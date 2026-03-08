@@ -1,0 +1,78 @@
+{
+  "shape": {
+    "startEvent":              { "w": 36,  "h": 36  },
+    "endEvent":                { "w": 36,  "h": 36  },
+    "intermediateCatchEvent":  { "w": 36,  "h": 36  },
+    "intermediateThrowEvent":  { "w": 36,  "h": 36  },
+    "boundaryEvent":           { "w": 36,  "h": 36  },
+    "task":                    { "w": 100, "h": 80  },
+    "userTask":                { "w": 100, "h": 80  },
+    "serviceTask":             { "w": 100, "h": 80  },
+    "scriptTask":              { "w": 100, "h": 80  },
+    "sendTask":                { "w": 100, "h": 80  },
+    "receiveTask":             { "w": 100, "h": 80  },
+    "manualTask":              { "w": 100, "h": 80  },
+    "businessRuleTask":        { "w": 100, "h": 80  },
+    "callActivity":            { "w": 100, "h": 80  },
+    "subProcess":              { "w": 100, "h": 80  },
+    "exclusiveGateway":        { "w": 50,  "h": 50  },
+    "parallelGateway":         { "w": 50,  "h": 50  },
+    "inclusiveGateway":        { "w": 50,  "h": 50  },
+    "eventBasedGateway":       { "w": 50,  "h": 50  },
+    "complexGateway":          { "w": 50,  "h": 50  },
+    "dataObjectReference":     { "w": 36,  "h": 50  },
+    "dataStoreReference":      { "w": 50,  "h": 50  },
+    "textAnnotation":          { "w": 100, "h": 30  },
+    "group":                   { "w": 300, "h": 300 },
+    "_collapsedPool":          { "w": 600, "h": 60  },
+    "_expandedSubProcess":     { "w": 350, "h": 200 },
+    "_transaction":            { "w": 350, "h": 200 }
+  },
+  "strokeWidth": {
+    "startEvent":    2,
+    "endEvent":      4,
+    "intermediate":  1.5,
+    "task":          2,
+    "callActivity":  5,
+    "gateway":       2,
+    "pool":          1.5,
+    "lane":          1.5,
+    "connection":    1.5,
+    "dataObject":    2,
+    "annotation":    2
+  },
+  "color": {
+    "fill":       "#ffffff",
+    "stroke":     "#000000",
+    "label":      "#000000",
+    "canvasBg":   "#fafafa",
+    "laneHeader": "#f0f0f0",
+    "poolHeader": "#e8e8e8"
+  },
+  "layout": {
+    "laneHeaderWidth":    30,
+    "lanePadding":        30,
+    "labelDistance":       10,
+    "taskBorderRadius":   10,
+    "innerOuterGap":      3,
+    "externalLabelHeight": 25,
+    "poolGap":            60
+  },
+  "elk": {
+    "layered": {
+      "elk.algorithm":                                    "layered",
+      "elk.direction":                                    "RIGHT",
+      "elk.spacing.nodeNode":                             "40",
+      "elk.layered.spacing.nodeNodeBetweenLayers":        "60",
+      "elk.edgeRouting":                                  "ORTHOGONAL",
+      "elk.layered.crossingMinimization.strategy":        "LAYER_SWEEP",
+      "elk.layered.nodePlacement.strategy":               "BRANDES_KOEPF",
+      "elk.layered.considerModelOrder.strategy":          "NODES_AND_EDGES"
+    },
+    "rectpacking": {
+      "elk.algorithm":                        "rectpacking",
+      "elk.rectpacking.desiredAspectRatio":   "0.1",
+      "elk.contentAlignment":                 "V_TOP H_LEFT"
+    }
+  }
+}

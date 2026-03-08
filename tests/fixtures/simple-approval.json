@@ -1,0 +1,25 @@
+{
+  "pools": [{
+    "id": "Process_Main",
+    "name": "Main Pool",
+    "nodes": [
+      {"id": "start1", "type": "startEvent", "name": "Start", "lane": "lane1"},
+      {"id": "task1", "type": "userTask", "name": "Review Document", "lane": "lane1"},
+      {"id": "gw1", "type": "exclusiveGateway", "name": "Approved?", "lane": "lane1"},
+      {"id": "task2", "type": "serviceTask", "name": "Process Approval", "lane": "lane1"},
+      {"id": "task3", "type": "userTask", "name": "Revise Document", "lane": "lane1"},
+      {"id": "end1", "type": "endEvent", "name": "End", "lane": "lane1"}
+    ],
+    "edges": [
+      {"id": "f1", "source": "start1", "target": "task1"},
+      {"id": "f2", "source": "task1", "target": "gw1"},
+      {"id": "f3", "source": "gw1", "target": "task2", "label": "Yes"},
+      {"id": "f4", "source": "gw1", "target": "task3", "label": "No"},
+      {"id": "f5", "source": "task3", "target": "task1"},
+      {"id": "f6", "source": "task2", "target": "end1"}
+    ],
+    "lanes": [
+      {"id": "lane1", "name": "Default Lane"}
+    ]
+  }]
+}

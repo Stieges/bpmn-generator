@@ -27,81 +27,43 @@
 
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { readFileSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 // ═══════════════════════════════════════════════════════════════════════
-// §1  OMG / bpmn-js VISUAL CONSTANTS
+// §1  OMG / bpmn-js VISUAL CONSTANTS (loaded from config.json)
 // ═══════════════════════════════════════════════════════════════════════
 
-const SHAPE = {
-  // Events (all 36×36 per bpmn-js ElementFactory)
-  startEvent:              { w: 36,  h: 36  },
-  endEvent:                { w: 36,  h: 36  },
-  intermediateCatchEvent:  { w: 36,  h: 36  },
-  intermediateThrowEvent:  { w: 36,  h: 36  },
-  boundaryEvent:           { w: 36,  h: 36  },
-  // Activities (all 100×80)
-  task:                    { w: 100, h: 80  },
-  userTask:                { w: 100, h: 80  },
-  serviceTask:             { w: 100, h: 80  },
-  scriptTask:              { w: 100, h: 80  },
-  sendTask:                { w: 100, h: 80  },
-  receiveTask:             { w: 100, h: 80  },
-  manualTask:              { w: 100, h: 80  },
-  businessRuleTask:        { w: 100, h: 80  },
-  callActivity:            { w: 100, h: 80  },
-  subProcess:              { w: 100, h: 80  },
-  // Gateways (all 50×50)
-  exclusiveGateway:        { w: 50,  h: 50  },
-  parallelGateway:         { w: 50,  h: 50  },
-  inclusiveGateway:        { w: 50,  h: 50  },
-  eventBasedGateway:       { w: 50,  h: 50  },
-  complexGateway:          { w: 50,  h: 50  },
-  // Data / Artifacts
-  dataObjectReference:     { w: 36,  h: 50  },
-  dataStoreReference:      { w: 50,  h: 50  },
-  textAnnotation:          { w: 100, h: 30  },
-  group:                   { w: 300, h: 300 },
-  // Collapsed pool (Black-Box, bpmn-js default 600×60)
-  _collapsedPool:          { w: 600, h: 60  },
-  // Expanded sub-process (default container, grows with content)
-  _expandedSubProcess:     { w: 350, h: 200 },
-  // Transaction (double-bordered sub-process)
-  _transaction:            { w: 350, h: 200 },
-};
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Stroke widths (bpmn-js BpmnRenderer.js)
-const SW = {
-  startEvent:    2,
-  endEvent:      4,
-  intermediate:  1.5,
-  task:          2,
-  callActivity:  5,
-  gateway:       2,
-  pool:          1.5,
-  lane:          1.5,
-  connection:    1.5,
-  dataObject:    2,
-  annotation:    2,
-};
+function loadConfig(customPath) {
+  const defaults = JSON.parse(readFileSync(resolve(__dirname, 'config.json'), 'utf8'));
+  if (!customPath) return defaults;
+  const custom = JSON.parse(readFileSync(resolve(customPath), 'utf8'));
+  // Deep merge: custom overrides defaults per top-level key
+  const merged = { ...defaults };
+  for (const key of Object.keys(custom)) {
+    if (typeof custom[key] === 'object' && !Array.isArray(custom[key]) && typeof defaults[key] === 'object') {
+      merged[key] = { ...defaults[key], ...custom[key] };
+    } else {
+      merged[key] = custom[key];
+    }
+  }
+  return merged;
+}
 
-// Colors (bpmn-js defaults; OMG is color-neutral)
-const CLR = {
-  fill:       '#ffffff',
-  stroke:     '#000000',
-  label:      '#000000',
-  canvasBg:   '#fafafa',
-  laneHeader: '#f0f0f0',
-  poolHeader: '#e8e8e8',
-};
+const CFG = loadConfig(process.env.BPMN_CONFIG);
 
-const LANE_HEADER_W   = 30;   // px, rotated text band
-const LANE_PADDING    = 30;   // internal padding for ElkJS (must contain event labels)
-const LABEL_DISTANCE  = 10;   // gap below events/gateways for external labels
-const TASK_RX         = 10;   // border radius for activities
-const INNER_OUTER_GAP = 3;    // gap between double circles (intermediate events)
-const EXTERNAL_LABEL_H = 25;  // reserved height for external labels in ELK
-const POOL_GAP        = 60;   // vertical gap between pools in collaboration
+const SHAPE          = CFG.shape;
+const SW             = CFG.strokeWidth;
+const CLR            = CFG.color;
+const LANE_HEADER_W  = CFG.layout.laneHeaderWidth;
+const LANE_PADDING   = CFG.layout.lanePadding;
+const LABEL_DISTANCE = CFG.layout.labelDistance;
+const TASK_RX        = CFG.layout.taskBorderRadius;
+const INNER_OUTER_GAP = CFG.layout.innerOuterGap;
+const EXTERNAL_LABEL_H = CFG.layout.externalLabelHeight;
+const POOL_GAP       = CFG.layout.poolGap;
 
 // ═══════════════════════════════════════════════════════════════════════
 // §2  VALIDATION — structural soundness, deadlock detection
@@ -515,14 +477,7 @@ function buildLanedProcessElk(proc) {
   return {
     id: 'pool',
     properties: {
-      'elk.algorithm': 'layered',
-      'elk.direction': 'RIGHT',
-      'elk.spacing.nodeNode': '40',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '60',
-      'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+      ...CFG.elk.layered,
       'elk.partitioning.activate': 'true',   // enable lane partitioning
       'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
     },
@@ -575,11 +530,9 @@ function buildMultiPoolElk(lc) {
   return {
     id: 'collaboration',
     properties: {
-      'elk.algorithm': 'rectpacking',
-      'elk.rectpacking.desiredAspectRatio': '0.1',
+      ...CFG.elk.rectpacking,
       'elk.spacing.nodeNode': `${POOL_GAP}`,
       'elk.padding': '[top=20,left=20,bottom=20,right=20]',
-      'elk.contentAlignment': 'V_TOP H_LEFT',
     },
     children: poolElkChildren,
     edges: [],
@@ -624,16 +577,7 @@ function buildElkEdge(edge, idx) {
 }
 
 function elkDefaults() {
-  return {
-    'elk.algorithm': 'layered',
-    'elk.direction': 'RIGHT',
-    'elk.spacing.nodeNode': '40',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '60',
-    'elk.edgeRouting': 'ORTHOGONAL',
-    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-    'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',  // respect input order
-  };
+  return { ...CFG.elk.layered };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1157,10 +1101,23 @@ function generateBpmnXml(lc, coordMap) {
     }
 
     // Build default flow map (gateway → default edge id)
+    // For XOR/Inclusive gateways with >1 outgoing: auto-assign last flow as default
+    // if no explicit isDefault is set (OMG spec §10.5.1)
     const defaultFlowMap = {};
     for (const e of edges) {
       if (e.isDefault) {
         defaultFlowMap[e.source] = e.id || `flow_${e.source}_${e.target}`;
+      }
+    }
+    for (const n of nodes) {
+      if ((n.type === 'exclusiveGateway' || n.type === 'inclusiveGateway') &&
+          n._direction === 'Diverging' && !defaultFlowMap[n.id]) {
+        const gwOutEdges = edges.filter(e => e.source === n.id);
+        if (gwOutEdges.length > 1) {
+          // Pick the last outgoing edge as default (typically the "else" branch)
+          const defaultEdge = gwOutEdges[gwOutEdges.length - 1];
+          defaultFlowMap[n.id] = defaultEdge.id || `flow_${defaultEdge.source}_${defaultEdge.target}`;
+        }
       }
     }
 
@@ -1173,7 +1130,7 @@ function generateBpmnXml(lc, coordMap) {
 
     // §6.5  LaneSet — ONE laneSet per process (OMG spec §10.5)
     if (lanes.length > 0) {
-      x.push(`    <laneSet id="LaneSet_1">`);
+      x.push(`    <laneSet id="LaneSet_${proc.id || '1'}">`);
       for (const lane of lanes) {
         x.push(`      <lane id="${lane.id}" name="${esc(lane.name || lane.id)}">`);
         nodes.filter(n => n.lane === lane.id)
@@ -1239,14 +1196,24 @@ function generateBpmnXml(lc, coordMap) {
     }
 
     // §6.7  Sequence flows
+    // Build set of default flow IDs for conditionExpression logic
+    const defaultFlowIds = new Set(Object.values(defaultFlowMap));
     for (const edge of edges) {
       const eid = edge.id || `flow_${edge.source}_${edge.target}`;
       const attrs = [`id="${eid}"`, `sourceRef="${edge.source}"`, `targetRef="${edge.target}"`];
       if (edge.label) attrs.push(`name="${esc(edge.label)}"`);
 
-      if (edge.condition) {
+      // Determine if this flow needs a conditionExpression:
+      // Non-default outgoing flows from XOR/Inclusive gateways (OMG spec §10.5.1)
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      const needsCondition = edge.condition ||
+        (sourceNode && (sourceNode.type === 'exclusiveGateway' || sourceNode.type === 'inclusiveGateway') &&
+         sourceNode._direction === 'Diverging' && !defaultFlowIds.has(eid));
+
+      if (needsCondition) {
+        const expr = edge.condition || edge.label || '';
         x.push(`    <sequenceFlow ${attrs.join(' ')}>`);
-        x.push(`      <conditionExpression xsi:type="tFormalExpression">${esc(edge.condition)}</conditionExpression>`);
+        x.push(`      <conditionExpression xsi:type="tFormalExpression">${esc(expr)}</conditionExpression>`);
         x.push(`    </sequenceFlow>`);
       } else {
         x.push(`    <sequenceFlow ${attrs.join(' ')} />`);
@@ -2220,6 +2187,58 @@ function wrapText(text, maxChars) {
 // §9  MAIN — Pipeline orchestration
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// §10  PUBLIC API — programmatic usage via import
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Run the full BPMN pipeline programmatically.
+ * @param {object} logicCore - Logic-Core JSON object
+ * @returns {Promise<{bpmnXml: string, svg: string, coordMap: object, validation: {errors: string[], warnings: string[]}}>}
+ */
+async function runPipeline(logicCore) {
+  const lc = JSON.parse(JSON.stringify(logicCore)); // deep clone to avoid mutation
+  const { errors, warnings } = validateLogicCore(lc);
+  if (errors.length) {
+    return { bpmnXml: null, svg: null, coordMap: null, validation: { errors, warnings } };
+  }
+
+  const allProcesses = lc.pools ? lc.pools : [lc];
+  for (const proc of allProcesses) {
+    inferGatewayDirections(proc.nodes || [], proc.edges || []);
+  }
+
+  const elkGraph  = logicCoreToElk(lc);
+  const elkResult = await runElkLayout(elkGraph);
+  const coordMap  = buildCoordinateMap(elkResult, lc);
+  const bpmnXml   = generateBpmnXml(lc, coordMap);
+  const svg       = generateSvg(lc, coordMap);
+
+  return { bpmnXml, svg, coordMap, validation: { errors: [], warnings } };
+}
+
+export {
+  runPipeline,
+  validateLogicCore,
+  inferGatewayDirections,
+  sortNodesTopologically,
+  orderLanesByFlow,
+  preprocessLogicCore,
+  logicCoreToElk,
+  runElkLayout,
+  buildCoordinateMap,
+  generateBpmnXml,
+  generateSvg,
+  enforceOrthogonal,
+  clipOrthogonal,
+  loadConfig,
+  CFG,
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// §11  CLI ENTRY POINT
+// ═══════════════════════════════════════════════════════════════════════
+
 async function main() {
   const args       = process.argv.slice(2);
   const inputArg   = args[0];
@@ -2230,7 +2249,7 @@ async function main() {
     process.exit(1);
   }
 
-  // §9.1  Read input
+  // Read input
   let rawJson;
   if (inputArg === '-') {
     const chunks = [];
@@ -2239,51 +2258,31 @@ async function main() {
   } else {
     rawJson = readFileSync(resolve(inputArg), 'utf8');
   }
-  const lc = JSON.parse(rawJson);
 
-  // §9.2  Validation
-  const { errors, warnings } = validateLogicCore(lc);
-  if (warnings.length) {
+  const result = await runPipeline(JSON.parse(rawJson));
+
+  if (result.validation.warnings.length) {
     console.warn('\n⚠ Warnings:');
-    warnings.forEach(w => console.warn('  · ' + w));
+    result.validation.warnings.forEach(w => console.warn('  · ' + w));
   }
-  if (errors.length) {
+  if (!result.bpmnXml) {
     console.error('\n✗ Errors (pipeline blocked):');
-    errors.forEach(e => console.error('  · ' + e));
+    result.validation.errors.forEach(e => console.error('  · ' + e));
     process.exit(1);
   }
   console.log('✓ Logic-Core validated (structural soundness OK)');
 
-  // §9.3  Gateway direction inference
-  const allProcesses = lc.pools ? lc.pools : [lc];
-  for (const proc of allProcesses) {
-    inferGatewayDirections(proc.nodes || [], proc.edges || []);
-  }
-
-  // §9.4  ELK graph construction + layout
-  const elkGraph  = logicCoreToElk(lc);
-  console.log('✓ ELK graph built');
-
-  const elkResult = await runElkLayout(elkGraph);
-  console.log('✓ ELK layout computed');
-
-  // §9.5  Coordinate extraction + edge clipping
-  const coordMap  = buildCoordinateMap(elkResult, lc);
-  console.log(`✓ Coordinates mapped (${Object.keys(coordMap.coords).length} nodes, edge endpoints clipped)`);
-
-  // §9.6  BPMN 2.0 XML generation
-  const bpmnXml   = generateBpmnXml(lc, coordMap);
-  const xmlPath   = `${outputBase}.bpmn`;
-  writeFileSync(xmlPath, bpmnXml, 'utf8');
+  const xmlPath = `${outputBase}.bpmn`;
+  writeFileSync(xmlPath, result.bpmnXml, 'utf8');
   console.log(`✓ BPMN 2.0 XML → ${xmlPath}`);
 
-  // §9.7  SVG preview generation
-  const svg       = generateSvg(lc, coordMap);
-  const svgPath   = `${outputBase}.svg`;
-  writeFileSync(svgPath, svg, 'utf8');
+  const svgPath = `${outputBase}.svg`;
+  writeFileSync(svgPath, result.svg, 'utf8');
   console.log(`✓ SVG preview → ${svgPath}`);
 
-  // §9.8  Summary
+  // Summary
+  const lc = JSON.parse(readFileSync(resolve(inputArg), 'utf8'));
+  const allProcesses = lc.pools ? lc.pools : [lc];
   const totalNodes = allProcesses.reduce((s, p) => s + (p.nodes || []).length, 0);
   const totalEdges = allProcesses.reduce((s, p) => s + (p.edges || []).length, 0);
   const totalLanes = allProcesses.reduce((s, p) => s + (p.lanes || []).length, 0);
@@ -2301,4 +2300,8 @@ async function main() {
   console.log(`  Files:         ${xmlPath}, ${svgPath}`);
 }
 
-main().catch(err => { console.error('Pipeline error:', err); process.exit(1); });
+// Only run CLI when executed directly (not imported)
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (isDirectRun) {
+  main().catch(err => { console.error('Pipeline error:', err); process.exit(1); });
+}

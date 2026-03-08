@@ -1,0 +1,50 @@
+{
+  "pools": [
+    {
+      "id": "Process_Customer",
+      "name": "Customer",
+      "nodes": [
+        {"id": "c_start", "type": "startEvent", "name": "Need identified", "lane": "c_lane"},
+        {"id": "c_submit", "type": "sendTask", "name": "Submit request", "lane": "c_lane"},
+        {"id": "c_wait", "type": "receiveTask", "name": "Wait for response", "lane": "c_lane"},
+        {"id": "c_end", "type": "endEvent", "name": "End", "lane": "c_lane"}
+      ],
+      "edges": [
+        {"id": "cf1", "source": "c_start", "target": "c_submit"},
+        {"id": "cf2", "source": "c_submit", "target": "c_wait"},
+        {"id": "cf3", "source": "c_wait", "target": "c_end"}
+      ],
+      "lanes": [{"id": "c_lane", "name": "Customer"}]
+    },
+    {
+      "id": "Process_Service",
+      "name": "Service Department",
+      "nodes": [
+        {"id": "s_start", "type": "startEvent", "name": "Request received", "lane": "s_agent"},
+        {"id": "s_review", "type": "userTask", "name": "Review request", "lane": "s_agent"},
+        {"id": "s_gw", "type": "exclusiveGateway", "name": "Valid?", "lane": "s_agent"},
+        {"id": "s_approve", "type": "serviceTask", "name": "Process approval", "lane": "s_mgr"},
+        {"id": "s_reject", "type": "userTask", "name": "Send rejection", "lane": "s_agent"},
+        {"id": "s_merge", "type": "exclusiveGateway", "name": "", "lane": "s_agent", "has_join": true},
+        {"id": "s_end", "type": "endEvent", "name": "End", "lane": "s_agent"}
+      ],
+      "edges": [
+        {"id": "sf1", "source": "s_start", "target": "s_review"},
+        {"id": "sf2", "source": "s_review", "target": "s_gw"},
+        {"id": "sf3", "source": "s_gw", "target": "s_approve", "label": "Yes"},
+        {"id": "sf4", "source": "s_gw", "target": "s_reject", "label": "No"},
+        {"id": "sf5", "source": "s_approve", "target": "s_merge"},
+        {"id": "sf6", "source": "s_reject", "target": "s_merge"},
+        {"id": "sf7", "source": "s_merge", "target": "s_end"}
+      ],
+      "lanes": [
+        {"id": "s_agent", "name": "Agent"},
+        {"id": "s_mgr", "name": "Manager"}
+      ]
+    }
+  ],
+  "messageFlows": [
+    {"id": "mf1", "source": "c_submit", "target": "s_start", "name": "Request"},
+    {"id": "mf2", "source": "s_merge", "target": "c_wait", "name": "Response"}
+  ]
+}

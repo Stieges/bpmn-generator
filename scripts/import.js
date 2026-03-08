@@ -13,6 +13,7 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -370,4 +371,11 @@ async function main() {
   console.log(`  Edges:      ${totalEdges}`);
 }
 
-main().catch(err => { console.error('Import error:', err); process.exit(1); });
+export { bpmnToLogicCore, parseXml };
+
+// Only run CLI when executed directly (not imported)
+const __filename = fileURLToPath(import.meta.url);
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(__filename);
+if (isDirectRun) {
+  main().catch(err => { console.error('Import error:', err); process.exit(1); });
+}
