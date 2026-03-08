@@ -1,0 +1,12 @@
+{
+  "name": "bpmn-generator-pipeline",
+  "version": "2.0.0",
+  "description": "Enterprise BPMN 2.0 Pipeline: JSON Logic-Core → ElkJS Layout → OMG-compliant XML + SVG",
+  "type": "module",
+  "scripts": {
+    "generate": "node pipeline.js"
+  },
+  "dependencies": {
+    "elkjs": "^0.9.3"
+  }
+}
