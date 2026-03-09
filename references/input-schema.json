@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpmn-generator.local/logic-core.schema.json",
+  "title": "BPMN Logic-Core",
+  "description": "Input format for the BPMN Generator Pipeline. Supports single-process and multi-pool collaboration modes.",
+  "oneOf": [
+    { "$ref": "#/$defs/SingleProcess" },
+    { "$ref": "#/$defs/Collaboration" }
+  ],
+  "$defs": {
+    "SingleProcess": {
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "properties": {
+        "id": { "type": "string", "description": "Process ID" },
+        "name": { "type": "string", "description": "Process name" },
+        "documentation": { "type": "string" },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/Node" }, "minItems": 1 },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/Edge" } },
+        "lanes": { "type": "array", "items": { "$ref": "#/$defs/Lane" } },
+        "associations": { "type": "array", "items": { "$ref": "#/$defs/Association" } },
+        "definitions": { "type": "array", "items": { "$ref": "#/$defs/TopLevelDefinition" }, "description": "Explicit error/message/signal/escalation definitions" }
+      },
+      "additionalProperties": false
+    },
+    "Collaboration": {
+      "type": "object",
+      "required": ["pools"],
+      "properties": {
+        "pools": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Pool" },
+          "minItems": 1,
+          "description": "Expanded pools with internal processes"
+        },
+        "collapsedPools": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CollapsedPool" },
+          "description": "Black-box participants (no internal process)"
+        },
+        "messageFlows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MessageFlow" },
+          "description": "Message flows between pools"
+        },
+        "associations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Association" }
+        },
+        "definitions": { "type": "array", "items": { "$ref": "#/$defs/TopLevelDefinition" }, "description": "Explicit error/message/signal/escalation definitions" }
+      },
+      "additionalProperties": false
+    },
+    "Pool": {
+      "type": "object",
+      "required": ["id", "nodes", "edges"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "documentation": { "type": "string" },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/Node" }, "minItems": 1 },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/Edge" } },
+        "lanes": { "type": "array", "items": { "$ref": "#/$defs/Lane" } }
+      },
+      "additionalProperties": false
+    },
+    "CollapsedPool": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "type": { "$ref": "#/$defs/NodeType" },
+        "name": { "type": "string" },
+        "lane": { "type": "string", "description": "Lane ID this node belongs to" },
+        "marker": { "$ref": "#/$defs/EventMarker" },
+        "attachedTo": { "type": "string", "description": "For boundaryEvent: ID of the activity" },
+        "cancelActivity": { "type": "boolean", "description": "For boundaryEvent: interrupting (true) or non-interrupting (false)" },
+        "isInterrupting": { "type": "boolean" },
+        "isExpanded": { "type": "boolean", "description": "For subProcess: show children inline" },
+        "isEventSubProcess": { "type": "boolean" },
+        "isAdHoc": { "type": "boolean" },
+        "isCompensation": { "type": "boolean" },
+        "isCollection": { "type": "boolean", "description": "For dataObjectReference: collection marker" },
+        "loopType": {
+          "oneOf": [
+            { "enum": ["standard"], "description": "Simple loop marker (backward-compatible)" },
+            {
+              "type": "object",
+              "properties": {
+                "loopCondition": { "type": "string" },
+                "testBefore": { "type": "boolean" },
+                "loopMaximum": { "type": "integer" }
+              },
+              "additionalProperties": false
+            }
+          ],
+          "description": "Standard loop characteristics"
+        },
+        "multiInstance": {
+          "oneOf": [
+            { "enum": ["parallel", "sequential"], "description": "Simple MI marker (backward-compatible)" },
+            {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": { "enum": ["parallel", "sequential"] },
+                "loopCardinality": { "type": "string" },
+                "completionCondition": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          ],
+          "description": "Multi-instance loop characteristics"
+        },
+        "calledElement": { "type": "string", "description": "For callActivity: called process ID" },
+        "scriptFormat": { "type": "string", "description": "For scriptTask: script language (e.g. groovy, javascript)" },
+        "script": { "type": "string", "description": "For scriptTask: script body" },
+        "implementation": { "type": "string", "description": "For service/send/receive/businessRule tasks: implementation type" },
+        "eventGatewayType": { "enum": ["Exclusive", "Parallel"], "description": "For eventBasedGateway" },
+        "instantiate": { "type": "boolean", "description": "For eventBasedGateway: instantiate process" },
+        "linkName": { "type": "string", "description": "For link events: linkEventDefinition name" },
+        "conditionExpression": { "type": "string", "description": "For conditional events: condition body" },
+        "timerExpression": {
+          "type": "object",
+          "required": ["type", "value"],
+          "properties": {
+            "type": { "enum": ["duration", "date", "cycle"] },
+            "value": { "type": "string" }
+          },
+          "additionalProperties": false,
+          "description": "For timer events: expression with type"
+        },
+        "documentation": { "type": "string" },
+        "has_join": { "type": "boolean", "description": "Hint for gateway direction inference" },
+        "color": {
+          "type": "object",
+          "description": "BPMN-in-Color (bioc:) visualization",
+          "properties": {
+            "fill": { "type": "string" },
+            "stroke": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Node" },
+          "description": "Child nodes for expanded subProcess"
+        },
+        "edges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Edge" },
+          "description": "Child edges for expanded subProcess"
+        },
+        "extensions": {
+          "type": "object",
+          "description": "Preserved extension attributes from round-trip (e.g. camunda:, zeebe:)",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "Edge": {
+      "type": "object",
+      "required": ["source", "target"],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string", "description": "Source node ID" },
+        "target": { "type": "string", "description": "Target node ID" },
+        "label": { "type": "string", "description": "Edge label (condition text)" },
+        "condition": { "type": "string", "description": "Formal condition expression" },
+        "isHappyPath": { "type": "boolean", "description": "Preferred path for layout ordering" },
+        "isDefault": { "type": "boolean", "description": "Default sequence flow from gateway" },
+        "isConditional": { "type": "boolean", "description": "Conditional sequence flow" }
+      },
+      "additionalProperties": false
+    },
+    "Lane": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/Lane" }, "description": "Nested child lanes" }
+      },
+      "additionalProperties": false
+    },
+    "MessageFlow": {
+      "type": "object",
+      "required": ["id", "source", "target"],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string", "description": "Source node or pool ID" },
+        "target": { "type": "string", "description": "Target node or pool ID" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Association": {
+      "type": "object",
+      "required": ["id", "source", "target"],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "directed": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "NodeType": {
+      "enum": [
+        "task", "userTask", "serviceTask", "scriptTask", "sendTask", "receiveTask",
+        "manualTask", "businessRuleTask", "callActivity", "subProcess", "transaction",
+        "startEvent", "endEvent", "intermediateCatchEvent", "intermediateThrowEvent", "boundaryEvent",
+        "exclusiveGateway", "parallelGateway", "inclusiveGateway", "eventBasedGateway", "complexGateway",
+        "dataObjectReference", "dataStoreReference", "textAnnotation", "group"
+      ]
+    },
+    "EventMarker": {
+      "enum": [
+        "message", "timer", "error", "signal", "escalation", "compensation",
+        "conditional", "link", "cancel", "terminate", "multiple", "parallelMultiple"
+      ]
+    },
+    "TopLevelDefinition": {
+      "type": "object",
+      "required": ["type", "id", "name"],
+      "properties": {
+        "type": { "enum": ["error", "message", "signal", "escalation"] },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "errorCode": { "type": "string" },
+        "escalationCode": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

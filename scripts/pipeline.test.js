@@ -18,9 +18,15 @@ import {
   generateBpmnXml,
   generateSvg,
   loadConfig,
+  generateDiagramSet,
+  collapseSubProcesses,
+  extractSubProcessAsLogicCore,
 } from './pipeline.js';
 
-import { bpmnToLogicCore } from './import.js';
+import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
+import { moddleParse, moddleToLogicCore } from './moddle-import.js';
+import { checkWorkflowNetSoundness, bpmnToPN } from './workflow-net.js';
+import { runRules, loadRuleProfile } from './rules.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = resolve(__dirname, '../tests/fixtures');
@@ -321,7 +327,7 @@ describe('Round-trip (JSON → BPMN → JSON)', () => {
     const result = await runPipeline(original);
     expect(result.bpmnXml).toBeTruthy();
 
-    const reimported = bpmnToLogicCore(result.bpmnXml);
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
     const origNodes = original.pools[0].nodes;
     const reimNodes = reimported.nodes || (reimported.pools && reimported.pools[0].nodes) || [];
 
@@ -333,7 +339,7 @@ describe('Round-trip (JSON → BPMN → JSON)', () => {
     const result = await runPipeline(original);
     expect(result.bpmnXml).toBeTruthy();
 
-    const reimported = bpmnToLogicCore(result.bpmnXml);
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
     expect(reimported.pools.length).toBe(original.pools.length);
   });
 });
@@ -354,5 +360,864 @@ describe('SVG output', () => {
     expect(result.svg).toContain('<rect');    // tasks
     expect(result.svg).toContain('<circle');  // events
     expect(result.svg).toContain('<polygon'); // gateways
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §10  Extended Validation (K4)
+// ═══════════════════════════════════════════════════════════════
+
+describe('Extended Validation (K4)', () => {
+  test('detects inclusive-GW → AND-join deadlock', () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'igw', type: 'inclusiveGateway', name: 'Split?' },
+          { id: 'a', type: 'userTask', name: 'A' },
+          { id: 'b', type: 'userTask', name: 'B' },
+          { id: 'pgw', type: 'parallelGateway', name: 'Join', has_join: true },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 'igw' },
+          { id: 'f2', source: 'igw', target: 'a', label: 'Ja' },
+          { id: 'f3', source: 'igw', target: 'b', label: 'Nein' },
+          { id: 'f4', source: 'a', target: 'pgw' },
+          { id: 'f5', source: 'b', target: 'pgw' },
+          { id: 'f6', source: 'pgw', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const { errors } = validateLogicCore(lc);
+    expect(errors.some(e => /Inclusive-split.*AND-join/i.test(e))).toBe(true);
+  });
+
+  test('warns boundary event path without endEvent', () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 't', type: 'userTask', name: 'Task' },
+          { id: 'be', type: 'boundaryEvent', name: 'Timer', attachedTo: 't', marker: 'timer' },
+          { id: 'dead', type: 'userTask', name: 'Dangling' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+          { id: 'f3', source: 'be', target: 'dead' },
+          // dead has no outgoing → path does not reach endEvent
+        ],
+        lanes: [],
+      }],
+    };
+    const { warnings } = validateLogicCore(lc);
+    expect(warnings.some(w => /boundary.*endEvent/i.test(w))).toBe(true);
+  });
+
+  test('warns converging gateway with labeled outgoing edge', () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'a', type: 'userTask', name: 'A' },
+          { id: 'b', type: 'userTask', name: 'B' },
+          { id: 'gw', type: 'exclusiveGateway', name: 'Merge', has_join: true },
+          { id: 't', type: 'userTask', name: 'Task' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 'a' },
+          { id: 'f2', source: 'a', target: 'gw' },
+          { id: 'f3', source: 'b', target: 'gw' },
+          { id: 'f4', source: 'gw', target: 't', label: 'Falsches Label' },
+          { id: 'f5', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const { warnings } = validateLogicCore(lc);
+    expect(warnings.some(w => /Converging.*labeled/i.test(w))).toBe(true);
+  });
+
+  test('detects message flow within same pool', () => {
+    const lc = {
+      pools: [
+        {
+          id: 'P1', name: 'Pool 1',
+          nodes: [
+            { id: 's1', type: 'startEvent', name: 'Start' },
+            { id: 't1', type: 'userTask', name: 'Task' },
+            { id: 'e1', type: 'endEvent', name: 'End' },
+          ],
+          edges: [
+            { id: 'f1', source: 's1', target: 't1' },
+            { id: 'f2', source: 't1', target: 'e1' },
+          ],
+          lanes: [],
+        },
+      ],
+      messageFlows: [
+        { id: 'mf1', source: 's1', target: 't1' },
+      ],
+    };
+    const { errors } = validateLogicCore(lc);
+    expect(errors.some(e => /within pool/i.test(e))).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §11  Expanded Sub-Processes (K3)
+// ═══════════════════════════════════════════════════════════════
+
+describe('Expanded Sub-Processes', () => {
+  test('generates valid BPMN XML with nested flow elements', async () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    const result = await runPipeline(lc);
+
+    expect(result.validation.errors).toHaveLength(0);
+    expect(result.bpmnXml).toBeTruthy();
+
+    // SubProcess element contains child flow elements
+    expect(result.bpmnXml).toContain('<subProcess');
+    expect(result.bpmnXml).toContain('sub1_start');
+    expect(result.bpmnXml).toContain('sub1_task1');
+    expect(result.bpmnXml).toContain('sub1_end');
+    // Child sequence flows inside subprocess
+    expect(result.bpmnXml).toContain('sub1_f1');
+    expect(result.bpmnXml).toContain('sub1_f2');
+    expect(result.bpmnXml).toContain('sub1_f3');
+    // BPMNDI: isExpanded attribute
+    expect(result.bpmnXml).toContain('isExpanded="true"');
+    // BPMNDI: child shapes exist
+    expect(result.bpmnXml).toContain('sub1_start_di');
+    expect(result.bpmnXml).toContain('sub1_task1_di');
+    expect(result.bpmnXml).toContain('sub1_end_di');
+    // BPMNDI: child edge waypoints
+    expect(result.bpmnXml).toContain('sub1_f1_di');
+  });
+
+  test('validates subprocess children (missing endEvent)', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Test',
+        nodes: [
+          { id: 'start1', type: 'startEvent', name: 'Start' },
+          {
+            id: 'sub1', type: 'subProcess', name: 'Sub', isExpanded: true,
+            nodes: [
+              { id: 'sub_s', type: 'startEvent', name: 'SubStart' },
+              { id: 'sub_t', type: 'userTask', name: 'SubTask' },
+            ],
+            edges: [{ id: 'sf1', source: 'sub_s', target: 'sub_t' }],
+          },
+          { id: 'end1', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 'start1', target: 'sub1' },
+          { id: 'f2', source: 'sub1', target: 'end1' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.validation.errors.some(e => /SubProcess.*endEvent/i.test(e))).toBe(true);
+  });
+
+  test('round-trip preserves subprocess structure', async () => {
+    const original = loadFixture('expanded-subprocess.json');
+    const result = await runPipeline(original);
+    expect(result.bpmnXml).toBeTruthy();
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    // May return { pools: [...] } or flat { nodes, edges } depending on collaboration
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    // Find the expanded subprocess node
+    const sub = nodes.find(n => n.type === 'subProcess' && n.isExpanded);
+    expect(sub).toBeDefined();
+    expect(sub.nodes.length).toBe(4); // start, task1, task2, end
+    expect(sub.edges.length).toBe(3);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §9  Drill-Down (M4)
+// ═══════════════════════════════════════════════════════════════
+
+describe('collapseSubProcesses', () => {
+  test('collapses expanded subprocesses', () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    const collapsed = collapseSubProcesses(lc);
+    const sub = collapsed.pools[0].nodes.find(n => n.id === 'sub1');
+    expect(sub.isExpanded).toBe(false);
+    expect(sub.nodes).toBeUndefined();
+    expect(sub.edges).toBeUndefined();
+  });
+
+  test('preserves non-subprocess nodes unchanged', () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    const collapsed = collapseSubProcesses(lc);
+    const task = collapsed.pools[0].nodes.find(n => n.id === 'task1');
+    expect(task.name).toBe('Vorprüfung');
+  });
+
+  test('does not mutate original', () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    collapseSubProcesses(lc);
+    const sub = lc.pools[0].nodes.find(n => n.id === 'sub1');
+    expect(sub.isExpanded).toBe(true);
+    expect(sub.nodes.length).toBe(4);
+  });
+});
+
+describe('extractSubProcessAsLogicCore', () => {
+  test('extracts subprocess as standalone Logic-Core', () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    const subLc = extractSubProcessAsLogicCore(lc, 'sub1');
+    expect(subLc).toBeDefined();
+    expect(subLc.pools).toHaveLength(1);
+    expect(subLc.pools[0].nodes).toHaveLength(4);
+    expect(subLc.pools[0].edges).toHaveLength(3);
+    expect(subLc.pools[0].name).toBe('Detailprüfung');
+  });
+
+  test('returns null for non-existent subprocess', () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    expect(extractSubProcessAsLogicCore(lc, 'nonexistent')).toBeNull();
+  });
+});
+
+describe('generateDiagramSet', () => {
+  test('generates parent + subprocess diagrams', async () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    const set = await generateDiagramSet(lc);
+
+    // Parent diagram exists
+    expect(set.parent.bpmnXml).toBeDefined();
+    expect(set.parent.svg).toContain('<svg');
+
+    // SubProcess diagram exists
+    expect(set.subProcesses).toHaveProperty('sub1');
+    expect(set.subProcesses.sub1.bpmnXml).toBeDefined();
+    expect(set.subProcesses.sub1.svg).toContain('<svg');
+
+    // Navigation
+    expect(set.navigation.subProcesses).toHaveLength(1);
+    expect(set.navigation.subProcesses[0].id).toBe('sub1');
+    expect(set.navigation.subProcesses[0].name).toBe('Detailprüfung');
+    expect(set.navigation.subProcesses[0].nodeCount).toBe(4);
+  });
+
+  test('no subprocesses → empty subProcesses map', async () => {
+    const lc = loadFixture('simple-approval.json');
+    const set = await generateDiagramSet(lc);
+
+    expect(set.parent.bpmnXml).toBeDefined();
+    expect(Object.keys(set.subProcesses)).toHaveLength(0);
+    expect(set.navigation.subProcesses).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// §10  Workflow-Net Soundness (L2)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('Workflow-Net Soundness', () => {
+  test('sound process → no WF errors', () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = checkWorkflowNetSoundness(lc);
+    const wfErrors = result.issues.filter(i => i.severity === 'ERROR');
+    expect(wfErrors).toHaveLength(0);
+    expect(result.stats).toBeDefined();
+  });
+
+  test('deadlock process → WF03 error', () => {
+    const lc = loadFixture('deadlock-process.json');
+    const result = checkWorkflowNetSoundness(lc);
+    const deadlocks = result.issues.filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(deadlocks.length).toBeGreaterThan(0);
+    expect(deadlocks[0].message).toContain('Deadlock');
+  });
+
+  test('multi-pool process → per-pool analysis', () => {
+    const lc = loadFixture('multi-pool-collaboration.json');
+    const result = checkWorkflowNetSoundness(lc);
+    // Should have stats for each pool
+    const poolCount = lc.pools.length;
+    expect(Object.keys(result.stats)).toHaveLength(poolCount);
+  });
+
+  test('bpmnToPN creates places for edges', () => {
+    const proc = {
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 't', type: 'task', name: 'Do' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 't' },
+        { id: 'f2', source: 't', target: 'e' },
+      ],
+    };
+    const pn = bpmnToPN(proc);
+    // 2 edge places + source + sink = 4
+    expect(pn.places.size).toBe(4);
+    expect(pn.transitions.size).toBe(3);
+    expect(pn.initialMarking.get('p_source')).toBe(1);
+  });
+
+  test('XOR split creates choice transitions', () => {
+    const proc = {
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'xor', type: 'exclusiveGateway', name: 'Pick?' },
+        { id: 'a', type: 'task', name: 'A' },
+        { id: 'b', type: 'task', name: 'B' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 'xor' },
+        { id: 'f2', source: 'xor', target: 'a', label: 'A' },
+        { id: 'f3', source: 'xor', target: 'b', label: 'B' },
+        { id: 'f4', source: 'a', target: 'e' },
+        { id: 'f5', source: 'b', target: 'e' },
+      ],
+    };
+    const pn = bpmnToPN(proc);
+    // XOR with 2 outgoing → 2 choice transitions
+    const choiceTs = [...pn.transitions.keys()].filter(k => k.includes('choice'));
+    expect(choiceTs).toHaveLength(2);
+  });
+
+  test('runRules with strict profile includes WF checks', () => {
+    const lc = loadFixture('simple-approval.json');
+    const profile = loadRuleProfile(resolve(fixturesDir, '../../rules/strict-profile.json'));
+    const result = runRules(lc, profile);
+    // Sound process should have workflowNet stats in metrics
+    expect(result.metrics.workflowNet).toBeDefined();
+  });
+
+  test('runRules without workflow_net layer skips WF checks', () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = runRules(lc); // default profile (no WF layer)
+    expect(result.metrics.workflowNet).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §12  OMG BPMN 2.0.2 Compliance — Semantic & Structural Gaps
+// ═══════════════════════════════════════════════════════════════
+
+describe('OMG Compliance — Execution Attributes', () => {
+  test('timer expression round-trip (duration)', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Timer Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start', marker: 'timer', timerExpression: { type: 'duration', value: 'PT5D' } },
+          { id: 't', type: 'userTask', name: 'Do Work' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('<timeDuration');
+    expect(result.bpmnXml).toContain('PT5D');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const timer = nodes.find(n => n.marker === 'timer');
+    expect(timer.timerExpression).toEqual({ type: 'duration', value: 'PT5D' });
+  });
+
+  test('script task round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Script Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'sc', type: 'scriptTask', name: 'Run Script', scriptFormat: 'groovy', script: 'println "hello"' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 'sc' },
+          { id: 'f2', source: 'sc', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('scriptFormat="groovy"');
+    expect(result.bpmnXml).toContain('<script>');
+    expect(result.bpmnXml).toContain('println &quot;hello&quot;');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const sc = nodes.find(n => n.type === 'scriptTask');
+    expect(sc.scriptFormat).toBe('groovy');
+    expect(sc.script).toContain('println');
+  });
+
+  test('callActivity calledElement round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'CallActivity Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'ca', type: 'callActivity', name: 'Call Sub', calledElement: 'SubProcess_123' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 'ca' },
+          { id: 'f2', source: 'ca', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('calledElement="SubProcess_123"');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const ca = nodes.find(n => n.type === 'callActivity');
+    expect(ca.calledElement).toBe('SubProcess_123');
+  });
+
+  test('conditional event condition round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Conditional Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start', marker: 'conditional', conditionExpression: '${amount > 1000}' },
+          { id: 't', type: 'userTask', name: 'Handle' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('conditionalEventDefinition');
+    expect(result.bpmnXml).toContain('<condition');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const cond = nodes.find(n => n.marker === 'conditional');
+    expect(cond.conditionExpression).toContain('amount');
+  });
+
+  test('link event name round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Link Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'lt', type: 'intermediateThrowEvent', name: 'Go To B', marker: 'link', linkName: 'LinkToB' },
+          { id: 'lc', type: 'intermediateCatchEvent', name: 'From A', marker: 'link', linkName: 'LinkToB' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 'lt' },
+          { id: 'f2', source: 'lc', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('linkEventDefinition');
+    expect(result.bpmnXml).toContain('name="LinkToB"');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const link = nodes.find(n => n.linkName === 'LinkToB');
+    expect(link).toBeDefined();
+  });
+
+  test('multi-instance with loopCardinality round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'MI Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 't', type: 'userTask', name: 'Review', multiInstance: { type: 'parallel', loopCardinality: '5', completionCondition: '${nrOfCompleted >= 3}' } },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('multiInstanceLoopCharacteristics');
+    expect(result.bpmnXml).toContain('<loopCardinality');
+    expect(result.bpmnXml).toContain('<completionCondition');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const mi = nodes.find(n => n.multiInstance);
+    expect(mi.multiInstance.type).toBe('parallel');
+    expect(mi.multiInstance.loopCardinality).toBe('5');
+    expect(mi.multiInstance.completionCondition).toContain('nrOfCompleted');
+  });
+
+  test('simple multiInstance string still works (backward compat)', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'MI Simple',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 't', type: 'userTask', name: 'Review', multiInstance: 'sequential' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('multiInstanceLoopCharacteristics');
+    expect(result.bpmnXml).toContain('isSequential="true"');
+  });
+
+  test('loop with loopCondition round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Loop Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 't', type: 'userTask', name: 'Retry', loopType: { loopCondition: '${retry < 3}', testBefore: true, loopMaximum: 10 } },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('standardLoopCharacteristics');
+    expect(result.bpmnXml).toContain('testBefore="true"');
+    expect(result.bpmnXml).toContain('loopMaximum="10"');
+    expect(result.bpmnXml).toContain('<loopCondition');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const loop = nodes.find(n => n.loopType);
+    // Note: < gets XML-escaped to &lt; during round-trip
+    expect(loop.loopType.testBefore).toBe(true);
+    expect(loop.loopType.loopMaximum).toBe(10);
+    expect(loop.loopType.loopCondition).toContain('retry');
+    expect(loop.loopType.loopCondition).toContain('3');
+  });
+
+  test('top-level definitions round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Defs Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 't', type: 'userTask', name: 'Process' },
+          { id: 'ee', type: 'endEvent', name: 'Error End', marker: 'error' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'ee' },
+          { id: 'f3', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+      definitions: [
+        { type: 'error', id: 'Err_1', name: 'Payment Failed', errorCode: 'ERR_PAY_001' },
+        { type: 'message', id: 'Msg_1', name: 'Order Request' },
+      ],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('errorCode="ERR_PAY_001"');
+    expect(result.bpmnXml).toContain('<message id="Msg_1"');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    expect(reimported.definitions).toBeDefined();
+    const errDef = reimported.definitions.find(d => d.type === 'error');
+    expect(errDef.errorCode).toBe('ERR_PAY_001');
+    const msgDef = reimported.definitions.find(d => d.type === 'message');
+    expect(msgDef.name).toBe('Order Request');
+  });
+
+  test('isForCompensation emitted on task', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Compensation Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 't', type: 'serviceTask', name: 'Compensate', isCompensation: true },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('isForCompensation="true"');
+  });
+
+  test('implementation attribute on serviceTask', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Impl Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 't', type: 'serviceTask', name: 'Call WS', implementation: 'WebService' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('implementation="WebService"');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const svc = nodes.find(n => n.type === 'serviceTask');
+    expect(svc.implementation).toBe('WebService');
+  });
+
+  test('eventBasedGateway attributes round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'EBG Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'ebg', type: 'eventBasedGateway', name: 'Wait', eventGatewayType: 'Parallel', instantiate: true },
+          { id: 'tc', type: 'intermediateCatchEvent', name: 'Timer', marker: 'timer' },
+          { id: 'mc', type: 'intermediateCatchEvent', name: 'Message', marker: 'message' },
+          { id: 'e1', type: 'endEvent', name: 'End1' },
+          { id: 'e2', type: 'endEvent', name: 'End2' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 'ebg' },
+          { id: 'f2', source: 'ebg', target: 'tc' },
+          { id: 'f3', source: 'ebg', target: 'mc' },
+          { id: 'f4', source: 'tc', target: 'e1' },
+          { id: 'f5', source: 'mc', target: 'e2' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('eventGatewayType="Parallel"');
+    expect(result.bpmnXml).toContain('instantiate="true"');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
+    const ebg = nodes.find(n => n.type === 'eventBasedGateway');
+    expect(ebg.eventGatewayType).toBe('Parallel');
+    expect(ebg.instantiate).toBe(true);
+  });
+
+  test('nested lanes round-trip', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Nested Lane Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start', lane: 'L1_1' },
+          { id: 't', type: 'userTask', name: 'Task', lane: 'L1_2' },
+          { id: 'e', type: 'endEvent', name: 'End', lane: 'L1_2' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [
+          {
+            id: 'L1', name: 'Parent Lane',
+            children: [
+              { id: 'L1_1', name: 'Child Lane A' },
+              { id: 'L1_2', name: 'Child Lane B' },
+            ],
+          },
+        ],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('childLaneSet');
+    expect(result.bpmnXml).toContain('Child Lane A');
+    expect(result.bpmnXml).toContain('Child Lane B');
+
+    const reimported = await bpmnToLogicCore(result.bpmnXml);
+    const lanes = reimported.pools ? reimported.pools[0].lanes : reimported.lanes;
+    const parent = lanes.find(l => l.id === 'L1');
+    expect(parent).toBeDefined();
+    expect(parent.children).toHaveLength(2);
+    expect(parent.children[0].name).toBe('Child Lane A');
+  });
+
+  test('triggeredByEvent on event subProcess', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Event SubProcess Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'esp', type: 'subProcess', name: 'Error Handler', isExpanded: true, isEventSubProcess: true,
+            nodes: [
+              { id: 'es', type: 'startEvent', name: 'Error Start', marker: 'error' },
+              { id: 'et', type: 'userTask', name: 'Handle Error' },
+              { id: 'ee', type: 'endEvent', name: 'Done' },
+            ],
+            edges: [
+              { id: 'ef1', source: 'es', target: 'et' },
+              { id: 'ef2', source: 'et', target: 'ee' },
+            ],
+          },
+          { id: 't', type: 'userTask', name: 'Main Task' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('triggeredByEvent="true"');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §13  bpmn-moddle Integration Tests
+// ═══════════════════════════════════════════════════════════════
+
+describe('bpmn-moddle Import', () => {
+  test('moddle import matches legacy import for simple approval', async () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toBeTruthy();
+
+    const moddleResult = await bpmnToLogicCore(result.bpmnXml);
+    const legacyResult = bpmnToLogicCoreLegacy(result.bpmnXml);
+
+    const moddleNodes = moddleResult.pools ? moddleResult.pools[0].nodes : moddleResult.nodes;
+    const legacyNodes = legacyResult.pools ? legacyResult.pools[0].nodes : legacyResult.nodes;
+    expect(moddleNodes.length).toBe(legacyNodes.length);
+
+    // Same node IDs
+    const moddleIds = moddleNodes.map(n => n.id).sort();
+    const legacyIds = legacyNodes.map(n => n.id).sort();
+    expect(moddleIds).toEqual(legacyIds);
+  });
+
+  test('moddle import matches legacy import for multi-pool', async () => {
+    const lc = loadFixture('multi-pool-collaboration.json');
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toBeTruthy();
+
+    const moddleResult = await bpmnToLogicCore(result.bpmnXml);
+    const legacyResult = bpmnToLogicCoreLegacy(result.bpmnXml);
+
+    expect(moddleResult.pools.length).toBe(legacyResult.pools.length);
+    expect(moddleResult.messageFlows.length).toBe(legacyResult.messageFlows.length);
+  });
+
+  test('moddle preserves unknown extension attributes', async () => {
+    // Minimal BPMN with a camunda:assignee attribute
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+  id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <process id="Process_1" isExecutable="false">
+    <startEvent id="s" name="Start" />
+    <userTask id="t" name="Review" camunda:assignee="\${currentUser}" />
+    <endEvent id="e" name="End" />
+    <sequenceFlow id="f1" sourceRef="s" targetRef="t" />
+    <sequenceFlow id="f2" sourceRef="t" targetRef="e" />
+  </process>
+  <bpmndi:BPMNDiagram id="D1">
+    <bpmndi:BPMNPlane id="P1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><dc:Bounds x="0" y="0" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_di" bpmnElement="t"><dc:Bounds x="100" y="0" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><dc:Bounds x="250" y="0" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>`;
+
+    const result = await bpmnToLogicCore(xml);
+    const nodes = result.pools ? result.pools[0].nodes : result.nodes;
+    const task = nodes.find(n => n.id === 't');
+    expect(task.extensions).toBeDefined();
+    expect(task.extensions.$attrs['camunda:assignee']).toContain('currentUser');
+  });
+
+  test('all OMG example files parse with bpmn-moddle', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('fs');
+    const { join } = await import('path');
+
+    function findBpmn(dir) {
+      const r = [];
+      for (const f of readdirSync(dir)) {
+        const p = join(dir, f);
+        if (statSync(p).isDirectory()) r.push(...findBpmn(p));
+        else if (f.endsWith('.bpmn')) r.push(p);
+      }
+      return r;
+    }
+
+    const examplesDir = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn');
+    const files = findBpmn(examplesDir);
+    expect(files.length).toBeGreaterThanOrEqual(25);
+
+    let ok = 0, fail = 0;
+    for (const f of files) {
+      try {
+        const xml = readFileSync(f, 'utf8');
+        const { rootElement } = await moddleParse(xml);
+        moddleToLogicCore(rootElement);
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    expect(ok).toBe(files.length);
+    expect(fail).toBe(0);
+  });
+
+  test('OMG nested lanes example imports correctly', async () => {
+    const { readFileSync } = await import('fs');
+    const nestedLanesFile = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn/2010-06-03/Diagram Interchange/Examples - DI - Lanes and Nested Lanes.bpmn');
+    const xml = readFileSync(nestedLanesFile, 'utf8');
+
+    const result = await bpmnToLogicCore(xml);
+    const lanes = result.pools ? result.pools[0].lanes : result.lanes;
+
+    // Should have at least one lane with children (nested)
+    const hasNested = lanes.some(l => l.children?.length > 0);
+    expect(hasNested).toBe(true);
   });
 });
