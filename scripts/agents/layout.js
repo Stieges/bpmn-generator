@@ -29,7 +29,7 @@ async function reviewLayout(llmProvider, svg) {
   try {
     const raw = await llmProvider(
       LAYOUT_REVIEW_PROMPT,
-      `SVG diagram (${svg.length} chars):\n${svg.slice(0, 50000)}`,
+      `SVG diagram (${svg.length} chars):\n${svg.slice(0, 50_000)}`,
       { responseFormat: { type: 'json_object' } },
     );
 

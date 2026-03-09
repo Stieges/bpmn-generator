@@ -37,6 +37,9 @@ export function createLlmProvider({ baseUrl, apiKey, model, timeout = 120_000 })
     }
 
     const data = await res.json();
+    if (!data.choices?.length || !data.choices[0].message?.content) {
+      throw new Error(`LLM returned empty response (choices: ${data.choices?.length ?? 0})`);
+    }
     return data.choices[0].message.content;
   };
 }

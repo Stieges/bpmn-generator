@@ -413,18 +413,18 @@ const STYLE_RULES = [
   },
   // Platzhalter für zukünftige Style-Regeln
   {
-    id: 'M05', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M05', layer: 'style', defaultSeverity: 'OFF', // NOT_IMPLEMENTED
     description: 'Message-Flow-Labels: nur Substantive',
     ref: { silver: 'Ch.5' },
     scope: 'global',
-    check: () => ({ pass: true }), // Platzhalter
+    check: () => ({ pass: true }),
   },
   {
-    id: 'M06', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M06', layer: 'style', defaultSeverity: 'OFF', // NOT_IMPLEMENTED
     description: 'Event-Labels: Partizip/Zustand oder Substantiv',
     ref: { silver: 'Ch.3' },
     scope: 'process',
-    check: () => ({ pass: true }), // Platzhalter
+    check: () => ({ pass: true }),
   },
   {
     id: 'M07', layer: 'style', defaultSeverity: 'WARNING',

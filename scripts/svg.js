@@ -20,10 +20,11 @@ function generateSvg(lc, coordMap) {
 
   // §7.1  Compute canvas bounds
   const PADDING = 50;
+  const LABEL_CLEARANCE = 30; // Space for external labels below nodes
   const allPts = [
     ...Object.values(coords).flatMap(c => [
       { x: c.x, y: c.y },
-      { x: c.x + c.w, y: c.y + c.h + 30 },
+      { x: c.x + c.w, y: c.y + c.h + LABEL_CLEARANCE },
     ]),
     ...Object.values(laneCoords).flatMap(l => [
       { x: l.x - LANE_HEADER_W, y: l.y },

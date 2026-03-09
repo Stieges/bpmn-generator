@@ -9,12 +9,12 @@ Wird als Claude Code Skill eingesetzt (SKILL.md) — das LLM extrahiert Logic-Co
 
 ## Architektur
 
-13 ES-Module unter `scripts/`, azyklischer Dependency-Graph:
+13 Core-Pipeline + 5 Agents + 5 Server/Tooling Module unter `scripts/`, azyklischer Dependency-Graph:
 
 ```
 pipeline.js (Orchestrator, ~180 LOC)
   ├── validate.js      ← rules.js
-  ├── rules.js         ← types.js (22 Regeln, 3 Schichten, Profile)
+  ├── rules.js         ← types.js, workflow-net.js (22 Regeln, 4 Schichten, Profile)
   ├── topology.js      ← types.js
   ├── layout.js        ← types.js, utils.js, topology.js, elkjs
   ├── coordinates.js   ← types.js, utils.js
@@ -61,11 +61,11 @@ import.js              BPMN XML → Logic-Core (eigenständig)
 ```bash
 cd scripts/
 npm install
-npm test                                          # 30 Tests (Jest, ES Modules)
+npm test                                          # 118 Tests (Jest, ES Modules)
 node pipeline.js tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
 ```
 
-Nach jeder Änderung: `npm test` muss 30/30 grün sein.
+Nach jeder Änderung: `npm test` muss grün sein.
 
 ### Neuen Test hinzufügen
 
@@ -98,9 +98,10 @@ Nach jeder Änderung: `npm test` muss 30/30 grün sein.
 
 | Schicht | Default-Severity | Regeln | Fokus |
 |---------|-----------------|--------|-------|
-| Soundness | ERROR | S01-S12 | Strukturelle Korrektheit (OMG-Konformität) |
-| Style | WARNING | M01-M04 | Lesbarkeit (Bruce Silver Method & Style) |
-| Pragmatics | INFO | P01 | Komplexitätsmetriken |
+| Soundness | ERROR | S01-S11 | Strukturelle Korrektheit (OMG-Konformität) |
+| Style | WARNING | M01-M08 | Lesbarkeit (Bruce Silver Method & Style) |
+| Pragmatics | INFO | P01-P03 | Komplexitätsmetriken |
+| Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net Soundness (opt-in) |
 
 Profile in `rules/*.json` überschreiben Severities oder deaktivieren Schichten.
 

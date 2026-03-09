@@ -6,7 +6,7 @@ Enterprise BPMN 2.0 diagram generator — converts natural language process desc
 
 ```
 User Text → [Phase 1] Intent Extraction (LLM → JSON Logic-Core)
-          → [Phase 2] Validation (22 rules, 3 layers, deadlock detection)
+          → [Phase 2] Validation (22 rules, 4 layers, deadlock detection)
           → [Phase 3] Auto-Layout (ElkJS Sugiyama layered algorithm)
           → [Phase 4] Serialization → BPMN 2.0 XML + SVG
 ```
@@ -84,7 +84,7 @@ scripts/
 ├── http-server.js     HTTP API (5 endpoints)
 ├── config.json        Externalized constants (shapes, colors, gaps)
 ├── package.json       Dependencies (elkjs, jest)
-├── pipeline.test.js   44 tests (Jest, ES Modules)
+├── pipeline.test.js   96 tests (Jest, ES Modules)
 └── orchestrator.test.js 22 tests (agents + state machine)
 ```
 
@@ -121,7 +121,7 @@ bpmn-generator/
 │   ├── input-schema.json                 Formal JSON Schema (draft 2020-12)
 │   ├── prompt-template.md                LLM prompt templates + few-shot patterns
 │   ├── inline-template.md                HTML template for browser-side ElkJS
-│   ├── fachliches-regelwerk.md           Rule documentation (22 rules, 3 layers)
+│   ├── fachliches-regelwerk.md           Rule documentation (22 rules, 4 layers)
 │   ├── omg-compliance.md                 OMG BPMN 2.0.2 compliance mapping
 │   └── review-set/                       Test fixtures for visual review
 ├── rules/
@@ -190,7 +190,7 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 - **Round-tripping** (BPMN XML → Logic-Core JSON → BPMN XML)
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
-- **Configurable rule engine** (22 rules, 3 layers, JSON profiles)
+- **Configurable rule engine** (22 rules, 4 layers, JSON profiles)
 - **OMG BPMN 2.0.2 compliant** XML output (ISO/IEC 19510:2013)
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)
 - **Documentation View** (SVG tooltips + `--doc` Markdown companion)

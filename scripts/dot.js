@@ -251,7 +251,7 @@ function dotToLogicCore(dotString) {
   // Collect closed pools
   for (const cluster of clusterStack.filter(c => c.type === 'pool')) {
     if (!pools.find(p => p.id === cluster.id)) {
-      pools.push(currentCluster);
+      pools.push(cluster);
     }
   }
 

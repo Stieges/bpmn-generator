@@ -26,7 +26,9 @@ import {
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
 import { checkWorkflowNetSoundness, bpmnToPN } from './workflow-net.js';
-import { runRules, loadRuleProfile } from './rules.js';
+import { runRules, RULES, loadRuleProfile } from './rules.js';
+import { logicCoreToDot, dotToLogicCore } from './dot.js';
+import { parseBody, validateCallbackUrl } from './http-server.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = resolve(__dirname, '../tests/fixtures');
@@ -1219,5 +1221,479 @@ describe('bpmn-moddle Import', () => {
     // Should have at least one lane with children (nested)
     const hasNested = lanes.some(l => l.children?.length > 0);
     expect(hasNested).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §14  Rule Engine — Dedicated unit tests per rule
+// ═══════════════════════════════════════════════════════════════
+
+describe('Rule Engine — individual rules', () => {
+  // Helper: minimal process
+  const proc = (nodes, edges = []) => ({ id: 'P1', name: 'Test', nodes, edges, lanes: [] });
+  const wfProfile = { layers: { workflow_net: { enabled: true } }, overrides: {} };
+
+  test('S01: missing startEvent → ERROR', () => {
+    const lc = proc([{ id: 'e1', type: 'endEvent', name: 'End' }]);
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('startEvent'))).toBe(true);
+  });
+
+  test('S02: missing endEvent → ERROR', () => {
+    const lc = proc([{ id: 's1', type: 'startEvent', name: 'Start' }]);
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('endEvent'))).toBe(true);
+  });
+
+  test('S03: edge with unknown source → ERROR', () => {
+    const lc = proc(
+      [{ id: 's1', type: 'startEvent' }, { id: 'e1', type: 'endEvent' }],
+      [{ id: 'f1', source: 'GHOST', target: 'e1' }],
+    );
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('unknown source'))).toBe(true);
+  });
+
+  test('S04: isolated node → WARNING', () => {
+    const lc = proc([
+      { id: 's1', type: 'startEvent' },
+      { id: 't1', type: 'task', name: 'Lonely Task' },
+      { id: 'e1', type: 'endEvent' },
+    ], [{ id: 'f1', source: 's1', target: 'e1' }]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('isolated'))).toBe(true);
+  });
+
+  test('S05: XOR-split → AND-join deadlock → ERROR', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'xor', type: 'exclusiveGateway', name: 'XOR' },
+      { id: 't1', type: 'task', name: 'Branch A' },
+      { id: 't2', type: 'task', name: 'Branch B' },
+      { id: 'and', type: 'parallelGateway', name: 'AND Join' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'xor' },
+      { id: 'f2', source: 'xor', target: 't1', label: 'Yes' },
+      { id: 'f3', source: 'xor', target: 't2', label: 'No' },
+      { id: 'f4', source: 't1', target: 'and' },
+      { id: 'f5', source: 't2', target: 'and' },
+      { id: 'f6', source: 'and', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('Deadlock') && e.includes('XOR'))).toBe(true);
+  });
+
+  test('S06: inclusive-split → AND-join → ERROR', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'or', type: 'inclusiveGateway', name: 'OR' },
+      { id: 't1', type: 'task', name: 'A' },
+      { id: 't2', type: 'task', name: 'B' },
+      { id: 'and', type: 'parallelGateway', name: 'AND' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'or' },
+      { id: 'f2', source: 'or', target: 't1' },
+      { id: 'f3', source: 'or', target: 't2' },
+      { id: 'f4', source: 't1', target: 'and' },
+      { id: 'f5', source: 't2', target: 'and' },
+      { id: 'f6', source: 'and', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('Deadlock') && e.includes('Inclusive'))).toBe(true);
+  });
+
+  test('S07: node without outgoing flow → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 't1', type: 'task', name: 'Dead End' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 't1' },
+      // t1 has no outgoing edge
+      { id: 'f2', source: 's', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('no outgoing'))).toBe(true);
+  });
+
+  test('S08: boundary event path without endEvent → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 't1', type: 'task', name: 'Do Work' },
+      { id: 'b1', type: 'boundaryEvent', name: 'Timer', attachedToRef: 't1' },
+      { id: 't2', type: 'task', name: 'Handle Timeout' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 't1' },
+      { id: 'f2', source: 't1', target: 'e' },
+      { id: 'f3', source: 'b1', target: 't2' },
+      // t2 has no path to endEvent
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('boundary') || w.includes('Boundary'))).toBe(true);
+  });
+
+  test('S09: messageFlow within same pool → ERROR', () => {
+    const lc = {
+      pools: [{
+        id: 'pool1', name: 'Pool 1',
+        nodes: [
+          { id: 's', type: 'startEvent' },
+          { id: 't1', type: 'task', name: 'A' },
+          { id: 'e', type: 'endEvent' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't1' },
+          { id: 'f2', source: 't1', target: 'e' },
+        ],
+        lanes: [],
+      }],
+      messageFlows: [{ id: 'mf1', source: 's', target: 't1' }],
+      collapsedPools: [],
+    };
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('within pool'))).toBe(true);
+  });
+
+  test('S10: messageFlow with unknown reference → ERROR', () => {
+    const lc = {
+      pools: [{
+        id: 'pool1', name: 'Pool 1',
+        nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }],
+        edges: [{ id: 'f1', source: 's', target: 'e' }],
+        lanes: [],
+      }],
+      messageFlows: [{ id: 'mf1', source: 's', target: 'NONEXISTENT' }],
+      collapsedPools: [],
+    };
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('unknown'))).toBe(true);
+  });
+
+  test('S11: expanded subProcess without start/end → ERROR', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      {
+        id: 'sub1', type: 'subProcess', name: 'Sub', isExpanded: true,
+        nodes: [{ id: 'inner_t', type: 'task', name: 'Inner' }],
+        edges: [],
+      },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'sub1' },
+      { id: 'f2', source: 'sub1', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('SubProcess') && e.includes('startEvent'))).toBe(true);
+    expect(result.errors.some(e => e.includes('SubProcess') && e.includes('endEvent'))).toBe(true);
+  });
+
+  test('M01: single-word task name → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 't1', type: 'task', name: 'Submit' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 't1' },
+      { id: 'f2', source: 't1', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('Submit'))).toBe(true);
+  });
+
+  test('M02: XOR gateway without question mark → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'xor', type: 'exclusiveGateway', name: 'Check result' },
+      { id: 't1', type: 'task', name: 'Path A' },
+      { id: 't2', type: 'task', name: 'Path B' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'xor' },
+      { id: 'f2', source: 'xor', target: 't1', label: 'Yes' },
+      { id: 'f3', source: 'xor', target: 't2', label: 'No' },
+      { id: 'f4', source: 't1', target: 'e' },
+      { id: 'f5', source: 't2', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('question'))).toBe(true);
+  });
+
+  test('M03: converging gateway with labeled outgoing edge → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 't1', type: 'task', name: 'Do A' },
+      { id: 't2', type: 'task', name: 'Do B' },
+      { id: 'merge', type: 'exclusiveGateway', name: 'Merge', has_join: true },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 't1' },
+      { id: 'f2', source: 's', target: 't2' },
+      { id: 'f3', source: 't1', target: 'merge' },
+      { id: 'f4', source: 't2', target: 'merge' },
+      { id: 'f5', source: 'merge', target: 'e', label: 'Should not have label' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('Converging'))).toBe(true);
+  });
+
+  test('M04: XOR outgoing edge without label → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'xor', type: 'exclusiveGateway', name: 'Check?' },
+      { id: 't1', type: 'task', name: 'Path A' },
+      { id: 't2', type: 'task', name: 'Path B' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'xor' },
+      { id: 'f2', source: 'xor', target: 't1' },  // no label
+      { id: 'f3', source: 'xor', target: 't2' },  // no label
+      { id: 'f4', source: 't1', target: 'e' },
+      { id: 'f5', source: 't2', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('missing label'))).toBe(true);
+  });
+
+  test('M05/M06: placeholder rules are OFF by default', () => {
+    const m05 = RULES.find(r => r.id === 'M05');
+    const m06 = RULES.find(r => r.id === 'M06');
+    expect(m05.defaultSeverity).toBe('OFF');
+    expect(m06.defaultSeverity).toBe('OFF');
+  });
+
+  test('M07: inclusive gateway present → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'or', type: 'inclusiveGateway', name: 'OR' },
+      { id: 't1', type: 'task', name: 'Do Something' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'or' },
+      { id: 'f2', source: 'or', target: 't1' },
+      { id: 'f3', source: 't1', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('OR') || w.includes('inclusive'))).toBe(true);
+  });
+
+  test('M08: XOR with 3+ outgoing, no default → WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'xor', type: 'exclusiveGateway', name: 'Multi?' },
+      { id: 't1', type: 'task', name: 'Path A' },
+      { id: 't2', type: 'task', name: 'Path B' },
+      { id: 't3', type: 'task', name: 'Path C' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'xor' },
+      { id: 'f2', source: 'xor', target: 't1', label: 'A' },
+      { id: 'f3', source: 'xor', target: 't2', label: 'B' },
+      { id: 'f4', source: 'xor', target: 't3', label: 'C' },
+      { id: 'f5', source: 't1', target: 'e' },
+      { id: 'f6', source: 't2', target: 'e' },
+      { id: 'f7', source: 't3', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('default'))).toBe(true);
+  });
+
+  test('P01: process with >50 nodes → INFO', () => {
+    const nodes = [{ id: 's', type: 'startEvent' }];
+    for (let i = 0; i < 55; i++) nodes.push({ id: `t${i}`, type: 'task', name: `Task ${i}` });
+    nodes.push({ id: 'e', type: 'endEvent' });
+    const edges = [{ id: 'f0', source: 's', target: 't0' }];
+    for (let i = 0; i < 54; i++) edges.push({ id: `f${i+1}`, source: `t${i}`, target: `t${i+1}` });
+    edges.push({ id: 'fend', source: 't54', target: 'e' });
+    const result = runRules(proc(nodes, edges));
+    expect(result.infos.some(i => i.includes('elements'))).toBe(true);
+  });
+
+  test('P02: gateway nesting depth >3 → INFO', () => {
+    // Chain of 4 nested XOR gateways
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'g1', type: 'exclusiveGateway', name: 'Q1?' },
+      { id: 'g2', type: 'exclusiveGateway', name: 'Q2?' },
+      { id: 'g3', type: 'exclusiveGateway', name: 'Q3?' },
+      { id: 'g4', type: 'exclusiveGateway', name: 'Q4?' },
+      { id: 't1', type: 'task', name: 'Deep Task' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'g1' },
+      { id: 'f2', source: 'g1', target: 'g2', label: 'Y' },
+      { id: 'f3', source: 'g1', target: 'e', label: 'N' },
+      { id: 'f4', source: 'g2', target: 'g3', label: 'Y' },
+      { id: 'f5', source: 'g2', target: 'e', label: 'N' },
+      { id: 'f6', source: 'g3', target: 'g4', label: 'Y' },
+      { id: 'f7', source: 'g3', target: 'e', label: 'N' },
+      { id: 'f8', source: 'g4', target: 't1', label: 'Y' },
+      { id: 'f9', source: 'g4', target: 'e', label: 'N' },
+      { id: 'f10', source: 't1', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.infos.some(i => i.includes('nesting depth'))).toBe(true);
+  });
+
+  test('P03: CFC score > 30 → INFO', () => {
+    // Many XOR gateways with 3+ outgoing each
+    const nodes = [{ id: 's', type: 'startEvent' }];
+    const edges = [];
+    let edgeId = 0;
+    let prev = 's';
+    for (let g = 0; g < 12; g++) {
+      const gwId = `gw${g}`;
+      nodes.push({ id: gwId, type: 'exclusiveGateway', name: `Q${g}?` });
+      edges.push({ id: `e${edgeId++}`, source: prev, target: gwId });
+      const t1 = `t${g}a`, t2 = `t${g}b`, t3 = `t${g}c`;
+      nodes.push({ id: t1, type: 'task', name: `${g}A` });
+      nodes.push({ id: t2, type: 'task', name: `${g}B` });
+      nodes.push({ id: t3, type: 'task', name: `${g}C` });
+      edges.push({ id: `e${edgeId++}`, source: gwId, target: t1, label: 'A' });
+      edges.push({ id: `e${edgeId++}`, source: gwId, target: t2, label: 'B' });
+      edges.push({ id: `e${edgeId++}`, source: gwId, target: t3, label: 'C' });
+      const merge = `m${g}`;
+      nodes.push({ id: merge, type: 'exclusiveGateway', name: 'Merge', has_join: true });
+      edges.push({ id: `e${edgeId++}`, source: t1, target: merge });
+      edges.push({ id: `e${edgeId++}`, source: t2, target: merge });
+      edges.push({ id: `e${edgeId++}`, source: t3, target: merge });
+      prev = merge;
+    }
+    nodes.push({ id: 'e', type: 'endEvent' });
+    edges.push({ id: `e${edgeId++}`, source: prev, target: 'e' });
+    const result = runRules(proc(nodes, edges));
+    expect(result.infos.some(i => i.includes('CFC') || i.includes('Complexity'))).toBe(true);
+  });
+
+  test('WF03: deadlock detected via workflow-net → ERROR', () => {
+    // XOR-split → AND-join = deadlock
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'xor', type: 'exclusiveGateway', name: 'XOR' },
+      { id: 't1', type: 'task', name: 'A' },
+      { id: 't2', type: 'task', name: 'B' },
+      { id: 'and', type: 'parallelGateway', name: 'AND' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'xor' },
+      { id: 'f2', source: 'xor', target: 't1', label: 'Y' },
+      { id: 'f3', source: 'xor', target: 't2', label: 'N' },
+      { id: 'f4', source: 't1', target: 'and' },
+      { id: 'f5', source: 't2', target: 'and' },
+      { id: 'f6', source: 'and', target: 'e' },
+    ]);
+    const result = runRules(lc, wfProfile);
+    expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  test('valid process passes all rules', () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = runRules(lc);
+    expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §15  HTTP Server — parseBody + URL validation
+// ═══════════════════════════════════════════════════════════════
+
+describe('HTTP Server utilities', () => {
+  test('parseBody with valid JSON → object', async () => {
+    const { Readable } = await import('stream');
+    const data = JSON.stringify({ logicCore: { id: 'P1' } });
+    const req = new Readable({ read() { this.push(data); this.push(null); } });
+    const result = await parseBody(req);
+    expect(result.logicCore.id).toBe('P1');
+  });
+
+  test('parseBody with invalid JSON → rejects', async () => {
+    const { Readable } = await import('stream');
+    const req = new Readable({ read() { this.push('not json'); this.push(null); } });
+    await expect(parseBody(req)).rejects.toThrow('Invalid JSON');
+  });
+
+  test('parseBody with oversized body → rejects', async () => {
+    const { Readable } = await import('stream');
+    const chunk = Buffer.alloc(1024 * 1024); // 1 MB
+    let sent = 0;
+    const req = new Readable({
+      read() {
+        if (sent < 11) { this.push(chunk); sent++; }
+        else this.push(null);
+      },
+      destroy() { /* allow destroy */ }
+    });
+    await expect(parseBody(req)).rejects.toThrow('exceeds');
+  });
+
+  test('validateCallbackUrl rejects internal IP', () => {
+    expect(validateCallbackUrl('http://127.0.0.1:8080/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://192.168.1.1/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://10.0.0.5/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://localhost:3000')).toMatch(/internal/);
+  });
+
+  test('validateCallbackUrl rejects non-http protocols', () => {
+    expect(validateCallbackUrl('ftp://example.com/hook')).toMatch(/http/);
+  });
+
+  test('validateCallbackUrl accepts valid external URL', () => {
+    expect(validateCallbackUrl('https://webhook.example.com/bpmn')).toBeNull();
+  });
+
+  test('validateCallbackUrl throws on invalid URL', () => {
+    expect(() => validateCallbackUrl('not-a-url')).toThrow();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §16  DOT Format — Round-trip + multi-pool export
+// ═══════════════════════════════════════════════════════════════
+
+describe('DOT format', () => {
+  test('logicCoreToDot produces valid DOT string', () => {
+    const lc = loadFixture('simple-approval.json');
+    const dot = logicCoreToDot(lc);
+    expect(dot).toContain('digraph');
+    expect(dot).toContain('start1');
+    expect(dot).toContain('task1');
+    expect(dot).toContain('->');
+  });
+
+  test('round-trip preserves node and edge count', () => {
+    const lc = {
+      id: 'P1', name: 'Test',
+      nodes: [
+        { id: 'start', type: 'startEvent', name: 'Start' },
+        { id: 'do_work', type: 'task', name: 'Do Work' },
+        { id: 'end', type: 'endEvent', name: 'End' },
+      ],
+      edges: [
+        { id: 'f1', source: 'start', target: 'do_work' },
+        { id: 'f2', source: 'do_work', target: 'end' },
+      ],
+      lanes: [],
+    };
+    const dot = logicCoreToDot(lc);
+    const rt = dotToLogicCore(dot);
+    expect(rt.nodes.length).toBe(lc.nodes.length);
+    expect(rt.edges.length).toBe(lc.edges.length);
+  });
+
+  test('multi-pool export contains subgraph clusters', () => {
+    const lc = {
+      pools: [
+        { id: 'pool1', name: 'Pool A', nodes: [{ id: 's1', type: 'startEvent', name: 'S' }], edges: [], lanes: [] },
+        { id: 'pool2', name: 'Pool B', nodes: [{ id: 's2', type: 'startEvent', name: 'S' }], edges: [], lanes: [] },
+      ],
+      messageFlows: [],
+      collapsedPools: [],
+    };
+    const dot = logicCoreToDot(lc);
+    expect(dot).toContain('subgraph cluster_');
+    expect(dot).toContain('Pool A');
+    expect(dot).toContain('Pool B');
   });
 });

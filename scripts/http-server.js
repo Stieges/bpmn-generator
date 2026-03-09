@@ -8,18 +8,69 @@ import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
 
 const PORT = process.env.PORT || 3000;
+const API_KEY = process.env.BPMN_API_KEY || null; // null = no auth (dev mode)
+const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
+const RATE_LIMIT = { windowMs: 60_000, max: 30 };
+const rateBuckets = new Map();
 const startTime = Date.now();
 
-function parseBody(req) {
+export function parseBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', c => chunks.push(c));
+    let size = 0;
+    req.on('data', c => {
+      size += c.length;
+      if (size > MAX_BODY_SIZE) {
+        req.destroy();
+        return reject(new Error(`Request body exceeds ${MAX_BODY_SIZE} bytes`));
+      }
+      chunks.push(c);
+    });
     req.on('end', () => {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-      catch (e) { reject(new Error('Invalid JSON')); }
+      catch { reject(new Error('Invalid JSON')); }
     });
     req.on('error', reject);
   });
+}
+
+export function validateCallbackUrl(url) {
+  const u = new URL(url); // throws on invalid URL
+  if (!['http:', 'https:'].includes(u.protocol)) {
+    return 'callbackUrl must use http or https';
+  }
+  const host = u.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' ||
+      host.startsWith('10.') || host.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+    return 'callbackUrl must not target internal networks';
+  }
+  return null; // valid
+}
+
+function checkAuth(req, res) {
+  if (!API_KEY) return true;
+  if (req.headers['x-api-key'] !== API_KEY) {
+    json(res, 401, { error: 'Invalid API key' });
+    return false;
+  }
+  return true;
+}
+
+function checkRateLimit(req, res) {
+  const ip = req.socket.remoteAddress;
+  const now = Date.now();
+  const bucket = rateBuckets.get(ip) || { count: 0, start: now };
+  if (now - bucket.start > RATE_LIMIT.windowMs) {
+    bucket.count = 0; bucket.start = now;
+  }
+  bucket.count++;
+  rateBuckets.set(ip, bucket);
+  if (bucket.count > RATE_LIMIT.max) {
+    json(res, 429, { error: 'Rate limit exceeded' });
+    return false;
+  }
+  return true;
 }
 
 function json(res, status, data) {
@@ -42,6 +93,10 @@ const server = createServer(async (req, res) => {
       version: '2.0.0',
     });
   }
+
+  // Auth + rate limiting (skip for health check)
+  if (!checkAuth(req, res)) return;
+  if (!checkRateLimit(req, res)) return;
 
   // Only POST for API endpoints
   if (method !== 'POST') return json(res, 405, { error: 'Method Not Allowed' });
@@ -73,6 +128,12 @@ const server = createServer(async (req, res) => {
 
       let callbackStatus = 'not_requested';
       if (body.callbackUrl) {
+        try {
+          const urlError = validateCallbackUrl(body.callbackUrl);
+          if (urlError) return json(res, 400, { error: urlError });
+        } catch {
+          return json(res, 400, { error: 'callbackUrl is not a valid URL' });
+        }
         deliver(body.callbackUrl, payload).catch(err => {
           auditLog({ event: 'delivery_failed', correlationId, error: err.message });
         });
@@ -112,7 +173,9 @@ const server = createServer(async (req, res) => {
         if (!baseUrl || !apiKey || !model) {
           return json(res, 400, { error: 'llmConfig requires baseUrl, apiKey, model' });
         }
-        options.llmProvider = createLlmProvider({ baseUrl, apiKey, model, timeout });
+        const safeTimeout = typeof timeout === 'number' && timeout > 0 && timeout <= 300_000
+          ? timeout : 120_000;
+        options.llmProvider = createLlmProvider({ baseUrl, apiKey, model, timeout: safeTimeout });
       }
 
       const input = body.userText || body.logicCore;
