@@ -1,0 +1,22 @@
+{
+  "profile": "strict",
+  "version": "1.0",
+  "description": "Strenges Profil fuer regulierte Branchen: Style-Warnungen werden zu Errors",
+  "layers": {
+    "soundness": { "enabled": true },
+    "style": { "enabled": true },
+    "pragmatics": { "enabled": true },
+    "workflow_net": { "enabled": true }
+  },
+  "overrides": {
+    "M01": { "severity": "ERROR" },
+    "M02": { "severity": "ERROR" },
+    "M03": { "severity": "ERROR" },
+    "M04": { "severity": "ERROR" },
+    "M05": { "severity": "ERROR" },
+    "M06": { "severity": "ERROR" },
+    "M07": { "severity": "ERROR" },
+    "M08": { "severity": "ERROR" },
+    "P01": { "severity": "WARNING" }
+  }
+}

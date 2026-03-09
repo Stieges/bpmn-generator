@@ -1,0 +1,12 @@
+{
+  "profile": "default",
+  "version": "1.0",
+  "description": "Standard-Profil: alle Layer aktiv, keine Overrides",
+  "layers": {
+    "soundness": { "enabled": true },
+    "style": { "enabled": true },
+    "pragmatics": { "enabled": true },
+    "workflow_net": { "enabled": false }
+  },
+  "overrides": {}
+}

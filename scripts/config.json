@@ -56,7 +56,8 @@
     "taskBorderRadius":   10,
     "innerOuterGap":      3,
     "externalLabelHeight": 25,
-    "poolGap":            60
+    "poolGap":            60,
+    "happyPathLeveling":  false
   },
   "elk": {
     "layered": {

@@ -1,0 +1,4 @@
+{"ts":"2026-03-09T08:57:09.087Z","event":"request","correlationId":"57907a95-c481-429d-9186-2ee4b2bc2c53","clientId":"smoke-test","endpoint":"/generate"}
+{"ts":"2026-03-09T08:57:09.162Z","event":"completed","correlationId":"57907a95-c481-429d-9186-2ee4b2bc2c53","durationMs":75,"hasErrors":false}
+{"ts":"2026-03-09T08:57:09.177Z","event":"request","correlationId":"6d6c1d53-19ab-4bba-9eb8-8e11ded2c1f2","clientId":"anonymous","endpoint":"/validate"}
+{"ts":"2026-03-09T08:57:09.178Z","event":"completed","correlationId":"6d6c1d53-19ab-4bba-9eb8-8e11ded2c1f2","durationMs":1,"hasErrors":true}

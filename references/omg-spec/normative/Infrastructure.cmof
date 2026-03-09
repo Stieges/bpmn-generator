@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cmof:Package xmi:version="2.1" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1" xmlns:cmof="http://schema.omg.org/spec/MOF/2.0/cmof.xml">
+  <ownedMember xmi:type="cmof:Class" xmi:id="Import" name="Import">
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Import-importType" name="importType" visibility="public">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Import-location" name="location" visibility="public">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Import-namespace" name="namespace" visibility="public">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+  </ownedMember>
+  <ownedMember xmi:type="cmof:Class" xmi:id="Definitions" name="Definitions">
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-name" name="name" visibility="public">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-targetNamespace" name="targetNamespace" visibility="public">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-expressionLanguage" name="expressionLanguage" visibility="public" default="http://www.w3.org/1999/XPath">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-typeLanguage" name="typeLanguage" visibility="public" default="http://www.w3.org/2001/XMLSchema">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-imports" name="imports" visibility="public" type="Import" upper="*" lower="0" isComposite="true" association="A_imports_definition"/>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-extensions" name="extensions" visibility="public" upper="*" lower="0" isComposite="true" association="A_extensions_definitions">
+      <type xmi:type="cmof:Class" href="Semantic.cmof#Core-Foundation-Extension"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-relationships" name="relationships" visibility="public" upper="*" lower="0" isComposite="true" association="A_relationships_definition">
+      <type xmi:type="cmof:Class" href="Semantic.cmof#Core-Foundation-Relationship"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-rootElements" name="rootElements" visibility="public" upper="*" lower="0" isComposite="true" association="A_rootElements_definition">
+      <type xmi:type="cmof:Class" href="Semantic.cmof#Core-Foundation-RootElement"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-diagrams" name="diagrams" visibility="public" upper="*" lower="0" isComposite="true" association="A_diagrams_definitions">
+      <type xmi:type="cmof:Class" href="BPMNDI.cmof#BPMNDiagram"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-exporter" name="exporter" visibility="public">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <ownedAttribute xmi:type="cmof:Property" xmi:id="Definitions-exporterVersion" name="exporterVersion" visibility="public">
+      <type xmi:type="cmof:PrimitiveType" href="http://schema.omg.org/spec/MOF/2.0/cmof.xml#String"/>
+    </ownedAttribute>
+    <superClass xmi:type="cmof:Class" href="Semantic.cmof#Core-Foundation-BaseElement"/>
+  </ownedMember>
+  <ownedMember xmi:type="cmof:Association" xmi:id="A_diagrams_definitions" name="A_diagrams_definitions" visibility="private" memberEnd="Definitions-diagrams A_diagrams_definitions-definitions">
+    <ownedEnd xmi:type="cmof:Property" xmi:id="A_diagrams_definitions-definitions" name="definitions" visibility="public" type="Definitions" owningAssociation="A_diagrams_definitions" association="A_diagrams_definitions"/>
+  </ownedMember>
+  <ownedMember xmi:type="cmof:Association" xmi:id="A_imports_definition" name="A_imports_definition" visibility="private" memberEnd="Definitions-imports A_imports_definition-definition">
+    <ownedEnd xmi:type="cmof:Property" xmi:id="A_imports_definition-definition" name="definition" type="Definitions" owningAssociation="A_imports_definition" association="A_imports_definition"/>
+  </ownedMember>
+  <ownedMember xmi:type="cmof:Association" xmi:id="A_extensions_definitions" name="A_extensions_definitions" visibility="private" memberEnd="Definitions-extensions A_extensions_definitions-definitions">
+    <ownedEnd xmi:type="cmof:Property" xmi:id="A_extensions_definitions-definitions" name="definitions" type="Definitions" owningAssociation="A_extensions_definitions" association="A_extensions_definitions"/>
+  </ownedMember>
+  <ownedMember xmi:type="cmof:Association" xmi:id="A_relationships_definition" name="A_relationships_definition" visibility="private" memberEnd="Definitions-relationships A_relationships_definition-definition">
+    <ownedEnd xmi:type="cmof:Property" xmi:id="A_relationships_definition-definition" name="definition" type="Definitions" owningAssociation="A_relationships_definition" association="A_relationships_definition"/>
+  </ownedMember>
+  <ownedMember xmi:type="cmof:Association" xmi:id="A_rootElements_definition" name="A_rootElements_definition" visibility="private" memberEnd="Definitions-rootElements A_rootElements_definition-definition">
+    <ownedEnd xmi:type="cmof:Property" xmi:id="A_rootElements_definition-definition" name="definition" type="Definitions" lower="0" owningAssociation="A_rootElements_definition" association="A_rootElements_definition"/>
+  </ownedMember>
+</cmof:Package>

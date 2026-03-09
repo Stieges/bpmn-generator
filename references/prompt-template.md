@@ -265,3 +265,123 @@ Expected structure:
   ]
 }
 ```
+
+---
+
+## Enterprise Few-Shot Patterns (K5)
+
+Referenzmuster fuer komplexe Geschaeftsprozesse. Diese Patterns koennen als Beispiele im Prompt verwendet werden, um haeufige Enterprise-Konstrukte korrekt zu modellieren.
+
+### Pattern 1: Vier-Augen-Prinzip (Dual Control)
+
+Zwei verschiedene Personen muessen einen Vorgang pruefen/genehmigen.
+
+```json
+{
+  "nodes": [
+    { "id": "task_erstpruefer", "type": "userTask", "name": "Antrag pruefen (Erstpruefer)", "lane": "lane_erstpruefer" },
+    { "id": "gw_erstpruefung", "type": "exclusiveGateway", "name": "Erstpruefung bestanden?" },
+    { "id": "task_zweitpruefer", "type": "userTask", "name": "Antrag pruefen (Zweitpruefer)", "lane": "lane_zweitpruefer" },
+    { "id": "gw_zweitpruefung", "type": "exclusiveGateway", "name": "Zweitpruefung bestanden?" },
+    { "id": "task_genehmigen", "type": "serviceTask", "name": "Antrag genehmigen" },
+    { "id": "task_ablehnen", "type": "userTask", "name": "Ablehnung dokumentieren" }
+  ],
+  "edges": [
+    { "id": "f1", "source": "task_erstpruefer", "target": "gw_erstpruefung", "isHappyPath": true },
+    { "id": "f2", "source": "gw_erstpruefung", "target": "task_zweitpruefer", "label": "Ja", "isHappyPath": true },
+    { "id": "f3", "source": "gw_erstpruefung", "target": "task_ablehnen", "label": "Nein" },
+    { "id": "f4", "source": "task_zweitpruefer", "target": "gw_zweitpruefung", "isHappyPath": true },
+    { "id": "f5", "source": "gw_zweitpruefung", "target": "task_genehmigen", "label": "Ja", "isHappyPath": true },
+    { "id": "f6", "source": "gw_zweitpruefung", "target": "task_ablehnen", "label": "Nein" }
+  ]
+}
+```
+
+### Pattern 2: Eskalation mit Fristablauf
+
+Timer-Boundary-Event auf einer Aufgabe, das eine Eskalation ausloest.
+
+```json
+{
+  "nodes": [
+    { "id": "task_bearbeiten", "type": "userTask", "name": "Vorgang bearbeiten" },
+    { "id": "evt_frist", "type": "boundaryEvent", "name": "Frist abgelaufen", "attachedTo": "task_bearbeiten", "marker": "timer", "cancelActivity": false },
+    { "id": "task_eskalieren", "type": "userTask", "name": "Vorgang eskalieren", "lane": "lane_teamleiter" },
+    { "id": "end_eskaliert", "type": "endEvent", "name": "Eskalation abgeschlossen", "marker": "escalation" }
+  ],
+  "edges": [
+    { "id": "f_frist", "source": "evt_frist", "target": "task_eskalieren" },
+    { "id": "f_esk", "source": "task_eskalieren", "target": "end_eskaliert" }
+  ]
+}
+```
+
+### Pattern 3: Wiederholungsschleife (Retry Pattern)
+
+Aufgabe wird wiederholt bis eine Bedingung erfuellt ist.
+
+```json
+{
+  "nodes": [
+    { "id": "task_daten_erfassen", "type": "userTask", "name": "Daten erfassen" },
+    { "id": "task_validieren", "type": "serviceTask", "name": "Daten validieren" },
+    { "id": "gw_valid", "type": "exclusiveGateway", "name": "Daten gueltig?" },
+    { "id": "task_korrigieren", "type": "userTask", "name": "Daten korrigieren" }
+  ],
+  "edges": [
+    { "id": "f1", "source": "task_daten_erfassen", "target": "task_validieren", "isHappyPath": true },
+    { "id": "f2", "source": "task_validieren", "target": "gw_valid", "isHappyPath": true },
+    { "id": "f3", "source": "gw_valid", "target": "task_korrigieren", "label": "Nein" },
+    { "id": "f4", "source": "task_korrigieren", "target": "task_validieren" }
+  ]
+}
+```
+
+### Pattern 4: Kompensation (Undo bei Fehler)
+
+Bereits abgeschlossene Aufgabe wird rueckgaengig gemacht, wenn ein spaeterer Schritt fehlschlaegt.
+
+```json
+{
+  "nodes": [
+    { "id": "task_buchen", "type": "serviceTask", "name": "Betrag buchen" },
+    { "id": "evt_comp_buchen", "type": "boundaryEvent", "name": "Kompensation", "attachedTo": "task_buchen", "marker": "compensation", "cancelActivity": false },
+    { "id": "task_storno", "type": "serviceTask", "name": "Buchung stornieren" },
+    { "id": "task_benachrichtigen", "type": "sendTask", "name": "Kunde benachrichtigen" },
+    { "id": "gw_fehler", "type": "exclusiveGateway", "name": "Versand erfolgreich?" },
+    { "id": "evt_throw_comp", "type": "intermediateThrowEvent", "name": "Kompensation ausloesen", "marker": "compensation" }
+  ],
+  "edges": [
+    { "id": "f1", "source": "task_buchen", "target": "task_benachrichtigen", "isHappyPath": true },
+    { "id": "f2", "source": "task_benachrichtigen", "target": "gw_fehler", "isHappyPath": true },
+    { "id": "f3", "source": "gw_fehler", "target": "evt_throw_comp", "label": "Nein" }
+  ],
+  "associations": [
+    { "id": "assoc_comp", "source": "evt_comp_buchen", "target": "task_storno", "directed": true }
+  ]
+}
+```
+
+### Pattern 5: Event SubProcess (globaler Fehlerhandler)
+
+Event-SubProcess faengt Fehler im uebergeordneten Prozess ab.
+
+```json
+{
+  "nodes": [
+    { "id": "sub_fehlerhandler", "type": "subProcess", "name": "Fehlerbehandlung", "isExpanded": true, "isEventSubProcess": true,
+      "nodes": [
+        { "id": "start_fehler", "type": "startEvent", "name": "Fehler aufgetreten", "marker": "error" },
+        { "id": "task_loggen", "type": "serviceTask", "name": "Fehler protokollieren" },
+        { "id": "task_support", "type": "sendTask", "name": "Support benachrichtigen" },
+        { "id": "end_fehler", "type": "endEvent", "name": "Fehlerbehandlung beendet" }
+      ],
+      "edges": [
+        { "id": "ef1", "source": "start_fehler", "target": "task_loggen", "isHappyPath": true },
+        { "id": "ef2", "source": "task_loggen", "target": "task_support", "isHappyPath": true },
+        { "id": "ef3", "source": "task_support", "target": "end_fehler" }
+      ]
+    }
+  ]
+}
+```

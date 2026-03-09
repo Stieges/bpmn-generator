@@ -1,0 +1,34 @@
+{
+  "pools": [{
+    "id": "Pool_Main",
+    "name": "Hauptprozess",
+    "lanes": [
+      { "id": "Lane_SB", "name": "Sachbearbeiter" }
+    ],
+    "nodes": [
+      { "id": "start1", "type": "startEvent", "name": "Eingang", "lane": "Lane_SB" },
+      { "id": "task1", "type": "userTask", "name": "Vorprüfung", "lane": "Lane_SB" },
+      {
+        "id": "sub1", "type": "subProcess", "name": "Detailprüfung", "lane": "Lane_SB",
+        "isExpanded": true,
+        "nodes": [
+          { "id": "sub1_start", "type": "startEvent", "name": "Start" },
+          { "id": "sub1_task1", "type": "userTask", "name": "Dokumente prüfen" },
+          { "id": "sub1_task2", "type": "serviceTask", "name": "Ergebnis speichern" },
+          { "id": "sub1_end", "type": "endEvent", "name": "Ende" }
+        ],
+        "edges": [
+          { "id": "sub1_f1", "source": "sub1_start", "target": "sub1_task1" },
+          { "id": "sub1_f2", "source": "sub1_task1", "target": "sub1_task2" },
+          { "id": "sub1_f3", "source": "sub1_task2", "target": "sub1_end" }
+        ]
+      },
+      { "id": "end1", "type": "endEvent", "name": "Abgeschlossen", "lane": "Lane_SB" }
+    ],
+    "edges": [
+      { "id": "f1", "source": "start1", "target": "task1" },
+      { "id": "f2", "source": "task1", "target": "sub1" },
+      { "id": "f3", "source": "sub1", "target": "end1" }
+    ]
+  }]
+}
