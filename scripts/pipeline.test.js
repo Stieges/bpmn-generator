@@ -16,6 +16,7 @@ import {
   enforceOrthogonal,
   clipOrthogonal,
   generateBpmnXml,
+  validateBpmnXml,
   generateSvg,
   loadConfig,
   generateDiagramSet,
@@ -1761,4 +1762,85 @@ describe('DOT format', () => {
     expect(dot).toContain('Pool A');
     expect(dot).toContain('Pool B');
   });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Round-Trip XML Validation
+// ═══════════════════════════════════════════════════════════════
+
+describe('Round-Trip XML Validation', () => {
+  test('validateBpmnXml is exported and callable', () => {
+    expect(typeof validateBpmnXml).toBe('function');
+  });
+
+  test('simple-approval: 0 round-trip warnings', async () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toBeDefined();
+    expect(result.validation.xmlWarnings).toEqual([]);
+  });
+
+  test('multi-pool-collaboration: 0 round-trip warnings', async () => {
+    const lc = loadFixture('multi-pool-collaboration.json');
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toBeDefined();
+    expect(result.validation.xmlWarnings).toEqual([]);
+  });
+
+  test('expanded-subprocess: 0 round-trip warnings', async () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toBeDefined();
+    expect(result.validation.xmlWarnings).toEqual([]);
+  });
+
+  test('validateBpmnXml detects invalid XML', async () => {
+    const result = await validateBpmnXml('<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"><bpmn:process id="p1"><bpmn:bogusElement id="x"/></bpmn:process></bpmn:definitions>');
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  test('runPipeline result includes xmlWarnings field', async () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = await runPipeline(lc);
+    expect(result.validation).toHaveProperty('xmlWarnings');
+    expect(Array.isArray(result.validation.xmlWarnings)).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// SVG Golden-File Regression Tests
+// ═══════════════════════════════════════════════════════════════
+
+describe('SVG Golden-File Regression', () => {
+  const goldenFixtures = ['simple-approval', 'multi-pool-collaboration', 'expanded-subprocess'];
+
+  for (const name of goldenFixtures) {
+    test(`${name}: SVG matches golden file`, async () => {
+      const lc = loadFixture(`${name}.json`);
+      const result = await runPipeline(lc);
+      expect(result.svg).toBeDefined();
+
+      let expected;
+      try {
+        expected = readFileSync(resolve(fixturesDir, `${name}.expected.svg`), 'utf8');
+      } catch {
+        throw new Error(`Golden file missing: tests/fixtures/${name}.expected.svg — run golden file generation first`);
+      }
+      expect(result.svg).toBe(expected);
+    });
+
+    test(`${name}: BPMN XML matches golden file`, async () => {
+      const lc = loadFixture(`${name}.json`);
+      const result = await runPipeline(lc);
+      expect(result.bpmnXml).toBeDefined();
+
+      let expected;
+      try {
+        expected = readFileSync(resolve(fixturesDir, `${name}.expected.bpmn`), 'utf8');
+      } catch {
+        throw new Error(`Golden file missing: tests/fixtures/${name}.expected.bpmn — run golden file generation first`);
+      }
+      expect(result.bpmnXml).toBe(expected);
+    });
+  }
 });

@@ -57,7 +57,8 @@
     "innerOuterGap":      3,
     "externalLabelHeight": 25,
     "poolGap":            60,
-    "happyPathLeveling":  false
+    "happyPathLeveling":  false,
+    "crossLaneDeconflict": true
   },
   "elk": {
     "layered": {

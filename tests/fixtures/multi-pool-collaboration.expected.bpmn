@@ -1,121 +1,111 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-  id="Definitions_1"
-  targetNamespace="http://bpmn.io/schema/bpmn">
-
-  <collaboration id="Collaboration_1">
-    <participant id="Participant_Process_Customer" processRef="Process_Customer" name="Customer" />
-    <participant id="Participant_Process_Service" processRef="Process_Service" name="Service Department" />
-    <messageFlow id="mf1" name="Request" sourceRef="c_submit" targetRef="s_start" />
-    <messageFlow id="mf2" name="Response" sourceRef="s_merge" targetRef="c_wait" />
-  </collaboration>
-
-  <process id="Process_Customer" isExecutable="false">
-    <laneSet id="LaneSet_Process_Customer">
-      <lane id="c_lane" name="Customer">
-        <flowNodeRef>c_start</flowNodeRef>
-        <flowNodeRef>c_submit</flowNodeRef>
-        <flowNodeRef>c_wait</flowNodeRef>
-        <flowNodeRef>c_end</flowNodeRef>
-      </lane>
-    </laneSet>
-    <startEvent id="c_start" name="Need identified">
-      <outgoing>cf1</outgoing>
-    </startEvent>
-    <sendTask id="c_submit" name="Submit request">
-      <incoming>cf1</incoming>
-      <outgoing>cf2</outgoing>
-    </sendTask>
-    <receiveTask id="c_wait" name="Wait for response">
-      <incoming>cf2</incoming>
-      <outgoing>cf3</outgoing>
-    </receiveTask>
-    <endEvent id="c_end" name="End">
-      <incoming>cf3</incoming>
-    </endEvent>
-    <sequenceFlow id="cf1" sourceRef="c_start" targetRef="c_submit" />
-    <sequenceFlow id="cf2" sourceRef="c_submit" targetRef="c_wait" />
-    <sequenceFlow id="cf3" sourceRef="c_wait" targetRef="c_end" />
-  </process>
-
-  <process id="Process_Service" isExecutable="false">
-    <laneSet id="LaneSet_Process_Service">
-      <lane id="s_agent" name="Agent">
-        <flowNodeRef>s_start</flowNodeRef>
-        <flowNodeRef>s_review</flowNodeRef>
-        <flowNodeRef>s_gw</flowNodeRef>
-        <flowNodeRef>s_reject</flowNodeRef>
-        <flowNodeRef>s_merge</flowNodeRef>
-        <flowNodeRef>s_end</flowNodeRef>
-      </lane>
-      <lane id="s_mgr" name="Manager">
-        <flowNodeRef>s_approve</flowNodeRef>
-      </lane>
-    </laneSet>
-    <startEvent id="s_start" name="Request received">
-      <outgoing>sf1</outgoing>
-    </startEvent>
-    <userTask id="s_review" name="Review request">
-      <incoming>sf1</incoming>
-      <outgoing>sf2</outgoing>
-    </userTask>
-    <exclusiveGateway id="s_gw" name="Valid?" gatewayDirection="Diverging" default="sf4">
-      <incoming>sf2</incoming>
-      <outgoing>sf3</outgoing>
-      <outgoing>sf4</outgoing>
-    </exclusiveGateway>
-    <serviceTask id="s_approve" name="Process approval">
-      <incoming>sf3</incoming>
-      <outgoing>sf5</outgoing>
-    </serviceTask>
-    <userTask id="s_reject" name="Send rejection">
-      <incoming>sf4</incoming>
-      <outgoing>sf6</outgoing>
-    </userTask>
-    <exclusiveGateway id="s_merge" name="" gatewayDirection="Converging">
-      <incoming>sf5</incoming>
-      <incoming>sf6</incoming>
-      <outgoing>sf7</outgoing>
-    </exclusiveGateway>
-    <endEvent id="s_end" name="End">
-      <incoming>sf7</incoming>
-    </endEvent>
-    <sequenceFlow id="sf1" sourceRef="s_start" targetRef="s_review" />
-    <sequenceFlow id="sf2" sourceRef="s_review" targetRef="s_gw" />
-    <sequenceFlow id="sf3" sourceRef="s_gw" targetRef="s_approve" name="Yes">
-      <conditionExpression xsi:type="tFormalExpression">Yes</conditionExpression>
-    </sequenceFlow>
-    <sequenceFlow id="sf4" sourceRef="s_gw" targetRef="s_reject" name="No" />
-    <sequenceFlow id="sf5" sourceRef="s_approve" targetRef="s_merge" />
-    <sequenceFlow id="sf6" sourceRef="s_reject" targetRef="s_merge" />
-    <sequenceFlow id="sf7" sourceRef="s_merge" targetRef="s_end" />
-  </process>
-
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_Process_Customer" name="Customer" processRef="Process_Customer" />
+    <bpmn:participant id="Participant_Process_Service" name="Service Department" processRef="Process_Service" />
+    <bpmn:messageFlow id="mf1" name="Request" sourceRef="c_submit" targetRef="s_start" />
+    <bpmn:messageFlow id="mf2" name="Response" sourceRef="s_merge" targetRef="c_wait" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Customer" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Customer">
+      <bpmn:lane id="c_lane" name="Customer">
+        <bpmn:flowNodeRef>c_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_submit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_wait</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c_start" name="Need identified">
+      <bpmn:outgoing>cf1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sendTask id="c_submit" name="Submit request">
+      <bpmn:incoming>cf1</bpmn:incoming>
+      <bpmn:outgoing>cf2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:receiveTask id="c_wait" name="Wait for response">
+      <bpmn:incoming>cf2</bpmn:incoming>
+      <bpmn:outgoing>cf3</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:endEvent id="c_end" name="End">
+      <bpmn:incoming>cf3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="cf1" sourceRef="c_start" targetRef="c_submit" />
+    <bpmn:sequenceFlow id="cf2" sourceRef="c_submit" targetRef="c_wait" />
+    <bpmn:sequenceFlow id="cf3" sourceRef="c_wait" targetRef="c_end" />
+  </bpmn:process>
+  <bpmn:process id="Process_Service" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Service">
+      <bpmn:lane id="s_agent" name="Agent">
+        <bpmn:flowNodeRef>s_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_merge</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="s_mgr" name="Manager">
+        <bpmn:flowNodeRef>s_approve</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s_start" name="Request received">
+      <bpmn:outgoing>sf1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="s_review" name="Review request">
+      <bpmn:incoming>sf1</bpmn:incoming>
+      <bpmn:outgoing>sf2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="s_gw" name="Valid?" gatewayDirection="Diverging" default="sf4">
+      <bpmn:incoming>sf2</bpmn:incoming>
+      <bpmn:outgoing>sf3</bpmn:outgoing>
+      <bpmn:outgoing>sf4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="s_approve" name="Process approval">
+      <bpmn:incoming>sf3</bpmn:incoming>
+      <bpmn:outgoing>sf5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="s_reject" name="Send rejection">
+      <bpmn:incoming>sf4</bpmn:incoming>
+      <bpmn:outgoing>sf6</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="s_merge" name="" gatewayDirection="Converging">
+      <bpmn:incoming>sf5</bpmn:incoming>
+      <bpmn:incoming>sf6</bpmn:incoming>
+      <bpmn:outgoing>sf7</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="s_end" name="End">
+      <bpmn:incoming>sf7</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="sf1" sourceRef="s_start" targetRef="s_review" />
+    <bpmn:sequenceFlow id="sf2" sourceRef="s_review" targetRef="s_gw" />
+    <bpmn:sequenceFlow id="sf3" name="Yes" sourceRef="s_gw" targetRef="s_approve">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Yes</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="sf4" name="No" sourceRef="s_gw" targetRef="s_reject" />
+    <bpmn:sequenceFlow id="sf5" sourceRef="s_approve" targetRef="s_merge" />
+    <bpmn:sequenceFlow id="sf6" sourceRef="s_reject" targetRef="s_merge" />
+    <bpmn:sequenceFlow id="sf7" sourceRef="s_merge" targetRef="s_end" />
+  </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Participant_Process_Customer_di" bpmnElement="Participant_Process_Customer" isHorizontal="true">
-        <dc:Bounds x="20" y="20" width="982" height="165" />
+        <dc:Bounds x="20" y="20" width="886" height="165" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c_lane_di" bpmnElement="c_lane" isHorizontal="true">
-        <dc:Bounds x="50" y="20" width="952" height="165" />
+        <dc:Bounds x="50" y="20" width="856" height="165" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Participant_Process_Service_di" bpmnElement="Participant_Process_Service" isHorizontal="true">
-        <dc:Bounds x="20" y="221.7" width="982" height="344.5" />
+        <dc:Bounds x="20" y="220" width="886" height="344" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_agent_di" bpmnElement="s_agent" isHorizontal="true">
-        <dc:Bounds x="50" y="388.7" width="952" height="177.5" />
+        <dc:Bounds x="50" y="387" width="856" height="177" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_mgr_di" bpmnElement="s_mgr" isHorizontal="true">
-        <dc:Bounds x="50" y="221.7" width="952" height="165" />
+        <dc:Bounds x="50" y="220" width="856" height="165" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c_start_di" bpmnElement="c_start">
-        <dc:Bounds x="80" y="59.5" width="36" height="36" />
+        <dc:Bounds x="80" y="59" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="53" y="105.5" width="90" height="20" />
+          <dc:Bounds x="53" y="105" width="90" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c_submit_di" bpmnElement="c_submit">
@@ -125,43 +115,43 @@
         <dc:Bounds x="336" y="50" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c_end_di" bpmnElement="c_end">
-        <dc:Bounds x="496" y="59.5" width="36" height="36" />
+        <dc:Bounds x="496" y="59" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="499.3" y="105.5" width="29.5" height="20" />
+          <dc:Bounds x="499.3" y="105" width="29.5" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_start_di" bpmnElement="s_start">
-        <dc:Bounds x="80" y="428.2" width="36" height="36" />
+        <dc:Bounds x="80" y="426" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="53" y="474.2" width="90" height="20" />
+          <dc:Bounds x="53" y="472" width="90" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_review_di" bpmnElement="s_review">
-        <dc:Bounds x="176" y="418.7" width="100" height="80" />
+        <dc:Bounds x="176" y="417" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_gw_di" bpmnElement="s_gw" isMarkerVisible="true">
-        <dc:Bounds x="336" y="421.2" width="50" height="50" />
+        <dc:Bounds x="336" y="419" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="336.5" y="481.2" width="49" height="20" />
+          <dc:Bounds x="336.5" y="479" width="49" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_approve_di" bpmnElement="s_approve">
-        <dc:Bounds x="872" y="251.7" width="100" height="80" />
+        <dc:Bounds x="776" y="250" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_reject_di" bpmnElement="s_reject">
-        <dc:Bounds x="506" y="431.2" width="100" height="80" />
+        <dc:Bounds x="506" y="429" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_merge_di" bpmnElement="s_merge" isMarkerVisible="true">
-        <dc:Bounds x="666" y="433.7" width="50" height="50" />
+        <dc:Bounds x="666" y="431" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_end_di" bpmnElement="s_end">
-        <dc:Bounds x="776" y="453.2" width="36" height="36" />
+        <dc:Bounds x="776" y="450" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="779.3" y="499.2" width="29.5" height="20" />
+          <dc:Bounds x="779.3" y="496" width="29.5" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="cf1_di" bpmnElement="cf1">
-        <di:waypoint x="111" y="90" />
+        <di:waypoint x="110.4" y="90" />
         <di:waypoint x="176" y="90" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="cf2_di" bpmnElement="cf2">
@@ -170,58 +160,55 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="cf3_di" bpmnElement="cf3">
         <di:waypoint x="436" y="90" />
-        <di:waypoint x="501" y="90" />
+        <di:waypoint x="501.6" y="90" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf1_di" bpmnElement="sf1">
-        <di:waypoint x="111" y="458.7" />
-        <di:waypoint x="176" y="458.7" />
+        <di:waypoint x="110.4" y="457" />
+        <di:waypoint x="176" y="457" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf2_di" bpmnElement="sf2">
-        <di:waypoint x="276" y="458.7" />
-        <di:waypoint x="348.5" y="458.7" />
+        <di:waypoint x="276" y="457" />
+        <di:waypoint x="349" y="457" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf3_di" bpmnElement="sf3">
-        <di:waypoint x="386" y="446.2" />
-        <di:waypoint x="396" y="446.2" />
-        <di:waypoint x="396" y="390.2" />
-        <di:waypoint x="822" y="390.2" />
-        <di:waypoint x="822" y="415.5" />
-        <di:waypoint x="822" y="331.7" />
-        <di:waypoint x="872" y="331.7" />
+        <di:waypoint x="386" y="444" />
+        <di:waypoint x="486" y="444" />
+        <di:waypoint x="486" y="277" />
+        <di:waypoint x="776" y="277" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="396" y="434.2" width="27.5" height="16" />
+          <dc:Bounds x="422.3" y="431" width="27.5" height="16" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf4_di" bpmnElement="sf4">
-        <di:waypoint x="361" y="471.2" />
-        <di:waypoint x="506" y="471.2" />
+        <di:waypoint x="361" y="469" />
+        <di:waypoint x="506" y="469" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="506" y="459.2" width="21" height="16" />
+          <dc:Bounds x="423" y="456" width="21" height="16" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf5_di" bpmnElement="sf5">
-        <di:waypoint x="872" y="331.7" />
-        <di:waypoint x="726" y="331.7" />
-        <di:waypoint x="726" y="442.2" />
-        <di:waypoint x="726" y="458.7" />
-        <di:waypoint x="716" y="458.7" />
+        <di:waypoint x="776" y="330" />
+        <di:waypoint x="776" y="404" />
+        <di:waypoint x="756" y="404" />
+        <di:waypoint x="756" y="456" />
+        <di:waypoint x="716" y="456" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf6_di" bpmnElement="sf6">
-        <di:waypoint x="606" y="471.2" />
-        <di:waypoint x="678.5" y="471.2" />
+        <di:waypoint x="606" y="469" />
+        <di:waypoint x="679" y="469" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf7_di" bpmnElement="sf7">
-        <di:waypoint x="691" y="483.7" />
-        <di:waypoint x="781" y="483.7" />
+        <di:waypoint x="691" y="481" />
+        <di:waypoint x="781.6" y="481" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="mf1_di" bpmnElement="mf1">
         <di:waypoint x="226" y="130" />
-        <di:waypoint x="98" y="428.2" />
+        <di:waypoint x="98" y="426" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="mf2_di" bpmnElement="mf2">
-        <di:waypoint x="691" y="483.7" />
+        <di:waypoint x="691" y="481" />
         <di:waypoint x="386" y="50" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
-</definitions>
+</bpmn:definitions>

@@ -1,132 +1,121 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-  id="Definitions_1"
-  targetNamespace="http://bpmn.io/schema/bpmn">
-
-  <collaboration id="Collaboration_1">
-    <participant id="Participant_Process_Main" processRef="Process_Main" name="Main Pool" />
-  </collaboration>
-
-  <process id="Process_Main" isExecutable="false">
-    <laneSet id="LaneSet_Process_Main">
-      <lane id="lane1" name="Default Lane">
-        <flowNodeRef>start1</flowNodeRef>
-        <flowNodeRef>task1</flowNodeRef>
-        <flowNodeRef>gw1</flowNodeRef>
-        <flowNodeRef>task2</flowNodeRef>
-        <flowNodeRef>task3</flowNodeRef>
-        <flowNodeRef>end1</flowNodeRef>
-      </lane>
-    </laneSet>
-    <startEvent id="start1" name="Start">
-      <outgoing>f1</outgoing>
-    </startEvent>
-    <userTask id="task1" name="Review Document">
-      <incoming>f1</incoming>
-      <incoming>f5</incoming>
-      <outgoing>f2</outgoing>
-    </userTask>
-    <exclusiveGateway id="gw1" name="Approved?" gatewayDirection="Diverging" default="f4">
-      <incoming>f2</incoming>
-      <outgoing>f3</outgoing>
-      <outgoing>f4</outgoing>
-    </exclusiveGateway>
-    <serviceTask id="task2" name="Process Approval">
-      <incoming>f3</incoming>
-      <outgoing>f6</outgoing>
-    </serviceTask>
-    <userTask id="task3" name="Revise Document">
-      <incoming>f4</incoming>
-      <outgoing>f5</outgoing>
-    </userTask>
-    <endEvent id="end1" name="End">
-      <incoming>f6</incoming>
-    </endEvent>
-    <sequenceFlow id="f1" sourceRef="start1" targetRef="task1" />
-    <sequenceFlow id="f2" sourceRef="task1" targetRef="gw1" />
-    <sequenceFlow id="f3" sourceRef="gw1" targetRef="task2" name="Yes">
-      <conditionExpression xsi:type="tFormalExpression">Yes</conditionExpression>
-    </sequenceFlow>
-    <sequenceFlow id="f4" sourceRef="gw1" targetRef="task3" name="No" />
-    <sequenceFlow id="f5" sourceRef="task3" targetRef="task1" />
-    <sequenceFlow id="f6" sourceRef="task2" targetRef="end1" />
-  </process>
-
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_Process_Main" name="Main Pool" processRef="Process_Main" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Main" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Main">
+      <bpmn:lane id="lane1" name="Default Lane">
+        <bpmn:flowNodeRef>start1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end1</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start1" name="Start">
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="task1" name="Review Document">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="gw1" name="Approved?" gatewayDirection="Diverging" default="f4">
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="task2" name="Process Approval">
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="task3" name="Revise Document">
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="end1" name="End">
+      <bpmn:incoming>f6</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start1" targetRef="task1" />
+    <bpmn:sequenceFlow id="f2" sourceRef="task1" targetRef="gw1" />
+    <bpmn:sequenceFlow id="f3" name="Yes" sourceRef="gw1" targetRef="task2">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Yes</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f4" name="No" sourceRef="gw1" targetRef="task3" />
+    <bpmn:sequenceFlow id="f5" sourceRef="task3" targetRef="task1" />
+    <bpmn:sequenceFlow id="f6" sourceRef="task2" targetRef="end1" />
+  </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Participant_Process_Main_di" bpmnElement="Participant_Process_Main" isHorizontal="true">
-        <dc:Bounds x="20" y="20" width="712" height="285" />
+        <dc:Bounds x="20" y="20" width="692" height="295" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="lane1_di" bpmnElement="lane1" isHorizontal="true">
-        <dc:Bounds x="50" y="20" width="682" height="285" />
+        <dc:Bounds x="50" y="20" width="662" height="295" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="start1_di" bpmnElement="start1">
-        <dc:Bounds x="80" y="85.3" width="36" height="36" />
+        <dc:Bounds x="80" y="189" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="76.8" y="131.3" width="42.5" height="20" />
+          <dc:Bounds x="76.8" y="235" width="42.5" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="task1_di" bpmnElement="task1">
-        <dc:Bounds x="176" y="75.8" width="100" height="80" />
+        <dc:Bounds x="176" y="180" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw1_di" bpmnElement="gw1" isMarkerVisible="true">
-        <dc:Bounds x="336" y="65" width="50" height="50" />
+        <dc:Bounds x="316" y="65" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="326.8" y="125" width="68.5" height="20" />
+          <dc:Bounds x="306.8" y="125" width="68.5" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="task2_di" bpmnElement="task2">
-        <dc:Bounds x="506" y="50" width="100" height="80" />
+        <dc:Bounds x="486" y="50" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="task3_di" bpmnElement="task3">
-        <dc:Bounds x="506" y="170" width="100" height="80" />
+        <dc:Bounds x="466" y="180" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="end1_di" bpmnElement="end1">
-        <dc:Bounds x="666" y="59.5" width="36" height="36" />
+        <dc:Bounds x="646" y="59" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="669.3" y="105.5" width="29.5" height="20" />
+          <dc:Bounds x="649.3" y="105" width="29.5" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
-        <di:waypoint x="111" y="115.8" />
-        <di:waypoint x="176" y="115.8" />
+        <di:waypoint x="110.4" y="220" />
+        <di:waypoint x="176" y="220" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
-        <di:waypoint x="276" y="102.5" />
-        <di:waypoint x="348.5" y="102.5" />
+        <di:waypoint x="276" y="207" />
+        <di:waypoint x="296" y="207" />
+        <di:waypoint x="296" y="103" />
+        <di:waypoint x="329" y="103" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
-        <di:waypoint x="386" y="90" />
-        <di:waypoint x="506" y="90" />
+        <di:waypoint x="366" y="90" />
+        <di:waypoint x="486" y="90" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="506" y="78" width="27.5" height="16" />
+          <dc:Bounds x="412.3" y="77" width="27.5" height="16" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
-        <di:waypoint x="361" y="115" />
-        <di:waypoint x="396" y="115" />
-        <di:waypoint x="396" y="196.7" />
-        <di:waypoint x="506" y="196.7" />
+        <di:waypoint x="341" y="115" />
+        <di:waypoint x="446" y="115" />
+        <di:waypoint x="446" y="207" />
+        <di:waypoint x="466" y="207" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="396" y="103" width="21" height="16" />
+          <dc:Bounds x="383" y="102" width="21" height="16" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5">
-        <di:waypoint x="506" y="223.3" />
-        <di:waypoint x="456" y="223.3" />
-        <di:waypoint x="456" y="210.7" />
-        <di:waypoint x="286" y="210.7" />
-        <di:waypoint x="286" y="129.2" />
-        <di:waypoint x="276" y="129.2" />
+        <di:waypoint x="466" y="233" />
+        <di:waypoint x="276" y="233" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6">
-        <di:waypoint x="606" y="90" />
-        <di:waypoint x="671" y="90" />
+        <di:waypoint x="586" y="90" />
+        <di:waypoint x="651.6" y="90" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
-</definitions>
+</bpmn:definitions>

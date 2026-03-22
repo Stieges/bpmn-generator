@@ -31,7 +31,7 @@ import { validateLogicCore } from './validate.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordinates.js';
-import { generateBpmnXml } from './bpmn-xml.js';
+import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 
@@ -62,7 +62,10 @@ async function runPipeline(logicCore) {
   const bpmnXml   = await generateBpmnXml(lc, coordMap);
   const svg       = generateSvg(lc, coordMap);
 
-  return { bpmnXml, svg, coordMap, validation: { errors: [], warnings } };
+  // Round-trip XML validation: parse back through moddle to catch structural issues
+  const roundTrip = await validateBpmnXml(bpmnXml);
+
+  return { bpmnXml, svg, coordMap, validation: { errors: [], warnings, xmlWarnings: roundTrip.warnings } };
 }
 
 /**
@@ -224,6 +227,7 @@ export {
   runElkLayout,
   buildCoordinateMap,
   generateBpmnXml,
+  validateBpmnXml,
   generateSvg,
   enforceOrthogonal,
   clipOrthogonal,

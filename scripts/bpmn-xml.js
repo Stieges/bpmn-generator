@@ -810,4 +810,17 @@ function findLaneInSets(laneSets, laneId) {
   return null;
 }
 
-export { generateBpmnXml };
+/**
+ * Round-trip validate BPMN XML by parsing it back through moddle.
+ * @param {string} xml - BPMN 2.0 XML string
+ * @returns {Promise<{valid: boolean, warnings: string[]}>}
+ */
+async function validateBpmnXml(xml) {
+  const { warnings } = await moddle.fromXML(xml);
+  return {
+    valid: warnings.length === 0,
+    warnings: warnings.map(w => w.message || String(w)),
+  };
+}
+
+export { generateBpmnXml, validateBpmnXml };

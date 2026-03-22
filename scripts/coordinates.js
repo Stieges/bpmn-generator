@@ -334,6 +334,68 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
+  // §5.0f  Cross-lane edge deconfliction: detect overlapping horizontal segments
+  //         of cross-lane edges and nudge them apart to reduce visual confusion.
+  if (CFG.layout?.crossLaneDeconflict !== false) {
+    // Build set of lane-id per node for cross-lane detection
+    const nodeLane = {};
+    for (const proc of allProcesses) {
+      for (const lane of (proc.lanes || [])) {
+        for (const nid of (lane.nodeIds || [])) nodeLane[nid] = lane.id;
+        // Format A: node.lane
+        for (const n of (proc.nodes || [])) {
+          if (n.lane && !nodeLane[n.id]) nodeLane[n.id] = n.lane;
+        }
+      }
+    }
+
+    // Collect cross-lane edges that have orthogonal routes with horizontal segments
+    const crossLaneEdges = [];
+    for (const proc of allProcesses) {
+      for (const edge of (proc.edges || [])) {
+        const pts = edgeCoords[edge.id];
+        if (!pts || pts.length < 3) continue;
+        const srcLane = nodeLane[edge.source];
+        const tgtLane = nodeLane[edge.target];
+        if (!srcLane || !tgtLane || srcLane === tgtLane) continue;
+
+        // Find horizontal segments (same Y)
+        const hSegments = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          if (Math.abs(pts[i].y - pts[i + 1].y) < 1) {
+            const minX = Math.min(pts[i].x, pts[i + 1].x);
+            const maxX = Math.max(pts[i].x, pts[i + 1].x);
+            hSegments.push({ y: pts[i].y, minX, maxX, ptIdx: i, edgeId: edge.id });
+          }
+        }
+        if (hSegments.length) crossLaneEdges.push({ edge, hSegments });
+      }
+    }
+
+    // Compare all pairs for overlap
+    const nudgeOffset = 12;
+    const nudged = new Set();
+    for (let i = 0; i < crossLaneEdges.length; i++) {
+      for (let j = i + 1; j < crossLaneEdges.length; j++) {
+        for (const segA of crossLaneEdges[i].hSegments) {
+          for (const segB of crossLaneEdges[j].hSegments) {
+            // Overlapping Y within threshold and overlapping X range?
+            if (Math.abs(segA.y - segB.y) < 8 &&
+                segA.minX < segB.maxX && segA.maxX > segB.minX) {
+              // Nudge the second edge's segment
+              if (!nudged.has(segB.edgeId)) {
+                const pts = edgeCoords[segB.edgeId];
+                pts[segB.ptIdx].y += nudgeOffset;
+                pts[segB.ptIdx + 1].y += nudgeOffset;
+                nudged.add(segB.edgeId);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   // §5.1  Orthogonal edge endpoint clipping
   //
   // ELK produces orthogonal routes (90° bends). We must preserve this when
