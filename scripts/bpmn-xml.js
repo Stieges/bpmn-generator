@@ -1,439 +1,543 @@
 /**
- * BPMN 2.0 XML Generation (OMG-compliant)
- * Produces valid BPMN 2.0.2 XML with DI (Diagram Interchange).
+ * BPMN 2.0 XML Generation via bpmn-moddle
+ * Uses bpmn-moddle's typed CMOF object model + toXML() for OMG-compliant serialization.
+ * Replaces the legacy string-concatenation approach.
+ *
+ * Signature: generateBpmnXml(lc, coordMap) → Promise<string>
  */
 
+import BpmnModdle from 'bpmn-moddle';
 import { isEvent, isGateway, isBoundaryEvent, bpmnXmlTag } from './types.js';
-import { esc, rn, LANE_HEADER_W, LABEL_DISTANCE } from './utils.js';
+import { rn, LANE_HEADER_W, LABEL_DISTANCE } from './utils.js';
 import { inferGatewayDirections } from './topology.js';
 import { inferEventMarker } from './icons.js';
 
-function biocAttrs(node) {
-  if (!node?.color) return '';
-  let a = '';
-  if (node.color.stroke) a += ` bioc:stroke="${node.color.stroke}"`;
-  if (node.color.fill) a += ` bioc:fill="${node.color.fill}"`;
-  return a;
+const moddle = new BpmnModdle();
+
+/** Helper: create a moddle element with shorthand */
+function create(type, attrs = {}) {
+  return moddle.create(type, attrs);
 }
 
-function generateBpmnXml(lc, coordMap) {
+/**
+ * Map Logic-Core type to bpmn-moddle qualified type name.
+ * e.g. 'userTask' → 'bpmn:UserTask'
+ */
+function moddleType(lcType) {
+  const tag = bpmnXmlTag(lcType);
+  return 'bpmn:' + tag.charAt(0).toUpperCase() + tag.slice(1);
+}
+
+/**
+ * Build event definition moddle element for a node.
+ */
+function buildEventDefinition(node, topLevelDefsMap) {
+  const marker = node.marker || inferEventMarker(node.name || '');
+  if (!marker) return null;
+
+  const typeMap = {
+    message: 'bpmn:MessageEventDefinition',
+    timer: 'bpmn:TimerEventDefinition',
+    error: 'bpmn:ErrorEventDefinition',
+    signal: 'bpmn:SignalEventDefinition',
+    escalation: 'bpmn:EscalationEventDefinition',
+    compensation: 'bpmn:CompensateEventDefinition',
+    conditional: 'bpmn:ConditionalEventDefinition',
+    link: 'bpmn:LinkEventDefinition',
+    cancel: 'bpmn:CancelEventDefinition',
+    terminate: 'bpmn:TerminateEventDefinition',
+  };
+
+  const bpmnType = typeMap[marker];
+  if (!bpmnType) return null;
+
+  const attrs = {};
+
+  // Reference to top-level definition
+  const topDef = topLevelDefsMap.get(marker);
+  if (topDef) {
+    const refProp = {
+      message: 'messageRef', error: 'errorRef',
+      signal: 'signalRef', escalation: 'escalationRef',
+    }[marker];
+    if (refProp) attrs[refProp] = topDef;
+  }
+
+  // Timer expressions
+  if (marker === 'timer' && node.timerExpression) {
+    const te = node.timerExpression;
+    const timerTag = te.type === 'date' ? 'timeDate' : te.type === 'cycle' ? 'timeCycle' : 'timeDuration';
+    const formalExpr = create('bpmn:FormalExpression', { body: te.value });
+    attrs[timerTag] = formalExpr;
+  }
+
+  // Conditional expression
+  if (marker === 'conditional' && node.conditionExpression) {
+    attrs.condition = create('bpmn:FormalExpression', { body: node.conditionExpression });
+  }
+
+  // Link name
+  if (marker === 'link') {
+    attrs.name = node.linkName || node.name || '';
+  }
+
+  return create(bpmnType, attrs);
+}
+
+/**
+ * Collect top-level definitions (message, signal, error, escalation)
+ * and return both the moddle elements array and a marker→element lookup map.
+ */
+function buildTopLevelDefinitions(processes, explicitDefs) {
+  const elements = [];
+  const markerMap = new Map();
+
+  if (explicitDefs && explicitDefs.length > 0) {
+    for (const d of explicitDefs) {
+      const typeMap = {
+        message: 'bpmn:Message', error: 'bpmn:Error',
+        signal: 'bpmn:Signal', escalation: 'bpmn:Escalation',
+      };
+      const bpmnType = typeMap[d.type];
+      if (!bpmnType) continue;
+      const attrs = { id: d.id, name: d.name || '' };
+      if (d.errorCode) attrs.errorCode = d.errorCode;
+      if (d.escalationCode) attrs.escalationCode = d.escalationCode;
+      const el = create(bpmnType, attrs);
+      elements.push(el);
+      markerMap.set(d.type, el);
+    }
+    return { elements, markerMap };
+  }
+
+  // Auto-generate from event markers
+  const seen = new Set();
+  for (const proc of processes) {
+    for (const node of (proc.nodes || [])) {
+      const marker = node.marker || inferEventMarker(node.name || '');
+      if (!marker || seen.has(marker)) continue;
+
+      const tagMap = {
+        message: 'bpmn:Message', error: 'bpmn:Error',
+        signal: 'bpmn:Signal', escalation: 'bpmn:Escalation',
+      };
+      const bpmnType = tagMap[marker];
+      if (!bpmnType) continue;
+
+      seen.add(marker);
+      const shortName = marker.charAt(0).toUpperCase() + marker.slice(1);
+      const el = create(bpmnType, {
+        id: `${shortName}_${elements.length + 1}`,
+        name: shortName,
+      });
+      elements.push(el);
+      markerMap.set(marker, el);
+    }
+  }
+  return { elements, markerMap };
+}
+
+/**
+ * Build a single BPMN process with all flow elements.
+ * Returns { process, flowNodeMap } where flowNodeMap maps node.id → moddle element.
+ */
+function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
+  const nodes = proc.nodes || [];
+  const edges = proc.edges || [];
+
+  inferGatewayDirections(nodes, edges);
+
+  // Build incoming/outgoing maps
+  const incomingMap = {};
+  const outgoingMap = {};
+  for (const e of edges) {
+    const eid = e.id || `flow_${e.source}_${e.target}`;
+    if (!outgoingMap[e.source]) outgoingMap[e.source] = [];
+    outgoingMap[e.source].push(eid);
+    if (!incomingMap[e.target]) incomingMap[e.target] = [];
+    incomingMap[e.target].push(eid);
+  }
+
+  const flowNodeMap = new Map();
+  const flowElements = [];
+
+  // Create flow nodes
+  for (const node of nodes) {
+    const type = moddleType(node.type);
+    const attrs = { id: node.id, name: node.name || '' };
+
+    // Gateway direction
+    if (isGateway(node.type) && node._direction) {
+      attrs.gatewayDirection = node._direction;
+    }
+
+    // Boundary event
+    if (isBoundaryEvent(node)) {
+      // attachedToRef will be resolved after all nodes are created
+      if (node.cancelActivity === false) attrs.cancelActivity = false;
+    }
+
+    // Special attributes
+    if (node.isCompensation) attrs.isForCompensation = true;
+    if (node.isCollection && node.type === 'dataObjectReference') attrs.isCollection = true;
+    if (node.isEventSubProcess && node.type === 'subProcess') attrs.triggeredByEvent = true;
+    if (node.calledElement && node.type === 'callActivity') attrs.calledElement = node.calledElement;
+    if (node.scriptFormat && node.type === 'scriptTask') attrs.scriptFormat = node.scriptFormat;
+    if (node.implementation) attrs.implementation = node.implementation;
+    if (node.type === 'eventBasedGateway') {
+      if (node.eventGatewayType) attrs.eventGatewayType = node.eventGatewayType;
+      if (node.instantiate) attrs.instantiate = true;
+    }
+
+    const el = create(type, attrs);
+
+    // Documentation
+    if (node.documentation) {
+      el.get('documentation').push(create('bpmn:Documentation', { text: node.documentation }));
+    }
+
+    // Event definitions (only Event types have this property, not SubProcess)
+    const eventDef = buildEventDefinition(node, topLevelDefsMap);
+    if (eventDef && el.$descriptor.properties.some(p => p.name === 'eventDefinitions')) {
+      el.get('eventDefinitions').push(eventDef);
+    }
+
+    // Loop / Multi-instance
+    if (node.loopType) {
+      const loopAttrs = {};
+      if (typeof node.loopType === 'object') {
+        if (node.loopType.testBefore) loopAttrs.testBefore = true;
+        if (node.loopType.loopMaximum != null) loopAttrs.loopMaximum = node.loopType.loopMaximum;
+        if (node.loopType.loopCondition) {
+          loopAttrs.loopCondition = create('bpmn:FormalExpression', { body: node.loopType.loopCondition });
+        }
+      }
+      el.loopCharacteristics = create('bpmn:StandardLoopCharacteristics', loopAttrs);
+    } else if (node.multiInstance) {
+      const mi = typeof node.multiInstance === 'object' ? node.multiInstance : { type: node.multiInstance };
+      const miAttrs = { isSequential: mi.type === 'sequential' };
+      if (mi.loopCardinality) {
+        miAttrs.loopCardinality = create('bpmn:FormalExpression', { body: mi.loopCardinality });
+      }
+      if (mi.completionCondition) {
+        miAttrs.completionCondition = create('bpmn:FormalExpression', { body: mi.completionCondition });
+      }
+      el.loopCharacteristics = create('bpmn:MultiInstanceLoopCharacteristics', miAttrs);
+    }
+
+    // Script body
+    if (node.type === 'scriptTask' && node.script) {
+      el.script = node.script;
+    }
+
+    // Expanded SubProcess: add child elements
+    if (node.isExpanded && node.nodes && node.nodes.length > 0) {
+      const childNodeMap = new Map();
+      for (const child of node.nodes) {
+        const childType = moddleType(child.type);
+        const childEl = create(childType, { id: child.id, name: child.name || '' });
+        const childEventDef = buildEventDefinition(child, topLevelDefsMap);
+        if (childEventDef && childEl.$descriptor.properties.some(p => p.name === 'eventDefinitions')) {
+          childEl.get('eventDefinitions').push(childEventDef);
+        }
+        childNodeMap.set(child.id, childEl);
+        el.get('flowElements').push(childEl);
+        flowNodeMap.set(child.id, childEl);
+      }
+      for (const subEdge of (node.edges || [])) {
+        const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
+        const seAttrs = { id: seid };
+        if (subEdge.label) seAttrs.name = subEdge.label;
+        seAttrs.sourceRef = childNodeMap.get(subEdge.source);
+        seAttrs.targetRef = childNodeMap.get(subEdge.target);
+        const seFlow = create('bpmn:SequenceFlow', seAttrs);
+        el.get('flowElements').push(seFlow);
+        flowNodeMap.set(seid, seFlow);
+      }
+    }
+
+    flowNodeMap.set(node.id, el);
+    flowElements.push(el);
+  }
+
+  // Resolve boundary event attachedToRef
+  for (const node of nodes) {
+    if (isBoundaryEvent(node) && node.attachedTo) {
+      const el = flowNodeMap.get(node.id);
+      const attachedEl = flowNodeMap.get(node.attachedTo);
+      if (el && attachedEl) el.attachedToRef = attachedEl;
+    }
+  }
+
+  // Create sequence flows
+  const defaultFlowIds = new Set(Object.values(defaultFlowMap));
+  const seqFlowMap = new Map();
+  for (const edge of edges) {
+    const eid = edge.id || `flow_${edge.source}_${edge.target}`;
+    const attrs = {
+      id: eid,
+      sourceRef: flowNodeMap.get(edge.source),
+      targetRef: flowNodeMap.get(edge.target),
+    };
+    if (edge.label) attrs.name = edge.label;
+
+    // Condition expression
+    const sourceNode = nodes.find(n => n.id === edge.source);
+    const needsCondition = edge.condition ||
+      (sourceNode && (sourceNode.type === 'exclusiveGateway' || sourceNode.type === 'inclusiveGateway') &&
+       sourceNode._direction === 'Diverging' && !defaultFlowIds.has(eid));
+    if (needsCondition) {
+      const expr = edge.condition || edge.label || '';
+      attrs.conditionExpression = create('bpmn:FormalExpression', { body: expr });
+    }
+
+    const seqFlow = create('bpmn:SequenceFlow', attrs);
+    seqFlowMap.set(eid, seqFlow);
+    flowElements.push(seqFlow);
+  }
+
+  // Set incoming/outgoing references on flow nodes (industry convention)
+  for (const edge of edges) {
+    const eid = edge.id || `flow_${edge.source}_${edge.target}`;
+    const seqFlow = seqFlowMap.get(eid);
+    if (!seqFlow) continue;
+    const srcEl = flowNodeMap.get(edge.source);
+    const tgtEl = flowNodeMap.get(edge.target);
+    if (srcEl) srcEl.get('outgoing').push(seqFlow);
+    if (tgtEl) tgtEl.get('incoming').push(seqFlow);
+  }
+
+  // Set default flow references on gateways
+  for (const [nodeId, flowId] of Object.entries(defaultFlowMap)) {
+    const gwEl = flowNodeMap.get(nodeId);
+    const dfEl = seqFlowMap.get(flowId);
+    if (gwEl && dfEl) gwEl.default = dfEl;
+  }
+
+  // Data objects
+  for (const node of nodes) {
+    if (node.type === 'dataObjectReference') {
+      flowElements.push(create('bpmn:DataObject', { id: `${node.id}_do` }));
+    }
+  }
+
+  // Associations
+  // (handled at caller level since they can span processes)
+
+  // Build process element
+  const processEl = create('bpmn:Process', {
+    id: proc.id,
+    isExecutable: false,
+  });
+  if (proc.documentation) {
+    processEl.get('documentation').push(create('bpmn:Documentation', { text: proc.documentation }));
+  }
+
+  // LaneSet
+  const lanes = proc.lanes || [];
+  if (lanes.length > 0) {
+    const laneSet = create('bpmn:LaneSet', { id: `LaneSet_${proc.id || '1'}` });
+    for (const lane of lanes) {
+      const laneEl = buildLane(lane, nodes, flowNodeMap);
+      laneSet.get('lanes').push(laneEl);
+    }
+    processEl.get('laneSets').push(laneSet);
+  }
+
+  // Add all flow elements
+  for (const fe of flowElements) {
+    processEl.get('flowElements').push(fe);
+  }
+
+  return { process: processEl, flowNodeMap };
+}
+
+function buildLane(lane, nodes, flowNodeMap) {
+  const laneEl = create('bpmn:Lane', { id: lane.id, name: lane.name || lane.id });
+  const refs = nodes.filter(n => n.lane === lane.id).map(n => flowNodeMap.get(n.id)).filter(Boolean);
+  for (const ref of refs) {
+    laneEl.get('flowNodeRef').push(ref);
+  }
+  if (lane.children?.length) {
+    const childLaneSet = create('bpmn:LaneSet');
+    for (const child of lane.children) {
+      childLaneSet.get('lanes').push(buildLane(child, nodes, flowNodeMap));
+    }
+    laneEl.childLaneSet = childLaneSet;
+  }
+  return laneEl;
+}
+
+/**
+ * Build default flow map for XOR/Inclusive gateways.
+ */
+function buildDefaultFlowMap(proc) {
+  const nodes = proc.nodes || [];
+  const edges = proc.edges || [];
+  const map = {};
+
+  for (const e of edges) {
+    if (e.isDefault) {
+      map[e.source] = e.id || `flow_${e.source}_${e.target}`;
+    }
+  }
+  for (const n of nodes) {
+    if ((n.type === 'exclusiveGateway' || n.type === 'inclusiveGateway') &&
+        n._direction === 'Diverging' && !map[n.id]) {
+      const gwOutEdges = edges.filter(e => e.source === n.id);
+      if (gwOutEdges.length > 1) {
+        const defaultEdge = gwOutEdges[gwOutEdges.length - 1];
+        map[n.id] = defaultEdge.id || `flow_${defaultEdge.source}_${defaultEdge.target}`;
+      }
+    }
+  }
+  return map;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DI (Diagram Interchange) — BPMNDiagram, BPMNPlane, BPMNShape, BPMNEdge
+// ═══════════════════════════════════════════════════════════════════════
+
+function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collapsedParticipants) {
   const { coords, laneCoords, poolCoords, edgeCoords } = coordMap;
   const isMultiPool = lc.pools && lc.pools.length > 0;
-  const processes   = isMultiPool ? lc.pools : [lc];
-  const collapsedPools = lc.collapsedPools || [];
   const associations = lc.associations || [];
+  const needsCollaboration = !!collaboration;
 
-  const x = [];
+  const plane = create('bpmndi:BPMNPlane', {
+    id: 'BPMNPlane_1',
+    bpmnElement: needsCollaboration ? collaboration : processes[0],
+  });
+  const planeElements = [];
 
-  // §6.1  XML Header & namespace declarations
-  x.push(`<?xml version="1.0" encoding="UTF-8"?>`);
-  x.push(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"`);
-  x.push(`  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`);
-  x.push(`  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"`);
-  x.push(`  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"`);
-  x.push(`  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"`);
-  x.push(`  xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0"`);
-  x.push(`  id="Definitions_1"`);
-  x.push(`  targetNamespace="http://bpmn.io/schema/bpmn">`);
-  x.push('');
-
-  // §6.1b  Top-level definitions: message, signal, error, escalation (OMG spec §9)
-  const topLevelDefs = collectTopLevelDefinitions(processes, lc.definitions);
-  for (const def of topLevelDefs) {
-    let attrs = `id="${def.id}" name="${esc(def.name)}"`;
-    if (def.errorCode) attrs += ` errorCode="${esc(def.errorCode)}"`;
-    if (def.escalationCode) attrs += ` escalationCode="${esc(def.escalationCode)}"`;
-    x.push(`  <${def.tag} ${attrs} />`);
-  }
-  if (topLevelDefs.length > 0) x.push('');
-
-  // §6.2  Collaboration element
-  const hasAnyLanes = processes.some(p => (p.lanes || []).length > 0);
-  const needsCollaboration = isMultiPool || hasAnyLanes || collapsedPools.length > 0;
-
+  // Pool shapes
   if (needsCollaboration) {
-    x.push(`  <collaboration id="Collaboration_1">`);
+    const allParticipants = collaboration.get('participants');
+    for (const part of allParticipants) {
+      const procId = part.processRef?.id || part.id?.replace('Participant_', '');
+      const pc = poolCoords[procId] || poolCoords['_singlePool'];
+      if (!pc) continue;
 
-    // Expanded pool participants (with processRef)
-    for (const proc of processes) {
-      const partId = `Participant_${proc.id}`;
-      x.push(`    <participant id="${partId}" processRef="${proc.id}" name="${esc(proc.name || '')}" />`);
-    }
+      let px = pc.x, py = pc.y, pw = pc.w, ph = pc.h;
 
-    // Collapsed pool participants (no processRef — black box, OMG spec §9.3)
-    for (const cp of collapsedPools) {
-      const partId = `Participant_${cp.id}`;
-      x.push(`    <participant id="${partId}" name="${esc(cp.name || '')}" />`);
-    }
-
-    // Message flows (OMG spec §9.4)
-    if (lc.messageFlows) {
-      for (const mf of lc.messageFlows) {
-        const srcRef = resolveMessageFlowRef(mf.source, processes, collapsedPools);
-        const tgtRef = resolveMessageFlowRef(mf.target, processes, collapsedPools);
-        x.push(`    <messageFlow id="${mf.id}" name="${esc(mf.name || '')}" sourceRef="${srcRef}" targetRef="${tgtRef}" />`);
-      }
-    }
-    x.push(`  </collaboration>`);
-    x.push('');
-  }
-
-  // §6.4  Process elements (only for expanded pools)
-  for (const proc of processes) {
-    const nodes = proc.nodes || [];
-    const edges = proc.edges || [];
-    const lanes = proc.lanes || [];
-
-    inferGatewayDirections(nodes, edges);
-
-    // Build incoming/outgoing maps
-    const incomingMap = {}, outgoingMap = {};
-    for (const e of edges) {
-      const eid = e.id || `flow_${e.source}_${e.target}`;
-      if (!outgoingMap[e.source]) outgoingMap[e.source] = [];
-      outgoingMap[e.source].push(eid);
-      if (!incomingMap[e.target]) incomingMap[e.target] = [];
-      incomingMap[e.target].push(eid);
-    }
-
-    // Build default flow map (gateway → default edge id)
-    // For XOR/Inclusive gateways with >1 outgoing: auto-assign last flow as default
-    // if no explicit isDefault is set (OMG spec §10.5.1)
-    const defaultFlowMap = {};
-    for (const e of edges) {
-      if (e.isDefault) {
-        defaultFlowMap[e.source] = e.id || `flow_${e.source}_${e.target}`;
-      }
-    }
-    for (const n of nodes) {
-      if ((n.type === 'exclusiveGateway' || n.type === 'inclusiveGateway') &&
-          n._direction === 'Diverging' && !defaultFlowMap[n.id]) {
-        const gwOutEdges = edges.filter(e => e.source === n.id);
-        if (gwOutEdges.length > 1) {
-          // Pick the last outgoing edge as default (typically the "else" branch)
-          const defaultEdge = gwOutEdges[gwOutEdges.length - 1];
-          defaultFlowMap[n.id] = defaultEdge.id || `flow_${defaultEdge.source}_${defaultEdge.target}`;
+      // Recalculate from lanes if available
+      const proc = (lc.pools || [lc]).find(p => p.id === procId);
+      const lanes = proc?.lanes || [];
+      if (lanes.length > 0) {
+        const lcs = lanes.map(l => laneCoords[l.id]).filter(Boolean);
+        if (lcs.length) {
+          px = Math.min(...lcs.map(l => l.x)) - LANE_HEADER_W;
+          py = Math.min(...lcs.map(l => l.y));
+          pw = Math.max(...lcs.map(l => l.x + l.w)) - px;
+          ph = Math.max(...lcs.map(l => l.y + l.h)) - py;
         }
       }
-    }
 
-    x.push(`  <process id="${proc.id}" isExecutable="false">`);
+      const shape = create('bpmndi:BPMNShape', {
+        id: `${part.id}_di`,
+        bpmnElement: part,
+        isHorizontal: true,
+        bounds: create('dc:Bounds', { x: rn(px), y: rn(py), width: rn(pw), height: rn(ph) }),
+      });
+      planeElements.push(shape);
 
-    // Process-level documentation
-    if (proc.documentation) {
-      x.push(`    <documentation>${esc(proc.documentation)}</documentation>`);
-    }
-
-    // §6.5  LaneSet — ONE laneSet per process (OMG spec §10.5)
-    if (lanes.length > 0) {
-      x.push(`    <laneSet id="LaneSet_${proc.id || '1'}">`);
-      for (const lane of lanes) {
-        emitLane(lane, nodes, '      ', x);
-      }
-      x.push(`    </laneSet>`);
-    }
-
-    // §6.6  Flow nodes
-    for (const node of nodes) {
-      const tag  = bpmnXmlTag(node.type);
-      const attrs = [`id="${node.id}"`, `name="${esc(node.name || '')}"`];
-
-      // Gateway direction (OMG spec §10.5.1)
-      if (isGateway(node.type) && node._direction) {
-        attrs.push(`gatewayDirection="${node._direction}"`);
-      }
-
-      // Default flow attribute on splitting gateways (OMG spec §10.5.1)
-      if (isGateway(node.type) && defaultFlowMap[node.id]) {
-        attrs.push(`default="${defaultFlowMap[node.id]}"`);
-      }
-
-      // Boundary event attachment
-      if (isBoundaryEvent(node)) {
-        attrs.push(`attachedToRef="${node.attachedTo}"`);
-        if (node.cancelActivity === false) attrs.push(`cancelActivity="false"`);
-      }
-
-      // isForCompensation (OMG spec §10.2.1)
-      if (node.isCompensation) attrs.push(`isForCompensation="true"`);
-
-      // isCollection on dataObjectReference (OMG spec §10.3.1)
-      if (node.isCollection && node.type === 'dataObjectReference') attrs.push(`isCollection="true"`);
-
-      // Event SubProcess: triggeredByEvent (OMG spec §10.2.4)
-      if (node.isEventSubProcess && (node.type === 'subProcess')) attrs.push(`triggeredByEvent="true"`);
-
-      // CallActivity: calledElement (OMG spec §10.2.3)
-      if (node.calledElement && node.type === 'callActivity') attrs.push(`calledElement="${esc(node.calledElement)}"`);
-
-      // ScriptTask: scriptFormat (OMG spec §10.2.5)
-      if (node.scriptFormat && node.type === 'scriptTask') attrs.push(`scriptFormat="${esc(node.scriptFormat)}"`);
-
-      // ServiceTask/SendTask/ReceiveTask: implementation (OMG spec §10.2.5)
-      if (node.implementation) attrs.push(`implementation="${esc(node.implementation)}"`);
-
-      // EventBasedGateway: eventGatewayType, instantiate (OMG spec §10.5.6)
-      if (node.type === 'eventBasedGateway') {
-        if (node.eventGatewayType) attrs.push(`eventGatewayType="${node.eventGatewayType}"`);
-        if (node.instantiate) attrs.push(`instantiate="true"`);
-      }
-
-      const incoming = incomingMap[node.id] || [];
-      const outgoing = outgoingMap[node.id] || [];
-      const eventDef = getEventDefinitionXml(node, topLevelDefs);
-      const isExpandedSub = node.isExpanded && node.nodes && node.nodes.length > 0;
-      const needsBody = incoming.length > 0 || outgoing.length > 0 || eventDef ||
-                        node.loopType || node.multiInstance || node.documentation || isExpandedSub ||
-                        (node.type === 'scriptTask' && node.script);
-
-      if (!needsBody) {
-        x.push(`    <${tag} ${attrs.join(' ')} />`);
-      } else {
-        x.push(`    <${tag} ${attrs.join(' ')}>`);
-
-        // Documentation (OMG spec §8.3.1)
-        if (node.documentation) {
-          x.push(`      <documentation>${esc(node.documentation)}</documentation>`);
-        }
-
-        for (const inc of incoming) x.push(`      <incoming>${inc}</incoming>`);
-        for (const out of outgoing) x.push(`      <outgoing>${out}</outgoing>`);
-
-        if (eventDef) x.push(eventDef);
-
-        // Expanded SubProcess: emit child flow elements + sequence flows inline
-        if (isExpandedSub) {
-          for (const child of node.nodes) {
-            const childTag = bpmnXmlTag(child.type);
-            const childAttrs = [`id="${child.id}"`, `name="${esc(child.name || '')}"`];
-            const childEventDef = getEventDefinitionXml(child, topLevelDefs);
-            // Build child incoming/outgoing from subprocess edges
-            const subEdges = node.edges || [];
-            const childInc = subEdges.filter(e => e.target === child.id).map(e => e.id || `flow_${e.source}_${e.target}`);
-            const childOut = subEdges.filter(e => e.source === child.id).map(e => e.id || `flow_${e.source}_${e.target}`);
-            const childNeedsBody = childInc.length > 0 || childOut.length > 0 || childEventDef;
-            if (!childNeedsBody) {
-              x.push(`      <${childTag} ${childAttrs.join(' ')} />`);
-            } else {
-              x.push(`      <${childTag} ${childAttrs.join(' ')}>`);
-              for (const inc of childInc) x.push(`        <incoming>${inc}</incoming>`);
-              for (const out of childOut) x.push(`        <outgoing>${out}</outgoing>`);
-              if (childEventDef) x.push(childEventDef);
-              x.push(`      </${childTag}>`);
-            }
-          }
-          for (const subEdge of (node.edges || [])) {
-            const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
-            const seAttrs = [`id="${seid}"`, `sourceRef="${subEdge.source}"`, `targetRef="${subEdge.target}"`];
-            if (subEdge.label) seAttrs.push(`name="${esc(subEdge.label)}"`);
-            x.push(`      <sequenceFlow ${seAttrs.join(' ')} />`);
-          }
-        }
-
-        // ScriptTask: script body (OMG spec §10.2.5)
-        if (node.type === 'scriptTask' && node.script) {
-          x.push(`      <script>${esc(node.script)}</script>`);
-        }
-
-        // Loop / Multi-instance (OMG spec §10.2.2)
-        if (node.loopType) {
-          if (typeof node.loopType === 'object') {
-            const loopAttrs = [];
-            if (node.loopType.testBefore) loopAttrs.push(`testBefore="true"`);
-            if (node.loopType.loopMaximum != null) loopAttrs.push(`loopMaximum="${node.loopType.loopMaximum}"`);
-            if (node.loopType.loopCondition) {
-              x.push(`      <standardLoopCharacteristics${loopAttrs.length ? ' ' + loopAttrs.join(' ') : ''}>`);
-              x.push(`        <loopCondition xsi:type="tFormalExpression">${esc(node.loopType.loopCondition)}</loopCondition>`);
-              x.push(`      </standardLoopCharacteristics>`);
-            } else {
-              x.push(`      <standardLoopCharacteristics${loopAttrs.length ? ' ' + loopAttrs.join(' ') : ''} />`);
-            }
-          } else {
-            x.push(`      <standardLoopCharacteristics />`);
-          }
-        } else if (node.multiInstance) {
-          const mi = typeof node.multiInstance === 'object' ? node.multiInstance : { type: node.multiInstance };
-          const isSeq = mi.type === 'sequential' ? 'true' : 'false';
-          const hasChildren = mi.loopCardinality || mi.completionCondition;
-          if (hasChildren) {
-            x.push(`      <multiInstanceLoopCharacteristics isSequential="${isSeq}">`);
-            if (mi.loopCardinality) x.push(`        <loopCardinality>${esc(mi.loopCardinality)}</loopCardinality>`);
-            if (mi.completionCondition) x.push(`        <completionCondition>${esc(mi.completionCondition)}</completionCondition>`);
-            x.push(`      </multiInstanceLoopCharacteristics>`);
-          } else {
-            x.push(`      <multiInstanceLoopCharacteristics isSequential="${isSeq}" />`);
-          }
-        }
-
-        x.push(`    </${tag}>`);
-      }
-    }
-
-    // §6.7  Sequence flows
-    // Build set of default flow IDs for conditionExpression logic
-    const defaultFlowIds = new Set(Object.values(defaultFlowMap));
-    for (const edge of edges) {
-      const eid = edge.id || `flow_${edge.source}_${edge.target}`;
-      const attrs = [`id="${eid}"`, `sourceRef="${edge.source}"`, `targetRef="${edge.target}"`];
-      if (edge.label) attrs.push(`name="${esc(edge.label)}"`);
-
-      // Determine if this flow needs a conditionExpression:
-      // Non-default outgoing flows from XOR/Inclusive gateways (OMG spec §10.5.1)
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const needsCondition = edge.condition ||
-        (sourceNode && (sourceNode.type === 'exclusiveGateway' || sourceNode.type === 'inclusiveGateway') &&
-         sourceNode._direction === 'Diverging' && !defaultFlowIds.has(eid));
-
-      if (needsCondition) {
-        const expr = edge.condition || edge.label || '';
-        x.push(`    <sequenceFlow ${attrs.join(' ')}>`);
-        x.push(`      <conditionExpression xsi:type="tFormalExpression">${esc(expr)}</conditionExpression>`);
-        x.push(`    </sequenceFlow>`);
-      } else {
-        x.push(`    <sequenceFlow ${attrs.join(' ')} />`);
-      }
-    }
-
-    // §6.8  Data objects
-    for (const node of nodes) {
-      if (node.type === 'dataObjectReference') {
-        x.push(`    <dataObject id="${node.id}_do" />`);
-      }
-    }
-
-    // §6.8b  Associations (OMG spec §7.2)
-    const procAssociations = associations.filter(a => {
-      const srcInProc = nodes.some(n => n.id === a.source);
-      const tgtInProc = nodes.some(n => n.id === a.target);
-      return srcInProc || tgtInProc;
-    });
-    for (const assoc of procAssociations) {
-      const dir = assoc.directed ? ` associationDirection="One"` : '';
-      x.push(`    <association id="${assoc.id}" sourceRef="${assoc.source}" targetRef="${assoc.target}"${dir} />`);
-    }
-
-    x.push(`  </process>`);
-    x.push('');
-  }
-
-  // §6.9  BPMN Diagram Interchange (DI)
-  x.push(`  <bpmndi:BPMNDiagram id="BPMNDiagram_1">`);
-  x.push(`    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${needsCollaboration ? 'Collaboration_1' : processes[0].id}">`);
-
-  // Pool shapes (expanded + collapsed)
-  if (needsCollaboration) {
-    for (const proc of processes) {
-      const partId = `Participant_${proc.id}`;
-      const pc = poolCoords[proc.id] || poolCoords['_singlePool'];
-      if (pc) {
-        let px = pc.x, py = pc.y, pw = pc.w, ph = pc.h;
-        const lanes = proc.lanes || [];
-        if (lanes.length > 0) {
-          const lcs = lanes.map(l => laneCoords[l.id]).filter(Boolean);
-          if (lcs.length) {
-            px = Math.min(...lcs.map(l => l.x)) - LANE_HEADER_W;
-            py = Math.min(...lcs.map(l => l.y));
-            pw = Math.max(...lcs.map(l => l.x + l.w)) - px;
-            ph = Math.max(...lcs.map(l => l.y + l.h)) - py;
-          }
-        }
-        x.push(`      <bpmndi:BPMNShape id="${partId}_di" bpmnElement="${partId}" isHorizontal="true">`);
-        x.push(`        <dc:Bounds x="${rn(px)}" y="${rn(py)}" width="${rn(pw)}" height="${rn(ph)}" />`);
-        x.push(`      </bpmndi:BPMNShape>`);
-      }
-
-      emitLaneDI(proc.lanes || [], laneCoords, x);
-    }
-
-    // Collapsed pool shapes
-    for (const cp of collapsedPools) {
-      const partId = `Participant_${cp.id}`;
-      const pc = poolCoords[cp.id];
-      if (pc) {
-        x.push(`      <bpmndi:BPMNShape id="${partId}_di" bpmnElement="${partId}" isHorizontal="true">`);
-        x.push(`        <dc:Bounds x="${rn(pc.x)}" y="${rn(pc.y)}" width="${rn(pc.w)}" height="${rn(pc.h)}" />`);
-        x.push(`      </bpmndi:BPMNShape>`);
+      // Lane DI
+      if (proc?.lanes) {
+        buildLaneDI(proc.lanes, laneCoords, planeElements, allFlowNodeMaps);
       }
     }
   }
 
-  // Node shapes with DI Label Bounds
-  for (const proc of processes) {
+  // Node shapes
+  for (const proc of (lc.pools || [lc])) {
     for (const node of (proc.nodes || [])) {
       const c = coords[node.id];
       if (!c) continue;
-      const markerAttr = (node.type === 'exclusiveGateway') ? ' isMarkerVisible="true"' : '';
-      const expandedAttr = (node.isExpanded && node.nodes) ? ' isExpanded="true"' : '';
-      x.push(`      <bpmndi:BPMNShape id="${node.id}_di" bpmnElement="${node.id}"${markerAttr}${expandedAttr}${biocAttrs(node)}>`);
-      x.push(`        <dc:Bounds x="${rn(c.x)}" y="${rn(c.y)}" width="${rn(c.w)}" height="${rn(c.h)}" />`);
 
-      // DI Label Bounds (OMG spec §12.1) — calculate actual label position
+      const flowNodeEl = allFlowNodeMaps.get(node.id);
+      const shapeAttrs = {
+        id: `${node.id}_di`,
+        bpmnElement: flowNodeEl || node.id,
+        bounds: create('dc:Bounds', { x: rn(c.x), y: rn(c.y), width: rn(c.w), height: rn(c.h) }),
+      };
+      if (node.type === 'exclusiveGateway') shapeAttrs.isMarkerVisible = true;
+      if (node.isExpanded && node.nodes) shapeAttrs.isExpanded = true;
+
+      // bioc color
+      if (node.color) {
+        if (node.color.stroke) shapeAttrs['bioc:stroke'] = node.color.stroke;
+        if (node.color.fill) shapeAttrs['bioc:fill'] = node.color.fill;
+      }
+
+      const shape = create('bpmndi:BPMNShape', shapeAttrs);
+
+      // Label bounds for events/gateways
       if ((isEvent(node.type) || isGateway(node.type)) && node.name) {
         const labelW = Math.min(node.name.length * 6.5 + 10, 90);
         const labelX = c.x + c.w / 2 - labelW / 2;
         const labelY = c.y + c.h + LABEL_DISTANCE;
-        x.push(`        <bpmndi:BPMNLabel>`);
-        x.push(`          <dc:Bounds x="${rn(labelX)}" y="${rn(labelY)}" width="${rn(labelW)}" height="${rn(20)}" />`);
-        x.push(`        </bpmndi:BPMNLabel>`);
+        shape.label = create('bpmndi:BPMNLabel', {
+          bounds: create('dc:Bounds', { x: rn(labelX), y: rn(labelY), width: rn(labelW), height: 20 }),
+        });
       }
-      x.push(`      </bpmndi:BPMNShape>`);
+      planeElements.push(shape);
 
-      // Expanded SubProcess children: emit BPMNShape + BPMNEdge for child nodes
+      // Expanded SubProcess children DI
       if (node.isExpanded && node.nodes) {
         for (const child of node.nodes) {
           const cc = coords[child.id];
           if (!cc) continue;
-          const childMarker = (child.type === 'exclusiveGateway') ? ' isMarkerVisible="true"' : '';
-          x.push(`      <bpmndi:BPMNShape id="${child.id}_di" bpmnElement="${child.id}"${childMarker}${biocAttrs(child)}>`);
-          x.push(`        <dc:Bounds x="${rn(cc.x)}" y="${rn(cc.y)}" width="${rn(cc.w)}" height="${rn(cc.h)}" />`);
+          const childShapeAttrs = {
+            id: `${child.id}_di`,
+            bpmnElement: allFlowNodeMaps.get(child.id) || child.id,
+            bounds: create('dc:Bounds', { x: rn(cc.x), y: rn(cc.y), width: rn(cc.w), height: rn(cc.h) }),
+          };
+          if (child.type === 'exclusiveGateway') childShapeAttrs.isMarkerVisible = true;
+          if (child.color) {
+            if (child.color.stroke) childShapeAttrs['bioc:stroke'] = child.color.stroke;
+            if (child.color.fill) childShapeAttrs['bioc:fill'] = child.color.fill;
+          }
+          const childShape = create('bpmndi:BPMNShape', childShapeAttrs);
           if ((isEvent(child.type) || isGateway(child.type)) && child.name) {
             const clw = Math.min(child.name.length * 6.5 + 10, 90);
             const clx = cc.x + cc.w / 2 - clw / 2;
             const cly = cc.y + cc.h + LABEL_DISTANCE;
-            x.push(`        <bpmndi:BPMNLabel>`);
-            x.push(`          <dc:Bounds x="${rn(clx)}" y="${rn(cly)}" width="${rn(clw)}" height="${rn(20)}" />`);
-            x.push(`        </bpmndi:BPMNLabel>`);
+            childShape.label = create('bpmndi:BPMNLabel', {
+              bounds: create('dc:Bounds', { x: rn(clx), y: rn(cly), width: rn(clw), height: 20 }),
+            });
           }
-          x.push(`      </bpmndi:BPMNShape>`);
+          planeElements.push(childShape);
         }
+        // SubProcess edge DI
         for (const subEdge of (node.edges || [])) {
           const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
           const spts = edgeCoords[seid] || [];
-          x.push(`      <bpmndi:BPMNEdge id="${seid}_di" bpmnElement="${seid}">`);
-          if (spts.length >= 2) {
-            for (const p of spts) x.push(`        <di:waypoint x="${rn(p.x)}" y="${rn(p.y)}" />`);
-          } else {
-            const ss = coords[subEdge.source], st = coords[subEdge.target];
-            if (ss && st) {
-              x.push(`        <di:waypoint x="${rn(ss.x + ss.w/2)}" y="${rn(ss.y + ss.h/2)}" />`);
-              x.push(`        <di:waypoint x="${rn(st.x + st.w/2)}" y="${rn(st.y + st.h/2)}" />`);
-            }
-          }
-          x.push(`      </bpmndi:BPMNEdge>`);
+          const waypoints = buildWaypoints(spts, coords, subEdge.source, subEdge.target);
+          planeElements.push(create('bpmndi:BPMNEdge', {
+            id: `${seid}_di`,
+            bpmnElement: allFlowNodeMaps.get(seid) || seid,
+            waypoint: waypoints,
+          }));
         }
       }
     }
   }
 
-  // Edge shapes
-  for (const proc of processes) {
+  // Edge DI
+  for (const proc of (lc.pools || [lc])) {
     for (const edge of (proc.edges || [])) {
       const eid = edge.id || `flow_${edge.source}_${edge.target}`;
       const pts = edgeCoords[eid] || [];
-      x.push(`      <bpmndi:BPMNEdge id="${eid}_di" bpmnElement="${eid}">`);
-      if (pts.length >= 2) {
-        for (const p of pts) x.push(`        <di:waypoint x="${rn(p.x)}" y="${rn(p.y)}" />`);
-      } else {
-        const s = coords[edge.source], t = coords[edge.target];
-        if (s && t) {
-          x.push(`        <di:waypoint x="${rn(s.x + s.w/2)}" y="${rn(s.y + s.h/2)}" />`);
-          x.push(`        <di:waypoint x="${rn(t.x + t.w/2)}" y="${rn(t.y + t.h/2)}" />`);
-        }
-      }
-      // Edge label DI bounds — first horizontal segment, 5px above
+      const waypoints = buildWaypoints(pts, coords, edge.source, edge.target);
+      const edgeEl = create('bpmndi:BPMNEdge', {
+        id: `${eid}_di`,
+        bpmnElement: allFlowNodeMaps.get(eid) || eid,
+        waypoint: waypoints,
+      });
+
+      // Edge label
       if (edge.label && pts.length >= 2) {
-        let lx, ly;
-        let found = false;
+        let lx, ly, found = false;
         for (let i = 0; i < pts.length - 1; i++) {
           if (Math.abs(pts[i + 1].y - pts[i].y) < 1) {
             lx = (pts[i].x + pts[i + 1].x) / 2;
@@ -444,11 +548,11 @@ function generateBpmnXml(lc, coordMap) {
         }
         if (!found) { lx = pts[1].x; ly = pts[1].y - 5; }
         const lw = edge.label.length * 6.5 + 8;
-        x.push(`        <bpmndi:BPMNLabel>`);
-        x.push(`          <dc:Bounds x="${rn(lx - lw/2)}" y="${rn(ly - 8)}" width="${rn(lw)}" height="${rn(16)}" />`);
-        x.push(`        </bpmndi:BPMNLabel>`);
+        edgeEl.label = create('bpmndi:BPMNLabel', {
+          bounds: create('dc:Bounds', { x: rn(lx - lw / 2), y: rn(ly - 8), width: rn(lw), height: 16 }),
+        });
       }
-      x.push(`      </bpmndi:BPMNEdge>`);
+      planeElements.push(edgeEl);
     }
   }
 
@@ -457,16 +561,22 @@ function generateBpmnXml(lc, coordMap) {
     for (const mf of lc.messageFlows) {
       const srcCoord = coords[mf.source] || poolCoords[mf.source];
       const tgtCoord = coords[mf.target] || poolCoords[mf.target];
-      x.push(`      <bpmndi:BPMNEdge id="${mf.id}_di" bpmnElement="${mf.id}">`);
+      const waypoints = [];
       if (srcCoord && tgtCoord) {
-        const sx = (srcCoord.x || 0) + (srcCoord.w || 0) / 2;
-        const sy = (srcCoord.y || 0) + (srcCoord.h || 0);
-        const tx = (tgtCoord.x || 0) + (tgtCoord.w || 0) / 2;
-        const ty = tgtCoord.y || 0;
-        x.push(`        <di:waypoint x="${rn(sx)}" y="${rn(sy)}" />`);
-        x.push(`        <di:waypoint x="${rn(tx)}" y="${rn(ty)}" />`);
+        waypoints.push(create('dc:Point', {
+          x: rn((srcCoord.x || 0) + (srcCoord.w || 0) / 2),
+          y: rn((srcCoord.y || 0) + (srcCoord.h || 0)),
+        }));
+        waypoints.push(create('dc:Point', {
+          x: rn((tgtCoord.x || 0) + (tgtCoord.w || 0) / 2),
+          y: rn(tgtCoord.y || 0),
+        }));
       }
-      x.push(`      </bpmndi:BPMNEdge>`);
+      planeElements.push(create('bpmndi:BPMNEdge', {
+        id: `${mf.id}_di`,
+        bpmnElement: allFlowNodeMaps.get(mf.id) || mf.id,
+        waypoint: waypoints,
+      }));
     }
   }
 
@@ -475,138 +585,229 @@ function generateBpmnXml(lc, coordMap) {
     const srcC = coords[assoc.source];
     const tgtC = coords[assoc.target];
     if (srcC && tgtC) {
-      x.push(`      <bpmndi:BPMNEdge id="${assoc.id}_di" bpmnElement="${assoc.id}">`);
-      x.push(`        <di:waypoint x="${rn(srcC.x + srcC.w/2)}" y="${rn(srcC.y + srcC.h/2)}" />`);
-      x.push(`        <di:waypoint x="${rn(tgtC.x + tgtC.w/2)}" y="${rn(tgtC.y + tgtC.h/2)}" />`);
-      x.push(`      </bpmndi:BPMNEdge>`);
+      planeElements.push(create('bpmndi:BPMNEdge', {
+        id: `${assoc.id}_di`,
+        bpmnElement: allFlowNodeMaps.get(assoc.id) || assoc.id,
+        waypoint: [
+          create('dc:Point', { x: rn(srcC.x + srcC.w / 2), y: rn(srcC.y + srcC.h / 2) }),
+          create('dc:Point', { x: rn(tgtC.x + tgtC.w / 2), y: rn(tgtC.y + tgtC.h / 2) }),
+        ],
+      }));
     }
   }
 
-  x.push(`    </bpmndi:BPMNPlane>`);
-  x.push(`  </bpmndi:BPMNDiagram>`);
-  x.push(`</definitions>`);
-  return x.join('\n');
+  // Assign planeElements
+  for (const pe of planeElements) {
+    plane.get('planeElement').push(pe);
+  }
+
+  return create('bpmndi:BPMNDiagram', { id: 'BPMNDiagram_1', plane });
 }
 
-function emitLaneDI(lanes, laneCoords, x) {
+function buildLaneDI(lanes, laneCoords, planeElements, allFlowNodeMaps) {
   for (const lane of lanes) {
     const lcc = laneCoords[lane.id];
     if (lcc) {
-      x.push(`      <bpmndi:BPMNShape id="${lane.id}_di" bpmnElement="${lane.id}" isHorizontal="true">`);
-      x.push(`        <dc:Bounds x="${rn(lcc.x)}" y="${rn(lcc.y)}" width="${rn(lcc.w)}" height="${rn(lcc.h)}" />`);
-      x.push(`      </bpmndi:BPMNShape>`);
+      planeElements.push(create('bpmndi:BPMNShape', {
+        id: `${lane.id}_di`,
+        bpmnElement: allFlowNodeMaps.get(lane.id) || lane.id,
+        isHorizontal: true,
+        bounds: create('dc:Bounds', { x: rn(lcc.x), y: rn(lcc.y), width: rn(lcc.w), height: rn(lcc.h) }),
+      }));
     }
     if (lane.children?.length) {
-      emitLaneDI(lane.children, laneCoords, x);
+      buildLaneDI(lane.children, laneCoords, planeElements, allFlowNodeMaps);
     }
   }
 }
 
-function emitLane(lane, nodes, indent, x) {
-  x.push(`${indent}<lane id="${lane.id}" name="${esc(lane.name || lane.id)}">`);
-  nodes.filter(n => n.lane === lane.id)
-       .forEach(n => x.push(`${indent}  <flowNodeRef>${n.id}</flowNodeRef>`));
-  if (lane.children?.length) {
-    x.push(`${indent}  <childLaneSet>`);
-    for (const child of lane.children) {
-      emitLane(child, nodes, indent + '    ', x);
-    }
-    x.push(`${indent}  </childLaneSet>`);
+function buildWaypoints(pts, coords, sourceId, targetId) {
+  if (pts.length >= 2) {
+    return pts.map(p => create('dc:Point', { x: rn(p.x), y: rn(p.y) }));
   }
-  x.push(`${indent}</lane>`);
+  const s = coords[sourceId], t = coords[targetId];
+  if (s && t) {
+    return [
+      create('dc:Point', { x: rn(s.x + s.w / 2), y: rn(s.y + s.h / 2) }),
+      create('dc:Point', { x: rn(t.x + t.w / 2), y: rn(t.y + t.h / 2) }),
+    ];
+  }
+  return [];
 }
 
-function resolveMessageFlowRef(ref, processes, collapsedPools) {
+function resolveMessageFlowRef(ref, processes, collapsedPools, participantMap) {
   for (const p of processes) {
-    if (p.id === ref) return `Participant_${ref}`;
+    if (p.id === ref) return participantMap.get(ref);
   }
   for (const cp of (collapsedPools || [])) {
-    if (cp.id === ref) return `Participant_${ref}`;
+    if (cp.id === ref) return participantMap.get(ref);
   }
-  return ref; // node id
+  // Must be a node id — return string (will be resolved from flowNodeMap)
+  return ref;
 }
 
-// §6.10  Collect top-level definitions (OMG spec §8.4, §9)
-// If explicit definitions[] are provided, use them. Otherwise auto-generate from markers.
-function collectTopLevelDefinitions(processes, explicitDefs) {
-  // Use explicit definitions if provided (from import round-trip or user input)
-  if (explicitDefs && explicitDefs.length > 0) {
-    return explicitDefs.map(d => ({
-      tag: d.type,
-      id: d.id,
-      name: d.name || '',
-      marker: d.type,
-      errorCode: d.errorCode,
-      escalationCode: d.escalationCode,
-    }));
-  }
+// ═══════════════════════════════════════════════════════════════════════
+// MAIN ENTRY POINT
+// ═══════════════════════════════════════════════════════════════════════
 
-  // Auto-generate from event markers (backward-compatible)
-  const defs = [];
-  const seen = new Set();
+async function generateBpmnXml(lc, coordMap) {
+  const isMultiPool = lc.pools && lc.pools.length > 0;
+  const processes = isMultiPool ? lc.pools : [lc];
+  const collapsedPools = lc.collapsedPools || [];
+  const associations = lc.associations || [];
+  const hasAnyLanes = processes.some(p => (p.lanes || []).length > 0);
+  const needsCollaboration = isMultiPool || hasAnyLanes || collapsedPools.length > 0;
 
+  // 1. Top-level definitions
+  const { elements: topLevelElements, markerMap: topLevelDefsMap } =
+    buildTopLevelDefinitions(processes, lc.definitions);
+
+  // 2. Build processes
+  const allFlowNodeMaps = new Map();
+  const processElements = [];
   for (const proc of processes) {
-    for (const node of (proc.nodes || [])) {
-      const marker = node.marker || inferEventMarker(node.name || '');
-      if (!marker || seen.has(marker)) continue;
+    // Need to infer gateway directions before building default flow map
+    inferGatewayDirections(proc.nodes || [], proc.edges || []);
+    const defaultFlowMap = buildDefaultFlowMap(proc);
+    const { process: processEl, flowNodeMap } = buildProcess(proc, defaultFlowMap, topLevelDefsMap);
+    processElements.push(processEl);
+    for (const [k, v] of flowNodeMap) allFlowNodeMaps.set(k, v);
+    // Also register sequence flows
+    for (const fe of processEl.get('flowElements')) {
+      if (fe.$type === 'bpmn:SequenceFlow') allFlowNodeMaps.set(fe.id, fe);
+    }
+  }
 
-      const tag = {
-        message: 'message', timer: null, error: 'error', signal: 'signal',
-        escalation: 'escalation', compensation: null, conditional: null,
-        link: null, cancel: null, terminate: null, multiple: null, parallelMultiple: null,
-      }[marker];
+  // 3. Collaboration
+  let collaboration = null;
+  const participantMap = new Map();
+  if (needsCollaboration) {
+    collaboration = create('bpmn:Collaboration', { id: 'Collaboration_1' });
+    const participants = [];
 
-      if (tag) {
-        seen.add(marker);
-        const id = `${tag.charAt(0).toUpperCase() + tag.slice(1)}_${defs.length + 1}`;
-        const name = marker.charAt(0).toUpperCase() + marker.slice(1);
-        defs.push({ tag, id, name, marker });
+    for (let i = 0; i < processes.length; i++) {
+      const proc = processes[i];
+      const part = create('bpmn:Participant', {
+        id: `Participant_${proc.id}`,
+        name: proc.name || '',
+        processRef: processElements[i],
+      });
+      participants.push(part);
+      participantMap.set(proc.id, part);
+    }
+
+    for (const cp of collapsedPools) {
+      const part = create('bpmn:Participant', {
+        id: `Participant_${cp.id}`,
+        name: cp.name || '',
+      });
+      participants.push(part);
+      participantMap.set(cp.id, part);
+    }
+
+    // Message flows
+    if (lc.messageFlows) {
+      const msgFlows = [];
+      for (const mf of lc.messageFlows) {
+        const srcRef = participantMap.get(mf.source) || allFlowNodeMaps.get(mf.source) || mf.source;
+        const tgtRef = participantMap.get(mf.target) || allFlowNodeMaps.get(mf.target) || mf.target;
+        const msgFlow = create('bpmn:MessageFlow', {
+          id: mf.id,
+          name: mf.name || '',
+          sourceRef: srcRef,
+          targetRef: tgtRef,
+        });
+        msgFlows.push(msgFlow);
+        allFlowNodeMaps.set(mf.id, msgFlow);
+      }
+      collaboration.messageFlows = msgFlows;
+    }
+
+    collaboration.participants = participants;
+  }
+
+  // 4. Associations (at process level)
+  for (const assoc of associations) {
+    for (const processEl of processElements) {
+      const flowEls = processEl.get('flowElements');
+      const srcInProc = flowEls.some(fe => fe.id === assoc.source);
+      const tgtInProc = flowEls.some(fe => fe.id === assoc.target);
+      if (srcInProc || tgtInProc) {
+        const dir = assoc.directed ? 'One' : undefined;
+        const assocEl = create('bpmn:Association', {
+          id: assoc.id,
+          sourceRef: allFlowNodeMaps.get(assoc.source) || assoc.source,
+          targetRef: allFlowNodeMaps.get(assoc.target) || assoc.target,
+          associationDirection: dir,
+        });
+        processEl.get('artifacts').push(assocEl);
+        allFlowNodeMaps.set(assoc.id, assocEl);
+        break;
       }
     }
   }
-  return defs;
+
+  // 5. Register lane elements in allFlowNodeMaps (for DI bpmnElement refs)
+  for (const proc of processes) {
+    registerLaneRefs(proc.lanes || [], processElements, allFlowNodeMaps);
+  }
+
+  // 6. DI
+  const diagram = buildDI(lc, coordMap, processElements, collaboration, allFlowNodeMaps, []);
+
+  // 7. Assemble definitions
+  const definitions = create('bpmn:Definitions', {
+    id: 'Definitions_1',
+    targetNamespace: 'http://bpmn.io/schema/bpmn',
+  });
+
+  const rootElements = definitions.get('rootElements');
+
+  // Top-level definitions first
+  for (const el of topLevelElements) rootElements.push(el);
+
+  // Collaboration before processes
+  if (collaboration) rootElements.push(collaboration);
+
+  // Processes
+  for (const pe of processElements) rootElements.push(pe);
+
+  // Diagram
+  definitions.get('diagrams').push(diagram);
+
+  // 8. Serialize
+  const { xml } = await moddle.toXML(definitions, { format: true, preamble: true });
+  return xml;
 }
 
-function getEventDefinitionXml(node, topLevelDefs) {
-  const marker = node.marker || inferEventMarker(node.name || '');
-  if (!marker) return null;
-  const indent = '      ';
-
-  // Find matching top-level definition for ref attribute
-  const topDef = (topLevelDefs || []).find(d => d.marker === marker);
-  const refAttr = topDef ? ` ${topDef.tag}Ref="${topDef.id}"` : '';
-
-  switch (marker) {
-    case 'message':      return `${indent}<messageEventDefinition${refAttr} />`;
-    case 'timer': {
-      if (node.timerExpression) {
-        const te = node.timerExpression;
-        const timerTag = te.type === 'date' ? 'timeDate' : te.type === 'cycle' ? 'timeCycle' : 'timeDuration';
-        return `${indent}<timerEventDefinition>\n${indent}  <${timerTag}>${esc(te.value)}</${timerTag}>\n${indent}</timerEventDefinition>`;
+function registerLaneRefs(lanes, processElements, allFlowNodeMaps) {
+  for (const lane of lanes) {
+    // Find the lane moddle element in the process
+    for (const proc of processElements) {
+      const laneSets = proc.get('laneSets');
+      const found = findLaneInSets(laneSets, lane.id);
+      if (found) {
+        allFlowNodeMaps.set(lane.id, found);
+        break;
       }
-      return `${indent}<timerEventDefinition />`;
     }
-    case 'error':        return `${indent}<errorEventDefinition${refAttr} />`;
-    case 'signal':       return `${indent}<signalEventDefinition${refAttr} />`;
-    case 'escalation':   return `${indent}<escalationEventDefinition${refAttr} />`;
-    case 'compensation': return `${indent}<compensateEventDefinition />`;
-    case 'conditional': {
-      if (node.conditionExpression) {
-        return `${indent}<conditionalEventDefinition>\n${indent}  <condition xsi:type="tFormalExpression">${esc(node.conditionExpression)}</condition>\n${indent}</conditionalEventDefinition>`;
-      }
-      return `${indent}<conditionalEventDefinition />`;
+    if (lane.children?.length) {
+      registerLaneRefs(lane.children, processElements, allFlowNodeMaps);
     }
-    case 'link': {
-      const linkName = node.linkName || node.name || '';
-      if (linkName) {
-        return `${indent}<linkEventDefinition name="${esc(linkName)}" />`;
-      }
-      return `${indent}<linkEventDefinition />`;
-    }
-    case 'cancel':       return `${indent}<cancelEventDefinition />`;
-    case 'terminate':    return `${indent}<terminateEventDefinition />`;
-    default: return null;
   }
 }
 
-export { generateBpmnXml, resolveMessageFlowRef, collectTopLevelDefinitions, getEventDefinitionXml };
+function findLaneInSets(laneSets, laneId) {
+  for (const ls of (laneSets || [])) {
+    for (const lane of (ls.get('lanes') || [])) {
+      if (lane.id === laneId) return lane;
+      if (lane.childLaneSet) {
+        const found = findLaneInSets([lane.childLaneSet], laneId);
+        if (found) return found;
+      }
+    }
+  }
+  return null;
+}
+
+export { generateBpmnXml };

@@ -63,12 +63,17 @@
     "layered": {
       "elk.algorithm":                                    "layered",
       "elk.direction":                                    "RIGHT",
-      "elk.spacing.nodeNode":                             "40",
+      "elk.spacing.nodeNode":                             "50",
       "elk.layered.spacing.nodeNodeBetweenLayers":        "60",
+      "elk.layered.spacing.edgeEdgeBetweenLayers":        "15",
+      "elk.layered.spacing.edgeNodeBetweenLayers":        "20",
       "elk.edgeRouting":                                  "ORTHOGONAL",
       "elk.layered.crossingMinimization.strategy":        "LAYER_SWEEP",
-      "elk.layered.nodePlacement.strategy":               "BRANDES_KOEPF",
-      "elk.layered.considerModelOrder.strategy":          "NODES_AND_EDGES"
+      "elk.layered.nodePlacement.strategy":               "NETWORK_SIMPLEX",
+      "elk.layered.considerModelOrder.strategy":          "NODES_AND_EDGES",
+      "elk.layered.thoroughness":                         "10",
+      "elk.layered.compaction.postCompaction.strategy":    "EDGE_LENGTH",
+      "elk.layered.cycleBreaking.strategy":               "DEPTH_FIRST"
     },
     "rectpacking": {
       "elk.algorithm":                        "rectpacking",

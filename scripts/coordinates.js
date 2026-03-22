@@ -55,10 +55,16 @@ function buildCoordinateMap(elkResult, lc) {
     }
 
     // Regular node — use actual shape dimensions, not ELK dimensions
-    const shapeH = node._shapeH || node.height;
-    const lcNode = findNodeInAllProcesses(node.id, allProcesses);
-    const specSz = SHAPE[lcNode?.type] || { w: node.width, h: shapeH };
-    coords[node.id] = { x: ax, y: ay, w: specSz.w, h: specSz.h };
+    // Exception: expanded subprocesses use ELK-computed dimensions
+    // (ELK sizes compound nodes to encompass their children)
+    if (node._isExpanded) {
+      coords[node.id] = { x: ax, y: ay, w: node.width, h: node.height };
+    } else {
+      const shapeH = node._shapeH || node.height;
+      const lcNode = findNodeInAllProcesses(node.id, allProcesses);
+      const specSz = SHAPE[lcNode?.type] || { w: node.width, h: shapeH };
+      coords[node.id] = { x: ax, y: ay, w: specSz.w, h: specSz.h };
+    }
 
     for (const c of node.children || []) collectNodes(c, ax, ay);
     for (const e of node.edges   || []) collectEdge(e, ax, ay);
@@ -194,6 +200,25 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
+  // §5.0b2  Reposition collapsed pools below all expanded pools.
+  //         After §5.0 recalculates lane/pool bounds from node positions, expanded
+  //         pools may have grown taller than ELK's original estimate.  Collapsed
+  //         pools (black-box participants) must be pushed below.
+  if (allCollapsedPools.length > 0) {
+    const expandedBottoms = allProcesses.map(p => {
+      const pc = poolCoords[p.id] || poolCoords['_singlePool'];
+      return pc ? pc.y + pc.h : 0;
+    });
+    let nextY = Math.max(...expandedBottoms) + 40;
+    for (const cp of allCollapsedPools) {
+      const pc = poolCoords[cp.id];
+      if (pc) {
+        pc.y = nextY;
+        nextY += pc.h + 40;
+      }
+    }
+  }
+
   // §5.0c  Happy-Path Y-Leveling (align happy-path nodes to median Y per lane)
   if (CFG.layout?.happyPathLeveling) {
     for (const proc of allProcesses) {
@@ -224,6 +249,87 @@ function buildCoordinateMap(elkResult, lc) {
             coords[id].y = medianY - coords[id].h / 2;
           }
         }
+      }
+    }
+  }
+
+  // §5.0d  Fan-out alignment: when an exclusive gateway fans out to 3+ targets,
+  //        snap those targets to the same x-column, and their direct successors
+  //        (typically end events) to a second aligned x-column.
+  //        This prevents ELK's slight horizontal offsets on parallel branches.
+  for (const proc of allProcesses) {
+    const edges = proc.edges || [];
+    const nodes = proc.nodes || [];
+    const outgoing = {};
+    for (const e of edges) (outgoing[e.source] ||= []).push(e.target);
+
+    for (const node of nodes) {
+      if (node.type !== 'exclusiveGateway') continue;
+      const targets = (outgoing[node.id] || []).filter(id => coords[id]);
+      if (targets.length < 3) continue;
+
+      // Align targets to rightmost x
+      const maxX = Math.max(...targets.map(id => coords[id].x));
+      for (const id of targets) coords[id].x = maxX;
+
+      // Align their successors (end events) to a second column
+      const succs = targets.flatMap(id => (outgoing[id] || []).filter(s => coords[s]));
+      if (succs.length >= 2) {
+        const maxSX = Math.max(...succs.map(id => coords[id].x));
+        for (const id of succs) coords[id].x = maxSX;
+      }
+    }
+  }
+
+  // §5.0e  Edge route compaction: replace extreme ELK detour routes.
+  //        ELK sometimes routes loop-back edges far outside pool bounds.
+  //        Detect these and replace with simple orthogonal routes.
+  for (const proc of allProcesses) {
+    const procEdges = proc.edges || [];
+    const poolC = poolCoords[proc.id] || poolCoords['_singlePool'];
+    if (!poolC) continue;
+
+    const margin = 80;
+    const poolMinY = poolC.y - margin;
+    const poolMaxY = poolC.y + poolC.h + margin;
+    const poolMinX = poolC.x - margin;
+    const poolMaxX = poolC.x + poolC.w + margin;
+
+    for (const edge of procEdges) {
+      const pts = edgeCoords[edge.id];
+      if (!pts || pts.length < 3) continue;
+
+      // Check if any waypoint is outside pool bounds + margin
+      const hasDetour = pts.some(p =>
+        p.y < poolMinY || p.y > poolMaxY || p.x < poolMinX || p.x > poolMaxX
+      );
+      if (!hasDetour) continue;
+
+      const srcC = coords[edge.source];
+      const tgtC = coords[edge.target];
+      if (!srcC || !tgtC) continue;
+
+      const srcCx = srcC.x + srcC.w / 2;
+      const srcCy = srcC.y + srcC.h / 2;
+      const tgtCx = tgtC.x + tgtC.w / 2;
+      const tgtCy = tgtC.y + tgtC.h / 2;
+
+      const dx = Math.abs(tgtCx - srcCx);
+      const dy = Math.abs(tgtCy - srcCy);
+
+      if (dy > dx) {
+        // Primarily vertical connection
+        const srcExit  = { x: srcCx, y: srcCy > tgtCy ? srcC.y : srcC.y + srcC.h };
+        const tgtEntry = { x: tgtCx, y: srcCy > tgtCy ? tgtC.y + tgtC.h : tgtC.y };
+        const midY = (srcExit.y + tgtEntry.y) / 2;
+        edgeCoords[edge.id] = [srcExit, { x: srcCx, y: midY }, { x: tgtCx, y: midY }, tgtEntry];
+      } else {
+        // Primarily horizontal connection
+        const goRight = tgtCx > srcCx;
+        const srcExit  = { x: goRight ? srcC.x + srcC.w : srcC.x, y: srcCy };
+        const tgtEntry = { x: goRight ? tgtC.x : tgtC.x + tgtC.w, y: tgtCy };
+        const midX = (srcExit.x + tgtEntry.x) / 2;
+        edgeCoords[edge.id] = [srcExit, { x: midX, y: srcCy }, { x: midX, y: tgtCy }, tgtEntry];
       }
     }
   }
@@ -306,6 +412,64 @@ function buildCoordinateMap(elkResult, lc) {
     const pts = edgeCoords[eid];
     if (!pts || pts.length < 2) continue;
     edgeCoords[eid] = enforceOrthogonal(pts);
+  }
+
+  // §5.5  Final zigzag cleanup: detect and replace routes that zigzag excessively.
+  //        Runs AFTER clipping (§5.1) + orthogonal enforcement (§5.3) because those
+  //        steps can introduce zigzags when ELK routes start far from the source node
+  //        (common for cross-lane edges).
+  //        Skip happy-path edges — ELK's layout for these is usually correct.
+  for (const proc of allProcesses) {
+    for (const edge of (proc.edges || [])) {
+      if (edge.isHappyPath) continue;
+
+      const pts = edgeCoords[edge.id];
+      if (!pts || pts.length < 3) continue;
+
+      const srcC = coords[edge.source];
+      const tgtC = coords[edge.target];
+      if (!srcC || !tgtC) continue;
+
+      const srcCx = srcC.x + srcC.w / 2;
+      const srcCy = srcC.y + srcC.h / 2;
+      const tgtCx = tgtC.x + tgtC.w / 2;
+      const tgtCy = tgtC.y + tgtC.h / 2;
+
+      // Criterion 1: route length vs direct Manhattan distance
+      let routeLength = 0;
+      for (let i = 1; i < pts.length; i++) {
+        routeLength += Math.abs(pts[i].x - pts[i - 1].x) + Math.abs(pts[i].y - pts[i - 1].y);
+      }
+      const directDist = Math.abs(tgtCx - srcCx) + Math.abs(tgtCy - srcCy);
+
+      // Criterion 2: Y-range exceedance
+      const routeYs = pts.map(p => p.y);
+      const routeYRange = Math.max(...routeYs) - Math.min(...routeYs);
+      const nodeYRange = Math.abs(tgtCy - srcCy);
+
+      const isZigzag =
+        (directDist > 20 && routeLength > 3 * directDist) ||
+        (routeYRange > nodeYRange + 200);
+
+      if (!isZigzag) continue;
+
+      // Replace with clean orthogonal route
+      const dx = Math.abs(tgtCx - srcCx);
+      const dy = Math.abs(tgtCy - srcCy);
+
+      if (dy > dx) {
+        const srcExit  = { x: srcCx, y: srcCy > tgtCy ? srcC.y : srcC.y + srcC.h };
+        const tgtEntry = { x: tgtCx, y: srcCy > tgtCy ? tgtC.y + tgtC.h : tgtC.y };
+        const midY = (srcExit.y + tgtEntry.y) / 2;
+        edgeCoords[edge.id] = [srcExit, { x: srcCx, y: midY }, { x: tgtCx, y: midY }, tgtEntry];
+      } else {
+        const goRight = tgtCx > srcCx;
+        const srcExit  = { x: goRight ? srcC.x + srcC.w : srcC.x, y: srcCy };
+        const tgtEntry = { x: goRight ? tgtC.x : tgtC.x + tgtC.w, y: tgtCy };
+        const midX = (srcExit.x + tgtEntry.x) / 2;
+        edgeCoords[edge.id] = [srcExit, { x: midX, y: srcCy }, { x: midX, y: tgtCy }, tgtEntry];
+      }
+    }
   }
 
   return { coords, laneCoords, poolCoords, edgeCoords };

@@ -99,7 +99,7 @@ describe('layoutAgent', () => {
     const lc = loadFixture('simple-approval.json');
     const result = await layoutAgent({ logicCore: lc, options: {} });
     expect(result.bpmnXml).toBeDefined();
-    expect(result.bpmnXml).toContain('<definitions');
+    expect(result.bpmnXml).toMatch(/definitions/);
     expect(result.svg).toBeDefined();
     expect(result.svg).toContain('<svg');
     expect(result.done).toBe(true);
@@ -207,7 +207,7 @@ describe('orchestrate', () => {
     const lc = loadFixture('multi-pool-collaboration.json');
     const result = await orchestrate(lc);
 
-    expect(result.bpmnXml).toContain('<definitions');
+    expect(result.bpmnXml).toMatch(/definitions/);
     expect(result.svg).toContain('<svg');
     expect(result.compliance).toBeDefined();
   });

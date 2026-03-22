@@ -129,11 +129,38 @@ export function identifyHappyPathNodes(nodes, edges) {
 }
 
 /**
+ * Normalize lane assignments: convert Format B (lane.nodeIds) → Format A (node.lane).
+ * Format A (node.lane) is what the layout engine reads for ELK partitioning.
+ * Format B (lane.nodeIds) is what the LLM typically generates.
+ * Existing node.lane values (Format A) are NOT overwritten.
+ */
+export function normalizeLaneAssignments(proc) {
+  const lanes = proc.lanes || [];
+  const nodes = proc.nodes || [];
+  if (lanes.length === 0 || nodes.length === 0) return;
+
+  const nodeIdToLane = {};
+  for (const lane of lanes) {
+    if (!lane.nodeIds) continue;
+    for (const nodeId of lane.nodeIds) {
+      nodeIdToLane[nodeId] = lane.id;
+    }
+  }
+
+  for (const node of nodes) {
+    if (!node.lane && nodeIdToLane[node.id]) {
+      node.lane = nodeIdToLane[node.id];
+    }
+  }
+}
+
+/**
  * Pre-process a Logic-Core before ELK graph construction.
  */
 export function preprocessLogicCore(lc) {
   const processes = lc.pools ? lc.pools : [lc];
   for (const proc of processes) {
+    normalizeLaneAssignments(proc);
     sortNodesTopologically(proc);
     orderLanesByFlow(proc);
   }

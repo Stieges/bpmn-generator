@@ -22,6 +22,7 @@ import {
   collapseSubProcesses,
   extractSubProcessAsLogicCore,
 } from './pipeline.js';
+import { normalizeLaneAssignments } from './topology.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
@@ -278,15 +279,15 @@ describe('runPipeline', () => {
     expect(result.bpmnXml).toBeTruthy();
     expect(result.svg).toBeTruthy();
 
-    // Check BPMN XML structure
-    expect(result.bpmnXml).toContain('<definitions');
-    expect(result.bpmnXml).toContain('xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"');
+    // Check BPMN XML structure (supports both default and prefixed namespaces)
+    expect(result.bpmnXml).toMatch(/definitions/);
+    expect(result.bpmnXml).toContain('http://www.omg.org/spec/BPMN/20100524/MODEL');
     expect(result.bpmnXml).toContain('xmlns:bpmndi=');
-    expect(result.bpmnXml).toContain('<process');
-    expect(result.bpmnXml).toContain('<laneSet');
-    expect(result.bpmnXml).toContain('<userTask');
-    expect(result.bpmnXml).toContain('<serviceTask');
-    expect(result.bpmnXml).toContain('<exclusiveGateway');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?process/);
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?laneSet/);
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?userTask/);
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?serviceTask/);
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?exclusiveGateway/);
     expect(result.bpmnXml).toContain('gatewayDirection=');
     expect(result.bpmnXml).toContain('<bpmndi:BPMNDiagram');
     expect(result.bpmnXml).toContain('<bpmndi:BPMNShape');
@@ -303,11 +304,11 @@ describe('runPipeline', () => {
     expect(result.bpmnXml).toBeTruthy();
 
     // Collaboration-specific checks
-    expect(result.bpmnXml).toContain('<collaboration');
-    expect(result.bpmnXml).toContain('<participant');
-    expect(result.bpmnXml).toContain('<messageFlow');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?collaboration/);
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?participant/);
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?messageFlow/);
     // Should have 2 processes
-    const processMatches = result.bpmnXml.match(/<process /g);
+    const processMatches = result.bpmnXml.match(/<(bpmn:)?process /g);
     expect(processMatches.length).toBe(2);
   });
 
@@ -486,7 +487,7 @@ describe('Expanded Sub-Processes', () => {
     expect(result.bpmnXml).toBeTruthy();
 
     // SubProcess element contains child flow elements
-    expect(result.bpmnXml).toContain('<subProcess');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?subProcess/);
     expect(result.bpmnXml).toContain('sub1_start');
     expect(result.bpmnXml).toContain('sub1_task1');
     expect(result.bpmnXml).toContain('sub1_end');
@@ -591,6 +592,70 @@ describe('extractSubProcessAsLogicCore', () => {
   test('returns null for non-existent subprocess', () => {
     const lc = loadFixture('expanded-subprocess.json');
     expect(extractSubProcessAsLogicCore(lc, 'nonexistent')).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// §9b  normalizeLaneAssignments (Format B → Format A)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('normalizeLaneAssignments', () => {
+  test('sets node.lane from lane.nodeIds (Format B → A)', () => {
+    const proc = {
+      lanes: [{ id: 'L1', name: 'Lane 1', nodeIds: ['n1', 'n2'] }],
+      nodes: [{ id: 'n1', type: 'task' }, { id: 'n2', type: 'task' }],
+    };
+    normalizeLaneAssignments(proc);
+    expect(proc.nodes[0].lane).toBe('L1');
+    expect(proc.nodes[1].lane).toBe('L1');
+  });
+
+  test('does not overwrite existing node.lane (Format A has priority)', () => {
+    const proc = {
+      lanes: [
+        { id: 'L1', name: 'Lane 1', nodeIds: ['n1'] },
+        { id: 'L2', name: 'Lane 2', nodeIds: [] },
+      ],
+      nodes: [{ id: 'n1', type: 'task', lane: 'L2' }],
+    };
+    normalizeLaneAssignments(proc);
+    expect(proc.nodes[0].lane).toBe('L2');
+  });
+
+  test('leaves nodes without lane assignment unchanged', () => {
+    const proc = {
+      lanes: [{ id: 'L1', name: 'Lane 1', nodeIds: ['n1'] }],
+      nodes: [{ id: 'n1', type: 'task' }, { id: 'n2', type: 'task' }],
+    };
+    normalizeLaneAssignments(proc);
+    expect(proc.nodes[0].lane).toBe('L1');
+    expect(proc.nodes[1].lane).toBeUndefined();
+  });
+
+  test('handles lanes without nodeIds gracefully', () => {
+    const proc = {
+      lanes: [{ id: 'L1', name: 'Lane 1' }],
+      nodes: [{ id: 'n1', type: 'task' }],
+    };
+    normalizeLaneAssignments(proc);
+    expect(proc.nodes[0].lane).toBeUndefined();
+  });
+
+  test('no-op when no lanes', () => {
+    const proc = { nodes: [{ id: 'n1', type: 'task' }] };
+    normalizeLaneAssignments(proc);
+    expect(proc.nodes[0].lane).toBeUndefined();
+  });
+});
+
+describe('extractSubProcessAsLogicCore — Format A', () => {
+  test('sets node.lane on extracted subprocess nodes', () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    const subLc = extractSubProcessAsLogicCore(lc, 'sub1');
+    const lane = subLc.pools[0].lanes[0];
+    for (const node of subLc.pools[0].nodes) {
+      expect(node.lane).toBe(lane.id);
+    }
   });
 });
 
@@ -733,7 +798,7 @@ describe('OMG Compliance — Execution Attributes', () => {
       }],
     };
     const result = await runPipeline(lc);
-    expect(result.bpmnXml).toContain('<timeDuration');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?timeDuration/);
     expect(result.bpmnXml).toContain('PT5D');
 
     const reimported = await bpmnToLogicCore(result.bpmnXml);
@@ -760,8 +825,8 @@ describe('OMG Compliance — Execution Attributes', () => {
     };
     const result = await runPipeline(lc);
     expect(result.bpmnXml).toContain('scriptFormat="groovy"');
-    expect(result.bpmnXml).toContain('<script>');
-    expect(result.bpmnXml).toContain('println &quot;hello&quot;');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?script>/);
+    expect(result.bpmnXml).toMatch(/println.*hello/);
 
     const reimported = await bpmnToLogicCore(result.bpmnXml);
     const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
@@ -813,7 +878,7 @@ describe('OMG Compliance — Execution Attributes', () => {
     };
     const result = await runPipeline(lc);
     expect(result.bpmnXml).toContain('conditionalEventDefinition');
-    expect(result.bpmnXml).toContain('<condition');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?condition/);
 
     const reimported = await bpmnToLogicCore(result.bpmnXml);
     const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
@@ -866,8 +931,8 @@ describe('OMG Compliance — Execution Attributes', () => {
     };
     const result = await runPipeline(lc);
     expect(result.bpmnXml).toContain('multiInstanceLoopCharacteristics');
-    expect(result.bpmnXml).toContain('<loopCardinality');
-    expect(result.bpmnXml).toContain('<completionCondition');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?loopCardinality/);
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?completionCondition/);
 
     const reimported = await bpmnToLogicCore(result.bpmnXml);
     const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
@@ -918,7 +983,7 @@ describe('OMG Compliance — Execution Attributes', () => {
     expect(result.bpmnXml).toContain('standardLoopCharacteristics');
     expect(result.bpmnXml).toContain('testBefore="true"');
     expect(result.bpmnXml).toContain('loopMaximum="10"');
-    expect(result.bpmnXml).toContain('<loopCondition');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?loopCondition/);
 
     const reimported = await bpmnToLogicCore(result.bpmnXml);
     const nodes = reimported.pools ? reimported.pools[0].nodes : reimported.nodes;
@@ -954,7 +1019,7 @@ describe('OMG Compliance — Execution Attributes', () => {
     };
     const result = await runPipeline(lc);
     expect(result.bpmnXml).toContain('errorCode="ERR_PAY_001"');
-    expect(result.bpmnXml).toContain('<message id="Msg_1"');
+    expect(result.bpmnXml).toMatch(/<(bpmn:)?message id="Msg_1"/);
 
     const reimported = await bpmnToLogicCore(result.bpmnXml);
     expect(reimported.definitions).toBeDefined();

@@ -411,6 +411,27 @@ const STYLE_RULES = [
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },
+  {
+    id: 'M09', layer: 'style', defaultSeverity: 'WARNING',
+    description: 'Lane-Node-Zuweisung: Format B (lane.nodeIds) ohne Format A (node.lane)',
+    ref: {},
+    scope: 'process',
+    check: (proc) => {
+      const lanes = proc.lanes || [], nodes = proc.nodes || [];
+      if (lanes.length === 0) return { pass: true };
+      const msgs = [];
+      for (const lane of lanes) {
+        if (!lane.nodeIds || lane.nodeIds.length === 0) continue;
+        const missingFormatA = lane.nodeIds.filter(nid => {
+          const node = nodes.find(n => n.id === nid);
+          return node && node.lane !== lane.id;
+        });
+        if (missingFormatA.length > 0)
+          msgs.push(`Lane "${lane.id}" uses nodeIds (Format B) but ${missingFormatA.length} node(s) lack node.lane (Format A): ${missingFormatA.slice(0, 3).join(', ')}${missingFormatA.length > 3 ? '...' : ''}`);
+      }
+      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+    }
+  },
   // Platzhalter für zukünftige Style-Regeln
   {
     id: 'M05', layer: 'style', defaultSeverity: 'OFF', // NOT_IMPLEMENTED

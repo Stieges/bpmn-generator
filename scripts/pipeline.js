@@ -59,7 +59,7 @@ async function runPipeline(logicCore) {
   const elkGraph  = logicCoreToElk(lc);
   const elkResult = await runElkLayout(elkGraph);
   const coordMap  = buildCoordinateMap(elkResult, lc);
-  const bpmnXml   = generateBpmnXml(lc, coordMap);
+  const bpmnXml   = await generateBpmnXml(lc, coordMap);
   const svg       = generateSvg(lc, coordMap);
 
   return { bpmnXml, svg, coordMap, validation: { errors: [], warnings } };
@@ -135,11 +135,16 @@ function extractSubProcessAsLogicCore(logicCore, subProcessId) {
   for (const proc of processes) {
     for (const node of (proc.nodes || [])) {
       if (node.id === subProcessId && node.isExpanded && node.nodes?.length) {
+        const laneId = `Lane_${subProcessId}`;
+        // Set Format A (node.lane) in addition to Format B (lane.nodeIds)
+        for (const n of node.nodes) {
+          if (!n.lane) n.lane = laneId;
+        }
         return {
           pools: [{
             id: `Pool_${subProcessId}`,
             name: node.name || subProcessId,
-            lanes: [{ id: `Lane_${subProcessId}`, name: node.name || subProcessId, nodeIds: node.nodes.map(n => n.id) }],
+            lanes: [{ id: laneId, name: node.name || subProcessId, nodeIds: node.nodes.map(n => n.id) }],
             nodes: node.nodes,
             edges: node.edges || [],
           }],
@@ -247,7 +252,6 @@ async function main() {
   const importDot  = flags.includes('--import-dot');
   const generateDoc = flags.includes('--doc');
   const drillDown  = flags.includes('--drill-down');
-
   if (!inputArg) {
     console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc]');
     process.exit(1);
@@ -324,7 +328,7 @@ async function main() {
     result.validation.errors.forEach(e => console.error('  · ' + e));
     process.exit(1);
   }
-  console.log('✓ Logic-Core validated (structural soundness OK)');
+  console.log(`✓ Logic-Core validated (structural soundness OK)`);
 
   const xmlPath = `${outputBase}.bpmn`;
   writeFileSync(xmlPath, result.bpmnXml, 'utf8');
