@@ -289,7 +289,7 @@ function buildCoordinateMap(elkResult, lc) {
     const poolC = poolCoords[proc.id] || poolCoords['_singlePool'];
     if (!poolC) continue;
 
-    const margin = 80;
+    const margin = 120;
     const poolMinY = poolC.y - margin;
     const poolMaxY = poolC.y + poolC.h + margin;
     const poolMinX = poolC.x - margin;

@@ -50,7 +50,7 @@
     "poolHeader": "#e8e8e8"
   },
   "layout": {
-    "laneHeaderWidth":    30,
+    "laneHeaderWidth":    40,
     "lanePadding":        30,
     "labelDistance":       10,
     "taskBorderRadius":   10,
@@ -64,17 +64,22 @@
     "layered": {
       "elk.algorithm":                                    "layered",
       "elk.direction":                                    "RIGHT",
-      "elk.spacing.nodeNode":                             "50",
-      "elk.layered.spacing.nodeNodeBetweenLayers":        "60",
+      "elk.spacing.nodeNode":                             "60",
+      "elk.spacing.edgeLabel":                            "5",
+      "elk.layered.spacing.nodeNodeBetweenLayers":        "80",
       "elk.layered.spacing.edgeEdgeBetweenLayers":        "15",
-      "elk.layered.spacing.edgeNodeBetweenLayers":        "20",
+      "elk.layered.spacing.edgeNodeBetweenLayers":        "30",
       "elk.edgeRouting":                                  "ORTHOGONAL",
       "elk.layered.crossingMinimization.strategy":        "LAYER_SWEEP",
+      "elk.layered.crossingMinimization.greedySwitch.type": "TWO_SIDED",
       "elk.layered.nodePlacement.strategy":               "NETWORK_SIMPLEX",
+      "elk.layered.nodePlacement.favorStraightEdges":     "true",
       "elk.layered.considerModelOrder.strategy":          "NODES_AND_EDGES",
-      "elk.layered.thoroughness":                         "10",
+      "elk.layered.thoroughness":                         "20",
       "elk.layered.compaction.postCompaction.strategy":    "EDGE_LENGTH",
-      "elk.layered.cycleBreaking.strategy":               "DEPTH_FIRST"
+      "elk.layered.cycleBreaking.strategy":               "GREEDY_MODEL_ORDER",
+      "elk.layered.highDegreeNodes.treatment":            "true",
+      "elk.layered.highDegreeNodes.threshold":            "6"
     },
     "rectpacking": {
       "elk.algorithm":                        "rectpacking",
