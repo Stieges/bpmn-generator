@@ -144,12 +144,9 @@ function buildMultiPoolElk(lc) {
 
 function buildElkNode(node) {
   const needsExternalLabel = isEvent(node.type) || isGateway(node.type);
-  // Tasks/Activities: FIXED_SIDE (West=input, East=output) for cleaner L→R flow
-  // Gateways/Events: FREE (edges from all directions)
-  const isActivity = !isEvent(node.type) && !isGateway(node.type) && !isArtifact(node.type);
   const props = {
     'elk.nodeLabels.placement': 'INSIDE V_CENTER H_CENTER',
-    'elk.portConstraints': isActivity ? 'FIXED_SIDE' : 'FREE',
+    'elk.portConstraints': 'FREE',
   };
 
   // Layer constraints: start events → first layer, end events → last layer

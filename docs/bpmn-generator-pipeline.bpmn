@@ -1,0 +1,500 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_Pool_User" name="Benutzer" processRef="Pool_User" />
+    <bpmn:participant id="Participant_Pool_Generator" name="BPMN Generator System" processRef="Pool_Generator" />
+    <bpmn:participant id="Participant_Pool_LLM" name="Claude API — LLM Provider (Anthropic)" />
+    <bpmn:participant id="Participant_Pool_ElkJS" name="ElkJS — Sugiyama Layout Engine (Eclipse)" />
+    <bpmn:participant id="Participant_Pool_Moddle" name="bpmn-moddle — CMOF Metamodell (bpmn.io)" />
+    <bpmn:messageFlow id="mf1" name="Prozessbeschreibung / Logic-Core JSON" sourceRef="t_describe" targetRef="start_orch" />
+    <bpmn:messageFlow id="mf2" name="BPMN XML + SVG + Compliance-Report" sourceRef="t_assemble" targetRef="t_receive" />
+    <bpmn:messageFlow id="mf3" name="System-Prompt + Few-Shot + Text" sourceRef="t_extract" targetRef="Participant_Pool_LLM" />
+    <bpmn:messageFlow id="mf4" name="Logic-Core + Review-Issues" sourceRef="t_refine" targetRef="Participant_Pool_LLM" />
+    <bpmn:messageFlow id="mf5" name="ELK-Graph (Nodes, Edges, Constraints)" sourceRef="t_elk" targetRef="Participant_Pool_ElkJS" />
+    <bpmn:messageFlow id="mf6" name="CMOF-Objekte → toXML()" sourceRef="t_bpmnxml" targetRef="Participant_Pool_Moddle" />
+    <bpmn:messageFlow id="mf7" name="XML → fromXML() Validierung" sourceRef="t_roundtrip" targetRef="Participant_Pool_Moddle" />
+  </bpmn:collaboration>
+  <bpmn:process id="Pool_User" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Pool_User">
+      <bpmn:lane id="Lane_User" name="Prozessverantwortlicher">
+        <bpmn:flowNodeRef>start_user</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_describe</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_receive</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_ok</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_user</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_adjust</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start_user" name="Prozessbedarf erkannt">
+      <bpmn:outgoing>fu1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="t_describe" name="Prozess beschreiben">
+      <bpmn:documentation>Der Benutzer erstellt eine natürlichsprachliche Prozessbeschreibung oder ein strukturiertes Logic-Core JSON. Eingabe über CLI, MCP-Server oder Orchestrator-API.</bpmn:documentation>
+      <bpmn:incoming>fu1</bpmn:incoming>
+      <bpmn:incoming>fu6</bpmn:incoming>
+      <bpmn:outgoing>fu2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="t_receive" name="BPMN-Diagramm prüfen">
+      <bpmn:documentation>Ergebnis enthält: BPMN 2.0 XML (.bpmn), SVG-Vorschau (.svg), Compliance-Report, Validierungs-Warnings und Agent-History.</bpmn:documentation>
+      <bpmn:incoming>fu2</bpmn:incoming>
+      <bpmn:outgoing>fu3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="gw_ok" name="Ergebnis akzeptabel?" gatewayDirection="Diverging" default="fu5">
+      <bpmn:incoming>fu3</bpmn:incoming>
+      <bpmn:outgoing>fu4</bpmn:outgoing>
+      <bpmn:outgoing>fu5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="end_user" name="Diagramm finalisiert">
+      <bpmn:incoming>fu4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:userTask id="t_adjust" name="Beschreibung anpassen">
+      <bpmn:documentation>Feedback einarbeiten: fehlende Schritte ergänzen, Rollen korrigieren, Gateways präzisieren.</bpmn:documentation>
+      <bpmn:incoming>fu5</bpmn:incoming>
+      <bpmn:outgoing>fu6</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="fu1" sourceRef="start_user" targetRef="t_describe" />
+    <bpmn:sequenceFlow id="fu2" sourceRef="t_describe" targetRef="t_receive" />
+    <bpmn:sequenceFlow id="fu3" sourceRef="t_receive" targetRef="gw_ok" />
+    <bpmn:sequenceFlow id="fu4" name="Ja" sourceRef="gw_ok" targetRef="end_user">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Ja</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="fu5" name="Nein" sourceRef="gw_ok" targetRef="t_adjust" />
+    <bpmn:sequenceFlow id="fu6" sourceRef="t_adjust" targetRef="t_describe" />
+  </bpmn:process>
+  <bpmn:process id="Pool_Generator" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Pool_Generator">
+      <bpmn:lane id="Lane_Orch" name="Orchestrator (orchestrator.js)">
+        <bpmn:flowNodeRef>start_orch</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_input</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_maxiter</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_assemble</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_orch</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Agents" name="Agents — Modeler + Reviewer (modeler.js, rules.js)">
+        <bpmn:flowNodeRef>t_validate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_extract</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_refine</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Pipeline" name="Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)">
+        <bpmn:flowNodeRef>t_topo</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_elk</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_coords</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_bpmnxml</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_roundtrip</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_svg</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Compliance" name="Compliance Agent (compliance.js)">
+        <bpmn:flowNodeRef>t_compliance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start_orch" name="Input empfangen">
+      <bpmn:documentation>Orchestrator empfängt Anfrage: entweder natürlichsprachlicher Text oder strukturiertes Logic-Core JSON.</bpmn:documentation>
+      <bpmn:outgoing>fo1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="gw_input" name="Input-Typ?" gatewayDirection="Diverging" default="fo3">
+      <bpmn:incoming>fo1</bpmn:incoming>
+      <bpmn:outgoing>fo2</bpmn:outgoing>
+      <bpmn:outgoing>fo3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_validate" name="Strukturelle Validierung durchführen">
+      <bpmn:documentation>Reviewer Agent: Führt 22 Regeln in 4 Schichten aus. Soundness (S01-S11): Start/End-Events, Edge-Referenzen, Gateway-Balance, Boundary-Events. Style (M01-M08): Naming-Konventionen, Label-Vollständigkeit. Pragmatik (P01-P03): Komplexitätsmetriken. Workflow-Net (WF01-WF03): Petri-Net-Soundness. Profile konfigurierbar (default/strict).</bpmn:documentation>
+      <bpmn:incoming>fo3</bpmn:incoming>
+      <bpmn:incoming>fo4</bpmn:incoming>
+      <bpmn:incoming>fo10</bpmn:incoming>
+      <bpmn:outgoing>fo5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_extract" name="Logic-Core aus Text extrahieren">
+      <bpmn:documentation>Modeler Agent im Extract-Modus: Baut LLM-Prompt mit System-Prompt (Logic-Core Schema + Regeln) + 5 Enterprise Few-Shot-Patterns aus references/prompt-template.md. Sendet an Claude API. Parst JSON-Antwort (auch aus Markdown-Codeblöcken).</bpmn:documentation>
+      <bpmn:incoming>fo2</bpmn:incoming>
+      <bpmn:outgoing>fo4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="gw_review" name="Validierung bestanden?" gatewayDirection="Diverging" default="fo7">
+      <bpmn:incoming>fo5</bpmn:incoming>
+      <bpmn:outgoing>fo6</bpmn:outgoing>
+      <bpmn:outgoing>fo7</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_topo" name="Topologie inferieren">
+      <bpmn:documentation>topology.js: inferGatewayDirections() bestimmt Diverging/Converging aus In/Out-Edge-Verhältnis. sortNodesTopologically() für deterministische Reihenfolge. orderLanesByFlow() ordnet Lanes nach Hauptflussrichtung. identifyHappyPathNodes() markiert den Happy Path.</bpmn:documentation>
+      <bpmn:incoming>fo6</bpmn:incoming>
+      <bpmn:incoming>fo9</bpmn:incoming>
+      <bpmn:outgoing>fo11</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="gw_maxiter" name="Max Iterationen erreicht?" gatewayDirection="Diverging" default="fo9">
+      <bpmn:incoming>fo7</bpmn:incoming>
+      <bpmn:outgoing>fo8</bpmn:outgoing>
+      <bpmn:outgoing>fo9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_elk" name="ELK Sugiyama Layout berechnen">
+      <bpmn:documentation>layout.js: logicCoreToElk() konvertiert Logic-Core in ELK-Graph. Nodes bekommen Dimensionen aus config.json. Events/Gateways: externe Label-Höhe. Start→FIRST, End→LAST Layer-Constraint. Lanes via elk.partitioning. Multi-Pool via rectpacking. runElkLayout(): Sugiyama hierarchisch, Direction RIGHT, ORTHOGONAL Routing, LAYER_SWEEP Crossing-Minimierung, NETWORK_SIMPLEX Node-Placement.</bpmn:documentation>
+      <bpmn:incoming>fo11</bpmn:incoming>
+      <bpmn:outgoing>fo12</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_refine" name="Logic-Core verfeinern">
+      <bpmn:documentation>Modeler Agent im Refine-Modus: Sendet bisheriges Logic-Core + Review-Issues (Severity + Problem-Beschreibung) an LLM. Claude korrigiert strukturelle Fehler und gibt verbessertes JSON zurück. Max 3 Iterationen (konfigurierbar via maxReviewIterations).</bpmn:documentation>
+      <bpmn:incoming>fo8</bpmn:incoming>
+      <bpmn:outgoing>fo10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_coords" name="Koordinaten transformieren">
+      <bpmn:documentation>coordinates.js — 10 Post-Processing-Phasen: §5.0 Lane-Bounds aus Node-Positionen, §5.0b Pool-Breitenausgleich, §5.0b2 Collapsed-Pool-Positionierung, §5.0c Happy-Path Y-Leveling, §5.0d Fan-Out Alignment, §5.0e Edge-Route-Compaction, §5.0f Cross-Lane Deconfliction, §5.1 Orthogonales Endpoint-Clipping, §5.2 Synthetisches Routing, §5.3 Force Orthogonal, §5.5 Zigzag-Cleanup.</bpmn:documentation>
+      <bpmn:incoming>fo12</bpmn:incoming>
+      <bpmn:outgoing>fo13</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_bpmnxml" name="BPMN 2.0 XML erzeugen">
+      <bpmn:documentation>bpmn-xml.js via bpmn-moddle: Erzeugt typisierte CMOF-Objekte (moddle.create). Semantic Model: Definitions, Process, FlowNodes, SequenceFlows. Diagram Interchange: BPMNDiagram, BPMNPlane, BPMNShape mit Bounds, BPMNEdge mit Waypoints. incoming/outgoing-Referenzen (Industriekonvention). OMG BPMN 2.0.2 konform (ISO/IEC 19510:2013).</bpmn:documentation>
+      <bpmn:incoming>fo13</bpmn:incoming>
+      <bpmn:outgoing>fo14</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_roundtrip" name="Round-Trip validieren">
+      <bpmn:documentation>validateBpmnXml(): Parst erzeugtes XML zurück durch moddle.fromXML(). 0 Warnings = strukturell korrekt. Erkennt: fehlende Namespace-Deklarationen, ungültige Attribut-Typen, nicht auflösbare Referenzen, unbekannte Elemente.</bpmn:documentation>
+      <bpmn:incoming>fo14</bpmn:incoming>
+      <bpmn:outgoing>fo15</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_svg" name="SVG-Vorschau rendern">
+      <bpmn:documentation>svg.js + icons.js: Standalone-SVG ohne externe Dependencies. Pools/Lanes mit rotiertem Header. Events mit Marker-Icons (Message, Timer, Error, Signal, Compensation, Link, Terminate). Gateways mit Marker (X, +, O, Pentagon). Tasks mit Type-Icon + Bottom-Markers (Loop, MI-Parallel, MI-Sequential, Ad-Hoc, Compensation). Edges mit Arrow-Markern. Text-Wrapping mit automatischem Zeilenumbruch.</bpmn:documentation>
+      <bpmn:incoming>fo15</bpmn:incoming>
+      <bpmn:outgoing>fo16</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_compliance" name="OMG-Konformität prüfen">
+      <bpmn:documentation>Compliance Agent: Prüft OMG BPMN 2.0.2 Konformität. Namespace-URIs (MODEL, DI, DC, DI), Pflicht-Attribute (id, targetNamespace), DI-Vollständigkeit (jeder FlowNode hat BPMNShape, jeder Flow hat BPMNEdge), Element-Typ-Mapping gegen OMG-Spezifikation.</bpmn:documentation>
+      <bpmn:incoming>fo16</bpmn:incoming>
+      <bpmn:outgoing>fo17</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_assemble" name="Ergebnis zusammenstellen">
+      <bpmn:documentation>Bündelt alle Artefakte: BPMN XML, SVG-Vorschau, Compliance-Report (errors/warnings/violations), Validierungs-Ergebnis (errors/warnings/xmlWarnings), History aller Agent-Aufrufe mit Timestamps.</bpmn:documentation>
+      <bpmn:incoming>fo17</bpmn:incoming>
+      <bpmn:outgoing>fo18</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="end_orch" name="Pipeline abgeschlossen">
+      <bpmn:incoming>fo18</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="fo1" sourceRef="start_orch" targetRef="gw_input" />
+    <bpmn:sequenceFlow id="fo2" name="Natürlicher Text" sourceRef="gw_input" targetRef="t_extract">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Natürlicher Text</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="fo3" name="Logic-Core JSON" sourceRef="gw_input" targetRef="t_validate" />
+    <bpmn:sequenceFlow id="fo4" sourceRef="t_extract" targetRef="t_validate" />
+    <bpmn:sequenceFlow id="fo5" sourceRef="t_validate" targetRef="gw_review" />
+    <bpmn:sequenceFlow id="fo6" name="Valide (0 Errors)" sourceRef="gw_review" targetRef="t_topo">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Valide (0 Errors)</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="fo7" name="Errors gefunden" sourceRef="gw_review" targetRef="gw_maxiter" />
+    <bpmn:sequenceFlow id="fo8" name="Iteration &#60; Max (Default: 3)" sourceRef="gw_maxiter" targetRef="t_refine">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Iteration &lt; Max (Default: 3)</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="fo9" name="Max erreicht → weiter mit Warnings" sourceRef="gw_maxiter" targetRef="t_topo" />
+    <bpmn:sequenceFlow id="fo10" sourceRef="t_refine" targetRef="t_validate" />
+    <bpmn:sequenceFlow id="fo11" sourceRef="t_topo" targetRef="t_elk" />
+    <bpmn:sequenceFlow id="fo12" sourceRef="t_elk" targetRef="t_coords" />
+    <bpmn:sequenceFlow id="fo13" sourceRef="t_coords" targetRef="t_bpmnxml" />
+    <bpmn:sequenceFlow id="fo14" sourceRef="t_bpmnxml" targetRef="t_roundtrip" />
+    <bpmn:sequenceFlow id="fo15" sourceRef="t_roundtrip" targetRef="t_svg" />
+    <bpmn:sequenceFlow id="fo16" sourceRef="t_svg" targetRef="t_compliance" />
+    <bpmn:sequenceFlow id="fo17" sourceRef="t_compliance" targetRef="t_assemble" />
+    <bpmn:sequenceFlow id="fo18" sourceRef="t_assemble" targetRef="end_orch" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Participant_Pool_User_di" bpmnElement="Participant_Pool_User" isHorizontal="true">
+        <dc:Bounds x="20" y="20" width="1860" height="286" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_User_di" bpmnElement="Lane_User" isHorizontal="true">
+        <dc:Bounds x="60" y="20" width="1820" height="286" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Pool_Generator_di" bpmnElement="Participant_Pool_Generator" isHorizontal="true">
+        <dc:Bounds x="20" y="341" width="1860" height="1397" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Orch_di" bpmnElement="Lane_Orch" isHorizontal="true">
+        <dc:Bounds x="60" y="852" width="1820" height="451" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Agents_di" bpmnElement="Lane_Agents" isHorizontal="true">
+        <dc:Bounds x="60" y="1305" width="1820" height="266" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Pipeline_di" bpmnElement="Lane_Pipeline" isHorizontal="true">
+        <dc:Bounds x="60" y="341" width="1820" height="509" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Compliance_di" bpmnElement="Lane_Compliance" isHorizontal="true">
+        <dc:Bounds x="60" y="1573" width="1820" height="165" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Pool_LLM_di" bpmnElement="Participant_Pool_LLM" isHorizontal="true">
+        <dc:Bounds x="20" y="1778" width="1860" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Pool_ElkJS_di" bpmnElement="Participant_Pool_ElkJS" isHorizontal="true">
+        <dc:Bounds x="20" y="1878" width="1860" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Pool_Moddle_di" bpmnElement="Participant_Pool_Moddle" isHorizontal="true">
+        <dc:Bounds x="20" y="1978" width="1860" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_user_di" bpmnElement="start_user">
+        <dc:Bounds x="90" y="180" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="63" y="226" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_describe_di" bpmnElement="t_describe">
+        <dc:Bounds x="206" y="171" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_receive_di" bpmnElement="t_receive">
+        <dc:Bounds x="386" y="134" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_ok_di" bpmnElement="gw_ok" isMarkerVisible="true">
+        <dc:Bounds x="566" y="136" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="546" y="196" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_user_di" bpmnElement="end_user">
+        <dc:Bounds x="756" y="50" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="729" y="96" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_adjust_di" bpmnElement="t_adjust">
+        <dc:Bounds x="776" y="171" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_orch_di" bpmnElement="start_orch">
+        <dc:Bounds x="184" y="1040" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="157" y="1086" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_input_di" bpmnElement="gw_input" isMarkerVisible="true">
+        <dc:Bounds x="300" y="1033" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="287.5" y="1093" width="75" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_validate_di" bpmnElement="t_validate">
+        <dc:Bounds x="690" y="1393" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_extract_di" bpmnElement="t_extract">
+        <dc:Bounds x="510" y="1436" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_review_di" bpmnElement="gw_review" isMarkerVisible="true">
+        <dc:Bounds x="90" y="882" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="70" y="942" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_topo_di" bpmnElement="t_topo">
+        <dc:Bounds x="380" y="371" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_maxiter_di" bpmnElement="gw_maxiter" isMarkerVisible="true">
+        <dc:Bounds x="300" y="882" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="280" y="942" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_elk_di" bpmnElement="t_elk">
+        <dc:Bounds x="850" y="715" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_refine_di" bpmnElement="t_refine">
+        <dc:Bounds x="510" y="1335" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_coords_di" bpmnElement="t_coords">
+        <dc:Bounds x="1030" y="715" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_bpmnxml_di" bpmnElement="t_bpmnxml">
+        <dc:Bounds x="1210" y="715" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_roundtrip_di" bpmnElement="t_roundtrip">
+        <dc:Bounds x="1390" y="715" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_svg_di" bpmnElement="t_svg">
+        <dc:Bounds x="1570" y="715" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_compliance_di" bpmnElement="t_compliance">
+        <dc:Bounds x="1750" y="1603" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_assemble_di" bpmnElement="t_assemble">
+        <dc:Bounds x="554" y="1168" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_orch_di" bpmnElement="end_orch">
+        <dc:Bounds x="734" y="1150" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="707" y="1196" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="fu1_di" bpmnElement="fu1">
+        <di:waypoint x="120.4" y="211" />
+        <di:waypoint x="206" y="211" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fu2_di" bpmnElement="fu2">
+        <di:waypoint x="306" y="211" />
+        <di:waypoint x="346" y="211" />
+        <di:waypoint x="346" y="174" />
+        <di:waypoint x="386" y="174" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fu3_di" bpmnElement="fu3">
+        <di:waypoint x="486" y="174" />
+        <di:waypoint x="579" y="174" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fu4_di" bpmnElement="fu4">
+        <di:waypoint x="616" y="161" />
+        <di:waypoint x="686" y="161" />
+        <di:waypoint x="686" y="68" />
+        <di:waypoint x="756" y="68" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="640.5" y="148" width="21" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fu5_di" bpmnElement="fu5">
+        <di:waypoint x="616" y="161" />
+        <di:waypoint x="696" y="161" />
+        <di:waypoint x="696" y="211" />
+        <di:waypoint x="776" y="211" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="639" y="148" width="34" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fu6_di" bpmnElement="fu6">
+        <di:waypoint x="776" y="224" />
+        <di:waypoint x="306" y="224" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo1_di" bpmnElement="fo1">
+        <di:waypoint x="220" y="1058" />
+        <di:waypoint x="300" y="1058" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo2_di" bpmnElement="fo2">
+        <di:waypoint x="325" y="1083" />
+        <di:waypoint x="325" y="1259.5" />
+        <di:waypoint x="560" y="1259.5" />
+        <di:waypoint x="560" y="1436" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="386.5" y="1246.5" width="112" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo3_di" bpmnElement="fo3">
+        <di:waypoint x="350" y="1058" />
+        <di:waypoint x="520" y="1058" />
+        <di:waypoint x="520" y="1433" />
+        <di:waypoint x="690" y="1433" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="382.3" y="1045" width="105.5" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo4_di" bpmnElement="fo4">
+        <di:waypoint x="610" y="1476" />
+        <di:waypoint x="650" y="1476" />
+        <di:waypoint x="650" y="1433" />
+        <di:waypoint x="690" y="1433" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo5_di" bpmnElement="fo5">
+        <di:waypoint x="690" y="1473" />
+        <di:waypoint x="270" y="1473" />
+        <di:waypoint x="270" y="1841" />
+        <di:waypoint x="270" y="1797" />
+        <di:waypoint x="270" y="932" />
+        <di:waypoint x="115" y="932" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo6_di" bpmnElement="fo6">
+        <di:waypoint x="115" y="932" />
+        <di:waypoint x="115" y="1760" />
+        <di:waypoint x="210" y="1760" />
+        <di:waypoint x="210" y="398" />
+        <di:waypoint x="380" y="398" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="103.3" y="1747" width="118.5" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo7_di" bpmnElement="fo7">
+        <di:waypoint x="115" y="932" />
+        <di:waypoint x="300" y="932" />
+        <di:waypoint x="300" y="907" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="154.8" y="919" width="105.5" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo8_di" bpmnElement="fo8">
+        <di:waypoint x="325" y="932" />
+        <di:waypoint x="325" y="1335" />
+        <di:waypoint x="510" y="1335" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="322.5" y="1322" width="190" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo9_di" bpmnElement="fo9">
+        <di:waypoint x="325" y="882" />
+        <di:waypoint x="325" y="666.5" />
+        <di:waypoint x="430" y="666.5" />
+        <di:waypoint x="430" y="451" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="263" y="653.5" width="229" height="16" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo10_di" bpmnElement="fo10">
+        <di:waypoint x="610" y="1375" />
+        <di:waypoint x="650" y="1375" />
+        <di:waypoint x="650" y="1433" />
+        <di:waypoint x="690" y="1433" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo11_di" bpmnElement="fo11">
+        <di:waypoint x="480" y="411" />
+        <di:waypoint x="665" y="411" />
+        <di:waypoint x="665" y="755" />
+        <di:waypoint x="850" y="755" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo12_di" bpmnElement="fo12">
+        <di:waypoint x="950" y="795" />
+        <di:waypoint x="1030" y="795" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo13_di" bpmnElement="fo13">
+        <di:waypoint x="1130" y="795" />
+        <di:waypoint x="1210" y="795" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo14_di" bpmnElement="fo14">
+        <di:waypoint x="1310" y="795" />
+        <di:waypoint x="1390" y="795" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo15_di" bpmnElement="fo15">
+        <di:waypoint x="1490" y="795" />
+        <di:waypoint x="1570" y="795" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo16_di" bpmnElement="fo16">
+        <di:waypoint x="1620" y="795" />
+        <di:waypoint x="1620" y="1199" />
+        <di:waypoint x="1800" y="1199" />
+        <di:waypoint x="1800" y="1603" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo17_di" bpmnElement="fo17">
+        <di:waypoint x="1750" y="1683" />
+        <di:waypoint x="654" y="1683" />
+        <di:waypoint x="654" y="1248" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="fo18_di" bpmnElement="fo18">
+        <di:waypoint x="654" y="1208" />
+        <di:waypoint x="694" y="1208" />
+        <di:waypoint x="694" y="1168" />
+        <di:waypoint x="734" y="1168" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mf1_di" bpmnElement="mf1">
+        <di:waypoint x="256" y="251" />
+        <di:waypoint x="202" y="1040" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mf2_di" bpmnElement="mf2">
+        <di:waypoint x="604" y="1248" />
+        <di:waypoint x="436" y="134" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mf3_di" bpmnElement="mf3">
+        <di:waypoint x="560" y="1516" />
+        <di:waypoint x="950" y="1778" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mf4_di" bpmnElement="mf4">
+        <di:waypoint x="560" y="1415" />
+        <di:waypoint x="950" y="1778" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mf5_di" bpmnElement="mf5">
+        <di:waypoint x="900" y="795" />
+        <di:waypoint x="950" y="1878" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mf6_di" bpmnElement="mf6">
+        <di:waypoint x="1260" y="795" />
+        <di:waypoint x="950" y="1978" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mf7_di" bpmnElement="mf7">
+        <di:waypoint x="1440" y="795" />
+        <di:waypoint x="950" y="1978" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

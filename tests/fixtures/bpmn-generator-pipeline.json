@@ -37,68 +37,58 @@
           "nodeIds": ["start_orch", "gw_input", "gw_review", "gw_maxiter", "t_assemble", "end_orch"]
         },
         {
-          "id": "Lane_Modeler",
-          "name": "Modeler Agent (agents/modeler.js)",
-          "nodeIds": ["t_extract", "t_refine"]
+          "id": "Lane_Agents",
+          "name": "Agents — Modeler + Reviewer (modeler.js, rules.js)",
+          "nodeIds": ["t_extract", "t_validate", "t_refine"]
         },
         {
-          "id": "Lane_Validation",
-          "name": "Review & Validation (rules.js — 22 Regeln, 4 Schichten)",
-          "nodeIds": ["t_validate"]
-        },
-        {
-          "id": "Lane_Layout",
-          "name": "Layout Engine (topology.js → layout.js → coordinates.js)",
-          "nodeIds": ["t_topo", "t_elk", "t_coords"]
-        },
-        {
-          "id": "Lane_Serial",
-          "name": "Serialisierung (bpmn-xml.js → svg.js)",
-          "nodeIds": ["t_bpmnxml", "t_roundtrip", "t_svg"]
+          "id": "Lane_Pipeline",
+          "name": "Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)",
+          "nodeIds": ["t_topo", "t_elk", "t_coords", "t_bpmnxml", "t_roundtrip", "t_svg"]
         },
         {
           "id": "Lane_Compliance",
-          "name": "Compliance Agent (agents/compliance.js)",
+          "name": "Compliance Agent (compliance.js)",
           "nodeIds": ["t_compliance"]
         }
       ],
       "nodes": [
         { "id": "start_orch", "type": "startEvent", "name": "Input empfangen", "lane": "Lane_Orch", "documentation": "Orchestrator empfängt Anfrage: entweder natürlichsprachlicher Text oder strukturiertes Logic-Core JSON." },
         { "id": "gw_input", "type": "exclusiveGateway", "name": "Input-Typ?", "lane": "Lane_Orch" },
-        { "id": "t_extract", "type": "serviceTask", "name": "Logic-Core aus Text extrahieren", "lane": "Lane_Modeler", "documentation": "Modeler Agent im Extract-Modus: Baut LLM-Prompt mit System-Prompt (Logic-Core Schema + Regeln) + 5 Enterprise Few-Shot-Patterns aus references/prompt-template.md. Sendet an Claude API. Parst JSON-Antwort (auch aus Markdown-Codeblöcken)." },
-        { "id": "t_validate", "type": "serviceTask", "name": "Strukturelle Validierung durchführen", "lane": "Lane_Validation", "documentation": "Reviewer Agent: Führt 22 Regeln in 4 Schichten aus. Soundness (S01-S11): Start/End-Events, Edge-Referenzen, Gateway-Balance, Boundary-Events. Style (M01-M08): Naming-Konventionen, Label-Vollständigkeit. Pragmatik (P01-P03): Komplexitätsmetriken. Workflow-Net (WF01-WF03): Petri-Net-Soundness. Profile konfigurierbar (default/strict)." },
+        { "id": "t_extract", "type": "serviceTask", "name": "Logic-Core aus Text extrahieren", "lane": "Lane_Agents", "documentation": "Modeler Agent im Extract-Modus: Baut LLM-Prompt mit System-Prompt (Logic-Core Schema + Regeln) + 5 Enterprise Few-Shot-Patterns aus references/prompt-template.md. Sendet an Claude API. Parst JSON-Antwort (auch aus Markdown-Codeblöcken)." },
+        { "id": "t_validate", "type": "serviceTask", "name": "Strukturelle Validierung durchführen", "lane": "Lane_Agents", "documentation": "Reviewer Agent: Führt 22 Regeln in 4 Schichten aus. Soundness (S01-S11): Start/End-Events, Edge-Referenzen, Gateway-Balance, Boundary-Events. Style (M01-M08): Naming-Konventionen, Label-Vollständigkeit. Pragmatik (P01-P03): Komplexitätsmetriken. Workflow-Net (WF01-WF03): Petri-Net-Soundness. Profile konfigurierbar (default/strict)." },
         { "id": "gw_review", "type": "exclusiveGateway", "name": "Validierung bestanden?", "lane": "Lane_Orch" },
         { "id": "gw_maxiter", "type": "exclusiveGateway", "name": "Max Iterationen erreicht?", "lane": "Lane_Orch" },
-        { "id": "t_refine", "type": "serviceTask", "name": "Logic-Core verfeinern", "lane": "Lane_Modeler", "documentation": "Modeler Agent im Refine-Modus: Sendet bisheriges Logic-Core + Review-Issues (Severity + Problem-Beschreibung) an LLM. Claude korrigiert strukturelle Fehler und gibt verbessertes JSON zurück. Max 3 Iterationen (konfigurierbar via maxReviewIterations)." },
-        { "id": "t_topo", "type": "serviceTask", "name": "Topologie inferieren", "lane": "Lane_Layout", "documentation": "topology.js: inferGatewayDirections() bestimmt Diverging/Converging aus In/Out-Edge-Verhältnis. sortNodesTopologically() für deterministische Reihenfolge. orderLanesByFlow() ordnet Lanes nach Hauptflussrichtung. identifyHappyPathNodes() markiert den Happy Path." },
-        { "id": "t_elk", "type": "serviceTask", "name": "ELK Sugiyama Layout berechnen", "lane": "Lane_Layout", "documentation": "layout.js: logicCoreToElk() konvertiert Logic-Core in ELK-Graph. Nodes bekommen Dimensionen aus config.json. Events/Gateways: externe Label-Höhe. Start→FIRST, End→LAST Layer-Constraint. Lanes via elk.partitioning. Multi-Pool via rectpacking. runElkLayout(): Sugiyama hierarchisch, Direction RIGHT, ORTHOGONAL Routing, LAYER_SWEEP Crossing-Minimierung, NETWORK_SIMPLEX Node-Placement." },
-        { "id": "t_coords", "type": "serviceTask", "name": "Koordinaten transformieren", "lane": "Lane_Layout", "documentation": "coordinates.js — 10 Post-Processing-Phasen: §5.0 Lane-Bounds aus Node-Positionen, §5.0b Pool-Breitenausgleich, §5.0b2 Collapsed-Pool-Positionierung, §5.0c Happy-Path Y-Leveling, §5.0d Fan-Out Alignment, §5.0e Edge-Route-Compaction, §5.0f Cross-Lane Deconfliction, §5.1 Orthogonales Endpoint-Clipping, §5.2 Synthetisches Routing, §5.3 Force Orthogonal, §5.5 Zigzag-Cleanup." },
-        { "id": "t_bpmnxml", "type": "serviceTask", "name": "BPMN 2.0 XML erzeugen", "lane": "Lane_Serial", "documentation": "bpmn-xml.js via bpmn-moddle: Erzeugt typisierte CMOF-Objekte (moddle.create). Semantic Model: Definitions, Process, FlowNodes, SequenceFlows. Diagram Interchange: BPMNDiagram, BPMNPlane, BPMNShape mit Bounds, BPMNEdge mit Waypoints. incoming/outgoing-Referenzen (Industriekonvention). OMG BPMN 2.0.2 konform (ISO/IEC 19510:2013)." },
-        { "id": "t_roundtrip", "type": "serviceTask", "name": "Round-Trip validieren", "lane": "Lane_Serial", "documentation": "validateBpmnXml(): Parst erzeugtes XML zurück durch moddle.fromXML(). 0 Warnings = strukturell korrekt. Erkennt: fehlende Namespace-Deklarationen, ungültige Attribut-Typen, nicht auflösbare Referenzen, unbekannte Elemente." },
-        { "id": "t_svg", "type": "serviceTask", "name": "SVG-Vorschau rendern", "lane": "Lane_Serial", "documentation": "svg.js + icons.js: Standalone-SVG ohne externe Dependencies. Pools/Lanes mit rotiertem Header. Events mit Marker-Icons (Message, Timer, Error, Signal, Compensation, Link, Terminate). Gateways mit Marker (X, +, O, Pentagon). Tasks mit Type-Icon + Bottom-Markers (Loop, MI-Parallel, MI-Sequential, Ad-Hoc, Compensation). Edges mit Arrow-Markern. Text-Wrapping mit automatischem Zeilenumbruch." },
+        { "id": "t_refine", "type": "serviceTask", "name": "Logic-Core verfeinern", "lane": "Lane_Agents", "documentation": "Modeler Agent im Refine-Modus: Sendet bisheriges Logic-Core + Review-Issues (Severity + Problem-Beschreibung) an LLM. Claude korrigiert strukturelle Fehler und gibt verbessertes JSON zurück. Max 3 Iterationen (konfigurierbar via maxReviewIterations)." },
+        { "id": "t_topo", "type": "serviceTask", "name": "Topologie inferieren", "lane": "Lane_Pipeline", "documentation": "topology.js: inferGatewayDirections() bestimmt Diverging/Converging aus In/Out-Edge-Verhältnis. sortNodesTopologically() für deterministische Reihenfolge. orderLanesByFlow() ordnet Lanes nach Hauptflussrichtung. identifyHappyPathNodes() markiert den Happy Path." },
+        { "id": "t_elk", "type": "serviceTask", "name": "ELK Sugiyama Layout berechnen", "lane": "Lane_Pipeline", "documentation": "layout.js: logicCoreToElk() konvertiert Logic-Core in ELK-Graph. Nodes bekommen Dimensionen aus config.json. Events/Gateways: externe Label-Höhe. Start→FIRST, End→LAST Layer-Constraint. Lanes via elk.partitioning. Multi-Pool via rectpacking. runElkLayout(): Sugiyama hierarchisch, Direction RIGHT, ORTHOGONAL Routing, LAYER_SWEEP Crossing-Minimierung, NETWORK_SIMPLEX Node-Placement." },
+        { "id": "t_coords", "type": "serviceTask", "name": "Koordinaten transformieren", "lane": "Lane_Pipeline", "documentation": "coordinates.js — 10 Post-Processing-Phasen: §5.0 Lane-Bounds aus Node-Positionen, §5.0b Pool-Breitenausgleich, §5.0b2 Collapsed-Pool-Positionierung, §5.0c Happy-Path Y-Leveling, §5.0d Fan-Out Alignment, §5.0e Edge-Route-Compaction, §5.0f Cross-Lane Deconfliction, §5.1 Orthogonales Endpoint-Clipping, §5.2 Synthetisches Routing, §5.3 Force Orthogonal, §5.5 Zigzag-Cleanup." },
+        { "id": "t_bpmnxml", "type": "serviceTask", "name": "BPMN 2.0 XML erzeugen", "lane": "Lane_Pipeline", "documentation": "bpmn-xml.js via bpmn-moddle: Erzeugt typisierte CMOF-Objekte (moddle.create). Semantic Model: Definitions, Process, FlowNodes, SequenceFlows. Diagram Interchange: BPMNDiagram, BPMNPlane, BPMNShape mit Bounds, BPMNEdge mit Waypoints. incoming/outgoing-Referenzen (Industriekonvention). OMG BPMN 2.0.2 konform (ISO/IEC 19510:2013)." },
+        { "id": "t_roundtrip", "type": "serviceTask", "name": "Round-Trip validieren", "lane": "Lane_Pipeline", "documentation": "validateBpmnXml(): Parst erzeugtes XML zurück durch moddle.fromXML(). 0 Warnings = strukturell korrekt. Erkennt: fehlende Namespace-Deklarationen, ungültige Attribut-Typen, nicht auflösbare Referenzen, unbekannte Elemente." },
+        { "id": "t_svg", "type": "serviceTask", "name": "SVG-Vorschau rendern", "lane": "Lane_Pipeline", "documentation": "svg.js + icons.js: Standalone-SVG ohne externe Dependencies. Pools/Lanes mit rotiertem Header. Events mit Marker-Icons (Message, Timer, Error, Signal, Compensation, Link, Terminate). Gateways mit Marker (X, +, O, Pentagon). Tasks mit Type-Icon + Bottom-Markers (Loop, MI-Parallel, MI-Sequential, Ad-Hoc, Compensation). Edges mit Arrow-Markern. Text-Wrapping mit automatischem Zeilenumbruch." },
         { "id": "t_compliance", "type": "serviceTask", "name": "OMG-Konformität prüfen", "lane": "Lane_Compliance", "documentation": "Compliance Agent: Prüft OMG BPMN 2.0.2 Konformität. Namespace-URIs (MODEL, DI, DC, DI), Pflicht-Attribute (id, targetNamespace), DI-Vollständigkeit (jeder FlowNode hat BPMNShape, jeder Flow hat BPMNEdge), Element-Typ-Mapping gegen OMG-Spezifikation." },
         { "id": "t_assemble", "type": "serviceTask", "name": "Ergebnis zusammenstellen", "lane": "Lane_Orch", "documentation": "Bündelt alle Artefakte: BPMN XML, SVG-Vorschau, Compliance-Report (errors/warnings/violations), Validierungs-Ergebnis (errors/warnings/xmlWarnings), History aller Agent-Aufrufe mit Timestamps." },
         { "id": "end_orch", "type": "endEvent", "name": "Pipeline abgeschlossen", "lane": "Lane_Orch" }
       ],
       "edges": [
-        { "id": "fo1", "source": "start_orch", "target": "gw_input" },
+        { "id": "fo1", "source": "start_orch", "target": "gw_input", "isHappyPath": true },
         { "id": "fo2", "source": "gw_input", "target": "t_extract", "label": "Natürlicher Text" },
-        { "id": "fo3", "source": "gw_input", "target": "t_validate", "label": "Logic-Core JSON", "isDefault": true },
+        { "id": "fo3", "source": "gw_input", "target": "t_validate", "label": "Logic-Core JSON", "isDefault": true, "isHappyPath": true },
         { "id": "fo4", "source": "t_extract", "target": "t_validate" },
-        { "id": "fo5", "source": "t_validate", "target": "gw_review" },
-        { "id": "fo6", "source": "gw_review", "target": "t_topo", "label": "Valide (0 Errors)" },
+        { "id": "fo5", "source": "t_validate", "target": "gw_review", "isHappyPath": true },
+        { "id": "fo6", "source": "gw_review", "target": "t_topo", "label": "Valide (0 Errors)", "isHappyPath": true },
         { "id": "fo7", "source": "gw_review", "target": "gw_maxiter", "label": "Errors gefunden", "isDefault": true },
         { "id": "fo8", "source": "gw_maxiter", "target": "t_refine", "label": "Iteration < Max (Default: 3)" },
         { "id": "fo9", "source": "gw_maxiter", "target": "t_topo", "label": "Max erreicht → weiter mit Warnings", "isDefault": true },
         { "id": "fo10", "source": "t_refine", "target": "t_validate" },
-        { "id": "fo11", "source": "t_topo", "target": "t_elk" },
-        { "id": "fo12", "source": "t_elk", "target": "t_coords" },
-        { "id": "fo13", "source": "t_coords", "target": "t_bpmnxml" },
-        { "id": "fo14", "source": "t_bpmnxml", "target": "t_roundtrip" },
-        { "id": "fo15", "source": "t_roundtrip", "target": "t_svg" },
-        { "id": "fo16", "source": "t_svg", "target": "t_compliance" },
-        { "id": "fo17", "source": "t_compliance", "target": "t_assemble" },
-        { "id": "fo18", "source": "t_assemble", "target": "end_orch" }
+        { "id": "fo11", "source": "t_topo", "target": "t_elk", "isHappyPath": true },
+        { "id": "fo12", "source": "t_elk", "target": "t_coords", "isHappyPath": true },
+        { "id": "fo13", "source": "t_coords", "target": "t_bpmnxml", "isHappyPath": true },
+        { "id": "fo14", "source": "t_bpmnxml", "target": "t_roundtrip", "isHappyPath": true },
+        { "id": "fo15", "source": "t_roundtrip", "target": "t_svg", "isHappyPath": true },
+        { "id": "fo16", "source": "t_svg", "target": "t_compliance", "isHappyPath": true },
+        { "id": "fo17", "source": "t_compliance", "target": "t_assemble", "isHappyPath": true },
+        { "id": "fo18", "source": "t_assemble", "target": "end_orch", "isHappyPath": true }
       ]
     }
   ],
