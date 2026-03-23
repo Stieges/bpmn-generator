@@ -36,10 +36,10 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "bpmn-moddle": "^9.0.4",
-    "elkjs": "^0.9.3"
+    "elkjs": "^0.11.1"
   },
   "devDependencies": {
-    "@jest/globals": "^30.2.0",
-    "jest": "^30.2.0"
+    "@jest/globals": "^30.3.0",
+    "jest": "^30.3.0"
   }
 }
