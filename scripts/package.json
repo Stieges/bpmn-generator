@@ -1,8 +1,34 @@
 {
-  "name": "bpmn-generator-pipeline",
-  "version": "2.0.0",
-  "description": "Enterprise BPMN 2.0 Pipeline: JSON Logic-Core → ElkJS Layout → OMG-compliant XML + SVG",
+  "name": "bpmn-generator",
+  "version": "3.1.0",
+  "description": "Enterprise BPMN 2.0 Generator — JSON Logic-Core → ElkJS Layout → OMG-compliant XML + SVG",
   "type": "module",
+  "license": "MIT",
+  "author": "Daniel Stiegler",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dstiegler/bpmn-generator.git"
+  },
+  "keywords": [
+    "bpmn",
+    "bpmn2",
+    "process",
+    "diagram",
+    "workflow",
+    "elkjs",
+    "layout",
+    "svg",
+    "xml",
+    "omg",
+    "modeler"
+  ],
+  "main": "pipeline.js",
+  "exports": {
+    ".": "./pipeline.js",
+    "./import": "./import.js",
+    "./validate": "./validate.js",
+    "./orchestrator": "./orchestrator.js"
+  },
   "scripts": {
     "generate": "node pipeline.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache"

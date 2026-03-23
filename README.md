@@ -1,5 +1,8 @@
 # BPMN Generator
 
+[![CI](https://github.com/dstiegler/bpmn-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/dstiegler/bpmn-generator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Enterprise BPMN 2.0 diagram generator — converts natural language process descriptions into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013).
 
 ## Pipeline
@@ -109,13 +112,17 @@ pipeline.js ← all of the above
 
 ```
 bpmn-generator/
-├── SKILL.md                              Claude Code skill definition
 ├── README.md                             This file
+├── LICENSE                               MIT License
+├── CHANGELOG.md                          Version history
+├── CONTRIBUTING.md                       Contribution guide
+├── THIRD-PARTY-NOTICES.md                Dependency licenses
+├── SKILL.md                              Claude Code skill definition
 ├── CLAUDE.md                             Project instructions for Claude Code
 ├── ROADMAP.md                            Development roadmap (K0-K8, M1-M6, L1-L6)
 ├── COMPATIBILITY.md                      bpmn.io compatibility report
-├── PLAN.md                               Modularization plan (completed)
 ├── bpmn-generator-v3.skill               Portable ZIP archive
+├── .github/workflows/ci.yml             GitHub Actions CI
 ├── references/
 │   ├── logic-core-schema.md              JSON schema documentation (prose)
 │   ├── input-schema.json                 Formal JSON Schema (draft 2020-12)
@@ -293,9 +300,23 @@ Optional fields: `callbackUrl` (async delivery with retry), `clientId` (audit), 
 
 See `references/omg-compliance.md` for a detailed mapping of OMG BPMN 2.0.2 specification sections to implementation code.
 
+## Third-Party Libraries
+
+| Library | License | Purpose |
+|---|---|---|
+| [ElkJS](https://github.com/kieler/elkjs) | EPL-2.0 | Sugiyama layered auto-layout |
+| [bpmn-moddle](https://github.com/bpmn-io/bpmn-moddle) | MIT | BPMN 2.0 meta-model (XML serialization) |
+| [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk) | MIT | MCP server integration |
+
+See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full license details.
+
 ## References
 
 - OMG BPMN 2.0.2 (formal/2013-12-09, ISO/IEC 19510:2013)
 - Bruce Silver: "BPMN Method and Style, 2nd Edition"
 - Soliman et al. (2025): "Size matters less: how fine-tuned small LLMs excel in BPMN generation"
 - Domroes et al. (2023): "Model Order in Sugiyama Layouts" (ELK)
+
+## License
+
+[MIT](LICENSE) — see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for dependency licenses.

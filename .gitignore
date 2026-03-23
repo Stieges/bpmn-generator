@@ -3,3 +3,21 @@ node_modules/
 *.svg
 !references/**
 !tests/**
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Environment
+.env
+.env.*
+
+# Runtime artifacts
+audit/
+dead-letter/
