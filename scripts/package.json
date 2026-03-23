@@ -7,7 +7,7 @@
   "author": "Daniel Stiegler",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dstiegler/bpmn-generator.git"
+    "url": "git+https://github.com/Stieges/bpmn-generator.git"
   },
   "keywords": [
     "bpmn",

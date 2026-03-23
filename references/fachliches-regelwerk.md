@@ -1,6 +1,6 @@
 # BPMN Fachliches Regelwerk
 
-Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 3 Schichten, 22 Regeln.
+Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 4 Schichten, 26 Regeln (M05/M06 deaktiviert).
 
 ## Architektur
 

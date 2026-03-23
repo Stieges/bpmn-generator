@@ -25,7 +25,7 @@ ElkJS is used as an unmodified library. No modifications have been made to its s
 
 ### @modelcontextprotocol/sdk — Model Context Protocol SDK
 
-- **Version:** 1.12.1+
+- **Version:** 1.27.1
 - **License:** MIT
 - **Copyright:** Copyright (c) 2024 Anthropic, PBC
 - **Repository:** https://github.com/modelcontextprotocol/typescript-sdk

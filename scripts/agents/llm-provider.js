@@ -1,6 +1,6 @@
 /**
  * LLM Provider — OpenAI-compatible fetch abstraction.
- * Supports cloud APIs (OpenAI, Azure, adesso AI Hub) and local inference
+ * Supports cloud APIs (OpenAI, Azure) and local inference
  * (Ollama, llama.cpp, vLLM, text-generation-inference).
  *
  * Zero dependencies, uses native fetch.

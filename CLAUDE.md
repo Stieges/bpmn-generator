@@ -14,7 +14,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 ```
 pipeline.js (Orchestrator, ~180 LOC)
   ├── validate.js      ← rules.js
-  ├── rules.js         ← types.js, workflow-net.js (22 Regeln, 4 Schichten, Profile)
+  ├── rules.js         ← types.js, workflow-net.js (26 rules (24 active, M05/M06 disabled), 4 layers, profiles)
   ├── topology.js      ← types.js
   ├── layout.js        ← types.js, utils.js, topology.js, elkjs
   ├── coordinates.js   ← types.js, utils.js
@@ -22,10 +22,10 @@ pipeline.js (Orchestrator, ~180 LOC)
   ├── svg.js           ← types.js, utils.js, icons.js
   ├── icons.js         ← utils.js
   ├── dot.js           ← types.js
-  ├── types.js         (keine Deps)
-  └── utils.js         (keine Deps, liest config.json)
+  ├── types.js         (no deps)
+  └── utils.js         (no deps, reads config.json)
 
-import.js              BPMN XML → Logic-Core (eigenständig)
+import.js              BPMN XML → Logic-Core (standalone)
 ```
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
@@ -35,7 +35,7 @@ import.js              BPMN XML → Logic-Core (eigenständig)
 | File | Purpose |
 |------|---------|
 | `scripts/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/rules.js` | Rule Engine: 22 rules, 3 layers (Soundness/Style/Pragmatics) |
+| `scripts/rules.js` | Rule Engine: 26 rules (24 active, M05/M06 disabled), 4 layers (Soundness/Style/Pragmatics/Workflow-Net) |
 | `scripts/validate.js` | Thin wrapper around `runRules()` |
 | `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact`, `bpmnXmlTag` |
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
@@ -51,7 +51,7 @@ import.js              BPMN XML → Logic-Core (eigenständig)
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
 | `references/logic-core-schema.md` | Schema documentation (prose + examples) |
 | `references/prompt-template.md` | LLM prompts + 5 enterprise few-shot patterns |
-| `references/fachliches-regelwerk.md` | Rule documentation (22 rules, sources, extension guide) |
+| `references/fachliches-regelwerk.md` | Rule documentation (26 rules (24 active, M05/M06 disabled), sources, extension guide) |
 | `references/omg-compliance.md` | OMG BPMN 2.0.2 → code mapping |
 | `rules/default-profile.json` | Default rule profile (all layers active) |
 | `rules/strict-profile.json` | Strict profile (style warnings → errors) |
@@ -61,7 +61,7 @@ import.js              BPMN XML → Logic-Core (eigenständig)
 ```bash
 cd scripts/
 npm install
-npm test                                          # 118 Tests (Jest, ES Modules)
+npm test                                          # 136 tests (Jest, ES Modules)
 node pipeline.js tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
 ```
 
@@ -94,12 +94,12 @@ After every change: `npm test` must pass.
 
 ## Rule Engine
 
-3 layers with configurable severity:
+4 layers with configurable severity:
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
 | Soundness | ERROR | S01-S11 | Structural correctness (OMG compliance) |
-| Style | WARNING | M01-M08 | Readability (Bruce Silver Method & Style) |
+| Style | WARNING | M01-M09 (M05/M06 disabled) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |
 
@@ -124,7 +124,7 @@ node pipeline.js input.json output-basename
 # Stdin:
 cat input.json | node pipeline.js - output
 
-# Mit DOT-Export:
+# With DOT export:
 node pipeline.js input.json output --dot
 
 # DOT → Logic-Core JSON:
@@ -133,10 +133,10 @@ node pipeline.js graph.dot output --import-dot
 # BPMN → Logic-Core (Round-Trip):
 node import.js existing.bpmn extracted.json
 
-# Mit Dokumentations-Export:
+# With documentation export:
 node pipeline.js input.json output --doc
 
-# MCP Server starten:
+# Start MCP server:
 node mcp-bpmn-server.js
 ```
 

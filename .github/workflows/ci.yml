@@ -33,4 +33,4 @@ jobs:
 
       - name: Smoke test — generate BPMN + SVG
         working-directory: scripts
-        run: node pipeline.js tests/fixtures/simple-approval.json /tmp/smoke-test
+        run: node pipeline.js ../tests/fixtures/simple-approval.json /tmp/smoke-test

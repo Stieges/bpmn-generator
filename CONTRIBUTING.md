@@ -45,9 +45,9 @@ See [README.md](README.md) for the full module architecture and dependency graph
 3. **Run tests** after every change: `npm test`
 4. **Golden files** — if your change affects layout or XML output, regenerate:
    ```bash
-   node pipeline.js tests/fixtures/simple-approval.json tests/fixtures/simple-approval.expected
-   node pipeline.js tests/fixtures/multi-pool-collaboration.json tests/fixtures/multi-pool-collaboration.expected
-   node pipeline.js tests/fixtures/expanded-subprocess.json tests/fixtures/expanded-subprocess.expected
+   node pipeline.js ../tests/fixtures/simple-approval.json ../tests/fixtures/simple-approval.expected
+   node pipeline.js ../tests/fixtures/multi-pool-collaboration.json ../tests/fixtures/multi-pool-collaboration.expected
+   node pipeline.js ../tests/fixtures/expanded-subprocess.json ../tests/fixtures/expanded-subprocess.expected
    ```
 5. **Submit a PR** with a clear description of what changed and why
 

@@ -3,6 +3,10 @@ node_modules/
 *.svg
 !references/**
 !tests/**
+!docs/**
+
+# OMG spec files (keep locally, download links in omg-compliance.md)
+references/omg-spec/
 
 # OS
 .DS_Store
