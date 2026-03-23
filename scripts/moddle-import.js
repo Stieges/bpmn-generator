@@ -6,7 +6,7 @@
  * that preserves all attributes (including unknown/extension attributes via $attrs).
  */
 
-import BpmnModdle from 'bpmn-moddle';
+import { BpmnModdle } from 'bpmn-moddle';
 
 const moddle = new BpmnModdle();
 

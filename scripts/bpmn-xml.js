@@ -6,7 +6,7 @@
  * Signature: generateBpmnXml(lc, coordMap) → Promise<string>
  */
 
-import BpmnModdle from 'bpmn-moddle';
+import { BpmnModdle } from 'bpmn-moddle';
 import { isEvent, isGateway, isBoundaryEvent, bpmnXmlTag } from './types.js';
 import { rn, LANE_HEADER_W, LABEL_DISTANCE } from './utils.js';
 import { inferGatewayDirections } from './topology.js';
