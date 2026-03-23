@@ -1244,8 +1244,15 @@ describe('bpmn-moddle Import', () => {
   });
 
   test('all OMG example files parse with bpmn-moddle', async () => {
-    const { readdirSync, readFileSync, statSync } = await import('fs');
+    const { readdirSync, readFileSync, statSync, existsSync } = await import('fs');
     const { join } = await import('path');
+
+    const examplesDir = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn');
+    if (!existsSync(examplesDir)) {
+      // OMG spec files are kept locally but not tracked in git (copyright).
+      // Skip this test in CI or when files are not present.
+      return;
+    }
 
     function findBpmn(dir) {
       const r = [];
@@ -1257,7 +1264,6 @@ describe('bpmn-moddle Import', () => {
       return r;
     }
 
-    const examplesDir = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn');
     const files = findBpmn(examplesDir);
     expect(files.length).toBeGreaterThanOrEqual(25);
 
@@ -1277,8 +1283,9 @@ describe('bpmn-moddle Import', () => {
   });
 
   test('OMG nested lanes example imports correctly', async () => {
-    const { readFileSync } = await import('fs');
+    const { readFileSync, existsSync } = await import('fs');
     const nestedLanesFile = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn/2010-06-03/Diagram Interchange/Examples - DI - Lanes and Nested Lanes.bpmn');
+    if (!existsSync(nestedLanesFile)) return; // OMG spec files not in git (copyright)
     const xml = readFileSync(nestedLanesFile, 'utf8');
 
     const result = await bpmnToLogicCore(xml);
