@@ -34,12 +34,12 @@
         {
           "id": "Lane_Orch",
           "name": "Orchestrator (orchestrator.js)",
-          "nodeIds": ["start_orch", "gw_input", "gw_review", "gw_maxiter", "t_assemble", "end_orch"]
+          "nodeIds": ["start_orch", "gw_input", "t_assemble", "end_orch"]
         },
         {
           "id": "Lane_Agents",
           "name": "Agents — Modeler + Reviewer (modeler.js, rules.js)",
-          "nodeIds": ["t_extract", "t_validate", "t_refine"]
+          "nodeIds": ["t_extract", "t_validate", "gw_review", "gw_maxiter", "t_refine"]
         },
         {
           "id": "Lane_Pipeline",
@@ -57,8 +57,8 @@
         { "id": "gw_input", "type": "exclusiveGateway", "name": "Input-Typ?", "lane": "Lane_Orch" },
         { "id": "t_extract", "type": "serviceTask", "name": "Logic-Core aus Text extrahieren", "lane": "Lane_Agents", "documentation": "Modeler Agent im Extract-Modus: Baut LLM-Prompt mit System-Prompt (Logic-Core Schema + Regeln) + 5 Enterprise Few-Shot-Patterns aus references/prompt-template.md. Sendet an Claude API. Parst JSON-Antwort (auch aus Markdown-Codeblöcken)." },
         { "id": "t_validate", "type": "serviceTask", "name": "Strukturelle Validierung durchführen", "lane": "Lane_Agents", "documentation": "Reviewer Agent: Führt 22 Regeln in 4 Schichten aus. Soundness (S01-S11): Start/End-Events, Edge-Referenzen, Gateway-Balance, Boundary-Events. Style (M01-M08): Naming-Konventionen, Label-Vollständigkeit. Pragmatik (P01-P03): Komplexitätsmetriken. Workflow-Net (WF01-WF03): Petri-Net-Soundness. Profile konfigurierbar (default/strict)." },
-        { "id": "gw_review", "type": "exclusiveGateway", "name": "Validierung bestanden?", "lane": "Lane_Orch" },
-        { "id": "gw_maxiter", "type": "exclusiveGateway", "name": "Max Iterationen erreicht?", "lane": "Lane_Orch" },
+        { "id": "gw_review", "type": "exclusiveGateway", "name": "Validierung bestanden?", "lane": "Lane_Agents" },
+        { "id": "gw_maxiter", "type": "exclusiveGateway", "name": "Max Iterationen erreicht?", "lane": "Lane_Agents" },
         { "id": "t_refine", "type": "serviceTask", "name": "Logic-Core verfeinern", "lane": "Lane_Agents", "documentation": "Modeler Agent im Refine-Modus: Sendet bisheriges Logic-Core + Review-Issues (Severity + Problem-Beschreibung) an LLM. Claude korrigiert strukturelle Fehler und gibt verbessertes JSON zurück. Max 3 Iterationen (konfigurierbar via maxReviewIterations)." },
         { "id": "t_topo", "type": "serviceTask", "name": "Topologie inferieren", "lane": "Lane_Pipeline", "documentation": "topology.js: inferGatewayDirections() bestimmt Diverging/Converging aus In/Out-Edge-Verhältnis. sortNodesTopologically() für deterministische Reihenfolge. orderLanesByFlow() ordnet Lanes nach Hauptflussrichtung. identifyHappyPathNodes() markiert den Happy Path." },
         { "id": "t_elk", "type": "serviceTask", "name": "ELK Sugiyama Layout berechnen", "lane": "Lane_Pipeline", "documentation": "layout.js: logicCoreToElk() konvertiert Logic-Core in ELK-Graph. Nodes bekommen Dimensionen aus config.json. Events/Gateways: externe Label-Höhe. Start→FIRST, End→LAST Layer-Constraint. Lanes via elk.partitioning. Multi-Pool via rectpacking. runElkLayout(): Sugiyama hierarchisch, Direction RIGHT, ORTHOGONAL Routing, LAYER_SWEEP Crossing-Minimierung, NETWORK_SIMPLEX Node-Placement." },
