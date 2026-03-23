@@ -3,7 +3,28 @@
 [![CI](https://github.com/Stieges/bpmn-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/Stieges/bpmn-generator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Enterprise BPMN 2.0 diagram generator — converts natural language process descriptions into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013).
+Enterprise BPMN 2.0 diagram generator — converts natural language process descriptions or structured JSON into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013).
+
+## What It Does
+
+You describe a business process — either as free text or as a structured JSON (Logic-Core) — and the generator produces:
+
+- A **BPMN 2.0 XML file** (.bpmn) that opens in [bpmn.io](https://bpmn.io), Camunda Modeler, or any standard-compliant tool
+- An **SVG preview** with all BPMN symbols, lanes, pools, and edge routing
+- A **validation report** covering structural correctness, naming conventions, and complexity metrics
+
+The output is structurally valid and OMG-compliant. It handles pools, lanes, gateways, boundary events, sub-processes, message flows, and loop markers correctly — things that LLMs typically get wrong when generating BPMN XML directly.
+
+### Realistic Expectations
+
+This tool produces a **solid first draft**, not a finished diagram. Expect to refine:
+
+- **Layout** — Auto-layout handles most cases well (happy-path alignment, orthogonal routing, lane partitioning), but complex processes with many cross-lane edges or feedback loops may need manual adjustment in a BPMN editor
+- **Labels & naming** — The LLM generates reasonable names, but domain-specific terminology may need correction
+- **Edge cases** — Unusual gateway patterns, deeply nested sub-processes, or very large diagrams (30+ activities) can produce suboptimal visual results
+- **Business logic** — The generator models what you describe; it doesn't validate whether your process makes business sense
+
+Think of it as going from **0% → 80%** in seconds. The remaining 20% is domain expertise that requires human judgment.
 
 ## Pipeline
 
