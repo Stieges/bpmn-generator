@@ -34,7 +34,7 @@
     "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "bpmn-moddle": "^10.0.0",
     "elkjs": "^0.11.1"
   },
