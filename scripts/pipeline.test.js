@@ -1932,3 +1932,48 @@ describe('wrapTextByPx', () => {
     expect(a).toEqual(b);
   });
 });
+
+describe('long-lane-names matrix', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/long-lane-names.json', 'utf8'));
+
+  test('matches .expected golden with refinement disabled', async () => {
+    const res = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const goldenBpmn = readFileSync('../tests/fixtures/long-lane-names.expected.bpmn', 'utf8');
+    const goldenSvg  = readFileSync('../tests/fixtures/long-lane-names.expected.svg',  'utf8');
+    expect(res.bpmnXml).toBe(goldenBpmn);
+    expect(res.svg).toBe(goldenSvg);
+  });
+
+  test('matches .refined golden with refinement enabled', async () => {
+    const res = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const goldenBpmn = readFileSync('../tests/fixtures/long-lane-names.refined.bpmn', 'utf8');
+    const goldenSvg  = readFileSync('../tests/fixtures/long-lane-names.refined.svg',  'utf8');
+    expect(res.bpmnXml).toBe(goldenBpmn);
+    expect(res.svg).toBe(goldenSvg);
+  });
+});
+
+describe('Pass 1 metric assertions', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/long-lane-names.json', 'utf8'));
+
+  test('laneHeaderWidth widens beyond default when refinement is enabled', async () => {
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const poolKey = Object.keys(off.coordMap.poolCoords)[0];
+    const offWidth = off.coordMap.poolCoords[poolKey].laneHeaderWidth;
+    const onWidth  = on.coordMap.poolCoords[poolKey].laneHeaderWidth;
+    expect(onWidth).toBeGreaterThan(offWidth);
+  });
+
+  test('canvas width does not grow runaway (<= 1.5× baseline)', async () => {
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const extractW = (svg) => {
+      const m = svg.match(/width="(\d+)"/);
+      return m ? parseInt(m[1], 10) : 0;
+    };
+    const wOff = extractW(off.svg);
+    const wOn  = extractW(on.svg);
+    expect(wOn).toBeLessThanOrEqual(wOff * 1.5);
+  });
+});
