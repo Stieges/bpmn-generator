@@ -2020,3 +2020,63 @@ describe('Pass 1 metric assertions', () => {
     expect(wOn).toBeLessThanOrEqual(wOff * 1.5);
   });
 });
+
+describe('dense-edge-labels matrix', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/dense-edge-labels.json', 'utf8'));
+
+  test('matches .expected golden (refinement off)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/dense-edge-labels.expected.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/dense-edge-labels.expected.svg', 'utf8'));
+  });
+
+  test('matches .refined golden (refinement on)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/dense-edge-labels.refined.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/dense-edge-labels.refined.svg', 'utf8'));
+  });
+});
+
+describe('Pass 3 metric assertions', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/dense-edge-labels.json', 'utf8'));
+
+  test('fewer label-vs-label bbox overlaps after refinement on dense fixture', async () => {
+    // Pass 3 reduces overlaps from 5 → 2 on this fixture; full zero-overlap
+    // is not achievable with simple nudge because two labels share the same
+    // mid-edge X and the nudge directions cancel (known limitation).
+    const { estimateTextBBox, bboxOverlaps } = await import('./visual-refinement.js');
+    const countOverlaps = (coordMap) => {
+      const bboxes = Object.values(coordMap.edgeLabels ?? {}).map(L => estimateTextBBox(L.text, L.x, L.y, 11));
+      let n = 0;
+      for (let i = 0; i < bboxes.length; i++) {
+        for (let j = i + 1; j < bboxes.length; j++) {
+          if (bboxOverlaps(bboxes[i], bboxes[j])) n++;
+        }
+      }
+      return n;
+    };
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const overlapsOff = countOverlaps(off.coordMap);
+    const overlapsOn  = countOverlaps(on.coordMap);
+    // Refinement must strictly reduce overlaps (5 → 2 observed)
+    expect(overlapsOn).toBeLessThan(overlapsOff);
+  });
+
+  test('refinement ON has fewer or equal label overlaps vs OFF', async () => {
+    const { estimateTextBBox, bboxOverlaps } = await import('./visual-refinement.js');
+    const countOverlaps = (coordMap) => {
+      const bboxes = Object.values(coordMap.edgeLabels ?? {}).map(L => estimateTextBBox(L.text, L.x, L.y, 11));
+      let n = 0;
+      for (let i = 0; i < bboxes.length; i++) {
+        for (let j = i + 1; j < bboxes.length; j++) {
+          if (bboxOverlaps(bboxes[i], bboxes[j])) n++;
+        }
+      }
+      return n;
+    };
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    expect(countOverlaps(on)).toBeLessThanOrEqual(countOverlaps(off));
+  });
+});

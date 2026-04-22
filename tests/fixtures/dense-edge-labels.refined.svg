@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="862" height="825" viewBox="0 0 862 825" font-family="Arial, sans-serif">
+<defs>
+  <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
+  <marker id="seq-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="6" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 6 3 L 10 17" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+  <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="1" refY="10"
+    markerWidth="12" markerHeight="12" orient="auto">
+    <path d="M 1 10 L 8 6 L 15 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
+  <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open arrowhead at target -->
+  <marker id="msg-end" viewBox="0 0 20 20" refX="8.5" refY="5"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#000000" stroke-width="1" stroke-linecap="butt"/>
+  </marker>
+  <!-- Association: open chevron -->
+  <marker id="assoc-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+</defs>
+<rect width="862" height="825" fill="#fafafa"/>
+<rect x="80" y="50" width="732" height="725" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="50" width="30" height="725" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="65" y="412.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,412.5)">Team</text>
+<path d="M 140.4 400 L 239 400" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 264 375 L 311 375 L 311 120 L 436 120" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="244.5" y="337" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="287.5" y="349" text-anchor="middle" font-size="10" fill="#000000">Option Alpha</text>
+<path d="M 276 387 L 326 387 L 326 260 L 436 260" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="261.3" y="374" width="79.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="301" y="386" text-anchor="middle" font-size="10" fill="#000000">Option Beta</text>
+<path d="M 263 400 L 436 400" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="306.5" y="387" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="349.5" y="399" text-anchor="middle" font-size="10" fill="#000000">Option Gamma</text>
+<path d="M 251 412 L 326 412 L 326 540 L 436 540" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="245.5" y="414" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="288.5" y="426" text-anchor="middle" font-size="10" fill="#000000">Option Delta</text>
+<path d="M 251 412 L 311 412 L 311 425 L 311 680 L 436 680" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="231.5" y="399" width="99" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="281" y="411" text-anchor="middle" font-size="10" fill="#000000">Option Epsilon</text>
+<path d="M 536 120 L 581 120 L 581 375 L 628 375" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 536 260 L 566 260 L 566 387 L 616 387" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 536 400 L 629 400" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 536 540 L 566 540 L 566 412 L 641 412" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 536 680 L 581 680 L 581 425 L 641 425 L 641 412" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 653 400 L 751.6 400" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<circle cx="128" cy="387" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<text x="128" y="425" text-anchor="middle" font-size="11" fill="#000000">Start</text>
+<polygon points="251,362 276,387 251,412 226,387" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="242" y1="378" x2="260" y2="396" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<line x1="260" y1="378" x2="242" y2="396" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<text x="251" y="432" text-anchor="middle" font-size="11" fill="#000000">Welche?</text>
+<rect x="436" y="80" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 451,92 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 453.162,93.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 444.1,88.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="486" y="129" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante A</text>
+<rect x="436" y="220" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 451,232 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 453.162,233.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 444.1,228.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="486" y="269" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante B</text>
+<rect x="436" y="360" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 451,372 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 453.162,373.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 444.1,368.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="486" y="409" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante C</text>
+<rect x="436" y="500" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 451,512 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 453.162,513.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 444.1,508.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="486" y="549" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante D</text>
+<rect x="436" y="640" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 451,652 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 453.162,653.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 444.1,648.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="486" y="689" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante E</text>
+<polygon points="641,362 666,387 641,412 616,387" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="632" y1="378" x2="650" y2="396" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<line x1="650" y1="378" x2="632" y2="396" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+
+<circle cx="764" cy="387" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
+<text x="764" y="425" text-anchor="middle" font-size="11" fill="#000000">Ende</text>
+</svg>
