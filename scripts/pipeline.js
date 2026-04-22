@@ -34,7 +34,7 @@ import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordin
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
-import { computeDynamicLaneHeaders } from './visual-refinement.js';
+import { computeDynamicLaneHeaders, repairEdgeLabels } from './visual-refinement.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // PUBLIC API — programmatic usage via import
@@ -70,6 +70,11 @@ async function runPipeline(logicCore, opts = {}) {
       computeDynamicLaneHeaders(coordMap, lc, {
         minWidth: CFG.visualRefinement?.laneHeaderMinWidth ?? 30,
         maxWidth: CFG.visualRefinement?.laneHeaderMaxWidth ?? 120,
+      });
+    }
+    if (CFG.visualRefinement?.edgeLabelCollisionRepair !== false) {
+      repairEdgeLabels(coordMap, {
+        maxShift: CFG.visualRefinement?.edgeLabelMaxShift ?? 25,
       });
     }
   }

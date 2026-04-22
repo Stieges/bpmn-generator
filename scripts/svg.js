@@ -24,7 +24,7 @@ function laneHeaderW(poolCoords, poolKey) {
 }
 
 function generateSvg(lc, coordMap) {
-  const { coords, laneCoords, poolCoords, edgeCoords } = coordMap;
+  const { coords, laneCoords, poolCoords, edgeCoords, edgeLabels } = coordMap;
   const processes = lc.pools ? lc.pools : [lc];
   const allNodes  = processes.flatMap(p => p.nodes || []);
   const allEdges  = processes.flatMap(p => p.edges || []);
@@ -177,7 +177,7 @@ function generateSvg(lc, coordMap) {
   for (const edge of allEdges) {
     const eid = edge.id || `flow_${edge.source}_${edge.target}`;
     const pts = edgeCoords[eid] || [];
-    renderSequenceFlow(out, edge, pts, coords, tx, ty);
+    renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels);
   }
 
   // §7.7  Message flows (dashed, orthogonal routing, OMG spec Fig 9.5)
@@ -208,8 +208,15 @@ function generateSvg(lc, coordMap) {
 
       out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
       if (mf.name) {
-        const mx = rn((sx + ex) / 2), my = rn((sy + ey) / 2);
-        renderEdgeLabel(out, mf.name, mx, my);
+        const mfKey = mf.id || `mf_${mf.source}_${mf.target}`;
+        const L = edgeLabels?.[mfKey];
+        if (L) {
+          renderEdgeLabel(out, L.text, tx(L.x), ty(L.y));
+        } else {
+          // Fallback: inline computation (coordMap may be missing mf entry)
+          const mx = rn((sx + ex) / 2), my = rn((sy + ey) / 2);
+          renderEdgeLabel(out, mf.name, mx, my);
+        }
       }
     }
   }
@@ -243,7 +250,7 @@ function generateSvg(lc, coordMap) {
       for (const subEdge of (node.edges || [])) {
         const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
         const pts = edgeCoords[seid] || [];
-        renderSequenceFlow(out, subEdge, pts, coords, tx, ty);
+        renderSequenceFlow(out, subEdge, pts, coords, tx, ty, edgeLabels);
       }
     }
   }
@@ -274,7 +281,7 @@ function renderPoolSvg(out, proc, pc, laneCoords, poolCoords, tx, ty) {
   out.push(`<text x="${plcx}" y="${plcy}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="bold" fill="${CLR.label}" transform="rotate(-90,${plcx},${plcy})">${esc(proc.name || 'Process')}</text>`);
 }
 
-function renderSequenceFlow(out, edge, pts, coords, tx, ty) {
+function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels) {
   let pathD;
   if (pts.length >= 2) {
     pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
@@ -292,36 +299,13 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty) {
 
   out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" ${markerStart} ${markerEnd}/>`);
 
-  // Edge label — position on first horizontal segment, 5px above edge
+  // Edge label — read position from coordMap.edgeLabels (computed in coordinates.js)
   if (edge.label) {
-    let labelX, labelY;
-    if (pts.length >= 2) {
-      // Find first horizontal segment (dy ≈ 0)
-      let placed = false;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const dy = Math.abs(pts[i + 1].y - pts[i].y);
-        if (dy < 1) {
-          // Horizontal segment found — place at midpoint, 5px above
-          labelX = tx((pts[i].x + pts[i + 1].x) / 2);
-          labelY = ty(pts[i].y) - 5;
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        // No horizontal segment: place at 30% from source, 5px above
-        const p0 = pts[0], p1 = pts[pts.length - 1];
-        labelX = tx(p0.x + (p1.x - p0.x) * 0.3);
-        labelY = ty(p0.y + (p1.y - p0.y) * 0.3) - 5;
-      }
-    } else {
-      const s = coords[edge.source], t = coords[edge.target];
-      if (s && t) {
-        labelX = tx((s.x + s.w/2 + t.x + t.w/2) / 2);
-        labelY = ty((s.y + s.h/2 + t.y + t.h/2) / 2) - 5;
-      }
+    const eid = edge.id;
+    const L = edgeLabels?.[eid];
+    if (L) {
+      renderEdgeLabel(out, L.text, tx(L.x), ty(L.y) - 5);
     }
-    if (labelX != null) renderEdgeLabel(out, edge.label, labelX, labelY);
   }
 }
 
