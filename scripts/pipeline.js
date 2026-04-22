@@ -34,6 +34,7 @@ import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordin
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
+import { computeDynamicLaneHeaders } from './visual-refinement.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // PUBLIC API — programmatic usage via import
@@ -42,9 +43,11 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 /**
  * Run the full BPMN pipeline programmatically.
  * @param {object} logicCore - Logic-Core JSON object
+ * @param {object} [opts={}] - Pipeline options
+ * @param {boolean} [opts.visualRefinement] - Enable visual refinement passes (overrides CFG.visualRefinement.enabled)
  * @returns {Promise<{bpmnXml: string, svg: string, coordMap: object, validation: {errors: string[], warnings: string[]}}>}
  */
-async function runPipeline(logicCore) {
+async function runPipeline(logicCore, opts = {}) {
   const lc = JSON.parse(JSON.stringify(logicCore)); // deep clone to avoid mutation
   const { errors, warnings } = validateLogicCore(lc);
   if (errors.length) {
@@ -59,6 +62,18 @@ async function runPipeline(logicCore) {
   const elkGraph  = logicCoreToElk(lc);
   const elkResult = await runElkLayout(elkGraph);
   const coordMap  = buildCoordinateMap(elkResult, lc);
+
+  // Visual Refinement (opt-in, post-layout coordinate transforms)
+  const refineOn = opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false;
+  if (refineOn) {
+    if (CFG.visualRefinement?.dynamicLaneHeader !== false) {
+      computeDynamicLaneHeaders(coordMap, lc, {
+        minWidth: CFG.visualRefinement?.laneHeaderMinWidth ?? 30,
+        maxWidth: CFG.visualRefinement?.laneHeaderMaxWidth ?? 120,
+      });
+    }
+  }
+
   const bpmnXml   = await generateBpmnXml(lc, coordMap);
   const svg       = generateSvg(lc, coordMap);
 
