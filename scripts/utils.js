@@ -95,3 +95,14 @@ export function wrapText(text, maxChars) {
   if (cur) lines.push(cur);
   return lines;
 }
+
+/**
+ * Wrap text using a pixel-width budget.
+ * Converts to a char-count budget via the same heuristic as estimateTextWidth,
+ * then delegates to wrapText. Safe for any fontSize > 0.
+ */
+export function wrapTextByPx(text, maxPxWidth, fontSize = 11) {
+  const CHAR_WIDTH_FACTOR = 0.6;
+  const maxChars = Math.max(1, Math.floor(maxPxWidth / (fontSize * CHAR_WIDTH_FACTOR)));
+  return wrapText(text, maxChars);
+}

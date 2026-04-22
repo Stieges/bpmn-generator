@@ -24,7 +24,7 @@ import {
   extractSubProcessAsLogicCore,
 } from './pipeline.js';
 import { normalizeLaneAssignments } from './topology.js';
-import { wrapText } from './utils.js';
+import { wrapText, wrapTextByPx } from './utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
@@ -1909,5 +1909,26 @@ describe('wrapText char-level fallback', () => {
     const result = wrapText('abc', -5);
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe('wrapTextByPx', () => {
+  test('wraps based on pixel budget, using estimateTextWidth heuristic', () => {
+    // 60px at fontSize=11 ≈ 9 chars (60 / (11 * 0.6))
+    const result = wrapTextByPx('Hello World Foo Bar', 60, 11);
+    expect(result.length).toBeGreaterThan(1);
+    expect(result.every(l => l.length <= 10)).toBe(true);
+  });
+
+  test('handles zero-width gracefully (does not infinite-loop)', () => {
+    const result = wrapTextByPx('abc', 1, 11);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('uses default fontSize=11 when omitted', () => {
+    const a = wrapTextByPx('Hello World', 60);
+    const b = wrapTextByPx('Hello World', 60, 11);
+    expect(a).toEqual(b);
   });
 });
