@@ -34,14 +34,14 @@ function buildCoordinateMap(elkResult, lc) {
     }
 
     if (allPoolIds.has(node.id)) {
-      poolCoords[node.id] = { x: ax, y: ay, w: node.width, h: node.height };
+      poolCoords[node.id] = { x: ax, y: ay, w: node.width, h: node.height, laneHeaderWidth: LANE_HEADER_W };
       for (const c of node.children || []) collectNodes(c, ax, ay);
       for (const e of node.edges   || []) collectEdge(e, ax, ay);
       return;
     }
 
     if (node.id === 'pool') {
-      poolCoords['_singlePool'] = { x: ax, y: ay, w: node.width, h: node.height };
+      poolCoords['_singlePool'] = { x: ax, y: ay, w: node.width, h: node.height, laneHeaderWidth: LANE_HEADER_W };
       for (const c of node.children || []) collectNodes(c, ax, ay);
       for (const e of node.edges   || []) collectEdge(e, ax, ay);
       return;
