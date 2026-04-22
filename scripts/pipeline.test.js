@@ -1574,6 +1574,49 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.some(w => w.includes('default'))).toBe(true);
   });
 
+  describe('Rule M10 — Lane/pool name length', () => {
+    test('passes when all names ≤ 25 chars', () => {
+      const lc = {
+        pools: [{
+          id: 'p1', name: 'Einkauf',
+          nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+          lanes: [{ id: 'l1', name: 'Bearbeiter' }],
+        }],
+      };
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes('M10') || w.includes('exceed'))).toBe(false);
+    });
+
+    test('flags pool with name > 25 chars', () => {
+      const lc = {
+        pools: [{
+          id: 'p1', name: 'This is a very descriptive pool name that is too long',
+          nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+          lanes: [{ id: 'l1', name: 'OK' }],
+        }],
+      };
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes('pool') && w.includes('chars'))).toBe(true);
+    });
+
+    test('flags lane with name > 25 chars', () => {
+      const lc = {
+        pools: [{
+          id: 'p1', name: 'Ok',
+          nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+          lanes: [{
+            id: 'l1', name: 'Pipeline — Layout + Rendering (topology → ELK → coordinates)',
+          }],
+        }],
+      };
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes('lane'))).toBe(true);
+    });
+  });
+
   test('P01: process with >50 nodes → INFO', () => {
     const nodes = [{ id: 's', type: 'startEvent' }];
     for (let i = 0; i < 55; i++) nodes.push({ id: `t${i}`, type: 'task', name: `Task ${i}` });
