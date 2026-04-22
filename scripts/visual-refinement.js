@@ -88,3 +88,26 @@ export function computeDynamicLaneHeaders(coordMap, process, opts = {}) {
 
   return coordMap;
 }
+
+const TEXT_BBOX_PADDING = 2;
+
+/**
+ * Rectangular bbox for a short edge-label rendered centered at (x,y).
+ * Width is derived from estimateTextWidth; height is fontSize plus small padding.
+ * Returns `{ x, y, w, h }` where (x, y) is the top-left corner.
+ */
+export function estimateTextBBox(text, x, y, fontSize = 11) {
+  const w = estimateTextWidth(text, fontSize) + 2 * TEXT_BBOX_PADDING;
+  const h = fontSize + 2 * TEXT_BBOX_PADDING;
+  return { x: x - w / 2, y: y - h / 2, w, h };
+}
+
+/**
+ * Axis-aligned bbox overlap test.
+ * Adjacent (touching-only) bboxes return false.
+ * Fully-contained bboxes return true.
+ */
+export function bboxOverlaps(a, b) {
+  return !(a.x + a.w <= b.x || b.x + b.w <= a.x ||
+           a.y + a.h <= b.y || b.y + b.h <= a.y);
+}

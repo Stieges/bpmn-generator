@@ -1,8 +1,7 @@
 /**
  * Visual Refinement — unit tests
  */
-import { estimateTextWidth } from './visual-refinement.js';
-import { computeDynamicLaneHeaders } from './visual-refinement.js';
+import { estimateTextWidth, computeDynamicLaneHeaders, estimateTextBBox, bboxOverlaps } from './visual-refinement.js';
 
 describe('estimateTextWidth', () => {
   test('returns 0 for empty string', () => {
@@ -110,5 +109,69 @@ describe('computeDynamicLaneHeaders', () => {
     const proc = mkProcess(['A', 'B']);
     const out = computeDynamicLaneHeaders(coords, proc, {});
     expect(out).toBe(coords);
+  });
+});
+
+describe('estimateTextBBox', () => {
+  test('returns bbox centered on (x,y) for single-line text', () => {
+    const bb = estimateTextBBox('Yes', 100, 100, 11);
+    // text "Yes" at fontSize 11 has width ~3*11*0.6 = 19.8 + padding
+    expect(bb.x).toBeLessThan(100);
+    expect(bb.y).toBeLessThan(100);
+    expect(bb.w).toBeGreaterThan(0);
+    expect(bb.h).toBeGreaterThan(0);
+    // Center of the bbox should roughly equal (100, 100)
+    expect(bb.x + bb.w / 2).toBeCloseTo(100, 0);
+    expect(bb.y + bb.h / 2).toBeCloseTo(100, 0);
+  });
+
+  test('wider text produces wider bbox', () => {
+    const short = estimateTextBBox('Yes', 100, 100, 11);
+    const long  = estimateTextBBox('This is a longer label', 100, 100, 11);
+    expect(long.w).toBeGreaterThan(short.w);
+  });
+
+  test('uses default fontSize=11 when omitted', () => {
+    const a = estimateTextBBox('Hello', 0, 0);
+    const b = estimateTextBBox('Hello', 0, 0, 11);
+    expect(a).toEqual(b);
+  });
+
+  test('handles empty text', () => {
+    const bb = estimateTextBBox('', 50, 50, 11);
+    expect(bb.w).toBeGreaterThan(0); // just the padding
+    expect(bb.h).toBeGreaterThan(0);
+  });
+});
+
+describe('bboxOverlaps', () => {
+  test('returns true for overlapping bboxes', () => {
+    const a = { x: 0, y: 0, w: 10, h: 10 };
+    const b = { x: 5, y: 5, w: 10, h: 10 };
+    expect(bboxOverlaps(a, b)).toBe(true);
+  });
+
+  test('returns false for separated bboxes', () => {
+    const a = { x: 0, y: 0, w: 10, h: 10 };
+    const b = { x: 20, y: 20, w: 10, h: 10 };
+    expect(bboxOverlaps(a, b)).toBe(false);
+  });
+
+  test('returns false for adjacent (touching-only) bboxes', () => {
+    const a = { x: 0, y: 0, w: 10, h: 10 };
+    const b = { x: 10, y: 0, w: 10, h: 10 };
+    expect(bboxOverlaps(a, b)).toBe(false);
+  });
+
+  test('returns true for one bbox entirely inside another', () => {
+    const outer = { x: 0, y: 0, w: 100, h: 100 };
+    const inner = { x: 10, y: 10, w: 10, h: 10 };
+    expect(bboxOverlaps(outer, inner)).toBe(true);
+  });
+
+  test('symmetric: overlaps(a,b) === overlaps(b,a)', () => {
+    const a = { x: 0, y: 0, w: 10, h: 10 };
+    const b = { x: 5, y: 5, w: 10, h: 10 };
+    expect(bboxOverlaps(a, b)).toBe(bboxOverlaps(b, a));
   });
 });
