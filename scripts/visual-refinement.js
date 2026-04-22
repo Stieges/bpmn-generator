@@ -111,3 +111,69 @@ export function bboxOverlaps(a, b) {
   return !(a.x + a.w <= b.x || b.x + b.w <= a.x ||
            a.y + a.h <= b.y || b.y + b.h <= a.y);
 }
+
+/**
+ * Nudge edge labels that overlap with nodes or other labels.
+ * Tries distances [15, 25, maxShift] × directions [up, down, left, right].
+ * If no collision-free slot is found within maxShift, the label stays at
+ * its original position (graceful degradation — we never throw).
+ *
+ * **Mutation contract:** mutates `coordMap.edgeLabels[...]` in place and
+ * returns the same coordMap reference for chaining.
+ *
+ * @param {Object} coordMap   — { coords, edgeLabels, ... }; MUTATED
+ * @param {Object} opts       — { maxShift = 25 }
+ * @returns {Object}          — same coordMap (mutated)
+ */
+export function repairEdgeLabels(coordMap, opts = {}) {
+  const maxShift = opts.maxShift ?? 25;
+  const labels = coordMap.edgeLabels ?? {};
+  const labelIds = Object.keys(labels);
+  if (labelIds.length === 0) return coordMap;
+
+  // Static obstacle bboxes (just nodes for now — lane/pool headers could be added in a later pass)
+  const nodeBboxes = Object.values(coordMap.coords ?? {}).map(c => ({
+    x: c.x, y: c.y, w: c.w, h: c.h
+  }));
+
+  const labelBboxOf = (id) => {
+    const L = labels[id];
+    return estimateTextBBox(L.text ?? '', L.x, L.y, 11);
+  };
+
+  const distances = [15, 25, maxShift].filter((d, i, arr) => arr.indexOf(d) === i && d > 0);
+  const directions = [
+    { dx:  0, dy: -1 },  // up
+    { dx:  0, dy:  1 },  // down
+    { dx: -1, dy:  0 },  // left
+    { dx:  1, dy:  0 },  // right
+  ];
+
+  for (const id of labelIds) {
+    const origBB = labelBboxOf(id);
+    const otherBboxes = labelIds.filter(o => o !== id).map(labelBboxOf);
+    const obstacles = [...nodeBboxes, ...otherBboxes];
+
+    const collides = (bb) => obstacles.some(o => bboxOverlaps(bb, o));
+    if (!collides(origBB)) continue;
+
+    let fixed = false;
+    outer: for (const d of distances) {
+      for (const dir of directions) {
+        const tryBB = {
+          ...origBB,
+          x: origBB.x + dir.dx * d,
+          y: origBB.y + dir.dy * d
+        };
+        if (!collides(tryBB)) {
+          labels[id].x += dir.dx * d;
+          labels[id].y += dir.dy * d;
+          fixed = true;
+          break outer;
+        }
+      }
+    }
+    // If !fixed: silently leave at original position (graceful degradation)
+  }
+  return coordMap;
+}
