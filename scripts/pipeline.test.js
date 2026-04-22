@@ -24,6 +24,7 @@ import {
   extractSubProcessAsLogicCore,
 } from './pipeline.js';
 import { normalizeLaneAssignments } from './topology.js';
+import { wrapText } from './utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
@@ -1862,5 +1863,51 @@ describe('poolCoords.laneHeaderWidth', () => {
       expect(result.coordMap.poolCoords[pid].laneHeaderWidth).toBeDefined();
       expect(typeof result.coordMap.poolCoords[pid].laneHeaderWidth).toBe('number');
     }
+  });
+});
+
+describe('wrapText char-level fallback', () => {
+  test('wraps normal sentences on word boundaries', () => {
+    expect(wrapText('Hello world foo', 5)).toEqual(['Hello', 'world', 'foo']);
+  });
+
+  test('breaks a single word longer than maxChars with hyphen', () => {
+    const result = wrapText('Prozessverantwortlicher', 10);
+    expect(result.length).toBeGreaterThan(1);
+    expect(result.every(line => line.length <= 11)).toBe(true);  // 10 + hyphen
+    // At least one line should end with hyphen (continuation marker)
+    expect(result.slice(0, -1).every(l => l.endsWith('-'))).toBe(true);
+    // Joining without hyphens reconstructs the original
+    expect(result.map(l => l.replace(/-$/, '')).join('')).toBe('Prozessverantwortlicher');
+  });
+
+  test('respects max chars per line', () => {
+    const result = wrapText('aaaaaaaaaaaaaaaaaaaa', 5);
+    expect(result.every(l => l.length <= 6)).toBe(true);
+  });
+
+  test('returns array with empty string for empty input', () => {
+    expect(wrapText('', 5)).toEqual(['']);
+  });
+
+  test('clamps maxChars to 2 instead of infinite-looping (maxChars = 1)', () => {
+    // This would previously RangeError. Clamp to 2 makes it terminate.
+    const result = wrapText('hello', 1);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every(l => l.length <= 3)).toBe(true); // 2 chars + hyphen at most
+  });
+
+  test('clamps maxChars to 2 when called with 0', () => {
+    const result = wrapText('ab', 0);
+    expect(Array.isArray(result)).toBe(true);
+    // 'ab' has length 2, clamped maxChars is 2, so no break needed
+    expect(result).toEqual(['ab']);
+  });
+
+  test('clamps maxChars to 2 when called with negative number', () => {
+    const result = wrapText('abc', -5);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
   });
 });
