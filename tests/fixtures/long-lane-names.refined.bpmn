@@ -43,7 +43,7 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Participant_Process_LongNames_di" bpmnElement="Participant_Process_LongNames" isHorizontal="true">
-        <dc:Bounds x="20" y="20" width="792" height="499" />
+        <dc:Bounds x="16" y="20" width="796" height="499" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="laneA_di" bpmnElement="laneA" isHorizontal="true">
         <dc:Bounds x="60" y="20" width="752" height="165" />

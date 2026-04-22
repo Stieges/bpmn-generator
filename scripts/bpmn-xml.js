@@ -17,9 +17,13 @@ const moddle = new BpmnModdle();
 /**
  * Return the effective lane-header strip width for a pool, preferring
  * any dynamic value computed by visual-refinement over the default.
+ * Falls back to '_singlePool' if the requested key isn't in poolCoords,
+ * mirroring the lookup pattern in visual-refinement.js.
  */
 function laneHeaderW(poolCoords, poolKey) {
-  return poolCoords?.[poolKey]?.laneHeaderWidth ?? LANE_HEADER_W;
+  return poolCoords?.[poolKey]?.laneHeaderWidth
+      ?? poolCoords?.['_singlePool']?.laneHeaderWidth
+      ?? LANE_HEADER_W;
 }
 
 /** Helper: create a moddle element with shorthand */
