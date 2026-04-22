@@ -57,6 +57,7 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 | M06 | Keine doppelten Knotennamen im selben Prozess | 7PMG G6 | Platzhalter |
 | M07 | Start-Events nur am Anfang (keine eingehenden Kanten) | OMG §10.4.2 | Platzhalter |
 | M08 | End-Events nur am Ende (keine ausgehenden Kanten) | OMG §10.4.2 | Platzhalter |
+| M10 | Lane- und Pool-Namen: max. 25 Zeichen | Silver §4.2 | implementiert |
 
 ## Schicht 3: Pragmatik (INFO)
 
@@ -116,6 +117,31 @@ Fuer regulierte Branchen: Style-Warnungen werden zu Errors.
   }
 }
 ```
+
+---
+
+## Regel M10: Lane/Pool Name Length
+
+**Layer:** Style | **Default Severity:** WARNING | **Scope:** global
+
+Lane- und Pool-Namen sollten maximal 25 Zeichen lang sein. Laengere Namen erzwingen mehrzeiliges Rendering in Swimlane-Headern, was die Lesbarkeit beeintraechtigt. Als Faustregel gilt: 25 Zeichen × ~6,6 px/Zeichen ≈ 165 px, was bei typischen Lane-Hoehen (100–200 px) komfortabel in einer rotierten Zeile Platz findet.
+
+**Rationale:** Bruce Silver empfiehlt kurze, funktionale Rollennamen fuer Swimlanes (z.B. "Einkauf", "QA", "Compliance"). Beschreibende Saetze, Modul-Pfade oder Meta-Informationen in eckigen Klammern gehoeren nicht in einen Lane-Header.
+
+**Beispiele:**
+
+| Bewertung | Name | Laenge |
+|-----------|------|--------|
+| gut | `Einkauf` | 7 |
+| gut | `QA Team` | 7 |
+| gut | `Compliance` | 10 |
+| gut | `Bestellverarbeitung` | 19 |
+| schlecht | `Pipeline — Layout + Rendering (topology → ELK)` | 47 |
+| schlecht | `Kreditorenbuchhaltung (intern)` | 30 |
+
+**Referenz:** Bruce Silver: BPMN Method & Style, 2nd Ed., §4.2 (Naming & Labels)
+
+---
 
 ## Erweiterung
 

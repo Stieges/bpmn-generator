@@ -55,6 +55,13 @@ Extract a structured Logic-Core JSON from the process description below.
 - Only add lanes if distinct roles/departments are explicitly mentioned
 - Use functional role names, NOT personal names ("Sachbearbeiter" not "Max Müller")
 
+### Lane and pool naming
+- **Keep names short (≤ 25 characters)**. Use role or department labels: "Einkauf", "Compliance", "QA Team".
+- **Avoid** descriptive sentences, module paths, arrow notation, or bracketed meta-info.
+  - ❌ `"Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)"`
+  - ✅ `"Pipeline"` or `"Layout Engine"`
+- Longer names trigger multi-line header rendering and visual clutter. The rule engine (M10) emits a WARNING if you exceed 25 chars.
+
 ### Multi-Pool (Collaboration)
 - If the process involves distinct organizations/participants communicating:
   - Use the "pools" array with separate process for each participant
