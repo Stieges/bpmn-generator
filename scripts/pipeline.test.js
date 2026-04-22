@@ -1851,3 +1851,16 @@ describe('SVG Golden-File Regression', () => {
     });
   }
 });
+
+describe('poolCoords.laneHeaderWidth', () => {
+  test('is populated with default LANE_HEADER_W after buildCoordinateMap', async () => {
+    const lc = JSON.parse(readFileSync('../tests/fixtures/simple-approval.json', 'utf8'));
+    const result = await runPipeline(lc);
+    const poolIds = Object.keys(result.coordMap.poolCoords);
+    expect(poolIds.length).toBeGreaterThan(0);
+    for (const pid of poolIds) {
+      expect(result.coordMap.poolCoords[pid].laneHeaderWidth).toBeDefined();
+      expect(typeof result.coordMap.poolCoords[pid].laneHeaderWidth).toBe('number');
+    }
+  });
+});
