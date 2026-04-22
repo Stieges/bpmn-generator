@@ -8,19 +8,48 @@ import { CFG, SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP } f
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { preprocessLogicCore } from './topology.js';
 
-function logicCoreToElk(lc) {
+function logicCoreToElk(lc, opts = {}) {
   // Pre-process: sort nodes topologically, order lanes by flow
   preprocessLogicCore(lc);
 
+  // Decide if wrapping should be applied at the current subgraph level
+  const wrappingOpts = resolveWrappingOpts(lc, opts);
+
   // Multi-pool mode
   if (lc.pools && lc.pools.length > 0) {
-    return buildMultiPoolElk(lc);
+    return buildMultiPoolElk(lc, wrappingOpts);
   }
   // Single-pool mode
-  return buildSingleProcessElk(lc);
+  return buildSingleProcessElk(lc, wrappingOpts);
 }
 
-function buildSingleProcessElk(proc) {
+/**
+ * Decide whether to inject `elk.layered.wrapping.strategy: MULTI_EDGE` into
+ * the top-level layered layout properties. Returns an object that can be
+ * spread into the properties block (empty object if no wrapping).
+ *
+ * @param {Object} lc    — Logic-Core
+ * @param {Object} opts  — { elkWrapping: boolean }
+ * @returns {Object}     — layout property overrides (possibly empty)
+ */
+function resolveWrappingOpts(lc, opts) {
+  if (!opts.elkWrapping) return {};
+  const mode = CFG.visualRefinement?.elkWrapping ?? 'auto';
+  if (mode === 'off') return {};
+
+  const threshold = CFG.visualRefinement?.elkWrappingNodeThreshold ?? 20;
+  const allNodes = lc.nodes ?? (lc.pools ?? []).flatMap(p => p.nodes ?? []);
+  const nodeCount = allNodes.length;
+
+  if (mode === 'auto' && nodeCount <= threshold) return {};
+
+  return {
+    'elk.layered.wrapping.strategy': 'MULTI_EDGE',
+    'elk.layered.wrapping.additionalEdgeSpacing': '40',
+  };
+}
+
+function buildSingleProcessElk(proc, wrappingOpts = {}) {
   const nodes = proc.nodes || [];
   const edges = proc.edges || [];
   const lanes = proc.lanes || [];
@@ -28,19 +57,19 @@ function buildSingleProcessElk(proc) {
   const hasPools = lanes.length > 0;
 
   if (hasPools) {
-    return buildLanedProcessElk(proc);
+    return buildLanedProcessElk(proc, wrappingOpts);
   }
 
   return {
     id: 'root',
-    properties: elkDefaults(),
+    properties: { ...elkDefaults(), ...wrappingOpts },
     children: nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
                    .map(n => buildElkNode(n)),
     edges: edges.map((e, i) => buildElkEdge(e, i)),
   };
 }
 
-function buildLanedProcessElk(proc) {
+function buildLanedProcessElk(proc, wrappingOpts = {}) {
   const nodes = proc.nodes || [];
   const edges = proc.edges || [];
   const lanes = proc.lanes || [];
@@ -83,13 +112,14 @@ function buildLanedProcessElk(proc) {
       ...CFG.elk.layered,
       'elk.partitioning.activate': 'true',   // enable lane partitioning
       'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
+      ...wrappingOpts,  // merge last so it wins on conflicts
     },
     children: flatChildren,
     edges: flatEdges,
   };
 }
 
-function buildMultiPoolElk(lc) {
+function buildMultiPoolElk(lc, wrappingOpts = {}) {
   const pools = lc.pools || [];
   const collapsedPools = lc.collapsedPools || [];
   const poolElkChildren = [];
@@ -100,7 +130,7 @@ function buildMultiPoolElk(lc) {
       poolElkChildren.push({
         id: pool.id,
         labels: [{ text: pool.name || pool.id }],
-        ...buildLanedProcessElk(pool),
+        ...buildLanedProcessElk(pool, wrappingOpts),
       });
     } else {
       const nodes = pool.nodes || [];
@@ -111,6 +141,7 @@ function buildMultiPoolElk(lc) {
         properties: {
           ...elkDefaults(),
           'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
+          ...wrappingOpts,  // merge wrapping into laneless pool's layered layout
         },
         children: nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
                        .map(n => buildElkNode(n)),

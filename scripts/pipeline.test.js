@@ -2080,3 +2080,65 @@ describe('Pass 3 metric assertions', () => {
     expect(countOverlaps(on)).toBeLessThanOrEqual(countOverlaps(off));
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// §P4.1  logicCoreToElk — conditional ELK wrapping
+// ═══════════════════════════════════════════════════════════════
+
+import { logicCoreToElk } from './layout.js';
+
+describe('logicCoreToElk — conditional ELK wrapping', () => {
+  // A linear 30-node pipeline (forces long single row without wrapping)
+  const mkWideLc = () => {
+    const nodes = [{ id: 's', type: 'startEvent', name: 'Start' }];
+    for (let i = 1; i <= 30; i++) {
+      nodes.push({ id: `t${i}`, type: 'userTask', name: `Step ${i}` });
+    }
+    nodes.push({ id: 'e', type: 'endEvent', name: 'End' });
+    const edges = [{ id: 'f0', source: 's', target: 't1' }];
+    for (let i = 1; i < 30; i++) {
+      edges.push({ id: `f${i}`, source: `t${i}`, target: `t${i+1}` });
+    }
+    edges.push({ id: 'f30', source: 't30', target: 'e' });
+    return { nodes, edges };
+  };
+
+  test('no wrapping properties injected when opts.elkWrapping is false', () => {
+    const graph = logicCoreToElk(mkWideLc(), { elkWrapping: false });
+    const props = graph.properties || {};
+    expect(props['elk.layered.wrapping.strategy']).toBeUndefined();
+  });
+
+  test('no wrapping properties injected when opts is omitted', () => {
+    const graph = logicCoreToElk(mkWideLc());
+    const props = graph.properties || {};
+    expect(props['elk.layered.wrapping.strategy']).toBeUndefined();
+  });
+
+  test('wrapping properties injected when opts.elkWrapping is true and mode is auto with 32 nodes (threshold 20)', () => {
+    const graph = logicCoreToElk(mkWideLc(), { elkWrapping: true });
+    const props = graph.properties || {};
+    expect(props['elk.layered.wrapping.strategy']).toBe('MULTI_EDGE');
+    expect(props['elk.layered.wrapping.additionalEdgeSpacing']).toBeDefined();
+  });
+
+  test('no wrapping when node count below threshold (5 nodes)', () => {
+    const lc = {
+      nodes: [
+        { id: 's', type: 'startEvent', name: 'S' },
+        { id: 't1', type: 'userTask', name: 'A' },
+        { id: 't2', type: 'userTask', name: 'B' },
+        { id: 't3', type: 'userTask', name: 'C' },
+        { id: 'e', type: 'endEvent', name: 'E' },
+      ],
+      edges: [
+        { id: 'f0', source: 's', target: 't1' },
+        { id: 'f1', source: 't1', target: 't2' },
+        { id: 'f2', source: 't2', target: 't3' },
+        { id: 'f3', source: 't3', target: 'e' },
+      ]
+    };
+    const graph = logicCoreToElk(lc, { elkWrapping: true });
+    expect(graph.properties['elk.layered.wrapping.strategy']).toBeUndefined();
+  });
+});
