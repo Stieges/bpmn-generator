@@ -158,7 +158,19 @@ function generateSvg(lc, coordMap) {
     out.push(`<rect x="${tx(lcc.x - lhw)}" y="${ty(lcc.y)}" width="${lhw}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
     const lcx = tx(lcc.x - lhw) + lhw / 2;
     const lcy = ty(lcc.y) + lcc.h / 2;
-    out.push(`<text x="${lcx}" y="${lcy}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="${CLR.label}" transform="rotate(-90,${lcx},${lcy})">${esc(lane.name || lane.id)}</text>`);
+    const rendered = lane._renderedLines;
+    if (!rendered || rendered.length <= 1) {
+      // Single-line (backwards compatible — refinement off or short label)
+      out.push(`<text x="${lcx}" y="${lcy}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="${CLR.label}" transform="rotate(-90,${lcx},${lcy})">${esc(lane.name || lane.id)}</text>`);
+    } else {
+      // Multi-line (refinement on, label wrapped)
+      const LINE_H = 14; // FONT_SIZE (11) + LINE_GAP (3), matches visual-refinement.js
+      const N = rendered.length;
+      for (let i = 0; i < N; i++) {
+        const yOffset = (i - (N - 1) / 2) * LINE_H;
+        out.push(`<text x="${lcx}" y="${lcy + yOffset}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="${CLR.label}" transform="rotate(-90,${lcx},${lcy})">${esc(rendered[i])}</text>`);
+      }
+    }
   }
 
   // §7.6  Sequence flows
