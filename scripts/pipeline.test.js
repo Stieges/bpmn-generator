@@ -2142,3 +2142,58 @@ describe('logicCoreToElk — conditional ELK wrapping', () => {
     expect(graph.properties['elk.layered.wrapping.strategy']).toBeUndefined();
   });
 });
+
+describe('wide-pipeline matrix', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/wide-pipeline.json', 'utf8'));
+
+  test('matches .expected golden (refinement off)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/wide-pipeline.expected.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/wide-pipeline.expected.svg', 'utf8'));
+  });
+
+  test('matches .refined golden (refinement on)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/wide-pipeline.refined.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/wide-pipeline.refined.svg', 'utf8'));
+  });
+});
+
+describe('Pass 5 (ELK wrapping) metric assertions', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/wide-pipeline.json', 'utf8'));
+
+  const parseCanvas = (svg) => {
+    const w = +(svg.match(/width="(\d+)"/)?.[1] ?? 0);
+    const h = +(svg.match(/height="(\d+)"/)?.[1] ?? 0);
+    return { w, h };
+  };
+
+  test('refinement ON produces a more compact aspect ratio (≤ 4.5)', async () => {
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const { w, h } = parseCanvas(on.svg);
+    const aspect = w / h;
+    expect(aspect).toBeLessThanOrEqual(4.5);
+  });
+
+  test('refinement ON has significantly better aspect ratio than OFF', async () => {
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const offRatio = parseCanvas(off.svg).w / parseCanvas(off.svg).h;
+    const onRatio  = parseCanvas(on.svg).w  / parseCanvas(on.svg).h;
+    // Require at least 2× improvement
+    expect(offRatio / onRatio).toBeGreaterThan(2);
+  });
+
+  test('lane partitioning intact after wrapping — every task inside lane l1', async () => {
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const laneBbox = on.coordMap.laneCoords['l1'];
+    expect(laneBbox).toBeDefined();
+    // Every node's coords must be inside (or touching) the lane bbox
+    for (const [id, c] of Object.entries(on.coordMap.coords)) {
+      expect(c.x).toBeGreaterThanOrEqual(laneBbox.x - 1);
+      expect(c.y).toBeGreaterThanOrEqual(laneBbox.y - 1);
+      expect(c.x + c.w).toBeLessThanOrEqual(laneBbox.x + laneBbox.w + 1);
+      expect(c.y + c.h).toBeLessThanOrEqual(laneBbox.y + laneBbox.h + 1);
+    }
+  });
+});
