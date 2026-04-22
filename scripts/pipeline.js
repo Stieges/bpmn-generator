@@ -59,12 +59,14 @@ async function runPipeline(logicCore, opts = {}) {
     inferGatewayDirections(proc.nodes || [], proc.edges || []);
   }
 
-  const elkGraph  = logicCoreToElk(lc);
+  // Visual Refinement (opt-in, computed early for layout options)
+  const refineOn = opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false;
+
+  const elkGraph  = logicCoreToElk(lc, { elkWrapping: refineOn });
   const elkResult = await runElkLayout(elkGraph);
   const coordMap  = buildCoordinateMap(elkResult, lc);
 
-  // Visual Refinement (opt-in, post-layout coordinate transforms)
-  const refineOn = opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false;
+  // Visual Refinement (post-layout coordinate transforms)
   if (refineOn) {
     if (CFG.visualRefinement?.dynamicLaneHeader !== false) {
       computeDynamicLaneHeaders(coordMap, lc, {
