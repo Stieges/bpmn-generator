@@ -86,5 +86,17 @@
       "elk.rectpacking.desiredAspectRatio":   "0.1",
       "elk.contentAlignment":                 "V_TOP H_LEFT"
     }
+  },
+  "visualRefinement": {
+    "enabled": false,
+    "dynamicLaneHeader": true,
+    "laneHeaderMinWidth": 30,
+    "laneHeaderMaxWidth": 120,
+    "laneCompaction": true,
+    "minLaneHeight": 80,
+    "edgeLabelCollisionRepair": true,
+    "edgeLabelMaxShift": 25,
+    "elkWrapping": "auto",
+    "elkWrappingNodeThreshold": 20
   }
 }
