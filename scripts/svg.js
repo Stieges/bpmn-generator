@@ -11,12 +11,30 @@ import {
   renderSubProcessMarker, renderAdHocMarker, renderCompensationMarker,
 } from './icons.js';
 
+/**
+ * Return the effective lane-header strip width for a pool, preferring
+ * any dynamic value computed by visual-refinement over the default.
+ */
+function laneHeaderW(poolCoords, poolKey) {
+  return poolCoords?.[poolKey]?.laneHeaderWidth ?? LANE_HEADER_W;
+}
+
 function generateSvg(lc, coordMap) {
   const { coords, laneCoords, poolCoords, edgeCoords } = coordMap;
   const processes = lc.pools ? lc.pools : [lc];
   const allNodes  = processes.flatMap(p => p.nodes || []);
   const allEdges  = processes.flatMap(p => p.edges || []);
   const allLanes  = processes.flatMap(p => p.lanes || []);
+
+  // Build lane-id → pool-key lookup for laneHeaderW resolution
+  const laneToPoolKey = {};
+  if (lc.pools) {
+    for (const proc of lc.pools) {
+      for (const lane of (proc.lanes || [])) laneToPoolKey[lane.id] = proc.id;
+    }
+  } else {
+    for (const lane of allLanes) laneToPoolKey[lane.id] = '_singlePool';
+  }
 
   // §7.1  Compute canvas bounds
   const PADDING = 50;
@@ -26,8 +44,8 @@ function generateSvg(lc, coordMap) {
       { x: c.x, y: c.y },
       { x: c.x + c.w, y: c.y + c.h + LABEL_CLEARANCE },
     ]),
-    ...Object.values(laneCoords).flatMap(l => [
-      { x: l.x - LANE_HEADER_W, y: l.y },
+    ...Object.entries(laneCoords).flatMap(([lid, l]) => [
+      { x: l.x - laneHeaderW(poolCoords, laneToPoolKey[lid]), y: l.y },
       { x: l.x + l.w, y: l.y + l.h },
     ]),
     ...Object.values(poolCoords).flatMap(p => [
@@ -96,20 +114,21 @@ function generateSvg(lc, coordMap) {
     for (const proc of lc.pools) {
       const pc = poolCoords[proc.id];
       if (!pc) continue;
-      renderPoolSvg(out, proc, pc, laneCoords, tx, ty);
+      renderPoolSvg(out, proc, pc, laneCoords, poolCoords, tx, ty);
     }
   } else if (allLanes.length > 0) {
     // Single pool with lanes
     const allLc = allLanes.map(l => laneCoords[l.id]).filter(Boolean);
     if (allLc.length) {
-      const px = Math.min(...allLc.map(l => l.x)) - LANE_HEADER_W;
+      const spLhw = laneHeaderW(poolCoords, '_singlePool');
+      const px = Math.min(...allLc.map(l => l.x)) - spLhw;
       const py = Math.min(...allLc.map(l => l.y));
       const pw = Math.max(...allLc.map(l => l.x + l.w)) - px;
       const ph = Math.max(...allLc.map(l => l.y + l.h)) - py;
 
       out.push(`<rect x="${tx(px)}" y="${ty(py)}" width="${pw}" height="${ph}" fill="${CLR.fill}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
-      out.push(`<rect x="${tx(px)}" y="${ty(py)}" width="${LANE_HEADER_W}" height="${ph}" fill="${CLR.poolHeader}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
-      const plcx = tx(px) + LANE_HEADER_W / 2;
+      out.push(`<rect x="${tx(px)}" y="${ty(py)}" width="${spLhw}" height="${ph}" fill="${CLR.poolHeader}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
+      const plcx = tx(px) + spLhw / 2;
       const plcy = ty(py) + ph / 2;
       out.push(`<text x="${plcx}" y="${plcy}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="bold" fill="${CLR.label}" transform="rotate(-90,${plcx},${plcy})">${esc(lc.name || 'Process')}</text>`);
     }
@@ -131,8 +150,9 @@ function generateSvg(lc, coordMap) {
     if (!lcc) continue;
     out.push(`<rect x="${tx(lcc.x)}" y="${ty(lcc.y)}" width="${lcc.w}" height="${lcc.h}" fill="${CLR.fill}" fill-opacity="0.25" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
     // Lane header band
-    out.push(`<rect x="${tx(lcc.x - LANE_HEADER_W)}" y="${ty(lcc.y)}" width="${LANE_HEADER_W}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
-    const lcx = tx(lcc.x - LANE_HEADER_W) + LANE_HEADER_W / 2;
+    const lhw = laneHeaderW(poolCoords, laneToPoolKey[lane.id]);
+    out.push(`<rect x="${tx(lcc.x - lhw)}" y="${ty(lcc.y)}" width="${lhw}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
+    const lcx = tx(lcc.x - lhw) + lhw / 2;
     const lcy = ty(lcc.y) + lcc.h / 2;
     out.push(`<text x="${lcx}" y="${lcy}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="${CLR.label}" transform="rotate(-90,${lcx},${lcy})">${esc(lane.name || lane.id)}</text>`);
   }
@@ -216,14 +236,15 @@ function generateSvg(lc, coordMap) {
   return out.join('\n');
 }
 
-function renderPoolSvg(out, proc, pc, laneCoords, tx, ty) {
+function renderPoolSvg(out, proc, pc, laneCoords, poolCoords, tx, ty) {
   const lanes = proc.lanes || [];
   let px = pc.x, py = pc.y, pw = pc.w, ph = pc.h;
+  const lhw = laneHeaderW(poolCoords, proc.id);
 
   if (lanes.length > 0) {
     const lcs = lanes.map(l => laneCoords[l.id]).filter(Boolean);
     if (lcs.length) {
-      px = Math.min(...lcs.map(l => l.x)) - LANE_HEADER_W;
+      px = Math.min(...lcs.map(l => l.x)) - lhw;
       py = Math.min(...lcs.map(l => l.y));
       pw = Math.max(...lcs.map(l => l.x + l.w)) - px;
       ph = Math.max(...lcs.map(l => l.y + l.h)) - py;
@@ -231,8 +252,8 @@ function renderPoolSvg(out, proc, pc, laneCoords, tx, ty) {
   }
 
   out.push(`<rect x="${tx(px)}" y="${ty(py)}" width="${pw}" height="${ph}" fill="${CLR.fill}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
-  out.push(`<rect x="${tx(px)}" y="${ty(py)}" width="${LANE_HEADER_W}" height="${ph}" fill="${CLR.poolHeader}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
-  const plcx = tx(px) + LANE_HEADER_W / 2;
+  out.push(`<rect x="${tx(px)}" y="${ty(py)}" width="${lhw}" height="${ph}" fill="${CLR.poolHeader}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
+  const plcx = tx(px) + lhw / 2;
   const plcy = ty(py) + ph / 2;
   out.push(`<text x="${plcx}" y="${plcy}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="bold" fill="${CLR.label}" transform="rotate(-90,${plcx},${plcy})">${esc(proc.name || 'Process')}</text>`);
 }
