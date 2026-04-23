@@ -1,0 +1,310 @@
+{
+  "pools": [
+    {
+      "id": "Process_Wide",
+      "name": "Wide Pipeline",
+      "lanes": [
+        {
+          "id": "l1",
+          "name": "Team"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "s",
+          "type": "startEvent",
+          "name": "Start",
+          "lane": "l1"
+        },
+        {
+          "id": "t1",
+          "type": "userTask",
+          "name": "Schritt 1",
+          "lane": "l1"
+        },
+        {
+          "id": "t2",
+          "type": "userTask",
+          "name": "Schritt 2",
+          "lane": "l1"
+        },
+        {
+          "id": "t3",
+          "type": "userTask",
+          "name": "Schritt 3",
+          "lane": "l1"
+        },
+        {
+          "id": "t4",
+          "type": "userTask",
+          "name": "Schritt 4",
+          "lane": "l1"
+        },
+        {
+          "id": "t5",
+          "type": "userTask",
+          "name": "Schritt 5",
+          "lane": "l1"
+        },
+        {
+          "id": "t6",
+          "type": "userTask",
+          "name": "Schritt 6",
+          "lane": "l1"
+        },
+        {
+          "id": "t7",
+          "type": "userTask",
+          "name": "Schritt 7",
+          "lane": "l1"
+        },
+        {
+          "id": "t8",
+          "type": "userTask",
+          "name": "Schritt 8",
+          "lane": "l1"
+        },
+        {
+          "id": "t9",
+          "type": "userTask",
+          "name": "Schritt 9",
+          "lane": "l1"
+        },
+        {
+          "id": "t10",
+          "type": "userTask",
+          "name": "Schritt 10",
+          "lane": "l1"
+        },
+        {
+          "id": "t11",
+          "type": "userTask",
+          "name": "Schritt 11",
+          "lane": "l1"
+        },
+        {
+          "id": "t12",
+          "type": "userTask",
+          "name": "Schritt 12",
+          "lane": "l1"
+        },
+        {
+          "id": "t13",
+          "type": "userTask",
+          "name": "Schritt 13",
+          "lane": "l1"
+        },
+        {
+          "id": "t14",
+          "type": "userTask",
+          "name": "Schritt 14",
+          "lane": "l1"
+        },
+        {
+          "id": "t15",
+          "type": "userTask",
+          "name": "Schritt 15",
+          "lane": "l1"
+        },
+        {
+          "id": "t16",
+          "type": "userTask",
+          "name": "Schritt 16",
+          "lane": "l1"
+        },
+        {
+          "id": "t17",
+          "type": "userTask",
+          "name": "Schritt 17",
+          "lane": "l1"
+        },
+        {
+          "id": "t18",
+          "type": "userTask",
+          "name": "Schritt 18",
+          "lane": "l1"
+        },
+        {
+          "id": "t19",
+          "type": "userTask",
+          "name": "Schritt 19",
+          "lane": "l1"
+        },
+        {
+          "id": "t20",
+          "type": "userTask",
+          "name": "Schritt 20",
+          "lane": "l1"
+        },
+        {
+          "id": "t21",
+          "type": "userTask",
+          "name": "Schritt 21",
+          "lane": "l1"
+        },
+        {
+          "id": "t22",
+          "type": "userTask",
+          "name": "Schritt 22",
+          "lane": "l1"
+        },
+        {
+          "id": "t23",
+          "type": "userTask",
+          "name": "Schritt 23",
+          "lane": "l1"
+        },
+        {
+          "id": "t24",
+          "type": "userTask",
+          "name": "Schritt 24",
+          "lane": "l1"
+        },
+        {
+          "id": "t25",
+          "type": "userTask",
+          "name": "Schritt 25",
+          "lane": "l1"
+        },
+        {
+          "id": "e",
+          "type": "endEvent",
+          "name": "Ende",
+          "lane": "l1"
+        }
+      ],
+      "edges": [
+        {
+          "id": "f0",
+          "source": "s",
+          "target": "t1"
+        },
+        {
+          "id": "f1",
+          "source": "t1",
+          "target": "t2"
+        },
+        {
+          "id": "f2",
+          "source": "t2",
+          "target": "t3"
+        },
+        {
+          "id": "f3",
+          "source": "t3",
+          "target": "t4"
+        },
+        {
+          "id": "f4",
+          "source": "t4",
+          "target": "t5"
+        },
+        {
+          "id": "f5",
+          "source": "t5",
+          "target": "t6"
+        },
+        {
+          "id": "f6",
+          "source": "t6",
+          "target": "t7"
+        },
+        {
+          "id": "f7",
+          "source": "t7",
+          "target": "t8"
+        },
+        {
+          "id": "f8",
+          "source": "t8",
+          "target": "t9"
+        },
+        {
+          "id": "f9",
+          "source": "t9",
+          "target": "t10"
+        },
+        {
+          "id": "f10",
+          "source": "t10",
+          "target": "t11"
+        },
+        {
+          "id": "f11",
+          "source": "t11",
+          "target": "t12"
+        },
+        {
+          "id": "f12",
+          "source": "t12",
+          "target": "t13"
+        },
+        {
+          "id": "f13",
+          "source": "t13",
+          "target": "t14"
+        },
+        {
+          "id": "f14",
+          "source": "t14",
+          "target": "t15"
+        },
+        {
+          "id": "f15",
+          "source": "t15",
+          "target": "t16"
+        },
+        {
+          "id": "f16",
+          "source": "t16",
+          "target": "t17"
+        },
+        {
+          "id": "f17",
+          "source": "t17",
+          "target": "t18"
+        },
+        {
+          "id": "f18",
+          "source": "t18",
+          "target": "t19"
+        },
+        {
+          "id": "f19",
+          "source": "t19",
+          "target": "t20"
+        },
+        {
+          "id": "f20",
+          "source": "t20",
+          "target": "t21"
+        },
+        {
+          "id": "f21",
+          "source": "t21",
+          "target": "t22"
+        },
+        {
+          "id": "f22",
+          "source": "t22",
+          "target": "t23"
+        },
+        {
+          "id": "f23",
+          "source": "t23",
+          "target": "t24"
+        },
+        {
+          "id": "f24",
+          "source": "t24",
+          "target": "t25"
+        },
+        {
+          "id": "f25",
+          "source": "t25",
+          "target": "e"
+        }
+      ]
+    }
+  ]
+}

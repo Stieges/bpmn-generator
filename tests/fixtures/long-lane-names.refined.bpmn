@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_Process_LongNames" name="Long Names Test" processRef="Process_LongNames" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_LongNames" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_LongNames">
+      <bpmn:lane id="laneA" name="Prozessverantwortlicher">
+        <bpmn:flowNodeRef>s1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t1</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="laneB" name="Qualitätssicherungsbeauftragter">
+        <bpmn:flowNodeRef>t2</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="laneC" name="Datenschutzkoordinator">
+        <bpmn:flowNodeRef>t3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e1</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s1" name="Start">
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="t1" name="Erfassen">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="t2" name="Prüfen">
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="t3" name="Freigeben">
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="e1" name="Fertig">
+      <bpmn:incoming>f4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="s1" targetRef="t1" />
+    <bpmn:sequenceFlow id="f2" sourceRef="t1" targetRef="t2" />
+    <bpmn:sequenceFlow id="f3" sourceRef="t2" targetRef="t3" />
+    <bpmn:sequenceFlow id="f4" sourceRef="t3" targetRef="e1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Participant_Process_LongNames_di" bpmnElement="Participant_Process_LongNames" isHorizontal="true">
+        <dc:Bounds x="16" y="20" width="796" height="499" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="laneA_di" bpmnElement="laneA" isHorizontal="true">
+        <dc:Bounds x="60" y="20" width="752" height="165" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="laneB_di" bpmnElement="laneB" isHorizontal="true">
+        <dc:Bounds x="60" y="187" width="752" height="165" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="laneC_di" bpmnElement="laneC" isHorizontal="true">
+        <dc:Bounds x="60" y="354" width="752" height="165" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s1_di" bpmnElement="s1">
+        <dc:Bounds x="90" y="59" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="86.8" y="105" width="42.5" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t1_di" bpmnElement="t1">
+        <dc:Bounds x="206" y="50" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t2_di" bpmnElement="t2">
+        <dc:Bounds x="386" y="217" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t3_di" bpmnElement="t3">
+        <dc:Bounds x="566" y="384" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e1_di" bpmnElement="e1">
+        <dc:Bounds x="746" y="393" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="739.5" y="439" width="49" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
+        <di:waypoint x="126" y="77" />
+        <di:waypoint x="206" y="77" />
+        <di:waypoint x="206" y="50" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
+        <di:waypoint x="306" y="130" />
+        <di:waypoint x="306" y="217" />
+        <di:waypoint x="386" y="217" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
+        <di:waypoint x="486" y="297" />
+        <di:waypoint x="486" y="384" />
+        <di:waypoint x="566" y="384" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
+        <di:waypoint x="666" y="464" />
+        <di:waypoint x="764" y="464" />
+        <di:waypoint x="764" y="429" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

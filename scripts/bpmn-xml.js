@@ -14,6 +14,18 @@ import { inferEventMarker } from './icons.js';
 
 const moddle = new BpmnModdle();
 
+/**
+ * Return the effective lane-header strip width for a pool, preferring
+ * any dynamic value computed by visual-refinement over the default.
+ * Falls back to '_singlePool' if the requested key isn't in poolCoords,
+ * mirroring the lookup pattern in visual-refinement.js.
+ */
+function laneHeaderW(poolCoords, poolKey) {
+  return poolCoords?.[poolKey]?.laneHeaderWidth
+      ?? poolCoords?.['_singlePool']?.laneHeaderWidth
+      ?? LANE_HEADER_W;
+}
+
 /** Helper: create a moddle element with shorthand */
 function create(type, attrs = {}) {
   return moddle.create(type, attrs);
@@ -426,7 +438,7 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
       if (lanes.length > 0) {
         const lcs = lanes.map(l => laneCoords[l.id]).filter(Boolean);
         if (lcs.length) {
-          px = Math.min(...lcs.map(l => l.x)) - LANE_HEADER_W;
+          px = Math.min(...lcs.map(l => l.x)) - laneHeaderW(poolCoords, procId);
           py = Math.min(...lcs.map(l => l.y));
           pw = Math.max(...lcs.map(l => l.x + l.w)) - px;
           ph = Math.max(...lcs.map(l => l.y + l.h)) - py;

@@ -34,14 +34,14 @@ function buildCoordinateMap(elkResult, lc) {
     }
 
     if (allPoolIds.has(node.id)) {
-      poolCoords[node.id] = { x: ax, y: ay, w: node.width, h: node.height };
+      poolCoords[node.id] = { x: ax, y: ay, w: node.width, h: node.height, laneHeaderWidth: LANE_HEADER_W };
       for (const c of node.children || []) collectNodes(c, ax, ay);
       for (const e of node.edges   || []) collectEdge(e, ax, ay);
       return;
     }
 
     if (node.id === 'pool') {
-      poolCoords['_singlePool'] = { x: ax, y: ay, w: node.width, h: node.height };
+      poolCoords['_singlePool'] = { x: ax, y: ay, w: node.width, h: node.height, laneHeaderWidth: LANE_HEADER_W };
       for (const c of node.children || []) collectNodes(c, ax, ay);
       for (const e of node.edges   || []) collectEdge(e, ax, ay);
       return;
@@ -534,7 +534,70 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
-  return { coords, laneCoords, poolCoords, edgeCoords };
+  // §5.6  Edge label positions (absolute ELK coordinates, -5px offset stored so
+  //        svg.js can apply ty(L.y) - 5 to preserve the original render position).
+  //        Algorithm mirrors svg.js renderSequenceFlow exactly so existing goldens
+  //        remain byte-identical when visual refinement is OFF.
+  const edgeLabels = {};
+
+  // Sequence-flow labels
+  for (const proc of allProcesses) {
+    for (const e of (proc.edges || [])) {
+      if (!e.label) continue;
+      const eid = e.id;
+      const pts = edgeCoords[eid];
+      if (!pts || pts.length < 2) {
+        // Fallback: midpoint between source and target node centers
+        const s = coords[e.source], t = coords[e.target];
+        if (!s || !t) continue;
+        edgeLabels[eid] = {
+          text: e.label,
+          x: (s.x + s.w / 2 + t.x + t.w / 2) / 2,
+          y: (s.y + s.h / 2 + t.y + t.h / 2) / 2,
+        };
+        continue;
+      }
+      // Find first horizontal segment (dy < 1) — mirrors svg.js renderSequenceFlow
+      let labelX = null, labelY = null;
+      let placed = false;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const dy = Math.abs(pts[i + 1].y - pts[i].y);
+        if (dy < 1) {
+          labelX = (pts[i].x + pts[i + 1].x) / 2;
+          labelY = pts[i].y;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        // No horizontal segment: 30% from source — mirrors svg.js fallback
+        const p0 = pts[0], p1 = pts[pts.length - 1];
+        labelX = p0.x + (p1.x - p0.x) * 0.3;
+        labelY = p0.y + (p1.y - p0.y) * 0.3;
+      }
+      edgeLabels[eid] = { text: e.label, x: labelX, y: labelY };
+    }
+  }
+
+  // Message-flow labels (stored in absolute coords; svg.js renders at midpoint of
+  // source-bottom → target-top after applying tx/ty, matching existing inline logic)
+  const allMessageFlows = lc.messageFlows || [];
+  for (const mf of allMessageFlows) {
+    if (!mf.name) continue;
+    const srcCoord = coords[mf.source] || {};
+    const tgtCoord = coords[mf.target] || {};
+    const sx = (srcCoord.x || 0) + (srcCoord.w || 0) / 2;
+    const sy = (srcCoord.y || 0) + (srcCoord.h || 0);
+    const ex = (tgtCoord.x || 0) + (tgtCoord.w || 0) / 2;
+    const ey = tgtCoord.y || 0;
+    edgeLabels[mf.id || `mf_${mf.source}_${mf.target}`] = {
+      text: mf.name,
+      x: (sx + ex) / 2,
+      y: (sy + ey) / 2,
+    };
+  }
+
+  return { coords, laneCoords, poolCoords, edgeCoords, edgeLabels };
 }
 
 /**

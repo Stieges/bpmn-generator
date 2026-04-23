@@ -24,6 +24,7 @@ import {
   extractSubProcessAsLogicCore,
 } from './pipeline.js';
 import { normalizeLaneAssignments } from './topology.js';
+import { wrapText, wrapTextByPx } from './utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
@@ -1573,6 +1574,49 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.some(w => w.includes('default'))).toBe(true);
   });
 
+  describe('Rule M10 — Lane/pool name length', () => {
+    test('passes when all names ≤ 25 chars', () => {
+      const lc = {
+        pools: [{
+          id: 'p1', name: 'Einkauf',
+          nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+          lanes: [{ id: 'l1', name: 'Bearbeiter' }],
+        }],
+      };
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes('M10') || w.includes('exceed'))).toBe(false);
+    });
+
+    test('flags pool with name > 25 chars', () => {
+      const lc = {
+        pools: [{
+          id: 'p1', name: 'This is a very descriptive pool name that is too long',
+          nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+          lanes: [{ id: 'l1', name: 'OK' }],
+        }],
+      };
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes('pool') && w.includes('chars'))).toBe(true);
+    });
+
+    test('flags lane with name > 25 chars', () => {
+      const lc = {
+        pools: [{
+          id: 'p1', name: 'Ok',
+          nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+          lanes: [{
+            id: 'l1', name: 'Pipeline — Layout + Rendering (topology → ELK → coordinates)',
+          }],
+        }],
+      };
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes('lane'))).toBe(true);
+    });
+  });
+
   test('P01: process with >50 nodes → INFO', () => {
     const nodes = [{ id: 's', type: 'startEvent' }];
     for (let i = 0; i < 55; i++) nodes.push({ id: `t${i}`, type: 'task', name: `Task ${i}` });
@@ -1850,4 +1894,306 @@ describe('SVG Golden-File Regression', () => {
       expect(result.bpmnXml).toBe(expected);
     });
   }
+});
+
+describe('poolCoords.laneHeaderWidth', () => {
+  test('is populated with default LANE_HEADER_W after buildCoordinateMap', async () => {
+    const lc = JSON.parse(readFileSync('../tests/fixtures/simple-approval.json', 'utf8'));
+    const result = await runPipeline(lc);
+    const poolIds = Object.keys(result.coordMap.poolCoords);
+    expect(poolIds.length).toBeGreaterThan(0);
+    for (const pid of poolIds) {
+      expect(result.coordMap.poolCoords[pid].laneHeaderWidth).toBeDefined();
+      expect(typeof result.coordMap.poolCoords[pid].laneHeaderWidth).toBe('number');
+    }
+  });
+});
+
+describe('wrapText char-level fallback', () => {
+  test('wraps normal sentences on word boundaries', () => {
+    expect(wrapText('Hello world foo', 5)).toEqual(['Hello', 'world', 'foo']);
+  });
+
+  test('breaks a single word longer than maxChars with hyphen', () => {
+    const result = wrapText('Prozessverantwortlicher', 10);
+    expect(result.length).toBeGreaterThan(1);
+    expect(result.every(line => line.length <= 11)).toBe(true);  // 10 + hyphen
+    // At least one line should end with hyphen (continuation marker)
+    expect(result.slice(0, -1).every(l => l.endsWith('-'))).toBe(true);
+    // Joining without hyphens reconstructs the original
+    expect(result.map(l => l.replace(/-$/, '')).join('')).toBe('Prozessverantwortlicher');
+  });
+
+  test('respects max chars per line', () => {
+    const result = wrapText('aaaaaaaaaaaaaaaaaaaa', 5);
+    expect(result.every(l => l.length <= 6)).toBe(true);
+  });
+
+  test('returns array with empty string for empty input', () => {
+    expect(wrapText('', 5)).toEqual(['']);
+  });
+
+  test('clamps maxChars to 2 instead of infinite-looping (maxChars = 1)', () => {
+    // This would previously RangeError. Clamp to 2 makes it terminate.
+    const result = wrapText('hello', 1);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every(l => l.length <= 3)).toBe(true); // 2 chars + hyphen at most
+  });
+
+  test('clamps maxChars to 2 when called with 0', () => {
+    const result = wrapText('ab', 0);
+    expect(Array.isArray(result)).toBe(true);
+    // 'ab' has length 2, clamped maxChars is 2, so no break needed
+    expect(result).toEqual(['ab']);
+  });
+
+  test('clamps maxChars to 2 when called with negative number', () => {
+    const result = wrapText('abc', -5);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe('wrapTextByPx', () => {
+  test('wraps based on pixel budget, using estimateTextWidth heuristic', () => {
+    // 60px at fontSize=11 ≈ 9 chars (60 / (11 * 0.6))
+    const result = wrapTextByPx('Hello World Foo Bar', 60, 11);
+    expect(result.length).toBeGreaterThan(1);
+    expect(result.every(l => l.length <= 10)).toBe(true);
+  });
+
+  test('handles zero-width gracefully (does not infinite-loop)', () => {
+    const result = wrapTextByPx('abc', 1, 11);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('uses default fontSize=11 when omitted', () => {
+    const a = wrapTextByPx('Hello World', 60);
+    const b = wrapTextByPx('Hello World', 60, 11);
+    expect(a).toEqual(b);
+  });
+});
+
+describe('long-lane-names matrix', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/long-lane-names.json', 'utf8'));
+
+  test('matches .expected golden with refinement disabled', async () => {
+    const res = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const goldenBpmn = readFileSync('../tests/fixtures/long-lane-names.expected.bpmn', 'utf8');
+    const goldenSvg  = readFileSync('../tests/fixtures/long-lane-names.expected.svg',  'utf8');
+    expect(res.bpmnXml).toBe(goldenBpmn);
+    expect(res.svg).toBe(goldenSvg);
+  });
+
+  test('matches .refined golden with refinement enabled', async () => {
+    const res = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const goldenBpmn = readFileSync('../tests/fixtures/long-lane-names.refined.bpmn', 'utf8');
+    const goldenSvg  = readFileSync('../tests/fixtures/long-lane-names.refined.svg',  'utf8');
+    expect(res.bpmnXml).toBe(goldenBpmn);
+    expect(res.svg).toBe(goldenSvg);
+  });
+});
+
+describe('Pass 1 metric assertions', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/long-lane-names.json', 'utf8'));
+
+  test('laneHeaderWidth widens beyond default when refinement is enabled', async () => {
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const poolKey = Object.keys(off.coordMap.poolCoords)[0];
+    const offWidth = off.coordMap.poolCoords[poolKey].laneHeaderWidth;
+    const onWidth  = on.coordMap.poolCoords[poolKey].laneHeaderWidth;
+    expect(onWidth).toBeGreaterThan(offWidth);
+  });
+
+  test('canvas width does not grow runaway (<= 1.5× baseline)', async () => {
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const extractW = (svg) => {
+      const m = svg.match(/width="(\d+)"/);
+      return m ? parseInt(m[1], 10) : 0;
+    };
+    const wOff = extractW(off.svg);
+    const wOn  = extractW(on.svg);
+    expect(wOn).toBeLessThanOrEqual(wOff * 1.5);
+  });
+});
+
+describe('dense-edge-labels matrix', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/dense-edge-labels.json', 'utf8'));
+
+  test('matches .expected golden (refinement off)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/dense-edge-labels.expected.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/dense-edge-labels.expected.svg', 'utf8'));
+  });
+
+  test('matches .refined golden (refinement on)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/dense-edge-labels.refined.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/dense-edge-labels.refined.svg', 'utf8'));
+  });
+});
+
+describe('Pass 3 metric assertions', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/dense-edge-labels.json', 'utf8'));
+
+  test('fewer label-vs-label bbox overlaps after refinement on dense fixture', async () => {
+    // Pass 3 reduces overlaps from 5 → 2 on this fixture; full zero-overlap
+    // is not achievable with simple nudge because two labels share the same
+    // mid-edge X and the nudge directions cancel (known limitation).
+    const { estimateTextBBox, bboxOverlaps } = await import('./visual-refinement.js');
+    const countOverlaps = (coordMap) => {
+      const bboxes = Object.values(coordMap.edgeLabels ?? {}).map(L => estimateTextBBox(L.text, L.x, L.y, 11));
+      let n = 0;
+      for (let i = 0; i < bboxes.length; i++) {
+        for (let j = i + 1; j < bboxes.length; j++) {
+          if (bboxOverlaps(bboxes[i], bboxes[j])) n++;
+        }
+      }
+      return n;
+    };
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const overlapsOff = countOverlaps(off.coordMap);
+    const overlapsOn  = countOverlaps(on.coordMap);
+    // Refinement must strictly reduce overlaps (5 → 2 observed)
+    expect(overlapsOn).toBeLessThan(overlapsOff);
+  });
+
+  test('refinement ON has fewer or equal label overlaps vs OFF', async () => {
+    const { estimateTextBBox, bboxOverlaps } = await import('./visual-refinement.js');
+    const countOverlaps = (coordMap) => {
+      const bboxes = Object.values(coordMap.edgeLabels ?? {}).map(L => estimateTextBBox(L.text, L.x, L.y, 11));
+      let n = 0;
+      for (let i = 0; i < bboxes.length; i++) {
+        for (let j = i + 1; j < bboxes.length; j++) {
+          if (bboxOverlaps(bboxes[i], bboxes[j])) n++;
+        }
+      }
+      return n;
+    };
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    expect(countOverlaps(on)).toBeLessThanOrEqual(countOverlaps(off));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §P4.1  logicCoreToElk — conditional ELK wrapping
+// ═══════════════════════════════════════════════════════════════
+
+import { logicCoreToElk } from './layout.js';
+
+describe('logicCoreToElk — conditional ELK wrapping', () => {
+  // A linear 30-node pipeline (forces long single row without wrapping)
+  const mkWideLc = () => {
+    const nodes = [{ id: 's', type: 'startEvent', name: 'Start' }];
+    for (let i = 1; i <= 30; i++) {
+      nodes.push({ id: `t${i}`, type: 'userTask', name: `Step ${i}` });
+    }
+    nodes.push({ id: 'e', type: 'endEvent', name: 'End' });
+    const edges = [{ id: 'f0', source: 's', target: 't1' }];
+    for (let i = 1; i < 30; i++) {
+      edges.push({ id: `f${i}`, source: `t${i}`, target: `t${i+1}` });
+    }
+    edges.push({ id: 'f30', source: 't30', target: 'e' });
+    return { nodes, edges };
+  };
+
+  test('no wrapping properties injected when opts.elkWrapping is false', () => {
+    const graph = logicCoreToElk(mkWideLc(), { elkWrapping: false });
+    const props = graph.properties || {};
+    expect(props['elk.layered.wrapping.strategy']).toBeUndefined();
+  });
+
+  test('no wrapping properties injected when opts is omitted', () => {
+    const graph = logicCoreToElk(mkWideLc());
+    const props = graph.properties || {};
+    expect(props['elk.layered.wrapping.strategy']).toBeUndefined();
+  });
+
+  test('wrapping properties injected when opts.elkWrapping is true and mode is auto with 32 nodes (threshold 20)', () => {
+    const graph = logicCoreToElk(mkWideLc(), { elkWrapping: true });
+    const props = graph.properties || {};
+    expect(props['elk.layered.wrapping.strategy']).toBe('MULTI_EDGE');
+    expect(props['elk.layered.wrapping.additionalEdgeSpacing']).toBeDefined();
+  });
+
+  test('no wrapping when node count below threshold (5 nodes)', () => {
+    const lc = {
+      nodes: [
+        { id: 's', type: 'startEvent', name: 'S' },
+        { id: 't1', type: 'userTask', name: 'A' },
+        { id: 't2', type: 'userTask', name: 'B' },
+        { id: 't3', type: 'userTask', name: 'C' },
+        { id: 'e', type: 'endEvent', name: 'E' },
+      ],
+      edges: [
+        { id: 'f0', source: 's', target: 't1' },
+        { id: 'f1', source: 't1', target: 't2' },
+        { id: 'f2', source: 't2', target: 't3' },
+        { id: 'f3', source: 't3', target: 'e' },
+      ]
+    };
+    const graph = logicCoreToElk(lc, { elkWrapping: true });
+    expect(graph.properties['elk.layered.wrapping.strategy']).toBeUndefined();
+  });
+});
+
+describe('wide-pipeline matrix', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/wide-pipeline.json', 'utf8'));
+
+  test('matches .expected golden (refinement off)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/wide-pipeline.expected.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/wide-pipeline.expected.svg', 'utf8'));
+  });
+
+  test('matches .refined golden (refinement on)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/wide-pipeline.refined.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/wide-pipeline.refined.svg', 'utf8'));
+  });
+});
+
+describe('Pass 5 (ELK wrapping) metric assertions', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/wide-pipeline.json', 'utf8'));
+
+  const parseCanvas = (svg) => {
+    const w = +(svg.match(/width="(\d+)"/)?.[1] ?? 0);
+    const h = +(svg.match(/height="(\d+)"/)?.[1] ?? 0);
+    return { w, h };
+  };
+
+  test('refinement ON produces a more compact aspect ratio (≤ 4.5)', async () => {
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const { w, h } = parseCanvas(on.svg);
+    const aspect = w / h;
+    expect(aspect).toBeLessThanOrEqual(4.5);
+  });
+
+  test('refinement ON has significantly better aspect ratio than OFF', async () => {
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const offRatio = parseCanvas(off.svg).w / parseCanvas(off.svg).h;
+    const onRatio  = parseCanvas(on.svg).w  / parseCanvas(on.svg).h;
+    // Require at least 2× improvement
+    expect(offRatio / onRatio).toBeGreaterThan(2);
+  });
+
+  test('lane partitioning intact after wrapping — every task inside lane l1', async () => {
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const laneBbox = on.coordMap.laneCoords['l1'];
+    expect(laneBbox).toBeDefined();
+    // Every node's coords must be inside (or touching) the lane bbox
+    for (const [id, c] of Object.entries(on.coordMap.coords)) {
+      expect(c.x).toBeGreaterThanOrEqual(laneBbox.x - 1);
+      expect(c.y).toBeGreaterThanOrEqual(laneBbox.y - 1);
+      expect(c.x + c.w).toBeLessThanOrEqual(laneBbox.x + laneBbox.w + 1);
+      expect(c.y + c.h).toBeLessThanOrEqual(laneBbox.y + laneBbox.h + 1);
+    }
+  });
 });

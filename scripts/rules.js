@@ -479,6 +479,30 @@ const STYLE_RULES = [
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },
+  {
+    id: 'M10', layer: 'style', defaultSeverity: 'WARNING',
+    description: 'Lane and pool names should be ≤ 25 characters for readable swimlane headers',
+    ref: { silver: '§4.2' },
+    scope: 'global',
+    check: (proc, lc) => {
+      const LIMIT = 25;
+      const offenders = [];
+      const pools = lc.pools ?? [lc];
+      for (const pool of pools) {
+        if (pool.name && pool.name.length > LIMIT) {
+          offenders.push(`pool "${pool.name}" (${pool.name.length} chars)`);
+        }
+        for (const lane of pool.lanes ?? []) {
+          if (lane.name && lane.name.length > LIMIT) {
+            offenders.push(`lane "${lane.name}" (${lane.name.length} chars)`);
+          }
+        }
+      }
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Names exceed ${LIMIT} chars — shorten for readability: ${offenders.join('; ')}` };
+    }
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
