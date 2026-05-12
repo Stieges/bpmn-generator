@@ -39,7 +39,7 @@
     "elkjs": "^0.11.1"
   },
   "devDependencies": {
-    "@jest/globals": "^30.3.0",
+    "@jest/globals": "^30.4.1",
     "jest": "^30.3.0"
   }
 }
