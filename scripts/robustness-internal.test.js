@@ -66,7 +66,7 @@ describe('robustness/cli — LLM provider construction', () => {
   });
 });
 
-import { enumerateCells } from './robustness/synthetic-generator.js';
+import { enumerateCells, sampleCells } from './robustness/synthetic-generator.js';
 
 describe('robustness/synthetic-generator — enumerateCells', () => {
   const catalog = {
@@ -94,5 +94,41 @@ describe('robustness/synthetic-generator — enumerateCells', () => {
         stress_mode: expect.any(String),
       }));
     }
+  });
+});
+
+describe('robustness/synthetic-generator — sampleCells', () => {
+  const cells = [
+    { domain: 'a', complexity: 'simple', pattern: 'p1', stress_mode: 's1' },
+    { domain: 'a', complexity: 'medium', pattern: 'p1', stress_mode: 's1' },
+    { domain: 'b', complexity: 'simple', pattern: 'p1', stress_mode: 's1' },
+    { domain: 'b', complexity: 'medium', pattern: 'p1', stress_mode: 's1' },
+  ];
+
+  test('uniform strategy returns N samples', () => {
+    const picked = sampleCells(cells, { n: 3, strategy: 'uniform', seed: 42 });
+    expect(picked).toHaveLength(3);
+    for (const p of picked) {
+      expect(cells).toContainEqual(p);
+    }
+  });
+
+  test('uniform strategy is deterministic with same seed', () => {
+    const a = sampleCells(cells, { n: 2, strategy: 'uniform', seed: 7 });
+    const b = sampleCells(cells, { n: 2, strategy: 'uniform', seed: 7 });
+    expect(a).toEqual(b);
+  });
+
+  test('targeted strategy filters by predicate', () => {
+    const picked = sampleCells(cells, {
+      n: 10, strategy: 'targeted', seed: 1,
+      filter: c => c.complexity === 'simple'
+    });
+    expect(picked.every(p => p.complexity === 'simple')).toBe(true);
+  });
+
+  test('if n > available cells, returns all cells', () => {
+    const picked = sampleCells(cells, { n: 100, strategy: 'uniform', seed: 1 });
+    expect(picked).toHaveLength(cells.length);
   });
 });
