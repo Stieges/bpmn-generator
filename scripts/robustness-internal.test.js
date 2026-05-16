@@ -1,5 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import { parseArgs, loadConfig, resolveEndpoint } from './robustness/cli.js';
+import { createLlmProvider } from './agents/llm-provider.js';
 
 describe('robustness/cli — parseArgs', () => {
   test('parses subcommand and flags', () => {
@@ -52,5 +53,15 @@ describe('robustness/cli — resolveEndpoint precedence', () => {
   test('flag --model overrides config.model', () => {
     const result = resolveEndpoint(cfg, { model: 'flag-model' }, {});
     expect(result.model).toBe('flag-model');
+  });
+});
+
+describe('robustness/cli — LLM provider construction', () => {
+  test('constructs a callable from resolved endpoint', () => {
+    const cfg = { model: 'qwen-3.5-122b', endpoint: { url_env: 'AIHUB_URL', key_env: 'AIHUB_KEY', url: null, key: null } };
+    const env = { AIHUB_URL: 'http://test.example/v1', AIHUB_KEY: 'secret' };
+    const { baseUrl, apiKey, model } = resolveEndpoint(cfg, {}, env);
+    const llm = createLlmProvider({ baseUrl, apiKey, model, timeout: 5_000 });
+    expect(typeof llm).toBe('function');
   });
 });

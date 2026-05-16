@@ -57,8 +57,20 @@ async function main() {
     case 'report':
       console.log('[robustness] report — not implemented yet (Phase 4)');
       break;
+    case 'smoke-test': {
+      const { createLlmProvider } = await import('../agents/llm-provider.js');
+      const { baseUrl, apiKey, model } = resolveEndpoint(config, flags);
+      if (!baseUrl) {
+        console.error('Missing baseUrl. Set AIHUB_URL or pass --api-url=...');
+        process.exit(2);
+      }
+      const llm = createLlmProvider({ baseUrl, apiKey, model, timeout: 30_000 });
+      const reply = await llm('You are a test.', 'Reply with the single word: pong');
+      console.log('[smoke-test] reply:', reply);
+      break;
+    }
     default:
-      console.error(`Usage: node scripts/robustness/cli.js <run|triage|mad-check|report> [flags]`);
+      console.error(`Usage: node scripts/robustness/cli.js <run|smoke-test|triage|mad-check|report> [flags]`);
       process.exit(1);
   }
 }
