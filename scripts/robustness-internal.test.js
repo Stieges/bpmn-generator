@@ -194,7 +194,7 @@ describe('robustness/synthetic-generator — extractJson', () => {
   });
 });
 
-import { formatSampleId, buildSample } from './robustness/synthetic-generator.js';
+import { generateSamples, formatSampleId, buildSample } from './robustness/synthetic-generator.js';
 
 describe('robustness/synthetic-generator — formatSampleId', () => {
   test('uses __ separator and includes all 5 fields', () => {
@@ -230,5 +230,43 @@ describe('robustness/synthetic-generator — buildSample', () => {
     expect(sample.meta.target).toBe('lc-json');
     expect(sample.meta.model).toBe('qwen-3.5-122b');
     expect(sample.meta.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+describe('robustness/synthetic-generator — generateSamples (integration with mocked LLM)', () => {
+  const catalog = {
+    domains: ['a'],
+    complexity: { simple: { minNodes: 5, maxNodes: 10, gateways: 0 } },
+    patterns: ['p1'],
+    stress_modes: ['normal']
+  };
+
+  const mockLlm = async (system, user) => {
+    if (system.toLowerCase().includes('json')) {
+      return '{"pools":[{"id":"P1","lanes":[{"id":"L1","nodes":[{"id":"start","type":"startEvent"}]}]}],"flows":[]}';
+    }
+    return 'Eine kurze Prozessbeschreibung auf Deutsch.';
+  };
+
+  test('produces N Sample records with correct meta', async () => {
+    const samples = await generateSamples({
+      catalog, n: 1, llm: mockLlm, target: 'lc-json', model: 'mock-model', seed: 42,
+    });
+    expect(samples).toHaveLength(1);
+    expect(samples[0].description).toBe('Eine kurze Prozessbeschreibung auf Deutsch.');
+    expect(samples[0].lcJson).toMatchObject({ pools: expect.any(Array) });
+    expect(samples[0].meta.model).toBe('mock-model');
+    expect(samples[0].meta.target).toBe('lc-json');
+  });
+
+  test('skips samples where structure-gen returns unparseable output', async () => {
+    const flakyLlm = async (system) => {
+      if (system.toLowerCase().includes('json')) return 'not json at all';
+      return 'desc';
+    };
+    const samples = await generateSamples({
+      catalog, n: 1, llm: flakyLlm, target: 'lc-json', model: 'flaky', seed: 1,
+    });
+    expect(samples).toHaveLength(0);
   });
 });

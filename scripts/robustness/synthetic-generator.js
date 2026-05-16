@@ -107,6 +107,45 @@ export function formatSampleId(cell, seq) {
   return `${cell.domain}__${cell.complexity}__${cell.pattern}__${cell.stress_mode}__${padded}`;
 }
 
+export async function generateSamples({
+  catalog,
+  n,
+  llm,
+  strategy = 'uniform',
+  target = 'lc-json',
+  model,
+  seed = Date.now(),
+}) {
+  const cells = enumerateCells(catalog);
+  const picked = sampleCells(cells, { n, strategy, seed });
+  const samples = [];
+  let seq = 0;
+
+  for (const cell of picked) {
+    seq++;
+    const complexitySpec = catalog.complexity[cell.complexity];
+
+    // Step 1: description
+    const { system: sysA, user: userA } = buildDescriptionPrompt(cell, complexitySpec);
+    let description;
+    try { description = (await llm(sysA, userA, {})).trim(); }
+    catch (e) { continue; }
+
+    // Step 2: structure (LC-JSON path; DOT path added in Phase 5)
+    if (target === 'lc-json') {
+      const { system: sysB, user: userB } = buildLcJsonPrompt(description);
+      let rawOutput;
+      try { rawOutput = await llm(sysB, userB, {}); }
+      catch (e) { continue; }
+      const lcJson = extractJson(rawOutput);
+      if (!lcJson) continue;  // unparseable — skip silently
+      samples.push(buildSample({ cell, seq, description, lcJson, target, model }));
+    }
+  }
+
+  return samples;
+}
+
 export function buildSample({ cell, seq, description, lcJson, rawDot = null, target, model }) {
   return {
     id: formatSampleId(cell, seq),
