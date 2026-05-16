@@ -271,7 +271,7 @@ describe('robustness/synthetic-generator — generateSamples (integration with m
   });
 });
 
-import { toAdjacencyList } from './robustness/graph-isomorphism.js';
+import { toAdjacencyList, canonicalSignature, isStructurallyEqual } from './robustness/graph-isomorphism.js';
 
 describe('robustness/graph-isomorphism — toAdjacencyList', () => {
   test('converts single-pool LC to typed adjacency list', () => {
@@ -311,5 +311,57 @@ describe('robustness/graph-isomorphism — toAdjacencyList', () => {
     expect(adj.pools).toHaveLength(2);
     expect(adj.lanes).toHaveLength(2);
     expect(adj.nodes).toHaveLength(2);
+  });
+});
+
+describe('robustness/graph-isomorphism — canonicalSignature', () => {
+  test('produces deterministic string for same structure regardless of node order', () => {
+    const lcA = {
+      pools: [{ id: 'P', lanes: [{ id: 'L', nodes: [
+        { id: 'a', type: 'task' }, { id: 'b', type: 'gateway' }
+      ]}]}],
+      flows: []
+    };
+    const lcB = {
+      pools: [{ id: 'P', lanes: [{ id: 'L', nodes: [
+        { id: 'b', type: 'gateway' }, { id: 'a', type: 'task' }
+      ]}]}],
+      flows: []
+    };
+    expect(canonicalSignature(lcA)).toBe(canonicalSignature(lcB));
+  });
+
+  test('differs when types differ', () => {
+    const lcA = { pools: [{ id: 'P', lanes: [{ id: 'L', nodes: [{ id: 'x', type: 'task' }] }] }], flows: [] };
+    const lcB = { pools: [{ id: 'P', lanes: [{ id: 'L', nodes: [{ id: 'x', type: 'startEvent' }] }] }], flows: [] };
+    expect(canonicalSignature(lcA)).not.toBe(canonicalSignature(lcB));
+  });
+});
+
+describe('robustness/graph-isomorphism — isStructurallyEqual', () => {
+  test('returns equal:true for identical', () => {
+    const lc = { pools: [{ id: 'P', lanes: [{ id: 'L', nodes: [{ id: 'a', type: 'task' }] }] }], flows: [] };
+    const result = isStructurallyEqual(lc, lc);
+    expect(result.equal).toBe(true);
+  });
+
+  test('returns delta with mismatched node counts', () => {
+    const lcA = { pools: [{ id: 'P', lanes: [{ id: 'L', nodes: [
+      { id: 'a', type: 'task' }, { id: 'b', type: 'task' }
+    ]}]}], flows: [] };
+    const lcB = { pools: [{ id: 'P', lanes: [{ id: 'L', nodes: [
+      { id: 'a', type: 'task' }
+    ]}]}], flows: [] };
+    const result = isStructurallyEqual(lcA, lcB);
+    expect(result.equal).toBe(false);
+    expect(result.delta.nodeCount).toEqual({ a: 2, b: 1 });
+  });
+
+  test('returns delta when lane count differs', () => {
+    const lcA = { pools: [{ id: 'P', lanes: [{ id: 'L1', nodes: [] }, { id: 'L2', nodes: [] }] }], flows: [] };
+    const lcB = { pools: [{ id: 'P', lanes: [{ id: 'L1', nodes: [] }] }], flows: [] };
+    const result = isStructurallyEqual(lcA, lcB);
+    expect(result.equal).toBe(false);
+    expect(result.delta.laneCount).toEqual({ a: 2, b: 1 });
   });
 });
