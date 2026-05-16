@@ -1,6 +1,15 @@
 import { describe, test, expect } from '@jest/globals';
 import { parseArgs, loadConfig, resolveEndpoint } from './robustness/cli.js';
 import { createLlmProvider } from './agents/llm-provider.js';
+import { readFileSync as _readFile } from 'fs';
+import { resolve as _resolve, dirname as _dirname } from 'path';
+import { fileURLToPath as _fileURLToPath } from 'url';
+
+const __testDirname = _dirname(_fileURLToPath(import.meta.url));
+const _fixturesDir = _resolve(__testDirname, '../tests/fixtures');
+function loadFixture(name) {
+  return JSON.parse(_readFile(_resolve(_fixturesDir, name), 'utf8'));
+}
 
 describe('robustness/cli — parseArgs', () => {
   test('parses subcommand and flags', () => {
@@ -363,5 +372,29 @@ describe('robustness/graph-isomorphism — isStructurallyEqual', () => {
     const result = isStructurallyEqual(lcA, lcB);
     expect(result.equal).toBe(false);
     expect(result.delta.laneCount).toEqual({ a: 2, b: 1 });
+  });
+});
+
+import { preFilter } from './robustness/stress-tester.js';
+
+describe('robustness/stress-tester — preFilter', () => {
+  test('returns passed:true for valid LC', async () => {
+    const validLc = loadFixture('simple-approval.json');
+    const result = await preFilter(validLc);
+    expect(result.passed).toBe(true);
+    expect(result.schemaErrors).toEqual([]);
+    expect(result.ruleErrors).toEqual([]);
+  });
+
+  test('returns passed:false for broken structure', async () => {
+    const broken = { pools: 'not-an-array' };
+    const result = await preFilter(broken);
+    expect(result.passed).toBe(false);
+  });
+
+  test('warnings do not fail the filter', async () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = await preFilter(lc);
+    expect(result.passed).toBe(true);
   });
 });
