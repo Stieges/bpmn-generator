@@ -63,6 +63,52 @@ export async function preFilter(lc) {
   };
 }
 
+export async function runStressTest(samples, { timeoutMs = 30_000 } = {}) {
+  const out = [];
+  for (const sample of samples) {
+    const start = Date.now();
+    const pre = await preFilter(sample.lcJson);
+
+    if (!pre.passed) {
+      out.push({
+        sample,
+        preFilter: pre,
+        pipelineResult: null,
+        roundtripResult: null,
+        durationMs: Date.now() - start,
+        failure: {
+          stage: 'pre-filter',
+          schemaErrors: pre.schemaErrors,
+          ruleErrors: pre.ruleErrors,
+        }
+      });
+      continue;
+    }
+
+    const pipelineResult = await runPipelineChecks(sample.lcJson, { timeoutMs });
+    let roundtripResult = null;
+    if (pipelineResult.failedStep === null) {
+      roundtripResult = await runRoundtripCheck(sample.lcJson, pipelineResult.bpmnXml);
+    }
+
+    const failure = pipelineResult.failedStep
+      ? { stage: 'pipeline', failedStep: pipelineResult.failedStep, error: pipelineResult.error }
+      : (roundtripResult && !roundtripResult.equal
+        ? { stage: 'roundtrip', delta: roundtripResult.delta }
+        : null);
+
+    out.push({
+      sample,
+      preFilter: pre,
+      pipelineResult,
+      roundtripResult,
+      durationMs: Date.now() - start,
+      failure,
+    });
+  }
+  return out;
+}
+
 export async function runPipelineChecks(lc, { timeoutMs = 30_000 } = {}) {
   const start = Date.now();
   const result = {

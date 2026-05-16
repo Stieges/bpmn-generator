@@ -398,7 +398,7 @@ describe('robustness/graph-isomorphism — toAdjacencyList format tolerance', ()
   });
 });
 
-import { preFilter, runPipelineChecks, runRoundtripCheck } from './robustness/stress-tester.js';
+import { preFilter, runPipelineChecks, runRoundtripCheck, runStressTest } from './robustness/stress-tester.js';
 
 describe('robustness/stress-tester — runPipelineChecks', () => {
   test('passes on simple valid LC', async () => {
@@ -452,4 +452,20 @@ describe('robustness/stress-tester — preFilter', () => {
     const result = await preFilter(lc);
     expect(result.passed).toBe(true);
   });
+});
+
+describe('robustness/stress-tester — runStressTest', () => {
+  test('returns array of Result objects one per sample', async () => {
+    const sample = {
+      id: 'test__simple__none__normal__001',
+      description: 'test',
+      lcJson: loadFixture('simple-approval.json'),
+      meta: { domain: 'test', complexity: 'simple', pattern: 'none', stress_mode: 'normal', target: 'lc-json', model: 'test', generated_at: '2026-05-16T00:00:00Z' },
+    };
+    const results = await runStressTest([sample], { timeoutMs: 15_000 });
+    expect(results).toHaveLength(1);
+    expect(results[0].sample.id).toBe(sample.id);
+    expect(results[0].preFilter).toBeDefined();
+    expect(results[0]).toHaveProperty('failure');
+  }, 20_000);
 });
