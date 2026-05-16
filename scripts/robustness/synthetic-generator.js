@@ -28,6 +28,20 @@ export function sampleCells(cells, { n, strategy = 'uniform', seed = Date.now(),
   return picked;
 }
 
+export function buildDescriptionPrompt(cell, complexitySpec) {
+  const system = `You generate realistic German enterprise process descriptions for BPMN modeling. Write natural, plausible business language.`;
+
+  const user = `Generate a process description with these characteristics:
+- Domain: ${cell.domain}
+- Complexity: ${cell.complexity} (${complexitySpec.minNodes}-${complexitySpec.maxNodes} nodes, ${complexitySpec.gateways} gateways)
+- Pattern to demonstrate: ${cell.pattern}
+- Stress mode: ${cell.stress_mode}
+
+Write the description in German, 200-400 words. Output JUST the description text — no markdown, no preamble, no metadata. Plausible business prose only.`;
+
+  return { system, user };
+}
+
 export function enumerateCells(catalog) {
   const cells = [];
   for (const domain of catalog.domains) {

@@ -132,3 +132,31 @@ describe('robustness/synthetic-generator — sampleCells', () => {
     expect(picked).toHaveLength(cells.length);
   });
 });
+
+import { buildDescriptionPrompt } from './robustness/synthetic-generator.js';
+
+describe('robustness/synthetic-generator — buildDescriptionPrompt', () => {
+  const cell = { domain: 'procurement', complexity: 'medium', pattern: 'four-eyes', stress_mode: 'wide-parallelism' };
+  const complexitySpec = { minNodes: 10, maxNodes: 25, gateways: 2 };
+
+  test('produces system + user prompt strings', () => {
+    const { system, user } = buildDescriptionPrompt(cell, complexitySpec);
+    expect(typeof system).toBe('string');
+    expect(typeof user).toBe('string');
+    expect(system.length).toBeGreaterThan(0);
+    expect(user.length).toBeGreaterThan(0);
+  });
+
+  test('user prompt references domain, complexity, pattern, stress_mode', () => {
+    const { user } = buildDescriptionPrompt(cell, complexitySpec);
+    expect(user).toContain('procurement');
+    expect(user).toContain('medium');
+    expect(user).toContain('four-eyes');
+    expect(user).toContain('wide-parallelism');
+  });
+
+  test('user prompt requests German output', () => {
+    const { user } = buildDescriptionPrompt(cell, complexitySpec);
+    expect(user.toLowerCase()).toMatch(/german|deutsch/);
+  });
+});
