@@ -65,3 +65,34 @@ describe('robustness/cli — LLM provider construction', () => {
     expect(typeof llm).toBe('function');
   });
 });
+
+import { enumerateCells } from './robustness/synthetic-generator.js';
+
+describe('robustness/synthetic-generator — enumerateCells', () => {
+  const catalog = {
+    domains: ['a', 'b'],
+    complexity: { simple: {}, medium: {} },
+    patterns: ['p1'],
+    stress_modes: ['s1', 's2']
+  };
+
+  test('produces full Cartesian product', () => {
+    const cells = enumerateCells(catalog);
+    expect(cells).toHaveLength(2 * 2 * 1 * 2); // 8
+    expect(cells[0]).toMatchObject({
+      domain: 'a', complexity: 'simple', pattern: 'p1', stress_mode: 's1'
+    });
+  });
+
+  test('each cell has the four dimension keys', () => {
+    const cells = enumerateCells(catalog);
+    for (const cell of cells) {
+      expect(cell).toEqual(expect.objectContaining({
+        domain: expect.any(String),
+        complexity: expect.any(String),
+        pattern: expect.any(String),
+        stress_mode: expect.any(String),
+      }));
+    }
+  });
+});
