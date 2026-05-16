@@ -101,3 +101,26 @@ export function enumerateCells(catalog) {
   }
   return cells;
 }
+
+export function formatSampleId(cell, seq) {
+  const padded = String(seq).padStart(3, '0');
+  return `${cell.domain}__${cell.complexity}__${cell.pattern}__${cell.stress_mode}__${padded}`;
+}
+
+export function buildSample({ cell, seq, description, lcJson, rawDot = null, target, model }) {
+  return {
+    id: formatSampleId(cell, seq),
+    description,
+    lcJson,
+    rawDot,
+    meta: {
+      domain: cell.domain,
+      complexity: cell.complexity,
+      pattern: cell.pattern,
+      stress_mode: cell.stress_mode,
+      target,
+      model,
+      generated_at: new Date().toISOString(),
+    }
+  };
+}

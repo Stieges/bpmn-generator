@@ -193,3 +193,42 @@ describe('robustness/synthetic-generator — extractJson', () => {
     expect(extractJson('foo {"x":2} bar')).toEqual({ x: 2 });
   });
 });
+
+import { formatSampleId, buildSample } from './robustness/synthetic-generator.js';
+
+describe('robustness/synthetic-generator — formatSampleId', () => {
+  test('uses __ separator and includes all 5 fields', () => {
+    const id = formatSampleId({
+      domain: 'hr-onboarding', complexity: 'medium',
+      pattern: 'four-eyes', stress_mode: 'wide-parallelism'
+    }, 42);
+    expect(id).toBe('hr-onboarding__medium__four-eyes__wide-parallelism__042');
+  });
+
+  test('pads sequence to 3 digits', () => {
+    const id = formatSampleId({ domain: 'a', complexity: 'b', pattern: 'c', stress_mode: 'd' }, 7);
+    expect(id).toMatch(/__007$/);
+  });
+});
+
+describe('robustness/synthetic-generator — buildSample', () => {
+  test('assembles full Sample record', () => {
+    const sample = buildSample({
+      cell: { domain: 'proc', complexity: 'medium', pattern: 'p', stress_mode: 's' },
+      seq: 5,
+      description: 'desc text',
+      lcJson: { pools: [] },
+      rawDot: null,
+      target: 'lc-json',
+      model: 'qwen-3.5-122b',
+    });
+    expect(sample.id).toBe('proc__medium__p__s__005');
+    expect(sample.description).toBe('desc text');
+    expect(sample.lcJson).toEqual({ pools: [] });
+    expect(sample.rawDot).toBeNull();
+    expect(sample.meta.domain).toBe('proc');
+    expect(sample.meta.target).toBe('lc-json');
+    expect(sample.meta.model).toBe('qwen-3.5-122b');
+    expect(sample.meta.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
