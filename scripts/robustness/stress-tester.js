@@ -9,6 +9,7 @@
 
 import { validateLogicCore } from '../validate.js';
 import { runRules } from '../rules.js';
+import { runPipeline } from '../pipeline.js';
 
 export async function preFilter(lc) {
   // Phase A.1: schema validation
@@ -47,4 +48,46 @@ export async function preFilter(lc) {
     schemaWarnings: schemaResult.warnings || [],
     ruleWarnings,
   };
+}
+
+export async function runPipelineChecks(lc, { timeoutMs = 30_000 } = {}) {
+  const start = Date.now();
+  const result = {
+    bpmnXml: null,
+    svg: null,
+    coordMap: null,
+    validation: null,
+    failedStep: null,
+    error: null,
+    durationMs: 0,
+  };
+
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), timeoutMs)
+    );
+    const pipelinePromise = runPipeline(lc);
+    const r = await Promise.race([pipelinePromise, timeoutPromise]);
+
+    result.bpmnXml = r.bpmnXml;
+    result.svg = r.svg;
+    result.coordMap = r.coordMap;
+    result.validation = r.validation;
+    result.durationMs = Date.now() - start;
+
+    if (r.validation && r.validation.errors && r.validation.errors.length > 0) {
+      result.failedStep = 'elk-or-xml';
+      result.error = r.validation.errors[0];
+    } else if (!r.bpmnXml) {
+      result.failedStep = 'xml';
+    } else if (!r.svg) {
+      result.failedStep = 'svg';
+    }
+  } catch (e) {
+    result.durationMs = Date.now() - start;
+    result.failedStep = e.message === 'timeout' ? 'timeout' : 'pipeline-throw';
+    result.error = e.message;
+  }
+
+  return result;
 }

@@ -375,7 +375,23 @@ describe('robustness/graph-isomorphism — isStructurallyEqual', () => {
   });
 });
 
-import { preFilter } from './robustness/stress-tester.js';
+import { preFilter, runPipelineChecks } from './robustness/stress-tester.js';
+
+describe('robustness/stress-tester — runPipelineChecks', () => {
+  test('passes on simple valid LC', async () => {
+    const lc = loadFixture('simple-approval.json');
+    const result = await runPipelineChecks(lc, { timeoutMs: 15_000 });
+    expect(result.failedStep).toBeNull();
+    expect(result.bpmnXml).toMatch(/^<\?xml/);
+    expect(result.svg).toMatch(/<svg/);
+  }, 20_000);
+
+  test('captures pipeline failure on broken input', async () => {
+    const broken = { pools: 'not-an-array', flows: [] };
+    const result = await runPipelineChecks(broken, { timeoutMs: 5_000 });
+    expect(result.failedStep === null).toBe(false);
+  }, 10_000);
+});
 
 describe('robustness/stress-tester — preFilter', () => {
   test('returns passed:true for valid LC', async () => {
