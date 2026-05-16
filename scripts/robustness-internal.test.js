@@ -270,3 +270,46 @@ describe('robustness/synthetic-generator — generateSamples (integration with m
     expect(samples).toHaveLength(0);
   });
 });
+
+import { toAdjacencyList } from './robustness/graph-isomorphism.js';
+
+describe('robustness/graph-isomorphism — toAdjacencyList', () => {
+  test('converts single-pool LC to typed adjacency list', () => {
+    const lc = {
+      pools: [{
+        id: 'P1',
+        lanes: [{
+          id: 'L1',
+          nodes: [
+            { id: 'start', type: 'startEvent' },
+            { id: 'task1', type: 'task' },
+            { id: 'end', type: 'endEvent' },
+          ]
+        }]
+      }],
+      flows: [
+        { source: 'start', target: 'task1' },
+        { source: 'task1', target: 'end' },
+      ]
+    };
+    const adj = toAdjacencyList(lc);
+    expect(adj.nodes).toHaveLength(3);
+    expect(adj.nodes[0]).toMatchObject({ id: 'start', type: 'startEvent' });
+    expect(adj.edges).toHaveLength(2);
+    expect(adj.lanes).toHaveLength(1);
+  });
+
+  test('handles multi-pool with lane count', () => {
+    const lc = {
+      pools: [
+        { id: 'P1', lanes: [{ id: 'L1', nodes: [{ id: 'a', type: 'task' }] }] },
+        { id: 'P2', lanes: [{ id: 'L2', nodes: [{ id: 'b', type: 'task' }] }] },
+      ],
+      flows: []
+    };
+    const adj = toAdjacencyList(lc);
+    expect(adj.pools).toHaveLength(2);
+    expect(adj.lanes).toHaveLength(2);
+    expect(adj.nodes).toHaveLength(2);
+  });
+});
