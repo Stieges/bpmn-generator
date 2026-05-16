@@ -375,7 +375,30 @@ describe('robustness/graph-isomorphism — isStructurallyEqual', () => {
   });
 });
 
-import { preFilter, runPipelineChecks } from './robustness/stress-tester.js';
+describe('robustness/graph-isomorphism — toAdjacencyList format tolerance', () => {
+  test('handles legacy flat format', () => {
+    const legacy = {
+      id: 'proc',
+      nodes: [{ id: 'a', type: 'task' }, { id: 'b', type: 'task' }],
+      edges: [{ source: 'a', target: 'b' }],
+      lanes: [{ id: 'L1' }]
+    };
+    const adj = toAdjacencyList(legacy);
+    expect(adj.nodes).toHaveLength(2);
+    expect(adj.edges).toHaveLength(1);
+    expect(adj.lanes).toHaveLength(1);
+    expect(adj.pools).toHaveLength(1);
+  });
+
+  test('handles legacy flat format without lanes (synthetic lane)', () => {
+    const legacy = { nodes: [{ id: 'a', type: 'task' }], edges: [] };
+    const adj = toAdjacencyList(legacy);
+    expect(adj.nodes).toHaveLength(1);
+    expect(adj.lanes).toHaveLength(1);  // synthetic default lane
+  });
+});
+
+import { preFilter, runPipelineChecks, runRoundtripCheck } from './robustness/stress-tester.js';
 
 describe('robustness/stress-tester — runPipelineChecks', () => {
   test('passes on simple valid LC', async () => {
@@ -391,6 +414,22 @@ describe('robustness/stress-tester — runPipelineChecks', () => {
     const result = await runPipelineChecks(broken, { timeoutMs: 5_000 });
     expect(result.failedStep === null).toBe(false);
   }, 10_000);
+});
+
+describe('robustness/stress-tester — runRoundtripCheck', () => {
+  test('passes on simple LC that roundtrips cleanly', async () => {
+    const lc = loadFixture('simple-approval.json');
+    const { runPipeline } = await import('./pipeline.js');
+    const pipelineResult = await runPipeline(lc);
+    const rt = await runRoundtripCheck(lc, pipelineResult.bpmnXml);
+    expect(rt.equal).toBe(true);
+  }, 15_000);
+
+  test('returns reason when no XML provided', async () => {
+    const rt = await runRoundtripCheck({ pools: [] }, null);
+    expect(rt.equal).toBe(false);
+    expect(rt.delta.reason).toContain('no XML');
+  });
 });
 
 describe('robustness/stress-tester — preFilter', () => {

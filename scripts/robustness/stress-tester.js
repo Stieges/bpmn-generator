@@ -10,6 +10,19 @@
 import { validateLogicCore } from '../validate.js';
 import { runRules } from '../rules.js';
 import { runPipeline } from '../pipeline.js';
+import { bpmnToLogicCore } from '../import.js';
+import { isStructurallyEqual } from './graph-isomorphism.js';
+
+export async function runRoundtripCheck(originalLc, bpmnXml) {
+  if (!bpmnXml) return { equal: false, delta: { reason: 'no XML' } };
+  let reparsedLc;
+  try {
+    reparsedLc = await bpmnToLogicCore(bpmnXml);
+  } catch (e) {
+    return { equal: false, delta: { reason: `import threw: ${e.message}` } };
+  }
+  return isStructurallyEqual(originalLc, reparsedLc);
+}
 
 export async function preFilter(lc) {
   // Phase A.1: schema validation
