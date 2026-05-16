@@ -133,7 +133,7 @@ describe('robustness/synthetic-generator — sampleCells', () => {
   });
 });
 
-import { buildDescriptionPrompt } from './robustness/synthetic-generator.js';
+import { buildDescriptionPrompt, buildLcJsonPrompt, extractJson } from './robustness/synthetic-generator.js';
 
 describe('robustness/synthetic-generator — buildDescriptionPrompt', () => {
   const cell = { domain: 'procurement', complexity: 'medium', pattern: 'four-eyes', stress_mode: 'wide-parallelism' };
@@ -158,5 +158,38 @@ describe('robustness/synthetic-generator — buildDescriptionPrompt', () => {
   test('user prompt requests German output', () => {
     const { user } = buildDescriptionPrompt(cell, complexitySpec);
     expect(user.toLowerCase()).toMatch(/german|deutsch/);
+  });
+});
+
+describe('robustness/synthetic-generator — buildLcJsonPrompt', () => {
+  test('includes schema reference + description', () => {
+    const desc = 'Im Beschaffungsprozess beginnt der Vorgang...';
+    const { system, user } = buildLcJsonPrompt(desc);
+    expect(system.toLowerCase()).toContain('json');
+    expect(user).toContain(desc);
+  });
+
+  test('constrains output format (no prose)', () => {
+    const { system } = buildLcJsonPrompt('x');
+    expect(system.toLowerCase()).toMatch(/no prose|just json|output.*json/);
+  });
+});
+
+describe('robustness/synthetic-generator — extractJson', () => {
+  test('direct JSON parses', () => {
+    expect(extractJson('{"a":1}')).toEqual({ a: 1 });
+  });
+
+  test('fenced code block JSON extracts', () => {
+    const text = 'preamble\n```json\n{"a":1}\n```\ntrailing';
+    expect(extractJson(text)).toEqual({ a: 1 });
+  });
+
+  test('returns null on no JSON', () => {
+    expect(extractJson('no json here')).toBeNull();
+  });
+
+  test('first-to-last-brace fallback', () => {
+    expect(extractJson('foo {"x":2} bar')).toEqual({ x: 2 });
   });
 });

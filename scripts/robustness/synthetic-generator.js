@@ -3,6 +3,52 @@
  * See spec Section 4.3.
  */
 
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCHEMA_PATH = resolve(__dirname, '../../references/input-schema.json');
+
+let _cachedSchema = null;
+function loadSchema() {
+  if (!_cachedSchema) _cachedSchema = readFileSync(SCHEMA_PATH, 'utf8');
+  return _cachedSchema;
+}
+
+export function buildLcJsonPrompt(description) {
+  const schema = loadSchema();
+  const system = `You produce JSON conforming exactly to the provided schema. Output JUST the JSON object — no prose, no markdown fences, no preamble.
+
+SCHEMA:
+${schema}`;
+
+  const user = `Convert this process description to Logic-Core JSON matching the schema above:
+
+${description}
+
+Constraints:
+- All node IDs match ^[a-zA-Z_][a-zA-Z0-9_-]*$
+- Every flow.source and flow.target must reference an existing node ID
+- Lanes are ordered top-to-bottom by flow direction`;
+
+  return { system, user };
+}
+
+export function extractJson(text) {
+  try { return JSON.parse(text); } catch {}
+  const fenced = text.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+  if (fenced) {
+    try { return JSON.parse(fenced[1]); } catch {}
+  }
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
+  }
+  return null;
+}
+
 function mulberry32(seed) {
   let s = seed >>> 0;
   return () => {
