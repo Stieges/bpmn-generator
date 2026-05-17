@@ -310,4 +310,33 @@ describe('compactLanes — basic shrink', () => {
     compactLanes(cm, proc, { minLaneHeight: 60 });
     expect(cm.laneCoords.laneA.h).toBe(60);
   });
+
+  test('shifts nodes in subsequent lanes up by the shrink delta', () => {
+    const cm = {
+      coords: {
+        n1: { x: 50, y: 20,  w: 100, h: 80 },
+        n2: { x: 50, y: 220, w: 100, h: 80 }  // lane B
+      },
+      poolCoords: { p1: { x: 0, y: 0, w: 300, h: 400, laneHeaderWidth: 40 } },
+      laneCoords: {
+        laneA: { x: 40, y:   0, w: 260, h: 200 },
+        laneB: { x: 40, y: 200, w: 260, h: 200 }
+      },
+      edgeCoords: { e1: [{ x: 100, y: 60 }, { x: 100, y: 260 }] }
+    };
+    // NOTE: nodes go inside the pool per schema (see commit 66bad2d for context)
+    const proc = { pools: [{
+      id: 'p1',
+      lanes: [{ id: 'laneA' }, { id: 'laneB' }],
+      nodes: [{ id: 'n1', lane: 'laneA' }, { id: 'n2', lane: 'laneB' }]
+    }] };
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    // laneA: content 80 + 2*20 = 120 → delta 80 from 200
+    // n2 (in laneB) should be shifted up by 80
+    expect(cm.coords.n2.y).toBe(140); // 220 - 80
+    // The waypoint at y=260 (below laneA shrunk boundary) should also be shifted by 80
+    expect(cm.edgeCoords.e1[1].y).toBe(180); // 260 - 80
+    // The waypoint at y=60 (inside laneA) should NOT shift
+    expect(cm.edgeCoords.e1[0].y).toBe(60);
+  });
 });
