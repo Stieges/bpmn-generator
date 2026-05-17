@@ -44,10 +44,63 @@ async function main() {
   const config = loadConfig();
 
   switch (command) {
-    case 'run':
-      console.log('[robustness] run — not implemented yet (Phase 2+)');
-      console.log('Resolved endpoint:', resolveEndpoint(config, flags));
+    case 'run': {
+      const { createLlmProvider } = await import('../agents/llm-provider.js');
+      const { generateSamples } = await import('./synthetic-generator.js');
+      const { runStressTest } = await import('./stress-tester.js');
+      const { classify } = await import('./failure-classifier.js');
+      const { persistFailure } = await import('./fixture-persister.js');
+      const { generateReport } = await import('./report-generator.js');
+      const { readFileSync, writeFileSync, existsSync, mkdirSync } = await import('fs');
+      const { resolve, join } = await import('path');
+
+      const { baseUrl, apiKey, model } = resolveEndpoint(config, flags);
+      if (!baseUrl) {
+        console.error('Missing baseUrl. Set AIHUB_URL or pass --api-url=...');
+        process.exit(2);
+      }
+      const llm = createLlmProvider({ baseUrl, apiKey, model, timeout: 120_000 });
+
+      const catalog = JSON.parse(readFileSync(resolve(__dirname, 'seed-catalog.json'), 'utf8'));
+      const n = parseInt(flags.n || config.default_n, 10);
+      const target = flags.target || config.default_target;
+      const persistLlmSignal = flags['persist-llm-signal'] === 'true' || config.persist_llm_signal;
+      const seed = parseInt(flags.seed || Date.now(), 10);
+      const startedAt = new Date().toISOString();
+
+      console.log(`[robustness] Run started — model: ${model}, n: ${n}, target: ${target}, seed: ${seed}`);
+
+      const samples = await generateSamples({ catalog, n, llm, target, model, seed });
+      console.log(`[robustness] Generated ${samples.length} samples (out of ${n} attempts)`);
+
+      const results = await runStressTest(samples, { timeoutMs: config.timeout_seconds * 1000 });
+      const classified = results.map(r => ({ ...r, ...classify(r) }));
+
+      for (const c of classified) {
+        if (c.bucket) {
+          const persistResult = await persistFailure(
+            { category: c.category, bucket: c.bucket, fingerprint: c.fingerprint, evidence: c.evidence },
+            c.sample,
+            { persistLlmSignal }
+          );
+          c.wrote = persistResult.wrote;
+        }
+      }
+
+      const runMeta = { model, target, started_at: startedAt, duration_ms: Date.now() - new Date(startedAt).getTime() };
+      const { markdown, json } = generateReport(runMeta, classified);
+
+      const reportDir = resolve(__dirname, '../../', config.report_dir);
+      if (!existsSync(reportDir)) mkdirSync(reportDir, { recursive: true });
+      const stamp = startedAt.slice(0, 10);
+      const baseName = `${stamp}-${model}-n${n}`;
+      writeFileSync(join(reportDir, `${baseName}.md`), markdown, 'utf8');
+      writeFileSync(join(reportDir, `${baseName}.json`), JSON.stringify(json, null, 2), 'utf8');
+
+      console.log(markdown);
+      console.log(`\n[robustness] Report written to ${reportDir}/${baseName}.{md,json}`);
       break;
+    }
     case 'triage':
       console.log('[robustness] triage — not implemented yet (Phase 4)');
       break;
