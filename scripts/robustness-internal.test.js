@@ -740,3 +740,32 @@ describe('robustness — end-to-end with mocked LLM and tmpfs', () => {
     expect(persistResult.wrote).toBe('skipped-no-bucket');
   }, 20_000);
 });
+
+import { buildDotPrompt, extractDot } from './robustness/synthetic-generator.js';
+
+describe('robustness/synthetic-generator — buildDotPrompt', () => {
+  test('produces DOT-focused prompts', () => {
+    const { system, user } = buildDotPrompt('Eine Beschreibung');
+    expect(system.toLowerCase()).toMatch(/dot|graphviz/);
+    expect(user).toContain('Eine Beschreibung');
+  });
+});
+
+describe('robustness/synthetic-generator — extractDot', () => {
+  test('returns content of digraph block', () => {
+    const text = 'Some preamble\ndigraph G {\n  a -> b;\n}\nepilogue';
+    const result = extractDot(text);
+    expect(result).toContain('digraph');
+    expect(result).toContain('a -> b');
+  });
+
+  test('handles fenced code blocks', () => {
+    const text = '```dot\ndigraph G { a -> b }\n```';
+    const result = extractDot(text);
+    expect(result).toContain('digraph');
+  });
+
+  test('returns null when no DOT found', () => {
+    expect(extractDot('no dot here')).toBeNull();
+  });
+});

@@ -146,6 +146,39 @@ export async function generateSamples({
   return samples;
 }
 
+export function buildDotPrompt(description) {
+  const system = `You produce Graphviz DOT language describing BPMN process flows. Output JUST the DOT — no prose, no markdown.
+
+DOT format example:
+digraph process {
+  start [shape=circle];
+  task1 [shape=box];
+  end [shape=doublecircle];
+  start -> task1 -> end;
+}`;
+
+  const user = `Convert this process description to DOT:
+
+${description}
+
+Constraints:
+- Use shape=circle for start events, doublecircle for end events, box for tasks, diamond for gateways
+- Edge labels via [label="..."]
+- Node IDs alphanumeric only`;
+
+  return { system, user };
+}
+
+export function extractDot(text) {
+  // Fenced code block
+  const fenced = text.match(/```(?:dot)?\s*\n([\s\S]*?)\n```/);
+  if (fenced) return fenced[1].trim();
+  // Bare digraph block
+  const bare = text.match(/digraph\s+\w+\s*\{[\s\S]*?\}/);
+  if (bare) return bare[0].trim();
+  return null;
+}
+
 export function buildSample({ cell, seq, description, lcJson, rawDot = null, target, model }) {
   return {
     id: formatSampleId(cell, seq),
