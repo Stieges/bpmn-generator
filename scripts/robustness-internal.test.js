@@ -646,3 +646,39 @@ describe('robustness/fixture-persister — llm-signal gate', () => {
     expect(existsSync(llmSignalFile)).toBe(true);
   });
 });
+
+import { generateReport } from './robustness/report-generator.js';
+
+describe('robustness/report-generator — generateReport', () => {
+  const runMeta = {
+    model: 'qwen-3.5-122b',
+    target: 'lc-json',
+    started_at: '2026-05-16T14:00:00Z',
+    duration_ms: 600_000,
+  };
+
+  test('renders Markdown with totals + per-category', () => {
+    const records = [
+      { category: 'pass' }, { category: 'pass' },
+      { category: 'elk-error', bucket: 'auto', fingerprint: 'a1' },
+      { category: 'roundtrip-break', bucket: 'auto', fingerprint: 'a2' },
+    ];
+    const { markdown, json } = generateReport(runMeta, records);
+    expect(markdown).toContain('Robustness Run');
+    expect(markdown).toContain('Total samples: 4');
+    expect(markdown).toContain('Pass: 2');
+    expect(markdown).toContain('elk-error');
+    expect(json.totals.total).toBe(4);
+    expect(json.totals.pass).toBe(2);
+    expect(json.byCategory['elk-error']).toBe(1);
+  });
+
+  test('Markdown includes per-target breakdown when both targets present', () => {
+    const records = [
+      { category: 'pass', sample: { meta: { target: 'lc-json' } } },
+      { category: 'elk-error', sample: { meta: { target: 'dot' } }, bucket: 'auto', fingerprint: 'x' },
+    ];
+    const { markdown } = generateReport(runMeta, records);
+    expect(markdown.toLowerCase()).toContain('target');
+  });
+});
