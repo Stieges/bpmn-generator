@@ -572,3 +572,44 @@ describe('robustness/failure-classifier — classify', () => {
     expect(classify(result).bucket).toBeNull();
   });
 });
+
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { persistFailure } from './robustness/fixture-persister.js';
+import { join as _join_4_1 } from 'path';
+
+describe('robustness/fixture-persister — persistFailure', () => {
+  let tmpRoot;
+  beforeEach(() => { tmpRoot = mkdtempSync(`${tmpdir()}/robustness-`); });
+  afterEach(() => { rmSync(tmpRoot, { recursive: true, force: true }); });
+
+  const baseRecord = {
+    category: 'elk-error',
+    bucket: 'auto',
+    fingerprint: 'abc123',
+    evidence: { error: 'ElkError: cyclic' },
+  };
+  const baseSample = {
+    id: 'test__simple__none__normal__001',
+    description: 'A test',
+    lcJson: { pools: [], flows: [] },
+    meta: { model: 'test', target: 'lc-json', generated_at: '2026-05-16T00:00:00Z' },
+  };
+
+  test('first write creates fixture + meta files', async () => {
+    const r = await persistFailure(baseRecord, baseSample, { fixtureRoot: tmpRoot });
+    expect(r.wrote).toBe('new');
+    expect(existsSync(_join_4_1(tmpRoot, 'auto/elk-error-abc123.json'))).toBe(true);
+    expect(existsSync(_join_4_1(tmpRoot, 'auto/elk-error-abc123.meta.json'))).toBe(true);
+    const meta = JSON.parse(readFileSync(_join_4_1(tmpRoot, 'auto/elk-error-abc123.meta.json'), 'utf8'));
+    expect(meta.seen).toBe(1);
+  });
+
+  test('repeat with same fingerprint increments seen + updates last_seen', async () => {
+    await persistFailure(baseRecord, baseSample, { fixtureRoot: tmpRoot });
+    const r2 = await persistFailure(baseRecord, baseSample, { fixtureRoot: tmpRoot });
+    expect(r2.wrote).toBe('dedup');
+    const meta = JSON.parse(readFileSync(_join_4_1(tmpRoot, 'auto/elk-error-abc123.meta.json'), 'utf8'));
+    expect(meta.seen).toBe(2);
+  });
+});
