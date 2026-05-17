@@ -470,7 +470,40 @@ describe('robustness/stress-tester — runStressTest', () => {
   }, 20_000);
 });
 
-import { classify } from './robustness/failure-classifier.js';
+import { classify, computeFingerprint } from './robustness/failure-classifier.js';
+
+describe('robustness/failure-classifier — computeFingerprint', () => {
+  test('same category + same error + same structure → same hash', () => {
+    const r = {
+      sample: { lcJson: { pools: [{ id: 'P', lanes: [], nodes: [{ id: 'a', type: 'task' }] }], flows: [] } },
+      failure: { stage: 'pipeline', failedStep: 'pipeline-throw', error: 'ElkError: cyclic' },
+    };
+    const fp1 = computeFingerprint('elk-error', r);
+    const fp2 = computeFingerprint('elk-error', r);
+    expect(fp1).toBe(fp2);
+    expect(fp1).toMatch(/^[a-f0-9]{6,}$/);
+  });
+
+  test('different categories → different hashes', () => {
+    const r = {
+      sample: { lcJson: { pools: [], flows: [] } },
+      failure: { stage: 'pipeline', failedStep: 'pipeline-throw', error: 'x' },
+    };
+    expect(computeFingerprint('elk-error', r)).not.toBe(computeFingerprint('timeout', r));
+  });
+
+  test('different error messages → different hashes (same category)', () => {
+    const r1 = {
+      sample: { lcJson: { pools: [], flows: [] } },
+      failure: { stage: 'pipeline', failedStep: 'pipeline-throw', error: 'first error' },
+    };
+    const r2 = {
+      sample: { lcJson: { pools: [], flows: [] } },
+      failure: { stage: 'pipeline', failedStep: 'pipeline-throw', error: 'second error' },
+    };
+    expect(computeFingerprint('elk-error', r1)).not.toBe(computeFingerprint('elk-error', r2));
+  });
+});
 
 describe('robustness/failure-classifier — classify', () => {
   test('pre-filter schema fail → schema-violation, llm-signal bucket', () => {
