@@ -172,9 +172,21 @@ async function main() {
   rl.on('close', () => process.exit(0));
   return;  // important: return instead of break, since rl is async
 }
-    case 'mad-check':
-      console.log('[robustness] mad-check — not implemented yet (Phase 6)');
-      break;
+    case 'mad-check': {
+  const { runMadCheck } = await import('./mad-validator.js');
+  const limit = parseInt(flags.limit || '200', 10);
+  console.log(`[mad-check] Running up to ${limit} MaD samples...`);
+  try {
+    const result = await runMadCheck({ limit });
+    console.log(`[mad-check] Total: ${result.total}  Passed: ${result.passed}  Failed: ${result.failed}`);
+    console.log(`[mad-check] By category: ${JSON.stringify(result.byCategory, null, 2)}`);
+  } catch (e) {
+    console.error(`[mad-check] Failed: ${e.message}`);
+    console.error(`[mad-check] Tip: tests/fixtures/mad-subset/ must exist. Run curate-mad.js first to populate.`);
+    process.exit(2);
+  }
+  break;
+}
     case 'report':
       console.log('[robustness] report — not implemented yet (Phase 4)');
       break;
