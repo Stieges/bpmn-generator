@@ -177,3 +177,62 @@ export function repairEdgeLabels(coordMap, opts = {}) {
   }
   return coordMap;
 }
+
+const LANE_COMPACT_PADDING = 20;
+
+/**
+ * Shrink lanes to their content bbox + padding. Shifts subsequent lanes
+ * upward and adjusts edge waypoints accordingly.
+ *
+ * Strategy: lane-by-lane from top to bottom. For each lane, compute content
+ * bbox from the nodes that belong to it (via process.nodes[i].lane), clamp
+ * to minLaneHeight, apply delta.
+ */
+export function compactLanes(coordMap, process, opts = {}) {
+  const minH = opts.minLaneHeight ?? 80;
+  const pad  = opts.padding ?? LANE_COMPACT_PADDING;
+
+  const pools = process.pools ?? [process];
+  const allNodes = pools.flatMap(p => p.nodes ?? []);
+
+  for (const pool of pools) {
+    const pc = coordMap.poolCoords[pool.id] ?? coordMap.poolCoords['_singlePool'];
+    if (!pc) continue;
+    const lanes = (pool.lanes ?? []).map(l => l.id).filter(id => coordMap.laneCoords[id]);
+    lanes.sort((a, b) => coordMap.laneCoords[a].y - coordMap.laneCoords[b].y);
+
+    let cumulativeDelta = 0;
+    for (const laneId of lanes) {
+      const lc = coordMap.laneCoords[laneId];
+      lc.y -= cumulativeDelta;
+
+      const laneNodes = allNodes.filter(n => n.lane === laneId)
+                                .map(n => coordMap.coords[n.id])
+                                .filter(Boolean);
+
+      let newH;
+      if (laneNodes.length === 0) {
+        newH = minH;
+      } else {
+        const topY    = Math.min(...laneNodes.map(c => c.y));
+        const botY    = Math.max(...laneNodes.map(c => c.y + c.h));
+        newH = Math.max(minH, (botY - topY) + 2 * pad);
+      }
+
+      const delta = lc.h - newH;
+      if (delta > 0) {
+        lc.h = newH;
+        cumulativeDelta += delta;
+      }
+    }
+
+    // Recompute pool bounds
+    const lanesList = lanes.map(id => coordMap.laneCoords[id]);
+    if (lanesList.length > 0) {
+      pc.y = Math.min(...lanesList.map(l => l.y));
+      pc.h = Math.max(...lanesList.map(l => l.y + l.h)) - pc.y;
+    }
+  }
+
+  return coordMap;
+}

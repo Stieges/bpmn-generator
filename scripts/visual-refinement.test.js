@@ -1,7 +1,7 @@
 /**
  * Visual Refinement — unit tests
  */
-import { estimateTextWidth, computeDynamicLaneHeaders, estimateTextBBox, bboxOverlaps, repairEdgeLabels } from './visual-refinement.js';
+import { estimateTextWidth, computeDynamicLaneHeaders, estimateTextBBox, bboxOverlaps, repairEdgeLabels, compactLanes } from './visual-refinement.js';
 
 describe('estimateTextWidth', () => {
   test('returns 0 for empty string', () => {
@@ -254,5 +254,37 @@ describe('repairEdgeLabels', () => {
       coords: {}, poolCoords: {}, laneCoords: {}, edgeCoords: {}, edgeLabels: {}
     };
     expect(repairEdgeLabels(cm)).toBe(cm);
+  });
+});
+
+describe('compactLanes — basic shrink', () => {
+  test('shrinks a sparsely-populated lane to its content + padding', () => {
+    const cm = {
+      coords: { n1: { x: 50, y: 20, w: 100, h: 80 } },
+      poolCoords: { p1: { x: 0, y: 0, w: 300, h: 400, laneHeaderWidth: 40 } },
+      laneCoords: {
+        laneA: { x: 40, y:   0, w: 260, h: 200 },
+        laneB: { x: 40, y: 200, w: 260, h: 200 }
+      },
+      edgeCoords: {}
+    };
+    const proc = { pools: [{ id: 'p1', lanes: [
+      { id: 'laneA' }, { id: 'laneB' }
+    ]}], nodes: [{ id: 'n1', lane: 'laneA' }] };
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect(cm.laneCoords.laneA.h).toBeLessThan(200);
+    expect(cm.laneCoords.laneA.h).toBeGreaterThanOrEqual(60);
+  });
+
+  test('respects minLaneHeight for empty lanes', () => {
+    const cm = {
+      coords: {},
+      poolCoords: { p1: { x: 0, y: 0, w: 300, h: 200, laneHeaderWidth: 40 } },
+      laneCoords: { laneA: { x: 40, y: 0, w: 260, h: 200 } },
+      edgeCoords: {}
+    };
+    const proc = { pools: [{ id: 'p1', lanes: [{ id: 'laneA' }] }], nodes: [] };
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect(cm.laneCoords.laneA.h).toBe(60);
   });
 });
