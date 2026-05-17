@@ -799,3 +799,17 @@ describe('robustness/synthetic-generator — DOT target end-to-end', () => {
     expect(samples.length).toBeLessThanOrEqual(1);
   });
 });
+
+import { runMadCheck } from './robustness/mad-validator.js';
+
+describe('robustness/mad-validator — runMadCheck', () => {
+  test('returns aggregate stats from a fixture subset directory', async () => {
+    const subsetDir = _resolve(__testDirname, '../tests/fixtures/mad-subset-test');
+    const result = await runMadCheck({ subsetDir, limit: 5 });
+    expect(result).toHaveProperty('total');
+    expect(result).toHaveProperty('passed');
+    expect(result).toHaveProperty('failed');
+    expect(result).toHaveProperty('byCategory');
+    expect(result.total).toBe(2);  // 2 .dot files in the test subset
+  }, 30_000);
+});

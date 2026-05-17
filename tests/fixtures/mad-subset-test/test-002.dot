@@ -1,0 +1,1 @@
+digraph p2 { start [shape=circle]; a [shape=box]; b [shape=box]; finish [shape=doublecircle]; start -> a; a -> b; b -> finish; }

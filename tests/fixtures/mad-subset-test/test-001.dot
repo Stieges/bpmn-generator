@@ -1,0 +1,1 @@
+digraph p { start [shape=circle]; task1 [shape=box]; finish [shape=doublecircle]; start -> task1 -> finish; }
