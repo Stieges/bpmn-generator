@@ -223,8 +223,6 @@ export function compactLanes(coordMap, process, opts = {}) {
         const oldEndY = lc.y + lc.h; // before shrink
         lc.h = newH;
         const newEndY = lc.y + lc.h;
-        const DEBUG = false; // Set to true to debug
-        if (DEBUG) console.log(`Lane ${laneId}: delta=${delta}, oldEnd=${oldEndY}, newEnd=${newEndY}, waypoints before:`, coordMap.edgeCoords);
 
         // Shift nodes in subsequent lanes
         for (const other of lanes) {
@@ -242,16 +240,13 @@ export function compactLanes(coordMap, process, opts = {}) {
         for (const pts of Object.values(coordMap.edgeCoords)) {
           for (const p of pts) {
             if (p.y >= oldEndY) {
-              if (DEBUG) console.log(`  Waypoint y=${p.y}: >= ${oldEndY}, shifting by -${delta}`);
               p.y -= delta;
             } else if (p.y > newEndY && p.y < oldEndY) {
-              if (DEBUG) console.log(`  Waypoint y=${p.y}: boundary case (${newEndY} < y < ${oldEndY}), clamping to ${newEndY - 1}`);
               // Boundary edge case: clamp to newEndY - 1 (keeps waypoint inside shrunk lane)
               p.y = newEndY - 1;
             }
           }
         }
-        if (DEBUG) console.log(`  Waypoints after:`, coordMap.edgeCoords);
       }
     }
 
