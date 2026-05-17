@@ -303,7 +303,7 @@ Command: `AIHUB_URL=... AIHUB_KEY=... node scripts/robustness/cli.js run --n=100
 
 ### Step 1 — Bootstrap (instant)
 - Load `seed-catalog.json` (540 cells) and `config.json`
-- Resolve endpoint: `baseUrl=$AIHUB_URL, apiKey=$AIHUB_KEY, model=qwen-3.5-122b`
+- Resolve endpoint: `baseUrl=$AIHUB_URL, apiKey=$AIHUB_KEY, model=qwen-3.5-122b-sovereign`
 - Construct `llm = createLlmProvider({ baseUrl, apiKey, model })`
 - Create `tests/robustness-reports/` if missing
 
@@ -327,12 +327,12 @@ Per sample:
 - Dedup: existing fingerprint → only `meta.seen` incremented
 
 ### Step 5 — Report
-Markdown + JSON written to `tests/robustness-reports/2026-05-17-qwen-3.5-122b-n100.md`:
+Markdown + JSON written to `tests/robustness-reports/2026-05-17-qwen-3.5-122b-sovereign-n100.md`:
 
 ```markdown
 # Robustness Run — 2026-05-17
 
-Model: qwen-3.5-122b  Target: lc-json  Duration: 423s
+Model: qwen-3.5-122b-sovereign  Target: lc-json  Duration: 423s
 Total samples: 89  Pass: 67 (75%)  Fail: 22
 
 ## Failures by Category
