@@ -101,6 +101,15 @@ async function main() {
       }
 
       const runMeta = { model, target, started_at: startedAt, duration_ms: Date.now() - new Date(startedAt).getTime() };
+      if (flags['with-mad']) {
+        try {
+          const { runMadCheck } = await import('./mad-validator.js');
+          runMeta.madResult = await runMadCheck({});
+          console.log(`[robustness] MaD check: ${runMeta.madResult.passed}/${runMeta.madResult.total} passed`);
+        } catch (e) {
+          console.warn(`[robustness] MaD check skipped: ${e.message}`);
+        }
+      }
       const { markdown, json } = generateReport(runMeta, classified);
 
       const reportDir = resolve(__dirname, '../../', config.report_dir);

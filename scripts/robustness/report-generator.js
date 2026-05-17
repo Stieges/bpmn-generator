@@ -65,6 +65,17 @@ function renderMarkdown(runMeta, totals, byCategory, newFixturesByCategory, reco
   }
   lines.push('');
 
+  // MaD external sanity check section (only when runMeta.madResult is present)
+  if (runMeta.madResult) {
+    lines.push('## External Sanity Check (MaD subset)');
+    lines.push('');
+    lines.push(`MaD samples: ${runMeta.madResult.total}  Passed: ${runMeta.madResult.passed}  Failed: ${runMeta.madResult.failed}`);
+    for (const [cat, count] of Object.entries(runMeta.madResult.byCategory || {})) {
+      lines.push(`- ${cat}: ${count}`);
+    }
+    lines.push('');
+  }
+
   if (drift && !drift.firstRun && (drift.newFingerprints.length > 0 || drift.closedFingerprints.length > 0)) {
     lines.push('## Drift vs Previous Run');
     lines.push('');
