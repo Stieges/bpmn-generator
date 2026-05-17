@@ -704,3 +704,39 @@ describe('robustness/report-generator — computeDrift', () => {
     expect(drift.firstRun).toBe(true);
   });
 });
+
+describe('robustness — end-to-end with mocked LLM and tmpfs', () => {
+  let tmpRoot;
+  beforeEach(() => { tmpRoot = mkdtempSync(`${tmpdir()}/robustness-e2e-`); });
+  afterEach(() => { rmSync(tmpRoot, { recursive: true, force: true }); });
+
+  test('valid LC sample passes through full pipeline', async () => {
+    const { generateSamples } = await import('./robustness/synthetic-generator.js');
+    const { runStressTest } = await import('./robustness/stress-tester.js');
+    const { classify } = await import('./robustness/failure-classifier.js');
+    const { persistFailure } = await import('./robustness/fixture-persister.js');
+
+    const fixtureLc = loadFixture('simple-approval.json');
+    const mockLlm = async (system) => {
+      if (system.toLowerCase().includes('json')) return JSON.stringify(fixtureLc);
+      return 'A simple approval process where requests are reviewed and approved.';
+    };
+
+    const catalog = {
+      domains: ['test'],
+      complexity: { simple: { minNodes: 5, maxNodes: 10, gateways: 0 } },
+      patterns: ['none'],
+      stress_modes: ['normal']
+    };
+    const samples = await generateSamples({ catalog, n: 1, llm: mockLlm, target: 'lc-json', model: 'mock', seed: 1 });
+    expect(samples).toHaveLength(1);
+
+    const results = await runStressTest(samples, { timeoutMs: 15_000 });
+    const classified = results.map(r => ({ ...r, ...classify(r) }));
+    expect(classified[0].category).toBe('pass');
+
+    // No persistence expected for pass
+    const persistResult = await persistFailure(classified[0], classified[0].sample, { fixtureRoot: tmpRoot });
+    expect(persistResult.wrote).toBe('skipped-no-bucket');
+  }, 20_000);
+});
