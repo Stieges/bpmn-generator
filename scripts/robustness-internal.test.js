@@ -613,3 +613,36 @@ describe('robustness/fixture-persister — persistFailure', () => {
     expect(meta.seen).toBe(2);
   });
 });
+
+describe('robustness/fixture-persister — llm-signal gate', () => {
+  let tmpRoot;
+  beforeEach(() => { tmpRoot = mkdtempSync(`${tmpdir()}/robustness-signal-`); });
+  afterEach(() => { rmSync(tmpRoot, { recursive: true, force: true }); });
+
+  const record = {
+    category: 'schema-violation',
+    bucket: 'llm-signal',
+    fingerprint: 'sig123',
+    evidence: { schemaErrors: [{ msg: 'x' }] },
+  };
+  const sample = {
+    id: 'test',
+    description: 'd',
+    lcJson: {},
+    meta: { model: 't', target: 'lc-json' },
+  };
+
+  test('default OFF → not written', async () => {
+    const r = await persistFailure(record, sample, { fixtureRoot: tmpRoot });
+    expect(r.wrote).toBe('skipped-gated');
+    const llmSignalFile = `${tmpRoot}/llm-signal/schema-violation-sig123.json`;
+    expect(existsSync(llmSignalFile)).toBe(false);
+  });
+
+  test('flag ON → written', async () => {
+    const r = await persistFailure(record, sample, { fixtureRoot: tmpRoot, persistLlmSignal: true });
+    expect(r.wrote).toBe('new');
+    const llmSignalFile = `${tmpRoot}/llm-signal/schema-violation-sig123.json`;
+    expect(existsSync(llmSignalFile)).toBe(true);
+  });
+});
