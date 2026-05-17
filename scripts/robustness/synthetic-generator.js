@@ -131,7 +131,7 @@ export async function generateSamples({
     try { description = (await llm(sysA, userA, {})).trim(); }
     catch (e) { continue; }
 
-    // Step 2: structure (LC-JSON path; DOT path added in Phase 5)
+    // Step 2: structure (LC-JSON path; DOT path)
     if (target === 'lc-json') {
       const { system: sysB, user: userB } = buildLcJsonPrompt(description);
       let rawOutput;
@@ -140,6 +140,20 @@ export async function generateSamples({
       const lcJson = extractJson(rawOutput);
       if (!lcJson) continue;  // unparseable — skip silently
       samples.push(buildSample({ cell, seq, description, lcJson, target, model }));
+    }
+
+    if (target === 'dot') {
+      const { dotToLogicCore } = await import('../dot.js');
+      const { system: sysB, user: userB } = buildDotPrompt(description);
+      let rawOutput;
+      try { rawOutput = await llm(sysB, userB, {}); }
+      catch (e) { continue; }
+      const rawDot = extractDot(rawOutput);
+      if (!rawDot) continue;
+      let lcJson;
+      try { lcJson = dotToLogicCore(rawDot); }
+      catch (e) { continue; }
+      samples.push(buildSample({ cell, seq, description, lcJson, rawDot, target, model }));
     }
   }
 

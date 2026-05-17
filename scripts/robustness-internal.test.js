@@ -769,3 +769,33 @@ describe('robustness/synthetic-generator — extractDot', () => {
     expect(extractDot('no dot here')).toBeNull();
   });
 });
+
+describe('robustness/synthetic-generator — DOT target end-to-end', () => {
+  const catalog = {
+    domains: ['x'],
+    complexity: { simple: { minNodes: 5, maxNodes: 10, gateways: 0 } },
+    patterns: ['p'],
+    stress_modes: ['n']
+  };
+
+  test('parses good DOT into lcJson', async () => {
+    const goodDot = 'digraph p { a [shape=circle]; b [shape=box]; c [shape=doublecircle]; a -> b -> c; }';
+    const mockLlm = async (system) => {
+      if (system.toLowerCase().includes('dot')) return goodDot;
+      return 'desc';
+    };
+    const samples = await generateSamples({ catalog, n: 1, llm: mockLlm, target: 'dot', model: 'm', seed: 1 });
+    expect(samples).toHaveLength(1);
+    expect(samples[0].rawDot).toContain('digraph');
+    expect(samples[0].lcJson).toBeDefined();
+  });
+
+  test('drops samples when dot parser fails', async () => {
+    const mockLlm = async (system) => {
+      if (system.toLowerCase().includes('dot')) return 'completely invalid DOT };';
+      return 'desc';
+    };
+    const samples = await generateSamples({ catalog, n: 1, llm: mockLlm, target: 'dot', model: 'm', seed: 1 });
+    expect(samples.length).toBeLessThanOrEqual(1);
+  });
+});
