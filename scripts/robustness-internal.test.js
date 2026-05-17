@@ -28,7 +28,7 @@ describe('robustness/cli — parseArgs', () => {
 describe('robustness/cli — loadConfig', () => {
   test('loads default model from config.json', () => {
     const cfg = loadConfig();
-    expect(cfg.model).toBe('qwen-3.5-122b');
+    expect(cfg.model).toBe('qwen-3.5-122b-sovereign');
     expect(cfg.endpoint.url_env).toBe('AIHUB_URL');
   });
 });

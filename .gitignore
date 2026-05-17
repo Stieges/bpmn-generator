@@ -18,6 +18,9 @@ Thumbs.db
 *.swp
 *~
 
+# Tooling artifacts
+.playwright-mcp/
+
 # Environment
 .env
 .env.*
