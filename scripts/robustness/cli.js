@@ -70,10 +70,23 @@ async function main() {
 
       console.log(`[robustness] Run started — model: ${model}, n: ${n}, target: ${target}, seed: ${seed}`);
 
-      const samples = await generateSamples({ catalog, n, llm, target, model, seed });
-      console.log(`[robustness] Generated ${samples.length} samples (out of ${n} attempts)`);
+      if (!['lc-json', 'dot', 'both'].includes(target)) {
+        console.error(`Invalid target: ${target}. Use lc-json | dot | both`);
+        process.exit(2);
+      }
 
-      const results = await runStressTest(samples, { timeoutMs: config.timeout_seconds * 1000 });
+      let allSamples = [];
+      if (target === 'both') {
+        const halfN = Math.ceil(n / 2);
+        const a = await generateSamples({ catalog, n: halfN, llm, target: 'lc-json', model, seed });
+        const b = await generateSamples({ catalog, n: n - halfN, llm, target: 'dot', model, seed: seed + 1 });
+        allSamples = [...a, ...b];
+      } else {
+        allSamples = await generateSamples({ catalog, n, llm, target, model, seed });
+      }
+      console.log(`[robustness] Generated ${allSamples.length} samples (out of ${n} attempts, target=${target})`);
+
+      const results = await runStressTest(allSamples, { timeoutMs: config.timeout_seconds * 1000 });
       const classified = results.map(r => ({ ...r, ...classify(r) }));
 
       for (const c of classified) {
