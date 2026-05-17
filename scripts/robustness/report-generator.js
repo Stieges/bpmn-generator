@@ -10,9 +10,11 @@ export function generateReport(runMeta, records) {
     records.filter(r => r.bucket && r.wrote === 'new'),
     r => r.category
   );
+  const fingerprints = [...new Set(records.filter(r => r.fingerprint).map(r => r.fingerprint))];
+  const drift = computeDrift(runMeta.previousReportJson || null, { byCategory, fingerprints });
 
-  const json = { runMeta, totals, byCategory, newFixturesByCategory };
-  const markdown = renderMarkdown(runMeta, totals, byCategory, newFixturesByCategory, records);
+  const json = { runMeta, totals, byCategory, newFixturesByCategory, fingerprints, drift };
+  const markdown = renderMarkdown(runMeta, totals, byCategory, newFixturesByCategory, records, drift);
   return { markdown, json };
 }
 
@@ -33,7 +35,7 @@ function countBy(arr, fn) {
   return out;
 }
 
-function renderMarkdown(runMeta, totals, byCategory, newFixturesByCategory, records) {
+function renderMarkdown(runMeta, totals, byCategory, newFixturesByCategory, records, drift) {
   const lines = [];
   lines.push(`# Robustness Run — ${runMeta.started_at?.slice(0, 10) || 'unknown'}`);
   lines.push('');
@@ -63,5 +65,26 @@ function renderMarkdown(runMeta, totals, byCategory, newFixturesByCategory, reco
   }
   lines.push('');
 
+  if (drift && !drift.firstRun && (drift.newFingerprints.length > 0 || drift.closedFingerprints.length > 0)) {
+    lines.push('## Drift vs Previous Run');
+    lines.push('');
+    if (drift.newFingerprints.length > 0) {
+      lines.push(`- ⚠️ New fingerprints (regressions): ${drift.newFingerprints.join(', ')}`);
+    }
+    if (drift.closedFingerprints.length > 0) {
+      lines.push(`- ✅ Closed fingerprints (fixed): ${drift.closedFingerprints.join(', ')}`);
+    }
+    lines.push('');
+  }
+
   return lines.join('\n');
+}
+
+export function computeDrift(previous, current) {
+  if (!previous) return { firstRun: true, newFingerprints: [], closedFingerprints: [] };
+  const prevSet = new Set(previous.fingerprints || []);
+  const currSet = new Set(current.fingerprints || []);
+  const newFingerprints = [...currSet].filter(x => !prevSet.has(x));
+  const closedFingerprints = [...prevSet].filter(x => !currSet.has(x));
+  return { firstRun: false, newFingerprints, closedFingerprints };
 }

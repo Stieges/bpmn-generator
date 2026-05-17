@@ -647,7 +647,7 @@ describe('robustness/fixture-persister — llm-signal gate', () => {
   });
 });
 
-import { generateReport } from './robustness/report-generator.js';
+import { generateReport, computeDrift } from './robustness/report-generator.js';
 
 describe('robustness/report-generator — generateReport', () => {
   const runMeta = {
@@ -680,5 +680,27 @@ describe('robustness/report-generator — generateReport', () => {
     ];
     const { markdown } = generateReport(runMeta, records);
     expect(markdown.toLowerCase()).toContain('target');
+  });
+});
+
+describe('robustness/report-generator — computeDrift', () => {
+  test('detects new fingerprints', () => {
+    const prev = { byCategory: { 'elk-error': 2 }, fingerprints: ['a1', 'a2'] };
+    const curr = { byCategory: { 'elk-error': 3 }, fingerprints: ['a1', 'a2', 'a3'] };
+    const drift = computeDrift(prev, curr);
+    expect(drift.newFingerprints).toEqual(['a3']);
+    expect(drift.closedFingerprints).toEqual([]);
+  });
+
+  test('detects closed fingerprints', () => {
+    const prev = { byCategory: { 'elk-error': 2 }, fingerprints: ['a1', 'a2'] };
+    const curr = { byCategory: { 'elk-error': 1 }, fingerprints: ['a1'] };
+    const drift = computeDrift(prev, curr);
+    expect(drift.closedFingerprints).toEqual(['a2']);
+  });
+
+  test('handles no previous run', () => {
+    const drift = computeDrift(null, { byCategory: { 'elk-error': 1 }, fingerprints: ['a1'] });
+    expect(drift.firstRun).toBe(true);
   });
 });
