@@ -1,0 +1,33 @@
+{
+  "pools": [{
+    "id": "Process_Sparse",
+    "name": "Sparse Lanes Test",
+    "lanes": [
+      { "id": "laneA", "name": "Frontend" },
+      { "id": "laneB", "name": "Backend" },
+      { "id": "laneC", "name": "Ops" },
+      { "id": "laneD", "name": "QA" }
+    ],
+    "nodes": [
+      {"id": "s",  "type": "startEvent", "name": "Start",  "lane": "laneA"},
+      {"id": "a1", "type": "userTask", "name": "A1", "lane": "laneA"},
+      {"id": "a2", "type": "userTask", "name": "A2", "lane": "laneA"},
+      {"id": "a3", "type": "userTask", "name": "A3", "lane": "laneA"},
+      {"id": "a4", "type": "userTask", "name": "A4", "lane": "laneA"},
+      {"id": "b1", "type": "userTask", "name": "Validate", "lane": "laneB"},
+      {"id": "c1", "type": "userTask", "name": "Deploy",   "lane": "laneC"},
+      {"id": "d1", "type": "userTask", "name": "Test",     "lane": "laneD"},
+      {"id": "e",  "type": "endEvent", "name": "End", "lane": "laneD"}
+    ],
+    "edges": [
+      {"id": "f1", "source": "s",  "target": "a1"},
+      {"id": "f2", "source": "a1", "target": "a2"},
+      {"id": "f3", "source": "a2", "target": "a3"},
+      {"id": "f4", "source": "a3", "target": "a4"},
+      {"id": "f5", "source": "a4", "target": "b1"},
+      {"id": "f6", "source": "b1", "target": "c1"},
+      {"id": "f7", "source": "c1", "target": "d1"},
+      {"id": "f8", "source": "d1", "target": "e"}
+    ]
+  }]
+}
