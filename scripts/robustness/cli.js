@@ -101,9 +101,64 @@ async function main() {
       console.log(`\n[robustness] Report written to ${reportDir}/${baseName}.{md,json}`);
       break;
     }
-    case 'triage':
-      console.log('[robustness] triage — not implemented yet (Phase 4)');
-      break;
+    case 'triage': {
+  const { readdirSync, existsSync, readFileSync, renameSync, appendFileSync, unlinkSync } = await import('fs');
+  const { resolve, join } = await import('path');
+  const readline = await import('readline');
+
+  const triageDir = resolve(__dirname, '../../', config.fixture_dir, 'triage');
+  const autoDir = resolve(__dirname, '../../', config.fixture_dir, 'auto');
+  const dismissedLog = resolve(__dirname, '../../', config.fixture_dir, 'dismissed.log');
+
+  if (!existsSync(triageDir)) {
+    console.log('[triage] No triage directory yet.');
+    break;
+  }
+
+  const items = readdirSync(triageDir)
+    .filter(f => f.endsWith('.meta.json'))
+    .map(f => ({ name: f, meta: JSON.parse(readFileSync(join(triageDir, f), 'utf8')) }));
+
+  if (items.length === 0) {
+    console.log('[triage] No pending triage items.');
+    break;
+  }
+
+  console.log(`Pending triage items: ${items.length}\n`);
+  items.forEach((item, i) => {
+    console.log(`[${i + 1}] ${item.meta.category}-${item.meta.fingerprint}   (seen ${item.meta.seen}x)`);
+    console.log(`    description: ${(item.meta.description || '').slice(0, 80)}...`);
+    console.log(`    evidence:    ${JSON.stringify(item.meta.evidence).slice(0, 100)}`);
+  });
+
+  console.log('\nCommands: promote N | dismiss N | defer N | quit');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.setPrompt('> ');
+  rl.prompt();
+  rl.on('line', (line) => {
+    const [cmd, nStr] = line.trim().split(/\s+/);
+    const n = parseInt(nStr, 10);
+    if (cmd === 'quit') { rl.close(); return; }
+    if (isNaN(n) || n < 1 || n > items.length) { rl.prompt(); return; }
+    const item = items[n - 1];
+    const base = item.name.replace('.meta.json', '');
+    if (cmd === 'promote') {
+      renameSync(join(triageDir, `${base}.json`), join(autoDir, `${base}.json`));
+      renameSync(join(triageDir, `${base}.meta.json`), join(autoDir, `${base}.meta.json`));
+      console.log(`Promoted ${base} to auto/`);
+    } else if (cmd === 'dismiss') {
+      unlinkSync(join(triageDir, `${base}.json`));
+      unlinkSync(join(triageDir, `${base}.meta.json`));
+      appendFileSync(dismissedLog, JSON.stringify({ at: new Date().toISOString(), base, meta: item.meta }) + '\n');
+      console.log(`Dismissed ${base}`);
+    } else if (cmd === 'defer') {
+      console.log(`Deferred ${base}`);
+    }
+    rl.prompt();
+  });
+  rl.on('close', () => process.exit(0));
+  return;  // important: return instead of break, since rl is async
+}
     case 'mad-check':
       console.log('[robustness] mad-check — not implemented yet (Phase 6)');
       break;
