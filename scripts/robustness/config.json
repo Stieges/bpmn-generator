@@ -1,0 +1,17 @@
+{
+  "model": "qwen-3.5-122b-sovereign",
+  "fallback_models": ["qwen-3.6-35b-sovereign", "gpt-oss-120b-sovereign"],
+  "default_n": 100,
+  "default_target": "lc-json",
+  "timeout_seconds": 30,
+  "parallelism": 1,
+  "persist_llm_signal": false,
+  "report_dir": "tests/robustness-reports",
+  "fixture_dir": "tests/fixtures/robustness",
+  "endpoint": {
+    "url_env": "AIHUB_URL",
+    "key_env": "AIHUB_KEY",
+    "url": null,
+    "key": null
+  }
+}
