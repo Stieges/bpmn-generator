@@ -7,7 +7,7 @@
  * - estimateTextWidth:          char-count-based text width heuristic
  * - computeDynamicLaneHeaders:  per-pool dynamic lane header strip width
  * - repairEdgeLabels:           bbox-collision-based label nudging
- * - compactLanes:               shrink lanes to content, shift nodes + waypoints
+ * - compactLanes:               shrink lanes to content + shift subsequent laneCoords (nodes/waypoints in a follow-up)
  */
 
 import { wrapTextByPx, LANE_HEADER_W } from './utils.js';
@@ -181,8 +181,9 @@ export function repairEdgeLabels(coordMap, opts = {}) {
 const LANE_COMPACT_PADDING = 20;
 
 /**
- * Shrink lanes to their content bbox + padding. Shifts subsequent lanes
- * upward and adjusts edge waypoints accordingly.
+ * Shrink lanes to their content bbox + padding. Shifts subsequent lanes upward in laneCoords.
+ *
+ * NOTE: This pass only updates `laneCoords` and `poolCoords`. Node coordinates and edge waypoints are NOT yet adjusted — that's planned in a follow-up pass.
  *
  * Strategy: lane-by-lane from top to bottom. For each lane, compute content
  * bbox from the nodes that belong to it (via process.nodes[i].lane), clamp

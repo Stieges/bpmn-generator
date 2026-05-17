@@ -268,12 +268,35 @@ describe('compactLanes — basic shrink', () => {
       },
       edgeCoords: {}
     };
-    const proc = { pools: [{ id: 'p1', lanes: [
-      { id: 'laneA' }, { id: 'laneB' }
-    ]}], nodes: [{ id: 'n1', lane: 'laneA' }] };
+    const proc = { pools: [{
+      id: 'p1',
+      lanes: [{ id: 'laneA' }, { id: 'laneB' }],
+      nodes: [{ id: 'n1', lane: 'laneA' }]
+    }] };
     compactLanes(cm, proc, { minLaneHeight: 60 });
-    expect(cm.laneCoords.laneA.h).toBeLessThan(200);
-    expect(cm.laneCoords.laneA.h).toBeGreaterThanOrEqual(60);
+    // n1 at y=20 h=80 → content height 80; +2*20 padding = 120
+    expect(cm.laneCoords.laneA.h).toBe(120);
+  });
+
+  test('shifts subsequent lanes upward by cumulative delta', () => {
+    const cm = {
+      coords: { n1: { x: 50, y: 20, w: 100, h: 80 } },
+      poolCoords: { p1: { x: 0, y: 0, w: 300, h: 400, laneHeaderWidth: 40 } },
+      laneCoords: {
+        laneA: { x: 40, y:   0, w: 260, h: 200 },
+        laneB: { x: 40, y: 200, w: 260, h: 200 }
+      },
+      edgeCoords: {}
+    };
+    const proc = { pools: [{
+      id: 'p1',
+      lanes: [{ id: 'laneA' }, { id: 'laneB' }],
+      nodes: [{ id: 'n1', lane: 'laneA' }]
+    }] };
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    // laneA shrinks from 200→120 (delta 80). laneB shifts up by 80.
+    expect(cm.laneCoords.laneB.y).toBe(120);
+    expect(cm.laneCoords.laneB.h).toBe(60); // empty → minLaneHeight
   });
 
   test('respects minLaneHeight for empty lanes', () => {
