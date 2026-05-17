@@ -469,3 +469,73 @@ describe('robustness/stress-tester — runStressTest', () => {
     expect(results[0]).toHaveProperty('failure');
   }, 20_000);
 });
+
+import { classify } from './robustness/failure-classifier.js';
+
+describe('robustness/failure-classifier — classify', () => {
+  test('pre-filter schema fail → schema-violation, llm-signal bucket', () => {
+    const result = {
+      sample: { id: 'x', lcJson: { pools: [] } },
+      preFilter: { passed: false, schemaErrors: [{ msg: 'bad' }], ruleErrors: [] },
+      failure: { stage: 'pre-filter', schemaErrors: [{ msg: 'bad' }] },
+    };
+    const c = classify(result);
+    expect(c.category).toBe('schema-violation');
+    expect(c.bucket).toBe('llm-signal');
+  });
+
+  test('pre-filter rule fail → rule-violation, llm-signal bucket', () => {
+    const result = {
+      sample: { id: 'x', lcJson: { pools: [] } },
+      preFilter: { passed: false, schemaErrors: [], ruleErrors: [{ id: 'S01' }] },
+      failure: { stage: 'pre-filter', ruleErrors: [{ id: 'S01' }] },
+    };
+    expect(classify(result).category).toBe('rule-violation');
+    expect(classify(result).bucket).toBe('llm-signal');
+  });
+
+  test('pipeline-throw → elk-error, auto bucket', () => {
+    const result = {
+      sample: { id: 'x', lcJson: { pools: [] } },
+      preFilter: { passed: true },
+      pipelineResult: { failedStep: 'pipeline-throw', error: 'ElkError: cyclic' },
+      failure: { stage: 'pipeline', failedStep: 'pipeline-throw', error: 'ElkError: cyclic' },
+    };
+    expect(classify(result).category).toBe('elk-error');
+    expect(classify(result).bucket).toBe('auto');
+  });
+
+  test('timeout → timeout, auto', () => {
+    const result = {
+      sample: { id: 'x', lcJson: { pools: [] } },
+      preFilter: { passed: true },
+      pipelineResult: { failedStep: 'timeout', error: 'timeout' },
+      failure: { stage: 'pipeline', failedStep: 'timeout', error: 'timeout' },
+    };
+    expect(classify(result).category).toBe('timeout');
+  });
+
+  test('roundtrip break → roundtrip-break, auto', () => {
+    const result = {
+      sample: { id: 'x', lcJson: { pools: [] } },
+      preFilter: { passed: true },
+      pipelineResult: { failedStep: null },
+      roundtripResult: { equal: false, delta: {} },
+      failure: { stage: 'roundtrip', delta: {} },
+    };
+    expect(classify(result).category).toBe('roundtrip-break');
+    expect(classify(result).bucket).toBe('auto');
+  });
+
+  test('no failure → category:pass, no bucket', () => {
+    const result = {
+      sample: { id: 'x', lcJson: { pools: [] } },
+      preFilter: { passed: true },
+      pipelineResult: { failedStep: null },
+      roundtripResult: { equal: true },
+      failure: null,
+    };
+    expect(classify(result).category).toBe('pass');
+    expect(classify(result).bucket).toBeNull();
+  });
+});
