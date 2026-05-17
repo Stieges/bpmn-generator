@@ -25,3 +25,7 @@ Thumbs.db
 # Runtime artifacts
 audit/
 dead-letter/
+
+# Robustness run artifacts (the dir is committed via .gitkeep, but reports are local)
+tests/robustness-reports/*.md
+tests/robustness-reports/*.json
