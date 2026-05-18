@@ -247,11 +247,18 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`BPMN Generator HTTP API listening on port ${PORT}`);
-  console.log(`  POST /api/v1/generate   — Logic-Core → BPMN + SVG`);
-  console.log(`  POST /api/v1/validate   — Logic-Core → Validation`);
-  console.log(`  POST /api/v1/import     — BPMN XML → Logic-Core`);
-  console.log(`  POST /api/v1/orchestrate — Multi-agent review + generate + compliance`);
-  console.log(`  GET  /health            — Health check`);
-});
+// Only listen when this module is the entry point. When imported by tests
+// (or other modules) it stays inert — prevents EADDRINUSE under Jest workers.
+const isEntryPoint = import.meta.url === `file://${process.argv[1]}`;
+if (isEntryPoint) {
+  server.listen(PORT, () => {
+    console.log(`BPMN Generator HTTP API listening on port ${PORT}`);
+    console.log(`  POST /api/v1/generate   — Logic-Core → BPMN + SVG`);
+    console.log(`  POST /api/v1/validate   — Logic-Core → Validation`);
+    console.log(`  POST /api/v1/import     — BPMN XML → Logic-Core`);
+    console.log(`  POST /api/v1/orchestrate — Multi-agent review + generate + compliance`);
+    console.log(`  GET  /health            — Health check`);
+  });
+}
+
+export { server };
