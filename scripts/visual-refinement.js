@@ -7,7 +7,7 @@
  * - estimateTextWidth:          char-count-based text width heuristic
  * - computeDynamicLaneHeaders:  per-pool dynamic lane header strip width
  * - repairEdgeLabels:           bbox-collision-based label nudging
- * - compactLanes:               shrink lanes to content + shift subsequent laneCoords (nodes/waypoints in a follow-up)
+ * - compactLanes:               reduce lane height to content bbox + LANE_COMPACT_PADDING; cascade-shift nodes + edge waypoints
  */
 
 import { wrapTextByPx, LANE_HEADER_W } from './utils.js';
@@ -181,13 +181,18 @@ export function repairEdgeLabels(coordMap, opts = {}) {
 const LANE_COMPACT_PADDING = 20;
 
 /**
- * Shrink lanes to their content bbox + padding. Shifts subsequent lanes upward in laneCoords.
+ * Reduce each non-empty lane's height to `content_bbox + 2 * LANE_COMPACT_PADDING`,
+ * with a `minLaneHeight` floor for empty lanes. Cascade-shifts subsequent lanes,
+ * the nodes they contain, and edge waypoints up by the cumulative delta.
  *
- * NOTE: This pass only updates `laneCoords` and `poolCoords`. Node coordinates and edge waypoints are NOT yet adjusted — that's planned in a follow-up pass.
+ * Effect in practice: approximately uniform ~45px savings per non-empty lane on
+ * typical layouts. The pre-refinement padding from `coordinates.js` sums to ~85px
+ * (LANE_PADDING + EXTERNAL_LABEL_H + LANE_PADDING) and the compact padding here
+ * sums to 40px — the `content_h` terms cancel out, leaving a near-constant delta
+ * independent of lane density. Lanes whose ELK output already fits within
+ * `minLaneHeight + 2 * padding` are not shrunk.
  *
- * Strategy: lane-by-lane from top to bottom. For each lane, compute content
- * bbox from the nodes that belong to it (via process.nodes[i].lane), clamp
- * to minLaneHeight, apply delta.
+ * Idempotent: running twice produces the same result as running once.
  */
 export function compactLanes(coordMap, process, opts = {}) {
   const minH = opts.minLaneHeight ?? 80;

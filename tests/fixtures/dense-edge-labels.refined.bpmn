@@ -85,10 +85,10 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Participant_Process_Dense_di" bpmnElement="Participant_Process_Dense" isHorizontal="true">
-        <dc:Bounds x="30" y="20" width="762" height="725" />
+        <dc:Bounds x="30" y="20" width="762" height="680" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="l1_di" bpmnElement="l1" isHorizontal="true">
-        <dc:Bounds x="60" y="20" width="732" height="725" />
+        <dc:Bounds x="60" y="20" width="732" height="680" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s1_di" bpmnElement="s1">
         <dc:Bounds x="90" y="339" width="36" height="36" />

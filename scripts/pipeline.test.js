@@ -2197,3 +2197,19 @@ describe('Pass 5 (ELK wrapping) metric assertions', () => {
     }
   });
 });
+
+describe('sparse-lanes matrix', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/sparse-lanes.json', 'utf8'));
+
+  test('matches .expected golden (refinement off)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/sparse-lanes.expected.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/sparse-lanes.expected.svg', 'utf8'));
+  });
+
+  test('matches .refined golden (refinement on)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/sparse-lanes.refined.bpmn', 'utf8'));
+    expect(r.svg).toBe(readFileSync('../tests/fixtures/sparse-lanes.refined.svg', 'utf8'));
+  });
+});

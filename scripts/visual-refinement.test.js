@@ -339,4 +339,29 @@ describe('compactLanes — basic shrink', () => {
     // The waypoint at y=60 (inside laneA) should NOT shift
     expect(cm.edgeCoords.e1[0].y).toBe(60);
   });
+
+  test('is idempotent — running twice equals running once', () => {
+    const cm = {
+      coords: { n1: { x: 50, y: 20, w: 100, h: 80 } },
+      poolCoords: { p1: { x: 0, y: 0, w: 300, h: 400, laneHeaderWidth: 40 } },
+      laneCoords: {
+        laneA: { x: 40, y:   0, w: 260, h: 200 },
+        laneB: { x: 40, y: 200, w: 260, h: 200 }
+      },
+      edgeCoords: { e1: [{ x: 100, y: 60 }, { x: 100, y: 260 }] }
+    };
+    const proc = { pools: [{
+      id: 'p1',
+      lanes: [{ id: 'laneA' }, { id: 'laneB' }],
+      nodes: [{ id: 'n1', lane: 'laneA' }]
+    }] };
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    const snap1 = structuredClone({
+      coords: cm.coords, laneCoords: cm.laneCoords, edgeCoords: cm.edgeCoords
+    });
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect({
+      coords: cm.coords, laneCoords: cm.laneCoords, edgeCoords: cm.edgeCoords
+    }).toEqual(snap1);
+  });
 });

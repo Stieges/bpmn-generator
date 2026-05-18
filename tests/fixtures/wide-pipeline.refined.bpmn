@@ -171,10 +171,10 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Participant_Process_Wide_di" bpmnElement="Participant_Process_Wide" isHorizontal="true">
-        <dc:Bounds x="30" y="20" width="4022" height="889" />
+        <dc:Bounds x="30" y="20" width="4022" height="844" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="l1_di" bpmnElement="l1" isHorizontal="true">
-        <dc:Bounds x="60" y="20" width="3992" height="889" />
+        <dc:Bounds x="60" y="20" width="3992" height="844" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_di" bpmnElement="s">
         <dc:Bounds x="90" y="59" width="36" height="36" />

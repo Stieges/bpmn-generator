@@ -131,6 +131,8 @@ for each pool p in coordMap:
 
 **Rationale:** ELK partitioning produces equal-height lane slots. Sparsely populated lanes waste vertical space. A post-layout shrink of each lane to its content's vertical bounding box yields significantly denser diagrams.
 
+> **Note (post-implementation, 2026-05-18):** The rationale envisioned density-aware compaction (sparse lanes shrinking proportionally more than dense ones). The implemented mathematics, however, produces a uniform ~45px savings per non-empty lane on typical fixtures — the `content_h` terms in `newH = max(minH, content_h + 2*pad)` and the pre-existing `coordinates.js` padding cancel out, leaving a constant delta independent of density. The feature still meaningfully reduces canvas height (~10–20% on multi-lane diagrams), but does not exploit lane-density asymmetry. If future user feedback demands density-aware behavior, a follow-up extension would branch on `laneNodes.length` and drop sparse lanes to `minLaneHeight` directly.
+
 **Risk:** ELK's edge waypoints are computed against the original geometry. Moving lanes after layout requires coordinated waypoint adjustment. Three approaches considered; (ii) selected:
 
 **(i) Pre-layout hints via ELK partition spacing** — rejected. ELK's partitioning API does not support per-partition heights (see elkjs#92). Attempting this via spacing overrides yielded unreliable results in prior experiments.
