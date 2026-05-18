@@ -1,12 +1,19 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { auditLog } from './audit.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const deadLetterDir = join(__dirname, '..', 'dead-letter');
+function resolveDeadLetterDir() {
+  if (process.env.DEAD_LETTER_PATH) return process.env.DEAD_LETTER_PATH;
+  return join(tmpdir(), 'bpmn-generator', 'dead-letter');
+}
 
+const deadLetterDir = resolveDeadLetterDir();
 mkdirSync(deadLetterDir, { recursive: true });
+
+export function getDeadLetterDir() {
+  return deadLetterDir;
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

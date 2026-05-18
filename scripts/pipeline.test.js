@@ -1841,6 +1841,42 @@ describe('http-server production auth gate', () => {
   });
 });
 
+describe('audit/dead-letter path configuration', () => {
+  test('audit module defaults to os.tmpdir()/bpmn-generator/audit/', async () => {
+    delete process.env.AUDIT_LOG_PATH;
+    const os = await import('node:os');
+    // cache-bust the import so module-init re-evaluates env
+    const { getAuditPath } = await import(`./audit.js?cb=default-${Date.now()}`);
+    const p = getAuditPath();
+    expect(p.startsWith(os.tmpdir())).toBe(true);
+    expect(p).toMatch(/bpmn-generator/);
+    expect(p).toMatch(/\.jsonl$/);
+  });
+
+  test('audit module honors AUDIT_LOG_PATH env', async () => {
+    process.env.AUDIT_LOG_PATH = '/tmp/test-audit-' + Date.now() + '.jsonl';
+    const expected = process.env.AUDIT_LOG_PATH;
+    const fs = await import('node:fs');
+    const { auditLog, getAuditPath } = await import(`./audit.js?cb=env-${Date.now()}`);
+    expect(getAuditPath()).toBe(expected);
+    auditLog({ event: 'env-path-test' });
+    expect(fs.existsSync(expected)).toBe(true);
+    fs.unlinkSync(expected);
+    delete process.env.AUDIT_LOG_PATH;
+  });
+
+  test('delivery module honors DEAD_LETTER_PATH env', async () => {
+    const dir = '/tmp/test-dl-' + Date.now();
+    process.env.DEAD_LETTER_PATH = dir;
+    const { getDeadLetterDir } = await import(`./delivery.js?cb=env-${Date.now()}`);
+    expect(getDeadLetterDir()).toBe(dir);
+    const fs = await import('node:fs');
+    expect(fs.existsSync(dir)).toBe(true);
+    fs.rmdirSync(dir);
+    delete process.env.DEAD_LETTER_PATH;
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════
 // §16  DOT Format — Round-trip + multi-pool export
 // ═══════════════════════════════════════════════════════════════
