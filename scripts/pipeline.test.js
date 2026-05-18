@@ -1893,6 +1893,34 @@ describe('SVG Golden-File Regression', () => {
       }
       expect(result.bpmnXml).toBe(expected);
     });
+
+    test(`${name}: SVG matches refined golden file`, async () => {
+      const lc = loadFixture(`${name}.json`);
+      const result = await runPipeline(lc, { visualRefinement: true });
+      expect(result.svg).toBeDefined();
+
+      let expected;
+      try {
+        expected = readFileSync(resolve(fixturesDir, `${name}.refined.svg`), 'utf8');
+      } catch {
+        throw new Error(`Golden file missing: tests/fixtures/${name}.refined.svg — run golden file generation first`);
+      }
+      expect(result.svg).toBe(expected);
+    });
+
+    test(`${name}: BPMN XML matches refined golden file`, async () => {
+      const lc = loadFixture(`${name}.json`);
+      const result = await runPipeline(lc, { visualRefinement: true });
+      expect(result.bpmnXml).toBeDefined();
+
+      let expected;
+      try {
+        expected = readFileSync(resolve(fixturesDir, `${name}.refined.bpmn`), 'utf8');
+      } catch {
+        throw new Error(`Golden file missing: tests/fixtures/${name}.refined.bpmn — run golden file generation first`);
+      }
+      expect(result.bpmnXml).toBe(expected);
+    });
   }
 });
 
