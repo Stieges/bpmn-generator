@@ -267,6 +267,14 @@ const server = createServer(async (req, res) => {
       const options = { ruleProfile: body.ruleProfile || null };
 
       // Optional LLM provider for text→BPMN or review-fix loops
+      if (!body.llmConfig && process.env.OPENAI_API_KEY) {
+        body.llmConfig = {
+          baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+          apiKey: process.env.OPENAI_API_KEY,
+          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        };
+      }
+
       if (body.llmConfig) {
         const { baseUrl, apiKey, model, timeout } = body.llmConfig;
         if (!baseUrl || !apiKey || !model) {
@@ -305,6 +313,16 @@ const server = createServer(async (req, res) => {
         history: result.history,
         iterations: result.iterations,
       });
+    }
+
+    // Telemetry
+    if (url === '/api/v1/telemetry') {
+      try {
+        auditLog({ event: 'frontend_event', ...body, ts: new Date().toISOString() });
+        return json(res, 200, { status: 'ok' });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
     }
 
     return json(res, 404, { error: 'Not Found' });

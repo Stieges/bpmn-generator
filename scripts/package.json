@@ -32,7 +32,8 @@
   "scripts": {
     "generate": "node pipeline.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache",
-    "build:skill": "node build-skill.mjs"
+    "build:skill": "node build-skill.mjs",
+    "demo": "AUDIT_LOG_PATH=./audit/bpmn-generator.jsonl node http-server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
