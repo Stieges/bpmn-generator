@@ -20,6 +20,7 @@ import { modelerAgent } from './agents/modeler.js';
 import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
 
 export async function orchestrate(input, options = {}) {
   const maxReviewIterations = options.maxReviewIterations ?? 3;
@@ -54,6 +55,15 @@ export async function orchestrate(input, options = {}) {
 
   if (!state.logicCore) {
     throw new Error('No logicCore — provide text + llmProvider, or a logicCore object');
+  }
+
+  // Schema-strict gate: catch malformed Logic-Core (especially LLM-generated) before
+  // it reaches reviewer/layout phases. Structural defects here are the LLM's fault,
+  // not the pipeline's, and we want them caught at the boundary.
+  const schemaCheck = validateLogicCoreSchema(state.logicCore);
+  if (!schemaCheck.valid) {
+    state.history.push({ agent: 'schema-gate', phase: 'reject', errors: schemaCheck.errors, ts: new Date().toISOString() });
+    throw new Error(`Logic-Core failed schema validation: ${JSON.stringify(schemaCheck.errors.slice(0, 3))}`);
   }
 
   // Phase 2: Review loop

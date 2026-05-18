@@ -218,12 +218,23 @@ Profiles in `rules/*.json` override severities or disable layers.
 - XML escaping via `esc()` from `utils.js`
 - Coordinates always as `{ x, y, width, height }` objects
 
+### Security defaults (HTTP API + MCP)
+
+- `BPMN_API_KEY` env var: required in production (`NODE_ENV=production`), optional in dev. Startup fails if production + missing key.
+- `AUDIT_LOG_PATH` env var: where the audit JSONL is written. Default `<os.tmpdir>/bpmn-generator/audit/bpmn-generator.jsonl`.
+- `DEAD_LETTER_PATH` env var: where failed webhook deliveries are written. Default `<os.tmpdir>/bpmn-generator/dead-letter/`.
+- SSRF: callback URLs are validated against IPv4 private/link-local ranges (10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x), IPv6 (::1, fc00::/7, fe80::/10), and the hostname is DNS-resolved with the resolved IP re-checked against the same denylist.
+- Schema-strict gate: every Logic-Core input at the HTTP entry passes through `scripts/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw.
+- Body size cap: 10 MB. Rate limit: 30 req/min per IP. Both in `scripts/http-server.js`.
+
+See `SECURITY.md` for the threat model and deployment guidance.
+
 ## Do NOT
 
 Anti-patterns that have caused real problems in this codebase. Each rule has a reason; understand it before deciding the rule does not apply.
 
 - **No `require()` or CommonJS.** This is an ES-Modules project (`"type": "module"`). A single `require()` breaks everything downstream. If a CommonJS-only dep is unavoidable, use dynamic `import()` with explicit interop wrapping.
-- **No new runtime dependencies without prior discussion.** Current deps: `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`. Each was a deliberate choice. Adding a fourth widens the threat surface and the supply-chain risk — propose it before installing.
+- **No new runtime dependencies without prior discussion.** Current deps: `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats` (`ajv` + `ajv-formats` added in v3.3 for the JSON Schema strict-gate). Each was a deliberate choice. Adding another widens the threat surface and the supply-chain risk — propose it before installing.
 - **No blind golden-file regeneration.** When a `.expected.bpmn` or `.expected.svg` test fails, inspect the diff first. The test is the alarm — silencing it without understanding is how real regressions enter master.
 - **No LLM output downstream without schema validation.** Any path that lets `references/input-schema.json` be bypassed is a bug. The pipeline assumes well-formed Logic-Core; an LLM that emits malformed JSON should be caught at the gate, not crash at `layout.js`.
 - **No hard-coded constants where `config.json` applies.** Shapes, colors, spacing, font metrics all live in `scripts/config.json` and are loaded via `utils.js → CFG`. Hard-coding bypasses profile customization and tests.

@@ -1,11 +1,13 @@
 import { createServer } from 'node:http';
 import crypto from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { runPipeline, validateLogicCore } from './pipeline.js';
 import { bpmnToLogicCore } from './import.js';
 import { orchestrate } from './orchestrator.js';
 import { createLlmProvider } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.BPMN_API_KEY || null; // null = no auth (dev mode)
@@ -13,6 +15,18 @@ const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
 const RATE_LIMIT = { windowMs: 60_000, max: 30 };
 const rateBuckets = new Map();
 const startTime = Date.now();
+
+export function startupCheck(env, logger = console.warn) {
+  if (env.NODE_ENV === 'production' && !env.BPMN_API_KEY) {
+    throw new Error(
+      'Refusing to start in production without BPMN_API_KEY. ' +
+      'Set BPMN_API_KEY=<secret> or unset NODE_ENV for dev mode.'
+    );
+  }
+  if (!env.BPMN_API_KEY) {
+    logger('⚠️  Starting with no API key — dev mode only. Set BPMN_API_KEY for production.');
+  }
+}
 
 export function parseBody(req) {
   return new Promise((resolve, reject) => {
@@ -39,13 +53,51 @@ export function validateCallbackUrl(url) {
   if (!['http:', 'https:'].includes(u.protocol)) {
     return 'callbackUrl must use http or https';
   }
-  const host = u.hostname;
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' ||
-      host.startsWith('10.') || host.startsWith('192.168.') ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+  if (isInternalHost(u.hostname)) {
     return 'callbackUrl must not target internal networks';
   }
   return null; // valid
+}
+
+export function isInternalHost(host) {
+  // IPv4
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  if (host.startsWith('10.') || host.startsWith('192.168.')) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+  if (/^169\.254\./.test(host)) return true; // link-local + AWS metadata
+  // IPv6
+  if (host === '::1') return true;
+  // Strip brackets if URL passed them through (e.g., [fc00::1] → fc00::1)
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  if (h === '::1') return true;
+  if (/^f[cd][0-9a-f]{0,2}:/.test(h)) return true;  // fc00::/7 (ULA)
+  if (/^fe[89ab][0-9a-f]?:/.test(h)) return true;   // fe80::/10 (link-local)
+  return false;
+}
+
+// Swappable DNS lookup (overridable in tests via _setDnsLookup).
+let _lookup = dnsLookup;
+export function _setDnsLookup(fn) { _lookup = fn || dnsLookup; }
+
+export async function validateCallbackUrlAsync(url) {
+  const sync = validateCallbackUrl(url);
+  if (sync) return sync;
+  const { hostname } = new URL(url);
+  // Strip brackets for IPv6 hostnames
+  const h = hostname.replace(/^\[|\]$/g, '');
+  // If hostname is already an IP, the sync check already covered it.
+  if (/^[\d.]+$/.test(h) || /:/.test(h)) return null;
+  try {
+    const addrs = await _lookup(hostname, { all: true });
+    for (const { address } of addrs) {
+      if (isInternalHost(address)) {
+        return 'callbackUrl resolves to internal network';
+      }
+    }
+  } catch (err) {
+    return `callbackUrl DNS lookup failed: ${err.code || err.message}`;
+  }
+  return null;
 }
 
 function checkAuth(req, res) {
@@ -113,6 +165,11 @@ const server = createServer(async (req, res) => {
     // Generate
     if (url === '/api/v1/generate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/generate' });
+      const schemaCheck = validateLogicCoreSchema(body.logicCore);
+      if (!schemaCheck.valid) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: schemaCheck.errors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+      }
       const result = await runPipeline(body.logicCore);
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
@@ -128,12 +185,13 @@ const server = createServer(async (req, res) => {
 
       let callbackStatus = 'not_requested';
       if (body.callbackUrl) {
+        let urlError;
         try {
-          const urlError = validateCallbackUrl(body.callbackUrl);
-          if (urlError) return json(res, 400, { error: urlError });
+          urlError = await validateCallbackUrlAsync(body.callbackUrl);
         } catch {
           return json(res, 400, { error: 'callbackUrl is not a valid URL' });
         }
+        if (urlError) return json(res, 400, { error: urlError });
         deliver(body.callbackUrl, payload).catch(err => {
           auditLog({ event: 'delivery_failed', correlationId, error: err.message });
         });
@@ -146,6 +204,11 @@ const server = createServer(async (req, res) => {
     // Validate
     if (url === '/api/v1/validate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/validate' });
+      const schemaCheck = validateLogicCoreSchema(body.logicCore);
+      if (!schemaCheck.valid) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/validate', errorCount: schemaCheck.errors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+      }
       const validation = validateLogicCore(body.logicCore);
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors: validation.errors.length > 0 });
@@ -183,6 +246,14 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { error: 'Provide userText (string) or logicCore (object)' });
       }
 
+      if (body.logicCore) {
+        const schemaCheck = validateLogicCoreSchema(body.logicCore);
+        if (!schemaCheck.valid) {
+          auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: schemaCheck.errors.length });
+          return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+        }
+      }
+
       const result = await orchestrate(input, options);
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs, isCompliant: result.compliance?.isCompliant });
@@ -207,11 +278,19 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`BPMN Generator HTTP API listening on port ${PORT}`);
-  console.log(`  POST /api/v1/generate   — Logic-Core → BPMN + SVG`);
-  console.log(`  POST /api/v1/validate   — Logic-Core → Validation`);
-  console.log(`  POST /api/v1/import     — BPMN XML → Logic-Core`);
-  console.log(`  POST /api/v1/orchestrate — Multi-agent review + generate + compliance`);
-  console.log(`  GET  /health            — Health check`);
-});
+// Only listen when this module is the entry point. When imported by tests
+// (or other modules) it stays inert — prevents EADDRINUSE under Jest workers.
+const isEntryPoint = import.meta.url === `file://${process.argv[1]}`;
+if (isEntryPoint) {
+  startupCheck(process.env);
+  server.listen(PORT, () => {
+    console.log(`BPMN Generator HTTP API listening on port ${PORT}`);
+    console.log(`  POST /api/v1/generate   — Logic-Core → BPMN + SVG`);
+    console.log(`  POST /api/v1/validate   — Logic-Core → Validation`);
+    console.log(`  POST /api/v1/import     — BPMN XML → Logic-Core`);
+    console.log(`  POST /api/v1/orchestrate — Multi-agent review + generate + compliance`);
+    console.log(`  GET  /health            — Health check`);
+  });
+}
+
+export { server };

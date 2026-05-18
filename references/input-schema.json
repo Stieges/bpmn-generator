@@ -12,6 +12,11 @@
       "type": "object",
       "required": ["nodes", "edges"],
       "properties": {
+        "$schemaVersion": {
+          "type": "string",
+          "const": "1.0",
+          "description": "Optional schema version (current: \"1.0\"). Absent or \"1.0\" accepted."
+        },
         "id": { "type": "string", "description": "Process ID" },
         "name": { "type": "string", "description": "Process name" },
         "documentation": { "type": "string" },
@@ -27,6 +32,11 @@
       "type": "object",
       "required": ["pools"],
       "properties": {
+        "$schemaVersion": {
+          "type": "string",
+          "const": "1.0",
+          "description": "Optional schema version (current: \"1.0\"). Absent or \"1.0\" accepted."
+        },
         "pools": {
           "type": "array",
           "items": { "$ref": "#/$defs/Pool" },
@@ -189,6 +199,11 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string", "description": "Short role or department name. Recommended: ≤ 25 characters (e.g. 'Einkauf', 'QA', 'Compliance', 'Teamleiter'). Longer names force multi-line header rendering and visual clutter; rule M10 emits a WARNING if exceeded. Avoid descriptive sentences, module paths, or bracketed meta-info." },
+        "nodeIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Format B: explicit list of node IDs assigned to this lane (alternative to node.lane back-references)"
+        },
         "children": { "type": "array", "items": { "$ref": "#/$defs/Lane" }, "description": "Nested child lanes" }
       },
       "additionalProperties": false

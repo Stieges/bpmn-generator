@@ -1745,11 +1745,31 @@ describe('HTTP Server utilities', () => {
     await expect(parseBody(req)).rejects.toThrow('exceeds');
   });
 
-  test('validateCallbackUrl rejects internal IP', () => {
+  test('validateCallbackUrl rejects internal IPv4', () => {
     expect(validateCallbackUrl('http://127.0.0.1:8080/hook')).toMatch(/internal/);
     expect(validateCallbackUrl('http://192.168.1.1/hook')).toMatch(/internal/);
     expect(validateCallbackUrl('http://10.0.0.5/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://172.16.0.1/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://172.31.255.254/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://localhost/hook')).toMatch(/internal/);
     expect(validateCallbackUrl('http://localhost:3000')).toMatch(/internal/);
+  });
+
+  test('validateCallbackUrl rejects link-local IPv4 (169.254.x)', () => {
+    expect(validateCallbackUrl('http://169.254.169.254/latest/meta-data/')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://169.254.0.1/hook')).toMatch(/internal/);
+  });
+
+  test('validateCallbackUrl rejects internal IPv6', () => {
+    expect(validateCallbackUrl('http://[::1]/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://[fc00::1]/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://[fd00::1]/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://[fe80::1]/hook')).toMatch(/internal/);
+  });
+
+  test('validateCallbackUrl accepts public hosts', () => {
+    expect(validateCallbackUrl('https://example.com/webhook')).toBeNull();
+    expect(validateCallbackUrl('https://api.github.com/hook')).toBeNull();
   });
 
   test('validateCallbackUrl rejects non-http protocols', () => {
@@ -1762,6 +1782,98 @@ describe('HTTP Server utilities', () => {
 
   test('validateCallbackUrl throws on invalid URL', () => {
     expect(() => validateCallbackUrl('not-a-url')).toThrow();
+  });
+
+  test('validateCallbackUrlAsync rejects host that resolves to internal IP', async () => {
+    // ESM `node:dns/promises` exports are read-only in Jest 30, so we inject the
+    // lookup function via the test-only `_setDnsLookup` hook on http-server.
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    _setDnsLookup(async (h) => h === 'evil.example.com'
+      ? [{ address: '127.0.0.1', family: 4 }]
+      : [{ address: '93.184.216.34', family: 4 }]);
+    try {
+      const result = await validateCallbackUrlAsync('http://evil.example.com/hook');
+      expect(result).toMatch(/internal/);
+    } finally {
+      _setDnsLookup(null); // restore default
+    }
+  });
+
+  test('validateCallbackUrlAsync accepts host that resolves to public IP', async () => {
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    _setDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]); // example.com public IP
+    try {
+      const result = await validateCallbackUrlAsync('https://example.com/webhook');
+      expect(result).toBeNull();
+    } finally {
+      _setDnsLookup(null);
+    }
+  });
+
+  test('validateCallbackUrlAsync passes through sync errors unchanged', async () => {
+    const { validateCallbackUrlAsync } = await import('./http-server.js');
+    // Raw internal IP — sync check catches it before DNS lookup is attempted
+    expect(await validateCallbackUrlAsync('http://127.0.0.1/hook')).toMatch(/internal/);
+    // Bad protocol — sync check catches it
+    expect(await validateCallbackUrlAsync('ftp://example.com/hook')).toMatch(/http or https/);
+  });
+});
+
+describe('http-server production auth gate', () => {
+  test('startupCheck refuses production without API key', async () => {
+    const { startupCheck } = await import('./http-server.js');
+    expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: undefined }))
+      .toThrow(/BPMN_API_KEY/);
+  });
+
+  test('startupCheck allows production with API key', async () => {
+    const { startupCheck } = await import('./http-server.js');
+    expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: 'secret' }))
+      .not.toThrow();
+  });
+
+  test('startupCheck warns in dev mode without API key', async () => {
+    const { startupCheck } = await import('./http-server.js');
+    const warns = [];
+    expect(() => startupCheck({ NODE_ENV: 'development', BPMN_API_KEY: undefined }, msg => warns.push(msg)))
+      .not.toThrow();
+    expect(warns.join('\n')).toMatch(/no API key/i);
+  });
+});
+
+describe('audit/dead-letter path configuration', () => {
+  test('audit module defaults to os.tmpdir()/bpmn-generator/audit/', async () => {
+    delete process.env.AUDIT_LOG_PATH;
+    const os = await import('node:os');
+    // cache-bust the import so module-init re-evaluates env
+    const { getAuditPath } = await import(`./audit.js?cb=default-${Date.now()}`);
+    const p = getAuditPath();
+    expect(p.startsWith(os.tmpdir())).toBe(true);
+    expect(p).toMatch(/bpmn-generator/);
+    expect(p).toMatch(/\.jsonl$/);
+  });
+
+  test('audit module honors AUDIT_LOG_PATH env', async () => {
+    process.env.AUDIT_LOG_PATH = '/tmp/test-audit-' + Date.now() + '.jsonl';
+    const expected = process.env.AUDIT_LOG_PATH;
+    const fs = await import('node:fs');
+    const { auditLog, getAuditPath } = await import(`./audit.js?cb=env-${Date.now()}`);
+    expect(getAuditPath()).toBe(expected);
+    auditLog({ event: 'env-path-test' });
+    expect(fs.existsSync(expected)).toBe(true);
+    fs.unlinkSync(expected);
+    delete process.env.AUDIT_LOG_PATH;
+  });
+
+  test('delivery module honors DEAD_LETTER_PATH env', async () => {
+    const dir = '/tmp/test-dl-' + Date.now();
+    process.env.DEAD_LETTER_PATH = dir;
+    const { getDeadLetterDir } = await import(`./delivery.js?cb=env-${Date.now()}`);
+    expect(getDeadLetterDir()).toBe(dir);
+    const fs = await import('node:fs');
+    expect(fs.existsSync(dir)).toBe(true);
+    fs.rmdirSync(dir);
+    delete process.env.DEAD_LETTER_PATH;
   });
 });
 
@@ -2321,5 +2433,69 @@ describe('Pass 2 (lane compaction) abort criterion', () => {
     // Assert: compaction must not degrade routing by more than 5%
     const threshold = Math.ceil(cOff * 1.05);
     expect(cOn).toBeLessThanOrEqual(threshold);
+  });
+});
+
+describe('schema-gate', () => {
+  test('accepts a valid Logic-Core fixture', async () => {
+    const fs = await import('node:fs');
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = JSON.parse(fs.readFileSync('../tests/fixtures/simple-approval.json', 'utf8'));
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  test('rejects object missing required top-level fields', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const r = validateLogicCoreSchema({});
+    expect(r.valid).toBe(false);
+    expect(r.errors.length).toBeGreaterThan(0);
+  });
+
+  test('schema only checks structure, not cross-reference integrity', async () => {
+    // Documents the contract: edges referencing unknown node ids are
+    // structurally valid per schema; the rule engine catches the bad reference.
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const r = validateLogicCoreSchema({
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'z', type: 'endEvent' }],
+      edges: [{ id: 'e1', source: 'a', target: 'b' }] // 'b' doesn't exist, schema doesn't care
+    });
+    expect(r.valid).toBe(true);
+  });
+});
+
+describe('$schemaVersion field', () => {
+  test('schema accepts input with $schemaVersion: "1.0"', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = {
+      $schemaVersion: '1.0',
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  test('schema accepts input without $schemaVersion (backward compat)', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = {
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(true);
+  });
+
+  test('schema rejects $schemaVersion with unsupported value', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = {
+      $schemaVersion: '99.0',
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(false);
   });
 });

@@ -245,20 +245,17 @@ describe('orchestrate', () => {
   });
 
   test('respects maxReviewIterations option', async () => {
-    // Use broken logicCore that will always fail review
-    const brokenLc = {
-      pools: [{
-        id: 'P1', name: 'Test',
-        lanes: [{ id: 'L1', name: 'Lane', nodeIds: ['t1'] }],
-      }],
-      nodes: [{ id: 't1', type: 'task', label: 'Do stuff' }],
+    // Schema-valid Logic-Core that still fails the rule engine
+    // (no StartEvent, no EndEvent → S01/S02 will keep flagging issues).
+    const unsoundLc = {
+      nodes: [{ id: 't1', type: 'task', name: 'Do stuff' }],
       edges: [],
     };
 
-    // Mock LLM that always returns the same broken LC
-    const mockLlm = async () => JSON.stringify(brokenLc);
+    // Mock LLM that always returns the same unsound LC
+    const mockLlm = async () => JSON.stringify(unsoundLc);
 
-    const result = await orchestrate(brokenLc, {
+    const result = await orchestrate(unsoundLc, {
       llmProvider: mockLlm,
       maxReviewIterations: 2,
     });
