@@ -39,13 +39,26 @@ export function validateCallbackUrl(url) {
   if (!['http:', 'https:'].includes(u.protocol)) {
     return 'callbackUrl must use http or https';
   }
-  const host = u.hostname;
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' ||
-      host.startsWith('10.') || host.startsWith('192.168.') ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+  if (isInternalHost(u.hostname)) {
     return 'callbackUrl must not target internal networks';
   }
   return null; // valid
+}
+
+export function isInternalHost(host) {
+  // IPv4
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  if (host.startsWith('10.') || host.startsWith('192.168.')) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+  if (/^169\.254\./.test(host)) return true; // link-local + AWS metadata
+  // IPv6
+  if (host === '::1') return true;
+  // Strip brackets if URL passed them through (e.g., [fc00::1] → fc00::1)
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  if (h === '::1') return true;
+  if (/^f[cd][0-9a-f]{0,2}:/.test(h)) return true;  // fc00::/7 (ULA)
+  if (/^fe[89ab][0-9a-f]?:/.test(h)) return true;   // fe80::/10 (link-local)
+  return false;
 }
 
 function checkAuth(req, res) {

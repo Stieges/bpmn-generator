@@ -1745,11 +1745,31 @@ describe('HTTP Server utilities', () => {
     await expect(parseBody(req)).rejects.toThrow('exceeds');
   });
 
-  test('validateCallbackUrl rejects internal IP', () => {
+  test('validateCallbackUrl rejects internal IPv4', () => {
     expect(validateCallbackUrl('http://127.0.0.1:8080/hook')).toMatch(/internal/);
     expect(validateCallbackUrl('http://192.168.1.1/hook')).toMatch(/internal/);
     expect(validateCallbackUrl('http://10.0.0.5/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://172.16.0.1/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://172.31.255.254/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://localhost/hook')).toMatch(/internal/);
     expect(validateCallbackUrl('http://localhost:3000')).toMatch(/internal/);
+  });
+
+  test('validateCallbackUrl rejects link-local IPv4 (169.254.x)', () => {
+    expect(validateCallbackUrl('http://169.254.169.254/latest/meta-data/')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://169.254.0.1/hook')).toMatch(/internal/);
+  });
+
+  test('validateCallbackUrl rejects internal IPv6', () => {
+    expect(validateCallbackUrl('http://[::1]/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://[fc00::1]/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://[fd00::1]/hook')).toMatch(/internal/);
+    expect(validateCallbackUrl('http://[fe80::1]/hook')).toMatch(/internal/);
+  });
+
+  test('validateCallbackUrl accepts public hosts', () => {
+    expect(validateCallbackUrl('https://example.com/webhook')).toBeNull();
+    expect(validateCallbackUrl('https://api.github.com/hook')).toBeNull();
   });
 
   test('validateCallbackUrl rejects non-http protocols', () => {
