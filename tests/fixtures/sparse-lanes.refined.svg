@@ -44,25 +44,25 @@
 <rect x="80" y="830" width="1252" height="120" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
 <rect x="50" y="830" width="30" height="120" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="65" y="890" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,890)">QA</text>
-<path d="M 176 285 L 256 285" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 306 285 L 346 285 L 346 150 L 386 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 281 310 L 386 310 L 386 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 306 285 L 346 285 L 346 430 L 386 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 281 310 L 281 420 L 421 420 L 421 530" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 486 150 L 526 150 L 526 285 L 566 285" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 486 330 L 566 330 L 566 285" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 486 430 L 526 430 L 526 285 L 566 285" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 421 530 L 421 420 L 591 420 L 591 310" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 591 310 L 591 650 L 696 650" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 176 297.5 L 256 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 306 297.5 L 346 297.5 L 346 150 L 386 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 281 322.5 L 386 322.5 L 386 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 306 297.5 L 346 297.5 L 346 430 L 386 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 281 322.5 L 281 426.3 L 421 426.3 L 421 530" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 486 150 L 526 150 L 526 297.5 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 486 330 L 566 330 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 486 430 L 526 430 L 526 297.5 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 421 530 L 421 426.3 L 591 426.3 L 591 322.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 591 322.5 L 591 650 L 696 650" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 796 709 L 796 770 L 876 770" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 976 829 L 976 890 L 1056 890" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1156 949 L 1254 949 L 1254 935" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<circle cx="158" cy="285" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<text x="158" y="323" text-anchor="middle" font-size="11" fill="#000000">Start</text>
-<polygon points="281,260 306,285 281,310 256,285" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<line x1="281" y1="276" x2="281" y2="294" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
-<line x1="272" y1="285" x2="290" y2="285" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
-<text x="281" y="330" text-anchor="middle" font-size="11" fill="#000000">Split</text>
+<path d="M 1156 949 L 1254 949 L 1254 947.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<circle cx="158" cy="297.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<text x="158" y="335.5" text-anchor="middle" font-size="11" fill="#000000">Start</text>
+<polygon points="281,272.5 306,297.5 281,322.5 256,297.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="281" y1="288.5" x2="281" y2="306.5" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<line x1="272" y1="297.5" x2="290" y2="297.5" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<text x="281" y="342.5" text-anchor="middle" font-size="11" fill="#000000">Split</text>
 <rect x="386" y="110" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 401,122 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 403.162,123.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 394.1,118.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="436" y="159" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Validate Inputs</text>
@@ -75,10 +75,10 @@
 <rect x="371" y="530" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 386,542 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 388.162,543.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 379.1,538.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="421" y="579" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Log Telemetry</text>
-<polygon points="591,260 616,285 591,310 566,285" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<line x1="591" y1="276" x2="591" y2="294" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
-<line x1="582" y1="285" x2="600" y2="285" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
-<text x="591" y="330" text-anchor="middle" font-size="11" fill="#000000">Join</text>
+<polygon points="591,272.5 616,297.5 591,322.5 566,297.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="591" y1="288.5" x2="591" y2="306.5" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<line x1="582" y1="297.5" x2="600" y2="297.5" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<text x="591" y="342.5" text-anchor="middle" font-size="11" fill="#000000">Join</text>
 <rect x="696" y="650" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 711,662 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 713.162,663.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 704.1,658.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="746" y="692" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Validate</text>
@@ -89,6 +89,6 @@
 <rect x="1056" y="890" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1071,902 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1073.162,903.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1064.1,898.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1106" y="939" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Run Tests</text>
-<circle cx="1254" cy="917" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
-<text x="1254" y="955" text-anchor="middle" font-size="11" fill="#000000">End</text>
+<circle cx="1254" cy="929.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
+<text x="1254" y="967.5" text-anchor="middle" font-size="11" fill="#000000">End</text>
 </svg>

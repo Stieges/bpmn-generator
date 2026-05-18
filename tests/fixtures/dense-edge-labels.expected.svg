@@ -35,34 +35,34 @@
 <rect x="80" y="50" width="792" height="785" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
 <rect x="50" y="50" width="30" height="785" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="65" y="442.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,442.5)">Team</text>
-<path d="M 170.4 430 L 269 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 294 405 L 341 405 L 341 150 L 466 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="274.5" y="392" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="317.5" y="404" text-anchor="middle" font-size="10" fill="#000000">Option Alpha</text>
-<path d="M 306 417 L 356 417 L 356 290 L 466 290" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="291.3" y="404" width="79.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="331" y="416" text-anchor="middle" font-size="10" fill="#000000">Option Beta</text>
-<path d="M 293 430 L 466 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="336.5" y="417" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="379.5" y="429" text-anchor="middle" font-size="10" fill="#000000">Option Gamma</text>
-<path d="M 281 442 L 356 442 L 356 570 L 466 570" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="275.5" y="429" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="318.5" y="441" text-anchor="middle" font-size="10" fill="#000000">Option Delta</text>
-<path d="M 281 442 L 341 442 L 341 455 L 341 710 L 466 710" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="261.5" y="429" width="99" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="311" y="441" text-anchor="middle" font-size="10" fill="#000000">Option Epsilon</text>
-<path d="M 566 150 L 611 150 L 611 405 L 658 405" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 290 L 596 290 L 596 417 L 646 417" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 430 L 659 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 570 L 596 570 L 596 442 L 671 442" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 710 L 611 710 L 611 455 L 671 455 L 671 442" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 683 430 L 781.6 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<circle cx="158" cy="417" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<text x="158" y="455" text-anchor="middle" font-size="11" fill="#000000">Start</text>
-<polygon points="281,392 306,417 281,442 256,417" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<line x1="272" y1="408" x2="290" y2="426" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<line x1="290" y1="408" x2="272" y2="426" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<text x="281" y="462" text-anchor="middle" font-size="11" fill="#000000">Welche?</text>
+<path d="M 176 430 L 256.5 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 281.5 405 L 341 405 L 341 150 L 466 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="268.3" y="392" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="311.3" y="404" text-anchor="middle" font-size="10" fill="#000000">Option Alpha</text>
+<path d="M 293.5 417 L 356 417 L 356 290 L 466 290" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="285.1" y="404" width="79.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="324.8" y="416" text-anchor="middle" font-size="10" fill="#000000">Option Beta</text>
+<path d="M 305.5 430 L 466 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="342.8" y="417" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="385.8" y="429" text-anchor="middle" font-size="10" fill="#000000">Option Gamma</text>
+<path d="M 293.5 442 L 356 442 L 356 570 L 466 570" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="281.8" y="429" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="324.8" y="441" text-anchor="middle" font-size="10" fill="#000000">Option Delta</text>
+<path d="M 281 454.5 L 341 454.5 L 341 710 L 466 710" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="261.5" y="441.5" width="99" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="311" y="453.5" text-anchor="middle" font-size="10" fill="#000000">Option Epsilon</text>
+<path d="M 566 150 L 611 150 L 611 405 L 670.5 405" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 290 L 596 290 L 596 417 L 658.5 417" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 430 L 646.5 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 570 L 596 570 L 596 442 L 658.5 442" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 710 L 611 710 L 611 455 L 671 455" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 695.5 430 L 776 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<circle cx="158" cy="429.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<text x="158" y="467.5" text-anchor="middle" font-size="11" fill="#000000">Start</text>
+<polygon points="281,404.5 306,429.5 281,454.5 256,429.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="272" y1="420.5" x2="290" y2="438.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<line x1="290" y1="420.5" x2="272" y2="438.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<text x="281" y="474.5" text-anchor="middle" font-size="11" fill="#000000">Welche?</text>
 <rect x="466" y="110" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 481,122 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 483.162,123.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 474.1,118.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="516" y="159" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante A</text>
@@ -78,10 +78,10 @@
 <rect x="466" y="670" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 481,682 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 483.162,683.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 474.1,678.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="516" y="719" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante E</text>
-<polygon points="671,392 696,417 671,442 646,417" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<line x1="662" y1="408" x2="680" y2="426" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<line x1="680" y1="408" x2="662" y2="426" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<polygon points="671,404.5 696,429.5 671,454.5 646,429.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="662" y1="420.5" x2="680" y2="438.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<line x1="680" y1="420.5" x2="662" y2="438.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
 
-<circle cx="794" cy="417" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
-<text x="794" y="455" text-anchor="middle" font-size="11" fill="#000000">Ende</text>
+<circle cx="794" cy="429.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
+<text x="794" y="467.5" text-anchor="middle" font-size="11" fill="#000000">Ende</text>
 </svg>

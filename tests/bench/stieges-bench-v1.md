@@ -4,8 +4,8 @@ Deterministic pipeline benchmark over every Logic-Core fixture in
 `tests/fixtures/*.json`. No LLM, no network. Reproducible via
 `node scripts/bench/run-stieges-bench-v1.mjs`.
 
-- Generated: 2026-05-18T13:22:51.757Z
-- Commit: 332761314bb0a182e7d988cbfb0ffc9f778243e4
+- Generated: 2026-05-18T13:35:20.103Z
+- Commit: 718921540162c9fc843b365e3e9b5a50d7415f93
 - Fixtures: 9
 - All parsed: YES
 
@@ -13,15 +13,15 @@ Deterministic pipeline benchmark over every Logic-Core fixture in
 
 | Fixture | Parses | Serialized | Schema | Nodes | Edges | Sound-Err | Sound-Warn | Crossings | BPMN (B) | SVG (B) | Time (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bpmn-generator-pipeline | yes | yes | yes | 22 | 31 | 0 | 4 | 10 | 28994 | 54838 | 163.5 |
-| deadlock-process | yes | no | yes | 7 | 7 | 1 | 1 | 0 | 0 | 0 | 0.25 |
-| dense-edge-labels | yes | yes | yes | 9 | 12 | 0 | 1 | 1 | 9784 | 10661 | 23.15 |
-| expanded-subprocess | yes | yes | yes | 4 | 3 | 0 | 1 | 0 | 5377 | 8901 | 13.91 |
-| long-lane-names | yes | yes | yes | 5 | 4 | 0 | 4 | 0 | 4675 | 6825 | 10.32 |
-| multi-pool-collaboration | yes | yes | yes | 11 | 12 | 0 | 0 | 1 | 10343 | 12526 | 17.34 |
-| simple-approval | yes | yes | yes | 6 | 6 | 0 | 0 | 0 | 5747 | 8945 | 13.75 |
-| sparse-lanes | yes | yes | yes | 11 | 13 | 0 | 0 | 7 | 10066 | 13165 | 14.7 |
-| wide-pipeline | yes | yes | yes | 27 | 26 | 0 | 0 | 0 | 16414 | 30144 | 19.34 |
+| bpmn-generator-pipeline | yes | yes | yes | 22 | 31 | 0 | 4 | 11 | 29093 | 55157 | 169.25 |
+| deadlock-process | yes | no | yes | 7 | 7 | 1 | 1 | 0 | 0 | 0 | 0.13 |
+| dense-edge-labels | yes | yes | yes | 9 | 12 | 0 | 1 | 0 | 9738 | 10709 | 22.99 |
+| expanded-subprocess | yes | yes | yes | 4 | 3 | 0 | 1 | 0 | 5389 | 8913 | 13.9 |
+| long-lane-names | yes | yes | yes | 5 | 4 | 0 | 4 | 0 | 4690 | 6839 | 9.42 |
+| multi-pool-collaboration | yes | yes | yes | 11 | 12 | 0 | 0 | 1 | 10375 | 12598 | 17.85 |
+| simple-approval | yes | yes | yes | 6 | 6 | 0 | 0 | 0 | 5763 | 8977 | 11.45 |
+| sparse-lanes | yes | yes | yes | 11 | 13 | 0 | 0 | 7 | 10124 | 13251 | 13.74 |
+| wide-pipeline | yes | yes | yes | 27 | 26 | 0 | 0 | 0 | 16420 | 30148 | 18.91 |
 
 ## Totals
 
@@ -33,8 +33,8 @@ Deterministic pipeline benchmark over every Logic-Core fixture in
 - Total soundness errors: **1**
 - Total soundness warnings: **11**
 - Total edge crossings: **19**
-- Cumulative wall-clock: **276.26 ms**
-- Output bytes (BPMN + SVG): **237405**
+- Cumulative wall-clock: **277.64 ms**
+- Output bytes (BPMN + SVG): **238184**
 
 ## Notes
 

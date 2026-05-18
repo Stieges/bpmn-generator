@@ -63,7 +63,15 @@ function buildCoordinateMap(elkResult, lc) {
       const shapeH = node._shapeH || node.height;
       const lcNode = findNodeInAllProcesses(node.id, allProcesses);
       const specSz = SHAPE[lcNode?.type] || { w: node.width, h: shapeH };
-      coords[node.id] = { x: ax, y: ay, w: specSz.w, h: specSz.h };
+      // Vertical center alignment: ELK centers BBOX centers, but bboxes for
+      // nodes with external labels include label-height padding below the shape.
+      // Result: the shape sits at the TOP of its bbox, so an event's shape-center
+      // is above a task's shape-center in the same row by EXTERNAL_LABEL_H/2.
+      // Fix: shift the shape down by half the label-height padding so the
+      // shape-center coincides with the bbox-center, which is what ELK aligns.
+      const bboxH = node.height;
+      const yOffset = Math.max(0, (bboxH - specSz.h) / 2);
+      coords[node.id] = { x: ax, y: ay + yOffset, w: specSz.w, h: specSz.h };
     }
 
     for (const c of node.children || []) collectNodes(c, ax, ay);
