@@ -2213,3 +2213,85 @@ describe('sparse-lanes matrix', () => {
     expect(r.svg).toBe(readFileSync('../tests/fixtures/sparse-lanes.refined.svg', 'utf8'));
   });
 });
+
+/**
+ * Edge-crossing abort criterion helpers for P5.5
+ * Validates that compactLanes does not degrade edge routing significantly
+ */
+
+/**
+ * Check if two line segments intersect using the CCW (counterclockwise) method.
+ * @param {Object} p1 - Point {x, y}
+ * @param {Object} p2 - Point {x, y}
+ * @param {Object} p3 - Point {x, y}
+ * @param {Object} p4 - Point {x, y}
+ * @returns {boolean} true if segments p1-p2 and p3-p4 intersect (not just touch)
+ */
+function doSegmentsIntersect(p1, p2, p3, p4) {
+  const ccw = (A, B, C) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+  return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+}
+
+/**
+ * Check if two polylines (multi-segment edges) intersect.
+ * @param {Array<Object>} polylineA - Array of {x, y} points
+ * @param {Array<Object>} polylineB - Array of {x, y} points
+ * @returns {boolean} true if any segment of A crosses any segment of B
+ */
+function segmentsCross(polylineA, polylineB) {
+  for (let i = 0; i < polylineA.length - 1; i++) {
+    for (let j = 0; j < polylineB.length - 1; j++) {
+      if (doSegmentsIntersect(
+        polylineA[i], polylineA[i + 1],
+        polylineB[j], polylineB[j + 1]
+      )) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Count the number of edge-crossing pairs in a set of polylines.
+ * @param {Object|Array} edgesAsPolylines - Dictionary or array of edge polylines
+ * @returns {number} Total crossing count
+ */
+function countEdgeCrossings(edgesAsPolylines) {
+  const edges = Array.isArray(edgesAsPolylines)
+    ? edgesAsPolylines
+    : Object.values(edgesAsPolylines);
+
+  let crossings = 0;
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      if (segmentsCross(edges[i], edges[j])) {
+        crossings++;
+      }
+    }
+  }
+  return crossings;
+}
+
+describe('Pass 2 (lane compaction) abort criterion', () => {
+  const lc = JSON.parse(readFileSync('../tests/fixtures/sparse-lanes.json', 'utf8'));
+
+  test('P5 abort criterion: crossings after compaction ≤ 1.05 × baseline', async () => {
+    // Run pipeline with refinement OFF (baseline)
+    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    // Run pipeline with refinement ON (with compaction)
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+
+    // Extract edge polylines from coordMap
+    const edgesOff = off.coordMap.edgeCoords;
+    const edgesOn = on.coordMap.edgeCoords;
+
+    // Count crossings in both versions
+    const cOff = countEdgeCrossings(edgesOff);
+    const cOn = countEdgeCrossings(edgesOn);
+
+    // Assert: compaction must not degrade routing by more than 5%
+    const threshold = Math.ceil(cOff * 1.05);
+    expect(cOn).toBeLessThanOrEqual(threshold);
+  });
+});
