@@ -99,7 +99,7 @@ After every change: `npm test` must pass.
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
 | Soundness | ERROR | S01-S11 | Structural correctness (OMG compliance) |
-| Style | WARNING | M01-M09 (M05/M06 disabled) | Readability (Bruce Silver Method & Style) |
+| Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |
 
