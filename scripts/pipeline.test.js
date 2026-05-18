@@ -2464,3 +2464,38 @@ describe('schema-gate', () => {
     expect(r.valid).toBe(true);
   });
 });
+
+describe('$schemaVersion field', () => {
+  test('schema accepts input with $schemaVersion: "1.0"', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = {
+      $schemaVersion: '1.0',
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  test('schema accepts input without $schemaVersion (backward compat)', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = {
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(true);
+  });
+
+  test('schema rejects $schemaVersion with unsupported value', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = {
+      $schemaVersion: '99.0',
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(false);
+  });
+});

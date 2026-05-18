@@ -12,6 +12,11 @@
       "type": "object",
       "required": ["nodes", "edges"],
       "properties": {
+        "$schemaVersion": {
+          "type": "string",
+          "const": "1.0",
+          "description": "Optional schema version (current: \"1.0\"). Absent or \"1.0\" accepted."
+        },
         "id": { "type": "string", "description": "Process ID" },
         "name": { "type": "string", "description": "Process name" },
         "documentation": { "type": "string" },
@@ -27,6 +32,11 @@
       "type": "object",
       "required": ["pools"],
       "properties": {
+        "$schemaVersion": {
+          "type": "string",
+          "const": "1.0",
+          "description": "Optional schema version (current: \"1.0\"). Absent or \"1.0\" accepted."
+        },
         "pools": {
           "type": "array",
           "items": { "$ref": "#/$defs/Pool" },
