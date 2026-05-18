@@ -167,7 +167,7 @@ bpmn-generator/
 | Layer | Severity | Rules | Examples |
 |-------|----------|-------|----------|
 | Soundness | ERROR | S01-S11 | Start/End events, deadlocks, boundary events |
-| Style | WARNING | M01-M09 (M05/M06 disabled) | Naming conventions, gateway labels |
+| Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Liveness, boundedness, deadlock-freedom (opt-in) |
 

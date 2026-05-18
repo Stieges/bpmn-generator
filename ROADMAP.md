@@ -174,7 +174,7 @@ Lightweight custom orchestrator (no CrewAI — avoided polyglot break). 4 agents
 
 **Files:** scripts/orchestrator.js, scripts/agents/{modeler,reviewer,layout,compliance,llm-provider}.js, scripts/orchestrator.test.js (20 tests). Integration: MCP server (+orchestrate_bpmn tool), HTTP API (+/api/v1/orchestrate endpoint), CLI (--input/--text).
 
-136 tests green (114 pipeline + 22 orchestrator).
+Test suite green after L4 work (current count verified via `npm test`; refer to that output rather than a hard-coded number).
 
 ### L1 — Training Data Pipeline for BPMN-SLM | DONE
 
@@ -234,7 +234,7 @@ All 5 phases are implemented (March 2026):
 | 4 | M2 — Happy-Path Leveling | DONE |
 | 5 | L4 — MCP Server | DONE |
 
-136 tests green after all changes.
+Test suite green after all changes (current count verified via `npm test`).
 
 ---
 
