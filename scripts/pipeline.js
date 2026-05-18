@@ -31,6 +31,7 @@ import { validateLogicCore } from './validate.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordinates.js';
+import { simplifyAllEdges } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
@@ -65,6 +66,15 @@ async function runPipeline(logicCore, opts = {}) {
   const elkGraph  = logicCoreToElk(lc, { elkWrapping: refineOn });
   const elkResult = await runElkLayout(elkGraph);
   const coordMap  = buildCoordinateMap(elkResult, lc);
+
+  // Edge simplification: collapse ELK's layer-column jogs into clean L-shapes
+  // where node-bbox collision allows it. Reduces cross-lane zigzag.
+  const allEdges = [
+    ...(lc.edges || []),
+    ...((lc.pools || []).flatMap(p => p.edges || [])),
+    ...(lc.messageFlows || []),
+  ];
+  coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges);
 
   // Visual Refinement (post-layout coordinate transforms)
   if (refineOn) {

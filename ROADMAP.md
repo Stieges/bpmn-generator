@@ -5,7 +5,7 @@ Created by: Daniel Stiegler + Claude
 
 ## 1 Current State (v3.1)
 
-The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (27 rules, 4 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
+The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (28 rules, 4 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
 
 ### 1.1 Implemented Features
 
@@ -13,7 +13,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 |---------|---------|--------|
 | Pipeline Architecture | 4 phases: LLM→JSON→ELK→XML/SVG | Done |
 | Modular Architecture | 13 ES modules, acyclic dependency graph | Done |
-| Rule Engine | 27 rules in 4 layers (Soundness/Style/Pragmatics/Workflow-Net), configurable JSON profiles | Done |
+| Rule Engine | 28 rules in 4 layers (Soundness/Style/Pragmatics/Workflow-Net), configurable JSON profiles | Done |
 | Flat Layout + Partitioning | Global Sugiyama layout, lanes as constraints | Done |
 | Topological Sorting | Nodes in happy-path order, ELK Model Order | Done |
 | Lane Ordering by Flow | Start lane on top, end lane at bottom | Done |
@@ -49,7 +49,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 scripts/
 ├── pipeline.js        Orchestrator + CLI (~180 LOC)
 │   ├── validate.js    Validation Wrapper → rules.js
-│   ├── rules.js       Rule Engine (27 rules, 4 layers, profiles)
+│   ├── rules.js       Rule Engine (28 rules, 4 layers, profiles)
 │   ├── topology.js    Gateway directions, topological sorting, lane ordering
 │   ├── layout.js      ELK graph construction + layout execution
 │   ├── coordinates.js Coordinate maps, edge clipping, pool equalization
@@ -92,7 +92,7 @@ All K0-K8 items are implemented.
 | K1 | SVG Icon Fidelity | Done | icons.js (real PathMap paths) |
 | K2 | Edge-Label Placement | Done | coordinates.js |
 | K3 | Expanded Sub-Processes | Done | layout.js, svg.js, bpmn-xml.js |
-| K4 | Extend validation | Done | rules.js (27 rules, 4 layers) |
+| K4 | Extend validation | Done | rules.js (28 rules, 4 layers) |
 | K5 | Few-Shot Enterprise Patterns | Done | references/prompt-template.md |
 | K6 | Transaction Sub-Process | Done | types.js, svg.js, bpmn-xml.js, import.js |
 | K7 | Pool width fits content | Done | coordinates.js §5.0b |

@@ -4,7 +4,7 @@
     <bpmn:participant id="Participant_Process_Customer" name="Customer" processRef="Process_Customer" />
     <bpmn:participant id="Participant_Process_Service" name="Service Department" processRef="Process_Service" />
     <bpmn:messageFlow id="mf1" name="Request" sourceRef="c_submit" targetRef="s_start" />
-    <bpmn:messageFlow id="mf2" name="Response" sourceRef="s_merge" targetRef="c_wait" />
+    <bpmn:messageFlow id="mf2" name="Response" sourceRef="s_notify" targetRef="c_wait" />
   </bpmn:collaboration>
   <bpmn:process id="Process_Customer" isExecutable="false">
     <bpmn:laneSet id="LaneSet_Process_Customer">
@@ -41,6 +41,7 @@
         <bpmn:flowNodeRef>s_gw</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>s_reject</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>s_merge</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>s_notify</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>s_end</bpmn:flowNodeRef>
       </bpmn:lane>
       <bpmn:lane id="s_mgr" name="Manager">
@@ -72,8 +73,12 @@
       <bpmn:incoming>sf6</bpmn:incoming>
       <bpmn:outgoing>sf7</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:endEvent id="s_end" name="End">
+    <bpmn:sendTask id="s_notify" name="Notify customer">
       <bpmn:incoming>sf7</bpmn:incoming>
+      <bpmn:outgoing>sf8</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="s_end" name="End">
+      <bpmn:incoming>sf8</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="sf1" sourceRef="s_start" targetRef="s_review" />
     <bpmn:sequenceFlow id="sf2" sourceRef="s_review" targetRef="s_gw" />
@@ -83,7 +88,8 @@
     <bpmn:sequenceFlow id="sf4" name="No" sourceRef="s_gw" targetRef="s_reject" />
     <bpmn:sequenceFlow id="sf5" sourceRef="s_approve" targetRef="s_merge" />
     <bpmn:sequenceFlow id="sf6" sourceRef="s_reject" targetRef="s_merge" />
-    <bpmn:sequenceFlow id="sf7" sourceRef="s_merge" targetRef="s_end" />
+    <bpmn:sequenceFlow id="sf7" sourceRef="s_merge" targetRef="s_notify" />
+    <bpmn:sequenceFlow id="sf8" sourceRef="s_notify" targetRef="s_end" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_Process_Customer">
     <bpmndi:BPMNPlane id="BPMNPlane_Process_Customer" bpmnElement="Process_Customer">

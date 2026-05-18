@@ -1,6 +1,6 @@
 # BPMN Generator vs `bpmn-auto-layout` — Pools/Lanes Comparison
 
-Generated: 2026-05-18T12:19:38.658Z
+Generated: 2026-05-18T14:09:57.615Z
 bpmn-auto-layout version: 1.3.0
 
 ## Method
@@ -14,7 +14,7 @@ Counts of `<bpmn:*>` elements before/after. These should be identical — a layo
 | Fixture | Participants (ours / theirs) | Lanes (ours / theirs) | MsgFlows (ours / theirs) | SeqFlows (ours / theirs) | Their error |
 |---|---|---|---|---|---|
 | simple-approval.json | 1 / 1 | 1 / 1 | 0 / 0 | 6 / 6 | — |
-| multi-pool-collaboration.json | 2 / 2 | 3 / 3 | 2 / 2 | 10 / 10 | — |
+| multi-pool-collaboration.json | 2 / 2 | 3 / 3 | 2 / 2 | 11 / 11 | — |
 | sparse-lanes.json | 1 / 1 | 4 / 4 | 0 / 0 | 13 / 13 | — |
 
 ## DI Output
@@ -24,7 +24,7 @@ Counts of `<bpmndi:*>` elements — what the layout engine actually drew. Missin
 | Fixture | Pool shapes (ours / theirs) | Lane shapes (ours / theirs) | MsgFlow edges (ours / theirs) | SeqFlow edges (ours / theirs) | Total shapes (ours / theirs) | Total edges (ours / theirs) |
 |---|---|---|---|---|---|---|
 | simple-approval.json | 1 / 0 ⚠ | 1 / 0 ⚠ | 0 / 0 | 6 / 6 | 8 / 6 ⚠ | 6 / 6 |
-| multi-pool-collaboration.json | 2 / 0 ⚠ | 3 / 0 ⚠ | 2 / 0 ⚠ | 10 / 3 ⚠ | 16 / 4 ⚠ | 12 / 3 ⚠ |
+| multi-pool-collaboration.json | 2 / 0 ⚠ | 3 / 0 ⚠ | 2 / 0 ⚠ | 11 / 3 ⚠ | 17 / 4 ⚠ | 13 / 3 ⚠ |
 | sparse-lanes.json | 1 / 0 ⚠ | 4 / 0 ⚠ | 0 / 0 | 13 / 13 | 16 / 11 ⚠ | 13 / 13 |
 
 ## Interpretation

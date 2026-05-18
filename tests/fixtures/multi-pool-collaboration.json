@@ -26,6 +26,7 @@
         {"id": "s_approve", "type": "serviceTask", "name": "Process approval", "lane": "s_mgr"},
         {"id": "s_reject", "type": "userTask", "name": "Send rejection", "lane": "s_agent"},
         {"id": "s_merge", "type": "exclusiveGateway", "name": "", "lane": "s_agent", "has_join": true},
+        {"id": "s_notify", "type": "sendTask", "name": "Notify customer", "lane": "s_agent"},
         {"id": "s_end", "type": "endEvent", "name": "End", "lane": "s_agent"}
       ],
       "edges": [
@@ -35,7 +36,8 @@
         {"id": "sf4", "source": "s_gw", "target": "s_reject", "label": "No"},
         {"id": "sf5", "source": "s_approve", "target": "s_merge"},
         {"id": "sf6", "source": "s_reject", "target": "s_merge"},
-        {"id": "sf7", "source": "s_merge", "target": "s_end"}
+        {"id": "sf7", "source": "s_merge", "target": "s_notify"},
+        {"id": "sf8", "source": "s_notify", "target": "s_end"}
       ],
       "lanes": [
         {"id": "s_agent", "name": "Agent"},
@@ -45,6 +47,6 @@
   ],
   "messageFlows": [
     {"id": "mf1", "source": "c_submit", "target": "s_start", "name": "Request"},
-    {"id": "mf2", "source": "s_merge", "target": "c_wait", "name": "Response"}
+    {"id": "mf2", "source": "s_notify", "target": "c_wait", "name": "Response"}
   ]
 }

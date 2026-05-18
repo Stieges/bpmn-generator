@@ -4,8 +4,8 @@ Deterministic pipeline benchmark over every Logic-Core fixture in
 `tests/fixtures/*.json`. No LLM, no network. Reproducible via
 `node scripts/bench/run-stieges-bench-v1.mjs`.
 
-- Generated: 2026-05-18T12:28:35.694Z
-- Commit: 3852d56d1eb8ec0b09b711ec91113278e34805d5
+- Generated: 2026-05-18T14:09:58.875Z
+- Commit: 377959fea33844eb6c3f58c8b079aca96a8183fc
 - Fixtures: 9
 - All parsed: YES
 
@@ -13,28 +13,28 @@ Deterministic pipeline benchmark over every Logic-Core fixture in
 
 | Fixture | Parses | Serialized | Schema | Nodes | Edges | Sound-Err | Sound-Warn | Crossings | BPMN (B) | SVG (B) | Time (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bpmn-generator-pipeline | yes | yes | yes | 22 | 31 | 0 | 4 | 11 | 28976 | 54790 | 233.84 |
-| deadlock-process | yes | no | yes | 7 | 7 | 1 | 1 | 0 | 0 | 0 | 0.17 |
-| dense-edge-labels | yes | yes | yes | 9 | 12 | 0 | 1 | 1 | 9778 | 10657 | 23.6 |
-| expanded-subprocess | yes | yes | yes | 4 | 3 | 0 | 1 | 0 | 5367 | 8899 | 16.4 |
-| long-lane-names | yes | yes | yes | 5 | 4 | 0 | 4 | 0 | 4671 | 6820 | 10.17 |
-| multi-pool-collaboration | yes | yes | yes | 11 | 12 | 0 | 0 | 1 | 10328 | 12516 | 29.01 |
-| simple-approval | yes | yes | yes | 6 | 6 | 0 | 0 | 0 | 5740 | 8943 | 17.56 |
-| sparse-lanes | yes | yes | yes | 11 | 13 | 0 | 0 | 7 | 10054 | 13155 | 21.96 |
-| wide-pipeline | yes | yes | yes | 27 | 26 | 0 | 0 | 0 | 16360 | 30044 | 21.29 |
+| bpmn-generator-pipeline | yes | yes | yes | 22 | 31 | 0 | 4 | 9 | 28373 | 54961 | 158.59 |
+| deadlock-process | yes | no | yes | 7 | 7 | 1 | 1 | 0 | 0 | 0 | 0.15 |
+| dense-edge-labels | yes | yes | yes | 9 | 12 | 0 | 1 | 0 | 9424 | 10639 | 20.9 |
+| expanded-subprocess | yes | yes | yes | 4 | 3 | 0 | 1 | 0 | 5389 | 8913 | 13.05 |
+| long-lane-names | yes | yes | yes | 5 | 4 | 0 | 4 | 0 | 4690 | 6839 | 8.65 |
+| multi-pool-collaboration | yes | yes | yes | 12 | 13 | 0 | 0 | 1 | 10829 | 13051 | 16.64 |
+| simple-approval | yes | yes | yes | 6 | 6 | 0 | 0 | 0 | 5685 | 8959 | 10.31 |
+| sparse-lanes | yes | yes | yes | 11 | 13 | 0 | 0 | 2 | 9868 | 13175 | 12.8 |
+| wide-pipeline | yes | yes | yes | 27 | 26 | 0 | 0 | 0 | 16420 | 30148 | 17.29 |
 
 ## Totals
 
 - Fixtures that parse (runPipeline didn't throw): **9 / 9**
 - Fixtures that serialize (non-empty BPMN+SVG): **8 / 9**
 - Schema-valid inputs: **9 / 9**
-- Total nodes: **102**
-- Total edges: **114**
+- Total nodes: **103**
+- Total edges: **115**
 - Total soundness errors: **1**
 - Total soundness warnings: **11**
-- Total edge crossings: **20**
-- Cumulative wall-clock: **374.00 ms**
-- Output bytes (BPMN + SVG): **237098**
+- Total edge crossings: **12**
+- Cumulative wall-clock: **258.38 ms**
+- Output bytes (BPMN + SVG): **237363**
 
 ## Notes
 

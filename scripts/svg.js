@@ -5,6 +5,7 @@
 
 import { isEvent, isGateway, isDataArtifact } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H, esc, rn, wrapText } from './utils.js';
+import { messageFlowPorts } from './coordinates.js';
 import {
   renderEventMarker, inferEventMarker, renderTaskIcon, renderPentagon,
   renderLoopMarker, renderMIParallelMarker, renderMISequentialMarker,
@@ -187,11 +188,13 @@ function generateSvg(lc, coordMap) {
       const tgtCoord = coords[mf.target] || poolCoords[mf.target];
       if (!srcCoord || !tgtCoord) continue;
 
-      // Source: bottom-center of shape; Target: top-center of shape
-      const sx = tx((srcCoord.x || 0) + (srcCoord.w || 0) / 2);
-      const sy = ty((srcCoord.y || 0) + (srcCoord.h || 0));
-      const ex = tx((tgtCoord.x || 0) + (tgtCoord.w || 0) / 2);
-      const ey = ty(tgtCoord.y || 0);
+      // Direction-aware ports: source-bottom→target-top for downward flows,
+      // source-top→target-bottom for upward flows
+      const ports = messageFlowPorts(srcCoord, tgtCoord);
+      const sx = tx(ports.sx);
+      const sy = ty(ports.sy);
+      const ex = tx(ports.ex);
+      const ey = ty(ports.ey);
 
       // Determine if source is above or below target
       const goingDown = sy < ey;

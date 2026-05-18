@@ -330,6 +330,37 @@ const SOUNDNESS_RULES = [
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },
+  {
+    id: 'S12', layer: 'soundness', defaultSeverity: 'ERROR',
+    description: 'Message Flow source/target darf kein Gateway sein (OMG §7.6.2 Table 7.4)',
+    ref: { omg: '§7.6.2 Table 7.4', cmof: 'MessageFlow.sourceRef/targetRef type=InteractionNode; Gateway extends FlowNode (not InteractionNode)' },
+    scope: 'global',
+    check: (proc, lc) => {
+      if (!lc.messageFlows) return { pass: true };
+      // Collect all node types across pools (top-level + pool-nested)
+      const nodeTypeMap = {};
+      const collectFrom = (container) => {
+        for (const n of (container.nodes || [])) {
+          nodeTypeMap[n.id] = n.type;
+          if (n.isExpanded && n.nodes) collectFrom(n);
+        }
+      };
+      if (lc.pools) for (const p of lc.pools) collectFrom(p);
+      else collectFrom(lc);
+      const isGatewayType = (t) => typeof t === 'string' && t.toLowerCase().includes('gateway');
+      const msgs = [];
+      for (const mf of lc.messageFlows) {
+        const srcType = nodeTypeMap[mf.source];
+        const tgtType = nodeTypeMap[mf.target];
+        // mf.source may be a Pool id (Participant); only flag if it's a known Gateway node
+        if (srcType && isGatewayType(srcType))
+          msgs.push(`MessageFlow "${mf.id || ''}" source "${mf.source}" is a ${srcType} — Gateways cannot be MessageFlow sources (use a Task or Event instead).`);
+        if (tgtType && isGatewayType(tgtType))
+          msgs.push(`MessageFlow "${mf.id || ''}" target "${mf.target}" is a ${tgtType} — Gateways cannot be MessageFlow targets (use a Task or Event instead).`);
+      }
+      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+    }
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════

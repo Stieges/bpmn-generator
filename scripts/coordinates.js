@@ -63,7 +63,15 @@ function buildCoordinateMap(elkResult, lc) {
       const shapeH = node._shapeH || node.height;
       const lcNode = findNodeInAllProcesses(node.id, allProcesses);
       const specSz = SHAPE[lcNode?.type] || { w: node.width, h: shapeH };
-      coords[node.id] = { x: ax, y: ay, w: specSz.w, h: specSz.h };
+      // Vertical center alignment: ELK centers BBOX centers, but bboxes for
+      // nodes with external labels include label-height padding below the shape.
+      // Result: the shape sits at the TOP of its bbox, so an event's shape-center
+      // is above a task's shape-center in the same row by EXTERNAL_LABEL_H/2.
+      // Fix: shift the shape down by half the label-height padding so the
+      // shape-center coincides with the bbox-center, which is what ELK aligns.
+      const bboxH = node.height;
+      const yOffset = Math.max(0, (bboxH - specSz.h) / 2);
+      coords[node.id] = { x: ax, y: ay + yOffset, w: specSz.w, h: specSz.h };
     }
 
     for (const c of node.children || []) collectNodes(c, ax, ay);
@@ -124,7 +132,8 @@ function buildCoordinateMap(elkResult, lc) {
       };
     }
 
-    // Fix lane overlaps: if two lanes overlap vertically, insert gap
+    // Fix lane overlaps: adjacent lanes share their border line (bpmn.io
+    // convention), so they touch exactly. Only shift if there's a real overlap.
     const laneSorted = lanes.map(l => l.id).filter(id => laneCoords[id])
       .sort((a, b) => laneCoords[a].y - laneCoords[b].y);
 
@@ -132,9 +141,9 @@ function buildCoordinateMap(elkResult, lc) {
       const prev = laneCoords[laneSorted[i - 1]];
       const curr = laneCoords[laneSorted[i]];
       const prevBottom = prev.y + prev.h;
-      if (curr.y < prevBottom + 2) {
-        // Shift this lane and all its nodes down
-        const delta = prevBottom + 2 - curr.y;
+      if (curr.y < prevBottom) {
+        // Shift this lane and all its nodes down so it sits flush below prev
+        const delta = prevBottom - curr.y;
         curr.y += delta;
         // Shift all nodes in this lane
         for (const n of procNodes) {
@@ -579,21 +588,17 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
-  // Message-flow labels (stored in absolute coords; svg.js renders at midpoint of
-  // source-bottom → target-top after applying tx/ty, matching existing inline logic)
+  // Message-flow labels: use direction-aware ports (bottom-up vs top-down)
   const allMessageFlows = lc.messageFlows || [];
   for (const mf of allMessageFlows) {
     if (!mf.name) continue;
     const srcCoord = coords[mf.source] || {};
     const tgtCoord = coords[mf.target] || {};
-    const sx = (srcCoord.x || 0) + (srcCoord.w || 0) / 2;
-    const sy = (srcCoord.y || 0) + (srcCoord.h || 0);
-    const ex = (tgtCoord.x || 0) + (tgtCoord.w || 0) / 2;
-    const ey = tgtCoord.y || 0;
+    const ports = messageFlowPorts(srcCoord, tgtCoord);
     edgeLabels[mf.id || `mf_${mf.source}_${mf.target}`] = {
       text: mf.name,
-      x: (sx + ex) / 2,
-      y: (sy + ey) / 2,
+      x: (ports.sx + ports.ex) / 2,
+      y: (ports.sy + ports.ey) / 2,
     };
   }
 
@@ -765,6 +770,33 @@ function clipRectOrthogonal(shape, nextPt, isHorizontal) {
     const y = nextPt.y > shape.y + shape.h / 2 ? shape.y + shape.h : shape.y;
     return { x: clampedX, y };
   }
+}
+
+/**
+ * Pick natural endpoint ports for a message flow based on the relative position
+ * of source and target shapes. Returns { sx, sy, ex, ey } in absolute coords.
+ *
+ * Convention (matching bpmn.io):
+ * - If source is ABOVE target: exit source bottom, enter target top (downward)
+ * - If source is BELOW target: exit source top, enter target bottom (upward)
+ *
+ * Used by message-flow rendering in svg.js and bpmn-xml.js, and by
+ * coordinates.js for message-flow label positioning. Falling back to the
+ * legacy bottom→top behavior would be wrong for upward flows (e.g., a
+ * service-pool merge gateway sending a response back to a customer pool).
+ */
+export function messageFlowPorts(srcCoord, tgtCoord) {
+  const sCenterY = (srcCoord.y || 0) + (srcCoord.h || 0) / 2;
+  const tCenterY = (tgtCoord.y || 0) + (tgtCoord.h || 0) / 2;
+  const sxCenter = (srcCoord.x || 0) + (srcCoord.w || 0) / 2;
+  const exCenter = (tgtCoord.x || 0) + (tgtCoord.w || 0) / 2;
+  const downward = sCenterY < tCenterY;
+  return {
+    sx: sxCenter,
+    sy: downward ? (srcCoord.y || 0) + (srcCoord.h || 0) : (srcCoord.y || 0),
+    ex: exCenter,
+    ey: downward ? (tgtCoord.y || 0) : (tgtCoord.y || 0) + (tgtCoord.h || 0),
+  };
 }
 
 export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal };

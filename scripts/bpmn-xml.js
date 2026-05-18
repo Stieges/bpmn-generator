@@ -11,6 +11,7 @@ import { isEvent, isGateway, isBoundaryEvent, bpmnXmlTag } from './types.js';
 import { rn, LANE_HEADER_W, LABEL_DISTANCE } from './utils.js';
 import { inferGatewayDirections } from './topology.js';
 import { inferEventMarker } from './icons.js';
+import { messageFlowPorts } from './coordinates.js';
 
 const moddle = new BpmnModdle();
 
@@ -568,21 +569,16 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
     }
   }
 
-  // Message flow DI
+  // Message flow DI — direction-aware ports
   if (lc.messageFlows) {
     for (const mf of lc.messageFlows) {
       const srcCoord = coords[mf.source] || poolCoords[mf.source];
       const tgtCoord = coords[mf.target] || poolCoords[mf.target];
       const waypoints = [];
       if (srcCoord && tgtCoord) {
-        waypoints.push(create('dc:Point', {
-          x: rn((srcCoord.x || 0) + (srcCoord.w || 0) / 2),
-          y: rn((srcCoord.y || 0) + (srcCoord.h || 0)),
-        }));
-        waypoints.push(create('dc:Point', {
-          x: rn((tgtCoord.x || 0) + (tgtCoord.w || 0) / 2),
-          y: rn(tgtCoord.y || 0),
-        }));
+        const ports = messageFlowPorts(srcCoord, tgtCoord);
+        waypoints.push(create('dc:Point', { x: rn(ports.sx), y: rn(ports.sy) }));
+        waypoints.push(create('dc:Point', { x: rn(ports.ex), y: rn(ports.ey) }));
       }
       planeElements.push(create('bpmndi:BPMNEdge', {
         id: `${mf.id}_di`,
