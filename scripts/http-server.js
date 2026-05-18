@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import crypto from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { runPipeline, validateLogicCore } from './pipeline.js';
 import { bpmnToLogicCore } from './import.js';
 import { orchestrate } from './orchestrator.js';
@@ -59,6 +60,31 @@ export function isInternalHost(host) {
   if (/^f[cd][0-9a-f]{0,2}:/.test(h)) return true;  // fc00::/7 (ULA)
   if (/^fe[89ab][0-9a-f]?:/.test(h)) return true;   // fe80::/10 (link-local)
   return false;
+}
+
+// Swappable DNS lookup (overridable in tests via _setDnsLookup).
+let _lookup = dnsLookup;
+export function _setDnsLookup(fn) { _lookup = fn || dnsLookup; }
+
+export async function validateCallbackUrlAsync(url) {
+  const sync = validateCallbackUrl(url);
+  if (sync) return sync;
+  const { hostname } = new URL(url);
+  // Strip brackets for IPv6 hostnames
+  const h = hostname.replace(/^\[|\]$/g, '');
+  // If hostname is already an IP, the sync check already covered it.
+  if (/^[\d.]+$/.test(h) || /:/.test(h)) return null;
+  try {
+    const addrs = await _lookup(hostname, { all: true });
+    for (const { address } of addrs) {
+      if (isInternalHost(address)) {
+        return 'callbackUrl resolves to internal network';
+      }
+    }
+  } catch (err) {
+    return `callbackUrl DNS lookup failed: ${err.code || err.message}`;
+  }
+  return null;
 }
 
 function checkAuth(req, res) {
@@ -141,12 +167,13 @@ const server = createServer(async (req, res) => {
 
       let callbackStatus = 'not_requested';
       if (body.callbackUrl) {
+        let urlError;
         try {
-          const urlError = validateCallbackUrl(body.callbackUrl);
-          if (urlError) return json(res, 400, { error: urlError });
+          urlError = await validateCallbackUrlAsync(body.callbackUrl);
         } catch {
           return json(res, 400, { error: 'callbackUrl is not a valid URL' });
         }
+        if (urlError) return json(res, 400, { error: urlError });
         deliver(body.callbackUrl, payload).catch(err => {
           auditLog({ event: 'delivery_failed', correlationId, error: err.message });
         });

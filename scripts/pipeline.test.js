@@ -1783,6 +1783,40 @@ describe('HTTP Server utilities', () => {
   test('validateCallbackUrl throws on invalid URL', () => {
     expect(() => validateCallbackUrl('not-a-url')).toThrow();
   });
+
+  test('validateCallbackUrlAsync rejects host that resolves to internal IP', async () => {
+    // ESM `node:dns/promises` exports are read-only in Jest 30, so we inject the
+    // lookup function via the test-only `_setDnsLookup` hook on http-server.
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    _setDnsLookup(async (h) => h === 'evil.example.com'
+      ? [{ address: '127.0.0.1', family: 4 }]
+      : [{ address: '93.184.216.34', family: 4 }]);
+    try {
+      const result = await validateCallbackUrlAsync('http://evil.example.com/hook');
+      expect(result).toMatch(/internal/);
+    } finally {
+      _setDnsLookup(null); // restore default
+    }
+  });
+
+  test('validateCallbackUrlAsync accepts host that resolves to public IP', async () => {
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    _setDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]); // example.com public IP
+    try {
+      const result = await validateCallbackUrlAsync('https://example.com/webhook');
+      expect(result).toBeNull();
+    } finally {
+      _setDnsLookup(null);
+    }
+  });
+
+  test('validateCallbackUrlAsync passes through sync errors unchanged', async () => {
+    const { validateCallbackUrlAsync } = await import('./http-server.js');
+    // Raw internal IP — sync check catches it before DNS lookup is attempted
+    expect(await validateCallbackUrlAsync('http://127.0.0.1/hook')).toMatch(/internal/);
+    // Bad protocol — sync check catches it
+    expect(await validateCallbackUrlAsync('ftp://example.com/hook')).toMatch(/http or https/);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
