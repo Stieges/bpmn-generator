@@ -140,6 +140,61 @@ After every change: `npm test` must pass.
 7. `references/omg-compliance.md` — update OMG mapping
 8. `references/input-schema.json` — extend schema
 
+## Common Tasks
+
+Workflows that come up repeatedly in this codebase. Each lists the file(s) to open first and the verification command.
+
+### Debug a wrong layout
+
+1. Reproduce: `cd scripts && node pipeline.js tests/fixtures/<fixture>.json /tmp/dbg`
+2. Inspect `/tmp/dbg.svg` (browser) and `/tmp/dbg.bpmn` (text editor).
+3. Open in order: `layout.js` (Elk node/edge build), `coordinates.js` (post-processing), `topology.js` (node/lane ordering).
+4. For pool/lane width issues, suspect `coordinates.js` first (`balancePoolWidths`, lane-compaction).
+5. For edge routing issues, suspect `coordinates.js` (`clipOrthogonal`) and `bpmn-xml.js` (waypoint emission).
+
+### React to a golden-file failure
+
+1. **Never blind-regenerate.** First inspect the diff:
+   - `diff -u tests/fixtures/<name>.expected.bpmn /tmp/output.bpmn`
+2. Decide: is the change intended (then the golden is stale and must be regenerated) or unintended (then the code is broken)?
+3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`).
+4. Commit golden updates in their own commit, separate from code changes.
+
+### Extend the rule engine
+
+1. Insert the rule object into the `RULES` array in `scripts/rules.js`.
+2. Fields: `id`, `layer`, `defaultSeverity`, `description`, `ref`, `check(proc) → { pass: true } | { pass: false, message }`.
+3. Document the rule in `references/fachliches-regelwerk.md` with source citation.
+4. Add a positive and a negative fixture under `tests/fixtures/` and assertions in `pipeline.test.js`.
+5. Verify: `npm test -- --testPathPattern=pipeline`.
+
+### Choose a test fixture
+
+- Simple sequential approval flow → `tests/fixtures/simple-approval.json`
+- Multi-pool collaboration with message flows → `tests/fixtures/multi-pool-collaboration.json`
+- Subprocess (expanded) → `tests/fixtures/expanded-subprocess.json`
+- Sparse lanes (tests visual-refinement compaction) → `tests/fixtures/sparse-lanes.json`
+- Full list: `ls tests/fixtures/`.
+
+### Change a prompt template
+
+1. Edit `references/prompt-template.md`. The LLM consumes this verbatim.
+2. **Re-validate downstream**: any change must still produce valid Logic-Core per `references/input-schema.json`. Run a sample text through the orchestrator (`scripts/agents/modeler.js`) and check the schema-validation step passes.
+3. Update the few-shot examples in the same file if the format changes — examples must be consistent with the new rules.
+
+### Run a visual-refinement pass
+
+1. Default: `visualRefinement: false`. Opt in per call: `runPipeline(lc, { visualRefinement: true })`.
+2. Sub-flags: `compactLanes`, `wrapLabels`, `padPoolBounds`, etc. See `scripts/visual-refinement.js`.
+3. Verify against goldens: `cd scripts && npm test -- --testPathPattern=visual-refinement`.
+
+### Run a robustness benchmark
+
+1. Synthetic-data run: `cd scripts/robustness && node cli.js run --target=lc-json`.
+2. Drift check vs previous run: `node cli.js run --target=both` (compares against `tests/robustness-reports/`).
+3. MaD subset validation: `node cli.js mad-check`.
+4. Reports land in `tests/robustness-reports/` (gitignored — share by attaching).
+
 ## Rule Engine
 
 4 layers with configurable severity:
