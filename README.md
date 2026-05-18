@@ -5,6 +5,18 @@
 
 BPMN 2.0 diagram generator — converts natural language process descriptions or structured JSON into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013).
 
+## Why this one
+
+Three things you can verify in the repo, not just claim:
+
+1. **Multi-pool collaborations with lanes and message flows render fully.** The closest open-source comparable (`bpmn-auto-layout@1.3.0`, used by [BPMN Assistant](https://github.com/jtlicardo/bpmn-assistant)) silently drops every participant after the first plus all inter-pool message flows ([data](EVALUATION.md#bpmn-auto-layout-comparison)). Our pipeline renders all participants and all message flows.
+2. **Strict JSON Schema gate at every HTTP API entry.** LLM output cannot reach the layout engine with malformed Logic-Core — `ajv` draft-2020-12 rejects it at the boundary ([scripts/schema-gate.js](scripts/schema-gate.js)).
+3. **Native Claude Code MCP server.** Exposed as a [Skill](SKILL.md) and via [`scripts/mcp-bpmn-server.js`](scripts/mcp-bpmn-server.js). The LLM never touches coordinates — it emits Logic-Core JSON, the pipeline handles layout deterministically.
+
+Reproduce the comparison: `cd scripts && node bench/compare-bpmn-auto-layout.mjs` — produces [tests/bench/auto-layout-comparison.md](tests/bench/auto-layout-comparison.md) + side-by-side HTML.
+
+See [EVALUATION.md](EVALUATION.md) for the full benchmark, the competitor matrix, and honest notes about where ProMoAI and BPMN Assistant are stronger.
+
 ## What It Does
 
 You describe a business process — either as free text or as a structured JSON (Logic-Core) — and the generator produces:
