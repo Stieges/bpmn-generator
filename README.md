@@ -223,8 +223,37 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)
 - **Documentation View** (SVG tooltips + `--doc` Markdown companion)
 - **Happy-Path Y-Leveling** (post-layout alignment, configurable)
+- **Visual Refinement Pass** (opt-in post-layout polish — see below)
 - **MCP Server** (generate, validate, import as MCP tools)
 - **bpmn.io compatible** (verified with bpmn-js viewer)
+
+### Visual Refinement (opt-in)
+
+Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Default `enabled: false` — existing pipeline output stays byte-identical.
+
+- **Pass 1** — Dynamic per-pool lane-header widths with multi-line wrapping (long lane/pool names no longer clip)
+- **Pass 2** — `compactLanes`: reduces lane padding (~45px per non-empty lane on typical layouts, ~10–20% canvas shrink on multi-lane diagrams)
+- **Pass 3** — Edge label collision repair via bbox-nudge
+- **Pass 5** — ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes)
+
+**Enable via config:**
+
+```json
+{
+  "visualRefinement": {
+    "enabled": true,
+    "minLaneHeight": 80
+  }
+}
+```
+
+**Or per-call:**
+
+```javascript
+const result = await runPipeline(logicCore, { visualRefinement: true });
+```
+
+Design spec: [`docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md`](docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md)
 
 ## Multi-Agent Orchestration
 

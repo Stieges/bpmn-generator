@@ -56,7 +56,7 @@
       "required": ["id", "nodes", "edges"],
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "description": "Short organization or participant name. Recommended: ≤ 25 characters (e.g. 'Bestellverarbeitung', 'Kunde', 'Lieferant'). Longer names force multi-line header rendering; rule M10 emits a WARNING if exceeded. Avoid descriptive sentences or bracketed meta-info." },
         "documentation": { "type": "string" },
         "nodes": { "type": "array", "items": { "$ref": "#/$defs/Node" }, "minItems": 1 },
         "edges": { "type": "array", "items": { "$ref": "#/$defs/Edge" } },
@@ -69,7 +69,7 @@
       "required": ["id"],
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" }
+        "name": { "type": "string", "description": "Short external participant name. Recommended: ≤ 25 characters (e.g. 'Kunde', 'Lieferant', 'Behörde'). Rule M10 emits a WARNING if exceeded." }
       },
       "additionalProperties": false
     },
@@ -188,7 +188,7 @@
       "required": ["id"],
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "description": "Short role or department name. Recommended: ≤ 25 characters (e.g. 'Einkauf', 'QA', 'Compliance', 'Teamleiter'). Longer names force multi-line header rendering and visual clutter; rule M10 emits a WARNING if exceeded. Avoid descriptive sentences, module paths, or bracketed meta-info." },
         "children": { "type": "array", "items": { "$ref": "#/$defs/Lane" }, "description": "Nested child lanes" }
       },
       "additionalProperties": false

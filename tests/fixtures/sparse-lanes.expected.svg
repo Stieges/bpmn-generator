@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1332" height="1186" viewBox="0 0 1332 1186" font-family="Arial, sans-serif">
+<defs>
+  <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
+  <marker id="seq-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="6" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 6 3 L 10 17" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+  <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="1" refY="10"
+    markerWidth="12" markerHeight="12" orient="auto">
+    <path d="M 1 10 L 8 6 L 15 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
+  <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open arrowhead at target -->
+  <marker id="msg-end" viewBox="0 0 20 20" refX="8.5" refY="5"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#000000" stroke-width="1" stroke-linecap="butt"/>
+  </marker>
+  <!-- Association: open chevron -->
+  <marker id="assoc-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+</defs>
+<rect width="1332" height="1186" fill="#fafafa"/>
+<rect x="90" y="50" width="1192" height="585" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="50" width="40" height="585" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="70" y="342.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,70,342.5)">Frontend</text>
+<rect x="90" y="637" width="1192" height="165" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="637" width="40" height="165" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="70" y="719.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,70,719.5)">Backend</text>
+<rect x="90" y="804" width="1192" height="165" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="804" width="40" height="165" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="70" y="886.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,70,886.5)">Ops</text>
+<rect x="90" y="971" width="1192" height="165" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="971" width="40" height="165" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="70" y="1053.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,70,1053.5)">QA</text>
+<path d="M 156 255 L 236 255" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 286 255 L 326 255 L 326 120 L 366 120" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 261 280 L 366 280 L 366 300" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 286 255 L 326 255 L 326 400 L 366 400" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 261 280 L 261 390 L 401 390 L 401 500" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 466 120 L 506 120 L 506 255 L 546 255" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 466 300 L 546 300 L 546 255" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 466 400 L 506 400 L 506 255 L 546 255" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 401 500 L 401 390 L 571 390 L 571 280" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 571 280 L 571 667 L 676 667" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 776 747 L 776 834 L 856 834" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 956 914 L 956 1001 L 1036 1001" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 1136 1081 L 1234 1081 L 1234 1046" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<circle cx="138" cy="255" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<text x="138" y="293" text-anchor="middle" font-size="11" fill="#000000">Start</text>
+<polygon points="261,230 286,255 261,280 236,255" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="261" y1="246" x2="261" y2="264" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<line x1="252" y1="255" x2="270" y2="255" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<text x="261" y="300" text-anchor="middle" font-size="11" fill="#000000">Split</text>
+<rect x="366" y="80" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 381,92 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 383.162,93.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 374.1,88.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="416" y="129" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Validate Inputs</text>
+<rect x="366" y="220" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 381,232 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 383.162,233.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 374.1,228.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="416" y="269" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Render Form</text>
+<rect x="366" y="360" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 381,372 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 383.162,373.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 374.1,368.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="416" y="409" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Update State</text>
+<rect x="351" y="500" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 366,512 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 368.162,513.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 359.1,508.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="401" y="549" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Log Telemetry</text>
+<polygon points="571,230 596,255 571,280 546,255" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="571" y1="246" x2="571" y2="264" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<line x1="562" y1="255" x2="580" y2="255" stroke="#000000" stroke-width="3.5" stroke-linecap="round"/>
+<text x="571" y="300" text-anchor="middle" font-size="11" fill="#000000">Join</text>
+<rect x="676" y="667" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 691,679 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 693.162,680.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 684.1,675.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="726" y="709" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Validate</text>
+<text x="726" y="723" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Request</text>
+<rect x="856" y="834" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 871,846 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 873.162,847.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 864.1,842.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="906" y="883" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Deploy Build</text>
+<rect x="1036" y="1001" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 1051,1013 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1053.162,1014.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1044.1,1009.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="1086" y="1050" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Run Tests</text>
+<circle cx="1234" cy="1028" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
+<text x="1234" y="1066" text-anchor="middle" font-size="11" fill="#000000">End</text>
+</svg>

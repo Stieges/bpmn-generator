@@ -140,6 +140,12 @@ bioc:stroke/bioc:fill attributes on BPMNShape elements, per-node colors in SVG r
 
 **Rationale:** Process Mining is a pre-processor (event log → variants → Logic-Core), not part of the BPMN Generator. The pipeline consumes finished Logic-Core JSON — where it comes from (LLM, Process Mining, manual) is not its scope. Belongs in iwf-knowledge or a separate tool.
 
+### M7 — Visual Refinement Pass | DONE
+
+Opt-in post-layout polish: dynamic per-pool lane-header widths, edge-label collision repair via bbox-nudge, ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes), and lane padding compaction. Default `visualRefinement.enabled: false` — existing output byte-identical with flag off.
+
+**Files:** scripts/visual-refinement.js (new), scripts/utils.js (wrapText extension), scripts/pipeline.js (flag wiring), scripts/layout.js (wrapping hint), scripts/coordinates.js (per-pool laneHeaderWidth), config.json. Spec + plan in docs/superpowers/.
+
 ---
 
 ## 4 Long-Term Improvements — Assessment

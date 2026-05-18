@@ -1,0 +1,24 @@
+{
+  "pools": [{
+    "id": "Process_LongNames",
+    "name": "Long Names Test",
+    "lanes": [
+      { "id": "laneA", "name": "Prozessverantwortlicher" },
+      { "id": "laneB", "name": "Qualitätssicherungsbeauftragter" },
+      { "id": "laneC", "name": "Datenschutzkoordinator" }
+    ],
+    "nodes": [
+      {"id": "s1", "type": "startEvent", "name": "Start",     "lane": "laneA"},
+      {"id": "t1", "type": "userTask",   "name": "Erfassen",  "lane": "laneA"},
+      {"id": "t2", "type": "userTask",   "name": "Prüfen",    "lane": "laneB"},
+      {"id": "t3", "type": "userTask",   "name": "Freigeben", "lane": "laneC"},
+      {"id": "e1", "type": "endEvent",   "name": "Fertig",    "lane": "laneC"}
+    ],
+    "edges": [
+      {"id": "f1", "source": "s1", "target": "t1"},
+      {"id": "f2", "source": "t1", "target": "t2"},
+      {"id": "f3", "source": "t2", "target": "t3"},
+      {"id": "f4", "source": "t3", "target": "e1"}
+    ]
+  }]
+}

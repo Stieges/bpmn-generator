@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="892" height="599" viewBox="0 0 892 599" font-family="Arial, sans-serif">
+<defs>
+  <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
+  <marker id="seq-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="6" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 6 3 L 10 17" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+  <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="1" refY="10"
+    markerWidth="12" markerHeight="12" orient="auto">
+    <path d="M 1 10 L 8 6 L 15 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
+  <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open arrowhead at target -->
+  <marker id="msg-end" viewBox="0 0 20 20" refX="8.5" refY="5"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#000000" stroke-width="1" stroke-linecap="butt"/>
+  </marker>
+  <!-- Association: open chevron -->
+  <marker id="assoc-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+</defs>
+<rect width="892" height="599" fill="#fafafa"/>
+<rect x="90" y="50" width="752" height="165" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="50" width="40" height="165" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="70" y="132.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,70,132.5)">Prozessverantwortlicher</text>
+<rect x="90" y="217" width="752" height="165" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="217" width="40" height="165" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="70" y="299.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,70,299.5)">Qualitätssicherungsbeauftragter</text>
+<rect x="90" y="384" width="752" height="165" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="384" width="40" height="165" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="70" y="466.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,70,466.5)">Datenschutzkoordinator</text>
+<path d="M 156 107 L 236 107 L 236 80" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 336 160 L 336 247 L 416 247" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 516 327 L 516 414 L 596 414" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 696 494 L 794 494 L 794 459" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<circle cx="138" cy="107" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<text x="138" y="145" text-anchor="middle" font-size="11" fill="#000000">Start</text>
+<rect x="236" y="80" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 251,92 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 253.162,93.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 244.1,88.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="286" y="129" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Erfassen</text>
+<rect x="416" y="247" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 431,259 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 433.162,260.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 424.1,255.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="466" y="296" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Prüfen</text>
+<rect x="596" y="414" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 611,426 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 613.162,427.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 604.1,422.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="646" y="463" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Freigeben</text>
+<circle cx="794" cy="441" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
+<text x="794" y="479" text-anchor="middle" font-size="11" fill="#000000">Fertig</text>
+</svg>

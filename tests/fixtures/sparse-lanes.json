@@ -1,0 +1,40 @@
+{
+  "pools": [{
+    "id": "Process_Sparse",
+    "name": "Sparse Lanes Test",
+    "lanes": [
+      { "id": "laneA", "name": "Frontend" },
+      { "id": "laneB", "name": "Backend" },
+      { "id": "laneC", "name": "Ops" },
+      { "id": "laneD", "name": "QA" }
+    ],
+    "nodes": [
+      {"id": "s",       "type": "startEvent",       "name": "Start",   "lane": "laneA"},
+      {"id": "split",   "type": "parallelGateway", "name": "Split",   "lane": "laneA"},
+      {"id": "a1",      "type": "userTask",        "name": "Validate Inputs", "lane": "laneA"},
+      {"id": "a2",      "type": "userTask",        "name": "Render Form",     "lane": "laneA"},
+      {"id": "a3",      "type": "userTask",        "name": "Update State",    "lane": "laneA"},
+      {"id": "a4",      "type": "userTask",        "name": "Log Telemetry",   "lane": "laneA"},
+      {"id": "join",    "type": "parallelGateway", "name": "Join",    "lane": "laneA"},
+      {"id": "b1",      "type": "userTask",        "name": "Validate Request", "lane": "laneB"},
+      {"id": "c1",      "type": "userTask",        "name": "Deploy Build",     "lane": "laneC"},
+      {"id": "d1",      "type": "userTask",        "name": "Run Tests",        "lane": "laneD"},
+      {"id": "e",       "type": "endEvent",        "name": "End",     "lane": "laneD"}
+    ],
+    "edges": [
+      {"id": "f0",  "source": "s",     "target": "split"},
+      {"id": "f1a", "source": "split", "target": "a1"},
+      {"id": "f1b", "source": "split", "target": "a2"},
+      {"id": "f1c", "source": "split", "target": "a3"},
+      {"id": "f1d", "source": "split", "target": "a4"},
+      {"id": "f2a", "source": "a1",    "target": "join"},
+      {"id": "f2b", "source": "a2",    "target": "join"},
+      {"id": "f2c", "source": "a3",    "target": "join"},
+      {"id": "f2d", "source": "a4",    "target": "join"},
+      {"id": "f3",  "source": "join",  "target": "b1"},
+      {"id": "f4",  "source": "b1",    "target": "c1"},
+      {"id": "f5",  "source": "c1",    "target": "d1"},
+      {"id": "f6",  "source": "d1",    "target": "e"}
+    ]
+  }]
+}
