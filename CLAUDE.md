@@ -12,20 +12,41 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 23 core-pipeline + 5 agent + 9 robustness modules under `scripts/`. Verify current inventory with `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
-pipeline.js (Orchestrator, ~180 LOC)
-  ├── validate.js      ← rules.js
-  ├── rules.js         ← types.js, workflow-net.js (27 rules, 4 layers, profiles; M05/M06 severity=OFF)
-  ├── topology.js      ← types.js
-  ├── layout.js        ← types.js, utils.js, topology.js, elkjs
-  ├── coordinates.js   ← types.js, utils.js
-  ├── bpmn-xml.js      ← types.js, utils.js, topology.js, icons.js
-  ├── svg.js           ← types.js, utils.js, icons.js
-  ├── icons.js         ← utils.js
-  ├── dot.js           ← types.js
-  ├── types.js         (no deps)
-  └── utils.js         (no deps, reads config.json)
+Core Pipeline (run on every generate call)
+  pipeline.js (Orchestrator, public API runPipeline)
+    ├── validate.js          ← rules.js
+    ├── rules.js             ← types.js, workflow-net.js
+    ├── workflow-net.js      ← types.js
+    ├── topology.js          ← types.js
+    ├── layout.js            ← types.js, utils.js, topology.js, elkjs
+    ├── coordinates.js       ← types.js, utils.js
+    ├── visual-refinement.js ← coordinates.js (opt-in compaction passes)
+    ├── bpmn-xml.js          ← types.js, utils.js, topology.js, icons.js
+    ├── svg.js               ← types.js, utils.js, icons.js
+    ├── icons.js             ← utils.js
+    ├── dot.js               ← types.js
+    ├── types.js             (no deps)
+    └── utils.js             (reads config.json)
 
-import.js              BPMN XML → Logic-Core (standalone)
+Standalone tooling
+  import.js                  BPMN XML → Logic-Core (DOM parser)
+  moddle-import.js           BPMN XML → Logic-Core (bpmn-moddle path)
+  http-server.js             HTTP API (/api/v1/generate, /orchestrate)
+  mcp-bpmn-server.js         MCP server entry point
+  evaluate-slm.js            Pipeline evaluation runner
+  prepare-training-data.js   Training-data prep script
+  audit.js                   Append-only JSONL audit log
+  delivery.js                Webhook delivery + dead-letter
+  orchestrator.js            Multi-agent orchestration
+
+Agent subsystem (scripts/agents/)
+  compliance.js, layout.js, llm-provider.js, modeler.js, reviewer.js
+
+Robustness subsystem (scripts/robustness/)
+  cli.js, curate-mad.js, failure-classifier.js, fixture-persister.js,
+  graph-isomorphism.js, mad-validator.js, report-generator.js,
+  stress-tester.js, synthetic-generator.js
+  (+ seed-catalog.json, config.json, README.md)
 ```
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
@@ -46,6 +67,18 @@ import.js              BPMN XML → Logic-Core (standalone)
 | `scripts/svg.js` | `generateSvg` — SVG rendering of all BPMN elements |
 | `scripts/icons.js` | Event markers, task icons, bottom markers (Loop, MI, Ad-Hoc) |
 | `scripts/dot.js` | `logicCoreToDot` / `dotToLogicCore` — Graphviz DOT support |
+| `scripts/workflow-net.js` | WF-Net soundness checks (used by WF01–WF03 rules) |
+| `scripts/visual-refinement.js` | Optional compaction/refinement passes P1–P7.1 (off by default) |
+| `scripts/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
+| `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`) |
+| `scripts/mcp-bpmn-server.js` | MCP server entry point |
+| `scripts/orchestrator.js` | Multi-agent orchestration (modeler → layout → reviewer → compliance) |
+| `scripts/audit.js` | Append-only audit log (JSONL) |
+| `scripts/delivery.js` | Webhook delivery + dead-letter queue |
+| `scripts/evaluate-slm.js` | Evaluation runner against fixture sets |
+| `scripts/prepare-training-data.js` | Training-data prep for SLM eval |
+| `scripts/agents/` | 5 agent modules: compliance, layout, llm-provider, modeler, reviewer |
+| `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
 | `scripts/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
