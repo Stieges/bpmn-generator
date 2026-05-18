@@ -1,6 +1,15 @@
 import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
+import { readFileSync } from 'node:fs';
+import { join, extname, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const frontendDir = join(__dirname, '..', 'frontend');
+
+const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+
 import { runPipeline, validateLogicCore } from './pipeline.js';
 import { bpmnToLogicCore } from './import.js';
 import { orchestrate } from './orchestrator.js';
@@ -144,6 +153,33 @@ const server = createServer(async (req, res) => {
       uptime: Math.floor((Date.now() - startTime) / 1000),
       version: '2.0.0',
     });
+  }
+
+  // Frontend static files
+  if (method === 'GET' && (url === '/' || url === '/index.html')) {
+    const body = readFileSync(join(frontendDir, 'index.html'));
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    return res.end(body);
+  }
+  if (method === 'GET' && url.startsWith('/static/')) {
+    const file = url.replace('/static/', '');
+    const path = join(frontendDir, file);
+    if (!path.startsWith(frontendDir)) return res.writeHead(403).end(); // path traversal guard
+    try {
+      const body = readFileSync(path);
+      res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
+      return res.end(body);
+    } catch { return res.writeHead(404).end(); }
+  }
+  if (method === 'GET' && url.startsWith('/examples/')) {
+    const file = url.replace('/examples/', '');
+    const path = join(frontendDir, 'examples', file);
+    if (!path.startsWith(join(frontendDir, 'examples'))) return res.writeHead(403).end();
+    try {
+      const body = readFileSync(path);
+      res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
+      return res.end(body);
+    } catch { return res.writeHead(404).end(); }
   }
 
   // Auth + rate limiting (skip for health check)
