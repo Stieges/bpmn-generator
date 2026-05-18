@@ -29,6 +29,9 @@ Thumbs.db
 audit/
 dead-letter/
 
+# Skill bundle (rebuild on demand via `npm run build:skill`)
+bpmn-generator-v3.skill
+
 # Robustness run artifacts (the dir is committed via .gitkeep, but reports are local)
 tests/robustness-reports/*.md
 tests/robustness-reports/*.json

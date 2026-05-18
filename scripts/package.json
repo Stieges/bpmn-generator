@@ -31,7 +31,8 @@
   },
   "scripts": {
     "generate": "node pipeline.js",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache",
+    "build:skill": "node build-skill.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
