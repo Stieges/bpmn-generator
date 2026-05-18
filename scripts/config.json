@@ -50,8 +50,8 @@
     "poolHeader": "#e8e8e8"
   },
   "layout": {
-    "laneHeaderWidth":    40,
-    "lanePadding":        30,
+    "laneHeaderWidth":    30,
+    "lanePadding":        60,
     "labelDistance":       10,
     "taskBorderRadius":   10,
     "innerOuterGap":      3,

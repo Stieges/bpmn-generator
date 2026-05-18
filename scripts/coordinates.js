@@ -124,7 +124,8 @@ function buildCoordinateMap(elkResult, lc) {
       };
     }
 
-    // Fix lane overlaps: if two lanes overlap vertically, insert gap
+    // Fix lane overlaps: adjacent lanes share their border line (bpmn.io
+    // convention), so they touch exactly. Only shift if there's a real overlap.
     const laneSorted = lanes.map(l => l.id).filter(id => laneCoords[id])
       .sort((a, b) => laneCoords[a].y - laneCoords[b].y);
 
@@ -132,9 +133,9 @@ function buildCoordinateMap(elkResult, lc) {
       const prev = laneCoords[laneSorted[i - 1]];
       const curr = laneCoords[laneSorted[i]];
       const prevBottom = prev.y + prev.h;
-      if (curr.y < prevBottom + 2) {
-        // Shift this lane and all its nodes down
-        const delta = prevBottom + 2 - curr.y;
+      if (curr.y < prevBottom) {
+        // Shift this lane and all its nodes down so it sits flush below prev
+        const delta = prevBottom - curr.y;
         curr.y += delta;
         // Shift all nodes in this lane
         for (const n of procNodes) {

@@ -1,8 +1,8 @@
 {
   "benchmark": "stieges-bench-v1",
   "version": 1,
-  "generatedAt": "2026-05-18T12:28:35.694Z",
-  "gitCommit": "3852d56d1eb8ec0b09b711ec91113278e34805d5",
+  "generatedAt": "2026-05-18T13:22:51.757Z",
+  "gitCommit": "332761314bb0a182e7d988cbfb0ffc9f778243e4",
   "fixturesDir": "tests/fixtures",
   "fixtureCount": 9,
   "anyParseFailure": false,
@@ -14,10 +14,10 @@
     "edges": 114,
     "soundnessErrors": 1,
     "soundnessWarnings": 11,
-    "crossings": 20,
-    "bpmnXmlBytes": 91274,
-    "svgBytes": 145824,
-    "wallClockMs": 374
+    "crossings": 19,
+    "bpmnXmlBytes": 91400,
+    "svgBytes": 146005,
+    "wallClockMs": 276.26
   },
   "results": [
     {
@@ -29,10 +29,10 @@
       "edgeCount": 31,
       "soundnessErrors": 0,
       "soundnessWarnings": 4,
-      "layoutCrossings": 11,
-      "bpmnXmlBytes": 28976,
-      "svgBytes": 54790,
-      "wallClockMs": 233.84
+      "layoutCrossings": 10,
+      "bpmnXmlBytes": 28994,
+      "svgBytes": 54838,
+      "wallClockMs": 163.5
     },
     {
       "fixture": "deadlock-process",
@@ -46,7 +46,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 0,
       "svgBytes": 0,
-      "wallClockMs": 0.17
+      "wallClockMs": 0.25
     },
     {
       "fixture": "dense-edge-labels",
@@ -58,9 +58,9 @@
       "soundnessErrors": 0,
       "soundnessWarnings": 1,
       "layoutCrossings": 1,
-      "bpmnXmlBytes": 9778,
-      "svgBytes": 10657,
-      "wallClockMs": 23.6
+      "bpmnXmlBytes": 9784,
+      "svgBytes": 10661,
+      "wallClockMs": 23.15
     },
     {
       "fixture": "expanded-subprocess",
@@ -72,9 +72,9 @@
       "soundnessErrors": 0,
       "soundnessWarnings": 1,
       "layoutCrossings": 0,
-      "bpmnXmlBytes": 5367,
-      "svgBytes": 8899,
-      "wallClockMs": 16.4
+      "bpmnXmlBytes": 5377,
+      "svgBytes": 8901,
+      "wallClockMs": 13.91
     },
     {
       "fixture": "long-lane-names",
@@ -86,9 +86,9 @@
       "soundnessErrors": 0,
       "soundnessWarnings": 4,
       "layoutCrossings": 0,
-      "bpmnXmlBytes": 4671,
-      "svgBytes": 6820,
-      "wallClockMs": 10.17
+      "bpmnXmlBytes": 4675,
+      "svgBytes": 6825,
+      "wallClockMs": 10.32
     },
     {
       "fixture": "multi-pool-collaboration",
@@ -100,9 +100,9 @@
       "soundnessErrors": 0,
       "soundnessWarnings": 0,
       "layoutCrossings": 1,
-      "bpmnXmlBytes": 10328,
-      "svgBytes": 12516,
-      "wallClockMs": 29.01
+      "bpmnXmlBytes": 10343,
+      "svgBytes": 12526,
+      "wallClockMs": 17.34
     },
     {
       "fixture": "simple-approval",
@@ -114,9 +114,9 @@
       "soundnessErrors": 0,
       "soundnessWarnings": 0,
       "layoutCrossings": 0,
-      "bpmnXmlBytes": 5740,
-      "svgBytes": 8943,
-      "wallClockMs": 17.56
+      "bpmnXmlBytes": 5747,
+      "svgBytes": 8945,
+      "wallClockMs": 13.75
     },
     {
       "fixture": "sparse-lanes",
@@ -128,9 +128,9 @@
       "soundnessErrors": 0,
       "soundnessWarnings": 0,
       "layoutCrossings": 7,
-      "bpmnXmlBytes": 10054,
-      "svgBytes": 13155,
-      "wallClockMs": 21.96
+      "bpmnXmlBytes": 10066,
+      "svgBytes": 13165,
+      "wallClockMs": 14.7
     },
     {
       "fixture": "wide-pipeline",
@@ -142,9 +142,9 @@
       "soundnessErrors": 0,
       "soundnessWarnings": 0,
       "layoutCrossings": 0,
-      "bpmnXmlBytes": 16360,
-      "svgBytes": 30044,
-      "wallClockMs": 21.29
+      "bpmnXmlBytes": 16414,
+      "svgBytes": 30144,
+      "wallClockMs": 19.34
     }
   ]
 }
