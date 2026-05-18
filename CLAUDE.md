@@ -9,12 +9,12 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-13 Core-Pipeline + 5 Agents + 5 Server/Tooling modules under `scripts/`, acyclic dependency graph:
+23 core-pipeline + 5 agent + 9 robustness modules under `scripts/`. Verify current inventory with `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
 pipeline.js (Orchestrator, ~180 LOC)
   ├── validate.js      ← rules.js
-  ├── rules.js         ← types.js, workflow-net.js (26 rules (24 active, M05/M06 disabled), 4 layers, profiles)
+  ├── rules.js         ← types.js, workflow-net.js (27 rules, 4 layers, profiles; M05/M06 severity=OFF)
   ├── topology.js      ← types.js
   ├── layout.js        ← types.js, utils.js, topology.js, elkjs
   ├── coordinates.js   ← types.js, utils.js
@@ -35,7 +35,7 @@ import.js              BPMN XML → Logic-Core (standalone)
 | File | Purpose |
 |------|---------|
 | `scripts/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/rules.js` | Rule Engine: 26 rules (24 active, M05/M06 disabled), 4 layers (Soundness/Style/Pragmatics/Workflow-Net) |
+| `scripts/rules.js` | Rule Engine: 27 rules, 4 layers (Soundness/Style/Pragmatics/Workflow-Net); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
 | `scripts/validate.js` | Thin wrapper around `runRules()` |
 | `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact`, `bpmnXmlTag` |
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
@@ -51,7 +51,7 @@ import.js              BPMN XML → Logic-Core (standalone)
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
 | `references/logic-core-schema.md` | Schema documentation (prose + examples) |
 | `references/prompt-template.md` | LLM prompts + 5 enterprise few-shot patterns |
-| `references/fachliches-regelwerk.md` | Rule documentation (26 rules (24 active, M05/M06 disabled), sources, extension guide) |
+| `references/fachliches-regelwerk.md` | Rule documentation (per-rule sources, extension guide). Authoritative catalog — see this file, not duplicated counts. |
 | `references/omg-compliance.md` | OMG BPMN 2.0.2 → code mapping |
 | `rules/default-profile.json` | Default rule profile (all layers active) |
 | `rules/strict-profile.json` | Strict profile (style warnings → errors) |
@@ -61,7 +61,7 @@ import.js              BPMN XML → Logic-Core (standalone)
 ```bash
 cd scripts/
 npm install
-npm test                                          # 136 tests (Jest, ES Modules)
+npm test                                          # Jest, ES Modules; verify count with `npm test 2>&1 | tail -5`
 node pipeline.js tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
 ```
 
@@ -108,7 +108,7 @@ Profiles in `rules/*.json` override severities or disable layers.
 ## Conventions
 
 - ES Modules (`import`/`export`) — no CommonJS
-- No external deps except `elkjs` (+ `jest` dev)
+- Runtime deps (3): `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`. Dev deps: `jest`, `@jest/globals`. No new deps without prior discussion.
 - Config in `config.json`, not hardcoded
 - Functions are pure (no global state except `CFG`)
 - IDs in Logic-Core: `^[a-zA-Z_][a-zA-Z0-9_-]*$`
@@ -142,7 +142,7 @@ node mcp-bpmn-server.js
 
 ## Known Limitations
 
-- Rule placeholders: M05-M06 (Style) are registered but not implemented (POS tagger problem)
+- Rule placeholders: M05-M06 (Style) registered with severity=OFF (POS tagger problem; tracked in ROADMAP)
 - No Camunda extensions (`camunda:` namespace)
-- Timer events have empty `<timerEventDefinition/>` (no duration/cycle)
-- DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed)
+- DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
+- Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + 13 unit tests; not exhaustive across all BPMN element types
