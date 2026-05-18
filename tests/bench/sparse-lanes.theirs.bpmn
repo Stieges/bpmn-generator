@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_Process_Sparse" name="Sparse Lanes Test" processRef="Process_Sparse" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Sparse" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Sparse">
+      <bpmn:lane id="laneA" name="Frontend">
+        <bpmn:flowNodeRef>s</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>split</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a4</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>join</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="laneB" name="Backend">
+        <bpmn:flowNodeRef>b1</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="laneC" name="Ops">
+        <bpmn:flowNodeRef>c1</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="laneD" name="QA">
+        <bpmn:flowNodeRef>d1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s" name="Start">
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:parallelGateway id="split" name="Split" gatewayDirection="Diverging">
+      <bpmn:incoming>f0</bpmn:incoming>
+      <bpmn:outgoing>f1a</bpmn:outgoing>
+      <bpmn:outgoing>f1b</bpmn:outgoing>
+      <bpmn:outgoing>f1c</bpmn:outgoing>
+      <bpmn:outgoing>f1d</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:userTask id="a1" name="Validate Inputs">
+      <bpmn:incoming>f1a</bpmn:incoming>
+      <bpmn:outgoing>f2a</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="a2" name="Render Form">
+      <bpmn:incoming>f1b</bpmn:incoming>
+      <bpmn:outgoing>f2b</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="a3" name="Update State">
+      <bpmn:incoming>f1c</bpmn:incoming>
+      <bpmn:outgoing>f2c</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="a4" name="Log Telemetry">
+      <bpmn:incoming>f1d</bpmn:incoming>
+      <bpmn:outgoing>f2d</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:parallelGateway id="join" name="Join" gatewayDirection="Diverging">
+      <bpmn:incoming>f2a</bpmn:incoming>
+      <bpmn:incoming>f2b</bpmn:incoming>
+      <bpmn:incoming>f2c</bpmn:incoming>
+      <bpmn:incoming>f2d</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:userTask id="b1" name="Validate Request">
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="c1" name="Deploy Build">
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="d1" name="Run Tests">
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="e" name="End">
+      <bpmn:incoming>f6</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="s" targetRef="split" />
+    <bpmn:sequenceFlow id="f1a" sourceRef="split" targetRef="a1" />
+    <bpmn:sequenceFlow id="f1b" sourceRef="split" targetRef="a2" />
+    <bpmn:sequenceFlow id="f1c" sourceRef="split" targetRef="a3" />
+    <bpmn:sequenceFlow id="f1d" sourceRef="split" targetRef="a4" />
+    <bpmn:sequenceFlow id="f2a" sourceRef="a1" targetRef="join" />
+    <bpmn:sequenceFlow id="f2b" sourceRef="a2" targetRef="join" />
+    <bpmn:sequenceFlow id="f2c" sourceRef="a3" targetRef="join" />
+    <bpmn:sequenceFlow id="f2d" sourceRef="a4" targetRef="join" />
+    <bpmn:sequenceFlow id="f3" sourceRef="join" targetRef="b1" />
+    <bpmn:sequenceFlow id="f4" sourceRef="b1" targetRef="c1" />
+    <bpmn:sequenceFlow id="f5" sourceRef="c1" targetRef="d1" />
+    <bpmn:sequenceFlow id="f6" sourceRef="d1" targetRef="e" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_Sparse">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_Sparse" bpmnElement="Process_Sparse">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s">
+        <dc:Bounds x="57" y="52" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="split_di" bpmnElement="split">
+        <dc:Bounds x="200" y="45" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a1_di" bpmnElement="a1">
+        <dc:Bounds x="325" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join">
+        <dc:Bounds x="500" y="45" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b1_di" bpmnElement="b1">
+        <dc:Bounds x="625" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c1_di" bpmnElement="c1">
+        <dc:Bounds x="775" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="d1_di" bpmnElement="d1">
+        <dc:Bounds x="925" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e">
+        <dc:Bounds x="1107" y="52" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a2_di" bpmnElement="a2">
+        <dc:Bounds x="325" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a3_di" bpmnElement="a3">
+        <dc:Bounds x="325" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a4_di" bpmnElement="a4">
+        <dc:Bounds x="325" y="450" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0">
+        <di:waypoint x="93" y="70" />
+        <di:waypoint x="200" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1a_di" bpmnElement="f1a">
+        <di:waypoint x="250" y="70" />
+        <di:waypoint x="325" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1b_di" bpmnElement="f1b">
+        <di:waypoint x="225" y="95" />
+        <di:waypoint x="225" y="210" />
+        <di:waypoint x="325" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1c_di" bpmnElement="f1c">
+        <di:waypoint x="225" y="95" />
+        <di:waypoint x="225" y="350" />
+        <di:waypoint x="325" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1d_di" bpmnElement="f1d">
+        <di:waypoint x="225" y="95" />
+        <di:waypoint x="225" y="490" />
+        <di:waypoint x="325" y="490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2a_di" bpmnElement="f2a">
+        <di:waypoint x="425" y="70" />
+        <di:waypoint x="500" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
+        <di:waypoint x="550" y="70" />
+        <di:waypoint x="625" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
+        <di:waypoint x="725" y="70" />
+        <di:waypoint x="775" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5">
+        <di:waypoint x="875" y="70" />
+        <di:waypoint x="925" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6">
+        <di:waypoint x="1025" y="70" />
+        <di:waypoint x="1107" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2b_di" bpmnElement="f2b">
+        <di:waypoint x="425" y="210" />
+        <di:waypoint x="525" y="210" />
+        <di:waypoint x="525" y="95" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2c_di" bpmnElement="f2c">
+        <di:waypoint x="425" y="350" />
+        <di:waypoint x="525" y="350" />
+        <di:waypoint x="525" y="95" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2d_di" bpmnElement="f2d">
+        <di:waypoint x="425" y="490" />
+        <di:waypoint x="525" y="490" />
+        <di:waypoint x="525" y="95" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
