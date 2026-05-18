@@ -200,7 +200,7 @@ Ad-hoc subprocesses as containers for LLM decisions, deploy to Camunda Zeebe.
 
 ---
 
-## 6 Placeholder Rules — Assessment
+## 5 Placeholder Rules — Assessment
 
 6 registered placeholders in rules.js (`check: () => ({ pass: true })`):
 

@@ -149,7 +149,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 1. Reproduce: `cd scripts && node pipeline.js tests/fixtures/<fixture>.json /tmp/dbg`
 2. Inspect `/tmp/dbg.svg` (browser) and `/tmp/dbg.bpmn` (text editor).
 3. Open in order: `layout.js` (Elk node/edge build), `coordinates.js` (post-processing), `topology.js` (node/lane ordering).
-4. For pool/lane width issues, suspect `coordinates.js` first (`balancePoolWidths`, lane-compaction).
+4. For pool/lane width issues, suspect `coordinates.js` first (pool width balancing + lane-compaction logic) and `visual-refinement.js` (compaction passes).
 5. For edge routing issues, suspect `coordinates.js` (`clipOrthogonal`) and `bpmn-xml.js` (waypoint emission).
 
 ### React to a golden-file failure
@@ -166,7 +166,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 2. Fields: `id`, `layer`, `defaultSeverity`, `description`, `ref`, `check(proc) → { pass: true } | { pass: false, message }`.
 3. Document the rule in `references/fachliches-regelwerk.md` with source citation.
 4. Add a positive and a negative fixture under `tests/fixtures/` and assertions in `pipeline.test.js`.
-5. Verify: `npm test -- --testPathPattern=pipeline`.
+5. Verify: `npm test -- --testPathPatterns=pipeline`.
 
 ### Choose a test fixture
 
@@ -185,13 +185,13 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 ### Run a visual-refinement pass
 
 1. Default: `visualRefinement: false`. Opt in per call: `runPipeline(lc, { visualRefinement: true })`.
-2. Sub-flags: `compactLanes`, `wrapLabels`, `padPoolBounds`, etc. See `scripts/visual-refinement.js`.
-3. Verify against goldens: `cd scripts && npm test -- --testPathPattern=visual-refinement`.
+2. Sub-flags live in `scripts/config.json` under `CFG.visualRefinement`: `dynamicLaneHeader`, `laneCompaction`, `edgeLabelCollisionRepair` (all on by default when `visualRefinement: true`). See `scripts/visual-refinement.js` for the pass implementations.
+3. Verify against goldens: `cd scripts && npm test -- --testPathPatterns=visual-refinement`.
 
 ### Run a robustness benchmark
 
 1. Synthetic-data run: `cd scripts/robustness && node cli.js run --target=lc-json`.
-2. Drift check vs previous run: `node cli.js run --target=both` (compares against `tests/robustness-reports/`).
+2. Multi-target run: `node cli.js run --target=both` (LC-JSON + DOT paths through the LLM).
 3. MaD subset validation: `node cli.js mad-check`.
 4. Reports land in `tests/robustness-reports/` (gitignored — share by attaching).
 
