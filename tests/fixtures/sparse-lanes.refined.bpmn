@@ -155,8 +155,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f1a_di" bpmnElement="f1a">
         <di:waypoint x="276" y="267.5" />
-        <di:waypoint x="316" y="267.5" />
-        <di:waypoint x="316" y="120" />
+        <di:waypoint x="276" y="120" />
         <di:waypoint x="356" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f1b_di" bpmnElement="f1b">
@@ -166,20 +165,17 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f1c_di" bpmnElement="f1c">
         <di:waypoint x="276" y="267.5" />
-        <di:waypoint x="316" y="267.5" />
-        <di:waypoint x="316" y="400" />
+        <di:waypoint x="276" y="400" />
         <di:waypoint x="356" y="400" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f1d_di" bpmnElement="f1d">
         <di:waypoint x="251" y="292.5" />
-        <di:waypoint x="251" y="396.3" />
-        <di:waypoint x="391" y="396.3" />
+        <di:waypoint x="251" y="500" />
         <di:waypoint x="391" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2a_di" bpmnElement="f2a">
         <di:waypoint x="456" y="120" />
-        <di:waypoint x="496" y="120" />
-        <di:waypoint x="496" y="267.5" />
+        <di:waypoint x="536" y="120" />
         <di:waypoint x="536" y="267.5" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2b_di" bpmnElement="f2b">
@@ -189,14 +185,12 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2c_di" bpmnElement="f2c">
         <di:waypoint x="456" y="400" />
-        <di:waypoint x="496" y="400" />
-        <di:waypoint x="496" y="267.5" />
+        <di:waypoint x="536" y="400" />
         <di:waypoint x="536" y="267.5" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2d_di" bpmnElement="f2d">
         <di:waypoint x="391" y="500" />
-        <di:waypoint x="391" y="396.3" />
-        <di:waypoint x="561" y="396.3" />
+        <di:waypoint x="561" y="500" />
         <di:waypoint x="561" y="292.5" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">

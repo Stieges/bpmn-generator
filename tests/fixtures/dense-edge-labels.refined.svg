@@ -36,26 +36,26 @@
 <rect x="50" y="50" width="30" height="680" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="65" y="390" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,390)">Team</text>
 <path d="M 176 430 L 256.5 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 281.5 405 L 341 405 L 341 150 L 466 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 281.5 405 L 281.5 150 L 466 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="268.3" y="377" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="311.3" y="389" text-anchor="middle" font-size="10" fill="#000000">Option Alpha</text>
-<path d="M 293.5 417 L 356 417 L 356 290 L 466 290" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 293.5 417 L 293.5 290 L 466 290" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="285.1" y="404" width="79.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="324.8" y="416" text-anchor="middle" font-size="10" fill="#000000">Option Beta</text>
 <path d="M 305.5 430 L 466 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="367.8" y="417" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="410.8" y="429" text-anchor="middle" font-size="10" fill="#000000">Option Gamma</text>
-<path d="M 293.5 442 L 356 442 L 356 570 L 466 570" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 293.5 442 L 293.5 570 L 466 570" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="281.8" y="429" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="324.8" y="441" text-anchor="middle" font-size="10" fill="#000000">Option Delta</text>
-<path d="M 281 454.5 L 341 454.5 L 341 710 L 466 710" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 281 454.5 L 281 710 L 466 710" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="261.5" y="456.5" width="99" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="311" y="468.5" text-anchor="middle" font-size="10" fill="#000000">Option Epsilon</text>
-<path d="M 566 150 L 611 150 L 611 405 L 670.5 405" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 290 L 596 290 L 596 417 L 658.5 417" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 150 L 670.5 150 L 670.5 405" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 290 L 658.5 290 L 658.5 417" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 566 430 L 646.5 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 570 L 596 570 L 596 442 L 658.5 442" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 710 L 611 710 L 611 455 L 671 455" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 570 L 658.5 570 L 658.5 442" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 566 710 L 671 710 L 671 455" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 695.5 430 L 776 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <circle cx="158" cy="429.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text x="158" y="467.5" text-anchor="middle" font-size="11" fill="#000000">Start</text>

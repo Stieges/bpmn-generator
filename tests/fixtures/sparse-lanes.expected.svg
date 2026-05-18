@@ -45,14 +45,14 @@
 <rect x="50" y="1145" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="65" y="1257.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,1257.5)">QA</text>
 <path d="M 176 297.5 L 256 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 306 297.5 L 346 297.5 L 346 150 L 386 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 306 297.5 L 306 150 L 386 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 281 322.5 L 386 322.5 L 386 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 306 297.5 L 346 297.5 L 346 430 L 386 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 281 322.5 L 281 426.3 L 421 426.3 L 421 530" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 486 150 L 526 150 L 526 297.5 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 306 297.5 L 306 430 L 386 430" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 281 322.5 L 281 530 L 421 530" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 486 150 L 566 150 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 486 330 L 566 330 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 486 430 L 526 430 L 526 297.5 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 421 530 L 421 426.3 L 591 426.3 L 591 322.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 486 430 L 566 430 L 566 297.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 421 530 L 591 530 L 591 322.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 591 322.5 L 591 755 L 696 755" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 796 835 L 796 980 L 876 980" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 976 1060 L 976 1205 L 1056 1205" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>

@@ -588,21 +588,17 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
-  // Message-flow labels (stored in absolute coords; svg.js renders at midpoint of
-  // source-bottom → target-top after applying tx/ty, matching existing inline logic)
+  // Message-flow labels: use direction-aware ports (bottom-up vs top-down)
   const allMessageFlows = lc.messageFlows || [];
   for (const mf of allMessageFlows) {
     if (!mf.name) continue;
     const srcCoord = coords[mf.source] || {};
     const tgtCoord = coords[mf.target] || {};
-    const sx = (srcCoord.x || 0) + (srcCoord.w || 0) / 2;
-    const sy = (srcCoord.y || 0) + (srcCoord.h || 0);
-    const ex = (tgtCoord.x || 0) + (tgtCoord.w || 0) / 2;
-    const ey = tgtCoord.y || 0;
+    const ports = messageFlowPorts(srcCoord, tgtCoord);
     edgeLabels[mf.id || `mf_${mf.source}_${mf.target}`] = {
       text: mf.name,
-      x: (sx + ex) / 2,
-      y: (sy + ey) / 2,
+      x: (ports.sx + ports.ex) / 2,
+      y: (ports.sy + ports.ey) / 2,
     };
   }
 
@@ -774,6 +770,33 @@ function clipRectOrthogonal(shape, nextPt, isHorizontal) {
     const y = nextPt.y > shape.y + shape.h / 2 ? shape.y + shape.h : shape.y;
     return { x: clampedX, y };
   }
+}
+
+/**
+ * Pick natural endpoint ports for a message flow based on the relative position
+ * of source and target shapes. Returns { sx, sy, ex, ey } in absolute coords.
+ *
+ * Convention (matching bpmn.io):
+ * - If source is ABOVE target: exit source bottom, enter target top (downward)
+ * - If source is BELOW target: exit source top, enter target bottom (upward)
+ *
+ * Used by message-flow rendering in svg.js and bpmn-xml.js, and by
+ * coordinates.js for message-flow label positioning. Falling back to the
+ * legacy bottom→top behavior would be wrong for upward flows (e.g., a
+ * service-pool merge gateway sending a response back to a customer pool).
+ */
+export function messageFlowPorts(srcCoord, tgtCoord) {
+  const sCenterY = (srcCoord.y || 0) + (srcCoord.h || 0) / 2;
+  const tCenterY = (tgtCoord.y || 0) + (tgtCoord.h || 0) / 2;
+  const sxCenter = (srcCoord.x || 0) + (srcCoord.w || 0) / 2;
+  const exCenter = (tgtCoord.x || 0) + (tgtCoord.w || 0) / 2;
+  const downward = sCenterY < tCenterY;
+  return {
+    sx: sxCenter,
+    sy: downward ? (srcCoord.y || 0) + (srcCoord.h || 0) : (srcCoord.y || 0),
+    ex: exCenter,
+    ey: downward ? (tgtCoord.y || 0) : (tgtCoord.y || 0) + (tgtCoord.h || 0),
+  };
 }
 
 export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal };

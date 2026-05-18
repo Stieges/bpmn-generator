@@ -36,11 +36,11 @@
 <rect x="50" y="50" width="30" height="365" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="65" y="232.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,232.5)">Default Lane</text>
 <path d="M 176 290 L 256 290" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 356 277 L 386 277 L 386 163 L 416.5 163" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 356 277 L 416.5 277 L 416.5 163" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 453.5 150 L 626 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="526.1" y="137" width="27.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="539.8" y="149" text-anchor="middle" font-size="10" fill="#000000">Yes</text>
-<path d="M 453.5 175 L 576 175 L 576 277 L 606 277" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 453.5 175 L 606 175 L 606 277" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="504.3" y="162" width="21" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="514.8" y="174" text-anchor="middle" font-size="10" fill="#000000">No</text>
 <path d="M 606 303 L 356 303" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>

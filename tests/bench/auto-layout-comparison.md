@@ -1,6 +1,6 @@
 # BPMN Generator vs `bpmn-auto-layout` — Pools/Lanes Comparison
 
-Generated: 2026-05-18T13:35:19.280Z
+Generated: 2026-05-18T14:02:32.998Z
 bpmn-auto-layout version: 1.3.0
 
 ## Method
