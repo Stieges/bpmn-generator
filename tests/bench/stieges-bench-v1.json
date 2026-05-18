@@ -1,8 +1,8 @@
 {
   "benchmark": "stieges-bench-v1",
   "version": 1,
-  "generatedAt": "2026-05-18T14:02:34.240Z",
-  "gitCommit": "5a0a628487d51b9321d39e75c4c0e7629ae7c7e6",
+  "generatedAt": "2026-05-18T14:09:58.875Z",
+  "gitCommit": "377959fea33844eb6c3f58c8b079aca96a8183fc",
   "fixturesDir": "tests/fixtures",
   "fixtureCount": 9,
   "anyParseFailure": false,
@@ -10,14 +10,14 @@
     "parsed": 9,
     "serialized": 8,
     "schemaValid": 9,
-    "nodes": 102,
-    "edges": 114,
+    "nodes": 103,
+    "edges": 115,
     "soundnessErrors": 1,
     "soundnessWarnings": 11,
     "crossings": 12,
-    "bpmnXmlBytes": 90069,
-    "svgBytes": 146196,
-    "wallClockMs": 251.62
+    "bpmnXmlBytes": 90678,
+    "svgBytes": 146685,
+    "wallClockMs": 258.38000000000005
   },
   "results": [
     {
@@ -32,7 +32,7 @@
       "layoutCrossings": 9,
       "bpmnXmlBytes": 28373,
       "svgBytes": 54961,
-      "wallClockMs": 148.76
+      "wallClockMs": 158.59
     },
     {
       "fixture": "deadlock-process",
@@ -46,7 +46,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 0,
       "svgBytes": 0,
-      "wallClockMs": 0.14
+      "wallClockMs": 0.15
     },
     {
       "fixture": "dense-edge-labels",
@@ -60,7 +60,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 9424,
       "svgBytes": 10639,
-      "wallClockMs": 20.52
+      "wallClockMs": 20.9
     },
     {
       "fixture": "expanded-subprocess",
@@ -74,7 +74,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 5389,
       "svgBytes": 8913,
-      "wallClockMs": 13.06
+      "wallClockMs": 13.05
     },
     {
       "fixture": "long-lane-names",
@@ -88,21 +88,21 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 4690,
       "svgBytes": 6839,
-      "wallClockMs": 9.14
+      "wallClockMs": 8.65
     },
     {
       "fixture": "multi-pool-collaboration",
       "parses": true,
       "serialized": true,
       "schemaValid": true,
-      "nodeCount": 11,
-      "edgeCount": 12,
+      "nodeCount": 12,
+      "edgeCount": 13,
       "soundnessErrors": 0,
       "soundnessWarnings": 0,
       "layoutCrossings": 1,
-      "bpmnXmlBytes": 10220,
-      "svgBytes": 12562,
-      "wallClockMs": 16.03
+      "bpmnXmlBytes": 10829,
+      "svgBytes": 13051,
+      "wallClockMs": 16.64
     },
     {
       "fixture": "simple-approval",
@@ -116,7 +116,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 5685,
       "svgBytes": 8959,
-      "wallClockMs": 10.19
+      "wallClockMs": 10.31
     },
     {
       "fixture": "sparse-lanes",
@@ -130,7 +130,7 @@
       "layoutCrossings": 2,
       "bpmnXmlBytes": 9868,
       "svgBytes": 13175,
-      "wallClockMs": 13.46
+      "wallClockMs": 12.8
     },
     {
       "fixture": "wide-pipeline",
@@ -144,7 +144,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 16420,
       "svgBytes": 30148,
-      "wallClockMs": 20.32
+      "wallClockMs": 17.29
     }
   ]
 }

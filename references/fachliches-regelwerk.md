@@ -42,6 +42,7 @@ Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung.
 | S09 | Message Flows nur zwischen verschiedenen Pools | OMG §9.4 | implementiert |
 | S10 | Message Flows: Quell- und Ziel-Nodes muessen existieren | OMG §9.4 | implementiert |
 | S11 | SubProcess-Kinder: Start-Event + End-Event vorhanden | OMG §10.2.1 | implementiert |
+| S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
 
 ## Schicht 2: Style (WARNING)
 
