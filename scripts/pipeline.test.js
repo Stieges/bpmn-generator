@@ -1819,6 +1819,28 @@ describe('HTTP Server utilities', () => {
   });
 });
 
+describe('http-server production auth gate', () => {
+  test('startupCheck refuses production without API key', async () => {
+    const { startupCheck } = await import('./http-server.js');
+    expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: undefined }))
+      .toThrow(/BPMN_API_KEY/);
+  });
+
+  test('startupCheck allows production with API key', async () => {
+    const { startupCheck } = await import('./http-server.js');
+    expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: 'secret' }))
+      .not.toThrow();
+  });
+
+  test('startupCheck warns in dev mode without API key', async () => {
+    const { startupCheck } = await import('./http-server.js');
+    const warns = [];
+    expect(() => startupCheck({ NODE_ENV: 'development', BPMN_API_KEY: undefined }, msg => warns.push(msg)))
+      .not.toThrow();
+    expect(warns.join('\n')).toMatch(/no API key/i);
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════
 // §16  DOT Format — Round-trip + multi-pool export
 // ═══════════════════════════════════════════════════════════════

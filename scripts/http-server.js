@@ -15,6 +15,18 @@ const RATE_LIMIT = { windowMs: 60_000, max: 30 };
 const rateBuckets = new Map();
 const startTime = Date.now();
 
+export function startupCheck(env, logger = console.warn) {
+  if (env.NODE_ENV === 'production' && !env.BPMN_API_KEY) {
+    throw new Error(
+      'Refusing to start in production without BPMN_API_KEY. ' +
+      'Set BPMN_API_KEY=<secret> or unset NODE_ENV for dev mode.'
+    );
+  }
+  if (!env.BPMN_API_KEY) {
+    logger('⚠️  Starting with no API key — dev mode only. Set BPMN_API_KEY for production.');
+  }
+}
+
 export function parseBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -251,6 +263,7 @@ const server = createServer(async (req, res) => {
 // (or other modules) it stays inert — prevents EADDRINUSE under Jest workers.
 const isEntryPoint = import.meta.url === `file://${process.argv[1]}`;
 if (isEntryPoint) {
+  startupCheck(process.env);
   server.listen(PORT, () => {
     console.log(`BPMN Generator HTTP API listening on port ${PORT}`);
     console.log(`  POST /api/v1/generate   — Logic-Core → BPMN + SVG`);
