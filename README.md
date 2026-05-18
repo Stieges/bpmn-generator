@@ -17,6 +17,36 @@ Reproduce the comparison: `cd scripts && node bench/compare-bpmn-auto-layout.mjs
 
 See [EVALUATION.md](EVALUATION.md) for the full benchmark, the competitor matrix, and honest notes about where ProMoAI and BPMN Assistant are stronger.
 
+### Visual examples
+
+<table>
+<tr>
+<td width="50%"><a href="docs/screenshots/01-simple-approval.svg"><img src="docs/screenshots/01-simple-approval.svg" alt="simple approval workflow"></a><br><sub>Single-pool linear flow + exclusive gateway</sub></td>
+<td width="50%"><a href="docs/screenshots/02-multi-pool-collaboration.svg"><img src="docs/screenshots/02-multi-pool-collaboration.svg" alt="multi-pool collaboration"></a><br><sub>Two pools, three lanes, message flows — what bpmn-auto-layout drops</sub></td>
+</tr>
+<tr>
+<td><a href="docs/screenshots/03-multi-lane-pool.svg"><img src="docs/screenshots/03-multi-lane-pool.svg" alt="multi-lane single pool"></a><br><sub>One pool, four lanes (Frontend / Backend / Ops / QA)</sub></td>
+<td><a href="docs/screenshots/04-expanded-subprocess.svg"><img src="docs/screenshots/04-expanded-subprocess.svg" alt="expanded subprocess"></a><br><sub>Expanded subprocess with inner activities</sub></td>
+</tr>
+</table>
+
+Full gallery: [docs/screenshots/](docs/screenshots/). All SVGs regenerated from fixtures by the pipeline — they reflect current output, not stale marketing screenshots.
+
+### How we compare (verified)
+
+| Capability | This generator | ProMoAI | BPMN Assistant | BPMN-Chatbot |
+|---|---|---|---|---|
+| Multi-pool with lanes + message flows | **✅ verified** | ✅ | ❌ (bpmn-auto-layout limitation) | ? |
+| Strict JSON Schema input gate (ajv) | **✅** | n/a | partial | partial |
+| Soundness check | WF-Net (3 rules) | POWL by construction | none | none |
+| Configurable rule engine | **28 rules, 4 layers, JSON profiles** | limited | none | none |
+| MCP server | **✅** | ❌ | ❌ | ❌ |
+| Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
+| License | MIT | GPL-3.0 | MIT-ish | unclear |
+| Paper | none (engineering) | IJCAI-24, EMMSAD 2024 | arXiv 2509.24592 | CEUR-WS Vol-3758 |
+
+Each ✅ on our row links back to a fixture, a benchmark, or a source file. See [EVALUATION.md](EVALUATION.md) for cell-by-cell evidence and honest notes on where competitors are stronger (ProMoAI's mathematical soundness guarantee, BPMN Assistant's web UI).
+
 ## What It Does
 
 You describe a business process — either as free text or as a structured JSON (Logic-Core) — and the generator produces:

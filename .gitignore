@@ -35,3 +35,11 @@ bpmn-generator-v3.skill
 # Robustness run artifacts (the dir is committed via .gitkeep, but reports are local)
 tests/robustness-reports/*.md
 tests/robustness-reports/*.json
+
+# Handoff specs for external LLM sessions (local-only, kept on developer machines
+# to be handed to opencode / Cursor / other agents — not project history)
+docs/specs/
+
+# Frontend (built by external LLM session per docs/specs/2026-05-18-bpmn-copilot-frontend.md,
+# stays local per-developer machine — not project history)
+frontend/

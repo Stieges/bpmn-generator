@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1462" height="847" viewBox="0 0 1462 847" font-family="Arial, sans-serif">
+<defs>
+  <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
+  <marker id="seq-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="6" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 6 3 L 10 17" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+  <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="1" refY="10"
+    markerWidth="12" markerHeight="12" orient="auto">
+    <path d="M 1 10 L 8 6 L 15 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
+  <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  </marker>
+  <!-- Message flow: open arrowhead at target -->
+  <marker id="msg-end" viewBox="0 0 20 20" refX="8.5" refY="5"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#000000" stroke-width="1" stroke-linecap="butt"/>
+  </marker>
+  <!-- Association: open chevron -->
+  <marker id="assoc-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#000000" stroke-width="1.5"/>
+  </marker>
+</defs>
+<rect width="1462" height="847" fill="#fafafa"/>
+<rect x="80" y="50" width="1332" height="225" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="50" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="65" y="162.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,162.5)">Customer</text>
+<rect x="80" y="548" width="1332" height="249" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="548" width="30" height="249" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="65" y="672.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,672.5)">Agent</text>
+<rect x="80" y="323" width="1332" height="225" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="323" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="65" y="435.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,435.5)">Manager</text>
+<path d="M 176 150 L 256 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 356 150 L 436 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 536 150 L 616 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 176 648 L 256 648" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 356 648 L 436.5 648" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 473.5 635 L 473.5 463 L 1252 463" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="531.1" y="622" width="27.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="544.8" y="634" text-anchor="middle" font-size="10" fill="#000000">Yes</text>
+<path d="M 473.5 660 L 646 660" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="549.3" y="647" width="21" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="559.8" y="659" text-anchor="middle" font-size="10" fill="#000000">No</text>
+<path d="M 1252 463 L 863.5 463 L 863.5 647" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 746 660 L 826.5 660" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 863.5 672 L 956 672" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 1056 672 L 1136 672" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 306 190 L 306 409.8 L 158 409.8 L 158 629.5" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
+<rect x="205.3" y="401.8" width="53.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="232" y="413.8" text-anchor="middle" font-size="10" fill="#000000">Request</text>
+<path d="M 1006 632 L 1006 411 L 486 411 L 486 190" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
+<rect x="716" y="403" width="60" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="746" y="415" text-anchor="middle" font-size="10" fill="#000000">Response</text>
+<circle cx="158" cy="149.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<text x="158" y="187.5" text-anchor="middle" font-size="11" fill="#000000">Need identified</text>
+<rect x="256" y="110" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 262,115 l 0,14 l 21,0 l 0,-14 z l 10.5,6 l 10.5,-6" fill="#000000" stroke="#ffffff" stroke-width="0.5"/></g>
+<text x="306" y="159" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Submit request</text>
+<rect x="436" y="110" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 442,115 l 0,14 l 21,0 l 0,-14 z l 10.5,6 l 10.5,-6" fill="#ffffff" stroke="#000000" stroke-width="1"/></g>
+<text x="486" y="152" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Wait for</text>
+<text x="486" y="166" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">response</text>
+<circle cx="634" cy="149.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
+<text x="634" y="187.5" text-anchor="middle" font-size="11" fill="#000000">End</text>
+<circle cx="158" cy="647.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<text x="158" y="685.5" text-anchor="middle" font-size="11" fill="#000000">Request</text>
+<text x="158" y="698.5" text-anchor="middle" font-size="11" fill="#000000">received</text>
+<rect x="256" y="608" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 271,620 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 273.162,621.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 264.1,616.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="306" y="657" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Review request</text>
+<polygon points="461,622.5 486,647.5 461,672.5 436,647.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="452" y1="638.5" x2="470" y2="656.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<line x1="470" y1="638.5" x2="452" y2="656.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<text x="461" y="692.5" text-anchor="middle" font-size="11" fill="#000000">Valid?</text>
+<rect x="1252" y="383" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 1270,407 v -1.713 c 0.352,-0.071 0.704,-0.178 1.048,-0.321 0.344,-0.145 0.666,-0.321 0.966,-0.521 l 1.194,1.18 1.567,-1.577 -1.195,-1.18 c 0.403,-0.614 0.683,-1.299 0.825,-2.018 l 1.622,-0.01 v -2.22 l -1.637,0.01 c -0.073,-0.352 -0.178,-0.7 -0.324,-1.044 -0.145,-0.344 -0.321,-0.664 -0.523,-0.962 l 1.131,-1.136 -1.583,-1.563 -1.13,1.136 c -0.614,-0.401 -1.303,-0.681 -2.023,-0.822 l 0.009,-1.619 h -2.241 l 0.004,1.631 c -0.354,0.074 -0.705,0.18 -1.05,0.324 -0.344,0.144 -0.665,0.321 -0.964,0.52 l -1.17,-1.158 -1.567,1.579 1.168,1.157 c -0.403,0.613 -0.683,1.298 -0.825,2.017 l -1.659,0.003 v 2.222 l 1.672,-0.006 c 0.073,0.351 0.18,0.702 0.324,1.045 0.145,0.344 0.321,0.664 0.523,0.961 l -1.199,1.197 1.584,1.56 1.196,-1.193 c 0.614,0.403 1.303,0.682 2.023,0.823 l 0.001,1.699 h 2.227 z m 0.221,-3.996 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1270.221,403.004 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1275,411 v -1.713 c 0.352,-0.071 0.704,-0.178 1.048,-0.321 0.344,-0.145 0.666,-0.321 0.966,-0.521 l 1.194,1.18 1.567,-1.577 -1.195,-1.18 c 0.403,-0.614 0.683,-1.299 0.825,-2.018 l 1.622,-0.01 v -2.22 l -1.637,0.01 c -0.073,-0.352 -0.178,-0.7 -0.324,-1.044 -0.145,-0.344 -0.321,-0.664 -0.523,-0.962 l 1.131,-1.136 -1.583,-1.563 -1.13,1.136 c -0.614,-0.401 -1.303,-0.681 -2.023,-0.822 l 0.009,-1.619 h -2.241 l 0.004,1.631 c -0.354,0.074 -0.705,0.18 -1.05,0.324 -0.344,0.144 -0.665,0.321 -0.964,0.52 l -1.17,-1.158 -1.567,1.579 1.168,1.157 c -0.403,0.613 -0.683,1.298 -0.825,2.017 l -1.659,0.003 v 2.222 l 1.672,-0.006 c 0.073,0.351 0.18,0.702 0.324,1.045 0.145,0.344 0.321,0.664 0.523,0.961 l -1.199,1.197 1.584,1.56 1.196,-1.193 c 0.614,0.403 1.303,0.682 2.023,0.823 l 0.001,1.699 h 2.227 z m 0.221,-3.996 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1275.221,407.004 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="1302" y="425" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Process</text>
+<text x="1302" y="439" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">approval</text>
+<rect x="646" y="620" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 661,632 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 663.162,633.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 654.1,628.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
+<text x="696" y="669" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Send rejection</text>
+<polygon points="851,634.5 876,659.5 851,684.5 826,659.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<line x1="842" y1="650.5" x2="860" y2="668.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<line x1="860" y1="650.5" x2="842" y2="668.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+
+<rect x="956" y="632" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
+<g><path d="m 962,637 l 0,14 l 21,0 l 0,-14 z l 10.5,6 l 10.5,-6" fill="#000000" stroke="#ffffff" stroke-width="0.5"/></g>
+<text x="1006" y="681" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Notify customer</text>
+<circle cx="1154" cy="671.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
+<text x="1154" y="709.5" text-anchor="middle" font-size="11" fill="#000000">End</text>
+</svg>
