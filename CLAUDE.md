@@ -71,7 +71,7 @@ Robustness subsystem (scripts/robustness/)
 | File | Purpose |
 |------|---------|
 | `scripts/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/rules.js` | Rule Engine: 27 rules, 4 layers (Soundness/Style/Pragmatics/Workflow-Net); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
+| `scripts/rules.js` | Rule Engine: 28 rules, 4 layers (Soundness/Style/Pragmatics/Workflow-Net); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
 | `scripts/validate.js` | Thin wrapper around `runRules()` |
 | `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact`, `bpmnXmlTag` |
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
@@ -201,7 +201,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
-| Soundness | ERROR | S01-S11 | Structural correctness (OMG compliance) |
+| Soundness | ERROR | S01-S12 | Structural correctness (OMG compliance) |
 | Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |

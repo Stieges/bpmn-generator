@@ -42,7 +42,7 @@ Think of it as going from **0% → 80%** in seconds. The remaining 20% is domain
 
 ```
 User Text → [Phase 1] Intent Extraction (LLM → JSON Logic-Core)
-          → [Phase 2] Validation (27 rules, 4 layers, deadlock detection)
+          → [Phase 2] Validation (28 rules, 4 layers, deadlock detection)
           → [Phase 3] Auto-Layout (ElkJS Sugiyama layered algorithm)
           → [Phase 4] Serialization → BPMN 2.0 XML + SVG
 ```
@@ -95,7 +95,7 @@ The `bpmn-generator-v3.skill` ZIP archive can be shared with other projects. It 
 scripts/
 ├── pipeline.js        Orchestrator + CLI (~180 LOC)
 │   ├── validate.js    Validation wrapper → rules.js
-│   ├── rules.js       Rule engine (27 rules, 4 layers, profile support) — see `references/fachliches-regelwerk.md` for the catalog
+│   ├── rules.js       Rule engine (28 rules, 4 layers, profile support) — see `references/fachliches-regelwerk.md` for the catalog
 │   ├── topology.js    Gateway directions, topological sort, lane ordering
 │   ├── layout.js      ELK graph construction + layout execution
 │   ├── coordinates.js Coordinate maps, edge clipping, pool equalization
@@ -174,11 +174,11 @@ bpmn-generator/
 
 ## Rule Engine
 
-27 rules across 4 layers with configurable severity via JSON profiles. The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
+28 rules across 4 layers with configurable severity via JSON profiles. The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
 
 | Layer | Severity | Rules | Examples |
 |-------|----------|-------|----------|
-| Soundness | ERROR | S01-S11 | Start/End events, deadlocks, boundary events |
+| Soundness | ERROR | S01-S12 | Start/End events, deadlocks, boundary events |
 | Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Liveness, boundedness, deadlock-freedom (opt-in) |
@@ -230,7 +230,7 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 - **Round-tripping** (BPMN XML → Logic-Core JSON → BPMN XML)
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
-- **Configurable rule engine** (27 rules, 4 layers, JSON profiles)
+- **Configurable rule engine** (28 rules, 4 layers, JSON profiles)
 - **OMG BPMN 2.0.2 compliant** XML output (ISO/IEC 19510:2013)
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)
 - **Documentation View** (SVG tooltips + `--doc` Markdown companion)
