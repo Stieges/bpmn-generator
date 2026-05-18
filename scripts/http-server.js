@@ -7,6 +7,7 @@ import { orchestrate } from './orchestrator.js';
 import { createLlmProvider } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.BPMN_API_KEY || null; // null = no auth (dev mode)
@@ -164,6 +165,11 @@ const server = createServer(async (req, res) => {
     // Generate
     if (url === '/api/v1/generate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/generate' });
+      const schemaCheck = validateLogicCoreSchema(body.logicCore);
+      if (!schemaCheck.valid) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: schemaCheck.errors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+      }
       const result = await runPipeline(body.logicCore);
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
@@ -198,6 +204,11 @@ const server = createServer(async (req, res) => {
     // Validate
     if (url === '/api/v1/validate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/validate' });
+      const schemaCheck = validateLogicCoreSchema(body.logicCore);
+      if (!schemaCheck.valid) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/validate', errorCount: schemaCheck.errors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+      }
       const validation = validateLogicCore(body.logicCore);
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors: validation.errors.length > 0 });
@@ -233,6 +244,14 @@ const server = createServer(async (req, res) => {
       const input = body.userText || body.logicCore;
       if (!input) {
         return json(res, 400, { error: 'Provide userText (string) or logicCore (object)' });
+      }
+
+      if (body.logicCore) {
+        const schemaCheck = validateLogicCoreSchema(body.logicCore);
+        if (!schemaCheck.valid) {
+          auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: schemaCheck.errors.length });
+          return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+        }
       }
 
       const result = await orchestrate(input, options);

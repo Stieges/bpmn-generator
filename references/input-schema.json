@@ -189,6 +189,11 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string", "description": "Short role or department name. Recommended: ≤ 25 characters (e.g. 'Einkauf', 'QA', 'Compliance', 'Teamleiter'). Longer names force multi-line header rendering and visual clutter; rule M10 emits a WARNING if exceeded. Avoid descriptive sentences, module paths, or bracketed meta-info." },
+        "nodeIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Format B: explicit list of node IDs assigned to this lane (alternative to node.lane back-references)"
+        },
         "children": { "type": "array", "items": { "$ref": "#/$defs/Lane" }, "description": "Nested child lanes" }
       },
       "additionalProperties": false

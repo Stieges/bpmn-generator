@@ -2435,3 +2435,32 @@ describe('Pass 2 (lane compaction) abort criterion', () => {
     expect(cOn).toBeLessThanOrEqual(threshold);
   });
 });
+
+describe('schema-gate', () => {
+  test('accepts a valid Logic-Core fixture', async () => {
+    const fs = await import('node:fs');
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const lc = JSON.parse(fs.readFileSync('../tests/fixtures/simple-approval.json', 'utf8'));
+    const r = validateLogicCoreSchema(lc);
+    expect(r.valid).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  test('rejects object missing required top-level fields', async () => {
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const r = validateLogicCoreSchema({});
+    expect(r.valid).toBe(false);
+    expect(r.errors.length).toBeGreaterThan(0);
+  });
+
+  test('schema only checks structure, not cross-reference integrity', async () => {
+    // Documents the contract: edges referencing unknown node ids are
+    // structurally valid per schema; the rule engine catches the bad reference.
+    const { validateLogicCoreSchema } = await import('./schema-gate.js');
+    const r = validateLogicCoreSchema({
+      nodes: [{ id: 'a', type: 'startEvent' }, { id: 'z', type: 'endEvent' }],
+      edges: [{ id: 'e1', source: 'a', target: 'b' }] // 'b' doesn't exist, schema doesn't care
+    });
+    expect(r.valid).toBe(true);
+  });
+});
