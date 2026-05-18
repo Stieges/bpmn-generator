@@ -318,7 +318,14 @@ const server = createServer(async (req, res) => {
     // Telemetry
     if (url === '/api/v1/telemetry') {
       try {
-        auditLog({ event: 'frontend_event', ...body, ts: new Date().toISOString() });
+        auditLog({
+          ts: new Date().toISOString(),
+          event: 'frontend_event',
+          frontendEvent: body.event,
+          diagramId: body.diagramId,
+          correlationId: body.correlationId,
+          details: body.details,
+        });
         return json(res, 200, { status: 'ok' });
       } catch (err) {
         return json(res, 400, { error: err.message });
