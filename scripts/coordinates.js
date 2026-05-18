@@ -124,8 +124,7 @@ function buildCoordinateMap(elkResult, lc) {
       };
     }
 
-    // Fix lane overlaps: lanes must touch exactly (share border line per bpmn.io
-    // convention) — no gap, no overlap. Only nudge if there's a real overlap.
+    // Fix lane overlaps: if two lanes overlap vertically, insert gap
     const laneSorted = lanes.map(l => l.id).filter(id => laneCoords[id])
       .sort((a, b) => laneCoords[a].y - laneCoords[b].y);
 
@@ -133,9 +132,9 @@ function buildCoordinateMap(elkResult, lc) {
       const prev = laneCoords[laneSorted[i - 1]];
       const curr = laneCoords[laneSorted[i]];
       const prevBottom = prev.y + prev.h;
-      if (curr.y < prevBottom) {
-        // Shift this lane and all its nodes down so it starts exactly at prev's bottom
-        const delta = prevBottom - curr.y;
+      if (curr.y < prevBottom + 2) {
+        // Shift this lane and all its nodes down
+        const delta = prevBottom + 2 - curr.y;
         curr.y += delta;
         // Shift all nodes in this lane
         for (const n of procNodes) {

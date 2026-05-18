@@ -1,8 +1,8 @@
 {
   "benchmark": "stieges-bench-v1",
   "version": 1,
-  "generatedAt": "2026-05-18T12:47:16.596Z",
-  "gitCommit": "4eaefb57be2820377a065fd5e61de8a13c2a14e7",
+  "generatedAt": "2026-05-18T12:28:35.694Z",
+  "gitCommit": "3852d56d1eb8ec0b09b711ec91113278e34805d5",
   "fixturesDir": "tests/fixtures",
   "fixtureCount": 9,
   "anyParseFailure": false,
@@ -16,8 +16,8 @@
     "soundnessWarnings": 11,
     "crossings": 20,
     "bpmnXmlBytes": 91274,
-    "svgBytes": 145821,
-    "wallClockMs": 268.84000000000003
+    "svgBytes": 145824,
+    "wallClockMs": 374
   },
   "results": [
     {
@@ -32,7 +32,7 @@
       "layoutCrossings": 11,
       "bpmnXmlBytes": 28976,
       "svgBytes": 54790,
-      "wallClockMs": 156.53
+      "wallClockMs": 233.84
     },
     {
       "fixture": "deadlock-process",
@@ -46,7 +46,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 0,
       "svgBytes": 0,
-      "wallClockMs": 0.31
+      "wallClockMs": 0.17
     },
     {
       "fixture": "dense-edge-labels",
@@ -60,7 +60,7 @@
       "layoutCrossings": 1,
       "bpmnXmlBytes": 9778,
       "svgBytes": 10657,
-      "wallClockMs": 25.21
+      "wallClockMs": 23.6
     },
     {
       "fixture": "expanded-subprocess",
@@ -74,7 +74,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 5367,
       "svgBytes": 8899,
-      "wallClockMs": 14
+      "wallClockMs": 16.4
     },
     {
       "fixture": "long-lane-names",
@@ -88,7 +88,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 4671,
       "svgBytes": 6820,
-      "wallClockMs": 9.99
+      "wallClockMs": 10.17
     },
     {
       "fixture": "multi-pool-collaboration",
@@ -102,7 +102,7 @@
       "layoutCrossings": 1,
       "bpmnXmlBytes": 10328,
       "svgBytes": 12516,
-      "wallClockMs": 16.59
+      "wallClockMs": 29.01
     },
     {
       "fixture": "simple-approval",
@@ -116,7 +116,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 5740,
       "svgBytes": 8943,
-      "wallClockMs": 16.14
+      "wallClockMs": 17.56
     },
     {
       "fixture": "sparse-lanes",
@@ -129,8 +129,8 @@
       "soundnessWarnings": 0,
       "layoutCrossings": 7,
       "bpmnXmlBytes": 10054,
-      "svgBytes": 13152,
-      "wallClockMs": 12.91
+      "svgBytes": 13155,
+      "wallClockMs": 21.96
     },
     {
       "fixture": "wide-pipeline",
@@ -144,7 +144,7 @@
       "layoutCrossings": 0,
       "bpmnXmlBytes": 16360,
       "svgBytes": 30044,
-      "wallClockMs": 17.16
+      "wallClockMs": 21.29
     }
   ]
 }
