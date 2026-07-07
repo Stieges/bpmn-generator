@@ -1,0 +1,132 @@
+/**
+ * HTTP API Tests — /api/v1/chat
+ * Boots the real server on an ephemeral port and drives it with fetch.
+ */
+
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
+import { server } from './http-server.js';
+
+let baseUrl;
+
+beforeAll(async () => {
+  await new Promise((resolve) => server.listen(0, resolve));
+  const { port } = server.address();
+  baseUrl = `http://127.0.0.1:${port}`;
+});
+
+afterAll(async () => {
+  await new Promise((resolve) => server.close(resolve));
+});
+
+const realFetch = global.fetch;
+afterEach(() => {
+  global.fetch = realFetch;
+  delete process.env.OPENAI_API_KEY;
+});
+
+function mockLlmResponse(content) {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content } }] }),
+  });
+}
+
+describe('POST /api/v1/chat', () => {
+  test('400 when messages is missing', async () => {
+    const res = await realFetch(`${baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ llmConfig: { baseUrl: 'http://x/v1', apiKey: 'k', model: 'm' } }),
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/messages/i);
+  });
+
+  test('400 when messages is an empty array', async () => {
+    const res = await realFetch(`${baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [], llmConfig: { baseUrl: 'http://x/v1', apiKey: 'k', model: 'm' } }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('400 when no llmConfig is given and no OPENAI_API_KEY env fallback is set', async () => {
+    const res = await realFetch(`${baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/llmConfig/i);
+  });
+
+  test('400 when llmConfig is missing required fields', async () => {
+    const res = await realFetch(`${baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], llmConfig: { model: 'm' } }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('200: returns reply, readyToGenerate, suggestedSummary and echoes correlationId', async () => {
+    mockLlmResponse(JSON.stringify({
+      reply: 'Wie viele Beteiligte sind involviert?',
+      readyToGenerate: false,
+      suggestedSummary: null,
+    }));
+
+    const res = await realFetch(`${baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'Ich brauche einen Genehmigungsprozess.' }],
+        correlationId: 'test-correlation-id',
+        llmConfig: { baseUrl: 'http://x/v1', apiKey: 'k', model: 'm' },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.correlationId).toBe('test-correlation-id');
+    expect(data.reply).toBe('Wie viele Beteiligte sind involviert?');
+    expect(data.readyToGenerate).toBe(false);
+    expect(data.suggestedSummary).toBeNull();
+  });
+
+  test('200: generates a correlationId when none is provided', async () => {
+    mockLlmResponse(JSON.stringify({ reply: 'ok', readyToGenerate: false, suggestedSummary: null }));
+
+    const res = await realFetch(`${baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'hi' }],
+        llmConfig: { baseUrl: 'http://x/v1', apiKey: 'k', model: 'm' },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(typeof data.correlationId).toBe('string');
+    expect(data.correlationId.length).toBeGreaterThan(0);
+  });
+
+  test('falls back to OPENAI_API_KEY env var when llmConfig is omitted', async () => {
+    process.env.OPENAI_API_KEY = 'env-key';
+    mockLlmResponse(JSON.stringify({ reply: 'ok via env key', readyToGenerate: false, suggestedSummary: null }));
+
+    const res = await realFetch(`${baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.reply).toBe('ok via env key');
+  });
+});

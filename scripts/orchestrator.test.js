@@ -358,3 +358,89 @@ describe('createLlmProvider', () => {
     expect(capturedBody.temperature).toBe(0.5);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// §7  Chat Agent (Discovery conversation, pre-generation)
+// ═══════════════════════════════════════════════════════════════
+
+import { chatAgent } from './agents/chat.js';
+
+describe('chatAgent', () => {
+  test('throws without llmProvider', async () => {
+    await expect(chatAgent({ messages: [{ role: 'user', content: 'hi' }] }))
+      .rejects.toThrow('llmProvider');
+  });
+
+  test('throws without a non-empty messages array', async () => {
+    await expect(chatAgent({ messages: [], llmProvider: async () => '{}' }))
+      .rejects.toThrow('messages');
+  });
+
+  test('sends the discovery system prompt plus the conversation to the llmProvider', async () => {
+    let capturedMessages;
+    const mockLlm = async (messages) => {
+      capturedMessages = messages;
+      return JSON.stringify({ reply: 'Wie viele Beteiligte gibt es?', readyToGenerate: false, suggestedSummary: null });
+    };
+
+    await chatAgent({
+      messages: [{ role: 'user', content: 'Ich will einen Genehmigungsprozess.' }],
+      llmProvider: mockLlm,
+    });
+
+    expect(capturedMessages[0].role).toBe('system');
+    expect(capturedMessages[0].content).toContain('readyToGenerate');
+    expect(capturedMessages[1]).toEqual({ role: 'user', content: 'Ich will einen Genehmigungsprozess.' });
+  });
+
+  test('returns parsed reply, readyToGenerate and suggestedSummary', async () => {
+    const mockLlm = async () => JSON.stringify({
+      reply: 'Ich habe alles was ich brauche.',
+      readyToGenerate: true,
+      suggestedSummary: 'Kunde sendet Antrag, Sachbearbeiter prüft.',
+    });
+
+    const result = await chatAgent({
+      messages: [{ role: 'user', content: 'Das reicht, generier es.' }],
+      llmProvider: mockLlm,
+    });
+
+    expect(result).toEqual({
+      reply: 'Ich habe alles was ich brauche.',
+      readyToGenerate: true,
+      suggestedSummary: 'Kunde sendet Antrag, Sachbearbeiter prüft.',
+    });
+  });
+
+  test('defaults readyToGenerate to false and suggestedSummary to null when omitted', async () => {
+    const mockLlm = async () => JSON.stringify({ reply: 'Wer ist beteiligt?' });
+
+    const result = await chatAgent({
+      messages: [{ role: 'user', content: 'Hallo' }],
+      llmProvider: mockLlm,
+    });
+
+    expect(result.readyToGenerate).toBe(false);
+    expect(result.suggestedSummary).toBeNull();
+  });
+
+  test('extracts JSON from a fenced code block', async () => {
+    const mockLlm = async () => '```json\n' + JSON.stringify({ reply: 'ok', readyToGenerate: false, suggestedSummary: null }) + '\n```';
+
+    const result = await chatAgent({
+      messages: [{ role: 'user', content: 'Hallo' }],
+      llmProvider: mockLlm,
+    });
+
+    expect(result.reply).toBe('ok');
+  });
+
+  test('throws a clear error when the LLM response is not valid JSON', async () => {
+    const mockLlm = async () => 'Sure, here is my answer: not json at all';
+
+    await expect(chatAgent({
+      messages: [{ role: 'user', content: 'Hallo' }],
+      llmProvider: mockLlm,
+    })).rejects.toThrow('Chat agent');
+  });
+});

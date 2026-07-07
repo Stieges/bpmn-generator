@@ -7,31 +7,16 @@
  *   amend    — After layout feedback: current JSON + feedback → amended JSON
  */
 
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const promptPath = join(__dirname, '..', '..', 'references', 'prompt-template.md');
+import { extractPromptSection } from './prompt-sections.js';
 
 let _promptSections = null;
 
 function loadPromptSections() {
   if (_promptSections) return _promptSections;
-  const raw = readFileSync(promptPath, 'utf8');
-
-  // Extract the outer fenced block after each section header. The block may contain
-  // nested ```json examples, so anchor the close on the section separator (---).
-  const extract = (header) => {
-    const re = new RegExp(`## ${header}[\\s\\S]*?\`\`\`\\n([\\s\\S]*?)\\n\`\`\`\\n+---`, 'i');
-    const m = raw.match(re);
-    return m ? m[1].trim() : '';
-  };
-
   _promptSections = {
-    masterExtraction: extract('Master Extraction Prompt'),
-    refinement: extract('Refinement / Correction Prompt'),
-    amendment: extract('Amendment Prompt'),
+    masterExtraction: extractPromptSection('Master Extraction Prompt'),
+    refinement: extractPromptSection('Refinement / Correction Prompt'),
+    amendment: extractPromptSection('Amendment Prompt'),
   };
   return _promptSections;
 }

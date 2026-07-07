@@ -13,6 +13,7 @@ const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 't
 import { runPipeline, validateLogicCore } from './pipeline.js';
 import { bpmnToLogicCore } from './import.js';
 import { orchestrate } from './orchestrator.js';
+import { chatAgent } from './agents/chat.js';
 import { createLlmProvider } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
@@ -315,6 +316,39 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    // Chat (discovery conversation, pre-generation)
+    if (url === '/api/v1/chat') {
+      auditLog({ event: 'request', correlationId, clientId, endpoint: '/chat' });
+
+      if (!Array.isArray(body.messages) || body.messages.length === 0) {
+        return json(res, 400, { error: 'messages must be a non-empty array' });
+      }
+
+      if (!body.llmConfig && process.env.OPENAI_API_KEY) {
+        body.llmConfig = {
+          baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+          apiKey: process.env.OPENAI_API_KEY,
+          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        };
+      }
+      if (!body.llmConfig) {
+        return json(res, 400, { error: 'llmConfig is required (or set OPENAI_API_KEY on the server)' });
+      }
+      const { baseUrl, apiKey, model, timeout } = body.llmConfig;
+      if (!baseUrl || !apiKey || !model) {
+        return json(res, 400, { error: 'llmConfig requires baseUrl, apiKey, model' });
+      }
+      const safeTimeout = typeof timeout === 'number' && timeout > 0 && timeout <= 300_000
+        ? timeout : 120_000;
+      const llmProvider = createLlmProvider({ baseUrl, apiKey, model, timeout: safeTimeout });
+
+      const result = await chatAgent({ messages: body.messages, llmProvider });
+      const durationMs = Date.now() - t0;
+      auditLog({ event: 'completed', correlationId, durationMs, readyToGenerate: result.readyToGenerate });
+
+      return json(res, 200, { ...result, correlationId });
+    }
+
     // Telemetry
     if (url === '/api/v1/telemetry') {
       try {
@@ -350,6 +384,7 @@ if (isEntryPoint) {
     console.log(`  POST /api/v1/validate   — Logic-Core → Validation`);
     console.log(`  POST /api/v1/import     — BPMN XML → Logic-Core`);
     console.log(`  POST /api/v1/orchestrate — Multi-agent review + generate + compliance`);
+    console.log(`  POST /api/v1/chat       — Discovery conversation (pre-generation)`);
     console.log(`  GET  /health            — Health check`);
   });
 }
