@@ -167,6 +167,15 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  // Config (frontend bootstrap — reveals whether a server-side LLM key exists)
+  if (method === 'GET' && url === '/api/v1/config') {
+    const envCfg = resolveEnvLlmConfig();
+    const devMode = !process.env.BPMN_API_KEY;
+    const payload = { envKeyConfigured: Boolean(envCfg) };
+    if (devMode) payload.model = envCfg ? envCfg.model : null;
+    return json(res, 200, payload);
+  }
+
   // Frontend static files
   if (method === 'GET' && (url === '/' || url === '/index.html')) {
     const body = readFileSync(join(frontendDir, 'index.html'));
@@ -391,6 +400,7 @@ if (isEntryPoint) {
     console.log(`  POST /api/v1/orchestrate — Multi-agent review + generate + compliance`);
     console.log(`  POST /api/v1/chat       — Discovery conversation (pre-generation)`);
     console.log(`  GET  /health            — Health check`);
+    console.log(`  GET  /api/v1/config     — Frontend bootstrap (env-key status)`);
   });
 }
 

@@ -24,6 +24,7 @@ afterEach(() => {
   delete process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_BASE_URL;
   delete process.env.OPENAI_MODEL;
+  delete process.env.BPMN_API_KEY;
 });
 
 function mockLlmResponse(content) {
@@ -156,5 +157,40 @@ describe('resolveEnvLlmConfig', () => {
       apiKey: 'sk-test',
       model: 'qwen2.5',
     });
+  });
+});
+
+describe('GET /api/v1/config', () => {
+  test('dev mode, no env key → envKeyConfigured false, model null', async () => {
+    const res = await realFetch(`${baseUrl}/api/v1/config`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({ envKeyConfigured: false, model: null });
+  });
+
+  test('dev mode, OPENAI_API_KEY set, no OPENAI_MODEL → default model', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    const res = await realFetch(`${baseUrl}/api/v1/config`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({ envKeyConfigured: true, model: 'gpt-4o-mini' });
+  });
+
+  test('dev mode, explicit OPENAI_MODEL → echoes it', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    process.env.OPENAI_MODEL = 'qwen2.5';
+    const res = await realFetch(`${baseUrl}/api/v1/config`);
+    const data = await res.json();
+    expect(data).toEqual({ envKeyConfigured: true, model: 'qwen2.5' });
+  });
+
+  test('production (BPMN_API_KEY set) → model omitted, only boolean', async () => {
+    process.env.BPMN_API_KEY = 'server-secret';
+    process.env.OPENAI_API_KEY = 'sk-test';
+    const res = await realFetch(`${baseUrl}/api/v1/config`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({ envKeyConfigured: true });
+    expect(data).not.toHaveProperty('model');
   });
 });
