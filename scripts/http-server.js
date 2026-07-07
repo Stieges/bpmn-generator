@@ -1,9 +1,19 @@
 import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
+import { readFileSync } from 'node:fs';
+import { join, extname, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const frontendDir = join(__dirname, '..', 'frontend');
+
+const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+
 import { runPipeline, validateLogicCore } from './pipeline.js';
 import { bpmnToLogicCore } from './import.js';
 import { orchestrate } from './orchestrator.js';
+import { chatAgent } from './agents/chat.js';
 import { createLlmProvider } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
@@ -134,6 +144,17 @@ function json(res, status, data) {
   res.end(body);
 }
 
+// Resolves an LLM config from environment variables, or null if no key is set.
+// Reads process.env on every call so key/model changes are picked up at request time.
+export function resolveEnvLlmConfig() {
+  if (!process.env.OPENAI_API_KEY) return null;
+  return {
+    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  };
+}
+
 const server = createServer(async (req, res) => {
   const { method, url } = req;
 
@@ -144,6 +165,45 @@ const server = createServer(async (req, res) => {
       uptime: Math.floor((Date.now() - startTime) / 1000),
       version: '2.0.0',
     });
+  }
+
+  // Config (frontend bootstrap — reveals whether a server-side LLM key exists)
+  if (method === 'GET' && url === '/api/v1/config') {
+    const envCfg = resolveEnvLlmConfig();
+    // Read BPMN_API_KEY fresh here (not the module-load API_KEY const that
+    // checkAuth uses): keeps the dev/prod model-gating decision at request
+    // time so tests can simulate production against the booted server.
+    const devMode = !process.env.BPMN_API_KEY;
+    const payload = { envKeyConfigured: Boolean(envCfg) };
+    if (devMode) payload.model = envCfg ? envCfg.model : null;
+    return json(res, 200, payload);
+  }
+
+  // Frontend static files
+  if (method === 'GET' && (url === '/' || url === '/index.html')) {
+    const body = readFileSync(join(frontendDir, 'index.html'));
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    return res.end(body);
+  }
+  if (method === 'GET' && url.startsWith('/static/')) {
+    const file = url.replace('/static/', '');
+    const path = join(frontendDir, file);
+    if (!path.startsWith(frontendDir)) return res.writeHead(403).end(); // path traversal guard
+    try {
+      const body = readFileSync(path);
+      res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
+      return res.end(body);
+    } catch { return res.writeHead(404).end(); }
+  }
+  if (method === 'GET' && url.startsWith('/examples/')) {
+    const file = url.replace('/examples/', '');
+    const path = join(frontendDir, 'examples', file);
+    if (!path.startsWith(join(frontendDir, 'examples'))) return res.writeHead(403).end();
+    try {
+      const body = readFileSync(path);
+      res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
+      return res.end(body);
+    } catch { return res.writeHead(404).end(); }
   }
 
   // Auth + rate limiting (skip for health check)
@@ -231,6 +291,11 @@ const server = createServer(async (req, res) => {
       const options = { ruleProfile: body.ruleProfile || null };
 
       // Optional LLM provider for text→BPMN or review-fix loops
+      if (!body.llmConfig) {
+        const envCfg = resolveEnvLlmConfig();
+        if (envCfg) body.llmConfig = envCfg;
+      }
+
       if (body.llmConfig) {
         const { baseUrl, apiKey, model, timeout } = body.llmConfig;
         if (!baseUrl || !apiKey || !model) {
@@ -271,6 +336,53 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    // Chat (discovery conversation, pre-generation)
+    if (url === '/api/v1/chat') {
+      auditLog({ event: 'request', correlationId, clientId, endpoint: '/chat' });
+
+      if (!Array.isArray(body.messages) || body.messages.length === 0) {
+        return json(res, 400, { error: 'messages must be a non-empty array' });
+      }
+
+      if (!body.llmConfig) {
+        const envCfg = resolveEnvLlmConfig();
+        if (envCfg) body.llmConfig = envCfg;
+      }
+      if (!body.llmConfig) {
+        return json(res, 400, { error: 'llmConfig is required (or set OPENAI_API_KEY on the server)' });
+      }
+      const { baseUrl, apiKey, model, timeout } = body.llmConfig;
+      if (!baseUrl || !apiKey || !model) {
+        return json(res, 400, { error: 'llmConfig requires baseUrl, apiKey, model' });
+      }
+      const safeTimeout = typeof timeout === 'number' && timeout > 0 && timeout <= 300_000
+        ? timeout : 120_000;
+      const llmProvider = createLlmProvider({ baseUrl, apiKey, model, timeout: safeTimeout });
+
+      const result = await chatAgent({ messages: body.messages, llmProvider });
+      const durationMs = Date.now() - t0;
+      auditLog({ event: 'completed', correlationId, durationMs, readyToGenerate: result.readyToGenerate });
+
+      return json(res, 200, { ...result, correlationId });
+    }
+
+    // Telemetry
+    if (url === '/api/v1/telemetry') {
+      try {
+        auditLog({
+          ts: new Date().toISOString(),
+          event: 'frontend_event',
+          frontendEvent: body.event,
+          diagramId: body.diagramId,
+          correlationId: body.correlationId,
+          details: body.details,
+        });
+        return json(res, 200, { status: 'ok' });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+
     return json(res, 404, { error: 'Not Found' });
   } catch (err) {
     auditLog({ event: 'error', correlationId, error: err.message });
@@ -289,7 +401,9 @@ if (isEntryPoint) {
     console.log(`  POST /api/v1/validate   — Logic-Core → Validation`);
     console.log(`  POST /api/v1/import     — BPMN XML → Logic-Core`);
     console.log(`  POST /api/v1/orchestrate — Multi-agent review + generate + compliance`);
+    console.log(`  POST /api/v1/chat       — Discovery conversation (pre-generation)`);
     console.log(`  GET  /health            — Health check`);
+    console.log(`  GET  /api/v1/config     — Frontend bootstrap (env-key status)`);
   });
 }
 

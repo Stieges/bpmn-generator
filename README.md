@@ -365,7 +365,12 @@ The BPMN Generator also provides an HTTP API for multi-user access (CI/CD pipeli
 | `POST` | `/api/v1/validate` | Validate Logic-Core without generating output |
 | `POST` | `/api/v1/import` | BPMN 2.0 XML → Logic-Core JSON |
 | `POST` | `/api/v1/orchestrate` | Multi-agent review + generate + compliance |
+| `POST` | `/api/v1/chat` | Discovery conversation (pre-generation) |
+| `POST` | `/api/v1/telemetry` | Frontend event log (best-effort) |
+| `GET` | `/api/v1/config` | Frontend bootstrap (env-key status) |
 | `GET` | `/health` | Health check (uptime, version) |
+
+See [references/api-reference.md](references/api-reference.md) for full request/response schemas and error codes.
 
 ### Start
 
