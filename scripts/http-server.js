@@ -170,6 +170,9 @@ const server = createServer(async (req, res) => {
   // Config (frontend bootstrap — reveals whether a server-side LLM key exists)
   if (method === 'GET' && url === '/api/v1/config') {
     const envCfg = resolveEnvLlmConfig();
+    // Read BPMN_API_KEY fresh here (not the module-load API_KEY const that
+    // checkAuth uses): keeps the dev/prod model-gating decision at request
+    // time so tests can simulate production against the booted server.
     const devMode = !process.env.BPMN_API_KEY;
     const payload = { envKeyConfigured: Boolean(envCfg) };
     if (devMode) payload.model = envCfg ? envCfg.model : null;
