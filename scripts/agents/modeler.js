@@ -20,9 +20,10 @@ function loadPromptSections() {
   if (_promptSections) return _promptSections;
   const raw = readFileSync(promptPath, 'utf8');
 
-  // Extract code blocks after each section header
+  // Extract the outer fenced block after each section header. The block may contain
+  // nested ```json examples, so anchor the close on the section separator (---).
   const extract = (header) => {
-    const re = new RegExp(`## ${header}[\\s\\S]*?\`\`\`\\n([\\s\\S]*?)\`\`\``, 'i');
+    const re = new RegExp(`## ${header}[\\s\\S]*?\`\`\`\\n([\\s\\S]*?)\\n\`\`\`\\n+---`, 'i');
     const m = raw.match(re);
     return m ? m[1].trim() : '';
   };
@@ -72,17 +73,29 @@ function buildPrompt(state) {
 }
 
 function extractJson(text) {
-  // Try fenced code block first
   const fenced = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
-  if (fenced) return JSON.parse(fenced[1]);
-
-  // Try raw JSON (starts with { or [)
-  const trimmed = text.trim();
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    return JSON.parse(trimmed);
+  let parsed;
+  if (fenced) parsed = JSON.parse(fenced[1]);
+  else {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) parsed = JSON.parse(trimmed);
+    else throw new Error('Modeler: Could not extract JSON from LLM response');
   }
+  return unwrapLogicCore(parsed);
+}
 
-  throw new Error('Modeler: Could not extract JSON from LLM response');
+// Tolerate common LLM wrappers (e.g. { process: {...} }, { data: {...} }).
+// A Logic-Core root has nodes+edges OR pools. If not, peek one level deeper.
+function unwrapLogicCore(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const isRoot = (o) => o && typeof o === 'object' && (Array.isArray(o.pools) || (Array.isArray(o.nodes) && Array.isArray(o.edges)));
+  if (isRoot(obj)) return obj;
+  for (const key of ['process', 'processes', 'data', 'result', 'bpmn', 'logicCore', 'logic_core']) {
+    const inner = obj[key];
+    if (isRoot(inner)) return inner;
+    if (Array.isArray(inner) && inner.length === 1 && isRoot(inner[0])) return inner[0];
+  }
+  return obj;
 }
 
 export async function modelerAgent(state) {

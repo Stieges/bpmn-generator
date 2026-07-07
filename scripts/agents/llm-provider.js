@@ -10,7 +10,23 @@ export function createLlmProvider({ baseUrl, apiKey, model, timeout = 120_000 })
   const normalizedBase = baseUrl.replace(/\/$/, '');
   const isLocal = !apiKey || apiKey === 'none' || apiKey === 'local';
 
-  return async function callLlm(systemPrompt, userPrompt, options = {}) {
+  return async function callLlm(systemOrMessages, userPromptOrOptions, maybeOptions) {
+    // Two call shapes:
+    //   (systemPrompt, userPrompt, options?)     — legacy 2-message
+    //   (messages[], options?)                   — multi-turn (chat)
+    let messages;
+    let options;
+    if (Array.isArray(systemOrMessages)) {
+      messages = systemOrMessages;
+      options = userPromptOrOptions || {};
+    } else {
+      messages = [
+        { role: 'system', content: systemOrMessages },
+        { role: 'user', content: userPromptOrOptions },
+      ];
+      options = maybeOptions || {};
+    }
+
     const headers = { 'Content-Type': 'application/json' };
     if (!isLocal) {
       headers['Authorization'] = `Bearer ${apiKey}`;
@@ -21,10 +37,7 @@ export function createLlmProvider({ baseUrl, apiKey, model, timeout = 120_000 })
       headers,
       body: JSON.stringify({
         model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
+        messages,
         ...(options.responseFormat && { response_format: options.responseFormat }),
         temperature: options.temperature ?? 0.2,
       }),
