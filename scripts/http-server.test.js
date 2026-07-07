@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
-import { server } from './http-server.js';
+import { server, resolveEnvLlmConfig } from './http-server.js';
 
 let baseUrl;
 
@@ -22,6 +22,8 @@ const realFetch = global.fetch;
 afterEach(() => {
   global.fetch = realFetch;
   delete process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_BASE_URL;
+  delete process.env.OPENAI_MODEL;
 });
 
 function mockLlmResponse(content) {
@@ -128,5 +130,31 @@ describe('POST /api/v1/chat', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.reply).toBe('ok via env key');
+  });
+});
+
+describe('resolveEnvLlmConfig', () => {
+  test('returns null when OPENAI_API_KEY is unset', () => {
+    expect(resolveEnvLlmConfig()).toBeNull();
+  });
+
+  test('returns defaults when only OPENAI_API_KEY is set', () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    expect(resolveEnvLlmConfig()).toEqual({
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-test',
+      model: 'gpt-4o-mini',
+    });
+  });
+
+  test('honors OPENAI_BASE_URL and OPENAI_MODEL overrides', () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    process.env.OPENAI_BASE_URL = 'http://localhost:1234/v1';
+    process.env.OPENAI_MODEL = 'qwen2.5';
+    expect(resolveEnvLlmConfig()).toEqual({
+      baseUrl: 'http://localhost:1234/v1',
+      apiKey: 'sk-test',
+      model: 'qwen2.5',
+    });
   });
 });

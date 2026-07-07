@@ -144,6 +144,17 @@ function json(res, status, data) {
   res.end(body);
 }
 
+// Resolves an LLM config from environment variables, or null if no key is set.
+// Reads process.env on every call so key/model changes are picked up at request time.
+export function resolveEnvLlmConfig() {
+  if (!process.env.OPENAI_API_KEY) return null;
+  return {
+    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  };
+}
+
 const server = createServer(async (req, res) => {
   const { method, url } = req;
 
@@ -268,12 +279,9 @@ const server = createServer(async (req, res) => {
       const options = { ruleProfile: body.ruleProfile || null };
 
       // Optional LLM provider for text→BPMN or review-fix loops
-      if (!body.llmConfig && process.env.OPENAI_API_KEY) {
-        body.llmConfig = {
-          baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-          apiKey: process.env.OPENAI_API_KEY,
-          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        };
+      if (!body.llmConfig) {
+        const envCfg = resolveEnvLlmConfig();
+        if (envCfg) body.llmConfig = envCfg;
       }
 
       if (body.llmConfig) {
@@ -324,12 +332,9 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { error: 'messages must be a non-empty array' });
       }
 
-      if (!body.llmConfig && process.env.OPENAI_API_KEY) {
-        body.llmConfig = {
-          baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-          apiKey: process.env.OPENAI_API_KEY,
-          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        };
+      if (!body.llmConfig) {
+        const envCfg = resolveEnvLlmConfig();
+        if (envCfg) body.llmConfig = envCfg;
       }
       if (!body.llmConfig) {
         return json(res, 400, { error: 'llmConfig is required (or set OPENAI_API_KEY on the server)' });
