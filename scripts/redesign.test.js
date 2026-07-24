@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { cloneLc, checkGate, nextId, isProtected, refusal, collectIds } from './redesign-core.js';
 import { runRules, loadRuleProfile } from './rules.js';
 import { previewParallelize, applyParallelize, previewMergeTasks, applyMergeTasks,
-         previewRelane, applyRelane } from './redesign.js';
+         previewRelane, applyRelane, previewReorderKnockouts, applyReorderKnockouts } from './redesign.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -678,5 +678,301 @@ describe('relane', () => {
     expect(r.change.handoffsBefore).toBe(0);
     expect(r.change.handoffsAfter).toBe(2);
     expect(r.change.handoffsAfter).toBeGreaterThan(r.change.handoffsBefore);
+  });
+});
+
+// Fixture aus der Aufgabenstellung — wortgleich übernommen, damit die drei
+// dort vorgegebenen Testfälle 1:1 nachvollziehbar bleiben.
+const lcKo = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'L' },
+    { id: 'g1', type: 'exclusiveGateway', name: 'Vollständig?', lane: 'L' },
+    { id: 'r1', type: 'endEvent', name: 'Abgelehnt', marker: 'terminate', lane: 'L' },
+    { id: 'g2', type: 'exclusiveGateway', name: 'Zulässig?', lane: 'L' },
+    { id: 'r2', type: 'endEvent', name: 'Fehler', marker: 'error', lane: 'L' },
+    { id: 't', type: 'userTask', name: 'Antrag bearbeiten', lane: 'L' },
+    { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+  ],
+  edges: [
+    { id: 'k0', source: 's', target: 'g1' },
+    { id: 'k1', source: 'g1', target: 'r1', label: 'Nein' },
+    { id: 'k2', source: 'g1', target: 'g2', label: 'Ja' },
+    { id: 'k3', source: 'g2', target: 'r2', label: 'Nein' },
+    { id: 'k4', source: 'g2', target: 't', label: 'Ja' },
+    { id: 'k5', source: 't', target: 'e' },
+  ],
+  lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+};
+
+describe('reorderKnockouts', () => {
+  test('verweigert ohne uebergebene Reihenfolge und erfindet keine', () => {
+    const r = previewReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/reihenfolge/i);
+  });
+
+  test('verweigert, wenn die Reihenfolge keine Permutation ist', () => {
+    const r = previewReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g3'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/permutation/i);
+  });
+
+  test('dreht die Reihenfolge, behaelt Labels und bleibt sound', () => {
+    const r = applyReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    const firstEdge = r.lc.edges.find(e => e.source === 's');
+    expect(firstEdge.target).toBe('g2');
+    const rejectG2 = r.lc.edges.find(e => e.source === 'g2' && e.target === 'r2');
+    expect(rejectG2.label).toBe('Nein');
+    expect(checkGate(r.lc).ok).toBe(true);
+
+    // g1's eigenes Ablehn-Label bleibt ebenfalls an g1 haengen, unabhaengig
+    // von seiner neuen Position in der Kette.
+    const rejectG1 = r.lc.edges.find(e => e.source === 'g1' && e.target === 'r1');
+    expect(rejectG1.label).toBe('Nein');
+
+    // Die neue Kette: s -> g2 (Nein->r2 / Ja weiter) -> g1 (Nein->r1 / Ja weiter) -> t -> e.
+    const g2Cont = r.lc.edges.find(e => e.source === 'g2' && e.target !== 'r2');
+    expect(g2Cont.target).toBe('g1');
+    expect(g2Cont.label).toBe('Ja');
+    const g1Cont = r.lc.edges.find(e => e.source === 'g1' && e.target !== 'r1');
+    expect(g1Cont.target).toBe('t');
+    expect(g1Cont.label).toBe('Ja');
+
+    expect(r.change.transform).toBe('reorderKnockouts');
+    expect(r.change.targets).toEqual(['g2', 'g1']);
+    expect(r.change.added).toEqual([]);
+    expect(r.change.removed).toEqual([]);
+    // "modified": die IDs bleiben gleich (k0, k2, k4), nur source/target bzw.
+    // target wurden umgehaengt — sie muessen vollstaendig verzeichnet sein,
+    // sonst waere die Zusage "added/removed/modified nennen jeden Unterschied"
+    // fuer genau diese drei Kanten verletzt.
+    expect(r.change.modified).toEqual(expect.arrayContaining(['k0', 'k2', 'k4']));
+    expect(r.change.modified.length).toBe(3);
+  });
+
+  test('preview verweigert bei weniger als zwei Prüfungen', () => {
+    const r = previewReorderKnockouts(lcKo, { gatewayIds: ['g1'], order: ['g1'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/mindestens zwei/i);
+  });
+
+  test('preview verweigert bei unbekannter Kennung', () => {
+    const r = previewReorderKnockouts(lcKo, { gatewayIds: ['g1', 'gibtsnicht'], order: ['gibtsnicht', 'g1'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/unbekannt/i);
+  });
+
+  test('preview verweigert, wenn ein Knoten kein exklusives Gateway ist', () => {
+    const withTask = { ...lcKo, nodes: lcKo.nodes.map(n => n.id === 'g2' ? { ...n, type: 'userTask' } : n) };
+    const r = previewReorderKnockouts(withTask, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/exklusiv/i);
+  });
+
+  test('preview verweigert bei geschuetztem Element', () => {
+    const r = previewReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'],
+                                              policy: { protectNodes: ['g1'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
+  });
+
+  test('preview verweigert, wenn die uebergebene Reihenfolge bereits der aktuellen entspricht', () => {
+    const r = previewReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'], order: ['g1', 'g2'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/bereits/i);
+  });
+
+  test('preview verweigert, wenn ein Gateway keinen Fortsetzungspfad hat ' +
+       '(alle Zweige enden in einem Ausnahme-Ende) — Regression fuer den TypeError-Fall', () => {
+    // g2 hat ZWEI ausgehende Kanten, beide zu Ausnahme-Enden (marker 'error').
+    // contEdge(g2) faende in der urspruenglichen Skizze keine Kante und liefert
+    // undefined; ein direkter .target-Zugriff darauf wuerde einen TypeError
+    // werfen statt sauber zu verweigern. previewReorderKnockouts muss das VOR
+    // jedem .target-Zugriff abfangen — applyReorderKnockouts ebenso, da apply
+    // preview intern aufruft und dessen Verweigerung respektieren muss.
+    const lcAllReject = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 'g1', type: 'exclusiveGateway', name: 'Vollständig?', lane: 'L' },
+        { id: 'r1', type: 'endEvent', name: 'Abgelehnt', marker: 'terminate', lane: 'L' },
+        { id: 'g2', type: 'exclusiveGateway', name: 'Zulässig?', lane: 'L' },
+        { id: 'r2a', type: 'endEvent', name: 'Fehler A', marker: 'error', lane: 'L' },
+        { id: 'r2b', type: 'endEvent', name: 'Fehler B', marker: 'error', lane: 'L' },
+      ],
+      edges: [
+        { id: 'k0', source: 's', target: 'g1' },
+        { id: 'k1', source: 'g1', target: 'r1', label: 'Nein' },
+        { id: 'k2', source: 'g1', target: 'g2', label: 'Ja' },
+        { id: 'k3', source: 'g2', target: 'r2a', label: 'Nein' },
+        { id: 'k4', source: 'g2', target: 'r2b', label: 'Ja' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+    };
+    const r = previewReorderKnockouts(lcAllReject, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/fortsetzungspfad/i);
+    expect(r.reason).toMatch(/g2/);
+
+    // apply muss ebenfalls sauber verweigern (werfen), nicht mit TypeError abstuerzen.
+    expect(() => applyReorderKnockouts(lcAllReject, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] }))
+      .toThrow(/fortsetzungspfad/i);
+  });
+
+  test('preview verweigert bei mehrdeutigem Fortsetzungspfad (mehr als eine Nicht-Ausnahme-Kante)', () => {
+    // g2 hat zwei ausgehende Kanten, die BEIDE keine Ausnahme-Enden sind
+    // (zwei Aufgaben) — welche davon die "Weiter"-Kante ist, ist nicht
+    // eindeutig bestimmbar, ohne selbst ein fachliches Urteil zu faellen.
+    const lcAmbiguous = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 'g1', type: 'exclusiveGateway', name: 'Vollständig?', lane: 'L' },
+        { id: 'r1', type: 'endEvent', name: 'Abgelehnt', marker: 'terminate', lane: 'L' },
+        { id: 'g2', type: 'exclusiveGateway', name: 'Zulässig?', lane: 'L' },
+        { id: 't', type: 'userTask', name: 'Antrag bearbeiten', lane: 'L' },
+        { id: 't2', type: 'userTask', name: 'Sonderfall bearbeiten', lane: 'L' },
+      ],
+      edges: [
+        { id: 'k0', source: 's', target: 'g1' },
+        { id: 'k1', source: 'g1', target: 'r1', label: 'Nein' },
+        { id: 'k2', source: 'g1', target: 'g2', label: 'Ja' },
+        { id: 'k3', source: 'g2', target: 't', label: 'Ja' },
+        { id: 'k4', source: 'g2', target: 't2', label: 'Sonderfall' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+    };
+    const r = previewReorderKnockouts(lcAmbiguous, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/mehr als einen möglichen fortsetzungspfad/i);
+  });
+
+  test('preview verweigert, wenn die angegebenen Pruefungen keine zusammenhaengende Kette bilden', () => {
+    // g1s Weiter-Kante zeigt auf einen Zwischenschritt 'z', nicht direkt auf
+    // g2 — die beiden Gateways sind zwar beide gueltige Knock-outs, aber
+    // NICHT in der behaupteten Reihenfolge miteinander verkettet.
+    const lcNotChained = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 'g1', type: 'exclusiveGateway', name: 'Vollständig?', lane: 'L' },
+        { id: 'r1', type: 'endEvent', name: 'Abgelehnt', marker: 'terminate', lane: 'L' },
+        { id: 'z', type: 'userTask', name: 'Zwischenschritt', lane: 'L' },
+        { id: 'g2', type: 'exclusiveGateway', name: 'Zulässig?', lane: 'L' },
+        { id: 'r2', type: 'endEvent', name: 'Fehler', marker: 'error', lane: 'L' },
+        { id: 't', type: 'userTask', name: 'Antrag bearbeiten', lane: 'L' },
+        { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+      ],
+      edges: [
+        { id: 'k0', source: 's', target: 'g1' },
+        { id: 'k1', source: 'g1', target: 'r1', label: 'Nein' },
+        { id: 'k2', source: 'g1', target: 'z', label: 'Ja' },
+        { id: 'kz', source: 'z', target: 'g2' },
+        { id: 'k3', source: 'g2', target: 'r2', label: 'Nein' },
+        { id: 'k4', source: 'g2', target: 't', label: 'Ja' },
+        { id: 'k5', source: 't', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+    };
+    const r = previewReorderKnockouts(lcNotChained, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/zusammenhängende kette/i);
+  });
+
+  test('preview verweigert bei Fan-in am Kettenanfang (mehr als ein Einstieg von aussen)', () => {
+    // Regression analog zu applyParallelize (Commit bd25f60): eine zweite
+    // eingehende Kante am ersten Kettenmitglied darf nicht stillschweigend
+    // ignoriert werden — sonst haengt apply per .find() nur die zuerst
+    // gefundene Kante um und die zweite bleibt am alten Platz haengen.
+    const lcFanIn = {
+      ...lcKo,
+      nodes: [...lcKo.nodes, { id: 'w', type: 'userTask', name: 'Vorschritt', lane: 'L' }],
+      edges: [...lcKo.edges, { id: 'kw', source: 'w', target: 'g1' }],
+    };
+    const r = previewReorderKnockouts(lcFanIn, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/mehr als einen einstieg/i);
+  });
+
+  test('apply mutiert die Eingabe nicht', () => {
+    const before = JSON.stringify(lcKo);
+    applyReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    expect(JSON.stringify(lcKo)).toBe(before);
+  });
+
+  test('apply ist deterministisch', () => {
+    const r1 = applyReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    const r2 = applyReorderKnockouts(lcKo, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    expect(JSON.stringify(r1.lc)).toBe(JSON.stringify(r2.lc));
+  });
+
+  test('bewahrt die Standardfluss-Markierung (isDefault) an der umgehaengten Kante', () => {
+    const lcDefault = { ...lcKo, edges: lcKo.edges.map(e => e.id === 'k4' ? { ...e, isDefault: true } : e) };
+    const r = applyReorderKnockouts(lcDefault, { gatewayIds: ['g1', 'g2'], order: ['g2', 'g1'] });
+    // k4 war g2s Weiter-Kante (ehemals g2->t) und zeigt nach dem Dreh auf g1;
+    // isDefault muss an der Kante (id k4) haengen bleiben, nicht verloren gehen.
+    const k4After = r.lc.edges.find(e => e.id === 'k4');
+    expect(k4After.isDefault).toBe(true);
+    expect(k4After.target).toBe('g1');
+    expect(checkGate(r.lc).ok).toBe(true);
+  });
+
+  test('dreht eine dreigliedrige Kette korrekt (mittleres Element betroffen)', () => {
+    const lcKo3 = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 'g1', type: 'exclusiveGateway', name: 'Vollständig?', lane: 'L' },
+        { id: 'r1', type: 'endEvent', name: 'Abgelehnt 1', marker: 'terminate', lane: 'L' },
+        { id: 'g2', type: 'exclusiveGateway', name: 'Zulässig?', lane: 'L' },
+        { id: 'r2', type: 'endEvent', name: 'Abgelehnt 2', marker: 'terminate', lane: 'L' },
+        { id: 'g3', type: 'exclusiveGateway', name: 'Budget vorhanden?', lane: 'L' },
+        { id: 'r3', type: 'endEvent', name: 'Abgelehnt 3', marker: 'terminate', lane: 'L' },
+        { id: 't', type: 'userTask', name: 'Antrag bearbeiten', lane: 'L' },
+        { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+      ],
+      edges: [
+        { id: 'k0', source: 's', target: 'g1' },
+        { id: 'k1', source: 'g1', target: 'r1', label: 'Nein' },
+        { id: 'k2', source: 'g1', target: 'g2', label: 'Ja' },
+        { id: 'k3', source: 'g2', target: 'r2', label: 'Nein' },
+        { id: 'k4', source: 'g2', target: 'g3', label: 'Ja' },
+        { id: 'k5', source: 'g3', target: 'r3', label: 'Nein' },
+        { id: 'k6', source: 'g3', target: 't', label: 'Ja' },
+        { id: 'k7', source: 't', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+    };
+    const r = applyReorderKnockouts(lcKo3, { gatewayIds: ['g1', 'g2', 'g3'], order: ['g2', 'g1', 'g3'] });
+    expect(checkGate(r.lc).ok).toBe(true);
+    expect(r.change.targets).toEqual(['g2', 'g1', 'g3']);
+
+    // Neue Kette: s -> g2 -> g1 -> g3 -> t -> e; jedes Gateway behaelt sein
+    // eigenes Ablehn-Label, unabhaengig von seiner neuen Position.
+    const first = r.lc.edges.find(e => e.source === 's');
+    expect(first.target).toBe('g2');
+    const g2Cont = r.lc.edges.find(e => e.source === 'g2' && e.target !== 'r2');
+    expect(g2Cont.target).toBe('g1');
+    expect(g2Cont.label).toBe('Ja');
+    const g1Cont = r.lc.edges.find(e => e.source === 'g1' && e.target !== 'r1');
+    expect(g1Cont.target).toBe('g3');
+    expect(g1Cont.label).toBe('Ja');
+    const g3Cont = r.lc.edges.find(e => e.source === 'g3' && e.target !== 'r3');
+    expect(g3Cont.target).toBe('t');
+    expect(g3Cont.label).toBe('Ja');
+
+    // Ablehn-Kanten bleiben unveraendert an ihrem jeweiligen Gateway haengen.
+    expect(r.lc.edges.find(e => e.source === 'g1' && e.target === 'r1').label).toBe('Nein');
+    expect(r.lc.edges.find(e => e.source === 'g2' && e.target === 'r2').label).toBe('Nein');
+    expect(r.lc.edges.find(e => e.source === 'g3' && e.target === 'r3').label).toBe('Nein');
+
+    // "modified": Einstiegskante (k0) plus die drei Weiter-Kanten (k4, k2,
+    // k6) — k6 aendert seinen Wert dabei nicht wirklich (g3 bleibt letztes
+    // Kettenmitglied, zeigt vorher wie nachher auf 't'), zaehlt aber wie bei
+    // applyParallelize/applyMergeTasks als angefasste Kante, weil sie
+    // programmatisch angefasst wird.
+    expect(r.change.modified).toEqual(expect.arrayContaining(['k0', 'k4', 'k2', 'k6']));
+    expect(r.change.modified.length).toBe(4);
   });
 });

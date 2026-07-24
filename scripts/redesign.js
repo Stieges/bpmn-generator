@@ -349,3 +349,168 @@ export function applyRelane(lc, params = {}) {
     warnings: gate.warnings,
   };
 }
+
+/**
+ * Ausnahme-Ende-Erkennung fuer Knock-out-Ketten: ein Ende gilt als
+ * "Ausnahme" (Ablehnung/Abbruch/Fehler), wenn es einen entsprechenden Marker
+ * traegt ODER sein Name danach klingt. Dieselbe Erkennung entscheidet, welche
+ * ausgehende Kante eines Gateways die "Weiter"-Kante ist — siehe
+ * continuationEdges().
+ */
+const EXCEPTION_END_MARKERS = new Set(['error', 'terminate', 'escalation', 'cancel']);
+const EXCEPTION_END_NAME_RE = /fehler|error|abbruch|abgebroch|eskal|storn|ablehn|abgelehnt|reject|cancel|verwerf|verworf/i;
+
+function buildNodeMap(proc) {
+  const map = {};
+  for (const n of (proc.nodes || [])) map[n.id] = n;
+  return map;
+}
+
+function isExceptionEnd(nodeById, id) {
+  const n = nodeById[id];
+  return !!n && n.type === 'endEvent' &&
+    (EXCEPTION_END_MARKERS.has(n.marker) || EXCEPTION_END_NAME_RE.test(n.name || ''));
+}
+
+/**
+ * Alle ausgehenden Kanten eines Gateways, die NICHT zu einem Ausnahme-Ende
+ * fuehren — die Kandidaten fuer die "Weiter"-Kante. Liefert bewusst ein Array
+ * (nicht eine einzelne Kante per .find()), damit der Aufrufer selbst
+ * unterscheiden kann: genau ein Treffer (eindeutige Weiter-Kante), keiner
+ * (alle Zweige sind Ausnahmen — kein Fortsetzungspfad) oder mehrere
+ * (mehrdeutig, welcher Zweig weiterfuehrt). Ein direkter .find()-Zugriff wie
+ * im urspruenglichen Entwurf liefert bei "keiner" `undefined` und stuerzt beim
+ * naechsten .target-Zugriff mit TypeError ab, statt sauber zu verweigern —
+ * siehe knockoutChainIssue(), das genau diese drei Faelle VOR dem Zugriff
+ * unterscheidet.
+ */
+function continuationEdges(proc, nodeById, gwId) {
+  return (proc.edges || []).filter(e => e.source === gwId && !isExceptionEnd(nodeById, e.target));
+}
+
+/**
+ * Strukturelle Vorbedingung: bilden `ids` (in genau dieser Reihenfolge) eine
+ * gueltige, umkehrbare Knock-out-Kette? Liefert null, wenn ja, sonst den
+ * Verweigerungsgrund. Geprüft wird:
+ *   - jedes Gateway hat genau EINE Weiter-Kante (nicht keine, nicht mehrdeutige)
+ *   - aufeinanderfolgende Gateways sind ueber genau diese Kante verbunden
+ *     (ids[i] -weiter-> ids[i+1])
+ *   - die Weiter-Kante des LETZTEN Mitglieds fuehrt aus der Kette HINAUS
+ *     (kein Ruecksprung in die Kette)
+ *   - das ERSTE Mitglied hat GENAU EINEN Einstieg von ausserhalb der Kette
+ *
+ * Ohne diese Pruefung koennte applyReorderKnockouts entweder abstuerzen
+ * (TypeError auf undefined.target, wenn ein Gateway keine oder mehrere
+ * Weiter-Kanten hat — siehe die "kein Fortsetzungspfad"-Testfaelle) oder ein
+ * strukturell irrefuehrendes Modell erzeugen: ein Fan-in am Kettenanfang
+ * wuerde applyParallelize's urspruenglichen .find()-Fehler wiederholen (siehe
+ * dessen "Fan-in am ERSTEN Kettenmitglied"-Regressionstest, Commit bd25f60),
+ * und eine in Wahrheit nicht zusammenhaengende "Kette" wuerde still falsch
+ * verdrahtet. Das feste Rollback-Gate faengt das NICHT zuverlaessig ab: ein
+ * dadurch entstehender toter Zweig ist WF01 (dead transition), Default-
+ * Severity WARNING — checkGate().ok bleibt bei reinen Warnungen true, das
+ * Rollback greift also nicht. Diese Pruefung muss daher VOR jedem Zugriff auf
+ * das Ergebnis von continuationEdges()[0] laufen, nicht erst danach.
+ */
+function knockoutChainIssue(proc, ids) {
+  const nodeById = buildNodeMap(proc);
+  for (const id of ids) {
+    const cont = continuationEdges(proc, nodeById, id);
+    if (cont.length === 0) {
+      return `Prüfung "${id}" hat keinen Fortsetzungspfad — alle Zweige enden in einem Ausnahme-Ende.`;
+    }
+    if (cont.length > 1) {
+      return `Prüfung "${id}" hat mehr als einen möglichen Fortsetzungspfad — nicht eindeutig, welcher Zweig weiterführt.`;
+    }
+  }
+  for (let i = 0; i < ids.length - 1; i++) {
+    const cont = continuationEdges(proc, nodeById, ids[i])[0];
+    if (cont.target !== ids[i + 1]) {
+      return `Die Prüfungen bilden in der übergebenen Reihenfolge keine zusammenhängende Kette ` +
+             `("${ids[i]}" führt nicht weiter zu "${ids[i + 1]}").`;
+    }
+  }
+  const lastCont = continuationEdges(proc, nodeById, ids[ids.length - 1])[0];
+  if (ids.includes(lastCont.target)) {
+    return `Der Fortsetzungspfad der letzten Prüfung ("${ids[ids.length - 1]}") führt zurück in die Kette ` +
+           `statt hinaus.`;
+  }
+  const entries = (proc.edges || []).filter(e => e.target === ids[0] && !ids.includes(e.source));
+  if (entries.length === 0) {
+    return `Die erste Prüfung ("${ids[0]}") hat keinen erkennbaren Einstieg von außerhalb der Kette.`;
+  }
+  if (entries.length > 1) {
+    return `Die erste Prüfung ("${ids[0]}") hat mehr als einen Einstieg von außerhalb der Kette — nicht eindeutig.`;
+  }
+  return null;
+}
+
+/**
+ * Eingriff „Prüfreihenfolge drehen". Zentrale Zusage: dieser Eingriff
+ * BERECHNET KEINE Reihenfolge und ERFINDET KEINE — er wendet eine vom
+ * Aufrufer uebergebene an und verweigert sonst. Das Modell traegt weder
+ * Aufwand noch Ablehnungswahrscheinlichkeit je Pruefung; jede "optimale"
+ * Reihenfolge waere ein erfundener Wert ohne Grundlage im Logic-Core.
+ */
+export function previewReorderKnockouts(lc, { gatewayIds = [], order = null, policy = {} } = {}) {
+  const proc = procOf(lc);
+  if (gatewayIds.length < 2) return refusal('Mindestens zwei Prüfungen nötig.');
+  const nodes = findNodes(proc, gatewayIds);
+  if (nodes.some(n => !n)) return refusal('Unbekannte Kennung.');
+  if (nodes.some(n => n.type !== 'exclusiveGateway')) return refusal('Nur exklusive Gateways.');
+  const prot = nodes.filter(n => isProtected(n, policy, lc));
+  if (prot.length) return refusal(`Geschütztes Element betroffen: ${prot.map(n => n.id).join(', ')}`);
+  const chainIssue = knockoutChainIssue(proc, gatewayIds);
+  if (chainIssue) return refusal(chainIssue);
+  if (!order) {
+    return refusal('Keine Reihenfolge übergeben — der Eingriff berechnet keine und erfindet keine.');
+  }
+  const same = order.length === gatewayIds.length &&
+               [...order].sort().join() === [...gatewayIds].sort().join();
+  if (!same) return refusal('Die Reihenfolge ist keine Permutation der übergebenen Prüfungen.');
+  if (order.every((id, i) => id === gatewayIds[i])) {
+    return refusal('Die übergebene Reihenfolge entspricht bereits der aktuellen — kein Eingriff nötig.');
+  }
+  return { feasible: 'full', scope: [...order], reason: '' };
+}
+
+export function applyReorderKnockouts(lc, params = {}) {
+  const pv = previewReorderKnockouts(lc, params);
+  if (pv.feasible === 'none') throw new Error(pv.reason);
+
+  const out = cloneLc(lc);
+  const proc = procOf(out);
+  const oldOrder = params.gatewayIds;
+  const newOrder = pv.scope;
+  const nodeById = buildNodeMap(proc);
+
+  // Struktur bereits durch previewReorderKnockouts (knockoutChainIssue)
+  // geprüft: entry und die Weiter-Kante der letzten alten Prüfung existieren
+  // garantiert und sind eindeutig. `if (entry)` bleibt trotzdem als billige
+  // Absicherung stehen, falls dieser Pfad je ohne den Preview-Aufruf erreicht wird.
+  const entry = (proc.edges || []).find(e => e.target === oldOrder[0] && !oldOrder.includes(e.source));
+  const exit = continuationEdges(proc, nodeById, oldOrder[oldOrder.length - 1])[0].target;
+
+  // Bedingungs-Labels ("Nein"/"Ja") und Standardfluss-Markierung (isDefault)
+  // haengen an der KANTE, nicht an ihrer Position in der Kette: weil hier nur
+  // e.target auf vorhandenen Kanten-Objekten umgehaengt wird (statt Kanten neu
+  // zu erzeugen), wandern label/isDefault automatisch mit der Pruefung, der
+  // sie gehoeren — kein gesonderter Kopierschritt noetig.
+  const modified = [];
+  if (entry) { entry.target = newOrder[0]; modified.push(entry.id); }
+  for (let i = 0; i < newOrder.length; i++) {
+    const c = continuationEdges(proc, nodeById, newOrder[i])[0];
+    c.target = i < newOrder.length - 1 ? newOrder[i + 1] : exit;
+    modified.push(c.id);
+  }
+
+  const gate = checkGate(out);
+  if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
+
+  return {
+    lc: out,
+    change: { transform: 'reorderKnockouts', targets: newOrder, added: [], removed: [], modified,
+              note: `Reihenfolge ${oldOrder.join(' → ')} → ${newOrder.join(' → ')}` },
+    warnings: gate.warnings,
+  };
+}
