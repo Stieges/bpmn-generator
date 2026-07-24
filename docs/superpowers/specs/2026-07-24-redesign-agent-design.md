@@ -38,6 +38,8 @@ goal trade-offs, and estimating numbers the model doesn't carry.
 - Auto-merging redesigns into the user's file without confirmation
 - Process mining / event-log analysis (no event data in Logic-Core)
 - Changing Increment 1's detection heuristics themselves
+- **Cross-pool restructuring.** Transforms operate *within* one process/pool. Moving work between
+  participants changes the collaboration contract (message flows) and needs its own design.
 
 ## 3 Architecture
 
@@ -74,33 +76,68 @@ applied transform is validated; a step that breaks soundness is rolled back and 
 
 Pure functions, `(lc, params) → { lc, change }`. No LLM, no I/O, fully testable.
 
-| Transform | Signature | Graph operation |
-|---|---|---|
-| `parallelize` | `(lc, {nodeIds})` | Replace a linear chain with AND-split → branches → AND-join |
-| `isolateException` | `(lc, {endId})` | Move an inline exception path onto a boundary event / event-subprocess |
-| `reorderKnockouts` | `(lc, {gatewayIds, order})` | Re-sequence knock-out checks (order supplied by math) |
-| `mergeTasks` | `(lc, {nodeIds})` | Compose consecutive same-lane micro-tasks into one |
-| `relane` | `(lc, {nodeId, lane})` | Move a task to another lane to cut handoffs |
+| Transform | Signature | Graph operation | Applicability |
+|---|---|---|---|
+| `parallelize` | `(lc, {nodeIds})` | Replace a linear chain with AND-split → branches → AND-join | **Mechanical** *only* when data-object dependencies prove independence — otherwise judgment (§5.1) |
+| `isolateException` | `(lc, {endId})` | Move an inline exception path onto a boundary event / event-subprocess | **Judgment always** (§4.1) |
+| `reorderKnockouts` | `(lc, {gatewayIds, order})` | Re-sequence knock-out checks (order supplied by math) | Judgment (needs estimated numbers, §5.2) |
+| `mergeTasks` | `(lc, {nodeIds})` | Compose consecutive same-lane micro-tasks into one | Judgment |
+| `relane` | `(lc, {nodeId, lane})` | Move a task to another lane to cut handoffs | Judgment |
 
 Rules for all transforms: preserve existing IDs where the node survives; generate schema-conform IDs for
-new nodes; never silently drop edges; return a structured `change` record for the changelog.
+new nodes; never silently drop edges; enforce `protectLanes`/`protectNodes` (reject the call, don't warn);
+return a structured `change` record for the changelog.
+
+### 4.1 Why `isolateException` can never be mechanical
+
+Two constructs look similar but mean different things:
+- **Inline branch** — `Task → XOR "Fehler?" → Ja → End`: *we checked and decided to reject.*
+- **Boundary event** — attached to the task: *something interrupted the task while it was running.*
+
+Converting the first into the second turns a business decision into a fault. Real example from a production
+process: `"Frist überschritten (5 Werktage)"` genuinely is an interruption (boundary event correct), while
+`"Antrag ablehnen (kein Vertragsabschluss)"` is a decision (boundary event wrong). Both are "exception
+paths" to the detector. Only naming/semantics separates them — that is the agent's job, not the code's.
 
 ## 5 Layer B — The math (`scripts/redesign-math.js`)
 
-Where a published result exists, use it instead of heuristic guessing.
+Where a published result exists **and the data to apply it exists**, use it instead of guessing. Where the
+data is missing, say so — never dress an estimate as a computation.
 
-- **Knock-out ordering** (Reijers/van der Aalst): order checks by **ascending `effort / rejectionProbability`**
-  — the least-cost-per-rejection rule. Optimal for expected processing cost under independent checks.
-  *Needs numbers* (see §6 fallback).
-- **Parallelizable sets**: tasks that are mutually unreachable in the dependency DAG form an **antichain**
-  (Dilworth). Computed from the transitive closure — a candidate set for `parallelize`.
-- **Critical path / cycle time**: longest weighted path (CPM) when durations are known; used to show the
-  time effect of a parallelization.
+### 5.1 Parallelizability — two-tier, because control flow ≠ dependency
+
+The detector finds *sequential* tasks. Sequence in the drawing does **not** imply dependence:
+`Adresse prüfen → Telefon prüfen → E-Mail prüfen` is parallelizable; `Partnerdaten erfassen →
+Sanktionsprüfung → Schwebesatz anlegen` is not. **They look identical in the model.**
+
+Note the common trap: in a drawn chain `A→B→C` the tasks are *totally ordered* by control flow, so the
+control-flow graph contains **no antichain at all**. Independence can only be read off a **dependency**
+graph — in Logic-Core, that means modelled data objects (`associations` / `dataObjectReference`).
+
+- **Tier 1 (data objects present):** build the data-dependency DAG from associations; a set of pairwise
+  incomparable tasks (an **antichain**, Dilworth) is provably parallelizable → `parallelize` may be applied
+  **mechanically**.
+- **Tier 2 (no data objects — the common case):** the control-flow chain yields *candidates* only. The
+  agent judges business independence from names/semantics; the result is a **proposal requiring
+  confirmation**, marked `judgment: true`. No mathematical claim is made.
+
+### 5.2 Knock-out ordering — correct rule, usually missing inputs
+
+Order checks by **ascending `effort / rejectionProbability`** (least cost per rejection; Reijers/van der
+Aalst). This minimizes expected processing cost for independent checks. **Logic-Core carries neither
+number**, so in practice the agent estimates them → the result is always `estimated: true` and is a
+proposal, never a mechanical application. Documented here so nobody mistakes the rule for something the
+tool can currently compute unaided.
+
+### 5.3 Always computable
+
+- **Critical path / cycle time**: longest weighted path (CPM) — only when durations are supplied; used to
+  quantify the effect of a parallelization.
 - **Trade-off score (MCDA)**: weighted sum over the devil's quadrangle `(time, cost, quality, flexibility)`
-  using the policy weights → ranks competing advisories. Reijers explicitly warns that improving one
-  dimension can worsen another; the score makes that explicit rather than hiding it.
-- **Handoff minimization**: lane reassignment scored by the count of lane-crossing edges (local greedy
-  improvement; no global partitioning in this increment).
+  with the policy weights → ranks competing advisories. Reijers explicitly warns that improving one
+  dimension can worsen another; the score surfaces that instead of hiding it.
+- **Handoff count**: lane-crossing edges before/after a `relane` — a pure count, always computable (local
+  greedy improvement only; no global partitioning in this increment).
 
 ## 6 Layer C — The agent (`scripts/agents/redesign.js`)
 
@@ -117,6 +154,7 @@ redesignAgent({
     protectNodes: ['task_vier_augen'],
     maxChanges:   5,
     autonomy:     'safe',   // 'propose' | 'safe' (default) | 'full'
+    maxLlmCalls:  12,
   },
   llmProvider,
 })
@@ -124,11 +162,35 @@ redesignAgent({
 
 **Autonomy levels** — the "as far as it can" dial:
 - `propose` — nothing applied; returns the ranked, parameterized plan only.
-- `safe` (default) — applies only **mechanical** transforms whose preconditions are fully decidable from
-  the graph (`parallelize` on a verified antichain, `isolateException`); everything judgment-dependent is
-  returned as a proposal.
-- `full` — also applies judgment-dependent transforms (`mergeTasks`, `reorderKnockouts`, `relane`), each
-  still soundness-validated and logged with its rationale.
+- `safe` (default) — applies only transforms that are **provably** applicable from the model: today that is
+  `parallelize` **in tier 1 only** (data-object-proven independence, §5.1). Everything else — including
+  `isolateException` — comes back as a proposal.
+- `full` — also applies judgment-dependent transforms (`isolateException`, `mergeTasks`,
+  `reorderKnockouts`, `relane`), each still soundness-validated and logged with its rationale.
+
+Consequence to accept knowingly: on models without data objects, `safe` applies **nothing** and behaves
+like `propose`. That is intended — silence beats a confidently wrong redesign.
+
+### 6.1 What the agent actually sees
+
+Not the raw Logic-Core JSON (unbounded tokens on large models). Per step it receives a **compact process
+digest**: nodes as `id | type | name | lane`, edges as `source → target [label]`, the current advisory plan
+(structured), the Lean metrics, and the brief/policy. Data objects and associations are included when
+present, since they decide tier 1 vs tier 2.
+
+### 6.2 Convergence — recompute after every applied step
+
+After each successful transform the detection (`optimize.js`) **re-runs on the new Soll**, and the plan is
+re-ranked. Rationale: one change invalidates or creates others (parallelizing a chain removes its own
+handoff finding and can expose a new one). The loop ends when: the brief is satisfied, no applicable
+advisory remains, `maxChanges` is hit, or `maxLlmCalls` is exhausted — whichever comes first. Every exit
+reason is reported.
+
+### 6.3 Cost control
+
+`maxLlmCalls` (default 12) caps total agent calls across all iterations; the digest keeps per-call payload
+bounded. On exhaustion the run stops cleanly and returns the Soll reached so far plus the remaining
+proposals — never a partially-applied, unvalidated state.
 
 **What the agent contributes (the non-computable part):**
 1. Reads the brief → maps it to weights/goals, overriding defaults where the text is explicit.
@@ -161,10 +223,14 @@ redesignAgent({
 
 - **Transforms** (no LLM): per transform, a before/after Logic-Core assertion + "result is still sound" +
   "IDs preserved" + "protected elements untouched".
-- **Math**: knock-out ordering against a hand-computed optimal order; antichain detection on a known DAG;
+- **Math**: knock-out ordering against a hand-computed optimal order; antichain detection on a known
+  data-dependency DAG (**and** the negative case: a plain control-flow chain yields no antichain);
   MCDA ranking monotonic in the weights.
+- **Tiering**: identical chain with and without data objects → tier 1 mechanical vs tier 2 proposal.
 - **Agent** with a mock `llmProvider` (pattern already used in `orchestrator.test.js`): honors `autonomy`,
-  respects `maxChanges`, applies the semantic veto, marks estimates.
+  respects `maxChanges` and `maxLlmCalls`, applies the semantic veto, marks estimates.
+- **Convergence**: advisories are recomputed after each step; a finding removed by a transform does not
+  reappear; the loop terminates and reports its exit reason.
 - **Rollback**: a transform forced to produce an unsound graph must be rolled back and reported.
 - **Golden IST→Soll**: one fixture through the full run; Soll renders and stays OMG-valid.
 - **Regression**: full suite green; document mode and existing goldens untouched.
@@ -176,14 +242,19 @@ redesignAgent({
 | Agent invents plausible but wrong estimates | Flag `estimated: true`; `safe` autonomy excludes estimate-driven transforms |
 | Transform produces a subtly wrong graph | Soundness re-validation + rollback; per-transform unit tests |
 | Over-optimization destroys intent | Brief + protect lists + `maxChanges`; IST always preserved |
-| Advisory contract change breaks consumers | `advisories` become objects but keep a human-readable `message`; documented in api-reference |
+| Advisory contract change breaks consumers | `advisories` become objects keeping a human-readable `message`; the field is one day old (PR #23) with no known consumers, so breaking now beats carrying two parallel structures forever. Documented as a contract change in api-reference |
+| Parallelization applied to genuinely dependent tasks | Tier 1/tier 2 split (§5.1): mechanical only on data-object-proven independence; otherwise confirmation required |
+| Recompute-per-step makes runs expensive | `maxLlmCalls` budget + compact digest (§6.1, §6.3) |
 
 ## 11 Acceptance
 
-- A linear same-lane chain is parallelized end-to-end, Soll is sound, handoff/cycle metrics improve, and the
-  changelog names the advisory + rationale.
-- `autonomy: 'propose'` changes nothing; `safe` applies only mechanical transforms; `full` applies more.
-- A protected lane is never modified, even when the agent proposes it.
+- A chain with data-object-proven independence is parallelized end-to-end, Soll is sound, metrics improve,
+  and the changelog names the advisory + rationale.
+- The **same chain without data objects** is *not* applied under `safe` — it comes back as a proposal
+  marked `judgment: true`.
+- `autonomy: 'propose'` changes nothing; `full` also applies judgment transforms.
+- A protected lane is never modified, even when the agent proposes it (enforced in the transform layer).
+- After an applied transform, advisories are recomputed; a finding invalidated by the change is gone.
 - Full test suite green; `document` mode output byte-identical to before.
 
 ## 12 Phasing
