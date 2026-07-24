@@ -9,7 +9,7 @@ erstellt_von: daniel.stiegler
 quelle: Arbeitssitzung 2026-07-24 (Dialog nach Merge von Inkrement 1, PR #23)
 tore_ebene: system   # gewaehlte Scheibe S2 (Vorhaben insgesamt: goal — siehe Split)
 prioritaet: muss     # Begruendung in Saeule business_intent; Bestaetigung an GATE 1
-reifegrad: structured
+reifegrad: formalized
 regulatory_refs: []
 beziehungen:
   - {typ: basiert_auf, ziel: docs/superpowers/specs/2026-07-24-redesign-agent-design.md}
@@ -28,11 +28,11 @@ beziehungen:
 
 | Prüf-Ziel | Stand (offen → belegt) | → Beleg |
 |---|---|---|
-| **Enthaltsamkeit** (was offen?) | 4 offene Punkte · 3 Scheiben geparkt (mit Trigger/Owner) | ↓ Offene Punkte · Split |
-| **Abdeckung** (Säulen + vergessene Pfade) | 7/7 Säulen belegt · 0 Opt-Out · **Negations-Achse: offen** | ↓ Saeulen |
-| **Belegtheit** (Quellen) | 7 Verifiziert · 0 Hypothese — davon 4 auf Sitzungs-Entscheidungen, 3 auf Code/Repo-Befunden; externe Recherche steht aus (Phase 3) | ↓ Saeulen-Quellen |
-| **Prüf-Durchdringung** (testbar) | 0 Gherkin-Szenarien — Phase 4 | ↓ Akzeptanzkriterien |
-| **Integrität** (Prozess) | GATE 1 **bestanden** (2026-07-24) · GATE 2a/2b offen · Lern-Spur gepflegt | ↓ Lern-Spur |
+| **Enthaltsamkeit** (was offen?) | 5 geparkte Punkte (Rechenteil-Verfahren · CPM · Bewertung · Laufzeitschranke · S2-Teilung) · 3 Scheiben geparkt — alle mit Trigger/Owner | ↓ Offene Punkte · Split |
+| **Abdeckung** (Säulen + vergessene Pfade) | 9 Säulen-Zeilen (7 Säulen, `functional` dreigeteilt) · 1 begründeter Opt-Out (Timeout/Warten) · **Negations-Achse: je Eingriff gestellt**, 6 transformspezifische Fehlermodi nachgetragen | ↓ Saeulen · Negations-Achse |
+| **Belegtheit** (Quellen) | **6 Verifiziert · 1 Hypothese · 1 Nicht gefunden** (Datenlage) · 1 eingeschränkt. **4 Demotionen** und **3 Quellenkorrekturen** durch GATE 2b; die Kein-LLM-Zusage wurde unabhängig an der Import-Hülle nachgerechnet | ↓ Saeulen-Quellen · Lern-Spur |
+| **Prüf-Durchdringung** (testbar) | **15 Gherkin-Szenarien** · nicht testbar → Inspection (Import-Grenze) | ↓ Akzeptanzkriterien |
+| **Integrität** (Prozess) | GATE 1 **bestanden** · GATE 2a **gelaufen** (12 Befunde, alle disponiert) · GATE 2b **gelaufen** (4 Demotionen, 3 Quellenkorrekturen, 1 Faktenkorrektur) · Lern-Spur gepflegt | ↓ Lern-Spur |
 
 ## Herkunft
 
@@ -157,15 +157,134 @@ nutzbar und vollständig testbar, und ohne Sprachmodell/API-Key betreibbar.
 |---|---|---|---|
 | **business_intent** | **Idee:** ein benannter, nachvollziehbarer Werkzeugkasten für Prozess-Eingriffe — die Grundlage, um aus erkannten Chancen echte Soll-Modelle zu machen. **Nutzen:** Verbesserungen müssen nicht mehr von Hand ins Modell übersetzt werden; jeder Eingriff ist benennbar, geprüft und umkehrbar (IST bleibt). **Priorität `muss`** — S3–S5 setzen alle auf S2 auf; ohne den Kern bleibt Inkrement 1 bei reinen Meldungen stehen. *(Bestätigung an GATE 1.)* | Verifiziert | Wortlaut-Original; Sitzung 2026-07-24 |
 | **user_ux** | Zwei Zugänge: **Programmierschnittstelle** für die späteren Scheiben **und** ein schlanker **Kommandozeilen-Zugang**, mit dem ein Mensch einen Eingriff gezielt auf eine Datei anwendet. Damit ist S2 ohne S3 erprobbar. | Verifiziert | Entscheidung Sitzung 2026-07-24 |
-| **functional** | **Alle fünf Eingriffe** im ersten Wurf: Nebeneinanderlegen · Ausnahme herausnehmen · Prüfreihenfolge drehen · Schritte bündeln · Rolle wechseln. Dazu der **Rechenteil**: Reihenfolge-Optimierung, Unabhängigkeits-Prüfung (nur bei modellierten Datenflüssen beweisbar), Durchlaufzeit, Bewertung nach Zeit/Kosten/Qualität/Flexibilität. **S2 entscheidet nie, *ob* ein Eingriff gemacht wird** — kein Ziel, kein Urteil, kein Sprachmodell. | Verifiziert | Entscheidung Sitzung 2026-07-24; Spec §4/§5 |
-| **quality_attributes** | **Sicherheitszusage:** nach jedem Eingriff Soundness-Prüfung; **strukturelle Fehler rollen den Eingriff zurück**, neue **Warnungen blockieren nicht, werden aber im Ergebnis gemeldet**. Determinismus: gleiche Eingabe + gleiche Parameter ⇒ gleiches Ergebnis (Voraussetzung für Golden-Tests). Reine Funktionen, keine Seiteneffekte, kein Netzzugriff. | Verifiziert | Entscheidung Sitzung 2026-07-24 |
-| **compliance** | **Kein Datenabfluss:** S2 läuft vollständig lokal, ohne Sprachmodell und ohne API-Key — geprüft: der CLI-/Pipeline-Pfad importiert heute keinen LLM-Provider. Relevant für regulierte Umgebungen, in denen Prozessmodelle das Haus nicht verlassen dürfen. **Herkunft der Verfahren:** ausschließlich publizierte Quellen (Reijers/Limam Mansar 2005; BABOK v3 §10.34); keine internen Materialien im öffentlichen MIT-Repo. **Kein Personenbezug** im Werkzeug selbst; Lane-Namen sind laut Konvention funktionale Rollen, keine Personennamen. | Verifiziert | `scripts/pipeline.js` (kein LLM-Import); SECURITY.md; SKILL.md (Rollen statt Namen) |
+| **functional** | **Alle fünf Eingriffe** im ersten Wurf: Nebeneinanderlegen · Ausnahme herausnehmen · Prüfreihenfolge drehen · Schritte bündeln · Rolle wechseln. Jeder mit **zwei Funktionen**: `prüfen` (was wäre machbar) und `anwenden` (mit gewähltem Umfang). **S2 entscheidet nie, *ob* ein Eingriff gemacht wird** — kein Ziel, kein Urteil, kein Sprachmodell. | Verifiziert | Entscheidung Sitzung 2026-07-24; Spec §4 |
+| **functional — Rechenteil** | **Reihenfolge-Anwendung** (die Reihenfolge wird **übergeben**, nicht als optimal berechnet) · **Unabhängigkeits-Prüfung** nur bei modellierten, **gerichteten** Datenflüssen · **Kennzahl-Delta** vor/nach einem Eingriff. | **Hypothese** | GATE 2b: die zugrundeliegenden Verfahren (Knock-out-Optimalität, Antiketten/Dilworth) sind **nicht** quellengeprüft; eigenes Design-Dokument ist kein Beleg für eine Weltaussage |
+| **functional — geparkt** | **Durchlaufzeit (CPM)** und **gewichtete Bewertung (Zeit/Kosten/Qualität/Flexibilität)** gehören **nicht** in S2. CPM ist auf Logic-Core nicht rechenbar (keine Dauern im Schema); Gewichte sind Zielpriorisierung und widersprächen „S2 hat kein Ziel". | **Nicht gefunden** (Datenlage) | GATE 2a §6a/6b; `references/input-schema.json` trägt keine Dauer-/Aufwandsfelder |
+| **quality_attributes** | **Sicherheitszusage:** nach jedem Eingriff Prüfung gegen eine **fest benannte Regelmenge** (Soundness-Schicht **inkl. Workflow-Netz**) — **profilunabhängig**, damit das Rollback-Verhalten nicht vom Nutzerprofil abhängt. Verstoß dagegen ⇒ **Rollback**; Stil-Verstöße blockieren nie, werden aber gemeldet. Determinismus: gleiche Eingabe + gleiche Parameter ⇒ gleiches Ergebnis (auch neue IDs deterministisch). Reine Funktionen: das **übergebene Modell wird nicht mutiert**, kein Netzzugriff. | Verifiziert | Entscheidung Sitzung 2026-07-24; **korrigiert nach GATE 2a §2** (WF-Netz ist im Default-Profil aus; strict-Profil macht Stil zu Fehlern) |
+| **compliance** | **Kein Datenabfluss** (Zusage für S2, verifizierter Ist-Zustand für den heutigen Pfad): die transitive Import-Hülle von `scripts/pipeline.js` (17 Module) enthält **kein** `agents/llm-provider.js`, auch nicht dynamisch. Relevant für regulierte Umgebungen. **Herkunft der Verfahren:** als Quellen **zitiert** werden ausschließlich publizierte Arbeiten (Reijers & Limam Mansar 2005, *Omega* 33(4):283–306, DOI 10.1016/j.omega.2004.04.012 — bibliographisch bestätigt; BABOK v3 §10.34 — **ungeprüft**). Inhaltliche Deckung ist **nicht** geprüft (Recherche abgebrochen). Keine internen Materialien im öffentlichen MIT-Repo. **Kein Personenbezug** im Werkzeug; Lane-Namen sind laut Konvention funktionale Rollen — **technisch nicht erzwungen** (keine Regel prüft das). | Verifiziert (Import-Befund) / eingeschränkt (Herkunft) | Import-Hülle `scripts/pipeline.js`; `scripts/optimize.js:6-12`; `SKILL.md:157`. **GATE 2b: `SECURITY.md` als Beleg gestrichen** — trägt die Aussage nicht |
 | **architecture** | Zwei neue Module: Eingriffe und Rechenteil, als **reine Funktionen** Logic-Core → Logic-Core. Anschluss an die vorhandene Erkennung (Inkrement 1) und an die vorhandene Soundness-Prüfung. **Verbindliche Grenze:** der berechenbare Kern importiert **nie** den LLM-Provider — Austausch oder Wegfall der Urteilsschicht darf ihn nicht brechen. Schutz-Listen (unantastbare Bahnen/Schritte) werden **im Eingriff selbst** durchgesetzt, nicht per Prompt. | Verifiziert | Spec §3/§8; `scripts/rules.js`, `scripts/optimize.js` |
-| **migration_operations** | **Umstellung:** `advisories` wird von Texten auf **Objekte** umgestellt (lesbare Meldung bleibt als Feld enthalten), dokumentiert als bewusste Vertragsänderung — das Feld ist einen Tag alt (PR #23) und hat praktisch keine Nutzer. Sonst **additiv**: `document`-Modus unverändert, Golden-Dateien unberührt, keine Datenmigration. Rückrollbarkeit: S2 ist opt-in und ändert nichts am bestehenden Verhalten. | Verifiziert | Entscheidung Sitzung 2026-07-24; `references/api-reference.md` (aktueller Vertrag) |
+| **migration_operations** | **Zweck der Umstellung:** ein Eingriff muss adressierbar sein — Advisories brauchen `targets` (welche Knoten) + `transform` (welcher Eingriff). **Umstellung:** `advisories` von Texten auf **Objekte** mit **verpflichtendem `message`-Feld**. **KORREKTUR (GATE 2a §1):** Die frühere Begründung „keine Nutzer" war **falsch** — es existieren **mindestens sechs Konsumenten**: `scripts/pipeline.js:388` (CLI-Ausgabe), fünf Assertions in `scripts/pipeline.test.js`, `scripts/mcp-bpmn-server.js:110`, `references/api-reference.md`, `SKILL.md`, `scripts/http-server.test.js`. Die Umstellung **muss** daher: CLI-Ausgabe lesbar halten (über `message`), die fünf Tests migrieren, die MCP-/HTTP-Antwortform dokumentieren. Sonst **additiv**: `document`-Modus unverändert, Golden-Dateien unberührt, keine Datenmigration (als Akzeptanzbedingung, nicht als festgestellte Eigenschaft). | Verifiziert (Konsumentenliste am Code) | GATE 2a §1; heutiger Elementtyp: `scripts/optimize.js:178` (**nicht** api-reference — dort steht kein Elementtyp) |
 
-## Akzeptanzkriterien (Gherkin — ab reifegrad: formalized)
+## Negations-Achse (§6a — je Eingriff, mit Disposition)
 
-> Phase 4, nach Scheiben-Wahl und Säulen-Walk.
+> Leitfrage je Eingriff: „Was verhindert, negiert oder unterbricht ihn?" Kein Befund bleibt undisponiert.
+
+| Fall | Verhalten | Disposition |
+|---|---|---|
+| **Ablehnung — Vorbedingung** (keine lineare Kette, Ziel ist kein Ausnahme-Ende, Zielbahn fehlt) | Eingriff **verweigert** mit Begründung, statt etwas Halbes zu tun | → Szenario |
+| **Ablehnung — Schutz** (geschützte Bahn/Schritt betroffen) | verweigert; Durchsetzung **im Eingriff**, nicht per Prompt | → Szenario |
+| **Abbruch — Soundness** (Ergebnis wäre strukturell fehlerhaft) | **Rollback** des Schritts; IST/Ausgangsmodell unberührt | → Szenario |
+| **Teil-Erfüllung** (nur ein Teil machbar) | **Prüffunktion meldet den machbaren Umfang vorab; der Aufrufer entscheidet** ganz / teilweise / gar nicht | → Szenario |
+| **Nebenwirkung** („Rolle wechseln" kann Übergaben anderswo erhöhen) | Veränderung der Kennzahlen wird **ausgewiesen**, auch wenn sie verschlechtert | → Szenario |
+| **Timeout** | entfällt: reine Funktionen, kein Netzzugriff, kein Wartezustand | → **begründeter Opt-Out** |
+| **Präzedenz bei „Prüfreihenfolge drehen"** (Prüfung B braucht Ergebnis von A) | Umsortierung dieser Paare **unzulässig** — Reihenfolge wird übergeben, nicht erzwungen | → Szenario |
+
+**Schnittstellen-Folge:** Jeder Eingriff hat **zwei** Funktionen — `prüfen` (was wäre machbar, warum
+nicht) und `anwenden` (mit gewähltem Umfang). Ohne diese Trennung ist „Aufrufer entscheidet" nicht
+umsetzbar.
+
+### Negations-Achse je Eingriff (nachgetragen nach GATE 2a §4)
+
+> Die Tabelle oben war **generalisiert**. Die realen Abbruchgründe sind pro Eingriff verschieden —
+> der Kritiker hat sechs unabgedeckte Fehlermodi gefunden. Alle → **Szenario**.
+
+| Eingriff | Transformspezifische Abbruchgründe |
+|---|---|
+| **Nebeneinanderlegen** | Neue Gateway-**IDs müssen deterministisch** und kollisionsfrei sein (sonst fällt die Determinismus-Zusage) · Lane-Zuordnung der neuen Gateways · Kette enthält Wartezustand/Boundary-Event/Subprozess · Kette liegt auf einer **Rückwärtskante** (Schleife) · **ungerichtete** Assoziationen tragen keine Lese-/Schreib-Semantik ⇒ Unabhängigkeit **nicht** beweisbar ⇒ verweigern |
+| **Ausnahme herausnehmen** | Verweigert **ohne explizit übergebene Semantik** (`marker`, `cancelActivity`) — beides ist **nicht** aus dem Graphen ableitbar. Keine Ableitung aus Namen: die Erkennung nutzt dieselbe Regex für Geschäftsentscheidung und Störung |
+| **Prüfreihenfolge drehen** | Bedingungs-Labels und `default`-Flows müssen **mitwandern** · Prüfungen mit Seiteneffekt-Task im Ablehnzweig · regulatorisch fixierte Reihenfolgen (nur über Schutzliste abbildbar) · übergebene Reihenfolge ist **keine Permutation** der Gateways ⇒ verweigern |
+| **Schritte bündeln** | Angehängte **Boundary-Events** würden heimatlos · **heterogene Typen** (welcher überlebt?) · Loop-/MI-Marker · Daten-Assoziationen · **Name des verschmolzenen Schritts ist Pflichtparameter** — eine Benennung wäre ein Urteil, das S2 nicht fällen darf |
+| **Rolle wechseln** | Das Schema kennt **zwei Zuordnungsformate** (`node.lane` **und** `Lane.nodeIds`) plus **verschachtelte Lanes** — wer nur eines schreibt, erzeugt ein widersprüchliches Modell · Zielbahn in **anderem Pool** ⇒ verweigern (Cross-Pool ist außerhalb) · Modell ohne Lanes |
+| **alle** | **Ungültige Eingabe/Parameter**: Schemaverstoß, unbekannte IDs, leere/duplizierte Listen, IDs aus verschiedenen Pools · **Ziel-IDs innerhalb eines Subprozesses** (`children`) ⇒ verweigern als bewusste Scope-Grenze |
+
+## Akzeptanzkriterien (Gherkin)
+
+```gherkin
+Szenario: Eingriff verweigert bei nicht erfuellter Vorbedingung
+  Gegeben ein Modell ohne zusammenhaengende lineare Kette
+  Wenn "Nebeneinanderlegen" geprueft wird
+  Dann meldet die Pruefung "nicht machbar" mit Begruendung
+  Und das Modell bleibt unveraendert
+
+Szenario: Geschuetztes Element blockiert den Eingriff
+  Gegeben eine Bahn ist als geschuetzt markiert
+  Wenn ein Eingriff einen Schritt dieser Bahn veraendern wuerde
+  Dann wird der Eingriff verweigert
+  Und die Verweigerung nennt das geschuetzte Element
+
+Szenario: Rollback bei strukturellem Fehler
+  Gegeben ein Eingriff wuerde ein strukturell fehlerhaftes Modell erzeugen
+  Wenn er angewendet wird
+  Dann wird der Schritt zurueckgerollt
+  Und das Ausgangsmodell ist unveraendert
+
+Szenario: Neue Warnung blockiert nicht, wird aber gemeldet
+  Gegeben ein Eingriff erzeugt einen neuen Stil-Verstoss
+  Wenn er angewendet wird
+  Dann wird er ausgefuehrt
+  Und die neue Warnung steht im Ergebnis
+
+Szenario: Teil-Erfuellung ueberlaesst die Wahl dem Aufrufer
+  Gegeben von fuenf Schritten sind nur drei parallelisierbar
+  Wenn der Eingriff geprueft wird
+  Dann meldet er den machbaren Umfang und den nicht machbaren Rest mit Begruendung
+  Und er veraendert nichts, solange der Aufrufer keinen Umfang waehlt
+
+Szenario: Kennzahl-Verschlechterung wird ausgewiesen
+  Gegeben ein Rollenwechsel senkt Uebergaben an einer Stelle und erhoeht sie an anderer
+  Wenn der Eingriff angewendet wird
+  Dann weist das Ergebnis beide Veraenderungen aus
+
+Szenario: Reproduzierbar ohne Sprachmodell
+  Gegeben dieselbe Eingabe und dieselben Parameter
+  Wenn der Eingriff zweimal auf DIESE Eingabe angewendet wird
+  Dann sind beide Ergebnisse identisch, einschliesslich neu erzeugter IDs
+  Und es wurde kein Sprachmodell und kein API-Schluessel benoetigt
+
+Szenario: Der Eingriff veraendert nur das Beabsichtigte
+  Gegeben ein Modell und ein angewendeter Eingriff
+  Wenn Ausgangsmodell und Ergebnis verglichen werden
+  Dann unterscheiden sie sich ausschliesslich in den im Aenderungssatz benannten Elementen
+  Und Kanten-Labels, Marker, default-Flags, Boundary-Bezuege und Message-Fluesse bleiben erhalten
+
+Szenario: Das uebergebene Modell wird nicht veraendert
+  Gegeben ein Aufrufer uebergibt sein Modell
+  Wenn ein Eingriff erfolgreich angewendet wird
+  Dann ist das uebergebene Modell unveraendert
+  Und das Ergebnis ist ein eigenstaendiges Modell
+
+Szenario: Rollback-Gate ist profilunabhaengig
+  Gegeben zwei Aufrufer mit unterschiedlichem Regelprofil
+  Wenn derselbe Eingriff auf dasselbe Modell angewendet wird
+  Dann ist das Rollback-Verhalten in beiden Faellen gleich
+  Und ein reiner Stil-Verstoss rollt auch unter dem strengen Profil nicht zurueck
+
+Szenario: Advisories bleiben fuer Menschen lesbar
+  Gegeben Advisories werden als Objekte geliefert
+  Wenn die Kommandozeile sie ausgibt
+  Dann erscheint je Advisory die lesbare Meldung
+  Und keine technische Objektdarstellung
+
+Szenario: Schutz greift auch bei Nennung ueber den Anzeigenamen
+  Gegeben eine Bahn wird ueber ihren Anzeigenamen geschuetzt, nicht ueber ihre Kennung
+  Wenn ein Eingriff einen Schritt dieser Bahn veraendern wuerde
+  Dann wird er verweigert
+
+Szenario: Verweigerung ueber die Kommandozeile
+  Gegeben ein Eingriff ist nicht machbar
+  Wenn er ueber die Kommandozeile aufgerufen wird
+  Dann endet der Aufruf mit einem Fehler-Rueckgabewert
+  Und die Zieldatei wurde nicht geschrieben
+
+Szenario: Reihenfolge wird angewendet, nicht berechnet
+  Gegeben keine Reihenfolge wurde uebergeben
+  Wenn "Pruefreihenfolge drehen" aufgerufen wird
+  Dann verweigert der Eingriff mit Begruendung
+  Und er erfindet keine Reihenfolge
+```
+
+**Nicht testbar → Inspection:** die Zusage „der Kern importiert nie den LLM-Provider" wird per
+Code-Inspektion/Abhängigkeitsprüfung sichergestellt, nicht per Szenario.
 
 ## Offene Punkte
 
@@ -173,15 +292,25 @@ nutzbar und vollständig testbar, und ohne Sprachmodell/API-Key betreibbar.
 > mit Trigger + Owner disponiert.
 
 - ~~GATE 1~~ — **bestanden 2026-07-24**; Rationale + Erfolgskriterium freigegeben.
-- **Negations-Achse (§6a) noch nicht gestellt** — pro Eingriff fehlt die Frage „Was verhindert,
-  negiert oder unterbricht ihn?" (Ablehnung · Abbruch · Timeout · Teil-Erfüllung).
-  *Disposition: in Phase 4 je Eingriff als Szenario oder begründeter Opt-Out.*
-- **Erfolgskriterium noch nicht bestätigt** — Entwurf: ein Eingriff liefert ein soundness-valides
-  Modell, verändert nur das Beabsichtigte und ist ohne Sprachmodell reproduzierbar.
-  *Disposition: an GATE 1 mitbestätigen.*
-- **Externe Recherche steht aus (Phase 3)** — die mathematischen Verfahren (Reihenfolge-Optimierung,
-  Unabhängigkeit, kritischer Pfad) sind bisher aus dem Spec übernommen, nicht gegen die publizierten
-  Quellen nachgeprüft. *Disposition: Phase-3-Recherche mit Quellenangabe je Befund.*
+- ~~Negations-Achse~~ — **je Eingriff nachgetragen** (GATE 2a §4), 6 transformspezifische Fehlermodi.
+- ~~Erfolgskriterium~~ — **bestätigt an GATE 1**; Szenario „verändert nur das Beabsichtigte" ergänzt.
+- **Laufzeit-/Größenschranke fehlt** — der Timeout-Opt-Out deckt nur *Warten*, nicht *Laufzeit*. Es gibt
+  keine Komplexitätsschranke und keinen Rekursionsschutz für zyklische Graphen (`countBackEdges` ist
+  eine ungeschützte Tiefensuche). *Disposition: **geparkt** — Trigger: erster Lauf gegen die
+  Robustness-Suite bzw. ein Modell > 200 Knoten. Owner: Daniel Stiegler.*
+- **Mögliche Teilung von S2** — die fünf Eingriffe (umsetzbar) und der Rechenteil (`Hypothese`) sind
+  ungleich belegt. *Disposition: **geparkt** — Trigger: bei Umsetzungsbeginn in S2a „Eingriffe" und
+  S2b „Rechenteil" trennen, falls die Datenlage es bestätigt. Owner: Daniel Stiegler.*
+- **Externe Quellenprüfung bewusst abgebrochen (2026-07-24)** — die mathematischen Verfahren
+  (Reihenfolge-Optimierung nach Aufwand/Ablehnwahrscheinlichkeit · Antiketten/Dilworth als Rahmen für
+  Unabhängigkeit · gewichtete Bewertung über das Devil's Quadrangle) sind **nicht** gegen die
+  publizierten Quellen nachgeprüft. Sie gelten daher als **`Hypothese`**, nicht als belegt.
+  *Disposition: **explizit geparkt** — Trigger: bevor eine dieser Formeln als „optimal" oder
+  „bewiesen" nach außen dokumentiert wird. Owner: Daniel Stiegler.*
+  **Konsequenz für die Umsetzung (nicht blockierend):** Die fünf Eingriffe hängen an keiner dieser
+  Behauptungen. Der Rechenteil wird konservativ gebaut — die Reihenfolge wird **übergeben**, nicht als
+  optimal behauptet; die Unabhängigkeitsprüfung bleibt an modellierte Datenflüsse gebunden; die
+  Bewertung wird als **eigene Konvention** gekennzeichnet, nicht als publiziertes Verfahren.
 
 ## Lern-Spur
 
@@ -198,6 +327,24 @@ nutzbar und vollständig testbar, und ohne Sprachmodell/API-Key betreibbar.
   normativer Abschnitt wiederhergestellt · Selbstprüfung vor GATE 1
 - 2026-07-24 · REIFEGRAD · GATE 1 · offen → bestanden · Rationale + Erfolgskriterium durch
   Daniel Stiegler freigegeben
+- 2026-07-24 · ERGAENZUNG · Negations-Achse · generalisiert → je Eingriff, 6 transformspezifische
+  Fehlermodi nachgetragen · GATE 2a §4
+- 2026-07-24 · KORREKTUR · migration_operations · „hat praktisch keine Nutzer" war **falsch** → sechs
+  Konsumenten am Code nachgewiesen (CLI-Ausgabe, 5 Tests, MCP, HTTP-Doku) · GATE 2a §1
+- 2026-07-24 · KORREKTUR · migration_operations · „einen Tag alt" → wenige Stunden (PR #23 gemergt
+  20:14, Record 22:58) · GATE 2b
+- 2026-07-24 · KORREKTUR · quality_attributes · „strukturelle Fehler" (profilabhängig) → fest benannte,
+  profilunabhängige Regelmenge inkl. Workflow-Netz · GATE 2a §2
+- 2026-07-24 · DEMOTION · functional/Rechenteil · Verifiziert → Hypothese · Knock-out-Optimalität und
+  Antiketten/Dilworth sind Weltaussagen, die nicht mit dem eigenen Design-Dokument belegbar sind · GATE 2b
+- 2026-07-24 · DEMOTION · functional · „Durchlaufzeit (CPM)" + „gewichtete Bewertung" → aus S2 entfernt
+  und geparkt · nicht aus Rationale/Scope ableitbar, keine Dauern im Schema · GATE 2a §6
+- 2026-07-24 · KORREKTUR · compliance · `SECURITY.md` als Beleg gestrichen (trägt die Aussage nicht);
+  Herkunftszusage auf „als Quellen zitiert" abgeschwächt · GATE 2b
+- 2026-07-24 · KORREKTUR · Prüf-Sicht · widersprach dem Körper (0 Szenarien / 0 Hypothese / Negations-
+  Achse offen) → aus dem Körper neu abgeleitet · GATE 2a §5
+- 2026-07-24 · REIFEGRAD · Record · structured → **formalized** · beide GATE-2-Pässe gelaufen, alle
+  Befunde disponiert (Szenario · Opt-Out · geparkt mit Trigger)
 
 ---
 

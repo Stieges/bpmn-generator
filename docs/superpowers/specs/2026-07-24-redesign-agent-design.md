@@ -131,19 +131,28 @@ control-flow graph contains **no antichain at all**. Independence can only be re
 graph — in Logic-Core, that means modelled data objects (`associations` / `dataObjectReference`).
 
 - **Tier 1 (data objects present):** build the data-dependency DAG from associations; a set of pairwise
-  incomparable tasks (an **antichain**, Dilworth) is provably parallelizable → `parallelize` may be applied
-  **mechanically**.
+  incomparable tasks (an **antichain**) may be applied **mechanically**.
+  > ⚠️ **Unverified:** whether the BPM literature actually uses the antichain/Dilworth framing for this —
+  > or something else entirely — was **not** source-checked. Do not present it as an established method.
+  > Note also that `Association` carries only `source`/`target`/`directed`: **undirected** associations
+  > carry no read/write semantics, so independence cannot be proven from them → refuse.
 - **Tier 2 (no data objects — the common case):** the control-flow chain yields *candidates* only. The
   agent judges business independence from names/semantics; the result is a **proposal requiring
   confirmation**, marked `judgment: true`. No mathematical claim is made.
 
 ### 5.2 Knock-out ordering — correct rule, usually missing inputs
 
-Order checks by **ascending `effort / rejectionProbability`** (least cost per rejection; Reijers/van der
-Aalst). This minimizes expected processing cost for independent checks. **Logic-Core carries neither
-number**, so in practice the agent estimates them → the result is always `estimated: true` and is a
-proposal, never a mechanical application. Documented here so nobody mistakes the rule for something the
-tool can currently compute unaided.
+The commonly cited rule is to order checks by **ascending `effort / rejectionProbability`** (least cost
+per rejection).
+
+> ⚠️ **Unverified — treat as unchecked.** A source check for this rule (its exact published form, its
+> optimality claim and that claim's assumptions) was **started and deliberately abandoned**; the earlier
+> attribution to "Reijers/van der Aalst" had **no matching reference** in §13. Until someone verifies it
+> against the primary literature, this repository must **not** assert it as optimal or proven.
+
+Practical consequence, independent of the open question: **Logic-Core carries neither number**, so the
+tool cannot compute an order at all. It therefore **applies an order that is handed to it** and refuses
+when none is given — no invented figures, no optimality claim.
 
 ### 5.3 Always computable
 
@@ -308,7 +317,7 @@ explicit limits — today's HTTP rate limit (30 req/min) counts requests, not mo
 | Agent invents plausible but wrong estimates | Flag `estimated: true`; `safe` autonomy excludes estimate-driven transforms |
 | Transform produces a subtly wrong graph | Soundness re-validation + rollback; per-transform unit tests |
 | Over-optimization destroys intent | Brief + protect lists + `maxChanges`; IST always preserved |
-| Advisory contract change breaks consumers | `advisories` become objects keeping a human-readable `message`; the field is one day old (PR #23) with no known consumers, so breaking now beats carrying two parallel structures forever. Documented as a contract change in api-reference |
+| Advisory contract change breaks consumers | **Corrected after review:** the earlier claim "no known consumers" was **wrong** — six exist in-repo (`pipeline.js:388` CLI print, five assertions in `pipeline.test.js`, `mcp-bpmn-server.js:110`, `api-reference.md`, `SKILL.md`, `http-server.test.js`). `advisories` still become objects, but a `message` field is **mandatory** so the CLI stays human-readable, the five tests must be migrated, and the MCP/HTTP response shape must be re-documented. The field is hours old (PR #23 merged 2026-07-24 20:14), not a day |
 | Parallelization applied to genuinely dependent tasks | Tier 1/tier 2 split (§5.1): mechanical only on data-object-proven independence; otherwise confirmation required |
 | Recompute-per-step makes runs expensive | `maxLlmCalls` budget + compact digest (§6.1, §6.3) |
 
