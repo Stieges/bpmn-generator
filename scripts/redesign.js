@@ -150,3 +150,65 @@ export function applyParallelize(lc, params = {}) {
     warnings: gate.warnings,
   };
 }
+
+const TASK_TYPES = new Set(['task', 'userTask', 'serviceTask', 'scriptTask', 'manualTask',
+                            'businessRuleTask', 'sendTask', 'receiveTask']);
+
+export function previewMergeTasks(lc, { nodeIds = [], name = '', policy = {} } = {}) {
+  const proc = procOf(lc);
+  if (nodeIds.length < 2) return refusal('Mindestens zwei Schritte nötig.');
+  if (!name || !name.trim()) {
+    return refusal('Name des gebündelten Schritts ist Pflicht — eine Benennung wäre ein fachliches Urteil.');
+  }
+  const nodes = findNodes(proc, nodeIds);
+  if (nodes.some(n => !n)) return refusal('Unbekannte Kennung.');
+  if (nodes.some(n => !TASK_TYPES.has(n.type))) return refusal('Nur Aufgaben lassen sich bündeln.');
+  const prot = nodes.filter(n => isProtected(n, policy, lc));
+  if (prot.length) return refusal(`Geschütztes Element betroffen: ${prot.map(n => n.id).join(', ')}`);
+  const types = new Set(nodes.map(n => n.type));
+  if (types.size > 1) return refusal(`Unterschiedliche Typen (${[...types].join(', ')}) — welcher überlebt, ist ein Urteil.`);
+  const lanes = new Set(nodes.map(n => n.lane));
+  if (lanes.size > 1) return refusal('Schritte liegen in verschiedenen Bahnen.');
+  if (nodes.some(n => n.loopType || n.multiInstance)) {
+    return refusal('Schleifen- oder Mehrfach-Marker vorhanden — Bündeln würde die Semantik verändern.');
+  }
+  const boundaries = (proc.nodes || []).filter(n => n.type === 'boundaryEvent' && nodeIds.includes(n.attachedTo));
+  if (boundaries.length) {
+    return refusal(`Angehängtes Boundary-Event (${boundaries.map(b => b.id).join(', ')}) würde heimatlos.`);
+  }
+  if (!isLinearChain(proc, nodeIds)) return refusal('Die Schritte bilden keine zusammenhängende Kette.');
+  return { feasible: 'full', scope: [...nodeIds], reason: '' };
+}
+
+export function applyMergeTasks(lc, params = {}) {
+  const pv = previewMergeTasks(lc, params);
+  if (pv.feasible === 'none') throw new Error(pv.reason);
+
+  const out = cloneLc(lc);
+  const proc = procOf(out);
+  const ids = pv.scope;
+  const keep = ids[0], drop = ids.slice(1);
+  const edges = proc.edges || [];
+
+  proc.nodes.find(n => n.id === keep).name = params.name;
+
+  const removed = [];
+  for (let i = 0; i < ids.length - 1; i++) {
+    const idx = edges.findIndex(e => e.source === ids[i] && e.target === ids[i + 1]);
+    if (idx >= 0) removed.push(edges.splice(idx, 1)[0].id);
+  }
+  const lastOut = edges.find(e => e.source === ids[ids.length - 1]);
+  if (lastOut) lastOut.source = keep;
+  proc.nodes = proc.nodes.filter(n => !drop.includes(n.id));
+  removed.push(...drop);
+
+  const gate = checkGate(out);
+  if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
+
+  return {
+    lc: out,
+    change: { transform: 'mergeTasks', targets: ids, added: [], removed,
+              note: `${ids.length} Schritte gebündelt zu "${params.name}"` },
+    warnings: gate.warnings,
+  };
+}

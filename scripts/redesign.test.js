@@ -3,7 +3,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { cloneLc, checkGate, nextId, isProtected, refusal, collectIds } from './redesign-core.js';
 import { runRules, loadRuleProfile } from './rules.js';
-import { previewParallelize, applyParallelize } from './redesign.js';
+import { previewParallelize, applyParallelize, previewMergeTasks, applyMergeTasks } from './redesign.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -308,5 +308,59 @@ describe('parallelize', () => {
     const r = previewParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
     expect(r.feasible).toBe('full');
     expect(r.provenIndependent).toBe(false);
+  });
+});
+
+const lcMerge = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'L' },
+    { id: 'm1', type: 'userTask', name: 'Daten erfassen', lane: 'L' },
+    { id: 'm2', type: 'userTask', name: 'Daten sichern', lane: 'L' },
+    { id: 'e', type: 'endEvent', lane: 'L' },
+  ],
+  edges: [
+    { id: 'g0', source: 's', target: 'm1' },
+    { id: 'g1', source: 'm1', target: 'm2' },
+    { id: 'g2', source: 'm2', target: 'e' },
+  ],
+  lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+};
+
+describe('mergeTasks', () => {
+  test('verweigert ohne Namen — Benennung waere ein Urteil', () => {
+    const r = previewMergeTasks(lcMerge, { nodeIds: ['m1', 'm2'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/name/i);
+  });
+
+  test('verweigert bei angehaengtem Boundary-Event', () => {
+    const withBoundary = { ...lcMerge, nodes: [...lcMerge.nodes,
+      { id: 'bnd', type: 'boundaryEvent', attachedTo: 'm1', marker: 'timer', lane: 'L' }] };
+    const r = previewMergeTasks(withBoundary, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/boundary/i);
+  });
+
+  test('verweigert bei unterschiedlichen Typen', () => {
+    const mixed = { ...lcMerge, nodes: lcMerge.nodes.map(n => n.id === 'm2' ? { ...n, type: 'serviceTask' } : n) };
+    const r = previewMergeTasks(mixed, { nodeIds: ['m1', 'm2'], name: 'X tun' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/typ/i);
+  });
+
+  test('verweigert bei Schleifen- oder Mehrfach-Marker', () => {
+    const looped = { ...lcMerge, nodes: lcMerge.nodes.map(n => n.id === 'm1' ? { ...n, loopType: 'standard' } : n) };
+    const r = previewMergeTasks(looped, { nodeIds: ['m1', 'm2'], name: 'X tun' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/marker/i);
+  });
+
+  test('buendelt zwei gleichartige Schritte und bleibt sound', () => {
+    const r = applyMergeTasks(lcMerge, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
+    expect(r.lc.nodes.find(n => n.id === 'm2')).toBeUndefined();
+    expect(r.lc.nodes.find(n => n.id === 'm1').name).toBe('Daten erfassen und sichern');
+    expect(checkGate(r.lc).ok).toBe(true);
+    expect(r.change.removed).toContain('m2');
   });
 });
