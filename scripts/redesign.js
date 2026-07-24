@@ -234,9 +234,15 @@ export function applyMergeTasks(lc, params = {}) {
   // "modified" schliesst die Lücke zwischen "added"/"removed": der ueberlebende
   // Knoten (keep) behaelt seine ID, aber sein Name wurde geaendert — er taucht
   // sonst in keinem der beiden anderen Arrays auf, obwohl er sich veraendert hat.
+  // Zusätzlich: die abgehende Kante des letzten entfernten Knotens wird umgehängt
+  // (source wechselt vom letzten Kettenmitglied zu keep) — auch diese Kante behält
+  // ihre ID, ändert aber ihren Inhalt. Sie muss ebenfalls in modified verzeichnet sein.
+  const modified = [keep];
+  if (lastOut) modified.push(lastOut.id);
+
   return {
     lc: out,
-    change: { transform: 'mergeTasks', targets: ids, added: [], removed, modified: [keep],
+    change: { transform: 'mergeTasks', targets: ids, added: [], removed, modified,
               note: `${ids.length} Schritte gebündelt zu "${params.name}"` },
     warnings: gate.warnings,
   };

@@ -371,8 +371,13 @@ describe('mergeTasks', () => {
 
     // "modified": m1 (der ueberlebende Knoten) behaelt seine ID, aber sein
     // Name wurde geaendert — er taucht sonst in keinem der beiden anderen
-    // Arrays auf, obwohl Quelle und Ergebnis sich hier unterscheiden.
-    expect(r.change.modified).toEqual(['m1']);
+    // Arrays auf, obwohl Quelle und Ergebnis sich hier unterscheiden. Zusätzlich:
+    // die abgehende Kante (g2) des letzten entfernten Knotens (m2) wird umgehängt
+    // — ihre source wechselt von m2 zu m1 — sie behält ihre ID aber ihre Inhalte
+    // unterscheiden sich zwischen Quelle und Ergebnis.
+    expect(r.change.modified).toContain('m1');
+    expect(r.change.modified).toContain('g2');
+    expect(r.change.modified.length).toBe(2);
   });
 
   test('preview verweigert bei weniger als zwei Schritten', () => {
