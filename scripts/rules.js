@@ -16,6 +16,8 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
+import { runOptimizationAnalysis } from './optimize.js';
+import { CFG } from './utils.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Helpers (internal)
@@ -666,10 +668,45 @@ const WORKFLOW_NET_RULES = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
+// Schicht 5 — Process Optimization Advisory (opt-in, "Soll"/optimize mode)
+// ═══════════════════════════════════════════════════════════════════════
+// Registry entries only (severity/profile/documentation). The real graph
+// analysis lives in optimize.js and runs via runOptimizationAnalysis() below,
+// mirroring the Workflow-Net opt-in pattern. Sources: published Reijers &
+// Limam Mansar (2005) + BABOK v3 §10.34 — never internal material.
+
+const OPTIMIZATION_RULES = [
+  {
+    id: 'O01', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    description: 'Exception isolation — Ausnahmen vom Hauptfluss trennen',
+    ref: { reijers: 'exception' }, tradeoff: { quality: '+' },
+    scope: 'global', check: () => ({ pass: true }), // handled by runOptimizationAnalysis
+  },
+  {
+    id: 'O02', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    description: 'Knock-out ordering — Prüfungen nach Aufwand/Wahrscheinlichkeit ordnen',
+    ref: { reijers: 'knock-out' }, tradeoff: { cost: '−' },
+    scope: 'global', check: () => ({ pass: true }),
+  },
+  {
+    id: 'O03', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    description: 'Handoffs / task composition — Rollen-Übergaben reduzieren',
+    ref: { reijers: 'task-composition', babok: '§10.34' }, tradeoff: { time: '−' },
+    scope: 'global', check: () => ({ pass: true }),
+  },
+  {
+    id: 'O04', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    description: 'Parallelism candidate — sequentielle Aufgaben ggf. parallelisieren',
+    ref: { reijers: 'parallelism' }, tradeoff: { time: '−' },
+    scope: 'global', check: () => ({ pass: true }),
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════════════
 // Rule Registry + Runner
 // ═══════════════════════════════════════════════════════════════════════
 
-const RULES = [...SOUNDNESS_RULES, ...STYLE_RULES, ...PRAGMATICS_RULES, ...WORKFLOW_NET_RULES];
+const RULES = [...SOUNDNESS_RULES, ...STYLE_RULES, ...PRAGMATICS_RULES, ...WORKFLOW_NET_RULES, ...OPTIMIZATION_RULES];
 
 /**
  * Load a rule profile from JSON file.
@@ -704,13 +741,29 @@ function getEffectiveSeverity(rule, profile) {
 }
 
 /**
+ * Derive a rule profile for a given mode. The "optimize"/"soll" mode enables the
+ * opt-in Optimization Advisory layer on top of any base profile; "document"
+ * (default) leaves the profile untouched.
+ * @param {object|null} baseProfile
+ * @param {string} [mode='document']
+ * @returns {object|null}
+ */
+function profileForMode(baseProfile, mode = 'document') {
+  if (mode !== 'optimize' && mode !== 'soll') return baseProfile;
+  const p = baseProfile ? JSON.parse(JSON.stringify(baseProfile)) : {};
+  p.layers = p.layers || {};
+  p.layers.optimization = { ...(p.layers.optimization || {}), enabled: true };
+  return p;
+}
+
+/**
  * Run all rules against a Logic-Core document.
  * @param {object} lc - Logic-Core JSON
  * @param {object|null} profile - Rule profile (or null for defaults)
  * @returns {{ errors: string[], warnings: string[], infos: string[], metrics: object }}
  */
 function runRules(lc, profile = null) {
-  const errors = [], warnings = [], infos = [];
+  const errors = [], warnings = [], infos = [], advisories = [];
   const metrics = {};
   const processes = lc.pools ? lc.pools : [lc];
 
@@ -753,7 +806,15 @@ function runRules(lc, profile = null) {
     metrics.workflowNet = wfResult.stats;
   }
 
-  return { errors, warnings, infos, metrics };
+  // Optimization Advisory rules (opt-in via profile / "optimize" mode)
+  const optimizationEnabled = profile?.layers?.optimization?.enabled === true;
+  if (optimizationEnabled) {
+    const optResult = runOptimizationAnalysis(lc, CFG.optimization || {});
+    advisories.push(...optResult.advisories);
+    metrics.optimization = optResult.metrics;
+  }
+
+  return { errors, warnings, infos, advisories, metrics };
 }
 
 function classifyResult(message, severity, errors, warnings, infos, prefix) {
@@ -766,4 +827,4 @@ function classifyResult(message, severity, errors, warnings, infos, prefix) {
   }
 }
 
-export { RULES, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, loadRuleProfile, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };
+export { RULES, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES, loadRuleProfile, profileForMode, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };

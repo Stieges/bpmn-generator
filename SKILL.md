@@ -37,6 +37,28 @@ The LLM **never** handles coordinates. Layout is 100% algorithmic.
 
 ---
 
+## Modes: Document (IST) vs. Optimize (Soll)
+
+Two distinct intents — keep them separate:
+
+- **Document mode (default, IST / as-is):** the user describes a process and wants it captured
+  **faithfully** as BPMN. No judgment, no improvement suggestions. This is the default for every entry
+  point (CLI, `runPipeline`, HTTP, MCP).
+- **Optimize mode (Soll / to-be):** the user wants a **better** process. Enables the opt-in Optimization
+  Advisory layer, which flags graph-detectable redesign opportunities (Reijers 2005 heuristics + BABOK
+  Lean metrics) as **non-blocking `advisories`** — never auto-applied.
+
+Select the mode consistently across entry points:
+- CLI: `node pipeline.js in.json out --optimize`
+- Programmatic: `runPipeline(lc, { mode: 'optimize' })`
+- HTTP: `{ "logicCore": {...}, "mode": "optimize" }` on `/api/v1/generate|validate|orchestrate`
+- MCP: `mode: "optimize"` on `generate_bpmn` / `validate_bpmn` / `orchestrate_bpmn`
+
+Advisories are review suggestions with trade-off tags (time/cost/quality/flexibility); they are heuristics,
+not proofs — present them as options, never silently apply them.
+
+---
+
 ## Reference Files
 
 Read these when needed:

@@ -98,5 +98,11 @@
     "edgeLabelMaxShift": 25,
     "elkWrapping": "auto",
     "elkWrappingNodeThreshold": 20
+  },
+  "optimization": {
+    "minParallelChain": 3,
+    "minKnockoutChain": 2,
+    "maxHandoffs": 6,
+    "minExceptionEnds": 2
   }
 }

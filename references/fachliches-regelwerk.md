@@ -1,6 +1,6 @@
 # BPMN Fachliches Regelwerk
 
-Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 4 Schichten, 26 Regeln (M05/M06 deaktiviert).
+Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, 30 Regeln (M05/M06 deaktiviert; Schicht 4 Workflow-Net und Schicht 5 Optimization sind opt-in).
 
 ## Architektur
 
@@ -69,6 +69,29 @@ Komplexitaetsmetriken und Hinweise.
 | P01 | Modellgroesse: max. 30 Aktivitaeten pro Prozess | 7PMG G1 (30/50 Threshold), BEF4LLM | implementiert |
 | P02 | Gateway-Fanout: max. 5 ausgehende Kanten pro Gateway | Silver Ch.5 | Platzhalter |
 | P03 | Verschachtelungstiefe: max. 3 Ebenen | BEF4LLM | Platzhalter |
+
+## Schicht 5: Process Optimization Advisory (opt-in, ADVISORY)
+
+Nur aktiv im **`optimize`/`soll`-Modus** (bzw. Profil-Flag `layers.optimization.enabled`). Erkennt
+Redesign-*Chancen* aus dem Prozessgraphen und gibt sie als nicht-blockierende **Vorschläge** (`advisories`)
+aus — **nie auto-appliziert**. Jeder Befund trägt ein Devil's-Quadrangle-Trade-off-Tag. Analyse in
+`optimize.js`.
+
+| ID | Regel | Referenz | Status |
+|----|-------|----------|--------|
+| O01 | Exception isolation — Ausnahmen vom Hauptfluss trennen | Reijers & Limam Mansar 2005 (exception) | Heuristik |
+| O02 | Knock-out ordering — Prüfungen nach Aufwand/Wahrscheinlichkeit ordnen | Reijers & Limam Mansar 2005 (knock-out) | Heuristik |
+| O03 | Handoffs / task composition — Rollen-Übergaben reduzieren | Reijers 2005 (task composition), BABOK v3 §10.34 (Lean) | Heuristik |
+| O04 | Parallelism candidate — sequentielle Aufgaben ggf. parallelisieren | Reijers & Limam Mansar 2005 (parallelism) | Heuristik |
+
+Zusätzlich `metrics.optimization` (Lean/BABOK §10.34): `handoffCount`, `waitStates`, `reworkLoops`,
+`gatewayComplexity`.
+
+**Bewusste Grenzen:** rein graph-heuristisch. Der Logic-Core trägt keine Laufzeit-/Mengendaten (Aufwand,
+Wahrscheinlichkeiten, echte Datenabhängigkeit) — deshalb werden Kandidaten zur **Prüfung** vorgeschlagen,
+nichts wird umsortiert oder automatisch geändert. Reijers warnt zudem: Heuristiken sind kontextabhängig und
+widersprechen sich teils (z.B. *Control addition* ↔ *Task elimination*). Quellen sind ausschließlich die
+**publizierten** Paper (Reijers/Limam Mansar 2005, *Omega* 33(4); BABOK v3 2015).
 
 ---
 

@@ -194,3 +194,45 @@ describe('GET /api/v1/config', () => {
     expect(data).not.toHaveProperty('model');
   });
 });
+
+describe('POST /api/v1/validate — mode (Optimization Advisory)', () => {
+  const knockoutExc = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent', lane: 'L' },
+      { id: 'g1', type: 'exclusiveGateway', name: 'Gültig?', lane: 'L' },
+      { id: 'ex1', type: 'endEvent', name: 'Fehler', marker: 'error', lane: 'L' },
+      { id: 'g2', type: 'exclusiveGateway', name: 'Vollständig?', lane: 'L' },
+      { id: 'ex2', type: 'endEvent', name: 'Abbruch', marker: 'terminate', lane: 'L' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'L' },
+      { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 'g1' },
+      { id: 'f2', source: 'g1', target: 'ex1', label: 'Nein' },
+      { id: 'f3', source: 'g1', target: 'g2', label: 'Ja' },
+      { id: 'f4', source: 'g2', target: 'ex2', label: 'Nein' },
+      { id: 'f5', source: 'g2', target: 't', label: 'Ja' },
+      { id: 'f6', source: 't', target: 'e' },
+    ],
+    lanes: [{ id: 'L', name: 'Rolle' }],
+  };
+  const post = (body) => realFetch(`${baseUrl}/api/v1/validate`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+
+  test('document mode (default) → no advisories', async () => {
+    const res = await post({ logicCore: knockoutExc });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.validation.advisories).toEqual([]);
+  });
+
+  test('optimize mode → advisories populated', async () => {
+    const res = await post({ logicCore: knockoutExc, mode: 'optimize' });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.validation.advisories.length).toBeGreaterThan(0);
+    expect(data.validation.metrics.optimization).toBeDefined();
+  });
+});

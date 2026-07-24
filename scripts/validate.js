@@ -9,7 +9,7 @@ import { runRules, loadRuleProfile } from './rules.js';
  * Validate a Logic-Core document.
  * @param {object} lc - Logic-Core JSON
  * @param {string|object|null} profileOrPath - Rule profile object, file path, or null for defaults
- * @returns {{ errors: string[], warnings: string[] }}
+ * @returns {{ errors: string[], warnings: string[], infos: string[], advisories: string[], metrics: object }}
  */
 function validateLogicCore(lc, profileOrPath = null) {
   let profile = null;
@@ -20,7 +20,16 @@ function validateLogicCore(lc, profileOrPath = null) {
   }
 
   const result = runRules(lc, profile);
-  return { errors: result.errors, warnings: result.warnings };
+  // Pass advisories/infos/metrics through (additive; existing callers that only
+  // read errors/warnings are unaffected). Advisories are populated only when the
+  // opt-in optimization layer is enabled (via profileForMode / "optimize" mode).
+  return {
+    errors: result.errors,
+    warnings: result.warnings,
+    infos: result.infos,
+    advisories: result.advisories,
+    metrics: result.metrics,
+  };
 }
 
 export { validateLogicCore };

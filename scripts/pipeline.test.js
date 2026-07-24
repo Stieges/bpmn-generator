@@ -29,7 +29,7 @@ import { wrapText, wrapTextByPx } from './utils.js';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
 import { checkWorkflowNetSoundness, bpmnToPN } from './workflow-net.js';
-import { runRules, RULES, loadRuleProfile } from './rules.js';
+import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from './http-server.js';
 
@@ -2622,5 +2622,127 @@ describe('CLI enforcement (schema-gate + --strict)', () => {
     const r = await runCli(goodProcess, { strict: true });
     expect(r.status).toBe(0);
     expect(r.bpmnExists).toBe(true);
+  });
+});
+
+describe('Optimization Advisory (optimize mode)', () => {
+  const runOpt = (lc, mode) => runRules(lc, profileForMode(null, mode));
+
+  // Knock-out chain + interleaved exception ends (triggers O01 + O02).
+  const knockoutExc = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent', lane: 'L' },
+      { id: 'g1', type: 'exclusiveGateway', name: 'Gültig?', lane: 'L' },
+      { id: 'ex1', type: 'endEvent', name: 'Fehler', marker: 'error', lane: 'L' },
+      { id: 'g2', type: 'exclusiveGateway', name: 'Vollständig?', lane: 'L' },
+      { id: 'ex2', type: 'endEvent', name: 'Abbruch', marker: 'terminate', lane: 'L' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'L' },
+      { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 'g1' },
+      { id: 'f2', source: 'g1', target: 'ex1', label: 'Nein' },
+      { id: 'f3', source: 'g1', target: 'g2', label: 'Ja' },
+      { id: 'f4', source: 'g2', target: 'ex2', label: 'Nein' },
+      { id: 'f5', source: 'g2', target: 't', label: 'Ja' },
+      { id: 'f6', source: 't', target: 'e' },
+    ],
+    lanes: [{ id: 'L', name: 'Rolle' }],
+  };
+
+  test('document mode → no advisories, no optimization metrics', () => {
+    const r = runOpt(knockoutExc, 'document');
+    expect(r.advisories).toEqual([]);
+    expect(r.metrics.optimization).toBeUndefined();
+  });
+
+  test('O01 exception isolation fires when exception ends branch off the mainline', () => {
+    const r = runOpt(knockoutExc, 'optimize');
+    expect(r.advisories.some(a => /Exception-Isolation/.test(a))).toBe(true);
+  });
+
+  test('O01 recognizes name-based exception ends (marker-less, incl. "eskaliert")', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 'g1', type: 'exclusiveGateway', name: 'Frist?', lane: 'L' },
+        { id: 'x1', type: 'endEvent', name: 'Fall eskaliert (Frist überschritten)', lane: 'L' },
+        { id: 'g2', type: 'exclusiveGateway', name: 'Storno?', lane: 'L' },
+        { id: 'x2', type: 'endEvent', name: 'Vorgang storniert', lane: 'L' },
+        { id: 't', type: 'userTask', name: 'Vorgang abschließen', lane: 'L' },
+        { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 'g1' },
+        { id: 'f2', source: 'g1', target: 'x1', label: 'Ja' },
+        { id: 'f3', source: 'g1', target: 'g2', label: 'Nein' },
+        { id: 'f4', source: 'g2', target: 'x2', label: 'Ja' },
+        { id: 'f5', source: 'g2', target: 't', label: 'Nein' },
+        { id: 'f6', source: 't', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Rolle' }],
+    };
+    const r = runOpt(lc, 'optimize');
+    expect(r.advisories.some(a => /Exception-Isolation/.test(a))).toBe(true);
+  });
+
+  test('O02 knock-out ordering fires on a chain of terminating XOR checks', () => {
+    const r = runOpt(knockoutExc, 'optimize');
+    expect(r.advisories.some(a => /Knock-out-Kette/.test(a))).toBe(true);
+  });
+
+  test('O03 handoffs fires when lane crossings exceed the threshold', () => {
+    const lanes = ['A', 'B'];
+    const nodes = [{ id: 's', type: 'startEvent', lane: 'A' }];
+    const edges = [];
+    let prev = 's';
+    for (let i = 1; i <= 8; i++) {
+      const id = `t${i}`;
+      nodes.push({ id, type: 'userTask', name: `Schritt ${i} tun`, lane: lanes[i % 2] });
+      edges.push({ id: `f${i}`, source: prev, target: id });
+      prev = id;
+    }
+    nodes.push({ id: 'e', type: 'endEvent', lane: 'A' });
+    edges.push({ id: 'fe', source: prev, target: 'e' });
+    const lc = { id: 'P', nodes, edges, lanes: [{ id: 'A', name: 'A' }, { id: 'B', name: 'B' }] };
+    const r = runOpt(lc, 'optimize');
+    expect(r.advisories.some(a => /Übergaben/.test(a))).toBe(true);
+    expect(r.metrics.optimization.handoffCount).toBeGreaterThan(6);
+  });
+
+  test('O04 parallelism candidate fires on a linear same-lane task run', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 't1', type: 'userTask', name: 'Daten erfassen', lane: 'L' },
+        { id: 't2', type: 'userTask', name: 'Daten prüfen', lane: 'L' },
+        { id: 't3', type: 'userTask', name: 'Daten freigeben', lane: 'L' },
+        { id: 'e', type: 'endEvent', lane: 'L' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 't1' },
+        { id: 'f2', source: 't1', target: 't2' },
+        { id: 'f3', source: 't2', target: 't3' },
+        { id: 'f4', source: 't3', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Rolle' }],
+    };
+    const r = runOpt(lc, 'optimize');
+    expect(r.advisories.some(a => /Parallelisierung/.test(a))).toBe(true);
+  });
+
+  test('optimize mode always populates Lean metrics', () => {
+    const r = runOpt(knockoutExc, 'optimize');
+    expect(r.metrics.optimization).toEqual(
+      expect.objectContaining({
+        handoffCount: expect.any(Number),
+        waitStates: expect.any(Number),
+        reworkLoops: expect.any(Number),
+        gatewayComplexity: expect.any(Number),
+      })
+    );
   });
 });

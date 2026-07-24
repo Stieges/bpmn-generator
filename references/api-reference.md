@@ -28,6 +28,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 }
 ```
 - `logicCore` (required, object) — validated against `references/input-schema.json` via the ajv strict gate.
+- `mode` (optional, string) — `"document"` (default, faithful IST) or `"optimize"`/`"soll"`. In optimize mode the response `validation` gains `advisories` (redesign suggestions) and `metrics.optimization` (Lean metrics). Advisories are heuristic, non-blocking, never auto-applied.
 - `callbackUrl` (optional, string) — if present, the result is also POSTed there asynchronously; the URL is SSRF-validated (rejects internal/link-local hosts, DNS-resolves and re-checks).
 
 **Response 200:**
@@ -37,11 +38,11 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
   "status": "success",
   "bpmnXml": "<?xml ...",
   "svg": "<svg ...",
-  "validation": { "errors": [], "warnings": [] },
+  "validation": { "errors": [], "warnings": [], "advisories": [], "metrics": {} },
   "callbackStatus": "not_requested"
 }
 ```
-`status` is `"validation_error"` when `validation.errors` is non-empty. `callbackStatus` is `"pending"` when a `callbackUrl` was accepted.
+`status` is `"validation_error"` when `validation.errors` is non-empty. `callbackStatus` is `"pending"` when a `callbackUrl` was accepted. `validation.advisories` is populated only in `mode: "optimize"`.
 
 **Errors:**
 - `400 { correlationId, status: "schema_error", errors: [...] }` — Logic-Core failed the schema gate.
@@ -61,11 +62,13 @@ curl -X POST http://localhost:3000/api/v1/generate \
 
 Validate Logic-Core against the rule engine without generating output.
 
-**Request:** `{ "logicCore": {...}, "correlationId": "uuid", "clientId": "my-app" }`
+**Request:** `{ "logicCore": {...}, "mode": "optimize", "correlationId": "uuid", "clientId": "my-app" }`
+
+`mode` (optional) — `"document"` (default) or `"optimize"`; in optimize mode `validation` gains `advisories` + `metrics.optimization`.
 
 **Response 200:**
 ```json
-{ "correlationId": "uuid", "status": "success", "validation": { "errors": [...], "warnings": [...] } }
+{ "correlationId": "uuid", "status": "success", "validation": { "errors": [...], "warnings": [...], "advisories": [...], "metrics": {} } }
 ```
 `status` is always `"success"` here (unlike `/generate`, it does not flip to an error status when `validation.errors` is non-empty — a non-empty `errors` array is itself the signal).
 
@@ -110,11 +113,13 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
   "logicCore": { ... },
   "llmConfig": { "baseUrl": "https://api.openai.com/v1", "apiKey": "sk-...", "model": "gpt-4o-mini", "timeout": 120000 },
   "ruleProfile": "rules/strict-profile.json",
+  "mode": "optimize",
   "correlationId": "uuid",
   "clientId": "my-app"
 }
 ```
 - One of `userText` or `logicCore` is required.
+- `mode` (optional) — `"document"` (default) or `"optimize"`/`"soll"`; optimize mode adds `validation.advisories` + `metrics.optimization` to the response.
 - `llmConfig` is required when `userText` is given; if omitted, the server falls back to `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` env vars when present.
 - `timeout` optional, clamped to (0, 300000], default 120000.
 

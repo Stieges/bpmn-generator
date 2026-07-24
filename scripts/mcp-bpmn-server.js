@@ -20,6 +20,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { runPipeline, validateLogicCore, generateDiagramSet } from './pipeline.js';
+import { profileForMode } from './rules.js';
 import { bpmnToLogicCore } from './import.js';
 import { orchestrate } from './orchestrator.js';
 
@@ -37,7 +38,8 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON (nodes, edges, pools etc.)' },
-        drillDown: { type: 'boolean', description: 'Generate per-subprocess diagrams (optional, default false)' }
+        drillDown: { type: 'boolean', description: 'Generate per-subprocess diagrams (optional, default false)' },
+        mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default, faithful IST) or 'optimize' (Soll — adds redesign advisories)" }
       }
     }
   },
@@ -48,7 +50,8 @@ const TOOLS = [
       type: 'object',
       required: ['logicCore'],
       properties: {
-        logicCore: { type: 'object', description: 'Logic-Core JSON to validate' }
+        logicCore: { type: 'object', description: 'Logic-Core JSON to validate' },
+        mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (adds redesign advisories)" }
       }
     }
   },
@@ -71,7 +74,8 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to orchestrate' },
-        ruleProfile: { type: 'string', description: 'Path to rule profile JSON (optional)' }
+        ruleProfile: { type: 'string', description: 'Path to rule profile JSON (optional)' },
+        mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (Soll — adds redesign advisories)" }
       }
     }
   }
@@ -93,7 +97,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         navigation: set.navigation,
       }, null, 2) }] };
     }
-    const result = await runPipeline(args.logicCore);
+    const result = await runPipeline(args.logicCore, { mode: args.mode });
     return { content: [{ type: 'text', text: JSON.stringify({
       bpmnXml: result.bpmnXml,
       svg: result.svg,
@@ -102,8 +106,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'validate_bpmn') {
-    const { errors, warnings } = validateLogicCore(args.logicCore);
-    return { content: [{ type: 'text', text: JSON.stringify({ errors, warnings }, null, 2) }] };
+    const { errors, warnings, advisories } = validateLogicCore(args.logicCore, profileForMode(null, args.mode));
+    return { content: [{ type: 'text', text: JSON.stringify({ errors, warnings, advisories }, null, 2) }] };
   }
 
   if (name === 'import_bpmn') {
@@ -114,6 +118,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'orchestrate_bpmn') {
     const result = await orchestrate(args.logicCore, {
       ruleProfile: args.ruleProfile || null,
+      mode: args.mode,
     });
     return { content: [{ type: 'text', text: JSON.stringify({
       bpmnXml: result.bpmnXml,
