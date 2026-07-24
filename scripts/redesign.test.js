@@ -261,6 +261,12 @@ describe('parallelize', () => {
     expect(newEdgeIds.length).toBe(6);
     expect(r.change.added).toEqual(expect.arrayContaining(newEdgeIds));
     expect(r.change.added.length).toBe(2 + newEdgeIds.length);
+
+    // "modified": s->a (f0) und c->e (f3) behalten ihre ID, aber ihr source/
+    // target wurde umgehaengt (auf den Split- bzw. Join-Gateway) — Quelle und
+    // Ergebnis unterscheiden sich hier NICHT nur in "added"/"removed".
+    expect(r.change.modified).toEqual(expect.arrayContaining(['f0', 'f3']));
+    expect(r.change.modified.length).toBe(2);
   });
 
   test('apply mutiert die Eingabe nicht', () => {
@@ -362,5 +368,63 @@ describe('mergeTasks', () => {
     expect(r.lc.nodes.find(n => n.id === 'm1').name).toBe('Daten erfassen und sichern');
     expect(checkGate(r.lc).ok).toBe(true);
     expect(r.change.removed).toContain('m2');
+
+    // "modified": m1 (der ueberlebende Knoten) behaelt seine ID, aber sein
+    // Name wurde geaendert — er taucht sonst in keinem der beiden anderen
+    // Arrays auf, obwohl Quelle und Ergebnis sich hier unterscheiden.
+    expect(r.change.modified).toEqual(['m1']);
+  });
+
+  test('preview verweigert bei weniger als zwei Schritten', () => {
+    const r = previewMergeTasks(lcMerge, { nodeIds: ['m1'], name: 'X tun' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/mindestens zwei/i);
+  });
+
+  test('preview verweigert bei unbekannter Kennung', () => {
+    const r = previewMergeTasks(lcMerge, { nodeIds: ['m1', 'gibtsnicht'], name: 'X tun' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/unbekannt/i);
+  });
+
+  test('preview verweigert bei geschuetztem Element', () => {
+    const r = previewMergeTasks(lcMerge, { nodeIds: ['m1', 'm2'], name: 'X tun',
+                                           policy: { protectNodes: ['m1'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
+  });
+
+  test('preview verweigert, wenn die Schritte in verschiedenen Bahnen liegen', () => {
+    const otherLane = { ...lcMerge,
+      lanes: [...lcMerge.lanes, { id: 'L2', name: 'Andere Bahn' }],
+      nodes: lcMerge.nodes.map(n => n.id === 'm2' ? { ...n, lane: 'L2' } : n) };
+    const r = previewMergeTasks(otherLane, { nodeIds: ['m1', 'm2'], name: 'X tun' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/bahn/i);
+  });
+
+  test('preview verweigert, wenn eine Assoziation auf einen zu entfernenden Schritt zeigt', () => {
+    // 'm2' wuerde entfernt (nur 'm1' ueberlebt). Eine Assoziation, die 'm2'
+    // referenziert, wuerde nach dem Merge auf eine nicht mehr existierende ID
+    // zeigen: bpmn-xml.js emittiert dann eine <bpmn:Association> mit ungueltigem
+    // sourceRef/targetRef, und keine Regel in rules.js prueft das (kein S03/S10-
+    // Pendant fuer Assoziationen), also greift das Rollback-Gate nicht.
+    const withAssoc = { ...lcMerge,
+      nodes: [...lcMerge.nodes, { id: 'do1', type: 'dataObjectReference', name: 'Protokoll', lane: 'L' }],
+      associations: [{ id: 'as1', source: 'm2', target: 'do1', directed: true }] };
+    const r = previewMergeTasks(withAssoc, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/assoziation/i);
+    expect(r.reason).toMatch(/as1/);
+  });
+
+  test('Assoziation auf den UEBERLEBENDEN Knoten (m1) blockiert nicht', () => {
+    // Gegenprobe zum vorigen Test: 'm1' ist ids[0] und ueberlebt den Merge —
+    // seine Assoziationen bleiben gueltig, also darf hier nicht verweigert werden.
+    const withAssoc = { ...lcMerge,
+      nodes: [...lcMerge.nodes, { id: 'do1', type: 'dataObjectReference', name: 'Protokoll', lane: 'L' }],
+      associations: [{ id: 'as1', source: 'm1', target: 'do1', directed: true }] };
+    const r = previewMergeTasks(withAssoc, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
+    expect(r.feasible).toBe('full');
   });
 });

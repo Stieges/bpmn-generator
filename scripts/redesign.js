@@ -140,12 +140,21 @@ export function applyParallelize(lc, params = {}) {
     added.push(eOut);
   }
 
+  // "modified" schliesst die Lücke zwischen "added"/"removed": inEdge/outEdge
+  // behalten ihre ID, aber source/target wurden umgehängt (auf splitId/joinId).
+  // Ohne diesen Eintrag bliebe die Vorgabe "Quelle und Ergebnis unterscheiden
+  // sich ausschliesslich in den verzeichneten Elementen" fuer diese zwei Kanten
+  // verletzt — sie tauchen sonst in keinem der drei Arrays auf.
+  const modified = [];
+  if (inEdge) modified.push(inEdge.id);
+  if (outEdge) modified.push(outEdge.id);
+
   const gate = checkGate(out);
   if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
 
   return {
     lc: out,
-    change: { transform: 'parallelize', targets: ids, added, removed,
+    change: { transform: 'parallelize', targets: ids, added, removed, modified,
               note: `${ids.length} Schritte parallel gefuehrt` },
     warnings: gate.warnings,
   };
@@ -177,6 +186,23 @@ export function previewMergeTasks(lc, { nodeIds = [], name = '', policy = {} } =
     return refusal(`Angehängtes Boundary-Event (${boundaries.map(b => b.id).join(', ')}) würde heimatlos.`);
   }
   if (!isLinearChain(proc, nodeIds)) return refusal('Die Schritte bilden keine zusammenhängende Kette.');
+
+  // Nur die zu ENTFERNENDEN Knoten zaehlen (nodeIds[1..], siehe applyMergeTasks:
+  // ids[0] ueberlebt und behaelt seine Assoziationen). Verweist eine Assoziation
+  // auf einen Knoten, der geloescht wuerde, faende S03/S10-artige Referenz-
+  // Integritaetspruefung fuer Assoziationen nicht statt (kein Regel-Pendant in
+  // rules.js) — das Rollback-Gate wuerde also NICHT greifen, und bpmn-xml.js
+  // wuerde eine <bpmn:Association> mit einem sourceRef/targetRef auf eine nicht
+  // mehr existierende ID emittieren: strukturell ungueltiges BPMN, das Importer
+  // zum Absturz bringen kann. Die grafische Kante wird dabei still weggelassen,
+  // der Defekt ist im Diagramm unsichtbar.
+  const drop = nodeIds.slice(1);
+  const assocs = lc.associations || [];
+  const orphaned = assocs.filter(a => drop.includes(a.source) || drop.includes(a.target));
+  if (orphaned.length) {
+    return refusal(`Assoziation(en) (${orphaned.map(a => a.id).join(', ')}) verweisen auf Schritte, ` +
+                   `die entfernt würden — Bündeln würde das Modell strukturell ungültig machen.`);
+  }
   return { feasible: 'full', scope: [...nodeIds], reason: '' };
 }
 
@@ -205,9 +231,12 @@ export function applyMergeTasks(lc, params = {}) {
   const gate = checkGate(out);
   if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
 
+  // "modified" schliesst die Lücke zwischen "added"/"removed": der ueberlebende
+  // Knoten (keep) behaelt seine ID, aber sein Name wurde geaendert — er taucht
+  // sonst in keinem der beiden anderen Arrays auf, obwohl er sich veraendert hat.
   return {
     lc: out,
-    change: { transform: 'mergeTasks', targets: ids, added: [], removed,
+    change: { transform: 'mergeTasks', targets: ids, added: [], removed, modified: [keep],
               note: `${ids.length} Schritte gebündelt zu "${params.name}"` },
     warnings: gate.warnings,
   };
