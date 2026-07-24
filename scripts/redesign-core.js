@@ -35,14 +35,33 @@ export function checkGate(lc) {
   return { ok: r.errors.length === 0, errors: r.errors, warnings: r.warnings };
 }
 
-/** Alle vergebenen Knoten-, Kanten- und Lane-IDs. */
+/**
+ * Sammelt rekursiv alle Knoten-IDs eines Knoten-Arrays, inklusive der Kind-Knoten
+ * und -Kanten expandierter Sub-Prozesse (node.nodes / node.edges). Ein Sub-Prozess
+ * kann wiederum einen Sub-Prozess enthalten — daher Rekursion, nicht nur eine Ebene.
+ */
+function collectNodeIdsRecursive(nodes, ids) {
+  for (const n of (nodes || [])) {
+    ids.add(n.id);
+    if (n.type === 'subProcess' && (n.nodes || n.edges)) {
+      collectNodeIdsRecursive(n.nodes, ids);
+      for (const e of (n.edges || [])) ids.add(e.id);
+    }
+  }
+}
+
+/** Alle vergebenen Pool-, Knoten-, Kanten- und Lane-IDs (inkl. verschachtelter Sub-Prozesse). */
 export function collectIds(lc) {
   const ids = new Set();
   const procs = lc.pools ? lc.pools : [lc];
   for (const p of procs) {
-    for (const n of (p.nodes || [])) ids.add(n.id);
+    if (p.id) ids.add(p.id);
+    collectNodeIdsRecursive(p.nodes, ids);
     for (const e of (p.edges || [])) ids.add(e.id);
     for (const l of (p.lanes || [])) ids.add(l.id);
+  }
+  for (const cp of (lc.collapsedPools || [])) {
+    if (cp.id) ids.add(cp.id);
   }
   for (const mf of (lc.messageFlows || [])) ids.add(mf.id);
   return ids;
