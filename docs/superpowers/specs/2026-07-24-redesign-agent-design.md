@@ -23,13 +23,22 @@ goal trade-offs, and estimating numbers the model doesn't carry.
 ## 2 Scope
 
 ### In scope
-- `scripts/redesign.js` — deterministic transform library (pure functions, Logic-Core → Logic-Core)
+
+**Deterministic core — no LLM, no API key:**
+- `scripts/redesign.js` — transform library (pure functions, Logic-Core → Logic-Core)
 - `scripts/redesign-math.js` — scoring/ordering math (knock-out order, antichains, critical path, MCDA)
-- `scripts/agents/redesign.js` — the configurable agent (brief + policy → applied plan)
 - Advisory enrichment in `scripts/optimize.js`: structured `targets` + `transform` per finding
-- IST↔Soll snapshot handling + changelog
-- CLI + programmatic entry; SKILL.md workflow section
-- Tests: transform unit tests, math unit tests, agent-with-mock-LLM tests, IST→Soll golden
+- IST↔Soll snapshot handling + changelog; CLI entry
+
+**Consumer A — Claude Code skill (primary, still key-free):**
+- `.claude/agents/redesign.md` — the *freely definable* subagent definition (mission, limits, allowed tools)
+- SKILL.md workflow section driving the loop
+
+**Consumer B — headless (last phase, needs a key):**
+- `scripts/agents/redesign.js` — same policy surface, driven by an `llmProvider` for HTTP/CI use
+- Key hygiene, audit, server-side cost cap (§9)
+
+**Tests:** transform units, math units, subagent-workflow check, agent-with-mock-LLM, IST→Soll golden
 
 ### Out of scope
 - Greenfield Soll from a goal without an IST → **Increment 3**
@@ -43,34 +52,41 @@ goal trade-offs, and estimating numbers the model doesn't carry.
 
 ## 3 Architecture
 
+**One deterministic core, two interchangeable judgment consumers.** The judgment layer is a *plug*, not the
+engine — which is what keeps the primary path free of API keys.
+
 ```
-IST Logic-Core ──(frozen snapshot)──────────────────────────┐
-      │                                                     │
-      ▼                                                     │
-optimize.js  ──▶ structured advisories                      │
-   (Inc.1 detection + NEW targets/transform)                │
-      │                                                     │
-      ▼                                                     │
-┌─────────────────────────────────────────────┐             │
-│ agents/redesign.js  (CONFIGURABLE AGENT)    │             │
-│  input: brief (free text) + policy (knobs)  │             │
-│  decides: which advisories to apply, order, │             │
-│           estimates missing numbers, judges │             │
-│           semantics, resolves conflicts     │             │
-└───────────────┬─────────────────────────────┘             │
-                │ calls (never edits JSON by hand)          │
-                ▼                                           │
-      redesign.js transforms  +  redesign-math.js scoring    │
-                │                                           │
-                ▼                                           │
-      validate (soundness/WF-net) ── fails ─▶ rollback step  │
-                │ ok                                         │
-                ▼                                            ▼
-          Soll Logic-Core  ◀──── changelog ────▶  IST vs. Soll render
+        CONSUMER A (primary)              CONSUMER B (last phase)
+   Claude Code subagent, key-free      agents/redesign.js + llmProvider
+   .claude/agents/redesign.md          (HTTP/CI, headless, needs a key)
+                    └──────────┬──────────┘
+                               │ brief + policy; selects & parameterizes
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ DETERMINISTIC CORE — no LLM, no key, fully testable          │
+│                                                              │
+│  IST Logic-Core ──(frozen)───────────────────────────┐       │
+│        │                                             │       │
+│        ▼                                             │       │
+│  optimize.js ──▶ structured advisories               │       │
+│        │         (Inc.1 detection + targets/transform)│      │
+│        ▼                                             │       │
+│  redesign.js transforms + redesign-math.js scoring   │       │
+│        │                                             │       │
+│        ▼                                             │       │
+│  validate (soundness/WF-net) ── fails ─▶ rollback    │       │
+│        │ ok                                          ▼       │
+│        ▼                                                     │
+│  Soll Logic-Core ◀── changelog ──▶ IST vs. Soll render       │
+└──────────────────────────────────────────────────────────────┘
+                               │
+                        re-detect (§6.2) ──▶ next step
 ```
 
-**Invariant:** the agent never hand-edits Logic-Core JSON. It selects and parameterizes transforms. Every
-applied transform is validated; a step that breaks soundness is rolled back and reported, not kept.
+**Invariants:**
+1. The judgment layer never hand-edits Logic-Core JSON — it selects and parameterizes transforms.
+2. Every applied transform is validated; a step that breaks soundness is rolled back and reported.
+3. **The core never imports an LLM provider.** Swapping or removing the judgment layer must not break it.
 
 ## 4 Layer A — Deterministic transforms (`scripts/redesign.js`)
 
@@ -139,9 +155,39 @@ tool can currently compute unaided.
 - **Handoff count**: lane-crossing edges before/after a `relane` — a pure count, always computable (local
   greedy improvement only; no global partitioning in this increment).
 
-## 6 Layer C — The agent (`scripts/agents/redesign.js`)
+## 6 Layer C — The judgment layer (two consumers)
 
-**Configured by both** a free-text brief and structured policy knobs:
+### 6.1 Consumer A — the Claude Code subagent (primary, key-free)
+
+In the skill path **Claude in the session is the judgment layer** — there is no `llmProvider` and no API
+key. The "freely definable agent" is therefore not custom runner code but a **subagent definition** the
+user can edit:
+
+```markdown
+<!-- .claude/agents/redesign.md -->
+---
+name: redesign
+description: Use when a Soll/to-be process should be derived from an existing IST BPMN model.
+tools: Bash, Read          # deliberately no Edit/Write — it may only call the transforms
+model: inherit
+---
+Mission, default weights, hard limits, how to call the transforms, when to stop.
+```
+
+Why this shape:
+- **Free definability without code** — redefining the agent means editing this file, not shipping a runner.
+- **Least privilege** — restricted to `Bash, Read`, it *cannot* edit arbitrary files; all model changes go
+  through the validated transforms.
+- **Context economy** — the recompute-per-step loop (§6.2) runs many iterations; encapsulated in a
+  subagent, only the changelog returns to the main conversation.
+- **Zero key surface** — the CLI/pipeline stay 100% deterministic, which matters for regulated deployments.
+
+Brief and policy are passed as invocation arguments; the definition file supplies the defaults.
+
+### 6.2 Consumer B — headless (`scripts/agents/redesign.js`, last phase)
+
+Same policy surface for HTTP/CI use, driven by an `llmProvider`. This is the only path that needs a key —
+see §8.1 for key hygiene and cost caps. It must produce the same result shape as consumer A.
 
 ```js
 redesignAgent({
@@ -171,14 +217,14 @@ redesignAgent({
 Consequence to accept knowingly: on models without data objects, `safe` applies **nothing** and behaves
 like `propose`. That is intended — silence beats a confidently wrong redesign.
 
-### 6.1 What the agent actually sees
+### 6.3 What the agent actually sees
 
 Not the raw Logic-Core JSON (unbounded tokens on large models). Per step it receives a **compact process
 digest**: nodes as `id | type | name | lane`, edges as `source → target [label]`, the current advisory plan
 (structured), the Lean metrics, and the brief/policy. Data objects and associations are included when
 present, since they decide tier 1 vs tier 2.
 
-### 6.2 Convergence — recompute after every applied step
+### 6.4 Convergence — recompute after every applied step
 
 After each successful transform the detection (`optimize.js`) **re-runs on the new Soll**, and the plan is
 re-ranked. Rationale: one change invalidates or creates others (parallelizing a chain removes its own
@@ -186,7 +232,7 @@ handoff finding and can expose a new one). The loop ends when: the brief is sati
 advisory remains, `maxChanges` is hit, or `maxLlmCalls` is exhausted — whichever comes first. Every exit
 reason is reported.
 
-### 6.3 Cost control
+### 6.5 Cost control
 
 `maxLlmCalls` (default 12) caps total agent calls across all iterations; the digest keeps per-call payload
 bounded. On exhaustion the run stops cleanly and returns the Soll reached so far plus the remaining
@@ -218,6 +264,26 @@ proposals — never a partially-applied, unvalidated state.
 3. `maxChanges` caps the blast radius; the loop terminates deterministically.
 4. Nothing overwrites the user's input file; IST stays intact.
 5. Estimated numbers are always marked as estimates.
+6. **The deterministic core stays key-free.** `redesign.js` / `redesign-math.js` / `optimize.js` must not
+   import `llm-provider.js`. The CLI redesign entry runs without any API key; only consumer B needs one.
+
+### 8.1 Key & cost safety (consumer B only)
+
+The headless agent is the first component that turns *one* request into *many* paid LLM calls. That needs
+explicit limits — today's HTTP rate limit (30 req/min) counts requests, not model calls.
+
+1. **Server-side hard cap.** `maxLlmCalls` from a client request is clamped to a server maximum
+   (env-configurable). A caller cannot raise its own budget.
+2. **No key leakage.** The API key never appears in the changelog, the Soll artifacts, error messages, or
+   the audit log — errors from `llm-provider.js` are redacted before they reach a response.
+3. **Audit.** Each redesign run writes an audit entry (run id, model, calls used, transforms applied,
+   exit reason) — LLM calls are currently unaudited, and an autonomous, mutating agent is exactly the
+   thing that should not be.
+4. **Sovereign/local operation.** `createLlmProvider` already supports keyless local models
+   (`apiKey: 'none' | 'local'`); the redesign agent must work in that setup, since regulated deployments
+   may not send process models to an external provider.
+5. **Fail closed.** No provider configured ⇒ the agent returns proposals (`propose` behaviour) instead of
+   erroring the whole pipeline.
 
 ## 9 Testing strategy
 
@@ -255,16 +321,23 @@ proposals — never a partially-applied, unvalidated state.
 - `autonomy: 'propose'` changes nothing; `full` also applies judgment transforms.
 - A protected lane is never modified, even when the agent proposes it (enforced in the transform layer).
 - After an applied transform, advisories are recomputed; a finding invalidated by the change is gone.
+- **A full redesign runs end-to-end without any API key** (consumer A); `grep -r llm-provider` finds no
+  import in the core modules.
+- Consumer B produces the same result shape as consumer A, clamps `maxLlmCalls` server-side, leaks no key,
+  and works against a local/keyless model.
 - Full test suite green; `document` mode output byte-identical to before.
 
 ## 12 Phasing
 
+Skill path first — it delivers the whole feature without ever needing a key; the headless agent lands last.
+
 1. **P1** — advisory enrichment (`targets` + `transform`) in optimize.js
 2. **P2** — `redesign.js` transforms + `redesign-math.js` (deterministic, no LLM, fully tested)
-3. **P3** — `agents/redesign.js` (brief + policy + autonomy) on top
-4. **P4** — IST↔Soll rendering, changelog, CLI entry, SKILL.md workflow
+3. **P3** — IST↔Soll rendering, changelog, CLI entry
+4. **P4** — consumer A: `.claude/agents/redesign.md` + SKILL.md workflow → **feature complete, key-free**
+5. **P5** — consumer B: `agents/redesign.js` headless + §8.1 key hygiene, audit, server cost cap
 
-P1+P2 are valuable on their own: even without the agent, the transforms are callable and testable.
+P1–P3 are valuable on their own: the transforms are callable and testable with no judgment layer at all.
 
 ## 13 References
 
