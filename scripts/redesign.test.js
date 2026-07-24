@@ -207,6 +207,39 @@ describe('parallelize', () => {
     expect(r.reason).toMatch(/zusammenhäng/i);
   });
 
+  test('preview verweigert bei Fan-in am ERSTEN Kettenmitglied (Regression)', () => {
+    // Reproduktion des Fund-Szenarios: s->a->b->c->e, Kette=[a,b,c], PLUS eine
+    // zusaetzliche Kante x->a (x hat sonst keine Kanten). Vor dem Fix fand
+    // applyParallelize per edges.find() nur die ERSTE Kante nach 'a' (s->a),
+    // haengte sie auf den Split um und liess x->a unveraendert direkt auf 'a'
+    // zeigen — der Split wird umgangen, exakt das urspruengliche Bug-Muster.
+    const fanInFirst = {
+      ...lcChain,
+      nodes: [...lcChain.nodes, { id: 'x', type: 'userTask', name: 'Extra pruefen', lane: 'L' }],
+      edges: [...lcChain.edges, { id: 'fx', source: 'x', target: 'a' }],
+    };
+    const r = previewParallelize(fanInFirst, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/zusammenhäng/i);
+
+    // apply muss ebenfalls verweigern (nicht nur preview) — kein stilles Durchrutschen.
+    expect(() => applyParallelize(fanInFirst, { nodeIds: ['a', 'b', 'c'] })).toThrow(/zusammenhäng/i);
+  });
+
+  test('preview verweigert, wenn das erste Kettenmitglied gar keine eingehende Kante hat', () => {
+    // Grenzfall: 'a' hat ueberhaupt keine eingehende Kante (z.B. weil s->a entfernt
+    // wurde). Der neue Split-Gateway haette dann selbst keinen Vorgaenger — bewusst
+    // eine Verweigerung, nicht eine stillschweigende Akzeptanz (siehe Docstring von
+    // isLinearChain).
+    const noIncoming = {
+      ...lcChain,
+      edges: lcChain.edges.filter(e => e.id !== 'f0'),
+    };
+    const r = previewParallelize(noIncoming, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/zusammenhäng/i);
+  });
+
   test('apply erzeugt AND-Split und AND-Join und bleibt sound', () => {
     const r = applyParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
     const types = r.lc.nodes.filter(n => n.type === 'parallelGateway');

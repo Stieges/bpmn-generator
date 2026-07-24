@@ -22,12 +22,24 @@ function findNodes(proc, ids) {
 /**
  * Ist ids eine zusammenhängende, lineare Kette (jeweils genau eine Kante)?
  * Prüft nicht nur die Kettenkanten selbst, sondern auch, dass kein Kettenmitglied
- * zusätzliche Kanten von/zu Knoten AUSSERHALB der Kette hat: jedes Mitglied nach
- * dem ersten darf genau eine eingehende Kante haben (die vom Vorgänger — sonst
- * Fan-in von aussen), und das letzte Mitglied darf genau eine ausgehende Kante
- * haben (sonst Fan-out). Ohne diese Prüfung würde applyParallelize eine externe
- * Kante in einen Zwischenschritt kappen bzw. umhängen und einen toten
- * Modell-Fragment erzeugen.
+ * zusätzliche Kanten von/zu Knoten AUSSERHALB der Kette hat: JEDES Mitglied,
+ * einschliesslich des ersten, muss genau eine eingehende Kante haben (sonst
+ * Fan-in von aussen — beim ersten Mitglied re-targeted applyParallelize sonst
+ * nur die zuerst gefundene Kante auf den neuen Split und laesst jede weitere
+ * eingehende Kante unveraendert am alten Ziel haengen, wodurch sie den Split
+ * umgeht). Das letzte Mitglied darf genau eine ausgehende Kante haben (sonst
+ * Fan-out). Ohne diese Prüfung würde applyParallelize eine externe Kante in
+ * einen Zwischenschritt kappen bzw. umhängen und ein totes Modell-Fragment
+ * erzeugen.
+ *
+ * Ein erstes Mitglied mit NULL eingehenden Kanten (z. B. weil es selbst ein
+ * startEvent ist) wird ebenfalls verweigert, nicht stillschweigend akzeptiert:
+ * der neue Split-Gateway braucht einen definierten Vorgänger, an den die
+ * bisherige Kante umgehängt wird. Ohne eine solche Kante entstünde ein Split
+ * ohne eingehenden Fluss — strukturell ungültig (Flow-Node ohne Vorgänger).
+ * Der praxisrelevante Fall "Kette am Prozessanfang" (erstes Mitglied direkt
+ * nach dem Start-Event) hat ohnehin genau eine eingehende Kante vom Start-Event
+ * und ist von dieser Regel nicht betroffen.
  */
 function isLinearChain(proc, ids) {
   const edges = proc.edges || [];
@@ -37,7 +49,7 @@ function isLinearChain(proc, ids) {
     const outs = edges.filter(e => e.source === ids[i]);
     if (outs.length !== 1) return false;
   }
-  for (let i = 1; i < ids.length; i++) {
+  for (let i = 0; i < ids.length; i++) {
     const ins = edges.filter(e => e.target === ids[i]);
     if (ins.length !== 1) return false;
   }
