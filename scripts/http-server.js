@@ -11,6 +11,7 @@ const frontendDir = join(__dirname, '..', 'frontend');
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
 import { runPipeline, validateLogicCore } from './pipeline.js';
+import { profileForMode } from './rules.js';
 import { bpmnToLogicCore } from './import.js';
 import { orchestrate } from './orchestrator.js';
 import { chatAgent } from './agents/chat.js';
@@ -230,7 +231,8 @@ const server = createServer(async (req, res) => {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: schemaCheck.errors.length });
         return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
       }
-      const result = await runPipeline(body.logicCore);
+      const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
+      const result = await runPipeline(body.logicCore, { mode });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors });
@@ -269,7 +271,8 @@ const server = createServer(async (req, res) => {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/validate', errorCount: schemaCheck.errors.length });
         return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
       }
-      const validation = validateLogicCore(body.logicCore);
+      const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
+      const validation = validateLogicCore(body.logicCore, profileForMode(null, mode));
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors: validation.errors.length > 0 });
       return json(res, 200, { correlationId, status: 'success', validation });
@@ -288,7 +291,10 @@ const server = createServer(async (req, res) => {
     if (url === '/api/v1/orchestrate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/orchestrate' });
 
-      const options = { ruleProfile: body.ruleProfile || null };
+      const options = {
+        ruleProfile: body.ruleProfile || null,
+        mode: (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document',
+      };
 
       // Optional LLM provider for text→BPMN or review-fix loops
       if (!body.llmConfig) {

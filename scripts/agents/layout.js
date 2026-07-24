@@ -41,7 +41,7 @@ async function reviewLayout(llmProvider, svg) {
 }
 
 export async function layoutAgent(state) {
-  const result = await runPipeline(state.logicCore);
+  const result = await runPipeline(state.logicCore, { mode: state.options?.mode });
 
   const update = {
     bpmnXml: result.bpmnXml,

@@ -73,7 +73,8 @@ Robustness subsystem (scripts/robustness/)
 | File | Purpose |
 |------|---------|
 | `scripts/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/rules.js` | Rule Engine: 28 rules, 4 layers (Soundness/Style/Pragmatics/Workflow-Net); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
+| `scripts/rules.js` | Rule Engine: 32 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
+| `scripts/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
 | `scripts/validate.js` | Thin wrapper around `runRules()` |
 | `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact`, `bpmnXmlTag` |
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
@@ -201,7 +202,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ## Rule Engine
 
-4 layers with configurable severity:
+5 layers with configurable severity:
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
@@ -209,8 +210,9 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 | Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |
+| Optimization | ADVISORY | O01-O04 | Redesign advisories — `optimize`/`soll` mode only (opt-in); Reijers 2005 + BABOK Lean. Emits `validation.advisories` + `metrics.optimization` |
 
-Profiles in `rules/*.json` override severities or disable layers.
+Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/optimize.js`.
 
 ## Conventions
 

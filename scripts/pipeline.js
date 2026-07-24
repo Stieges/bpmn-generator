@@ -29,6 +29,7 @@ import { fileURLToPath } from 'url';
 import { loadConfig, CFG } from './utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
+import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordinates.js';
@@ -47,13 +48,18 @@ import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels } from './vis
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean} [opts.visualRefinement] - Enable visual refinement passes (overrides CFG.visualRefinement.enabled)
- * @returns {Promise<{bpmnXml: string, svg: string, coordMap: object, validation: {errors: string[], warnings: string[]}}>}
+ * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
+ * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
+ * @returns {Promise<{bpmnXml: string, svg: string, coordMap: object, validation: {errors: string[], warnings: string[], advisories: string[], metrics: object}}>}
  */
 async function runPipeline(logicCore, opts = {}) {
   const lc = JSON.parse(JSON.stringify(logicCore)); // deep clone to avoid mutation
-  const { errors, warnings } = validateLogicCore(lc);
+  let baseProfile = opts.ruleProfile ?? null;
+  if (typeof baseProfile === 'string') baseProfile = loadRuleProfile(baseProfile);
+  const profile = profileForMode(baseProfile, opts.mode);
+  const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
-    return { bpmnXml: null, svg: null, coordMap: null, validation: { errors, warnings } };
+    return { bpmnXml: null, svg: null, coordMap: null, validation: { errors, warnings, advisories, metrics } };
   }
 
   const allProcesses = lc.pools ? lc.pools : [lc];
@@ -103,7 +109,7 @@ async function runPipeline(logicCore, opts = {}) {
   // Round-trip XML validation: parse back through moddle to catch structural issues
   const roundTrip = await validateBpmnXml(bpmnXml);
 
-  return { bpmnXml, svg, coordMap, validation: { errors: [], warnings, xmlWarnings: roundTrip.warnings } };
+  return { bpmnXml, svg, coordMap, validation: { errors: [], warnings, advisories, metrics, xmlWarnings: roundTrip.warnings } };
 }
 
 /**
@@ -295,8 +301,9 @@ async function main() {
   const generateDoc = flags.includes('--doc');
   const drillDown  = flags.includes('--drill-down');
   const strict     = flags.includes('--strict');
+  const optimize   = flags.includes('--optimize') || flags.includes('--mode=soll') || flags.includes('--mode=optimize');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize]');
     process.exit(1);
   }
 
@@ -370,11 +377,15 @@ async function main() {
     return;
   }
 
-  const result = await runPipeline(parsedInput);
+  const result = await runPipeline(parsedInput, { mode: optimize ? 'optimize' : 'document' });
 
   if (result.validation.warnings.length) {
     console.warn('\n⚠ Warnings:');
     result.validation.warnings.forEach(w => console.warn('  · ' + w));
+  }
+  if (optimize && result.validation.advisories?.length) {
+    console.log('\n💡 Optimization opportunities (Soll-Redesign — Vorschläge, kein Auto-Fix):');
+    result.validation.advisories.forEach(a => console.log('  · ' + a));
   }
   if (!result.bpmnXml) {
     console.error('\n✗ Errors (pipeline blocked):');
