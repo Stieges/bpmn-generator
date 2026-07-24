@@ -2659,7 +2659,7 @@ describe('Optimization Advisory (optimize mode)', () => {
 
   test('O01 exception isolation fires when exception ends branch off the mainline', () => {
     const r = runOpt(knockoutExc, 'optimize');
-    expect(r.advisories.some(a => /Exception-Isolation/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O01')).toBe(true);
   });
 
   test('O01 recognizes name-based exception ends (marker-less, incl. "eskaliert")', () => {
@@ -2685,12 +2685,12 @@ describe('Optimization Advisory (optimize mode)', () => {
       lanes: [{ id: 'L', name: 'Rolle' }],
     };
     const r = runOpt(lc, 'optimize');
-    expect(r.advisories.some(a => /Exception-Isolation/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O01')).toBe(true);
   });
 
   test('O02 knock-out ordering fires on a chain of terminating XOR checks', () => {
     const r = runOpt(knockoutExc, 'optimize');
-    expect(r.advisories.some(a => /Knock-out-Kette/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O02')).toBe(true);
   });
 
   test('O03 handoffs fires when lane crossings exceed the threshold', () => {
@@ -2708,7 +2708,7 @@ describe('Optimization Advisory (optimize mode)', () => {
     edges.push({ id: 'fe', source: prev, target: 'e' });
     const lc = { id: 'P', nodes, edges, lanes: [{ id: 'A', name: 'A' }, { id: 'B', name: 'B' }] };
     const r = runOpt(lc, 'optimize');
-    expect(r.advisories.some(a => /Übergaben/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O03')).toBe(true);
     expect(r.metrics.optimization.handoffCount).toBeGreaterThan(6);
   });
 
@@ -2731,7 +2731,24 @@ describe('Optimization Advisory (optimize mode)', () => {
       lanes: [{ id: 'L', name: 'Rolle' }],
     };
     const r = runOpt(lc, 'optimize');
-    expect(r.advisories.some(a => /Parallelisierung/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O04')).toBe(true);
+  });
+
+  test('advisories sind Objekte mit message, transform und targets', () => {
+    const r = runOpt(knockoutExc, 'optimize');
+    expect(r.advisories.length).toBeGreaterThan(0);
+    for (const a of r.advisories) {
+      expect(typeof a).toBe('object');
+      expect(typeof a.message).toBe('string');
+      expect(a.message.length).toBeGreaterThan(0);
+      expect(typeof a.id).toBe('string');
+      expect(typeof a.transform).toBe('string');
+      expect(Array.isArray(a.targets)).toBe(true);
+      expect(typeof a.judgment).toBe('boolean');
+    }
+    const o01 = r.advisories.find(a => a.id === 'O01');
+    expect(o01.transform).toBe('isolateException');
+    expect(o01.targets.length).toBeGreaterThan(0);
   });
 
   test('optimize mode always populates Lean metrics', () => {

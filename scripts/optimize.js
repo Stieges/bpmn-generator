@@ -61,6 +61,7 @@ function isRejectBranch(targetId, outMap, nmap) {
 function checkExceptionIsolation(proc, cfg) {
   const nodes = proc.nodes || [], edges = proc.edges || [];
   const nmap = byId(nodes), incMap = inc(edges);
+  const excEndIds = [];
   let interleaved = 0;
   for (const n of nodes) {
     const isExcEnd = isEnd(n) && (EXCEPTION_MARKERS.has(n.marker) || EXCEPTION_NAME_RE.test(n.name || ''));
@@ -68,11 +69,19 @@ function checkExceptionIsolation(proc, cfg) {
     // predecessor is a splitting gateway or task that also continues the main flow
     for (const e of (incMap[n.id] || [])) {
       const pred = nmap[e.source];
-      if (pred && (isGateway(pred.type) || isTask(pred))) { interleaved++; break; }
+      if (pred && (isGateway(pred.type) || isTask(pred))) { excEndIds.push(n.id); interleaved++; break; }
     }
   }
   if (interleaved >= (cfg.minExceptionEnds ?? DEFAULTS.minExceptionEnds)) {
-    return `${interleaved} Ausnahme-Enden zweigen aus dem Hauptfluss ab — Exception-Isolation prüfen (Boundary-Event/Event-Subprocess statt inline) [Reijers 2005: exception]. Trade-off: Klarheit ↑.`;
+    return {
+      id: 'O01',
+      transform: 'isolateException',
+      targets: excEndIds,
+      message: `${interleaved} Ausnahme-Enden zweigen aus dem Hauptfluss ab — Exception-Isolation prüfen (Boundary-Event/Event-Subprocess statt inline) [Reijers 2005: exception]. Trade-off: Klarheit ↑.`,
+      tradeoff: { quality: '+' },
+      ref: { reijers: 'exception' },
+      judgment: true,
+    };
   }
   return null;
 }
@@ -81,6 +90,7 @@ function checkExceptionIsolation(proc, cfg) {
 function checkKnockoutOrdering(proc, cfg) {
   const nodes = proc.nodes || [], edges = proc.edges || [];
   const nmap = byId(nodes), outMap = out(edges);
+  const chainIds = [];
   let chain = 0;
   for (const n of nodes) {
     if (n.type !== 'exclusiveGateway') continue;
@@ -88,18 +98,34 @@ function checkKnockoutOrdering(proc, cfg) {
     if (outs.length < 2) continue;
     const hasKnockout = outs.some(e => isRejectBranch(e.target, outMap, nmap));
     const continues = outs.some(e => !isRejectBranch(e.target, outMap, nmap));
-    if (hasKnockout && continues) chain++;
+    if (hasKnockout && continues) { chainIds.push(n.id); chain++; }
   }
   if (chain >= (cfg.minKnockoutChain ?? DEFAULTS.minKnockoutChain)) {
-    return `Knock-out-Kette erkannt (${chain} Prüfungen, die den Fall je beenden können) — Reihenfolge nach steigendem Aufwand / sinkender Durchlaufwahrscheinlichkeit prüfen [Reijers 2005: knock-out]. Trade-off: Kosten ↓.`;
+    return {
+      id: 'O02',
+      transform: 'reorderKnockouts',
+      targets: chainIds,
+      message: `Knock-out-Kette erkannt (${chain} Prüfungen, die den Fall je beenden können) — Reihenfolge nach steigendem Aufwand / sinkender Durchlaufwahrscheinlichkeit prüfen [Reijers 2005: knock-out]. Trade-off: Kosten ↓.`,
+      tradeoff: { cost: '−' },
+      ref: { reijers: 'knock-out' },
+      judgment: true,
+    };
   }
   return null;
 }
 
 // O03 — Handoffs (Lean waste). Count lane-crossing sequence flows.
-function checkHandoffs(proc, cfg, handoffCount) {
+function checkHandoffs(proc, cfg, handoffCount, handoffTargetIds) {
   if (handoffCount > (cfg.maxHandoffs ?? DEFAULTS.maxHandoffs)) {
-    return `${handoffCount} Rollen-Übergaben (Lane-wechselnde Flüsse) — Übergaben reduzieren / Aufgaben je Rolle bündeln [BABOK §10.34 Lean; Reijers 2005: task composition]. Trade-off: Zeit ↓, Fehler ↓.`;
+    return {
+      id: 'O03',
+      transform: 'relane',
+      targets: handoffTargetIds,
+      message: `${handoffCount} Rollen-Übergaben (Lane-wechselnde Flüsse) — Übergaben reduzieren / Aufgaben je Rolle bündeln [BABOK §10.34 Lean; Reijers 2005: task composition]. Trade-off: Zeit ↓, Fehler ↓.`,
+      tradeoff: { time: '−' },
+      ref: { reijers: 'task-composition', babok: '§10.34' },
+      judgment: true,
+    };
   }
   return null;
 }
@@ -126,7 +152,15 @@ function checkParallelismCandidate(proc, cfg) {
   }
   if (best) {
     const names = best.map(id => `"${nmap[id].name || id}"`).join(' → ');
-    return `Sequenz gleicher Rolle ohne Verzweigung (${names}) — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.`;
+    return {
+      id: 'O04',
+      transform: 'parallelize',
+      targets: best,
+      message: `Sequenz gleicher Rolle ohne Verzweigung (${names}) — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.`,
+      tradeoff: { time: '−' },
+      ref: { reijers: 'parallelism' },
+      judgment: true,
+    };
   }
   return null;
 }
@@ -136,9 +170,10 @@ function computeMetrics(proc) {
   const nodes = proc.nodes || [], edges = proc.edges || [];
   const nmap = byId(nodes);
   let handoffCount = 0;
+  const handoffTargetIds = [];
   for (const e of edges) {
     const s = nmap[e.source], t = nmap[e.target];
-    if (s && t && s.lane && t.lane && s.lane !== t.lane) handoffCount++;
+    if (s && t && s.lane && t.lane && s.lane !== t.lane) { handoffCount++; handoffTargetIds.push(t.id); }
   }
   const waitStates = nodes.filter(n =>
     (n.type === 'intermediateCatchEvent' || n.type === 'boundaryEvent') && WAIT_MARKERS.has(n.marker)
@@ -148,7 +183,7 @@ function computeMetrics(proc) {
     const fanout = edges.filter(e => e.source === n.id).length;
     return s + Math.max(0, fanout - 1);
   }, 0);
-  return { handoffCount, waitStates, reworkLoops, gatewayComplexity };
+  return { handoffCount, handoffTargetIds, waitStates, reworkLoops, gatewayComplexity };
 }
 
 // Rework loops ≈ back edges (DFS): edges pointing to an ancestor on the current stack.
@@ -175,7 +210,7 @@ function countBackEdges(nodes, edges) {
  * Run the optimization analysis over a Logic-Core (all processes / pools).
  * @param {object} lc - Logic-Core JSON
  * @param {object} [cfg] - thresholds (from CFG.optimization); falls back to DEFAULTS
- * @returns {{ advisories: string[], metrics: object }}
+ * @returns {{ advisories: object[], metrics: object }}
  */
 export function runOptimizationAnalysis(lc, cfg = {}) {
   const processes = lc.pools ? lc.pools : [lc];
@@ -183,7 +218,6 @@ export function runOptimizationAnalysis(lc, cfg = {}) {
   const agg = { handoffCount: 0, waitStates: 0, reworkLoops: 0, gatewayComplexity: 0 };
 
   for (const proc of processes) {
-    const prefix = lc.pools ? `[${proc.name || proc.id}] ` : '';
     const m = computeMetrics(proc);
     agg.handoffCount += m.handoffCount;
     agg.waitStates += m.waitStates;
@@ -193,10 +227,10 @@ export function runOptimizationAnalysis(lc, cfg = {}) {
     const findings = [
       checkExceptionIsolation(proc, cfg),
       checkKnockoutOrdering(proc, cfg),
-      checkHandoffs(proc, cfg, m.handoffCount),
+      checkHandoffs(proc, cfg, m.handoffCount, m.handoffTargetIds),
       checkParallelismCandidate(proc, cfg),
     ].filter(Boolean);
-    for (const f of findings) advisories.push(prefix + f);
+    for (const f of findings) advisories.push(lc.pools ? { ...f, pool: proc.name || proc.id } : f);
   }
 
   return { advisories, metrics: agg };
