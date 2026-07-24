@@ -514,3 +514,141 @@ export function applyReorderKnockouts(lc, params = {}) {
     warnings: gate.warnings,
   };
 }
+
+/**
+ * Boundary-Event-Marker, die eine Unterbrechung ausdruecken (nicht: eine
+ * Geschaeftsentscheidung). Absichtlich dieselben acht OMG-Ereignistypen wie an
+ * Boundary-Events zulaessig (Timer, Error, Message, Signal, Escalation,
+ * Compensation, Cancel, Conditional).
+ */
+const BOUNDARY_MARKERS = new Set(['timer', 'error', 'message', 'signal', 'escalation',
+                                  'compensation', 'cancel', 'conditional']);
+
+/**
+ * Eingriff „Ausnahme herausnehmen" (isolateException). Der heikelste Eingriff im
+ * Werkzeugkasten: ein Inline-Zweig ("Aufgabe -> XOR 'Frist überschritten?' -> Ja ->
+ * Ende") bedeutet "wir haben geprüft und ENTSCHIEDEN" — eine fachliche
+ * Entscheidung. Ein Boundary-Event am selben Punkt bedeutet "etwas hat die
+ * Aufgabe UNTERBROCHEN, während sie lief" — eine Störung. Im Graphen sehen
+ * beide identisch aus (derselbe Name-Regex EXCEPTION_END_NAME_RE weiter oben
+ * erkennt beide gleichermaßen als "Ausnahme-Ende"), und eine Umformung vom
+ * einen ins andere würde die BEDEUTUNG des Prozesses stillschweigend
+ * verändern, ohne dass sich am Graphen etwas Sichtbares ändert. Deshalb sind
+ * `marker` UND `cancelActivity` Pflichtparameter — previewIsolateException
+ * leitet KEINEN von beiden aus dem Namen des End-Events, des Gateways oder
+ * sonst irgendeiner Graph-Heuristik ab. Fehlt einer, wird verweigert, es gibt
+ * keinen stillen Fallback.
+ */
+export function previewIsolateException(lc, { endId, attachTo, marker, cancelActivity, policy = {} } = {}) {
+  const proc = procOf(lc);
+  const end = (proc.nodes || []).find(n => n.id === endId);
+  if (!end) return refusal(`Unbekannte Kennung: ${endId}`);
+  if (end.type !== 'endEvent') return refusal('Ziel ist kein End-Ereignis.');
+  const host = (proc.nodes || []).find(n => n.id === attachTo);
+  if (!host) return refusal(`Unbekannte Aufgabe: ${attachTo}`);
+  if (!TASK_TYPES.has(host.type)) return refusal('Boundary-Ereignisse hängen nur an Aufgaben.');
+  if (isProtected(host, policy, lc) || isProtected(end, policy, lc)) {
+    return refusal('Geschütztes Element betroffen.');
+  }
+  if (!marker || !BOUNDARY_MARKERS.has(marker)) {
+    return refusal('Marker ist Pflicht (timer|error|message|…) — die Semantik ist nicht aus dem Graphen ' +
+                   'oder dem Namen ableitbar.');
+  }
+  // cancelActivity ist ebenso Pflicht wie marker (siehe Docstring oben) — KEIN
+  // Default (weder true noch false). Ob eine Störung die Aufgabe abbricht oder
+  // nur nebenläufig protokolliert, ist dieselbe Art fachlicher Entscheidung
+  // wie der Marker selbst und darf ebenso wenig erraten werden.
+  if (typeof cancelActivity !== 'boolean') {
+    return refusal('cancelActivity ist Pflicht (true|false) — ob die Störung die Aufgabe unterbricht oder ' +
+                   'nebenläufig weiterläuft, ist eine fachliche Entscheidung, die nicht erraten wird.');
+  }
+
+  // Guard 1: apply entfernt ALLE eingehenden Kanten von endId (nicht nur die
+  // vom betroffenen Gateway) — siehe dort. Fuer jede betroffene Quelle muss
+  // deshalb geprueft werden, ob ihr NACH der Entfernung noch mindestens eine
+  // ausgehende Kante bleibt. S07 ("Pfade ohne ausgehende Kante") hat
+  // defaultSeverity WARNING, nicht ERROR — das feste Rollback-Gate
+  // (checkGate().ok prueft ausschliesslich errors.length) blockt NICHT bei
+  // reinen Warnungen, eine dadurch entstehende Sackgasse wuerde also still ins
+  // Ergebnis durchsickern. Ein Gateway, dem nach dem Entfernen genau EINE
+  // Kante bleibt, ist dagegen unproblematisch und wird bewusst NICHT
+  // verweigert: das ist der Regelfall dieses Eingriffs (ein XOR mit zwei
+  // Zweigen wird zu einem trivialen Durchlauf-Gateway mit einem Zweig —
+  // strukturell gueltig, hoechstens stilistisch fragwuerdig, das bereits M02
+  // als WARNUNG abdeckt).
+  const incomingToEnd = (proc.edges || []).filter(e => e.target === endId);
+  const outgoingCount = {};
+  for (const e of (proc.edges || [])) outgoingCount[e.source] = (outgoingCount[e.source] || 0) + 1;
+  const removedCount = {};
+  for (const e of incomingToEnd) removedCount[e.source] = (removedCount[e.source] || 0) + 1;
+  const stranded = Object.keys(removedCount)
+    .filter(src => (outgoingCount[src] || 0) - removedCount[src] <= 0);
+  if (stranded.length) {
+    return refusal(`Eingriff würde "${stranded.join(', ')}" ohne jeden ausgehenden Fluss zurücklassen ` +
+                   `(Sackgasse) — S07 prüft das nur als WARNUNG, das feste Rollback-Gate greift dafür nicht.`);
+  }
+
+  // Guard 2: Assoziationen koennen laut Schema auf JEDE Kennung zeigen, auch
+  // auf eine Kante statt auf einen Knoten (dieselbe Luecke wie bei
+  // applyMergeTasks' Assoziations-Pruefung oben: kein S03/S10-Pendant fuer
+  // Assoziationen in rules.js). Zeigt eine Assoziation auf eine der gleich zu
+  // entfernenden Kanten, wuerde sie danach ins Leere zeigen — unbemerkt vom
+  // Rollback-Gate, aber sichtbar als strukturell ungueltiges BPMN beim Export.
+  const removedEdgeIds = new Set(incomingToEnd.map(e => e.id));
+  const orphanedAssocs = (lc.associations || [])
+    .filter(a => removedEdgeIds.has(a.source) || removedEdgeIds.has(a.target));
+  if (orphanedAssocs.length) {
+    return refusal(`Assoziation(en) (${orphanedAssocs.map(a => a.id).join(', ')}) verweisen auf Kanten, ` +
+                   `die entfernt würden — der Eingriff würde das Modell strukturell ungültig machen.`);
+  }
+
+  return { feasible: 'full', scope: [endId, attachTo], reason: '' };
+}
+
+export function applyIsolateException(lc, params = {}) {
+  const pv = previewIsolateException(lc, params);
+  if (pv.feasible === 'none') throw new Error(pv.reason);
+
+  const out = cloneLc(lc);
+  const proc = procOf(out);
+  const { endId, attachTo, marker, cancelActivity } = params;
+  const host = proc.nodes.find(n => n.id === attachTo);
+
+  // currentLaneOf statt host.lane: das Schema erlaubt Lane-Zuordnung auch nur
+  // ueber Lane.nodeIds (Format B) ohne node.lane — ein neues Boundary-Event
+  // braucht trotzdem eine Bahn. Wer hier raw host.lane laese, saehe in einem
+  // Format-B-only-Modell `undefined` und das neue Boundary-Event bekaeme gar
+  // keine Bahn zugewiesen.
+  const lane = currentLaneOf(proc, host);
+  const bndId = nextId(out, `bnd_${attachTo}_${marker}`);
+  proc.nodes.push({ id: bndId, type: 'boundaryEvent', name: '', lane,
+                    attachedTo: attachTo, marker, cancelActivity });
+
+  // Bisherige Zufuehrung zum Ausnahme-Ende entfernen, neu vom Boundary-Ereignis
+  // fuehren. previewIsolateException (Guard 1) hat bereits sichergestellt,
+  // dass keine betroffene Quelle dadurch ohne ausgehenden Fluss zurueckbleibt.
+  const removed = [];
+  for (let i = proc.edges.length - 1; i >= 0; i--) {
+    if (proc.edges[i].target === endId) removed.push(proc.edges.splice(i, 1)[0].id);
+  }
+  const newEdge = nextId(out, `flow_${bndId}_${endId}`);
+  proc.edges.push({ id: newEdge, source: bndId, target: endId });
+
+  const gate = checkGate(out);
+  if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
+
+  // "modified": bewusst leer. Anders als bei parallelize/mergeTasks/relane wird
+  // hier kein bestehendes Element inhaltlich veraendert — der Host (attachTo)
+  // bleibt unangetastet, und keine ueberlebende Kante wird umgehaengt (die
+  // alten Kanten zu endId werden entfernt, nicht modifiziert; die neue Kante
+  // vom Boundary-Event ist komplett neu). "added" und "removed" nennen daher
+  // bereits jeden Unterschied zwischen Quelle und Ergebnis vollstaendig.
+  return {
+    lc: out,
+    change: { transform: 'isolateException', targets: [endId, attachTo],
+              added: [bndId, newEdge], removed, modified: [],
+              note: `Ausnahme "${(proc.nodes.find(n => n.id === endId) || {}).name || endId}" ` +
+                    `an ${attachTo} gehängt (${marker})` },
+    warnings: gate.warnings,
+  };
+}

@@ -4,7 +4,8 @@ import { fileURLToPath } from 'url';
 import { cloneLc, checkGate, nextId, isProtected, refusal, collectIds } from './redesign-core.js';
 import { runRules, loadRuleProfile } from './rules.js';
 import { previewParallelize, applyParallelize, previewMergeTasks, applyMergeTasks,
-         previewRelane, applyRelane, previewReorderKnockouts, applyReorderKnockouts } from './redesign.js';
+         previewRelane, applyRelane, previewReorderKnockouts, applyReorderKnockouts,
+         previewIsolateException, applyIsolateException } from './redesign.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -974,5 +975,246 @@ describe('reorderKnockouts', () => {
     // programmatisch angefasst wird.
     expect(r.change.modified).toEqual(expect.arrayContaining(['k0', 'k4', 'k2', 'k6']));
     expect(r.change.modified.length).toBe(4);
+  });
+});
+
+// Fixture aus der Aufgabenstellung — wortgleich übernommen.
+const lcExc = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'L' },
+    { id: 'task', type: 'userTask', name: 'Antrag prüfen', lane: 'L' },
+    { id: 'gw', type: 'exclusiveGateway', name: 'Frist überschritten?', lane: 'L' },
+    { id: 'xend', type: 'endEvent', name: 'Fall eskaliert', lane: 'L' },
+    { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+  ],
+  edges: [
+    { id: 'j0', source: 's', target: 'task' },
+    { id: 'j1', source: 'task', target: 'gw' },
+    { id: 'j2', source: 'gw', target: 'xend', label: 'Ja' },
+    { id: 'j3', source: 'gw', target: 'e', label: 'Nein' },
+  ],
+  lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+};
+
+describe('isolateException', () => {
+  test('verweigert ohne ausdrueckliche Semantik-Parameter', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/marker/i);
+  });
+
+  test('leitet die Semantik nicht aus dem Namen ab', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task', marker: null });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/marker/i);
+  });
+
+  test('verweigert bei ungueltigem Marker (nicht Teil der OMG-Boundary-Event-Typen)', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                               marker: 'irgendwas', cancelActivity: true });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/marker/i);
+  });
+
+  test('verweigert ohne cancelActivity — auch das ist Pflicht, kein Default', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task', marker: 'timer' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/cancelactivity/i);
+  });
+
+  test('verweigert bei nicht-booleschem cancelActivity — kein Fallback auf truthy/falsy', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                               marker: 'timer', cancelActivity: 'ja' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/cancelactivity/i);
+  });
+
+  test('verweigert bei unbekannter End-Kennung', () => {
+    const r = previewIsolateException(lcExc, { endId: 'gibtsnicht', attachTo: 'task',
+                                               marker: 'timer', cancelActivity: true });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/unbekannt/i);
+  });
+
+  test('verweigert, wenn das Ziel kein End-Ereignis ist', () => {
+    const r = previewIsolateException(lcExc, { endId: 'gw', attachTo: 'task',
+                                               marker: 'timer', cancelActivity: true });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/end-ereignis/i);
+  });
+
+  test('verweigert bei unbekannter Aufgabe', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'gibtsnicht',
+                                               marker: 'timer', cancelActivity: true });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/unbekannt/i);
+  });
+
+  test('verweigert, wenn attachTo kein Aufgaben-Typ ist (z.B. ein Gateway)', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'gw',
+                                               marker: 'timer', cancelActivity: true });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/aufgaben/i);
+  });
+
+  test('verweigert bei geschuetztem Host', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                               marker: 'timer', cancelActivity: true,
+                                               policy: { protectNodes: ['task'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
+  });
+
+  test('verweigert bei geschuetztem Ausnahme-Ende', () => {
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                               marker: 'timer', cancelActivity: true,
+                                               policy: { protectNodes: ['xend'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
+  });
+
+  test('haengt die Ausnahme als Boundary-Event an und bleibt sound', () => {
+    const r = applyIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                             marker: 'timer', cancelActivity: true });
+    const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+    expect(bnd.attachedTo).toBe('task');
+    expect(bnd.marker).toBe('timer');
+    expect(bnd.cancelActivity).toBe(true);
+    expect(checkGate(r.lc).ok).toBe(true);
+    expect(r.change.added).toContain(bnd.id);
+
+    // Inhalte pruefen, nicht nur Laengen: genau die alte Kante zum Ausnahme-
+    // Ende (j2) verschwindet, genau eine neue Kante vom Boundary-Event zum
+    // unveraendert bestehen bleibenden Ausnahme-Ende (xend) entsteht.
+    expect(r.change.removed).toEqual(['j2']);
+    const newEdge = r.lc.edges.find(e => e.source === bnd.id);
+    expect(newEdge.target).toBe('xend');
+    expect(r.change.added).toEqual(expect.arrayContaining([bnd.id, newEdge.id]));
+    expect(r.change.added.length).toBe(2);
+
+    // "modified": nichts Bestehendes aendert seinen Inhalt — der Host bleibt
+    // unangetastet, keine ueberlebende Kante wird umgehaengt.
+    expect(r.change.modified).toEqual([]);
+
+    // gw hat noch eine Kante (die "Nein"-Kante zu 'e') — der urspruengliche
+    // Knoten selbst bleibt unveraendert.
+    const gwAfter = r.lc.nodes.find(n => n.id === 'gw');
+    const gwBefore = lcExc.nodes.find(n => n.id === 'gw');
+    expect(gwAfter).toEqual(gwBefore);
+    expect(r.lc.edges.filter(e => e.source === 'gw').length).toBe(1);
+
+    // xend selbst bleibt inhaltlich unangetastet (nur seine eingehende Kante
+    // wechselt die Quelle).
+    const xendAfter = r.lc.nodes.find(n => n.id === 'xend');
+    const xendBefore = lcExc.nodes.find(n => n.id === 'xend');
+    expect(xendAfter).toEqual(xendBefore);
+  });
+
+  test('loest die Bahn ueber currentLaneOf auf, nicht ueber rohes node.lane ' +
+       '(Format-B-only-Modell, kein node.lane am Host gesetzt)', () => {
+    const formatBOnly = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'task', type: 'userTask', name: 'Antrag prüfen' },
+        { id: 'gw', type: 'exclusiveGateway', name: 'Frist überschritten?' },
+        { id: 'xend', type: 'endEvent', name: 'Fall eskaliert' },
+        { id: 'e', type: 'endEvent', name: 'Fertig' },
+      ],
+      edges: [
+        { id: 'j0', source: 's', target: 'task' },
+        { id: 'j1', source: 'task', target: 'gw' },
+        { id: 'j2', source: 'gw', target: 'xend', label: 'Ja' },
+        { id: 'j3', source: 'gw', target: 'e', label: 'Nein' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter', nodeIds: ['s', 'task', 'gw', 'xend', 'e'] }],
+    };
+    expect(formatBOnly.nodes.find(n => n.id === 'task').lane).toBeUndefined();
+    const r = applyIsolateException(formatBOnly, { endId: 'xend', attachTo: 'task',
+                                                    marker: 'timer', cancelActivity: true });
+    const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+    // Ein reines Auslesen von host.lane haette hier `undefined` ergeben — die
+    // Bahn muss ueber Lane.nodeIds (Format B) aufgeloest werden.
+    expect(bnd.lane).toBe('L');
+    expect(checkGate(r.lc).ok).toBe(true);
+  });
+
+  test('verweigert, wenn das Herausnehmen eine Quelle ohne jeden ausgehenden Fluss zuruecklaesst ' +
+       '(Sackgasse, die S07 nur als WARNUNG erkennt und das Rollback-Gate daher nicht abfaengt)', () => {
+    // task's EINZIGE ausgehende Kante fuehrt direkt zum Ausnahme-Ende — task
+    // haette nach dem Herausnehmen ueberhaupt keinen "normalen" Fortsetzungspfad
+    // mehr. checkGate().ok wuerde das NICHT bemerken (S07 = WARNING), previewIsolateException
+    // muss das eigenstaendig verweigern.
+    const lcStranded = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 'task', type: 'userTask', name: 'Antrag prüfen', lane: 'L' },
+        { id: 'xend', type: 'endEvent', name: 'Fall eskaliert', lane: 'L' },
+      ],
+      edges: [
+        { id: 'j0', source: 's', target: 'task' },
+        { id: 'j1', source: 'task', target: 'xend' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+    };
+    const r = previewIsolateException(lcStranded, { endId: 'xend', attachTo: 'task',
+                                                     marker: 'timer', cancelActivity: true });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/sackgasse|ausgehenden fluss/i);
+    expect(r.reason).toMatch(/task/);
+
+    // apply muss ebenfalls verweigern (werfen), nicht stillschweigend ein
+    // strukturell totes Modell erzeugen.
+    expect(() => applyIsolateException(lcStranded, { endId: 'xend', attachTo: 'task',
+                                                      marker: 'timer', cancelActivity: true }))
+      .toThrow(/sackgasse|ausgehenden fluss/i);
+  });
+
+  test('verweigert NICHT, wenn dem Gateway nach dem Herausnehmen genau eine Kante bleibt ' +
+       '(Regelfall dieses Eingriffs, kein Sackgassen-Fall)', () => {
+    // Gegenprobe zum vorigen Test: gw behaelt nach dem Entfernen von j2 noch
+    // j3 (-> e) — das ist der normale, erwuenschte Fall (siehe Haupttest oben)
+    // und darf nicht faelschlich als Sackgasse verweigert werden.
+    const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                               marker: 'timer', cancelActivity: true });
+    expect(r.feasible).toBe('full');
+  });
+
+  test('verweigert, wenn eine Assoziation auf eine der zu entfernenden Kanten zeigt', () => {
+    // 'j2' (gw->xend) wuerde entfernt. Eine Assoziation, die 'j2' referenziert
+    // (statt eines Knotens — das Schema laesst das syntaktisch zu), wuerde nach
+    // dem Eingriff auf eine nicht mehr existierende ID zeigen. Kein S03/S10-
+    // Pendant fuer Assoziationen in rules.js faengt das ab, siehe applyMergeTasks'
+    // analoge Pruefung.
+    const withAssoc = { ...lcExc,
+      nodes: [...lcExc.nodes, { id: 'note1', type: 'textAnnotation', name: 'Frist siehe SLA', lane: 'L' }],
+      associations: [{ id: 'as1', source: 'j2', target: 'note1', directed: false }] };
+    const r = previewIsolateException(withAssoc, { endId: 'xend', attachTo: 'task',
+                                                   marker: 'timer', cancelActivity: true });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/assoziation/i);
+    expect(r.reason).toMatch(/as1/);
+  });
+
+  test('apply mutiert die Eingabe nicht', () => {
+    const before = JSON.stringify(lcExc);
+    applyIsolateException(lcExc, { endId: 'xend', attachTo: 'task', marker: 'timer', cancelActivity: true });
+    expect(JSON.stringify(lcExc)).toBe(before);
+  });
+
+  test('apply ist deterministisch, auch bei der neuen Boundary-Event-Kennung', () => {
+    const r1 = applyIsolateException(lcExc, { endId: 'xend', attachTo: 'task', marker: 'timer', cancelActivity: true });
+    const r2 = applyIsolateException(lcExc, { endId: 'xend', attachTo: 'task', marker: 'timer', cancelActivity: true });
+    expect(JSON.stringify(r1.lc)).toBe(JSON.stringify(r2.lc));
+  });
+
+  test('cancelActivity: false wird respektiert (kein impliziter Default auf true)', () => {
+    const r = applyIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                             marker: 'error', cancelActivity: false });
+    const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+    expect(bnd.cancelActivity).toBe(false);
+    expect(checkGate(r.lc).ok).toBe(true);
   });
 });
