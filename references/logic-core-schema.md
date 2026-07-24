@@ -84,7 +84,7 @@ The Logic-Core supports two modes:
 |-------------------|----------|----------------------------------------------------------|
 | `id`              | Yes      | Unique, snake_case, descriptive                          |
 | `type`            | Yes      | See node type table below                                |
-| `name`            | Yes      | Human label (Verb+Noun for tasks, question for XOR GWs)  |
+| `name`            | Yes      | Human label (Objekt+Verb for tasks, question for XOR GWs)|
 | `lane`            | No       | Reference to LaneObject.id                               |
 | `has_join`        | No       | `true` if gateway merges (joins) split paths             |
 | `marker`          | No       | Event marker: message, timer, error, signal, etc.        |
@@ -387,7 +387,7 @@ If `marker` is not set, the pipeline infers it from the event name (e.g. "Frist 
 |---------------------------|----------------------------------------------------|--------------------------------------------|
 | AND-Join after XOR-Split  | Deadlock: AND waits for path that won't fire       | Use XOR-Join or restructure flow           |
 | XOR Gateway without `?`   | Ambiguous decision                                | Rename to "Bedingung?" form                |
-| Task not Verb+Noun        | Unclear activity                                  | e.g. "Prüfen" → "Antrag prüfen"           |
+| Task not Objekt+Verb      | Unclear activity                                  | e.g. "Prüfung" → "Antrag prüfen"          |
 | Isolated node             | Not connected to flow                             | Add at least one in/out edge               |
 | No endEvent               | Flow never terminates                             | Add endEvent to every terminal path        |
 | >10 nodes flat            | Cognitive overload                                | Group into subProcess                      |
@@ -463,7 +463,7 @@ This generates `<documentation>` child elements in the BPMN XML.
 The following rules are enforced by the pipeline validator and reviewer:
 
 1. **One expanded pool per diagram** — your process. External participants → collapsed pools.
-2. **Task names**: Verb + Substantiv ("Antrag prüfen", nicht "Prüfung")
+2. **Task names**: Objekt + Verb, Verb im Infinitiv ("Antrag prüfen", nicht "Prüfung")
 3. **XOR Gateway names**: Question form ("Antrag gültig?")
 4. **AND/OR Gateway names**: Empty or brief label — never a question
 5. **Merge gateways**: Never labeled

@@ -128,7 +128,7 @@ Read these when needed:
 Use the **Master Extraction Prompt** template. Key rules to enforce:
 
 ### Naming Conventions (BA-Quality)
-- **Tasks**: `Verb + Substantiv` — "Antrag prüfen" ✓ / "Prüfung" ✗
+- **Tasks**: `Objekt + Verb (Infinitiv)` — "Antrag prüfen" ✓ / "Prüfung" ✗
 - **XOR Gateways**: Question form — "Antrag gültig?" ✓ / "Entscheidung" ✗
 - **AND/OR Gateways**: Empty or brief label — "" ✓ (these are sync points)
 - **Gateway edges**: Always labeled — "Ja"/"Nein", "genehmigt"/"abgelehnt"
@@ -169,12 +169,32 @@ The pipeline validates automatically. These checks run:
 
 **Warnings (report but continue):**
 - [ ] XOR gateways not named as questions
-- [ ] Tasks not following Verb+Noun pattern
+- [ ] Tasks not following **Objekt + Verb (Infinitiv)** pattern (M01)
 - [ ] Nodes with no edges (isolated)
 - [ ] XOR gateway outgoing edges without labels
 - [ ] Nodes with no outgoing flow (may not terminate)
 
 Use the **Reviewer Agent Prompt** from `references/prompt-template.md` for additional automated review.
+
+### Pre-Delivery Gate (MANDATORY — do not skip)
+
+A first draft is expected to be wrong. **Never present a diagram as finished until it
+passes this gate.** Warnings are not noise — they are the alarm.
+
+1. **Read `references/logic-core-schema.md` first.** It is the field-by-field contract
+   (every node type, marker, edge, message flow, black-box pool). Fill the input file
+   against it — do not guess field names or values.
+2. **Validate the draft against the schema and run it strictly:**
+   ```bash
+   node pipeline.js <input>.json <output> --strict
+   ```
+   - The schema-gate (`references/input-schema.json`) rejects malformed structure with a
+     precise field path and exits non-zero — fix every reported field.
+   - `--strict` also makes **every warning fatal** (exit non-zero, no files written).
+3. **Resolve every warning** and re-run until `--strict` exits `0`. Delivering a diagram
+   with unresolved warnings is not allowed.
+4. Only then present the output. If a warning is a deliberate, justified exception, say so
+   explicitly to the user — do not silently ship past it.
 
 ---
 

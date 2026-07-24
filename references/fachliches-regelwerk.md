@@ -50,7 +50,7 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 
 | ID | Regel | Referenz | Status |
 |----|-------|----------|--------|
-| M01 | Tasks benennen mit Verb+Substantiv-Pattern | 7PMG G7, Silver Ch.3 | implementiert |
+| M01 | Tasks benennen mit Objekt+Verb-Pattern (Verb im Infinitiv) | 7PMG G7, Silver Ch.3 | implementiert (Heuristik) |
 | M02 | Divergierende XOR-Gateways: Label als Frage formulieren | Silver Ch.5, MG.org | implementiert |
 | M03 | Convergierende Gateways: kein Label an ausgehenden Kanten | Silver Ch.5 | implementiert |
 | M04 | Divergierende XOR-Gateways: Kanten muessen Labels haben | Silver Ch.5, OMG §10.5.1 | implementiert |
@@ -118,6 +118,34 @@ Fuer regulierte Branchen: Style-Warnungen werden zu Errors.
   }
 }
 ```
+
+---
+
+## Regel M01: Objekt+Verb-Heuristik
+
+**Layer:** Style | **Default Severity:** WARNING | **Scope:** process
+
+Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvention: Verb am Ende im Infinitiv, z.B. "Antrag pruefen", "Zahlung anweisen"). Reine Substantive oder Substantivketten ohne Verb ("Pruefung", "Vorgang zur Klaerung") sind unklar und werden gewarnt.
+
+**Heuristik (bewusst konservativ):** M01 ist **kein** POS-Tagger. Die Pruefung nutzt:
+1. **< 2 Tokens** → Verstoss (Einzelwort wie "Pruefung").
+2. **Deutsch (primaer):** valide, wenn das letzte Token wie ein Infinitiv aussieht (Endung `-en`/`-eln`/`-ern`/`-ieren`, Laenge ≥ 4). Klammer-/Bracket-Meta `(…)`/`[…]` und Slashes werden vorher normalisiert ("erfassen/aendern" → beide Verben).
+3. **Englischer Escape-Hatch:** valide, wenn das erste Token in einer kleinen kuratierten Verbliste steht ("Review Application"), um False-Positives zu vermeiden.
+
+**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Die exakte Wortartanalyse ist als **M05/M06** vorgesehen (Status: Platzhalter/OFF — POS-Tagger-Problem, siehe ROADMAP). M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
+
+**Beispiele:**
+
+| Bewertung | Name |
+|-----------|------|
+| gut | `Antrag pruefen` |
+| gut | `Zahlung anweisen` |
+| gut | `Partnerdaten erfassen/aendern (KVNeo)` |
+| gut | `Review Application` (englischer Escape-Hatch) |
+| schlecht | `Pruefung` (Einzelwort) |
+| schlecht | `Vorgang zur Klaerung` (kein Verb) |
+
+**Referenz:** 7PMG G7 (Mendling et al., 2010), Bruce Silver: BPMN Method & Style, Ch.3
 
 ---
 

@@ -1477,6 +1477,50 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.some(w => w.includes('Submit'))).toBe(true);
   });
 
+  test('M01: German Objekt+Verb (Infinitiv) names → no WARNING', () => {
+    for (const name of ['Antrag prüfen', 'Zahlung anweisen', 'Schwebesatz freigeben',
+                        'Partnerdaten erfassen/ändern (KVNeo)']) {
+      const lc = proc([
+        { id: 's', type: 'startEvent' },
+        { id: 't1', type: 'userTask', name },
+        { id: 'e', type: 'endEvent' },
+      ], [
+        { id: 'f1', source: 's', target: 't1' },
+        { id: 'f2', source: 't1', target: 'e' },
+      ]);
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes(name) && w.includes('Objekt+Verb'))).toBe(false);
+    }
+  });
+
+  test('M01: noun-only / no-verb task name → WARNING', () => {
+    for (const name of ['Vorgang zur Klärung', 'Rechnung Kunde']) {
+      const lc = proc([
+        { id: 's', type: 'startEvent' },
+        { id: 't1', type: 'userTask', name },
+        { id: 'e', type: 'endEvent' },
+      ], [
+        { id: 'f1', source: 's', target: 't1' },
+        { id: 'f2', source: 't1', target: 'e' },
+      ]);
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes(name) && w.includes('Objekt+Verb'))).toBe(true);
+    }
+  });
+
+  test('M01: English verb-first names → no WARNING', () => {
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 't1', type: 'serviceTask', name: 'Review Application' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 't1' },
+      { id: 'f2', source: 't1', target: 'e' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('Review Application') && w.includes('Objekt+Verb'))).toBe(false);
+  });
+
   test('M02: XOR gateway without question mark → WARNING', () => {
     const lc = proc([
       { id: 's', type: 'startEvent' },
@@ -2510,5 +2554,73 @@ describe('$schemaVersion field', () => {
     };
     const r = validateLogicCoreSchema(lc);
     expect(r.valid).toBe(false);
+  });
+});
+
+describe('CLI enforcement (schema-gate + --strict)', () => {
+  // Spawns the real CLI to verify main() wiring: the schema-gate blocks malformed
+  // input, and --strict turns warnings into a fatal, no-files-written exit.
+  const runCli = async (lc, { strict = false } = {}) => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bpmn-cli-'));
+    const inPath = path.join(dir, 'in.json');
+    const outBase = path.join(dir, 'out');
+    fs.writeFileSync(inPath, JSON.stringify(lc), 'utf8');
+    const args = ['pipeline.js', inPath, outBase];
+    if (strict) args.push('--strict');
+    const res = spawnSync('node', args, { cwd: __dirname, encoding: 'utf8' });
+    return {
+      status: res.status,
+      stderr: res.stderr || '',
+      bpmnExists: fs.existsSync(`${outBase}.bpmn`),
+    };
+  };
+
+  const goodProcess = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Start' },
+      { id: 't1', type: 'userTask', name: 'Antrag prüfen' },
+      { id: 'e', type: 'endEvent', name: 'Ende' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 't1' },
+      { id: 'f2', source: 't1', target: 'e' },
+    ],
+  };
+
+  test('malformed input (unknown node type) → schema-gate error, exit ≠ 0, no files', async () => {
+    const bad = JSON.parse(JSON.stringify(goodProcess));
+    bad.nodes[1].type = 'bogusType';
+    const r = await runCli(bad);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/Schema-Gate/);
+    expect(r.bpmnExists).toBe(false);
+  });
+
+  test('valid input with a style warning → exit 0 and files written (no --strict)', async () => {
+    const warn = JSON.parse(JSON.stringify(goodProcess));
+    warn.nodes[1].name = 'Prüfung'; // single word → M01 warning, but schema-valid
+    const r = await runCli(warn, { strict: false });
+    expect(r.status).toBe(0);
+    expect(r.bpmnExists).toBe(true);
+  });
+
+  test('--strict turns a style warning into a fatal exit with no files written', async () => {
+    const warn = JSON.parse(JSON.stringify(goodProcess));
+    warn.nodes[1].name = 'Prüfung';
+    const r = await runCli(warn, { strict: true });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/--strict/);
+    expect(r.bpmnExists).toBe(false);
+  });
+
+  test('clean input passes --strict with exit 0', async () => {
+    const r = await runCli(goodProcess, { strict: true });
+    expect(r.status).toBe(0);
+    expect(r.bpmnExists).toBe(true);
   });
 });
