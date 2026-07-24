@@ -3,6 +3,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { cloneLc, checkGate, nextId, isProtected, refusal, collectIds } from './redesign-core.js';
 import { runRules, loadRuleProfile } from './rules.js';
+import { previewParallelize, applyParallelize } from './redesign.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -131,5 +132,106 @@ describe('redesign-core', () => {
   test('refusal liefert die vereinbarte Form', () => {
     const r = refusal('kein Grund');
     expect(r).toEqual({ feasible: 'none', scope: [], reason: 'kein Grund' });
+  });
+});
+
+const lcChain = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'L' },
+    { id: 'a', type: 'userTask', name: 'Adresse prüfen', lane: 'L' },
+    { id: 'b', type: 'userTask', name: 'Telefon prüfen', lane: 'L' },
+    { id: 'c', type: 'userTask', name: 'E-Mail prüfen', lane: 'L' },
+    { id: 'e', type: 'endEvent', lane: 'L' },
+  ],
+  edges: [
+    { id: 'f0', source: 's', target: 'a' },
+    { id: 'f1', source: 'a', target: 'b' },
+    { id: 'f2', source: 'b', target: 'c' },
+    { id: 'f3', source: 'c', target: 'e' },
+  ],
+  lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+};
+
+describe('parallelize', () => {
+  test('preview meldet Machbarkeit fuer eine lineare Kette', () => {
+    const r = previewParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('full');
+    expect(r.scope).toEqual(['a', 'b', 'c']);
+  });
+
+  test('preview verweigert bei unbekannter Kennung', () => {
+    const r = previewParallelize(lcChain, { nodeIds: ['a', 'gibtsnicht'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/unbekannt/i);
+  });
+
+  test('preview verweigert bei geschuetztem Element ueber den Anzeigenamen', () => {
+    const r = previewParallelize(lcChain, { nodeIds: ['a', 'b', 'c'],
+                                            policy: { protectLanes: ['Sachbearbeiter'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
+  });
+
+  test('preview verweigert bei nicht zusammenhaengender Kette', () => {
+    const r = previewParallelize(lcChain, { nodeIds: ['a', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/zusammenhäng/i);
+  });
+
+  test('apply erzeugt AND-Split und AND-Join und bleibt sound', () => {
+    const r = applyParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
+    const types = r.lc.nodes.filter(n => n.type === 'parallelGateway');
+    expect(types.length).toBe(2);
+    expect(checkGate(r.lc).ok).toBe(true);
+    expect(r.change.transform).toBe('parallelize');
+    expect(r.change.added.length).toBe(2);
+  });
+
+  test('apply mutiert die Eingabe nicht', () => {
+    const before = JSON.stringify(lcChain);
+    applyParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
+    expect(JSON.stringify(lcChain)).toBe(before);
+  });
+
+  test('apply ist deterministisch, auch bei den neuen Kennungen', () => {
+    const r1 = applyParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
+    const r2 = applyParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
+    expect(JSON.stringify(r1.lc)).toBe(JSON.stringify(r2.lc));
+  });
+
+  test('apply veraendert nur das Beabsichtigte', () => {
+    const r = applyParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
+    const startBefore = lcChain.nodes.find(n => n.id === 's');
+    const startAfter = r.lc.nodes.find(n => n.id === 's');
+    expect(startAfter).toEqual(startBefore);
+    expect(r.lc.lanes).toEqual(lcChain.lanes);
+  });
+
+  test('apply verweigert, wenn preview nicht machbar meldet', () => {
+    expect(() => applyParallelize(lcChain, { nodeIds: ['a', 'c'] })).toThrow(/zusammenhäng/i);
+  });
+
+  test('verweigert bei ungerichteter Assoziation zwischen den Schritten', () => {
+    const undirected = { ...lcChain, associations: [{ id: 'as1', source: 'a', target: 'b' }] };
+    const r = previewParallelize(undirected, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/ungerichtet/i);
+  });
+
+  test('verweigert bei nachgewiesener Datenabhaengigkeit', () => {
+    const dependent = { ...lcChain,
+      nodes: [...lcChain.nodes, { id: 'do1', type: 'dataObjectReference', name: 'Ergebnis', lane: 'L' }],
+      associations: [{ id: 'as1', source: 'a', target: 'do1', directed: true },
+                     { id: 'as2', source: 'do1', target: 'b', directed: true }] };
+    const r = previewParallelize(dependent, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/abhängig/i);
+  });
+
+  test('ohne Assoziationen laeuft der Eingriff, meldet aber ungeprueft', () => {
+    const r = previewParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('full');
+    expect(r.provenIndependent).toBe(false);
   });
 });
