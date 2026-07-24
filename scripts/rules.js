@@ -367,10 +367,41 @@ const SOUNDNESS_RULES = [
 // Schicht 2 — Method & Style (WARNING)
 // ═══════════════════════════════════════════════════════════════════════
 
+// M01 Objekt+Verb-Heuristik. Bewusst konservativ und nur WARNING — das ist KEIN
+// echter POS-Tagger (exakte Wortartanalyse bleibt M05/M06, aktuell OFF). Die
+// deutsche BA-Konvention setzt das Verb ans Ende im Infinitiv ("Antrag prüfen");
+// zusätzlich akzeptieren wir das englische Verb-first-Muster ("Review application")
+// über eine kleine kuratierte Liste, um False-Positives zu vermeiden.
+const M01_GERMAN_VERB_SUFFIX = /(en|eln|ern|ieren)$/i;
+const M01_ENGLISH_VERBS = new Set([
+  'review', 'approve', 'send', 'receive', 'check', 'create', 'update', 'delete',
+  'reject', 'submit', 'notify', 'validate', 'process', 'archive', 'assign', 'verify',
+  'confirm', 'record', 'issue', 'close', 'open', 'prepare', 'request', 'forward',
+  'escalate', 'sign', 'evaluate', 'calculate', 'generate', 'publish', 'cancel',
+  'release', 'collect', 'enter', 'add', 'remove', 'store', 'fetch', 'handle',
+]);
+
+// Returns true when a task label does NOT look like Objekt+Verb / Verb+Object.
+function violatesVerbObject(name) {
+  const cleaned = String(name)
+    .replace(/\([^)]*\)/g, ' ')   // (meta) entfernen, z.B. "(KVNeo)"
+    .replace(/\[[^\]]*\]/g, ' ')  // [meta] entfernen
+    .replace(/[/\n]+/g, ' ')      // Slash/Newline → Leerzeichen ("erfassen/ändern")
+    .replace(/\s+/g, ' ')
+    .trim();
+  const tokens = cleaned ? cleaned.split(' ') : [];
+  if (tokens.length < 2) return true;                       // Einzelwort → Verstoß
+  const first = tokens[0].toLowerCase().replace(/[^a-zäöüß]/gi, '');
+  if (M01_ENGLISH_VERBS.has(first)) return false;           // englisch: Verb zuerst
+  const last = tokens[tokens.length - 1];
+  if (last.length >= 4 && M01_GERMAN_VERB_SUFFIX.test(last)) return false; // deutsch: Infinitiv am Ende
+  return true;
+}
+
 const STYLE_RULES = [
   {
     id: 'M01', layer: 'style', defaultSeverity: 'WARNING',
-    description: 'Activity-Labels: Verb + Substantiv',
+    description: 'Activity-Labels: Objekt + Verb (Verb im Infinitiv)',
     ref: { silver: 'Ch.3', pmg: 'G5' },
     scope: 'process',
     check: (proc) => {
@@ -378,8 +409,8 @@ const STYLE_RULES = [
                          'businessRuleTask', 'sendTask', 'receiveTask'];
       const msgs = [];
       for (const n of (proc.nodes || [])) {
-        if (taskTypes.includes(n.type) && n.name && !n.name.trim().replace(/\n/g, ' ').includes(' '))
-          msgs.push(`Task "${n.name}" should follow "Verb + Substantiv" convention.`);
+        if (taskTypes.includes(n.type) && n.name && violatesVerbObject(n.name))
+          msgs.push(`Task "${n.name}" folgt nicht der Objekt+Verb-Konvention (z.B. "Antrag prüfen"). Heuristik — exakte Wortartprüfung: M05/M06.`);
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }

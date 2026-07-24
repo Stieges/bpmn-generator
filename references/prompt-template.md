@@ -21,7 +21,7 @@ Extract a structured Logic-Core JSON from the process description below.
 - Prefixes: task_, gw_ (gateway), start, end_, evt_ (intermediate event), lane_, do_ (data object)
 
 ### Node Naming (BA-Quality Standard)
-- Tasks: MUST follow "Verb + Substantiv" pattern (e.g. "Antrag prüfen", "Zahlung anweisen")
+- Tasks: MUST follow "Objekt + Verb (Verb im Infinitiv)" pattern (e.g. "Antrag prüfen", "Zahlung anweisen")
 - XOR Gateways (exclusiveGateway): MUST be a question (e.g. "Antrag gültig?", "Betrag > 1000 EUR?")
 - AND/OR Gateways: Empty name ("") or brief label — these are synchronization points, not decisions
 - Events: Descriptive noun phrase (e.g. "Antrag eingegangen", "Frist abgelaufen")
@@ -260,7 +260,7 @@ Analyze this Logic-Core JSON and check for:
 2. **Missing end events**: Any path that doesn't reach an endEvent
 3. **Isolated nodes**: Nodes with no edges
 4. **XOR Gateway naming**: All exclusiveGateway nodes must be questions (with "?")
-5. **Task naming**: All tasks must follow Verb+Noun convention
+5. **Task naming**: All tasks must follow Objekt+Verb convention (Verb im Infinitiv, e.g. "Antrag prüfen")
 6. **Path labels**: All XOR gateway outgoing edges must be labeled
 7. **Join-split mismatch**: Every split gateway must have a matching join of same type
 8. **Boundary events**: Must have attachedTo referencing an existing task

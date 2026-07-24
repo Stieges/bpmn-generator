@@ -28,6 +28,7 @@ import { fileURLToPath } from 'url';
 // Module imports
 import { loadConfig, CFG } from './utils.js';
 import { validateLogicCore } from './validate.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordinates.js';
@@ -293,8 +294,9 @@ async function main() {
   const importDot  = flags.includes('--import-dot');
   const generateDoc = flags.includes('--doc');
   const drillDown  = flags.includes('--drill-down');
+  const strict     = flags.includes('--strict');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict]');
     process.exit(1);
   }
 
@@ -318,6 +320,16 @@ async function main() {
   }
 
   const parsedInput = JSON.parse(rawInput);
+
+  // Schema-Gate (ajv, draft-2020-12): LLM/handwritten Logic-Core is never trusted
+  // raw — enforce the formal input-schema before the pipeline, same guarantee the
+  // HTTP entry already has. See references/input-schema.json + scripts/schema-gate.js.
+  const schemaCheck = validateLogicCoreSchema(parsedInput);
+  if (!schemaCheck.valid) {
+    console.error('\n✗ Schema-Gate: Logic-Core input violates references/input-schema.json:');
+    schemaCheck.errors.forEach(e => console.error(`  · ${e.path} ${e.message}`));
+    process.exit(1);
+  }
 
   // Drill-down mode: generate parent + per-subprocess diagrams
   if (drillDown) {
@@ -367,6 +379,13 @@ async function main() {
   if (!result.bpmnXml) {
     console.error('\n✗ Errors (pipeline blocked):');
     result.validation.errors.forEach(e => console.error('  · ' + e));
+    process.exit(1);
+  }
+  // --strict: treat warnings as fatal and abort BEFORE writing files, so a run
+  // with unresolved warnings never produces a "green" artifact. Without the flag
+  // the historical behaviour (warn + exit 0) is preserved.
+  if (strict && result.validation.warnings.length) {
+    console.error(`\n✗ --strict: ${result.validation.warnings.length} warning(s) — resolve them before delivery. No files written.`);
     process.exit(1);
   }
   console.log(`✓ Logic-Core validated (structural soundness OK)`);
