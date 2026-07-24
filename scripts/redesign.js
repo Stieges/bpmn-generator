@@ -247,3 +247,108 @@ export function applyMergeTasks(lc, params = {}) {
     warnings: gate.warnings,
   };
 }
+
+/**
+ * Effektive aktuelle Bahn eines Knotens, formatuebergreifend: das Schema erlaubt
+ * die Zuordnung entweder über node.lane (Format A) ODER über Lane.nodeIds
+ * (Format B) — ein Modell kann eines von beiden nutzen (oder, inkonsistent,
+ * gar keines). Wer hier nur node.lane liest, uebersieht Format-B-only-Modelle:
+ * die "liegt bereits in dieser Bahn"-Pruefung in previewRelane wuerde dann
+ * einen No-Op faelschlich als Verschiebung akzeptieren.
+ */
+function currentLaneOf(proc, node) {
+  if (node.lane) return node.lane;
+  const lane = (proc.lanes || []).find(l => Array.isArray(l.nodeIds) && l.nodeIds.includes(node.id));
+  return lane ? lane.id : undefined;
+}
+
+/**
+ * Zaehlt Rollenwechsel: eine Kante gilt als Uebergabe, wenn Quelle und Ziel
+ * unterschiedlichen Bahnen zugeordnet sind. Nutzt currentLaneOf (nicht nur
+ * node.lane), sonst waeren Uebergaben in einem Format-B-only-Modell unsichtbar
+ * und handoffsBefore/handoffsAfter würden faelschlich immer 0 melden.
+ */
+function countHandoffs(proc) {
+  const map = {};
+  for (const n of (proc.nodes || [])) map[n.id] = n;
+  let c = 0;
+  for (const e of (proc.edges || [])) {
+    const s = map[e.source], t = map[e.target];
+    if (!s || !t) continue;
+    const sLane = currentLaneOf(proc, s), tLane = currentLaneOf(proc, t);
+    if (sLane && tLane && sLane !== tLane) c++;
+  }
+  return c;
+}
+
+export function previewRelane(lc, { nodeId, lane, policy = {} } = {}) {
+  const proc = procOf(lc);
+  const node = (proc.nodes || []).find(n => n.id === nodeId);
+  if (!node) return refusal(`Unbekannte Kennung: ${nodeId}`);
+  if (isProtected(node, policy, lc)) return refusal(`Geschütztes Element betroffen: ${nodeId}`);
+  const target = (proc.lanes || []).find(l => l.id === lane || l.name === lane);
+  if (!target) return refusal(`Unbekannte Zielbahn: ${lane}`);
+  // isProtected deckt nur die AKTUELLE Bahn des Knotens ab (schuetzt, was schon
+  // dort liegt). Eine geschuetzte ZIELbahn braucht eine eigene Pruefung, sonst
+  // liesse sich ein Schritt anstandslos IN eine geschuetzte Bahn hineinschieben
+  // — die Bahn waere danach nicht mehr das, was policy.protectLanes zusicherte.
+  const protectLanes = policy.protectLanes || [];
+  if (protectLanes.includes(target.id) || (target.name && protectLanes.includes(target.name))) {
+    return refusal(`Geschütztes Element betroffen: Zielbahn ${lane}`);
+  }
+  if (currentLaneOf(proc, node) === target.id) return refusal('Der Schritt liegt bereits in dieser Bahn.');
+  return { feasible: 'full', scope: [nodeId], reason: '' };
+}
+
+export function applyRelane(lc, params = {}) {
+  const pv = previewRelane(lc, params);
+  if (pv.feasible === 'none') throw new Error(pv.reason);
+
+  const out = cloneLc(lc);
+  const proc = procOf(out);
+  const before = countHandoffs(proc);
+  const node = proc.nodes.find(n => n.id === params.nodeId);
+  const target = proc.lanes.find(l => l.id === params.lane || l.name === params.lane);
+
+  node.lane = target.id;
+
+  // Zweites Zuordnungsformat mitpflegen (Lane.nodeIds), sonst entsteht ein
+  // widerspruechliches Modell: M09 prueft genau diese Konsistenz, ist aber eine
+  // Stil-Regel (Layer "style") und liegt damit in der Schicht, die das feste
+  // Rollback-Gate (SOUNDNESS_GATE) bewusst abschaltet — eine Inkonsistenz
+  // zwischen node.lane und Lane.nodeIds wuerde also NICHT durch checkGate
+  // abgefangen, sondern still ins Ergebnis durchsickern und dort z. B. bei
+  // einem nachgelagerten Re-Import (import.js) zu widerspruechlichen
+  // Lane-Zuordnungen fuehren. Aus JEDER Bahn entfernen (nicht nur der bisher
+  // via node.lane bekannten), damit auch ein bereits inkonsistentes
+  // Ausgangsmodell (Knoten in mehreren Lane.nodeIds gleichzeitig) geheilt statt
+  // fortgeschrieben wird.
+  const modifiedLaneIds = [];
+  for (const l of proc.lanes) {
+    if (!Array.isArray(l.nodeIds)) continue;
+    const hadBefore = l.nodeIds.includes(node.id);
+    l.nodeIds = l.nodeIds.filter(id => id !== node.id);
+    if (l.id === target.id) l.nodeIds.push(node.id);
+    const hasAfter = l.nodeIds.includes(node.id);
+    if (hadBefore !== hasAfter) modifiedLaneIds.push(l.id);
+  }
+
+  const gate = checkGate(out);
+  if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
+  const after = countHandoffs(proc);
+
+  // "modified": der Knoten behaelt seine ID, aber sein Inhalt (lane) hat sich
+  // geaendert — er taucht in keinem der beiden anderen Arrays auf. Dieselbe
+  // Lücke gilt fuer jede Lane, deren nodeIds-Array sich tatsaechlich veraendert
+  // hat (modifiedLaneIds): auch diese Lane-Objekte behalten ihre ID, aber ihr
+  // Inhalt unterscheidet sich zwischen Quelle und Ergebnis.
+  const modified = [node.id, ...modifiedLaneIds];
+
+  return {
+    lc: out,
+    change: { transform: 'relane', targets: [params.nodeId], added: [], removed: [], modified,
+              handoffsBefore: before, handoffsAfter: after,
+              note: `Übergaben ${before} → ${after}` },
+    warnings: gate.warnings,
+  };
+}

@@ -3,7 +3,8 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { cloneLc, checkGate, nextId, isProtected, refusal, collectIds } from './redesign-core.js';
 import { runRules, loadRuleProfile } from './rules.js';
-import { previewParallelize, applyParallelize, previewMergeTasks, applyMergeTasks } from './redesign.js';
+import { previewParallelize, applyParallelize, previewMergeTasks, applyMergeTasks,
+         previewRelane, applyRelane } from './redesign.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -431,5 +432,160 @@ describe('mergeTasks', () => {
       associations: [{ id: 'as1', source: 'm1', target: 'do1', directed: true }] };
     const r = previewMergeTasks(withAssoc, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
     expect(r.feasible).toBe('full');
+  });
+});
+
+const lcTwoLanes = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'A' },
+    { id: 'x', type: 'userTask', name: 'Fall prüfen', lane: 'A' },
+    { id: 'e', type: 'endEvent', lane: 'B' },
+  ],
+  edges: [
+    { id: 'h0', source: 's', target: 'x' },
+    { id: 'h1', source: 'x', target: 'e' },
+  ],
+  lanes: [{ id: 'A', name: 'Vorpruefung' }, { id: 'B', name: 'Entscheidung' }],
+};
+
+describe('relane', () => {
+  test('verweigert bei unbekannter Zielbahn', () => {
+    const r = previewRelane(lcTwoLanes, { nodeId: 'x', lane: 'gibtsnicht' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/bahn/i);
+  });
+
+  test('verweigert bei unbekannter Kennung', () => {
+    const r = previewRelane(lcTwoLanes, { nodeId: 'gibtsnicht', lane: 'B' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/unbekannt/i);
+  });
+
+  test('verweigert bei geschuetztem Knoten (aktuelle Bahn betroffen)', () => {
+    const r = previewRelane(lcTwoLanes, { nodeId: 'x', lane: 'B', policy: { protectNodes: ['x'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
+    expect(r.reason).toMatch(/x/);
+  });
+
+  test('verweigert bei geschuetzter Zielbahn', () => {
+    // Anders als bei den geschuetzten Knoten oben: hier ist nicht die AKTUELLE
+    // Bahn des Knotens geschuetzt, sondern die ZIELbahn. isProtected() allein
+    // prueft nur node.lane (die Herkunft) — ohne die eigene Zielbahn-Pruefung
+    // in previewRelane liesse sich ein Schritt anstandslos in eine per Policy
+    // geschuetzte Bahn hineinschieben.
+    const r = previewRelane(lcTwoLanes, { nodeId: 'x', lane: 'B', policy: { protectLanes: ['Entscheidung'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
+    expect(r.reason).toMatch(/zielbahn/i);
+  });
+
+  test('verweigert, wenn der Schritt schon in der Zielbahn liegt', () => {
+    const r = previewRelane(lcTwoLanes, { nodeId: 'x', lane: 'A' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/bereits/i);
+  });
+
+  test('verschiebt den Schritt und bleibt sound', () => {
+    const r = applyRelane(lcTwoLanes, { nodeId: 'x', lane: 'B' });
+    expect(r.lc.nodes.find(n => n.id === 'x').lane).toBe('B');
+    expect(checkGate(r.lc).ok).toBe(true);
+    expect(r.change.transform).toBe('relane');
+    expect(r.change.targets).toEqual(['x']);
+    expect(r.change.added).toEqual([]);
+    expect(r.change.removed).toEqual([]);
+    // "modified": 'x' behaelt seine ID, aber sein Inhalt (lane) hat sich
+    // geaendert — er taucht in added/removed nicht auf, muss aber trotzdem
+    // aus den drei Arrays rekonstruierbar sein.
+    expect(r.change.modified).toEqual(['x']);
+  });
+
+  test('apply mutiert die Eingabe nicht', () => {
+    const before = JSON.stringify(lcTwoLanes);
+    applyRelane(lcTwoLanes, { nodeId: 'x', lane: 'B' });
+    expect(JSON.stringify(lcTwoLanes)).toBe(before);
+  });
+
+  test('pflegt auch das zweite Zuordnungsformat (Lane.nodeIds), wenn beide Formate vorliegen', () => {
+    const formatB = {
+      ...lcTwoLanes,
+      lanes: [{ id: 'A', name: 'Vorpruefung', nodeIds: ['s', 'x'] },
+              { id: 'B', name: 'Entscheidung', nodeIds: ['e'] }],
+    };
+    const r = applyRelane(formatB, { nodeId: 'x', lane: 'B' });
+    const a = r.lc.lanes.find(l => l.id === 'A');
+    const b = r.lc.lanes.find(l => l.id === 'B');
+    expect(a.nodeIds).not.toContain('x');
+    expect(a.nodeIds).toEqual(['s']);
+    expect(b.nodeIds).toContain('x');
+    expect(b.nodeIds).toEqual(['e', 'x']);
+    // Format A bleibt ebenfalls gepflegt — beide Formate muessen nach dem
+    // Eingriff konsistent sein, nicht nur eines von beiden.
+    expect(r.lc.nodes.find(n => n.id === 'x').lane).toBe('B');
+    // Beide Lane-Objekte haben ihren Inhalt (nodeIds) geaendert und muessen
+    // daher in "modified" auftauchen, zusaetzlich zum verschobenen Knoten.
+    expect(r.change.modified).toEqual(expect.arrayContaining(['x', 'A', 'B']));
+    expect(r.change.modified.length).toBe(3);
+    expect(checkGate(r.lc).ok).toBe(true);
+  });
+
+  test('funktioniert auch, wenn NUR Format B (Lane.nodeIds) genutzt wird — kein node.lane gesetzt', () => {
+    // Kritischer Fall laut Vorgabe: das Schema erlaubt die Zuordnung ueber
+    // Lane.nodeIds OHNE node.lane. Wer die aktuelle Bahn nur ueber node.lane
+    // bestimmt, wuerde hier "keine Bahn" sehen und die "liegt bereits dort"-
+    // Pruefung sowie die Uebergabe-Zaehlung falsch auswerten.
+    const formatBOnly = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'x', type: 'userTask', name: 'Fall prüfen' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'h0', source: 's', target: 'x' },
+        { id: 'h1', source: 'x', target: 'e' },
+      ],
+      lanes: [{ id: 'A', name: 'Vorpruefung', nodeIds: ['s', 'x'] },
+              { id: 'B', name: 'Entscheidung', nodeIds: ['e'] }],
+    };
+
+    // "bereits in dieser Bahn" muss auch ueber Format B erkannt werden.
+    const already = previewRelane(formatBOnly, { nodeId: 'x', lane: 'A' });
+    expect(already.feasible).toBe('none');
+    expect(already.reason).toMatch(/bereits/i);
+
+    const r = applyRelane(formatBOnly, { nodeId: 'x', lane: 'B' });
+    expect(r.lc.lanes.find(l => l.id === 'A').nodeIds).toEqual(['s']);
+    expect(r.lc.lanes.find(l => l.id === 'B').nodeIds).toEqual(['e', 'x']);
+    // apply schreibt zusaetzlich Format A fort, auch wenn das Ausgangsmodell
+    // es nie genutzt hat — nach dem Eingriff sind beide Formate konsistent.
+    expect(r.lc.nodes.find(n => n.id === 'x').lane).toBe('B');
+    expect(checkGate(r.lc).ok).toBe(true);
+  });
+
+  test('weist die Veraenderung der Uebergaben aus, auch wenn sie steigt', () => {
+    // s, x, e liegen alle in Bahn A; Bahn B ist (noch) leer. Vorher also 0
+    // Uebergaben. Wird 'x' allein nach B verschoben, werden BEIDE angrenzenden
+    // Kanten (s->x und x->e) zu Bahnwechseln: die Uebergaben steigen von 0 auf 2.
+    const lcAllOneLane = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'A' },
+        { id: 'x', type: 'userTask', name: 'Fall prüfen', lane: 'A' },
+        { id: 'e', type: 'endEvent', lane: 'A' },
+      ],
+      edges: [
+        { id: 'h0', source: 's', target: 'x' },
+        { id: 'h1', source: 'x', target: 'e' },
+      ],
+      lanes: [{ id: 'A', name: 'Vorpruefung' }, { id: 'B', name: 'Entscheidung' }],
+    };
+    const r = applyRelane(lcAllOneLane, { nodeId: 'x', lane: 'B' });
+    expect(typeof r.change.handoffsBefore).toBe('number');
+    expect(typeof r.change.handoffsAfter).toBe('number');
+    expect(r.change.handoffsBefore).toBe(0);
+    expect(r.change.handoffsAfter).toBe(2);
+    expect(r.change.handoffsAfter).toBeGreaterThan(r.change.handoffsBefore);
   });
 });
