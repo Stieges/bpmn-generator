@@ -525,6 +525,49 @@ const BOUNDARY_MARKERS = new Set(['timer', 'error', 'message', 'signal', 'escala
                                   'compensation', 'cancel', 'conditional']);
 
 /**
+ * Eingehende Kanten von `endId`, die tatsaechlich zum Ausnahme-Pfad von
+ * `hostId` gehoeren — NICHT einfach alle eingehenden Kanten von endId.
+ * Mehrere, voneinander unabhaengige Aufgaben koennen sich denselben
+ * Ausnahme-Endpunkt teilen (genau dafuer gibt es ueberhaupt einen separaten
+ * Endpunkt statt eines Endpunkts pro Aufgabe) — ohne diese Eingrenzung wuerde
+ * der Eingriff Kanten entfernen, die zu einer voelling anderen Aufgabe
+ * gehoeren und deren Eskalationslogik stillschweigend zum Opfer faellt (Bug:
+ * zwei Aufgaben mit je eigenem Gateway teilen sich ein Ausnahme-Ende; das
+ * Isolieren der einen riss bislang auch den Zweig der anderen heraus, siehe
+ * Regressionstest "beruehrt NICHT den Ausnahme-Pfad einer anderen Aufgabe").
+ *
+ * Ermittelt per Vorwaerts-Suche ab hostId, welche Kanten von dort ueberhaupt
+ * erreichbar sind, bricht die Suche aber an jedem ANDEREN Aufgaben-Knoten ab:
+ * sobald der Fluss eine fremde Aufgabe erreicht, gehoert alles Weitere dieser
+ * fremden Aufgabe, nicht mehr dem Host. Damit ist z. B. auch der Fall
+ * abgedeckt, dass task1s "Nein"-Zweig irgendwann zu task2 fuehrt, dessen
+ * eigenes Gateway ebenfalls zu demselben Ausnahme-Ende fuehrt: task2s Zweig
+ * ist von task1 aus im Graphen erreichbar, aber nur ueber task2 selbst —
+ * genau dort bricht die Suche ab, bevor sie task2s Ausnahme-Kante erreicht.
+ * Zyklensicher ueber visitedEdgeIds/visitedNodes.
+ */
+function hostExceptionEdges(proc, hostId, endId) {
+  const edges = proc.edges || [];
+  const nodeById = buildNodeMap(proc);
+  const visitedEdgeIds = new Set();
+  const visitedNodes = new Set([hostId]);
+  const queue = [hostId];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const e of edges) {
+      if (e.source !== cur || visitedEdgeIds.has(e.id)) continue;
+      visitedEdgeIds.add(e.id);
+      if (visitedNodes.has(e.target)) continue;
+      visitedNodes.add(e.target);
+      const targetNode = nodeById[e.target];
+      const isForeignTask = targetNode && TASK_TYPES.has(targetNode.type) && e.target !== hostId;
+      if (!isForeignTask) queue.push(e.target);
+    }
+  }
+  return edges.filter(e => e.target === endId && visitedEdgeIds.has(e.id));
+}
+
+/**
  * Eingriff „Ausnahme herausnehmen" (isolateException). Der heikelste Eingriff im
  * Werkzeugkasten: ein Inline-Zweig ("Aufgabe -> XOR 'Frist überschritten?' -> Ja ->
  * Ende") bedeutet "wir haben geprüft und ENTSCHIEDEN" — eine fachliche
@@ -563,9 +606,20 @@ export function previewIsolateException(lc, { endId, attachTo, marker, cancelAct
                    'nebenläufig weiterläuft, ist eine fachliche Entscheidung, die nicht erraten wird.');
   }
 
-  // Guard 1: apply entfernt ALLE eingehenden Kanten von endId (nicht nur die
-  // vom betroffenen Gateway) — siehe dort. Fuer jede betroffene Quelle muss
-  // deshalb geprueft werden, ob ihr NACH der Entfernung noch mindestens eine
+  // Auf den Ausnahme-Pfad des HOSTS eingrenzen (hostExceptionEdges) — NICHT
+  // alle eingehenden Kanten von endId, siehe deren Docstring. Mehrere
+  // voneinander unabhaengige Aufgaben koennen sich denselben Ausnahme-
+  // Endpunkt teilen; ohne diese Eingrenzung wuerden die folgenden Guards (und
+  // apply weiter unten) fremde Kanten mitbetrachten bzw. entfernen.
+  const incomingToEnd = hostExceptionEdges(proc, attachTo, endId);
+  if (incomingToEnd.length === 0) {
+    return refusal(`Kein zu "${attachTo}" gehörender Ausnahme-Pfad zu "${endId}" gefunden — ` +
+                   `der Eingriff verschiebt nur einen bereits bestehenden Zweig, erfindet keinen neuen.`);
+  }
+
+  // Guard 1: apply entfernt alle (auf den Host eingegrenzten) eingehenden
+  // Kanten von endId — siehe dort. Fuer jede betroffene Quelle muss deshalb
+  // geprueft werden, ob ihr NACH der Entfernung noch mindestens eine
   // ausgehende Kante bleibt. S07 ("Pfade ohne ausgehende Kante") hat
   // defaultSeverity WARNING, nicht ERROR — das feste Rollback-Gate
   // (checkGate().ok prueft ausschliesslich errors.length) blockt NICHT bei
@@ -576,7 +630,6 @@ export function previewIsolateException(lc, { endId, attachTo, marker, cancelAct
   // Zweigen wird zu einem trivialen Durchlauf-Gateway mit einem Zweig —
   // strukturell gueltig, hoechstens stilistisch fragwuerdig, das bereits M02
   // als WARNUNG abdeckt).
-  const incomingToEnd = (proc.edges || []).filter(e => e.target === endId);
   const outgoingCount = {};
   for (const e of (proc.edges || [])) outgoingCount[e.source] = (outgoingCount[e.source] || 0) + 1;
   const removedCount = {};
@@ -602,7 +655,11 @@ export function previewIsolateException(lc, { endId, attachTo, marker, cancelAct
                    `die entfernt würden — der Eingriff würde das Modell strukturell ungültig machen.`);
   }
 
-  return { feasible: 'full', scope: [endId, attachTo], reason: '' };
+  // hostEdgeIds wird an apply weitergereicht, damit dort exakt dieselbe,
+  // bereits hier ermittelte und geprüfte Kantenmenge entfernt wird — kein
+  // zweites, potenziell abweichendes Nachrechnen in apply.
+  return { feasible: 'full', scope: [endId, attachTo], reason: '',
+           hostEdgeIds: incomingToEnd.map(e => e.id) };
 }
 
 export function applyIsolateException(lc, params = {}) {
@@ -625,11 +682,20 @@ export function applyIsolateException(lc, params = {}) {
                     attachedTo: attachTo, marker, cancelActivity });
 
   // Bisherige Zufuehrung zum Ausnahme-Ende entfernen, neu vom Boundary-Ereignis
-  // fuehren. previewIsolateException (Guard 1) hat bereits sichergestellt,
-  // dass keine betroffene Quelle dadurch ohne ausgehenden Fluss zurueckbleibt.
+  // fuehren — aber NUR die Kanten, die previewIsolateException als zum HOST
+  // gehoerig identifiziert hat (pv.hostEdgeIds, siehe hostExceptionEdges()),
+  // nicht pauschal alle eingehenden Kanten von endId. Andernfalls würde ein
+  // Ausnahme-Ende, das sich mehrere unabhängige Aufgaben teilen, beim
+  // Isolieren der einen auch die Eskalations-Kante der anderen mitreissen —
+  // ein fremder Prozesszweig verschwindet dabei lautlos, ohne dass targets
+  // oder note das erwaehnen und ohne dass checkGate() das bemerkt (der fremde
+  // Gateway hat ja meist noch einen anderen Zweig, also kein Dead-End). Guard 1
+  // in previewIsolateException hat bereits sichergestellt, dass keine
+  // betroffene (Host-eigene) Quelle dadurch ohne ausgehenden Fluss zurueckbleibt.
+  const hostEdgeIds = new Set(pv.hostEdgeIds);
   const removed = [];
   for (let i = proc.edges.length - 1; i >= 0; i--) {
-    if (proc.edges[i].target === endId) removed.push(proc.edges.splice(i, 1)[0].id);
+    if (hostEdgeIds.has(proc.edges[i].id)) removed.push(proc.edges.splice(i, 1)[0].id);
   }
   const newEdge = nextId(out, `flow_${bndId}_${endId}`);
   proc.edges.push({ id: newEdge, source: bndId, target: endId });
@@ -648,7 +714,8 @@ export function applyIsolateException(lc, params = {}) {
     change: { transform: 'isolateException', targets: [endId, attachTo],
               added: [bndId, newEdge], removed, modified: [],
               note: `Ausnahme "${(proc.nodes.find(n => n.id === endId) || {}).name || endId}" ` +
-                    `an ${attachTo} gehängt (${marker})` },
+                    `von ${attachTo} isoliert: ${removed.length} eingehende Kante(n) ` +
+                    `(${removed.join(', ')}) auf neues Boundary-Event ${bndId} (${marker}) umgehängt` },
     warnings: gate.warnings,
   };
 }

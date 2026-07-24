@@ -997,6 +997,57 @@ const lcExc = {
   lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
 };
 
+// Reviewer-Repro fuer den Critical-Fund: ein Ausnahme-Ende, das sich ZWEI
+// unabhaengige Aufgaben (task1, task2) mit je eigenem Gateway teilen — ein
+// realistisches Muster, denn genau dafuer gibt es ueberhaupt einen separaten
+// End-Knoten statt eines pro Aufgabe. task1s "Nein"-Zweig fuehrt zu task2,
+// dessen eigenes Gateway (gw2) ebenfalls in xend muendet.
+const lcSharedExc = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'L' },
+    { id: 'task1', type: 'userTask', name: 'Antrag prüfen', lane: 'L' },
+    { id: 'gw1', type: 'exclusiveGateway', name: 'Frist 1 überschritten?', lane: 'L' },
+    { id: 'task2', type: 'userTask', name: 'Freigabe erteilen', lane: 'L' },
+    { id: 'gw2', type: 'exclusiveGateway', name: 'Frist 2 überschritten?', lane: 'L' },
+    { id: 'xend', type: 'endEvent', name: 'Fall eskaliert', lane: 'L' },
+    { id: 'e2', type: 'endEvent', name: 'Fertig', lane: 'L' },
+  ],
+  edges: [
+    { id: 'j0', source: 's', target: 'task1' },
+    { id: 'j1', source: 'task1', target: 'gw1' },
+    { id: 'j2', source: 'gw1', target: 'xend', label: 'Ja' },
+    { id: 'j3', source: 'gw1', target: 'task2', label: 'Nein' },
+    { id: 'j4', source: 'task2', target: 'gw2' },
+    { id: 'j5', source: 'gw2', target: 'xend', label: 'Ja' },
+    { id: 'j6', source: 'gw2', target: 'e2', label: 'Nein' },
+  ],
+  lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+};
+
+// Ein Host mit ZWEI verschachtelten, ausschliesslich ihm gehoerenden
+// Ausnahme-Zweigen zum selben Ende — beide muessen entfernt werden.
+const lcHostMultiExc = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'L' },
+    { id: 'task', type: 'userTask', name: 'Antrag prüfen', lane: 'L' },
+    { id: 'gwA', type: 'exclusiveGateway', name: 'Prüfung A fehlgeschlagen?', lane: 'L' },
+    { id: 'gwB', type: 'exclusiveGateway', name: 'Prüfung B fehlgeschlagen?', lane: 'L' },
+    { id: 'xend', type: 'endEvent', name: 'Fall eskaliert', lane: 'L' },
+    { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+  ],
+  edges: [
+    { id: 'j0', source: 's', target: 'task' },
+    { id: 'j1', source: 'task', target: 'gwA' },
+    { id: 'j2', source: 'gwA', target: 'xend', label: 'Ja' },
+    { id: 'j3', source: 'gwA', target: 'gwB', label: 'Nein' },
+    { id: 'j4', source: 'gwB', target: 'xend', label: 'Ja' },
+    { id: 'j5', source: 'gwB', target: 'e', label: 'Nein' },
+  ],
+  lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+};
+
 describe('isolateException', () => {
   test('verweigert ohne ausdrueckliche Semantik-Parameter', () => {
     const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task' });
@@ -1216,5 +1267,107 @@ describe('isolateException', () => {
     const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
     expect(bnd.cancelActivity).toBe(false);
     expect(checkGate(r.lc).ok).toBe(true);
+  });
+
+  describe('geteiltes Ausnahme-Ende (Critical-Fund: Kanten-Entfernung war nicht auf attachTo eingegrenzt)', () => {
+    test('REGRESSION: Isolieren von task1 entfernt NICHT den unabhängigen Ausnahme-Pfad von task2', () => {
+      const r = applyIsolateException(lcSharedExc, { endId: 'xend', attachTo: 'task1',
+                                                     marker: 'timer', cancelActivity: true });
+
+      // Nur task1s eigene Kante zum Ausnahme-Ende (j2) wird entfernt — j5
+      // (gw2 -> xend, task2s Eskalationspfad) bleibt unangetastet.
+      expect(r.change.removed).toEqual(['j2']);
+      expect(r.change.removed).not.toContain('j5');
+      expect(r.change.targets).toEqual(['xend', 'task1']);
+
+      // gw2 (task2s Gateway) behält BEIDE ursprünglichen Zweige unverändert.
+      const gw2Out = r.lc.edges.filter(e => e.source === 'gw2');
+      expect(gw2Out.map(e => e.id).sort()).toEqual(['j5', 'j6']);
+      expect(gw2Out.find(e => e.id === 'j5').target).toBe('xend');
+      expect(gw2Out.find(e => e.id === 'j5').label).toBe('Ja');
+      expect(gw2Out.find(e => e.id === 'j6').target).toBe('e2');
+
+      // task2 und gw2 selbst bleiben inhaltlich unverändert.
+      expect(r.lc.nodes.find(n => n.id === 'task2'))
+        .toEqual(lcSharedExc.nodes.find(n => n.id === 'task2'));
+      expect(r.lc.nodes.find(n => n.id === 'gw2'))
+        .toEqual(lcSharedExc.nodes.find(n => n.id === 'gw2'));
+
+      // Das neue Boundary-Event hängt an task1, nicht an task2.
+      const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+      expect(bnd.attachedTo).toBe('task1');
+
+      // xend hat jetzt genau zwei eingehende Kanten: die neue vom Boundary-
+      // Event (task1s isolierter Pfad) und die unveränderte von gw2 (task2s Pfad).
+      const xendIn = r.lc.edges.filter(e => e.target === 'xend');
+      expect(xendIn.map(e => e.source).sort()).toEqual([bnd.id, 'gw2'].sort());
+
+      expect(checkGate(r.lc).ok).toBe(true);
+
+      // note beschreibt, was tatsächlich geändert wurde (welche Kante entfernt
+      // wurde), nicht was faelschlich mitentfernt haette werden koennen.
+      expect(r.change.note).toMatch(/j2/);
+      expect(r.change.note).not.toMatch(/j5/);
+    });
+
+    test('symmetrisch: Isolieren von task2 lässt task1s Ausnahme-Pfad unangetastet', () => {
+      const r = applyIsolateException(lcSharedExc, { endId: 'xend', attachTo: 'task2',
+                                                     marker: 'error', cancelActivity: true });
+      expect(r.change.removed).toEqual(['j5']);
+      expect(r.change.removed).not.toContain('j2');
+
+      const gw1Out = r.lc.edges.filter(e => e.source === 'gw1');
+      expect(gw1Out.map(e => e.id).sort()).toEqual(['j2', 'j3']);
+      expect(gw1Out.find(e => e.id === 'j2').target).toBe('xend');
+
+      const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+      expect(bnd.attachedTo).toBe('task2');
+      expect(checkGate(r.lc).ok).toBe(true);
+    });
+
+    test('mehrere eingehende Kanten des Ausnahme-Endes, die ALLE zum Host gehören, werden vollständig entfernt', () => {
+      const r = applyIsolateException(lcHostMultiExc, { endId: 'xend', attachTo: 'task',
+                                                        marker: 'timer', cancelActivity: true });
+      expect([...r.change.removed].sort()).toEqual(['j2', 'j4']);
+
+      // xend hat danach nur noch die eine neue Kante vom Boundary-Event.
+      const xendIn = r.lc.edges.filter(e => e.target === 'xend');
+      expect(xendIn.length).toBe(1);
+      const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+      expect(xendIn[0].source).toBe(bnd.id);
+
+      // gwA und gwB bleiben mit ihrem jeweils anderen Zweig verbunden.
+      expect(r.lc.edges.find(e => e.id === 'j3')).toMatchObject({ source: 'gwA', target: 'gwB' });
+      expect(r.lc.edges.find(e => e.id === 'j5')).toMatchObject({ source: 'gwB', target: 'e' });
+
+      expect(checkGate(r.lc).ok).toBe(true);
+    });
+
+    test('verweigert, wenn attachTo überhaupt keinen Ausnahme-Pfad zu endId hat ' +
+         '(0-Treffer-Fall: nichts zu isolieren, statt stillschweigend nur ein Boundary-Event ohne Wirkung anzuhängen)', () => {
+      const lcNoExceptionPath = {
+        id: 'P',
+        nodes: [
+          { id: 's', type: 'startEvent', lane: 'L' },
+          { id: 'task', type: 'userTask', name: 'Nur Normalfluss', lane: 'L' },
+          { id: 'xend', type: 'endEvent', name: 'Fall eskaliert', lane: 'L' },
+          { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+        ],
+        edges: [
+          { id: 'j0', source: 's', target: 'task' },
+          { id: 'j1', source: 'task', target: 'e' },
+        ],
+        lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+      };
+      const r = previewIsolateException(lcNoExceptionPath, { endId: 'xend', attachTo: 'task',
+                                                              marker: 'timer', cancelActivity: true });
+      expect(r.feasible).toBe('none');
+      expect(r.reason).toMatch(/ausnahme-pfad/i);
+      expect(r.reason).toMatch(/task/);
+
+      expect(() => applyIsolateException(lcNoExceptionPath, { endId: 'xend', attachTo: 'task',
+                                                               marker: 'timer', cancelActivity: true }))
+        .toThrow(/ausnahme-pfad/i);
+    });
   });
 });
