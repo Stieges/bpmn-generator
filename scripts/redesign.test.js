@@ -179,13 +179,55 @@ describe('parallelize', () => {
     expect(r.reason).toMatch(/zusammenhäng/i);
   });
 
+  test('preview verweigert bei Fan-in: zusaetzliche Kante von aussen in einen Zwischenschritt', () => {
+    // Knoten 'x' liegt ausserhalb der Kette a-b-c, hat aber selbst eine Kante nach 'b'.
+    // Ohne die Fan-in-Pruefung wuerde applyParallelize diese externe Kante ignorieren
+    // und einen strukturell falschen Rest (totes Fragment) erzeugen.
+    const fanIn = {
+      ...lcChain,
+      nodes: [...lcChain.nodes, { id: 'x', type: 'userTask', name: 'Extra pruefen', lane: 'L' }],
+      edges: [...lcChain.edges, { id: 'fx', source: 'x', target: 'b' }],
+    };
+    const r = previewParallelize(fanIn, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/zusammenhäng/i);
+  });
+
+  test('preview verweigert bei Fan-out: zusaetzliche ausgehende Kante am letzten Kettenmitglied', () => {
+    // 'c' (letztes Kettenmitglied) hat neben c->e noch eine zweite ausgehende Kante
+    // nach 'y'. Der Join darf nicht blind an die Stelle von c->e treten, waehrend
+    // c->y unberuecksichtigt bleibt.
+    const fanOut = {
+      ...lcChain,
+      nodes: [...lcChain.nodes, { id: 'y', type: 'userTask', name: 'Weiteres pruefen', lane: 'L' }],
+      edges: [...lcChain.edges, { id: 'fy', source: 'c', target: 'y' }],
+    };
+    const r = previewParallelize(fanOut, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/zusammenhäng/i);
+  });
+
   test('apply erzeugt AND-Split und AND-Join und bleibt sound', () => {
     const r = applyParallelize(lcChain, { nodeIds: ['a', 'b', 'c'] });
     const types = r.lc.nodes.filter(n => n.type === 'parallelGateway');
     expect(types.length).toBe(2);
     expect(checkGate(r.lc).ok).toBe(true);
     expect(r.change.transform).toBe('parallelize');
-    expect(r.change.added.length).toBe(2);
+
+    // "added" muss vollstaendig sein (Symmetrie zu "removed"): beide Gateway-IDs
+    // UND alle sechs neu geschaffenen Verbindungskanten (2 pro Kettenmitglied:
+    // eine vom Split, eine zum Join). Die zwei retargetierten Alt-Kanten (s->a,
+    // c->e) behalten ihre urspruengliche ID und zaehlen NICHT als "added".
+    const splitNode = types.find(n => !n.has_join);
+    const joinNode = types.find(n => n.has_join);
+    expect(r.change.added).toEqual(expect.arrayContaining([splitNode.id, joinNode.id]));
+
+    const newEdgeIds = r.lc.edges
+      .filter(e => e.source === splitNode.id || e.target === joinNode.id)
+      .map(e => e.id);
+    expect(newEdgeIds.length).toBe(6);
+    expect(r.change.added).toEqual(expect.arrayContaining(newEdgeIds));
+    expect(r.change.added.length).toBe(2 + newEdgeIds.length);
   });
 
   test('apply mutiert die Eingabe nicht', () => {

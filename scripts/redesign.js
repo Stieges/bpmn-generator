@@ -19,7 +19,16 @@ function findNodes(proc, ids) {
   return ids.map(id => map[id]);
 }
 
-/** Ist ids eine zusammenhängende, lineare Kette (jeweils genau eine Kante)? */
+/**
+ * Ist ids eine zusammenhängende, lineare Kette (jeweils genau eine Kante)?
+ * Prüft nicht nur die Kettenkanten selbst, sondern auch, dass kein Kettenmitglied
+ * zusätzliche Kanten von/zu Knoten AUSSERHALB der Kette hat: jedes Mitglied nach
+ * dem ersten darf genau eine eingehende Kante haben (die vom Vorgänger — sonst
+ * Fan-in von aussen), und das letzte Mitglied darf genau eine ausgehende Kante
+ * haben (sonst Fan-out). Ohne diese Prüfung würde applyParallelize eine externe
+ * Kante in einen Zwischenschritt kappen bzw. umhängen und einen toten
+ * Modell-Fragment erzeugen.
+ */
 function isLinearChain(proc, ids) {
   const edges = proc.edges || [];
   for (let i = 0; i < ids.length - 1; i++) {
@@ -28,6 +37,12 @@ function isLinearChain(proc, ids) {
     const outs = edges.filter(e => e.source === ids[i]);
     if (outs.length !== 1) return false;
   }
+  for (let i = 1; i < ids.length; i++) {
+    const ins = edges.filter(e => e.target === ids[i]);
+    if (ins.length !== 1) return false;
+  }
+  const lastOuts = edges.filter(e => e.source === ids[ids.length - 1]);
+  if (lastOuts.length !== 1) return false;
   return true;
 }
 
@@ -85,8 +100,6 @@ export function applyParallelize(lc, params = {}) {
   const outEdge = edges.find(e => e.source === last);
   const lane = (proc.nodes.find(n => n.id === first) || {}).lane;
 
-  // Reihenfolge beachten: erst den Split anlegen, DANN den Join berechnen —
-  // sonst kollidieren beide Kennungen bei gleichem Präfix.
   const splitId = nextId(out, 'gw_par_split');
   proc.nodes.push({ id: splitId, type: 'parallelGateway', name: '', lane });
   const joinId = nextId(out, 'gw_par_join');
@@ -101,15 +114,18 @@ export function applyParallelize(lc, params = {}) {
   if (inEdge) inEdge.target = splitId;
   if (outEdge) outEdge.source = joinId;
 
-  // "added" verzeichnet die neu geschaffenen Elemente auf Knotenebene (die zwei
-  // Gateways); die Verbindungskanten sind Routing-Folgeartefakte und werden nicht
-  // einzeln mitgezaehlt.
+  // "added" muss VOLLSTAENDIG sein: Quellmodell und Ergebnis duerfen sich
+  // ausschliesslich in den hier verzeichneten Elementen unterscheiden. Neben den
+  // zwei Gateways gehoeren daher auch die neu geschaffenen Verbindungskanten hinein
+  // (symmetrisch zu "removed", das die entfernten Kettenkanten-IDs auflistet).
   const added = [splitId, joinId];
   for (const id of ids) {
     const eIn = nextId(out, `flow_${splitId}_${id}`);
     edges.push({ id: eIn, source: splitId, target: id });
+    added.push(eIn);
     const eOut = nextId(out, `flow_${id}_${joinId}`);
     edges.push({ id: eOut, source: id, target: joinId });
+    added.push(eOut);
   }
 
   const gate = checkGate(out);
