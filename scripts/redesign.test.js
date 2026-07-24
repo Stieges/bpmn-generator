@@ -130,6 +130,33 @@ describe('redesign-core', () => {
     expect(isProtected(node, { protectNodes: ['anderes'] })).toBe(false);
   });
 
+  test('isProtected loest die Lane-Zugehoerigkeit auch ueber Format B (Lane.nodeIds) ' +
+       'auf, wenn der Knoten selbst kein node.lane traegt', () => {
+    // Kritischer Fall: das Schema erlaubt Lane-Zuordnung ENTWEDER ueber
+    // node.lane (Format A) ODER ueber Lane.nodeIds (Format B), ohne dass der
+    // Knoten je node.lane setzt. Eine Implementierung, die nur node.lane
+    // liest, sieht diesen Knoten in KEINER Bahn — protectLanes waere dann
+    // wirkungslos, obwohl die Bahn im Modell klar benannt ist.
+    const lcFormatBOnly = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 't1', type: 'userTask', name: 'Antrag prüfen' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 't1' },
+        { id: 'f2', source: 't1', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter', nodeIds: ['s', 't1', 'e'] }],
+    };
+    const node = lcFormatBOnly.nodes.find(n => n.id === 't1');
+    expect(node.lane).toBeUndefined();
+    expect(isProtected(node, { protectLanes: ['L'] }, lcFormatBOnly)).toBe(true);
+    expect(isProtected(node, { protectLanes: ['Sachbearbeiter'] }, lcFormatBOnly)).toBe(true);
+    expect(isProtected(node, { protectLanes: ['irgendeine-andere-bahn'] }, lcFormatBOnly)).toBe(false);
+  });
+
   test('refusal liefert die vereinbarte Form', () => {
     const r = refusal('kein Grund');
     expect(r).toEqual({ feasible: 'none', scope: [], reason: 'kein Grund' });
@@ -178,6 +205,30 @@ describe('parallelize', () => {
     const r = previewParallelize(lcChain, { nodeIds: ['a', 'c'] });
     expect(r.feasible).toBe('none');
     expect(r.reason).toMatch(/zusammenhäng/i);
+  });
+
+  test('preview verweigert bei geschuetzter Bahn in einem Format-B-only-Modell ' +
+       '(Lane.nodeIds, kein node.lane) — beweist, dass der isProtected()-Fix auch ' +
+       'andere Transforms als previewRelane erreicht', () => {
+    const chainFormatBOnly = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'a', type: 'userTask', name: 'Adresse prüfen' },
+        { id: 'b', type: 'userTask', name: 'Telefon prüfen' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f0', source: 's', target: 'a' },
+        { id: 'f1', source: 'a', target: 'b' },
+        { id: 'f2', source: 'b', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter', nodeIds: ['s', 'a', 'b', 'e'] }],
+    };
+    const r = previewParallelize(chainFormatBOnly, { nodeIds: ['a', 'b'],
+                                                      policy: { protectLanes: ['L'] } });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/geschützt/i);
   });
 
   test('preview verweigert bei Fan-in: zusaetzliche Kante von aussen in einen Zwischenschritt', () => {
@@ -466,7 +517,13 @@ describe('relane', () => {
     const r = previewRelane(lcTwoLanes, { nodeId: 'x', lane: 'B', policy: { protectNodes: ['x'] } });
     expect(r.feasible).toBe('none');
     expect(r.reason).toMatch(/geschützt/i);
-    expect(r.reason).toMatch(/x/);
+    // /x/ allein waere ein Fehl-Positiv-Magnet — die Regel matcht praktisch
+    // jeden Fliesstext (z. B. schon "geschützt" selbst enthaelt kein x, aber
+    // fast jede andere denkbare Nachricht wuerde durchrutschen, auch eine
+    // ohne Bezug zur Knoten-ID). Stattdessen exakt die Betroffenen-ID im
+    // erwarteten Nachrichtenformat pruefen, damit der Test bei einer falschen
+    // ID (z. B. vertauscht mit einer anderen Kennung) tatsaechlich rot wird.
+    expect(r.reason).toBe('Geschütztes Element betroffen: x');
   });
 
   test('verweigert bei geschuetzter Zielbahn', () => {
@@ -485,6 +542,40 @@ describe('relane', () => {
     const r = previewRelane(lcTwoLanes, { nodeId: 'x', lane: 'A' });
     expect(r.feasible).toBe('none');
     expect(r.reason).toMatch(/bereits/i);
+  });
+
+  test('verweigert bei geschuetzter AKTUELLER Bahn in einem Format-B-only-Modell ' +
+       '(Lane.nodeIds, kein node.lane)', () => {
+    // Regressionstest fuer den urspruenglichen Fehler: isProtected() las nur
+    // node.lane. In einem Modell, das die Lane-Zuordnung ausschliesslich ueber
+    // Lane.nodeIds ausdrueckt (kein node.lane gesetzt), fand isProtected keine
+    // Bahn fuer 'x' und protectLanes lief ins Leere — previewRelane haette
+    // 'full' gemeldet und den Schritt aus einer als geschuetzt zugesagten Bahn
+    // herausverschoben, ohne das jemals zu melden.
+    const formatBOnly = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'x', type: 'userTask', name: 'Fall prüfen' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'h0', source: 's', target: 'x' },
+        { id: 'h1', source: 'x', target: 'e' },
+      ],
+      lanes: [{ id: 'A', name: 'Vorpruefung', nodeIds: ['s', 'x'] },
+              { id: 'B', name: 'Entscheidung', nodeIds: ['e'] }],
+    };
+    const node = formatBOnly.nodes.find(n => n.id === 'x');
+    expect(node.lane).toBeUndefined();
+    const r = previewRelane(formatBOnly, { nodeId: 'x', lane: 'B',
+                                           policy: { protectLanes: ['Vorpruefung'] } });
+    expect(r.feasible).toBe('none');
+    // Exakte Nachricht pruefen (nicht nur "irgendwas mit 'geschützt'"), damit
+    // der Test wirklich beweist, dass der geschuetzte KNOTEN (aktuelle Bahn)
+    // den Ausschlag gab — previewRelane hat eine separate, textlich andere
+    // Meldung fuer eine geschuetzte ZIELbahn (siehe Test oben).
+    expect(r.reason).toBe('Geschütztes Element betroffen: x');
   });
 
   test('verschiebt den Schritt und bleibt sound', () => {

@@ -9,7 +9,7 @@
  * OB ein Eingriff gemacht wird — das tut der Aufrufer.
  */
 
-import { cloneLc, checkGate, nextId, isProtected, refusal } from './redesign-core.js';
+import { cloneLc, checkGate, nextId, isProtected, refusal, resolveLaneId } from './redesign-core.js';
 
 const procOf = (lc) => (lc.pools ? lc.pools[0] : lc);
 
@@ -249,18 +249,15 @@ export function applyMergeTasks(lc, params = {}) {
 }
 
 /**
- * Effektive aktuelle Bahn eines Knotens, formatuebergreifend: das Schema erlaubt
- * die Zuordnung entweder über node.lane (Format A) ODER über Lane.nodeIds
- * (Format B) — ein Modell kann eines von beiden nutzen (oder, inkonsistent,
- * gar keines). Wer hier nur node.lane liest, uebersieht Format-B-only-Modelle:
- * die "liegt bereits in dieser Bahn"-Pruefung in previewRelane wuerde dann
- * einen No-Op faelschlich als Verschiebung akzeptieren.
+ * Effektive aktuelle Bahn eines Knotens, formatuebergreifend (node.lane ODER
+ * Lane.nodeIds). Duennes Alias auf resolveLaneId() aus redesign-core.js —
+ * das ist die einzige Stelle, die beide Formate aufloest (auch isProtected()
+ * nutzt sie), damit hier keine zweite, potenziell abweichende Implementierung
+ * entsteht. Wer nur node.lane liest, uebersieht Format-B-only-Modelle: die
+ * "liegt bereits in dieser Bahn"-Pruefung in previewRelane wuerde dann einen
+ * No-Op faelschlich als Verschiebung akzeptieren.
  */
-function currentLaneOf(proc, node) {
-  if (node.lane) return node.lane;
-  const lane = (proc.lanes || []).find(l => Array.isArray(l.nodeIds) && l.nodeIds.includes(node.id));
-  return lane ? lane.id : undefined;
-}
+const currentLaneOf = resolveLaneId;
 
 /**
  * Zaehlt Rollenwechsel: eine Kante gilt als Uebergabe, wenn Quelle und Ziel

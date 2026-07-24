@@ -80,18 +80,48 @@ export function nextId(lc, prefix) {
 }
 
 /**
+ * Effektive aktuelle Bahn eines Knotens, formatuebergreifend: das Schema erlaubt
+ * die Zuordnung entweder über node.lane (Format A) ODER über Lane.nodeIds
+ * (Format B) — ein Modell kann eines von beiden nutzen (oder, inkonsistent,
+ * gar keines). Wer hier nur node.lane liest, uebersieht Format-B-only-Modelle.
+ * `container` darf entweder das komplette Logic-Core (mit optionalem
+ * `container.pools`, dann werden ALLE Pools/Prozesse durchsucht) oder bereits
+ * ein einzelner Prozess/Pool sein (dann wird nur dessen `lanes` durchsucht) —
+ * so laesst sich dieselbe Funktion sowohl fuer Multi-Pool-Aufloesung
+ * (isProtected) als auch fuer Single-Pool-Aufrufer (redesign.js, die bereits
+ * auf einem konkreten proc arbeiten) verwenden.
+ *
+ * Einzige Stelle im Code, die beide Formate aufloest — siehe redesign.js,
+ * das diese Funktion re-exportiert statt die Logik zu duplizieren.
+ */
+export function resolveLaneId(container, node) {
+  if (node.lane) return node.lane;
+  if (!container) return undefined;
+  const procs = container.pools ? container.pools : [container];
+  for (const p of procs) {
+    const lane = (p.lanes || []).find(l => Array.isArray(l.nodeIds) && l.nodeIds.includes(node.id));
+    if (lane) return lane.id;
+  }
+  return undefined;
+}
+
+/**
  * Schutzliste. Trifft über Kennung UND Anzeigenamen — eine Lane per Name zu
  * schuetzen darf nicht wirkungslos verpuffen, nur weil intern eine ID steht.
+ * Die Bahn des Knotens wird ueber resolveLaneId() formatuebergreifend
+ * aufgeloest (node.lane ODER Lane.nodeIds) — sonst schuetzt protectLanes in
+ * einem Format-B-only-Modell gar nichts, obwohl der Aufrufer es zugesagt hat.
  */
 export function isProtected(node, policy = {}, lc = null) {
   const nodes = policy.protectNodes || [];
   const lanes = policy.protectLanes || [];
   if (nodes.includes(node.id) || (node.name && nodes.includes(node.name))) return true;
-  if (node.lane && lanes.includes(node.lane)) return true;
-  if (node.lane && lc) {
+  const laneId = resolveLaneId(lc, node);
+  if (laneId && lanes.includes(laneId)) return true;
+  if (laneId && lc) {
     const procs = lc.pools ? lc.pools : [lc];
     for (const p of procs) {
-      const lane = (p.lanes || []).find(l => l.id === node.lane);
+      const lane = (p.lanes || []).find(l => l.id === laneId);
       if (lane && lane.name && lanes.includes(lane.name)) return true;
     }
   }
