@@ -193,7 +193,7 @@ export function main(argv = process.argv.slice(2)) {
   // Verweigerung eine Error mit derselben reason — derselbe Vertrag
   // (Rückgabewert ≠ 0, nichts geschrieben) gilt daher auch hier, falls
   // apply()s eigenes Rollback-Gate (Soundness nach der Änderung) anschlägt,
-  // obwohl die Vorprüfung oben 'full'/'partial' meldete.
+  // obwohl die Vorprüfung oben 'full' meldete.
   let res;
   try {
     res = apply(lc, params);

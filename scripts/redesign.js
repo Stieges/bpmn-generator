@@ -2,14 +2,19 @@
  * Redesign-Werkzeugkasten — benannte Prozess-Eingriffe.
  *
  * Jeder Eingriff hat zwei Funktionen:
- *   preview(lc, params) → { feasible: 'full'|'partial'|'none', scope, reason }
+ *   preview(lc, params) → { feasible: 'full'|'none', scope, reason }
  *   apply(lc, params)   → { lc, change, warnings }
+ *
+ * 'partial' ist bewusst NICHT Teil des Vertrags: kein Transform gibt es je
+ * zurück (vollständige Verweigerung ist die sichere Richtung bei Unsicherheit,
+ * siehe ADR/Review). Frueher hier dokumentiert, aber nie implementiert — die
+ * Doku hat damit mehr versprochen, als der Code je geliefert hat.
  *
  * Rein deterministisch, ohne Sprachmodell. Der Werkzeugkasten entscheidet nie,
  * OB ein Eingriff gemacht wird — das tut der Aufrufer.
  */
 
-import { cloneLc, checkGate, nextId, isProtected, refusal, resolveLaneId } from './redesign-core.js';
+import { cloneLc, checkGate, nextId, isProtected, refusal, resolveLaneId, warningsDelta } from './redesign-core.js';
 
 const procOf = (lc) => (lc.pools ? lc.pools[0] : lc);
 
@@ -65,6 +70,23 @@ function isLinearChain(proc, ids) {
  */
 function dependencyState(lc, ids) {
   const assocs = lc.associations || [];
+
+  // Eine DIREKTE gerichtete Assoziation zwischen zwei Kettenmitgliedern IST
+  // bereits die explizite fachliche Aussage "b hängt von a ab" — das ist keine
+  // Frage, die die nachfolgende Datenobjekt-Analyse (writes/reads über ein
+  // DRITTES Datenobjekt) überhaupt stellt: sie betrachtet nur Assoziationen,
+  // bei denen GENAU EIN Ende in `ids` liegt (siehe touching-Filter unten), eine
+  // Assoziation mit BEIDEN Enden in `ids` erzeugt für dasselbe Ziel sowohl
+  // einen writes-Eintrag als auch nichts in reads (reads wird nur befüllt, wenn
+  // das ZIEL der Assoziation in `ids` liegt UND die Quelle ausserhalb) — sie
+  // fällt faktisch durch beide Schleifen und die Funktion endet bei 'proven'.
+  // Das ist der gefährlichste denkbare Fehler: die klarste modellierte Aussage
+  // "b hängt von a ab" würde als NACHGEWIESEN UNABHÄNGIG gemeldet. Diese
+  // Prüfung muss daher VOR jeder Datenobjekt-Betrachtung laufen, nicht danach.
+  const directBetweenMembers = assocs.some(a =>
+    a.directed && ids.includes(a.source) && ids.includes(a.target));
+  if (directBetweenMembers) return 'dependent';
+
   const touching = assocs.filter(a => ids.includes(a.source) || ids.includes(a.target));
   if (touching.length === 0) return 'unmodelled';
   if (touching.some(a => !a.directed)) return 'unprovable';
@@ -80,14 +102,58 @@ function dependencyState(lc, ids) {
   return 'proven';
 }
 
+const TASK_TYPES = new Set(['task', 'userTask', 'serviceTask', 'scriptTask', 'manualTask',
+                            'businessRuleTask', 'sendTask', 'receiveTask']);
+
+/**
+ * Effektive aktuelle Bahn eines Knotens, formatuebergreifend (node.lane ODER
+ * Lane.nodeIds). Duennes Alias auf resolveLaneId() aus redesign-core.js —
+ * das ist die einzige Stelle, die beide Formate aufloest (auch isProtected()
+ * nutzt sie), damit hier keine zweite, potenziell abweichende Implementierung
+ * entsteht. Wer nur node.lane liest, uebersieht Format-B-only-Modelle: eine
+ * "liegt in derselben Bahn"-Pruefung (previewParallelize, previewMergeTasks)
+ * oder eine Lane-Zuweisung fuer neu geschaffene Knoten (applyParallelize,
+ * applyIsolateException) wuerde dann in einem Format-B-only-Modell entweder
+ * einen Bahn-Wechsel uebersehen oder dem neuen Knoten gar keine Bahn zuweisen.
+ * Bewusst vor previewParallelize definiert (nicht erst bei previewRelane
+ * weiter unten), weil previewParallelize/previewMergeTasks es ebenfalls
+ * brauchen.
+ */
+const currentLaneOf = resolveLaneId;
+
 export function previewParallelize(lc, { nodeIds = [], policy = {} } = {}) {
   const proc = procOf(lc);
   if (nodeIds.length < 2) return refusal('Mindestens zwei Schritte nötig.');
   const nodes = findNodes(proc, nodeIds);
   const missing = nodeIds.filter((id, i) => !nodes[i]);
   if (missing.length) return refusal(`Unbekannte Kennung: ${missing.join(', ')}`);
+  // Anders als seine vier Geschwister (mergeTasks/isolateException pruefen
+  // TASK_TYPES, reorderKnockouts prueft exclusiveGateway, mergeTasks prueft
+  // dieselbe Bahn) hat parallelize bislang GAR KEINE Typ- oder Bahn-Pruefung
+  // gehabt — nur die Kettenform. Damit wurden Ketten mit einem
+  // intermediateCatchEvent (Wartezustand), einem subProcess oder einem
+  // exclusiveGateway anstandslos akzeptiert und angewandt: ein Wartezustand
+  // parallel zu schalten veraendert, WANN der Prozess auf ein externes
+  // Ereignis wartet; ein Gateway parallel zu schalten veraendert die
+  // Verzweigungslogik selbst. Beides widerspricht der in SKILL.md UND im
+  // Anforderungsprotokoll zugesagten Beschraenkung auf eine "lineare,
+  // gleichbahnige TASK-Kette" (Wartezustand/Boundary-Event/Sub-Prozess sind
+  // dort explizit als Verweigerungsgruende gelistet).
+  if (nodes.some(n => !TASK_TYPES.has(n.type))) {
+    return refusal('Nur Aufgaben lassen sich parallelisieren — ein Wartezustand ' +
+                   '(Zwischenereignis), ein Gateway oder ein Sub-Prozess in der Kette ' +
+                   'würde die Prozesslogik verändern, nicht nur ihre Reihenfolge.');
+  }
   const prot = nodes.filter(n => isProtected(n, policy, lc));
   if (prot.length) return refusal(`Geschütztes Element betroffen: ${prot.map(n => n.id).join(', ')}`);
+  // Ebenso fehlte eine Bahn-Pruefung: eine Kette, die zwei Bahnen ueberspannt,
+  // wurde anstandslos akzeptiert, und applyParallelize haengte die neuen
+  // Gateways stillschweigend an die Bahn des ERSTEN Kettenmitglieds — der Teil
+  // der Kette in der zweiten Bahn wanderte damit unbemerkt in eine fremde
+  // Rolle. currentLaneOf() statt rohem node.lane, sonst waere die Pruefung in
+  // einem Format-B-only-Modell (Lane.nodeIds ohne node.lane) wirkungslos.
+  const laneSet = new Set(nodes.map(n => currentLaneOf(proc, n)));
+  if (laneSet.size > 1) return refusal('Die Schritte liegen in verschiedenen Bahnen.');
   if (!isLinearChain(proc, nodeIds)) return refusal('Die Schritte bilden keine zusammenhängende Kette.');
 
   const dep = dependencyState(lc, nodeIds);
@@ -110,7 +176,16 @@ export function applyParallelize(lc, params = {}) {
 
   const inEdge = edges.find(e => e.target === first);
   const outEdge = edges.find(e => e.source === last);
-  const lane = (proc.nodes.find(n => n.id === first) || {}).lane;
+  // currentLaneOf statt rohem node.lane: das Schema erlaubt Lane-Zuordnung
+  // auch nur ueber Lane.nodeIds (Format B) ohne node.lane — die zwei neuen
+  // Gateways brauchen trotzdem eine Bahn. Wer hier raw .lane laese, saehe in
+  // einem Format-B-only-Modell `undefined`, die neuen Gateways bekaemen gar
+  // keine Bahn zugewiesen und fehlten anschliessend in der emittierten
+  // <bpmn:lane> flowNodeRef-Liste. previewParallelize hat bereits sichergestellt,
+  // dass ALLE Kettenmitglieder in derselben Bahn liegen, daher genuegt es, die
+  // Bahn des ersten Mitglieds aufzuloesen — sie gilt fuer die ganze Kette.
+  const firstNode = proc.nodes.find(n => n.id === first);
+  const lane = firstNode ? currentLaneOf(proc, firstNode) : undefined;
 
   const splitId = nextId(out, 'gw_par_split');
   proc.nodes.push({ id: splitId, type: 'parallelGateway', name: '', lane });
@@ -156,12 +231,9 @@ export function applyParallelize(lc, params = {}) {
     lc: out,
     change: { transform: 'parallelize', targets: ids, added, removed, modified,
               note: `${ids.length} Schritte parallel gefuehrt` },
-    warnings: gate.warnings,
+    warnings: warningsDelta(lc, out),
   };
 }
-
-const TASK_TYPES = new Set(['task', 'userTask', 'serviceTask', 'scriptTask', 'manualTask',
-                            'businessRuleTask', 'sendTask', 'receiveTask']);
 
 export function previewMergeTasks(lc, { nodeIds = [], name = '', policy = {} } = {}) {
   const proc = procOf(lc);
@@ -176,7 +248,12 @@ export function previewMergeTasks(lc, { nodeIds = [], name = '', policy = {} } =
   if (prot.length) return refusal(`Geschütztes Element betroffen: ${prot.map(n => n.id).join(', ')}`);
   const types = new Set(nodes.map(n => n.type));
   if (types.size > 1) return refusal(`Unterschiedliche Typen (${[...types].join(', ')}) — welcher überlebt, ist ein Urteil.`);
-  const lanes = new Set(nodes.map(n => n.lane));
+  // currentLaneOf statt rohem node.lane: in einem Modell, das Lane-Zugehoerigkeit
+  // NUR ueber Lane.nodeIds ausdrueckt (Format B), ist node.lane bei JEDEM Knoten
+  // undefined — das Set haette dann IMMER genau ein Element (`undefined`), die
+  // Pruefung wuerde also nie ansprechen und eine Bahn-Grenze liesse sich anstandslos
+  // uebertreten. Derselbe Fehlerklasse, die bereits bei isProtected() behoben wurde.
+  const lanes = new Set(nodes.map(n => currentLaneOf(proc, n)));
   if (lanes.size > 1) return refusal('Schritte liegen in verschiedenen Bahnen.');
   if (nodes.some(n => n.loopType || n.multiInstance)) {
     return refusal('Schleifen- oder Mehrfach-Marker vorhanden — Bündeln würde die Semantik verändern.');
@@ -244,20 +321,9 @@ export function applyMergeTasks(lc, params = {}) {
     lc: out,
     change: { transform: 'mergeTasks', targets: ids, added: [], removed, modified,
               note: `${ids.length} Schritte gebündelt zu "${params.name}"` },
-    warnings: gate.warnings,
+    warnings: warningsDelta(lc, out),
   };
 }
-
-/**
- * Effektive aktuelle Bahn eines Knotens, formatuebergreifend (node.lane ODER
- * Lane.nodeIds). Duennes Alias auf resolveLaneId() aus redesign-core.js —
- * das ist die einzige Stelle, die beide Formate aufloest (auch isProtected()
- * nutzt sie), damit hier keine zweite, potenziell abweichende Implementierung
- * entsteht. Wer nur node.lane liest, uebersieht Format-B-only-Modelle: die
- * "liegt bereits in dieser Bahn"-Pruefung in previewRelane wuerde dann einen
- * No-Op faelschlich als Verschiebung akzeptieren.
- */
-const currentLaneOf = resolveLaneId;
 
 /**
  * Zaehlt Rollenwechsel: eine Kante gilt als Uebergabe, wenn Quelle und Ziel
@@ -346,7 +412,7 @@ export function applyRelane(lc, params = {}) {
     change: { transform: 'relane', targets: [params.nodeId], added: [], removed: [], modified,
               handoffsBefore: before, handoffsAfter: after,
               note: `Übergaben ${before} → ${after}` },
-    warnings: gate.warnings,
+    warnings: warningsDelta(lc, out),
   };
 }
 
@@ -511,7 +577,7 @@ export function applyReorderKnockouts(lc, params = {}) {
     lc: out,
     change: { transform: 'reorderKnockouts', targets: newOrder, added: [], removed: [], modified,
               note: `Reihenfolge ${oldOrder.join(' → ')} → ${newOrder.join(' → ')}` },
-    warnings: gate.warnings,
+    warnings: warningsDelta(lc, out),
   };
 }
 
@@ -732,6 +798,6 @@ export function applyIsolateException(lc, params = {}) {
               note: `Ausnahme "${(proc.nodes.find(n => n.id === endId) || {}).name || endId}" ` +
                     `von ${attachTo} isoliert: ${removed.length} eingehende Kante(n) ` +
                     `(${removed.join(', ')}) auf neues Boundary-Event ${bndId} (${marker}) umgehängt` },
-    warnings: gate.warnings,
+    warnings: warningsDelta(lc, out),
   };
 }

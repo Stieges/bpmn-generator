@@ -368,6 +368,111 @@ describe('parallelize', () => {
     expect(r.feasible).toBe('full');
     expect(r.provenIndependent).toBe(false);
   });
+
+  test('B1: direkte gerichtete Assoziation zwischen zwei Kettenmitgliedern gilt als ' +
+       'NACHGEWIESEN ABHÄNGIG, nicht als bewiesen unabhängig — gefährlichste Fehlrichtung', () => {
+    // Reproduktion des Funds: eine direkt zwischen 'a' und 'b' modellierte gerichtete
+    // Assoziation ("b hängt von a ab") landete vor dem Fix als writes['b']=['a'] /
+    // reads['a']=['b'] — die Schleife sucht reads['b'] und findet nichts, die Funktion
+    // endete bei 'proven'. previewParallelize hätte die klarste modellierte
+    // Abhängigkeitsaussage im Modell als PROVEN INDEPENDENT gemeldet.
+    const directDependency = { ...lcChain,
+      associations: [{ id: 'as1', source: 'a', target: 'b', directed: true }] };
+    const r = previewParallelize(directDependency, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/abhängig/i);
+  });
+
+  test('B2: verweigert eine Kette mit einem intermediateCatchEvent (Wartezustand)', () => {
+    const withWait = { ...lcChain,
+      nodes: lcChain.nodes.map(n => n.id === 'b' ? { ...n, type: 'intermediateCatchEvent' } : n) };
+    const r = previewParallelize(withWait, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/aufgaben/i);
+  });
+
+  test('B2: verweigert eine Kette mit einem subProcess', () => {
+    const withSub = { ...lcChain,
+      nodes: lcChain.nodes.map(n => n.id === 'b' ? { ...n, type: 'subProcess' } : n) };
+    const r = previewParallelize(withSub, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/aufgaben/i);
+  });
+
+  test('B2: verweigert eine Kette mit einem exclusiveGateway', () => {
+    const withGw = { ...lcChain,
+      nodes: lcChain.nodes.map(n => n.id === 'b' ? { ...n, type: 'exclusiveGateway' } : n) };
+    const r = previewParallelize(withGw, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/aufgaben/i);
+  });
+
+  test('B2: verweigert eine Kette, die zwei Bahnen ueberspannt (node.lane, Format A)', () => {
+    const twoLanes = { ...lcChain,
+      lanes: [...lcChain.lanes, { id: 'L2', name: 'Andere Bahn' }],
+      nodes: lcChain.nodes.map(n => n.id === 'c' ? { ...n, lane: 'L2' } : n) };
+    const r = previewParallelize(twoLanes, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/bahn/i);
+  });
+
+  test('B2: verweigert eine Kette, die zwei Bahnen ueberspannt, auch in einem ' +
+       'Format-B-only-Modell (Lane.nodeIds, kein node.lane) — beweist, dass die Bahn ueber ' +
+       'currentLaneOf aufgeloest wird, nicht ueber rohes node.lane', () => {
+    const chainFormatBTwoLanes = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'a', type: 'userTask', name: 'Adresse prüfen' },
+        { id: 'b', type: 'userTask', name: 'Telefon prüfen' },
+        { id: 'c', type: 'userTask', name: 'E-Mail prüfen' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f0', source: 's', target: 'a' },
+        { id: 'f1', source: 'a', target: 'b' },
+        { id: 'f2', source: 'b', target: 'c' },
+        { id: 'f3', source: 'c', target: 'e' },
+      ],
+      lanes: [{ id: 'L1', name: 'Bahn 1', nodeIds: ['s', 'a', 'b'] },
+              { id: 'L2', name: 'Bahn 2', nodeIds: ['c', 'e'] }],
+    };
+    const r = previewParallelize(chainFormatBTwoLanes, { nodeIds: ['a', 'b', 'c'] });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/bahn/i);
+
+    // apply muss ebenfalls verweigern (nicht nur preview) — kein stilles Durchrutschen.
+    expect(() => applyParallelize(chainFormatBTwoLanes, { nodeIds: ['a', 'b', 'c'] })).toThrow(/bahn/i);
+  });
+
+  test('B4: applyParallelize weist den neuen Gateways die Bahn ueber currentLaneOf zu, ' +
+       'auch in einem Format-B-only-Modell (kein node.lane an den Kettenmitgliedern) — ' +
+       'sonst fehlten die neuen Gateways in der <bpmn:lane> flowNodeRef-Liste', () => {
+    const chainFormatBOnly = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'a', type: 'userTask', name: 'Adresse prüfen' },
+        { id: 'b', type: 'userTask', name: 'Telefon prüfen' },
+        { id: 'c', type: 'userTask', name: 'E-Mail prüfen' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f0', source: 's', target: 'a' },
+        { id: 'f1', source: 'a', target: 'b' },
+        { id: 'f2', source: 'b', target: 'c' },
+        { id: 'f3', source: 'c', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter', nodeIds: ['s', 'a', 'b', 'c', 'e'] }],
+    };
+    expect(chainFormatBOnly.nodes.find(n => n.id === 'a').lane).toBeUndefined();
+    const r = applyParallelize(chainFormatBOnly, { nodeIds: ['a', 'b', 'c'] });
+    const gateways = r.lc.nodes.filter(n => n.type === 'parallelGateway');
+    expect(gateways.length).toBe(2);
+    // Ein reines Auslesen von node.lane haette hier bei beiden `undefined` ergeben.
+    for (const gw of gateways) expect(gw.lane).toBe('L');
+    expect(checkGate(r.lc).ok).toBe(true);
+  });
 });
 
 const lcMerge = {
@@ -484,6 +589,70 @@ describe('mergeTasks', () => {
       associations: [{ id: 'as1', source: 'm1', target: 'do1', directed: true }] };
     const r = previewMergeTasks(withAssoc, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
     expect(r.feasible).toBe('full');
+  });
+
+  test('B3: verweigert einen Bahnwechsel, der NUR ueber Lane.nodeIds (Format B) ausgedrueckt ' +
+       'ist — new Set(nodes.map(n => n.lane)) sah hier ueberall `undefined` (Set-Groesse 1) ' +
+       'und liess die Bahn-Pruefung nie ansprechen; dieselbe Fehlerklasse wie bei isProtected()', () => {
+    const mergeFormatBTwoLanes = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'm1', type: 'userTask', name: 'Daten erfassen' },
+        { id: 'm2', type: 'userTask', name: 'Daten sichern' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'g0', source: 's', target: 'm1' },
+        { id: 'g1', source: 'm1', target: 'm2' },
+        { id: 'g2', source: 'm2', target: 'e' },
+      ],
+      lanes: [{ id: 'L1', name: 'Bahn 1', nodeIds: ['s', 'm1'] },
+              { id: 'L2', name: 'Bahn 2', nodeIds: ['m2', 'e'] }],
+    };
+    expect(mergeFormatBTwoLanes.nodes.find(n => n.id === 'm1').lane).toBeUndefined();
+    expect(mergeFormatBTwoLanes.nodes.find(n => n.id === 'm2').lane).toBeUndefined();
+    const r = previewMergeTasks(mergeFormatBTwoLanes, { nodeIds: ['m1', 'm2'], name: 'X tun' });
+    expect(r.feasible).toBe('none');
+    expect(r.reason).toMatch(/bahn/i);
+  });
+
+  test('B5: ein vom Eingriff eingefuehrter Stil-Verstoss (Name des gebuendelten Schritts folgt ' +
+       'nicht der Objekt+Verb-Konvention) wird in `warnings` gemeldet, blockiert aber nicht — ' +
+       'style ist im festen Rollback-Gate absichtlich aktiviert, aber nur mit Severity WARNING', () => {
+    const r = applyMergeTasks(lcMerge, { nodeIds: ['m1', 'm2'], name: 'Pruefung' });
+    expect(r.lc.nodes.find(n => n.id === 'm1').name).toBe('Pruefung');
+    expect(r.warnings.some(w => w.includes('Objekt+Verb'))).toBe(true);
+    expect(checkGate(r.lc).ok).toBe(true);
+  });
+
+  test('apply mutiert die Eingabe nicht', () => {
+    const before = JSON.stringify(lcMerge);
+    applyMergeTasks(lcMerge, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
+    expect(JSON.stringify(lcMerge)).toBe(before);
+  });
+
+  test('Rollback-Pfad: ein vom Eingriff selbst unberuehrter, bereits im Modell vorhandener ' +
+       'Deadlock (zweites Start-Ereignis fuehrt in eine Sackgasse) wird vom festen Gate erkannt ' +
+       '— apply wirft und laesst das Eingabemodell unveraendert. previewMergeTasks prueft nur ' +
+       'die lokale Kettenform, nicht die globale WF-Netz-Soundness; genau dafuer existiert das ' +
+       'Rollback-Gate als zweite Verteidigungslinie.', () => {
+    const lcWithDeadlock = { ...lcMerge,
+      nodes: [...lcMerge.nodes,
+        { id: 's2', type: 'startEvent', lane: 'L' },
+        { id: 'dead', type: 'userTask', name: 'Sackgasse pruefen', lane: 'L' }],
+      edges: [...lcMerge.edges, { id: 'gd0', source: 's2', target: 'dead' }] };
+
+    // Vorbedingung des Tests: previewMergeTasks selbst sieht kein Problem (die
+    // Kette m1/m2 ist lokal unauffaellig) — nur das Rollback-Gate nach apply
+    // sieht die globale Konsequenz (Deadlock durch das zweite Start-Ereignis).
+    const pv = previewMergeTasks(lcWithDeadlock, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
+    expect(pv.feasible).toBe('full');
+
+    const before = JSON.stringify(lcWithDeadlock);
+    expect(() => applyMergeTasks(lcWithDeadlock, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' }))
+      .toThrow(/Rollback/i);
+    expect(JSON.stringify(lcWithDeadlock)).toBe(before);
   });
 });
 
