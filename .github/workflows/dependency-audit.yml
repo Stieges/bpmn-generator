@@ -1,0 +1,41 @@
+name: Dependency Audit
+
+# Fails the build on high/critical advisories that no valid exception covers.
+# Policy and accepted risks: .github/dependency-policy.json
+# Gate implementation:      .github/scripts/dep-audit-gate.mjs
+#
+# The cron run matters as much as the PR run: an advisory published against
+# code that has not changed would otherwise never be noticed. Note that GitHub
+# disables scheduled workflows after 60 days of repository inactivity — this
+# net is not self-maintaining (documented in SECURITY.md).
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # No `npm ci` — the gate audits from the lockfile via
+      # `npm audit --package-lock-only`, verified to match the installed-tree
+      # result. Keeps the job at roughly 15 seconds.
+      - name: Run the gate
+        run: node .github/scripts/dep-audit-gate.mjs --summary
