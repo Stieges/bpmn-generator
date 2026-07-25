@@ -16,14 +16,28 @@ export function cloneLc(lc) {
  * Festes Rollback-Gate — bewusst PROFILUNABHÄNGIG.
  * Das Default-Profil hat die Workflow-Netz-Schicht aus, das strict-Profil macht
  * Stil-Regeln zu Fehlern. Beides würde das Rollback-Verhalten vom Nutzerprofil
- * abhängig machen und die Determinismus-Zusage brechen.
+ * abhängig machen und die Determinismus-Zusage brechen — SOUNDNESS_GATE ist
+ * daher ein fest verdrahtetes Objekt, das NIE aus dem Profil des Aufrufers
+ * abgeleitet wird, auch nicht teilweise.
+ *
+ * style ist ABSICHTLICH aktiviert (enabled: true), obwohl das Ergebnis nie
+ * daran scheitern kann: die Stil-Schicht hat ausschliesslich defaultSeverity
+ * WARNING (siehe rules.js STYLE_RULES; M05/M06 sind ohnehin severity=OFF),
+ * checkGate().ok prueft ausschliesslich r.errors — Warnungen bleiben also
+ * folgenlos fuers Rollback. Ohne diese Aktivierung wuerden Stil-Verstoesse,
+ * die ein Eingriff neu einfuehrt (z. B. applyMergeTasks vergibt einen vom
+ * Aufrufer gewaehlten Namen, der nicht der Objekt+Verb-Konvention folgt),
+ * NIRGENDS auftauchen: checkGate() lieferte immer warnings:[], SKILL.md
+ * verspricht aber ausdruecklich, dass Stil-Warnungen "come back in the
+ * result's `warnings` array" — das war schlicht falsch, solange die Schicht
+ * hier abgeschaltet war.
  */
 export const SOUNDNESS_GATE = {
   profile: 'redesign-gate',
   layers: {
     soundness:    { enabled: true },
     workflow_net: { enabled: true },
-    style:        { enabled: false },
+    style:        { enabled: true },
     pragmatics:   { enabled: false },
     optimization: { enabled: false },
   },
@@ -33,6 +47,21 @@ export const SOUNDNESS_GATE = {
 export function checkGate(lc) {
   const r = runRules(lc, SOUNDNESS_GATE);
   return { ok: r.errors.length === 0, errors: r.errors, warnings: r.warnings };
+}
+
+/**
+ * Warnungen, die zwischen `before` und `after` NEU hinzugekommen sind — nicht
+ * einfach alle Warnungen von `after`. checkGate(after) allein liefert nur
+ * eine Momentaufnahme NACH dem Eingriff: ein Stil-Verstoss, der schon VOR dem
+ * Eingriff im Modell stand (und mit dem Eingriff nichts zu tun hat), würde
+ * sonst faelschlich als "neue" Warnung ausgewiesen. redesign-cli.js beschriftet
+ * die Ausgabe ausdruecklich als "⚠ Neue Warnungen:" — dieses Versprechen war
+ * bisher nicht eingeloest, weil apply() bislang schlicht gate.warnings (die
+ * volle Nach-Zustand-Liste) durchreichte.
+ */
+export function warningsDelta(before, after) {
+  const beforeSet = new Set(checkGate(before).warnings);
+  return checkGate(after).warnings.filter(w => !beforeSet.has(w));
 }
 
 /**
