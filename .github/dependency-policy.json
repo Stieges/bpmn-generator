@@ -1,0 +1,63 @@
+{
+  "_": "Policy for .github/scripts/dep-audit-gate.mjs. Every exception needs a reason, a whyNotFixed, a reviewTrigger and an expiry date. An expired entry fails the build — that is the point. Do not extend an entry without redoing the analysis; remove it once the underlying fix lands.",
+
+  "policy": {
+    "failOn": ["critical", "high"],
+    "warnOn": ["moderate", "low"],
+    "expiryWarningDays": 14,
+    "maxExceptionDays": 180
+  },
+
+  "sourceScan": {
+    "roots": ["scripts", "tests"],
+    "exclude": ["node_modules", ".git", "coverage"],
+    "excludeFiles": [".test.js"],
+    "extensions": [".js", ".mjs"]
+  },
+
+  "exceptions": [
+    {
+      "id": "dev-brace-expansion-redos-2026-07",
+      "packages": ["brace-expansion"],
+      "maxSeverity": "high",
+      "scope": "dev",
+      "advisories": [
+        "GHSA-mh99-v99m-4gvg",
+        "GHSA-3jxr-9vmj-r5cp",
+        "GHSA-f886-m6hf-6m8v"
+      ],
+      "acceptNewAdvisories": false,
+      "reason": "DoS via brace expansion (unbounded expansion length, exponential-time expansion of consecutive non-expanding {} groups, zero-step sequence hang). Dev-tree only, mechanically provable: brace-expansion does not appear in `npm audit --omit=dev`. It is reached through jest only — glob/minimatch@9 in @jest/reporters, and test-exclude/minimatch@3 in babel-plugin-istanbul. The patterns expanded originate from jest's config and this repo's file names, never from untrusted input, and no shipped artifact contains it (build-skill.mjs bundles no node_modules).",
+      "whyNotFixed": "GHSA-mh99 covers <=5.0.7, i.e. every published version except 5.0.8. Forcing `overrides: {\"brace-expansion\": \"^5.0.8\"}` breaks the tree: brace-expansion@5 is type:module and exports `expand` as a named export only, while both consumers take the default — minimatch@9.0.9 via `__importDefault(require(...)).default` and test-exclude's minimatch@3.1.5 via `var expand = require('brace-expansion')` called as a function. Measured 2026-07-25 with the override applied: `typeof require('brace-expansion')` returned `object` (namespace, no callable default); minimatch@9 threw `TypeError: (0 , brace_expansion_1.default) is not a function`; minimatch@3 threw `TypeError: expand is not a function`. Notably `npm test` and `npm test -- --coverage` both stayed green — this repo's patterns contain no braces — so the break is real at the API level but unexercised. Shipping a knowingly broken dependency tree to silence a dev-only advisory is the worse trade. Reverted.",
+      "reviewTrigger": "jest's transitive tree reaches minimatch>=10 (which imports the named export): `cd scripts && npm ls brace-expansion --all`. Or a 1.x/2.x backport of the fix is published.",
+      "voidIf": { "importsFound": [] },
+      "owner": "Stieges",
+      "opened": "2026-07-25",
+      "expires": "2026-10-23"
+    },
+    {
+      "id": "mcp-sdk-http-transport-dead-code-2026-07",
+      "packages": ["@hono/node-server", "@modelcontextprotocol/sdk"],
+      "maxSeverity": "moderate",
+      "scope": "prod",
+      "advisories": ["GHSA-frvp-7c67-39w9"],
+      "acceptNewAdvisories": true,
+      "reason": "Path traversal in serve-static via encoded backslash, Windows only. Pulled in solely by @modelcontextprotocol/sdk's HTTP/SSE transports, which this project never loads: scripts/mcp-bpmn-server.js imports StdioServerTransport only, and scripts/http-server.js uses node:http directly rather than express. serveStatic is never called and there is no Windows deployment path. @modelcontextprotocol/sdk is listed alongside @hono/node-server because npm reports it as a separate finding via the effects chain (`via: [\"@hono/node-server\"]`) — it is the same single advisory, not a second risk.",
+      "whyNotFixed": "The fix requires @hono/node-server >=2.0.5, but @modelcontextprotocol/sdk@1.29.0 declares \"@hono/node-server\": \"^1.19.9\" as a non-optional runtime dependency. npm's only proposed remedy is a semver-major *downgrade* of the SDK to 1.24.3 (`fixAvailable: {\"name\":\"@modelcontextprotocol/sdk\",\"version\":\"1.24.3\",\"isSemVerMajor\":true}`) — there is no forward fix. An override to 2.x would run the SDK outside its declared and tested range in order to patch a code path we never execute.",
+      "reviewTrigger": "@modelcontextprotocol/sdk widens its @hono/node-server range to admit >=2.0.5 (`npm view @modelcontextprotocol/sdk dependencies`), or this project adopts an HTTP/SSE MCP transport — the latter is caught automatically by voidIf below.",
+      "voidIf": {
+        "importsFound": [
+          "StreamableHTTPServerTransport",
+          "SSEServerTransport",
+          "@hono/node-server",
+          "serveStatic",
+          "from 'hono'",
+          "from 'express'"
+        ]
+      },
+      "owner": "Stieges",
+      "opened": "2026-07-25",
+      "expires": "2027-01-21"
+    }
+  ]
+}
