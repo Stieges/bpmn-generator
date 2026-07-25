@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { evaluate, resolveAdvisories, validatePolicy, scanSources } from '../.github/scripts/dep-audit-gate.mjs';
+import { evaluate, resolveAdvisories, validatePolicy, scanSources, ToolingError } from '../.github/scripts/dep-audit-gate.mjs';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -151,6 +151,58 @@ describe('dep-audit-gate — evaluate', () => {
     );
     expect(r.violations).toHaveLength(0);
     expect(r.exempt).toHaveLength(2);
+  });
+});
+
+// These pin the fail-open paths found by the security audit of 2026-07-25. Each
+// one previously let a finding through silently; the point of the test is that
+// the gate now refuses rather than shrugs.
+describe('dep-audit-gate — must fail closed, not open', () => {
+  test('a finding with no severity is a tooling error, not a silent drop', () => {
+    // Previously: failOn.includes(undefined) and warnOn.includes(undefined) are
+    // both false, so the finding vanished from violations AND warnings.
+    expect(() => run(report({ risky: { via: [advisory('GHSA-aaaa-bbbb-cccc')] } }), basePolicy()))
+      .toThrow(ToolingError);
+  });
+
+  test('a severity the gate does not know is a tooling error', () => {
+    expect(() => run(report({ risky: { severity: 'HIGH', via: [advisory('GHSA-aaaa-bbbb-cccc')] } }), basePolicy()))
+      .toThrow(/cannot classify/);
+  });
+
+  test('an unparseable expiry counts as expired rather than exempt', () => {
+    // Unreachable via main() — validatePolicy rejects it first — but evaluate()
+    // is exported, and `nowMs > NaN` is false, which would have exempted.
+    const r = run(
+      report({ risky: { severity: 'high', via: [advisory('GHSA-aaaa-bbbb-cccc')] } }),
+      basePolicy([exception({ expires: 'not-a-date' })]),
+    );
+    expect(r.exempt).toHaveLength(0);
+    expect(r.violations[0]).toMatchObject({ reason: 'expired' });
+  });
+
+  test('a future-dated `opened` cannot smuggle an unbounded exception past the cap', () => {
+    // The original cap measured expires-opened only. opened 2099-01-01 /
+    // expires 2099-06-15 is a compliant-looking 165 days, yet `now > expires`
+    // stays false for decades — exempting even a critical finding indefinitely.
+    expect(() => validatePolicy(
+      basePolicy([exception({ opened: '2099-01-01', expires: '2099-06-15' })]),
+      NOW.getTime(),
+    )).toThrow(/in the future/);
+  });
+
+  test('an expiry further away than maxExceptionDays is rejected even with a valid window', () => {
+    expect(() => validatePolicy(
+      basePolicy([exception({ opened: '2026-07-25', expires: '2027-06-01' })]),
+      NOW.getTime(),
+    )).toThrow(/maxExceptionDays/);
+  });
+
+  test('a normal exception opened today and expiring inside the cap still passes', () => {
+    expect(() => validatePolicy(
+      basePolicy([exception({ opened: '2026-07-25', expires: '2026-10-23' })]),
+      NOW.getTime(),
+    )).not.toThrow();
   });
 });
 

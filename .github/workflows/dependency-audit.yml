@@ -39,3 +39,34 @@ jobs:
       # result. Keeps the job at roughly 15 seconds.
       - name: Run the gate
         run: node .github/scripts/dep-audit-gate.mjs --summary
+
+  signatures:
+    name: Registry provenance
+    runs-on: ubuntu-latest
+
+    # Separate job: this one needs a full install, so it must not slow down the
+    # policy gate above. It answers a different question — not "is a known
+    # advisory open?" but "did these artifacts really come from the registry
+    # unmodified?". The 2026 wave of npm compromises (axios, node-ipc,
+    # node-gyp, jscrambler) was published through legitimate accounts, so
+    # signature verification is the check that catches tampering in transit.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci
+
+      # Non-blocking for now: unsigned legacy packages in the tree would turn
+      # the build red before it is clear which they are. Flip to blocking once
+      # a full run has been observed green.
+      - name: Verify registry signatures
+        working-directory: scripts
+        continue-on-error: true
+        run: npm audit signatures
