@@ -6,6 +6,7 @@
  */
 
 import { runRules } from './rules.js';
+import { resolveLaneId } from './topology.js';
 
 /** Tiefer Klon; die Eingabe eines Aufrufers wird nie mutiert. */
 export function cloneLc(lc) {
@@ -109,30 +110,17 @@ export function nextId(lc, prefix) {
 }
 
 /**
- * Effektive aktuelle Bahn eines Knotens, formatuebergreifend: das Schema erlaubt
- * die Zuordnung entweder über node.lane (Format A) ODER über Lane.nodeIds
- * (Format B) — ein Modell kann eines von beiden nutzen (oder, inkonsistent,
- * gar keines). Wer hier nur node.lane liest, uebersieht Format-B-only-Modelle.
- * `container` darf entweder das komplette Logic-Core (mit optionalem
- * `container.pools`, dann werden ALLE Pools/Prozesse durchsucht) oder bereits
- * ein einzelner Prozess/Pool sein (dann wird nur dessen `lanes` durchsucht) —
- * so laesst sich dieselbe Funktion sowohl fuer Multi-Pool-Aufloesung
- * (isProtected) als auch fuer Single-Pool-Aufrufer (redesign.js, die bereits
- * auf einem konkreten proc arbeiten) verwenden.
+ * Effektive aktuelle Bahn eines Knotens, formatuebergreifend (node.lane ODER
+ * Lane.nodeIds). Die Implementierung liegt in topology.js — dem Modul, das das
+ * Wissen ueber die beiden Zuordnungsformate ohnehin besitzt (siehe
+ * normalizeLaneAssignments). Hier nur re-exportiert, damit es weiterhin genau
+ * EINE Stelle gibt, die Bahn-Zugehoerigkeit aufloest.
  *
- * Einzige Stelle im Code, die beide Formate aufloest — siehe redesign.js,
- * das diese Funktion re-exportiert statt die Logik zu duplizieren.
+ * Warum nicht hier definiert: optimize.js braucht dieselbe Aufloesung, und
+ * redesign-core -> rules -> optimize existiert bereits — ein Import zurueck auf
+ * redesign-core wuerde einen Zyklus schliessen.
  */
-export function resolveLaneId(container, node) {
-  if (node.lane) return node.lane;
-  if (!container) return undefined;
-  const procs = container.pools ? container.pools : [container];
-  for (const p of procs) {
-    const lane = (p.lanes || []).find(l => Array.isArray(l.nodeIds) && l.nodeIds.includes(node.id));
-    if (lane) return lane.id;
-  }
-  return undefined;
-}
+export { resolveLaneId };
 
 /**
  * Schutzliste. Trifft über Kennung UND Anzeigenamen — eine Lane per Name zu

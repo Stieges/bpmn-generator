@@ -17,6 +17,7 @@
  */
 
 import { isGateway } from './types.js';
+import { resolveLaneId } from './topology.js';
 
 const TASK_TYPES = new Set([
   'task', 'userTask', 'serviceTask', 'scriptTask', 'manualTask',
@@ -173,7 +174,11 @@ function computeMetrics(proc) {
   const handoffTargetIds = [];
   for (const e of edges) {
     const s = nmap[e.source], t = nmap[e.target];
-    if (s && t && s.lane && t.lane && s.lane !== t.lane) { handoffCount++; handoffTargetIds.push(t.id); }
+    // Bahn formatuebergreifend aufloesen (node.lane ODER Lane.nodeIds) — sonst
+    // meldet diese Kennzahl bei Format-B-Modellen 0, waehrend der relane-Eingriff
+    // die echte Zahl liefert. Eine Kennzahl, eine Antwort.
+    const sLane = resolveLaneId(proc, s), tLane = resolveLaneId(proc, t);
+    if (sLane && tLane && sLane !== tLane) { handoffCount++; handoffTargetIds.push(t.id); }
   }
   const waitStates = nodes.filter(n =>
     (n.type === 'intermediateCatchEvent' || n.type === 'boundaryEvent') && WAIT_MARKERS.has(n.marker)

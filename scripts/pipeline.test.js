@@ -2762,4 +2762,42 @@ describe('Optimization Advisory (optimize mode)', () => {
       })
     );
   });
+
+  // Bahn-Zugehoerigkeit kann das Schema auf zwei Weisen ausdruecken: node.lane
+  // (Format A) oder Lane.nodeIds (Format B). Die Uebergaben-Kennzahl muss in
+  // beiden Faellen dieselbe Antwort geben — sonst meldet die Advisory-Erkennung
+  // 0 Uebergaben, waehrend der relane-Eingriff die echte Zahl liefert.
+  const lcFormatBHandoffs = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 'a', type: 'userTask', name: 'Antrag pruefen' },
+      { id: 'b', type: 'userTask', name: 'Antrag freigeben' },
+      { id: 'e', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 'a' },
+      { id: 'f2', source: 'a', target: 'b' },   // A -> B: Uebergabe
+      { id: 'f3', source: 'b', target: 'e' },   // B -> A: Uebergabe
+    ],
+    lanes: [
+      { id: 'LA', name: 'Vorpruefung', nodeIds: ['s', 'a', 'e'] },
+      { id: 'LB', name: 'Entscheidung', nodeIds: ['b'] },
+    ],
+  };
+
+  test('Uebergaben werden auch bei Format-B-Zuordnung (Lane.nodeIds) gezaehlt', () => {
+    const r = runOpt(lcFormatBHandoffs, 'optimize');
+    expect(r.metrics.optimization.handoffCount).toBe(2);
+  });
+
+  test('Uebergaben-Kennzahl stimmt mit der des relane-Eingriffs ueberein', async () => {
+    const { previewRelane, applyRelane } = await import('./redesign.js');
+    // relane braucht einen zulaessigen Zug, um handoffsBefore zu berichten.
+    const pv = previewRelane(lcFormatBHandoffs, { nodeId: 'b', lane: 'LA' });
+    expect(pv.feasible).toBe('full');
+    const applied = applyRelane(lcFormatBHandoffs, { nodeId: 'b', lane: 'LA' });
+    const fromRules = runOpt(lcFormatBHandoffs, 'optimize').metrics.optimization.handoffCount;
+    expect(applied.change.handoffsBefore).toBe(fromRules);
+  });
 });
