@@ -1,6 +1,6 @@
 # BPMN Fachliches Regelwerk
 
-Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, 30 Regeln (M05/M06 deaktiviert; Schicht 4 Workflow-Net und Schicht 5 Optimization sind opt-in).
+Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **32 registrierte Regeln**, davon 30 aktiv (M05/M06 stehen auf `severity: OFF`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
 
 ## Architektur
 
@@ -56,8 +56,9 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 | M04 | Divergierende XOR-Gateways: Kanten muessen Labels haben | Silver Ch.5, OMG §10.5.1 | implementiert |
 | M05 | Prozessnamen mit Verb+Substantiv-Pattern | 7PMG G7 | Platzhalter |
 | M06 | Keine doppelten Knotennamen im selben Prozess | 7PMG G6 | Platzhalter |
-| M07 | Start-Events nur am Anfang (keine eingehenden Kanten) | OMG §10.4.2 | Platzhalter |
-| M08 | End-Events nur am Ende (keine ausgehenden Kanten) | OMG §10.4.2 | Platzhalter |
+| M07 | Vermeide OR-Gateways (inclusive) | Silver Ch.5, 7PMG G4 | implementiert |
+| M08 | Jeder XOR-Split hat einen Default-Flow | Silver Ch.5 | implementiert |
+| M09 | Lane-Node-Zuweisung: Format B (lane.nodeIds) ohne Format A (node.lane) | OMG §10.5 | implementiert |
 | M10 | Lane- und Pool-Namen: max. 25 Zeichen | Silver §4.2 | implementiert |
 
 ## Schicht 3: Pragmatik (INFO)
@@ -67,8 +68,19 @@ Komplexitaetsmetriken und Hinweise.
 | ID | Regel | Referenz | Status |
 |----|-------|----------|--------|
 | P01 | Modellgroesse: max. 30 Aktivitaeten pro Prozess | 7PMG G1 (30/50 Threshold), BEF4LLM | implementiert |
-| P02 | Gateway-Fanout: max. 5 ausgehende Kanten pro Gateway | Silver Ch.5 | Platzhalter |
-| P03 | Verschachtelungstiefe: max. 3 Ebenen | BEF4LLM | Platzhalter |
+| P02 | Gateway-Verschachtelungstiefe ≤ 3 | BEF4LLM | implementiert |
+| P03 | Control-Flow Complexity Score (CFC) | Cardoso 2005 | implementiert |
+
+## Schicht 4: Workflow-Net Soundness (opt-in, ERROR/WARNING)
+
+Formale Petri-Netz-Pruefung. Nur aktiv, wenn das Profil `layers.workflow_net.enabled` setzt — der
+Redesign-Werkzeugkasten aktiviert sie in seinem festen Gate immer (siehe `redesign-core.js`).
+
+| ID | Regel | Referenz | Status |
+|----|-------|----------|--------|
+| WF01 | Liveness — jede Transition feuert mindestens einmal | van der Aalst, Soundness Def. 1 | implementiert |
+| WF02 | 1-Boundedness — kein Place akkumuliert mehr als 1 Token | van der Aalst, Soundness Def. 2 | implementiert |
+| WF03 | Proper Completion — keine Deadlocks, Sink erreichbar | van der Aalst, Soundness Def. 3 | implementiert |
 
 ## Schicht 5: Process Optimization Advisory (opt-in, ADVISORY)
 
