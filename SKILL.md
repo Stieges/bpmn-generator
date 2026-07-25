@@ -55,7 +55,59 @@ Select the mode consistently across entry points:
 - MCP: `mode: "optimize"` on `generate_bpmn` / `validate_bpmn` / `orchestrate_bpmn`
 
 Advisories are review suggestions with trade-off tags (time/cost/quality/flexibility); they are heuristics,
-not proofs — present them as options, never silently apply them.
+not proofs — present them as options, never silently apply them. Each advisory is an object
+`{ id, transform, targets, message, tradeoff, ref, judgment }` (see `references/api-reference.md`); `message`
+is the human-readable line, `transform` names the matching intervention in the toolbox below.
+
+### Redesign Toolbox
+
+In `optimize` mode, an advisory's `transform` field names a concrete, mechanical intervention. The
+interventions live in `scripts/redesign.js`; each has a `preview*` function (what would be feasible, and why
+not) and an `apply*` function that performs it:
+
+- `parallelize` — puts a linear, same-lane task chain into a parallel-gateway split/join
+- `mergeTasks` — folds a linear task chain into one task; **requires an explicit `name`** — naming the
+  result is a judgment call the toolbox refuses to make for you
+- `relane` — moves one node to a different lane
+- `reorderKnockouts` — reorders a chain of exclusive-gateway "knock-out" checks; **requires an explicit
+  `order`** — it is never computed
+- `isolateException` — turns an inline exception branch into a boundary event on the owning task;
+  **requires explicit `marker` and `cancelActivity`**, and, when the exception end has more than one
+  incoming edge, an **explicit `edgeIds`** naming which ones belong to this task — it refuses rather than
+  guess
+
+**No-language-model guarantee:** the toolbox is purely deterministic. `scripts/redesign-core.js` may not
+import `agents/llm-provider.js`, directly or transitively — no LLM call, no API key. Verify with
+`grep -rn "llm-provider" scripts/redesign*.js` (no hit).
+
+**Rollback:** every `apply*` re-checks its result against a fixed, **profile-independent** soundness gate
+(soundness + workflow-net layers, always on — `scripts/redesign-core.js: SOUNDNESS_GATE`) and rolls back
+(throws, writes nothing) on structural errors. Style warnings never block; they come back in the result's
+`warnings` array instead.
+
+**What it will not decide for you:** the toolbox never decides *whether* an intervention should happen —
+that's the caller's call. Where a transform lacks the information to act safely (no proven data-independence
+between two tasks, no supplied ordering, no supplied marker/`cancelActivity`, an ambiguous set of incoming
+edges) it refuses with a specific reason instead of guessing. Not every transform currently has a matching
+automatic advisory either: O01→`isolateException`, O02→`reorderKnockouts`, O03→`relane`, O04→`parallelize`
+are detected by `optimize.js`; `mergeTasks` has no detector and is reachable only by direct/manual
+invocation.
+
+**Protection lists** (`policy.protectNodes` / `policy.protectLanes`) match a node or lane by id **and** by
+display name, and resolve lane membership whether the model expresses it via `node.lane` or via
+`Lane.nodeIds`.
+
+Every `apply*` returns a `change` record with three arrays — `added`, `removed`, `modified` — that together
+name every element (node, edge, or lane) that differs between input and result.
+
+CLI (preview is the default; nothing is written without `--apply`; a refusal exits non-zero and writes
+nothing):
+```bash
+node redesign-cli.js <input.json> <parallelize|mergeTasks|relane|reorderKnockouts|isolateException> \
+  [--nodes a,b,c] [--name "..."] [--lane X] [--order g2,g1] [--end xend] [--attach-to task] \
+  [--marker timer] [--cancel-activity true|false] [--edges j2,j5] [--policy '{"protectNodes":[...]}'] \
+  [--apply] [-o out.json]
+```
 
 ---
 

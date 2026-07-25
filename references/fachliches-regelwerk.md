@@ -93,6 +93,15 @@ nichts wird umsortiert oder automatisch geändert. Reijers warnt zudem: Heuristi
 widersprechen sich teils (z.B. *Control addition* ↔ *Task elimination*). Quellen sind ausschließlich die
 **publizierten** Paper (Reijers/Limam Mansar 2005, *Omega* 33(4); BABOK v3 2015).
 
+**Vom Vorschlag zum Eingriff:** jede Advisory benennt über `transform` einen passenden, deterministischen
+Eingriff aus dem Redesign-Werkzeugkasten (`scripts/redesign.js`, CLI-Zugang `scripts/redesign-cli.js`,
+gemeinsamer Kern `scripts/redesign-core.js`) — je mit `preview*`/`apply*`, geprüft gegen ein festes,
+**profilunabhängiges** Soundness-Gate. O01→`isolateException`, O02→`reorderKnockouts`, O03→`relane`,
+O04→`parallelize`; `mergeTasks` hat keinen eigenen Detektor und ist nur direkt aufrufbar. Der
+Werkzeugkasten entscheidet **nie**, *ob* ein Eingriff gemacht wird, und rät nie eine fehlende
+Pflichtangabe (Reihenfolge, Marker, Name, Kantenzuordnung) — er verweigert stattdessen mit Begründung.
+Details: `SKILL.md` Abschnitt „Redesign Toolbox“, `references/api-reference.md` (Advisory-Objektform).
+
 ---
 
 ## Regel-Profile
