@@ -1025,6 +1025,42 @@ const lcSharedExc = {
   lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
 };
 
+// Host, dessen EIGENER Ausnahme-Pfad über eine Zwischen-Aufgabe läuft
+// ("Vorgesetzten benachrichtigen"), bevor er das Ausnahme-Ende erreicht — die
+// Zwischen-Aufgabe entscheidet per eigenem Gateway (gw2), ob die Eskalation
+// bestätigt wird oder sich doch erledigt hat (gw2 braucht zwei Zweige, sonst
+// bliebe 'notify' nach dem Herausnehmen ohne jeden ausgehenden Fluss zurück —
+// ein durch Guard 1 zu Recht verweigerter, DAVON UNABHÄNGIGER Sackgassen-Fall,
+// siehe den "Sackgasse"-Test oben). Die frühere BFS-Heuristik
+// (hostExceptionEdges) brach an JEDEM fremden Aufgaben-Knoten ab — auch wenn
+// dieser Knoten in Wahrheit Teil des HOST-eigenen Pfades war ('notify' ist
+// keine fremde Aufgabe) — und erreichte j5 (gw2 -> xend) deshalb nie: der
+// Eingriff wurde faelschlich verweigert, obwohl der Pfad eindeutig zu 'task'
+// gehoert. Mit edgeIds ist das kein Rate-Problem mehr.
+const lcExcViaIntermediateTask = {
+  id: 'P',
+  nodes: [
+    { id: 's', type: 'startEvent', lane: 'L' },
+    { id: 'task', type: 'userTask', name: 'Antrag prüfen', lane: 'L' },
+    { id: 'gw', type: 'exclusiveGateway', name: 'Frist überschritten?', lane: 'L' },
+    { id: 'notify', type: 'userTask', name: 'Vorgesetzten benachrichtigen', lane: 'L' },
+    { id: 'gw2', type: 'exclusiveGateway', name: 'Eskalation bestätigt?', lane: 'L' },
+    { id: 'xend', type: 'endEvent', name: 'Fall eskaliert', lane: 'L' },
+    { id: 'e', type: 'endEvent', name: 'Fertig', lane: 'L' },
+    { id: 'e2', type: 'endEvent', name: 'Doch erledigt', lane: 'L' },
+  ],
+  edges: [
+    { id: 'j0', source: 's', target: 'task' },
+    { id: 'j1', source: 'task', target: 'gw' },
+    { id: 'j2', source: 'gw', target: 'notify', label: 'Ja' },
+    { id: 'j3', source: 'gw', target: 'e', label: 'Nein' },
+    { id: 'j4', source: 'notify', target: 'gw2' },
+    { id: 'j5', source: 'gw2', target: 'xend', label: 'Bestätigt' },
+    { id: 'j6', source: 'gw2', target: 'e2', label: 'Doch ok' },
+  ],
+  lanes: [{ id: 'L', name: 'Sachbearbeiter' }],
+};
+
 // Ein Host mit ZWEI verschachtelten, ausschliesslich ihm gehoerenden
 // Ausnahme-Zweigen zum selben Ende — beide muessen entfernt werden.
 const lcHostMultiExc = {
@@ -1269,10 +1305,24 @@ describe('isolateException', () => {
     expect(checkGate(r.lc).ok).toBe(true);
   });
 
-  describe('geteiltes Ausnahme-Ende (Critical-Fund: Kanten-Entfernung war nicht auf attachTo eingegrenzt)', () => {
-    test('REGRESSION: Isolieren von task1 entfernt NICHT den unabhängigen Ausnahme-Pfad von task2', () => {
+  describe('geteiltes Ausnahme-Ende — edgeIds statt Graph-Heuristik (Round-3-Fund: BFS beanspruchte fremde Kanten am gemeinsamen Gateway)', () => {
+    test('ohne edgeIds verweigert previewIsolateException als mehrdeutig und nennt die Kandidaten-IDs', () => {
+      const r = previewIsolateException(lcSharedExc, { endId: 'xend', attachTo: 'task1',
+                                                        marker: 'timer', cancelActivity: true });
+      expect(r.feasible).toBe('none');
+      expect(r.reason).toMatch(/mehrdeutig/i);
+      expect(r.reason).toMatch(/j2/);
+      expect(r.reason).toMatch(/j5/);
+
+      expect(() => applyIsolateException(lcSharedExc, { endId: 'xend', attachTo: 'task1',
+                                                         marker: 'timer', cancelActivity: true }))
+        .toThrow(/mehrdeutig/i);
+    });
+
+    test('edgeIds nennt nur die Kante des Hosts -> Isolieren von task1 entfernt NICHT den unabhängigen Ausnahme-Pfad von task2', () => {
       const r = applyIsolateException(lcSharedExc, { endId: 'xend', attachTo: 'task1',
-                                                     marker: 'timer', cancelActivity: true });
+                                                     marker: 'timer', cancelActivity: true,
+                                                     edgeIds: ['j2'] });
 
       // Nur task1s eigene Kante zum Ausnahme-Ende (j2) wird entfernt — j5
       // (gw2 -> xend, task2s Eskalationspfad) bleibt unangetastet.
@@ -1310,9 +1360,10 @@ describe('isolateException', () => {
       expect(r.change.note).not.toMatch(/j5/);
     });
 
-    test('symmetrisch: Isolieren von task2 lässt task1s Ausnahme-Pfad unangetastet', () => {
+    test('symmetrisch: edgeIds für task2s eigene Kante lässt task1s Ausnahme-Pfad unangetastet', () => {
       const r = applyIsolateException(lcSharedExc, { endId: 'xend', attachTo: 'task2',
-                                                     marker: 'error', cancelActivity: true });
+                                                     marker: 'error', cancelActivity: true,
+                                                     edgeIds: ['j5'] });
       expect(r.change.removed).toEqual(['j5']);
       expect(r.change.removed).not.toContain('j2');
 
@@ -1325,9 +1376,10 @@ describe('isolateException', () => {
       expect(checkGate(r.lc).ok).toBe(true);
     });
 
-    test('mehrere eingehende Kanten des Ausnahme-Endes, die ALLE zum Host gehören, werden vollständig entfernt', () => {
+    test('mehrere eingehende Kanten des Ausnahme-Endes, die ALLE zum Host gehören, werden per edgeIds vollständig entfernt', () => {
       const r = applyIsolateException(lcHostMultiExc, { endId: 'xend', attachTo: 'task',
-                                                        marker: 'timer', cancelActivity: true });
+                                                        marker: 'timer', cancelActivity: true,
+                                                        edgeIds: ['j2', 'j4'] });
       expect([...r.change.removed].sort()).toEqual(['j2', 'j4']);
 
       // xend hat danach nur noch die eine neue Kante vom Boundary-Event.
@@ -1368,6 +1420,65 @@ describe('isolateException', () => {
       expect(() => applyIsolateException(lcNoExceptionPath, { endId: 'xend', attachTo: 'task',
                                                                marker: 'timer', cancelActivity: true }))
         .toThrow(/ausnahme-pfad/i);
+    });
+
+    test('vormals fälschlich verweigerter Fall: Hosts eigener Ausnahme-Pfad läuft über eine ' +
+         'Zwischen-Aufgabe — mit edgeIds gelingt der Eingriff jetzt', () => {
+      // Die frühere BFS-Heuristik brach an JEDER fremden Aufgabe ab, auch wenn
+      // diese Teil des Host-eigenen Pfades war ('notify' ist keine fremde
+      // Aufgabe, sondern der einzige Weg von 'task' zu 'xend') — sie erreichte
+      // j5 (gw2 -> xend) deshalb nie und previewIsolateException verweigerte
+      // fälschlich mit "kein Ausnahme-Pfad gefunden". Mit explizitem edgeIds
+      // gibt es dieses Rate-Problem nicht mehr.
+      const pv = previewIsolateException(lcExcViaIntermediateTask, {
+        endId: 'xend', attachTo: 'task', marker: 'escalation', cancelActivity: true, edgeIds: ['j5'],
+      });
+      expect(pv.feasible).toBe('full');
+
+      const r = applyIsolateException(lcExcViaIntermediateTask, {
+        endId: 'xend', attachTo: 'task', marker: 'escalation', cancelActivity: true, edgeIds: ['j5'],
+      });
+      expect(r.change.removed).toEqual(['j5']);
+      const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+      expect(bnd.attachedTo).toBe('task');
+      expect(bnd.marker).toBe('escalation');
+      const newEdge = r.lc.edges.find(e => e.source === bnd.id);
+      expect(newEdge.target).toBe('xend');
+      // 'notify' und 'gw2' selbst bleiben inhaltlich unangetastet — der
+      // Eingriff verschiebt nur die Kante zum Ausnahme-Ende, nicht die
+      // Zwischen-Aufgabe oder ihr Gateway. gw2 behält seinen anderen Zweig (j6).
+      expect(r.lc.nodes.find(n => n.id === 'notify'))
+        .toEqual(lcExcViaIntermediateTask.nodes.find(n => n.id === 'notify'));
+      expect(r.lc.nodes.find(n => n.id === 'gw2'))
+        .toEqual(lcExcViaIntermediateTask.nodes.find(n => n.id === 'gw2'));
+      expect(r.lc.edges.filter(e => e.source === 'gw2').map(e => e.id)).toEqual(['j6']);
+      expect(checkGate(r.lc).ok).toBe(true);
+    });
+
+    test('edgeIds, die eine Kante nennen, die NICHT auf endId zielt, wird mit konkretem Grund verweigert', () => {
+      // 'j1' (task -> gw) existiert, zielt aber nicht auf 'xend' — previewIsolateException
+      // darf das nicht stillschweigend ignorieren oder mit dem falschen Kanten
+      // arbeiten, sondern muss verweigern und die falsche Kante benennen.
+      const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                                 marker: 'timer', cancelActivity: true,
+                                                 edgeIds: ['j1'] });
+      expect(r.feasible).toBe('none');
+      expect(r.reason).toMatch(/j1/);
+      expect(r.reason).toMatch(/zielen nicht auf|xend/i);
+
+      expect(() => applyIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                                   marker: 'timer', cancelActivity: true,
+                                                   edgeIds: ['j1'] }))
+        .toThrow(/j1/);
+    });
+
+    test('edgeIds mit unbekannter Kanten-Kennung wird mit konkretem Grund verweigert', () => {
+      const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'task',
+                                                 marker: 'timer', cancelActivity: true,
+                                                 edgeIds: ['gibtsnicht'] });
+      expect(r.feasible).toBe('none');
+      expect(r.reason).toMatch(/gibtsnicht/i);
+      expect(r.reason).toMatch(/unbekannt/i);
     });
   });
 });
