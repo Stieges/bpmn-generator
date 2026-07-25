@@ -279,7 +279,7 @@ passes this gate.** Warnings are not noise — they are the alarm.
 ### Setup (first time only)
 ```bash
 cd scripts/
-npm install   # installs: elkjs (only dependency)
+npm install   # installs runtime + dev dependencies (see package.json)
 ```
 
 ### Run pipeline
@@ -377,7 +377,7 @@ Use prompts from `references/prompt-template.md` for both roles.
 | `Unknown source/target` | Edge references non-existent node | Fix ID typo |
 | `Deadlock: XOR-split feeds AND-join` | Structural error | Change AND-join to XOR-join or restructure |
 | `ELK layout failed` | Disconnected graph | Fix isolated nodes |
-| `npm install fails` | No network or Node.js missing | Ensure Node.js ≥18 |
+| `npm install fails` | No network or Node.js missing | Ensure Node.js ≥20 |
 
 ---
 
