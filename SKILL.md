@@ -95,7 +95,9 @@ invocation.
 
 **Protection lists** (`policy.protectNodes` / `policy.protectLanes`) match a node or lane by id **and** by
 display name, and resolve lane membership whether the model expresses it via `node.lane` or via
-`Lane.nodeIds`.
+`Lane.nodeIds`. Transforms also **maintain** both representations: a transform that deletes a node
+removes it from any `Lane.nodeIds`, and one that creates a node adds it — so the two never contradict
+each other. Purely Format-A models are left untouched (no `nodeIds` arrays are introduced).
 
 Every `apply*` returns a `change` record with three arrays — `added`, `removed`, `modified` — that together
 name every element (node, edge, or lane) that differs between input and result.
