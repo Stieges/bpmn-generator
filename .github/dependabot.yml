@@ -1,4 +1,10 @@
 version: 2
+
+# Grouping matters here: without it, a batch of transitive security fixes
+# arrives as one PR per package. In July 2026 twelve advisories were open at
+# once — ungrouped that is twelve PRs, which is how a backlog starts.
+# Majors stay ungrouped on purpose so each one is reviewed on its own.
+
 updates:
   - package-ecosystem: npm
     directory: /scripts
@@ -9,10 +15,34 @@ updates:
       - dependencies
     commit-message:
       prefix: "deps:"
+    # Soak time before adopting a freshly published version — the window in which
+    # a compromised release is usually caught. Applies to version updates only;
+    # security updates are never delayed by this. GitHub's own default is 3 days.
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    groups:
+      npm-production:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [minor, patch]
+      npm-development:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 3
     labels:
       - ci
+    commit-message:
+      prefix: "ci:"
+    groups:
+      github-actions:
+        patterns: ["*"]
