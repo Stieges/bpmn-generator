@@ -2801,3 +2801,44 @@ describe('Optimization Advisory (optimize mode)', () => {
     expect(applied.change.handoffsBefore).toBe(fromRules);
   });
 });
+
+describe('O04 Parallelisierungs-Kandidat: Bahn-Grenzen in beiden Formaten', () => {
+  // Rohes node.lane waere bei Format-B-Modellen ueberall undefined; die
+  // "gleiche Bahn"-Bedingung wuerde damit zum No-Op und eine bahnuebergreifende
+  // Kette faelschlich als Kandidat gemeldet (False Positive).
+  const chainAcrossLanes = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 'a', type: 'userTask', name: 'Erstens pruefen' },
+      { id: 'b', type: 'userTask', name: 'Zweitens pruefen' },
+      { id: 'c', type: 'userTask', name: 'Drittens pruefen' },
+      { id: 'e', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f0', source: 's', target: 'a' },
+      { id: 'f1', source: 'a', target: 'b' },
+      { id: 'f2', source: 'b', target: 'c' },
+      { id: 'f3', source: 'c', target: 'e' },
+    ],
+    // Format B, und die Kette ueberspannt ZWEI Bahnen
+    lanes: [
+      { id: 'LA', name: 'Eins', nodeIds: ['s', 'a', 'b'] },
+      { id: 'LB', name: 'Zwei', nodeIds: ['c', 'e'] },
+    ],
+  };
+
+  test('bahnuebergreifende Format-B-Kette wird NICHT als Kandidat gemeldet', () => {
+    const r = runRules(chainAcrossLanes, profileForMode(null, 'optimize'));
+    expect(r.advisories.some(a => a.id === 'O04')).toBe(false);
+  });
+
+  test('Format-B-Kette innerhalb EINER Bahn wird weiterhin gemeldet', () => {
+    const oneLane = {
+      ...chainAcrossLanes,
+      lanes: [{ id: 'LA', name: 'Eins', nodeIds: ['s', 'a', 'b', 'c', 'e'] }],
+    };
+    const r = runRules(oneLane, profileForMode(null, 'optimize'));
+    expect(r.advisories.some(a => a.id === 'O04')).toBe(true);
+  });
+});

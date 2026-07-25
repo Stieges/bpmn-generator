@@ -141,12 +141,18 @@ function checkParallelismCandidate(proc, cfg) {
   let best = null;
   for (const n of nodes) {
     if (!isTask(n) || seen.has(n.id)) continue;
-    // walk forward while linear + same lane + task
+    // walk forward while linear + same lane + task.
+    // Bahn formatuebergreifend aufloesen: bei einem Format-B-Modell (Zuordnung nur
+    // ueber Lane.nodeIds) waere rohes n.lane bei JEDEM Knoten undefined, und
+    // `undefined === undefined` machte die "gleiche Bahn"-Bedingung zum No-Op —
+    // eine bahnuebergreifende Kette wuerde dann faelschlich als
+    // Parallelisierungs-Kandidat gemeldet (False Positive).
     const run = [n.id];
+    const nLane = resolveLaneId(proc, n);
     let cur = n.id;
     while (true) {
       const nx = (outMap[cur] || [])[0]?.target;
-      if (nx && linear(nx) && nmap[nx].lane === n.lane && !run.includes(nx)) { run.push(nx); cur = nx; }
+      if (nx && linear(nx) && resolveLaneId(proc, nmap[nx]) === nLane && !run.includes(nx)) { run.push(nx); cur = nx; }
       else break;
     }
     if (run.length >= min) { run.forEach(id => seen.add(id)); if (!best || run.length > best.length) best = run; }
