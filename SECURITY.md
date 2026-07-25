@@ -54,7 +54,24 @@ node .github/scripts/dep-audit-gate.mjs      # the gate's verdict
 cd scripts && npm audit                      # the raw report
 ```
 
-Two caveats worth knowing. GitHub disables scheduled workflows after 60 days of repository inactivity, so the weekly run is not a self-maintaining safety net. And the gate enforces what the lockfile resolves — it does not prevent someone from regenerating the lockfile and losing a pinned resolution; it only makes that regression visible on the next run.
+A second job in the same workflow runs `npm audit signatures`, which answers a different question: not "is a known advisory open?" but "did these artifacts really come from the registry unmodified?". It is non-blocking at present.
+
+**What the gate is not.** It guards against regression and inattention, not against a hostile pull request. On a fork PR the policy file, the lockfile *and the gate script itself* are checked out from the PR head, so a determined fork can simply rewrite the gate. This is inherent to every in-repo CI check; the actual controls there are human review and branch protection. The registry is pinned to `registry.npmjs.org` in the gate so that a project-level `.npmrc` cannot redirect the advisory lookup, but that closes one hole rather than making the gate a security boundary.
+
+Two further caveats. GitHub disables scheduled workflows after 60 days of repository inactivity, so the weekly run is not a self-maintaining safety net. And the gate enforces what the lockfile resolves — it does not prevent someone from regenerating the lockfile and losing a pinned resolution; it only makes that regression visible on the next run.
+
+### Adopting new versions
+
+The Dependabot `cooldown` (7 days, 30 for majors) gives a freshly published version time to be found out before it is adopted — the 2026 npm compromises were published through legitimate maintainer accounts, so a valid signature is not by itself evidence of a benign release.
+
+**A manual `npm update` bypasses that cooldown entirely.** When closing an advisory by hand this is a deliberate trade — the open vulnerability is a certainty, the compromised-release risk is a possibility — but make it consciously and check what you are adopting:
+
+```bash
+npm view <package>@<version> time    # how old is this release?
+npm audit signatures                 # did it come from the registry unmodified?
+```
+
+Worth weighting the decision by reachability: a package this project never loads (the MCP SDK's HTTP-transport subtree, for instance) carries far less risk from a same-day adoption than one on the untrusted-input path such as `ajv`/`fast-uri`.
 
 ### Accepted risks
 

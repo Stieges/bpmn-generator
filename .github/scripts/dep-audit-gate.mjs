@@ -22,7 +22,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,7 +36,7 @@ const REQUIRED_EXCEPTION_FIELDS = [
   'reviewTrigger', 'opened', 'expires',
 ];
 
-class ToolingError extends Error {}
+export class ToolingError extends Error {}
 
 // ---------------------------------------------------------------- audit input
 
@@ -45,7 +45,15 @@ class ToolingError extends Error {}
  * on the normal path. The report is on stdout either way.
  */
 function runAudit(dir, extraArgs = []) {
-  const args = ['audit', '--json', '--package-lock-only', ...extraArgs];
+  // The registry is pinned explicitly. `npm audit` honours a project-level
+  // .npmrc in cwd, so a pull request could otherwise ship one pointing at a
+  // cooperative registry that returns an empty advisory set — a structurally
+  // valid report against which the gate would exit 0.
+  const args = [
+    'audit', '--json', '--package-lock-only',
+    '--registry=https://registry.npmjs.org/',
+    ...extraArgs,
+  ];
   let stdout;
   try {
     stdout = execFileSync('npm', args, { cwd: dir, encoding: 'utf8', maxBuffer: 1e8 });
@@ -164,7 +172,7 @@ export function scanSources(root, scanConfig, specifiers) {
 
 // ------------------------------------------------------------------ policy
 
-export function validatePolicy(policy) {
+export function validatePolicy(policy, now = Date.now()) {
   if (!policy || typeof policy !== 'object') throw new ToolingError('policy file is not an object');
   const p = policy.policy;
   if (!p || !Array.isArray(p.failOn) || !Array.isArray(p.warnOn)) {
@@ -197,8 +205,28 @@ export function validatePolicy(policy) {
     const expires = Date.parse(e.expires);
     if (Number.isNaN(opened)) throw new ToolingError(`exception "${e.id}": opened is not a date`);
     if (Number.isNaN(expires)) throw new ToolingError(`exception "${e.id}": expires is not a date`);
-    const days = (expires - opened) / 86_400_000;
+
     const max = p.maxExceptionDays ?? 180;
+    const DAY = 86_400_000;
+
+    // The window is bounded in both directions on purpose. Checking only
+    // `expires - opened` would let a future-dated `opened` smuggle an unbounded
+    // exception past a compliant-looking window: opened 2099-01-01 / expires
+    // 2099-06-15 is 165 days, yet `now > expires` stays false for decades, so
+    // the entry would exempt even a critical finding indefinitely.
+    if (opened > now + DAY) {
+      throw new ToolingError(
+        `exception "${e.id}": opened ${e.opened} is in the future — an exception cannot predate its own creation`,
+      );
+    }
+    const daysFromNow = (expires - now) / DAY;
+    if (daysFromNow > max) {
+      throw new ToolingError(
+        `exception "${e.id}": expires ${e.expires} is ${Math.round(daysFromNow)} days away, ` +
+        `exceeding policy.maxExceptionDays (${max})`,
+      );
+    }
+    const days = (expires - opened) / DAY;
     if (days > max) {
       throw new ToolingError(
         `exception "${e.id}": lifetime of ${Math.round(days)} days exceeds policy.maxExceptionDays (${max})`,
@@ -229,6 +257,20 @@ export function evaluate({ auditReport, prodAuditReport, policy, sourceHits = {}
 
   for (const [pkg, finding] of Object.entries(auditReport.vulnerabilities ?? {})) {
     const severity = finding.severity;
+
+    // A finding the gate cannot classify must stop the build, not vanish.
+    // `failOn.includes(undefined)` and `warnOn.includes(undefined)` are both
+    // false, so without this a missing severity — or a casing/label drift such
+    // as "HIGH", or a severity npm adds in future — would produce no violation,
+    // no warning and no trace. Same principle as exit 2: an audit that cannot
+    // be interpreted must never read as an audit that found nothing.
+    if (!(severity in SEVERITY_RANK)) {
+      throw new ToolingError(
+        `finding "${pkg}" has severity ${JSON.stringify(severity)}, which this gate cannot classify ` +
+        `(known: ${Object.keys(SEVERITY_RANK).join(', ')}) — refusing to interpret the report`,
+      );
+    }
+
     const advisories = [...resolveAdvisories(pkg, auditReport)];
     const exception = findException(pkg);
 
@@ -245,7 +287,11 @@ export function evaluate({ auditReport, prodAuditReport, policy, sourceHits = {}
     usedExceptions.add(exception.id);
     const expiresMs = Date.parse(exception.expires);
 
-    if (nowMs > expiresMs) {
+    // Inverted on purpose: `nowMs > NaN` is false and would silently exempt,
+    // whereas `!(nowMs <= NaN)` is true and fails closed. main() cannot reach
+    // this — validatePolicy rejects unparseable dates first — but evaluate() is
+    // exported and the test suite calls it directly.
+    if (!(nowMs <= expiresMs)) {
       violations.push({ pkg, severity, advisories, reason: 'expired', exception: exception.id,
         detail: `exception expired ${exception.expires} — re-review, do not extend blindly` });
       continue;
@@ -386,7 +432,7 @@ function main(argv) {
       render(result),
       '```',
     ].join('\n');
-    execFileSync('sh', ['-c', `cat >> "$GITHUB_STEP_SUMMARY"`], { input: md });
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
   }
 
   return result.violations.length > 0 ? 1 : 0;
