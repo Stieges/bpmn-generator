@@ -1482,3 +1482,202 @@ describe('isolateException', () => {
     });
   });
 });
+
+// CLI-Zugang (scripts/redesign-cli.js). Spawnt den echten Prozess (Muster aus
+// pipeline.test.js' runCli), um main()s tatsaechliche Verdrahtung zu pruefen:
+// Vorschau als Standard, Rueckgabewert bei Verweigerung, und dass die
+// Zieldatei in KEINEM Verweigerungsfall entsteht — inklusive der Faelle, in
+// denen ein Pflichtparameter (name/order/marker/cancelActivity/edgeIds bei
+// Mehrdeutigkeit) schlicht fehlt und die CLI ihn bewusst NICHT defaulted,
+// sondern die Verweigerung dem jeweiligen Transform ueberlaesst.
+describe('redesign-cli', () => {
+  const runCli = async (lc, args) => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redesign-cli-'));
+    const inPath = path.join(dir, 'in.json');
+    const outPath = path.join(dir, 'out.json');
+    fs.writeFileSync(inPath, JSON.stringify(lc), 'utf8');
+    const res = spawnSync('node', ['redesign-cli.js', inPath, ...args, '-o', outPath],
+                          { cwd: __dirname, encoding: 'utf8' });
+    const wrote = fs.existsSync(outPath);
+    return {
+      status: res.status, stdout: res.stdout || '', stderr: res.stderr || '', wrote,
+      readOut: () => JSON.parse(fs.readFileSync(outPath, 'utf8')),
+    };
+  };
+
+  describe('parallelize', () => {
+    test('Vorschau (Standard, kein --apply) schreibt nichts und meldet Machbarkeit', async () => {
+      const r = await runCli(lcChain, ['parallelize', '--nodes', 'a,b,c']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/machbar/i);
+      expect(r.wrote).toBe(false);
+    });
+
+    test('Verweigerung (keine zusammenhaengende Kette) endet mit Fehler-Rueckgabewert und schreibt nicht', async () => {
+      const r = await runCli(lcChain, ['parallelize', '--nodes', 'a,c', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/zusammenhäng/i);
+    });
+
+    test('mit --apply wird das Ergebnis geschrieben (AND-Split/-Join im Output)', async () => {
+      const r = await runCli(lcChain, ['parallelize', '--nodes', 'a,b,c', '--apply']);
+      expect(r.status).toBe(0);
+      expect(r.wrote).toBe(true);
+      const out = r.readOut();
+      expect(out.nodes.filter(n => n.type === 'parallelGateway').length).toBe(2);
+    });
+
+    test('--policy mit geschuetztem Knoten verweigert und schreibt nicht', async () => {
+      const r = await runCli(lcChain, ['parallelize', '--nodes', 'a,b,c',
+                                       '--policy', JSON.stringify({ protectNodes: ['a'] }), '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/geschützt/i);
+    });
+
+    test('ungueltiges --policy-JSON wird als Bedienungsfehler gemeldet, nicht als Absturz', async () => {
+      const r = await runCli(lcChain, ['parallelize', '--nodes', 'a,b,c', '--policy', 'kein-json', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/policy/i);
+    });
+  });
+
+  describe('mergeTasks', () => {
+    test('fehlender Pflichtparameter --name verweigert mit der eigenen Meldung des Transforms, nicht mit einem stillen Default', async () => {
+      const r = await runCli(lcMerge, ['mergeTasks', '--nodes', 'm1,m2', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/name/i);
+    });
+
+    test('mit --name wird gebuendelt und geschrieben', async () => {
+      const r = await runCli(lcMerge, ['mergeTasks', '--nodes', 'm1,m2',
+                                       '--name', 'Daten erfassen und sichern', '--apply']);
+      expect(r.status).toBe(0);
+      expect(r.wrote).toBe(true);
+      const out = r.readOut();
+      expect(out.nodes.find(n => n.id === 'm1').name).toBe('Daten erfassen und sichern');
+      expect(out.nodes.find(n => n.id === 'm2')).toBeUndefined();
+    });
+  });
+
+  describe('relane', () => {
+    test('fehlendes --lane verweigert (unbekannte Zielbahn) statt zu erraten', async () => {
+      const r = await runCli(lcTwoLanes, ['relane', '--node', 'x', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/bahn/i);
+    });
+
+    test('mit --node und --lane wird verschoben und geschrieben', async () => {
+      const r = await runCli(lcTwoLanes, ['relane', '--node', 'x', '--lane', 'B', '--apply']);
+      expect(r.status).toBe(0);
+      expect(r.wrote).toBe(true);
+      const out = r.readOut();
+      expect(out.nodes.find(n => n.id === 'x').lane).toBe('B');
+    });
+  });
+
+  describe('reorderKnockouts', () => {
+    test('fehlendes --order verweigert — der Eingriff berechnet und erraet keine Reihenfolge', async () => {
+      const r = await runCli(lcKo, ['reorderKnockouts', '--nodes', 'g1,g2', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/reihenfolge/i);
+    });
+
+    test('Vorschau mit gueltigem --order meldet Machbarkeit, schreibt aber ohne --apply nichts', async () => {
+      const r = await runCli(lcKo, ['reorderKnockouts', '--nodes', 'g1,g2', '--order', 'g2,g1']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/machbar/i);
+      expect(r.wrote).toBe(false);
+    });
+
+    test('mit --apply wird die Reihenfolge gedreht und geschrieben', async () => {
+      const r = await runCli(lcKo, ['reorderKnockouts', '--nodes', 'g1,g2', '--order', 'g2,g1', '--apply']);
+      expect(r.status).toBe(0);
+      expect(r.wrote).toBe(true);
+      const out = r.readOut();
+      const firstEdge = out.edges.find(e => e.source === 's');
+      expect(firstEdge.target).toBe('g2');
+    });
+  });
+
+  describe('isolateException', () => {
+    test('fehlender Pflichtparameter --marker verweigert', async () => {
+      const r = await runCli(lcExc, ['isolateException', '--end', 'xend', '--attach-to', 'task', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/marker/i);
+    });
+
+    test('fehlender Pflichtparameter --cancel-activity verweigert (kein Default auf true/false)', async () => {
+      const r = await runCli(lcExc, ['isolateException', '--end', 'xend', '--attach-to', 'task',
+                                     '--marker', 'timer', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/cancelactivity/i);
+    });
+
+    test('mit allen Pflichtparametern wird das Boundary-Event angehaengt und geschrieben', async () => {
+      const r = await runCli(lcExc, ['isolateException', '--end', 'xend', '--attach-to', 'task',
+                                     '--marker', 'timer', '--cancel-activity', 'true', '--apply']);
+      expect(r.status).toBe(0);
+      expect(r.wrote).toBe(true);
+      const out = r.readOut();
+      const bnd = out.nodes.find(n => n.type === 'boundaryEvent');
+      expect(bnd.attachedTo).toBe('task');
+      expect(bnd.marker).toBe('timer');
+      expect(bnd.cancelActivity).toBe(true);
+    });
+
+    test('geteiltes Ausnahme-Ende ohne --edges verweigert als mehrdeutig und nennt die Kandidaten-Kanten', () => {
+      return runCli(lcSharedExc, ['isolateException', '--end', 'xend', '--attach-to', 'task1',
+                                  '--marker', 'timer', '--cancel-activity', 'true', '--apply']).then(r => {
+        expect(r.status).not.toBe(0);
+        expect(r.wrote).toBe(false);
+        expect(r.stderr).toMatch(/mehrdeutig/i);
+        expect(r.stderr).toMatch(/j2/);
+        expect(r.stderr).toMatch(/j5/);
+      });
+    });
+
+    test('--edges loest die Mehrdeutigkeit auf und beruehrt den fremden Ausnahme-Pfad nicht', async () => {
+      const r = await runCli(lcSharedExc, ['isolateException', '--end', 'xend', '--attach-to', 'task1',
+                                           '--marker', 'timer', '--cancel-activity', 'true',
+                                           '--edges', 'j2', '--apply']);
+      expect(r.status).toBe(0);
+      expect(r.wrote).toBe(true);
+      const out = r.readOut();
+      const gw2Out = out.edges.filter(e => e.source === 'gw2').map(e => e.id).sort();
+      expect(gw2Out).toEqual(['j5', 'j6']);
+    });
+  });
+
+  describe('allgemeine CLI-Fehler', () => {
+    test('unbekannter Eingriff endet mit Fehler-Rueckgabewert und schreibt nicht', async () => {
+      const r = await runCli(lcChain, ['bogusTransform', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+    });
+
+    test('fehlende Argumente (kein Eingriff angegeben) enden mit Fehler-Rueckgabewert', async () => {
+      const { spawnSync } = await import('node:child_process');
+      const os = await import('node:os');
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redesign-cli-'));
+      const inPath = path.join(dir, 'in.json');
+      fs.writeFileSync(inPath, JSON.stringify(lcChain), 'utf8');
+      const res = spawnSync('node', ['redesign-cli.js', inPath], { cwd: __dirname, encoding: 'utf8' });
+      expect(res.status).not.toBe(0);
+      expect(res.stderr).toMatch(/usage/i);
+    });
+  });
+});
