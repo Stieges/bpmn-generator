@@ -42,9 +42,26 @@ const TRANSFORMS = {
 /** Signalisiert einen CLI-seitigen Bedienungsfehler (nicht: eine Verweigerung durch den Transform). */
 class UsageError extends Error {}
 
+/**
+ * Liest den Wert eines Flags. Ein Folge-Token, das selbst wie ein Flag
+ * aussieht (führendes "--"), darf NIE als Wert durchgereicht werden — sonst
+ * "verschluckt" ein fehlender Wert das naechste Flag: `--name --apply`
+ * wuerde sonst den String "--apply" als Namen liefern, mergeTasks haette
+ * einen (unsinnigen) Namen und wuerde NICHT verweigern, und die CLI meldete
+ * Erfolg + schriebe eine Datei mit dem Knoten-Namen "--apply" — ein
+ * stilles Erraten, exakt das, was dieses Werkzeug laut Vertrag ausschliesst.
+ * Kein "--"-Präfix kommt in diesem Programm als legitimer Wert vor (Kennungen,
+ * Bahn-Namen, Policy-JSON, Reihenfolgen) — daher ist "führendes --" ein
+ * sicheres, false-positive-freies Erkennungsmerkmal für ein Flag-Token.
+ * Ein tatsächlich wertloser Flag wie --apply wird nie ueber flag() gelesen
+ * (er wird per argv.includes('--apply') geprüft) und bleibt daher unberührt.
+ */
 function flag(args, name) {
   const i = args.indexOf(name);
-  return i >= 0 ? args[i + 1] : undefined;
+  if (i < 0) return undefined;
+  const value = args[i + 1];
+  if (value !== undefined && value.startsWith('--')) return undefined;
+  return value;
 }
 
 function splitList(value) {

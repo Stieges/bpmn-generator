@@ -1565,6 +1565,15 @@ describe('redesign-cli', () => {
       expect(out.nodes.find(n => n.id === 'm1').name).toBe('Daten erfassen und sichern');
       expect(out.nodes.find(n => n.id === 'm2')).toBeUndefined();
     });
+
+    test('Fund-Reproduktion: --name unmittelbar gefolgt von --apply darf NICHT "--apply" ' +
+         'als Namen uebernehmen — mergeTasks muss seine EIGENE "Name fehlt"-Verweigerung ' +
+         'auslösen, nicht stillschweigend erfolgreich schreiben', async () => {
+      const r = await runCli(lcMerge, ['mergeTasks', '--nodes', 'm1,m2', '--name', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/name/i);
+    });
   });
 
   describe('relane', () => {
@@ -1581,6 +1590,15 @@ describe('redesign-cli', () => {
       expect(r.wrote).toBe(true);
       const out = r.readOut();
       expect(out.nodes.find(n => n.id === 'x').lane).toBe('B');
+    });
+
+    test('Fund-Reproduktion (gleiches Slurping-Muster wie bei --name): --lane unmittelbar ' +
+         'gefolgt von --apply darf NICHT "--apply" als Zielbahn uebernehmen — previewRelane ' +
+         'muss seine eigene "unbekannte Zielbahn"-Verweigerung auslösen', async () => {
+      const r = await runCli(lcTwoLanes, ['relane', '--node', 'x', '--lane', '--apply']);
+      expect(r.status).not.toBe(0);
+      expect(r.wrote).toBe(false);
+      expect(r.stderr).toMatch(/bahn/i);
     });
   });
 
@@ -1668,16 +1686,45 @@ describe('redesign-cli', () => {
     });
 
     test('fehlende Argumente (kein Eingriff angegeben) enden mit Fehler-Rueckgabewert', async () => {
+      const r = await runCli(lcChain, []);
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toMatch(/usage/i);
+      expect(r.wrote).toBe(false);
+    });
+
+    test('fehlende Eingabedatei endet mit Fehler-Rueckgabewert und schreibt nicht ' +
+         '(readFileSync schlaegt fehl, sauber im try/catch abgefangen)', async () => {
+      const { spawnSync } = await import('node:child_process');
+      const os = await import('node:os');
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redesign-cli-'));
+      const missingPath = path.join(dir, 'gibtsnicht.json');
+      const outPath = path.join(dir, 'out.json');
+      const res = spawnSync('node', ['redesign-cli.js', missingPath, 'parallelize',
+                                     '--nodes', 'a,b,c', '--apply', '-o', outPath],
+                            { cwd: __dirname, encoding: 'utf8' });
+      expect(res.status).not.toBe(0);
+      expect(res.stderr).toMatch(/eingabe/i);
+      expect(fs.existsSync(outPath)).toBe(false);
+    });
+
+    test('unparsebare (kaputte) Eingabedatei endet mit Fehler-Rueckgabewert und schreibt nicht ' +
+         '(JSON.parse schlaegt fehl, sauber im try/catch abgefangen)', async () => {
       const { spawnSync } = await import('node:child_process');
       const os = await import('node:os');
       const fs = await import('node:fs');
       const path = await import('node:path');
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redesign-cli-'));
       const inPath = path.join(dir, 'in.json');
-      fs.writeFileSync(inPath, JSON.stringify(lcChain), 'utf8');
-      const res = spawnSync('node', ['redesign-cli.js', inPath], { cwd: __dirname, encoding: 'utf8' });
+      const outPath = path.join(dir, 'out.json');
+      fs.writeFileSync(inPath, '{ das ist kein JSON', 'utf8');
+      const res = spawnSync('node', ['redesign-cli.js', inPath, 'parallelize',
+                                     '--nodes', 'a,b,c', '--apply', '-o', outPath],
+                            { cwd: __dirname, encoding: 'utf8' });
       expect(res.status).not.toBe(0);
-      expect(res.stderr).toMatch(/usage/i);
+      expect(res.stderr).toMatch(/eingabe/i);
+      expect(fs.existsSync(outPath)).toBe(false);
     });
   });
 });
