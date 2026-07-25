@@ -1897,3 +1897,115 @@ describe('redesign-cli', () => {
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// Bahn-Zugehoerigkeit in BEIDEN Zuordnungsformaten pflegen
+// ═══════════════════════════════════════════════════════════════════════
+// Das Schema erlaubt node.lane (Format A) ODER Lane.nodeIds (Format B). Wer nur
+// eines pflegt, hinterlaesst ein widerspruechliches Modell: eine Bahn, die einen
+// nicht mehr existierenden Knoten auflistet, oder ein neuer Knoten, der in seiner
+// Bahn fehlt. Niemand faengt das heute: collectIds liest nodeIds nicht, und M09
+// ueberspringt verwaiste IDs strukturell (node &&) und ist nur Stil-Severity.
+describe('Bahn-Zugehoerigkeit (Format B) wird von allen Eingriffen gepflegt', () => {
+  test('mergeTasks entfernt geloeschte Knoten aus lane.nodeIds', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'm1', type: 'userTask', name: 'Daten erfassen' },
+        { id: 'm2', type: 'userTask', name: 'Daten sichern' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'g0', source: 's', target: 'm1' },
+        { id: 'g1', source: 'm1', target: 'm2' },
+        { id: 'g2', source: 'm2', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter', nodeIds: ['s', 'm1', 'm2', 'e'] }],
+    };
+    const r = applyMergeTasks(lc, { nodeIds: ['m1', 'm2'], name: 'Daten erfassen und sichern' });
+    const lane = r.lc.lanes.find(l => l.id === 'L');
+    expect(lane.nodeIds).not.toContain('m2');       // geloeschter Knoten ist weg
+    expect(lane.nodeIds).toContain('m1');           // Ueberlebender bleibt
+    expect(r.change.modified).toContain('L');       // Bahn hat sich geaendert
+    // Keine verwaiste Referenz: jede ID in nodeIds existiert noch als Knoten
+    const existing = new Set(r.lc.nodes.map(n => n.id));
+    for (const id of lane.nodeIds) expect(existing.has(id)).toBe(true);
+  });
+
+  test('parallelize traegt die neuen Gateways in lane.nodeIds ein', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'a', type: 'userTask', name: 'Adresse pruefen' },
+        { id: 'b', type: 'userTask', name: 'Telefon pruefen' },
+        { id: 'c', type: 'userTask', name: 'E-Mail pruefen' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f0', source: 's', target: 'a' },
+        { id: 'f1', source: 'a', target: 'b' },
+        { id: 'f2', source: 'b', target: 'c' },
+        { id: 'f3', source: 'c', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter', nodeIds: ['s', 'a', 'b', 'c', 'e'] }],
+    };
+    const r = applyParallelize(lc, { nodeIds: ['a', 'b', 'c'] });
+    const lane = r.lc.lanes.find(l => l.id === 'L');
+    const gateways = r.lc.nodes.filter(n => n.type === 'parallelGateway').map(n => n.id);
+    expect(gateways.length).toBe(2);
+    for (const gw of gateways) expect(lane.nodeIds).toContain(gw);
+    expect(r.change.modified).toContain('L');
+  });
+
+  test('isolateException traegt das neue Boundary-Ereignis in lane.nodeIds ein', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'task', type: 'userTask', name: 'Antrag pruefen' },
+        { id: 'gw', type: 'exclusiveGateway', name: 'Frist ueberschritten?' },
+        { id: 'xend', type: 'endEvent', name: 'Fall eskaliert' },
+        { id: 'e', type: 'endEvent', name: 'Fertig' },
+      ],
+      edges: [
+        { id: 'j0', source: 's', target: 'task' },
+        { id: 'j1', source: 'task', target: 'gw' },
+        { id: 'j2', source: 'gw', target: 'xend', label: 'Ja' },
+        { id: 'j3', source: 'gw', target: 'e', label: 'Nein' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter', nodeIds: ['s', 'task', 'gw', 'xend', 'e'] }],
+    };
+    const r = applyIsolateException(lc, {
+      endId: 'xend', attachTo: 'task', marker: 'timer', cancelActivity: true,
+    });
+    const lane = r.lc.lanes.find(l => l.id === 'L');
+    const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+    expect(lane.nodeIds).toContain(bnd.id);
+    expect(r.change.modified).toContain('L');
+  });
+
+  test('Gegenprobe: reine Format-A-Modelle bleiben unangetastet', () => {
+    // Ohne nodeIds-Arrays darf keine Bahn als geaendert gemeldet werden — sonst
+    // wuerde der Aenderungssatz eine Aenderung behaupten, die es nicht gibt.
+    const lcFormatA = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', lane: 'L' },
+        { id: 'm1', type: 'userTask', name: 'Daten erfassen', lane: 'L' },
+        { id: 'm2', type: 'userTask', name: 'Daten sichern', lane: 'L' },
+        { id: 'e', type: 'endEvent', lane: 'L' },
+      ],
+      edges: [
+        { id: 'g0', source: 's', target: 'm1' },
+        { id: 'g1', source: 'm1', target: 'm2' },
+        { id: 'g2', source: 'm2', target: 'e' },
+      ],
+      lanes: [{ id: 'L', name: 'Sachbearbeiter' }],   // kein nodeIds
+    };
+    const r = applyMergeTasks(lcFormatA, { nodeIds: ['m1', 'm2'], name: 'Zusammengefasst' });
+    expect(r.change.modified).not.toContain('L');
+    expect(r.change.modified).toEqual(['m1', 'g2']);
+  });
+});

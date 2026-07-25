@@ -121,6 +121,54 @@ const TASK_TYPES = new Set(['task', 'userTask', 'serviceTask', 'scriptTask', 'ma
  */
 const currentLaneOf = resolveLaneId;
 
+/**
+ * Entfernt Knoten-IDs aus ALLEN `lane.nodeIds`-Arrays (Format B).
+ *
+ * Notwendig, sobald ein Eingriff Knoten loescht: sonst listet die Bahn einen
+ * nicht mehr existierenden Knoten auf. Niemand faengt das — `collectIds` liest
+ * `nodeIds` nicht, und M09 ueberspringt verwaiste IDs strukturell (`node &&`)
+ * und ist ohnehin nur Stil-Severity, greift also nicht ins Rollback-Gate.
+ *
+ * Wie bei applyRelane: alle Bahnen durchlaufen (heilt ein bereits inkonsistentes
+ * Ausgangsmodell), `Array.isArray`-Waechter (reine Format-A-Modelle bleiben
+ * unangetastet), und nur tatsaechlich veraenderte Bahnen melden.
+ *
+ * @returns {string[]} IDs der Bahnen, deren nodeIds sich geaendert haben
+ */
+function pruneFromLanes(proc, ids) {
+  const modifiedLaneIds = [];
+  for (const l of (proc.lanes || [])) {
+    if (!Array.isArray(l.nodeIds)) continue;
+    const before = l.nodeIds.length;
+    l.nodeIds = l.nodeIds.filter(id => !ids.includes(id));
+    if (l.nodeIds.length !== before) modifiedLaneIds.push(l.id);
+  }
+  return modifiedLaneIds;
+}
+
+/**
+ * Traegt neu erzeugte Knoten in die `nodeIds`-Liste ihrer Bahn ein (Format B).
+ *
+ * Spiegelbild von pruneFromLanes: wer einen Knoten anlegt und nur `node.lane`
+ * setzt, hinterlaesst ihn in einem Format-B-Modell ausserhalb jeder Bahn — die
+ * beiden Zuordnungsformate widersprechen sich dann.
+ *
+ * Nur aktiv, wenn die Zielbahn tatsaechlich ein `nodeIds`-Array fuehrt; ein
+ * reines Format-A-Modell wird nicht nachtraeglich auf Format B umgestellt.
+ *
+ * @returns {string[]} IDs der Bahnen, deren nodeIds sich geaendert haben
+ */
+function addToLane(proc, nodeIds, laneId) {
+  if (!laneId || nodeIds.length === 0) return [];
+  const lane = (proc.lanes || []).find(l => l.id === laneId);
+  if (!lane || !Array.isArray(lane.nodeIds)) return [];
+  let changed = false;
+  for (const id of nodeIds) {
+    if (!lane.nodeIds.includes(id)) { lane.nodeIds.push(id); changed = true; }
+  }
+  return changed ? [lane.id] : [];
+}
+
 export function previewParallelize(lc, { nodeIds = [], policy = {} } = {}) {
   const proc = procOf(lc);
   if (nodeIds.length < 2) return refusal('Mindestens zwei Schritte nötig.');
@@ -191,6 +239,8 @@ export function applyParallelize(lc, params = {}) {
   proc.nodes.push({ id: splitId, type: 'parallelGateway', name: '', lane });
   const joinId = nextId(out, 'gw_par_join');
   proc.nodes.push({ id: joinId, type: 'parallelGateway', name: '', lane, has_join: true });
+  // Format B mitpflegen: sonst liegen die neuen Gateways ausserhalb jeder Bahn.
+  const laneIdsExtended = addToLane(proc, [splitId, joinId], lane);
 
   // Alte Kettenkanten entfernen
   const removed = [];
@@ -223,6 +273,7 @@ export function applyParallelize(lc, params = {}) {
   const modified = [];
   if (inEdge) modified.push(inEdge.id);
   if (outEdge) modified.push(outEdge.id);
+  modified.push(...laneIdsExtended);
 
   const gate = checkGate(out);
   if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
@@ -304,6 +355,8 @@ export function applyMergeTasks(lc, params = {}) {
   if (lastOut) lastOut.source = keep;
   proc.nodes = proc.nodes.filter(n => !drop.includes(n.id));
   removed.push(...drop);
+  // Format B mitpflegen: sonst listet die Bahn die geloeschten Knoten weiter auf.
+  const laneIdsPruned = pruneFromLanes(proc, drop);
 
   const gate = checkGate(out);
   if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
@@ -316,6 +369,7 @@ export function applyMergeTasks(lc, params = {}) {
   // ihre ID, ändert aber ihren Inhalt. Sie muss ebenfalls in modified verzeichnet sein.
   const modified = [keep];
   if (lastOut) modified.push(lastOut.id);
+  modified.push(...laneIdsPruned);
 
   return {
     lc: out,
@@ -761,6 +815,8 @@ export function applyIsolateException(lc, params = {}) {
   const bndId = nextId(out, `bnd_${attachTo}_${marker}`);
   proc.nodes.push({ id: bndId, type: 'boundaryEvent', name: '', lane,
                     attachedTo: attachTo, marker, cancelActivity });
+  // Format B mitpflegen: sonst liegt das neue Boundary-Ereignis ausserhalb jeder Bahn.
+  const laneIdsExtended = addToLane(proc, [bndId], lane);
 
   // Bisherige Zufuehrung zum Ausnahme-Ende entfernen, neu vom Boundary-Ereignis
   // fuehren — aber NUR die Kanten, die previewIsolateException aufgeloest hat
@@ -785,16 +841,18 @@ export function applyIsolateException(lc, params = {}) {
   const gate = checkGate(out);
   if (!gate.ok) throw new Error(`Rollback: Ergebnis waere nicht sound — ${gate.errors.join('; ')}`);
 
-  // "modified": bewusst leer. Anders als bei parallelize/mergeTasks/relane wird
-  // hier kein bestehendes Element inhaltlich veraendert — der Host (attachTo)
-  // bleibt unangetastet, und keine ueberlebende Kante wird umgehaengt (die
-  // alten Kanten zu endId werden entfernt, nicht modifiziert; die neue Kante
-  // vom Boundary-Event ist komplett neu). "added" und "removed" nennen daher
-  // bereits jeden Unterschied zwischen Quelle und Ergebnis vollstaendig.
+  // "modified" nennt hier nur Bahnen: an Knoten und Kanten wird nichts inhaltlich
+  // veraendert (der Host bleibt unangetastet, keine ueberlebende Kante wird
+  // umgehaengt — die alten Kanten zu endId werden entfernt, die neue ist komplett
+  // neu). In einem Format-B-Modell aendert sich aber die nodeIds-Liste der Bahn,
+  // in die das neue Boundary-Ereignis eingetragen wird — sonst waere die Zusage
+  // "Quelle und Ergebnis unterscheiden sich ausschliesslich in den verzeichneten
+  // Elementen" fuer dieses Lane-Objekt verletzt. Bei reinen Format-A-Modellen
+  // bleibt das Array leer.
   return {
     lc: out,
     change: { transform: 'isolateException', targets: [endId, attachTo],
-              added: [bndId, newEdge], removed, modified: [],
+              added: [bndId, newEdge], removed, modified: laneIdsExtended,
               note: `Ausnahme "${(proc.nodes.find(n => n.id === endId) || {}).name || endId}" ` +
                     `von ${attachTo} isoliert: ${removed.length} eingehende Kante(n) ` +
                     `(${removed.join(', ')}) auf neues Boundary-Event ${bndId} (${marker}) umgehängt` },
