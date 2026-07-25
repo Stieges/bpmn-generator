@@ -31,7 +31,7 @@ beziehungen:
 | **Enthaltsamkeit** (was offen?) | 5 geparkte Punkte (Rechenteil-Verfahren · CPM · Bewertung · Laufzeitschranke · S2-Teilung) · 3 Scheiben geparkt — alle mit Trigger/Owner | ↓ Offene Punkte · Split |
 | **Abdeckung** (Säulen + vergessene Pfade) | 9 Säulen-Zeilen (7 Säulen, `functional` dreigeteilt) · 1 begründeter Opt-Out (Timeout/Warten) · **Negations-Achse: je Eingriff gestellt**, 6 transformspezifische Fehlermodi nachgetragen | ↓ Saeulen · Negations-Achse |
 | **Belegtheit** (Quellen) | **6 Verifiziert · 1 Hypothese · 1 Nicht gefunden** (Datenlage) · 1 eingeschränkt. **4 Demotionen** und **3 Quellenkorrekturen** durch GATE 2b; die Kein-LLM-Zusage wurde unabhängig an der Import-Hülle nachgerechnet | ↓ Saeulen-Quellen · Lern-Spur |
-| **Prüf-Durchdringung** (testbar) | **15 Gherkin-Szenarien** · nicht testbar → Inspection (Import-Grenze) | ↓ Akzeptanzkriterien |
+| **Prüf-Durchdringung** (testbar) | **13 aktive Szenarien** (1 geparkt: Teil-Erfüllung) · **umgesetzt in 472 Tests**, davon 126 für den Werkzeugkasten · nicht testbar → Inspection (Import-Grenze, per transitiver Hülle geprüft: 8 Module, kein LLM) | ↓ Akzeptanzkriterien |
 | **Integrität** (Prozess) | GATE 1 **bestanden** · GATE 2a **gelaufen** (12 Befunde, alle disponiert) · GATE 2b **gelaufen** (4 Demotionen, 3 Quellenkorrekturen, 1 Faktenkorrektur) · Lern-Spur gepflegt | ↓ Lern-Spur |
 
 ## Herkunft
@@ -224,11 +224,14 @@ Szenario: Neue Warnung blockiert nicht, wird aber gemeldet
   Dann wird er ausgefuehrt
   Und die neue Warnung steht im Ergebnis
 
-Szenario: Teil-Erfuellung ueberlaesst die Wahl dem Aufrufer
-  Gegeben von fuenf Schritten sind nur drei parallelisierbar
-  Wenn der Eingriff geprueft wird
-  Dann meldet er den machbaren Umfang und den nicht machbaren Rest mit Begruendung
-  Und er veraendert nichts, solange der Aufrufer keinen Umfang waehlt
+# GEPARKT (nicht umgesetzt) — siehe Offene Punkte. Die Umsetzung verweigert stattdessen
+# vollstaendig, was die sichere Richtung ist. Trigger fuer den Aufgriff: ein realer Fall,
+# in dem eine Teil-Anwendung gebraucht wird. Owner: Daniel Stiegler.
+# Szenario: Teil-Erfuellung ueberlaesst die Wahl dem Aufrufer
+#   Gegeben von fuenf Schritten sind nur drei parallelisierbar
+#   Wenn der Eingriff geprueft wird
+#   Dann meldet er den machbaren Umfang und den nicht machbaren Rest mit Begruendung
+#   Und er veraendert nichts, solange der Aufrufer keinen Umfang waehlt
 
 Szenario: Kennzahl-Verschlechterung wird ausgewiesen
   Gegeben ein Rollenwechsel senkt Uebergaben an einer Stelle und erhoeht sie an anderer
@@ -345,6 +348,15 @@ Code-Inspektion/Abhängigkeitsprüfung sichergestellt, nicht per Szenario.
   Achse offen) → aus dem Körper neu abgeleitet · GATE 2a §5
 - 2026-07-24 · REIFEGRAD · Record · structured → **formalized** · beide GATE-2-Pässe gelaufen, alle
   Befunde disponiert (Szenario · Opt-Out · geparkt mit Trigger)
+- 2026-07-25 · KORREKTUR · Prüf-Sicht · „15 Gherkin-Szenarien" → tatsächlich 14 im Block; jetzt
+  13 aktiv + 1 geparkt · Abschluss-Review der Umsetzung
+- 2026-07-25 · DEMOTION · Akzeptanzkriterium „Teil-Erfüllung" · zugesagt → **geparkt**, nicht umgesetzt ·
+  vollständige Verweigerung ist die sichere Richtung; `feasible: 'partial'` wurde auch aus dem
+  Code-Vertrag entfernt, damit er nicht mehr verspricht als er hält · Abschluss-Review
+- 2026-07-25 · ERGAENZUNG · quality_attributes · Stil-Warnungen wurden entgegen der Zusage **nicht**
+  gemeldet (Stil-Schicht war im Gate abgeschaltet) → Schicht aktiviert, `apply*` liefert jetzt das
+  Warnungs-Delta; Gate bleibt profilunabhängig und rollt weiterhin nur bei Fehlern zurück ·
+  Abschluss-Review B5
 
 ---
 
