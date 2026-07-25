@@ -29,6 +29,18 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 ```
 - `logicCore` (required, object) — validated against `references/input-schema.json` via the ajv strict gate.
 - `mode` (optional, string) — `"document"` (default, faithful IST) or `"optimize"`/`"soll"`. In optimize mode the response `validation` gains `advisories` (redesign suggestions) and `metrics.optimization` (Lean metrics). Advisories are heuristic, non-blocking, never auto-applied.
+
+`validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
+- `id` — advisory rule id (`O01`–`O04`, see `references/fachliches-regelwerk.md`)
+- `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/redesign.js`/`redesign-cli.js` directly.
+- `targets` — ids of the affected nodes/gateways
+- `message` — the human-readable line (what the CLI and this response print)
+- `tradeoff` — devil's-quadrangle tag, e.g. `{ "time": "−" }` or `{ "quality": "+" }`
+- `ref` — source citation, e.g. `{ "reijers": "parallelism" }` or `{ "reijers": "task-composition", "babok": "§10.34" }`
+- `judgment` — `true` means: needs human confirmation, not mechanically applicable on its own (currently always `true` — no advisory is auto-applicable)
+- `pool` — present only for multi-pool Logic-Core, names the owning pool
+
+None of this is applied automatically; turning an advisory into an actual model change means calling the named `transform` in the redesign toolbox yourself (see `SKILL.md` → "Redesign Toolbox").
 - `callbackUrl` (optional, string) — if present, the result is also POSTed there asynchronously; the URL is SSRF-validated (rejects internal/link-local hosts, DNS-resolves and re-checks).
 
 **Response 200:**
@@ -64,7 +76,7 @@ Validate Logic-Core against the rule engine without generating output.
 
 **Request:** `{ "logicCore": {...}, "mode": "optimize", "correlationId": "uuid", "clientId": "my-app" }`
 
-`mode` (optional) — `"document"` (default) or `"optimize"`; in optimize mode `validation` gains `advisories` + `metrics.optimization`.
+`mode` (optional) — `"document"` (default) or `"optimize"`; in optimize mode `validation` gains `advisories` + `metrics.optimization`. `advisories` object shape: see `/api/v1/generate` above.
 
 **Response 200:**
 ```json

@@ -50,7 +50,7 @@ import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels } from './vis
  * @param {boolean} [opts.visualRefinement] - Enable visual refinement passes (overrides CFG.visualRefinement.enabled)
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
- * @returns {Promise<{bpmnXml: string, svg: string, coordMap: object, validation: {errors: string[], warnings: string[], advisories: string[], metrics: object}}>}
+ * @returns {Promise<{bpmnXml: string, svg: string, coordMap: object, validation: {errors: string[], warnings: string[], advisories: object[], metrics: object}}>}
  */
 async function runPipeline(logicCore, opts = {}) {
   const lc = JSON.parse(JSON.stringify(logicCore)); // deep clone to avoid mutation
@@ -385,7 +385,7 @@ async function main() {
   }
   if (optimize && result.validation.advisories?.length) {
     console.log('\n💡 Optimization opportunities (Soll-Redesign — Vorschläge, kein Auto-Fix):');
-    result.validation.advisories.forEach(a => console.log('  · ' + a));
+    result.validation.advisories.forEach(a => console.log('  · ' + (a.pool ? `[${a.pool}] ` : '') + a.message));
   }
   if (!result.bpmnXml) {
     console.error('\n✗ Errors (pipeline blocked):');

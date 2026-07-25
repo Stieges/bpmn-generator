@@ -24,13 +24,16 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-25 core-pipeline + 7 agent + 9 robustness modules under `scripts/`. Verify current inventory with `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
+29 top-level scripts (16 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
+tooling) + 7 agent + 9 robustness modules under `scripts/`. Verify current inventory with
+`find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
 Core Pipeline (run on every generate call)
   pipeline.js (Orchestrator, public API runPipeline)
     ├── validate.js          ← rules.js
-    ├── rules.js             ← types.js, workflow-net.js
+    ├── rules.js             ← types.js, workflow-net.js, optimize.js
+    ├── optimize.js          ← types.js, topology.js (opt-in Optimization Advisory layer O01–O04, invoked by rules.js)
     ├── workflow-net.js      ← types.js
     ├── topology.js          ← types.js
     ├── layout.js            ← types.js, utils.js, topology.js, elkjs
@@ -44,6 +47,12 @@ Core Pipeline (run on every generate call)
     ├── schema-gate.js       ← references/input-schema.json (ajv draft-2020-12 strict gate)
     ├── types.js             (no deps)
     └── utils.js             (reads config.json)
+
+Redesign toolbox (opt-in; CLI-driven, not invoked by runPipeline)
+  redesign-cli.js            ← redesign.js (CLI entry; preview is the default, --apply writes)
+  redesign.js                ← redesign-core.js (5 deterministic transforms, each preview*/apply*)
+  redesign-core.js           ← rules.js, topology.js (soundness gate, deterministic IDs, protection lists;
+                                may NOT import agents/llm-provider.js, directly or transitively)
 
 Standalone tooling
   import.js                  BPMN XML → Logic-Core (DOM parser)
@@ -75,10 +84,13 @@ Robustness subsystem (scripts/robustness/)
 | `scripts/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
 | `scripts/rules.js` | Rule Engine: 32 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
 | `scripts/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
+| `scripts/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
+| `scripts/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
+| `scripts/redesign-cli.js` | CLI entry to the redesign toolbox (`node redesign-cli.js <input.json> <transform> [options] [--apply]`); preview is the default, nothing is written without `--apply`, a refusal exits non-zero and writes nothing |
 | `scripts/validate.js` | Thin wrapper around `runRules()` |
 | `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact`, `bpmnXmlTag` |
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
-| `scripts/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow` |
+| `scripts/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
 | `scripts/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing |
 | `scripts/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |

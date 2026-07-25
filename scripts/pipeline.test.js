@@ -2659,7 +2659,7 @@ describe('Optimization Advisory (optimize mode)', () => {
 
   test('O01 exception isolation fires when exception ends branch off the mainline', () => {
     const r = runOpt(knockoutExc, 'optimize');
-    expect(r.advisories.some(a => /Exception-Isolation/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O01')).toBe(true);
   });
 
   test('O01 recognizes name-based exception ends (marker-less, incl. "eskaliert")', () => {
@@ -2685,12 +2685,12 @@ describe('Optimization Advisory (optimize mode)', () => {
       lanes: [{ id: 'L', name: 'Rolle' }],
     };
     const r = runOpt(lc, 'optimize');
-    expect(r.advisories.some(a => /Exception-Isolation/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O01')).toBe(true);
   });
 
   test('O02 knock-out ordering fires on a chain of terminating XOR checks', () => {
     const r = runOpt(knockoutExc, 'optimize');
-    expect(r.advisories.some(a => /Knock-out-Kette/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O02')).toBe(true);
   });
 
   test('O03 handoffs fires when lane crossings exceed the threshold', () => {
@@ -2708,7 +2708,7 @@ describe('Optimization Advisory (optimize mode)', () => {
     edges.push({ id: 'fe', source: prev, target: 'e' });
     const lc = { id: 'P', nodes, edges, lanes: [{ id: 'A', name: 'A' }, { id: 'B', name: 'B' }] };
     const r = runOpt(lc, 'optimize');
-    expect(r.advisories.some(a => /Übergaben/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O03')).toBe(true);
     expect(r.metrics.optimization.handoffCount).toBeGreaterThan(6);
   });
 
@@ -2731,7 +2731,24 @@ describe('Optimization Advisory (optimize mode)', () => {
       lanes: [{ id: 'L', name: 'Rolle' }],
     };
     const r = runOpt(lc, 'optimize');
-    expect(r.advisories.some(a => /Parallelisierung/.test(a))).toBe(true);
+    expect(r.advisories.some(a => a.id === 'O04')).toBe(true);
+  });
+
+  test('advisories sind Objekte mit message, transform und targets', () => {
+    const r = runOpt(knockoutExc, 'optimize');
+    expect(r.advisories.length).toBeGreaterThan(0);
+    for (const a of r.advisories) {
+      expect(typeof a).toBe('object');
+      expect(typeof a.message).toBe('string');
+      expect(a.message.length).toBeGreaterThan(0);
+      expect(typeof a.id).toBe('string');
+      expect(typeof a.transform).toBe('string');
+      expect(Array.isArray(a.targets)).toBe(true);
+      expect(typeof a.judgment).toBe('boolean');
+    }
+    const o01 = r.advisories.find(a => a.id === 'O01');
+    expect(o01.transform).toBe('isolateException');
+    expect(o01.targets.length).toBeGreaterThan(0);
   });
 
   test('optimize mode always populates Lean metrics', () => {
@@ -2744,5 +2761,84 @@ describe('Optimization Advisory (optimize mode)', () => {
         gatewayComplexity: expect.any(Number),
       })
     );
+  });
+
+  // Bahn-Zugehoerigkeit kann das Schema auf zwei Weisen ausdruecken: node.lane
+  // (Format A) oder Lane.nodeIds (Format B). Die Uebergaben-Kennzahl muss in
+  // beiden Faellen dieselbe Antwort geben — sonst meldet die Advisory-Erkennung
+  // 0 Uebergaben, waehrend der relane-Eingriff die echte Zahl liefert.
+  const lcFormatBHandoffs = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 'a', type: 'userTask', name: 'Antrag pruefen' },
+      { id: 'b', type: 'userTask', name: 'Antrag freigeben' },
+      { id: 'e', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 'a' },
+      { id: 'f2', source: 'a', target: 'b' },   // A -> B: Uebergabe
+      { id: 'f3', source: 'b', target: 'e' },   // B -> A: Uebergabe
+    ],
+    lanes: [
+      { id: 'LA', name: 'Vorpruefung', nodeIds: ['s', 'a', 'e'] },
+      { id: 'LB', name: 'Entscheidung', nodeIds: ['b'] },
+    ],
+  };
+
+  test('Uebergaben werden auch bei Format-B-Zuordnung (Lane.nodeIds) gezaehlt', () => {
+    const r = runOpt(lcFormatBHandoffs, 'optimize');
+    expect(r.metrics.optimization.handoffCount).toBe(2);
+  });
+
+  test('Uebergaben-Kennzahl stimmt mit der des relane-Eingriffs ueberein', async () => {
+    const { previewRelane, applyRelane } = await import('./redesign.js');
+    // relane braucht einen zulaessigen Zug, um handoffsBefore zu berichten.
+    const pv = previewRelane(lcFormatBHandoffs, { nodeId: 'b', lane: 'LA' });
+    expect(pv.feasible).toBe('full');
+    const applied = applyRelane(lcFormatBHandoffs, { nodeId: 'b', lane: 'LA' });
+    const fromRules = runOpt(lcFormatBHandoffs, 'optimize').metrics.optimization.handoffCount;
+    expect(applied.change.handoffsBefore).toBe(fromRules);
+  });
+});
+
+describe('O04 Parallelisierungs-Kandidat: Bahn-Grenzen in beiden Formaten', () => {
+  // Rohes node.lane waere bei Format-B-Modellen ueberall undefined; die
+  // "gleiche Bahn"-Bedingung wuerde damit zum No-Op und eine bahnuebergreifende
+  // Kette faelschlich als Kandidat gemeldet (False Positive).
+  const chainAcrossLanes = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 'a', type: 'userTask', name: 'Erstens pruefen' },
+      { id: 'b', type: 'userTask', name: 'Zweitens pruefen' },
+      { id: 'c', type: 'userTask', name: 'Drittens pruefen' },
+      { id: 'e', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f0', source: 's', target: 'a' },
+      { id: 'f1', source: 'a', target: 'b' },
+      { id: 'f2', source: 'b', target: 'c' },
+      { id: 'f3', source: 'c', target: 'e' },
+    ],
+    // Format B, und die Kette ueberspannt ZWEI Bahnen
+    lanes: [
+      { id: 'LA', name: 'Eins', nodeIds: ['s', 'a', 'b'] },
+      { id: 'LB', name: 'Zwei', nodeIds: ['c', 'e'] },
+    ],
+  };
+
+  test('bahnuebergreifende Format-B-Kette wird NICHT als Kandidat gemeldet', () => {
+    const r = runRules(chainAcrossLanes, profileForMode(null, 'optimize'));
+    expect(r.advisories.some(a => a.id === 'O04')).toBe(false);
+  });
+
+  test('Format-B-Kette innerhalb EINER Bahn wird weiterhin gemeldet', () => {
+    const oneLane = {
+      ...chainAcrossLanes,
+      lanes: [{ id: 'LA', name: 'Eins', nodeIds: ['s', 'a', 'b', 'c', 'e'] }],
+    };
+    const r = runRules(oneLane, profileForMode(null, 'optimize'));
+    expect(r.advisories.some(a => a.id === 'O04')).toBe(true);
   });
 });

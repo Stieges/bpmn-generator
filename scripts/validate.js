@@ -9,7 +9,7 @@ import { runRules, loadRuleProfile } from './rules.js';
  * Validate a Logic-Core document.
  * @param {object} lc - Logic-Core JSON
  * @param {string|object|null} profileOrPath - Rule profile object, file path, or null for defaults
- * @returns {{ errors: string[], warnings: string[], infos: string[], advisories: string[], metrics: object }}
+ * @returns {{ errors: string[], warnings: string[], infos: string[], advisories: object[], metrics: object }}
  */
 function validateLogicCore(lc, profileOrPath = null) {
   let profile = null;

@@ -129,6 +129,35 @@ export function identifyHappyPathNodes(nodes, edges) {
 }
 
 /**
+ * Resolve which lane a node belongs to — READ-ONLY, understands BOTH assignment
+ * formats. Format A (`node.lane`) wins when present; otherwise the lane objects'
+ * `nodeIds` arrays (Format B) are searched. Multi-pool aware.
+ *
+ * This lives here, next to normalizeLaneAssignments(), because this module owns
+ * the knowledge about the two lane-assignment formats. It must be the ONLY place
+ * that resolves lane membership — otherwise the same metric gets two different
+ * answers depending on which module asks (that was a real defect).
+ *
+ * It cannot live in redesign-core.js: optimize.js needs it too, and
+ * redesign-core → rules → optimize already exists, so importing back from
+ * redesign-core would close an import cycle.
+ *
+ * @param {object} container - Logic-Core, or a single process/pool
+ * @param {object} node
+ * @returns {string|undefined} lane id
+ */
+export function resolveLaneId(container, node) {
+  if (node.lane) return node.lane;
+  if (!container) return undefined;
+  const procs = container.pools ? container.pools : [container];
+  for (const p of procs) {
+    const lane = (p.lanes || []).find(l => Array.isArray(l.nodeIds) && l.nodeIds.includes(node.id));
+    if (lane) return lane.id;
+  }
+  return undefined;
+}
+
+/**
  * Normalize lane assignments: convert Format B (lane.nodeIds) → Format A (node.lane).
  * Format A (node.lane) is what the layout engine reads for ELK partitioning.
  * Format B (lane.nodeIds) is what the LLM typically generates.
