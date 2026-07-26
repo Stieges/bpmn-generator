@@ -63,10 +63,11 @@ jobs:
         working-directory: scripts
         run: npm ci
 
-      # Non-blocking for now: unsigned legacy packages in the tree would turn
-      # the build red before it is clear which they are. Flip to blocking once
-      # a full run has been observed green.
+      # Blocking. The first full run reported 384/384 verified signatures, so
+      # there is no unsigned legacy package to tolerate — and a permanently
+      # non-blocking check is the same silent pass this whole workflow exists
+      # to prevent. If this ever goes red, an artifact did not come from the
+      # registry as published, which is worth stopping for.
       - name: Verify registry signatures
         working-directory: scripts
-        continue-on-error: true
         run: npm audit signatures
