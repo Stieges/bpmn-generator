@@ -6,8 +6,8 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 ```bash
 cd scripts/
-npm install          # installs elkjs, bpmn-moddle, jest
-npm test             # run all tests (136 tests, Jest + ES Modules)
+npm install          # installs runtime + dev dependencies (Node >=20)
+npm test             # run all tests (Jest + ES Modules)
 ```
 
 ### Smoke Test
@@ -33,7 +33,7 @@ See [README.md](README.md) for the full module architecture and dependency graph
 
 - **ES Modules** — `import`/`export`, no `require()`
 - **Pure functions** — no global state except `CFG` (loaded from config.json)
-- **Minimal dependencies** — only `elkjs` and `bpmn-moddle` at runtime
+- **Minimal dependencies** — 5 at runtime (`elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`); adding one needs prior discussion, see [SECURITY.md](SECURITY.md#dependencies-and-supply-chain)
 - **Config over code** — visual constants live in `scripts/config.json`
 - **XML escaping** — always use `esc()` from `utils.js`
 - **IDs** — must match `^[a-zA-Z_][a-zA-Z0-9_-]*$`

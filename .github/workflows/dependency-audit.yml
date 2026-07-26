@@ -1,0 +1,73 @@
+name: Dependency Audit
+
+# Fails the build on high/critical advisories that no valid exception covers.
+# Policy and accepted risks: .github/dependency-policy.json
+# Gate implementation:      .github/scripts/dep-audit-gate.mjs
+#
+# The cron run matters as much as the PR run: an advisory published against
+# code that has not changed would otherwise never be noticed. Note that GitHub
+# disables scheduled workflows after 60 days of repository inactivity — this
+# net is not self-maintaining (documented in SECURITY.md).
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # No `npm ci` — the gate audits from the lockfile via
+      # `npm audit --package-lock-only`, verified to match the installed-tree
+      # result. Keeps the job at roughly 15 seconds.
+      - name: Run the gate
+        run: node .github/scripts/dep-audit-gate.mjs --summary
+
+  signatures:
+    name: Registry provenance
+    runs-on: ubuntu-latest
+
+    # Separate job: this one needs a full install, so it must not slow down the
+    # policy gate above. It answers a different question — not "is a known
+    # advisory open?" but "did these artifacts really come from the registry
+    # unmodified?". The 2026 wave of npm compromises (axios, node-ipc,
+    # node-gyp, jscrambler) was published through legitimate accounts, so
+    # signature verification is the check that catches tampering in transit.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci
+
+      # Blocking. The first full run reported 384/384 verified signatures, so
+      # there is no unsigned legacy package to tolerate — and a permanently
+      # non-blocking check is the same silent pass this whole workflow exists
+      # to prevent. If this ever goes red, an artifact did not come from the
+      # registry as published, which is worth stopping for.
+      - name: Verify registry signatures
+        working-directory: scripts
+        run: npm audit signatures

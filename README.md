@@ -83,7 +83,7 @@ The LLM **never** handles coordinates. Layout is 100% algorithmic.
 
 ```bash
 cd scripts/
-npm install          # installs elkjs + jest
+npm install          # installs runtime + dev dependencies (Node >=20)
 
 # Generate from JSON Logic-Core:
 node pipeline.js my-process.json my-process
@@ -149,7 +149,7 @@ scripts/
 ├── mcp-bpmn-server.js MCP server (4 tools)
 ├── http-server.js     HTTP API (5 endpoints)
 ├── config.json        Externalized constants (shapes, colors, gaps)
-├── package.json       Dependencies (elkjs, jest)
+├── package.json       Dependencies (5 runtime, 3 dev)
 ├── pipeline.test.js   114 tests (Jest, ES Modules)
 └── orchestrator.test.js 22 tests (agents + state machine)
 ```
@@ -406,8 +406,10 @@ See `references/omg-compliance.md` for a detailed mapping of OMG BPMN 2.0.2 spec
 | [ElkJS](https://github.com/kieler/elkjs) | EPL-2.0 | Sugiyama layered auto-layout |
 | [bpmn-moddle](https://github.com/bpmn-io/bpmn-moddle) | MIT | BPMN 2.0 meta-model (XML serialization) |
 | [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk) | MIT | MCP server integration |
+| [ajv](https://github.com/ajv-validator/ajv) | MIT | JSON Schema strict gate for untrusted input |
+| [ajv-formats](https://github.com/ajv-validator/ajv-formats) | MIT | Format validators for the schema gate |
 
-See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full license details.
+See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full license details and [SECURITY.md](SECURITY.md) for the dependency policy.
 
 ## References
 

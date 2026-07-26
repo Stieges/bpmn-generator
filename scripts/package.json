@@ -5,6 +5,9 @@
   "type": "module",
   "license": "MIT",
   "author": "Daniel Stiegler",
+  "engines": {
+    "node": ">=20"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Stieges/bpmn-generator.git"
@@ -23,6 +26,13 @@
     "modeler"
   ],
   "main": "pipeline.js",
+  "files": [
+    "*.js",
+    "config.json",
+    "agents/",
+    "robustness/",
+    "!**/*.test.js"
+  ],
   "exports": {
     ".": "./pipeline.js",
     "./import": "./import.js",

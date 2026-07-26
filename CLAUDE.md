@@ -229,7 +229,8 @@ Profiles in `rules/*.json` override severities or disable layers. Mode: `documen
 ## Conventions
 
 - ES Modules (`import`/`export`) — no CommonJS
-- Runtime deps (3): `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`. Dev deps: `jest`, `@jest/globals`. No new deps without prior discussion.
+- Node `>=20` (declared in `package.json` `engines`; CI tests 20 and 22)
+- Runtime deps (5): `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`. Dev deps: `jest`, `@jest/globals`, `bpmn-auto-layout`. No new deps without prior discussion.
 - Config in `config.json`, not hardcoded
 - Functions are pure (no global state except `CFG`)
 - IDs in Logic-Core: `^[a-zA-Z_][a-zA-Z0-9_-]*$`
