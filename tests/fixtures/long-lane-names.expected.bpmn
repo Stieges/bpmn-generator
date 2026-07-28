@@ -76,24 +76,22 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
-        <di:waypoint x="146" y="119.5" />
-        <di:waypoint x="226" y="119.5" />
-        <di:waypoint x="226" y="80" />
+        <di:waypoint x="146" y="120" />
+        <di:waypoint x="226" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
-        <di:waypoint x="326" y="160" />
-        <di:waypoint x="326" y="305" />
-        <di:waypoint x="406" y="305" />
+        <di:waypoint x="276" y="160" />
+        <di:waypoint x="456" y="160" />
+        <di:waypoint x="456" y="305" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
-        <di:waypoint x="506" y="385" />
-        <di:waypoint x="506" y="530" />
-        <di:waypoint x="586" y="530" />
+        <di:waypoint x="456" y="385" />
+        <di:waypoint x="636" y="385" />
+        <di:waypoint x="636" y="530" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
-        <di:waypoint x="686" y="610" />
-        <di:waypoint x="784" y="610" />
-        <di:waypoint x="784" y="587.5" />
+        <di:waypoint x="686" y="570" />
+        <di:waypoint x="766" y="570" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

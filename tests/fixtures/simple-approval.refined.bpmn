@@ -14,10 +14,10 @@
         <bpmn:flowNodeRef>end1</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="start1" name="Start">
+    <bpmn:startEvent id="start1" name="Document submitted">
       <bpmn:outgoing>f1</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:userTask id="task1" name="Review Document">
+    <bpmn:userTask id="task1" name="Review document">
       <bpmn:incoming>f1</bpmn:incoming>
       <bpmn:incoming>f5</bpmn:incoming>
       <bpmn:outgoing>f2</bpmn:outgoing>
@@ -27,15 +27,15 @@
       <bpmn:outgoing>f3</bpmn:outgoing>
       <bpmn:outgoing>f4</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:serviceTask id="task2" name="Process Approval">
+    <bpmn:serviceTask id="task2" name="Approve document">
       <bpmn:incoming>f3</bpmn:incoming>
       <bpmn:outgoing>f6</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:userTask id="task3" name="Revise Document">
+    <bpmn:userTask id="task3" name="Revise document">
       <bpmn:incoming>f4</bpmn:incoming>
       <bpmn:outgoing>f5</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:endEvent id="end1" name="End">
+    <bpmn:endEvent id="end1" name="Document approved">
       <bpmn:incoming>f6</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="f1" sourceRef="start1" targetRef="task1" />
@@ -50,15 +50,15 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Participant_Process_Main_di" bpmnElement="Participant_Process_Main" isHorizontal="true">
-        <dc:Bounds x="20" y="20" width="852" height="260" />
+        <dc:Bounds x="20" y="60" width="852" height="260" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="lane1_di" bpmnElement="lane1" isHorizontal="true">
-        <dc:Bounds x="50" y="20" width="822" height="260" />
+        <dc:Bounds x="50" y="60" width="822" height="260" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="start1_di" bpmnElement="start1">
         <dc:Bounds x="110" y="241.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="106.8" y="287.5" width="42.5" height="20" />
+          <dc:Bounds x="83" y="287.5" width="90" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="task1_di" bpmnElement="task1">
@@ -79,7 +79,7 @@
       <bpmndi:BPMNShape id="end1_di" bpmnElement="end1">
         <dc:Bounds x="776" y="101.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="779.3" y="147.5" width="29.5" height="20" />
+          <dc:Bounds x="749" y="147.5" width="90" height="20" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">

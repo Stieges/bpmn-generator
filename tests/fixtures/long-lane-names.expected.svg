@@ -32,19 +32,22 @@
   </marker>
 </defs>
 <rect width="942" height="775" fill="#fafafa"/>
+<rect x="50" y="50" width="842" height="675" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+<rect x="50" y="50" width="30" height="675" fill="#e8e8e8" stroke="#000000" stroke-width="1.5"/>
+<text x="65" y="387.5" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="bold" fill="#000000" transform="rotate(-90,65,387.5)">Long Names Test</text>
 <rect x="80" y="50" width="812" height="225" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
-<rect x="50" y="50" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
-<text x="65" y="162.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,162.5)">Prozessverantwortlicher</text>
+<rect x="80" y="50" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="95" y="162.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,162.5)">Prozessverantwortlicher</text>
 <rect x="80" y="275" width="812" height="225" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
-<rect x="50" y="275" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
-<text x="65" y="387.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,387.5)">Qualitätssicherungsbeauftragter</text>
+<rect x="80" y="275" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="95" y="387.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,387.5)">Qualitätssicherungsbeauftragter</text>
 <rect x="80" y="500" width="812" height="225" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
-<rect x="50" y="500" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
-<text x="65" y="612.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,65,612.5)">Datenschutzkoordinator</text>
-<path d="M 176 149.5 L 256 149.5 L 256 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 356 190 L 356 335 L 436 335" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 536 415 L 536 560 L 616 560" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 716 640 L 814 640 L 814 617.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect x="80" y="500" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="95" y="612.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,612.5)">Datenschutzkoordinator</text>
+<path d="M 176 150 L 256 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 306 190 L 486 190 L 486 335" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 486 415 L 666 415 L 666 560" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 716 600 L 796 600" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <circle cx="158" cy="149.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text x="158" y="187.5" text-anchor="middle" font-size="11" fill="#000000">Start</text>
 <rect x="256" y="110" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
