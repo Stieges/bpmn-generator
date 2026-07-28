@@ -3129,7 +3129,15 @@ function diEdges(xml) {
   return out;
 }
 
-const shifted = (poly, dx, dy) => poly.map(([x, y]) => [+(x + dx).toFixed(2), +(y + dy).toFixed(2)]);
+/** All DI shape bounds from a BPMN XML, keyed by bpmnElement. */
+function diShapes(xml) {
+  const out = {};
+  for (const m of xml.matchAll(
+    /<bpmndi:BPMNShape[^>]*bpmnElement="([^"]+)"[^>]*>\s*<dc:Bounds x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g)) {
+    out[m[1]] = { x: +m[2], y: +m[3], w: +m[4], h: +m[5] };
+  }
+  return out;
+}
 
 describe('geometry contract — every drawable has coordinates', () => {
   const CLASSES = [
@@ -3164,31 +3172,78 @@ describe('geometry contract — every drawable has coordinates', () => {
 });
 
 describe('geometry contract — the two renderers agree', () => {
-  // svg.js draws for humans, bpmn-xml.js writes for tools. Whenever the
-  // contract had a gap, both filled it independently and drifted apart: the SVG
-  // drew message flows as a dog-leg while the DI carried a diagonal.
-  for (const fixture of ['all-element-classes.json', 'multi-pool-collaboration.json', 'realistic-collaboration.json']) {
+  // svg.js draws for humans, bpmn-xml.js writes for tools. Whenever the contract
+  // had a gap, both filled it independently and drifted apart: the SVG drew
+  // message flows as a dog-leg while the DI carried a diagonal cutting through a
+  // pool, and the lane header strip sat in two different places.
+  //
+  // The comparison is deliberately blunt: SETS of polylines, all connection
+  // kinds at once, plus the shapes. An earlier version compared message flows
+  // and associations only, pairing them by order of appearance and deriving the
+  // canvas offset from the first pair — it stayed green while sequence flows
+  // were drawn straight in the SVG and orthogonal in the DI.
+  // Both renderers are compared against the CONTRACT, not against each other:
+  // if each of them only translates coordMap, they agree by construction. The
+  // SVG additionally normalises the canvas to the origin, so it is allowed
+  // exactly ONE offset — shared by shapes and connections alike.
+  // Both emitters round through utils.rn() (one decimal), so compare at that
+  // resolution — anything coarser would hide a real disagreement.
+  const r1 = n => (Math.round(n * 10) / 10).toFixed(1);
+  const poly = (pts, dx = 0, dy = 0) =>
+    pts.map(p => {
+      const [x, y] = Array.isArray(p) ? p : [p.x, p.y];
+      return `${r1(x + dx)},${r1(y + dy)}`;
+    }).join(' ');
+
+  for (const fixture of ['all-element-classes.json', 'multi-pool-collaboration.json', 'realistic-collaboration.json', 'expanded-subprocess.json', 'sparse-lanes.json']) {
     for (const visualRefinement of [false, true]) {
-      test(`${fixture} (refinement: ${visualRefinement}) — SVG polylines equal DI polylines`, async () => {
-        const lc = loadFixture(fixture);
-        const r = await runPipeline(lc, { visualRefinement });
+      test(`${fixture} (refinement: ${visualRefinement}) — the DI is coordMap, unchanged`, async () => {
+        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const cm = r.coordMap;
+
+        for (const [id, b] of Object.entries(diShapes(r.bpmnXml))) {
+          const c = cm.coords[id] ?? cm.laneCoords[id] ?? cm.poolCoords[id.replace(/^Participant_/, '')];
+          if (!c) continue;   // ids that exist only in the DI
+          expect({ id, x: r1(b.x), y: r1(b.y), w: r1(b.w), h: r1(b.h) })
+            .toEqual({ id, x: r1(c.x), y: r1(c.y), w: r1(c.w), h: r1(c.h) });
+        }
+
+        for (const [id, pts] of Object.entries(diEdges(r.bpmnXml))) {
+          if (!cm.edgeCoords[id]) continue;
+          expect(`${id}: ${poly(pts)}`).toBe(`${id}: ${poly(cm.edgeCoords[id])}`);
+        }
+      });
+
+      test(`${fixture} (refinement: ${visualRefinement}) — the SVG is coordMap under one offset`, async () => {
+        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
         const svg = svgConnections(r.svg);
-        const di = diEdges(r.bpmnXml);
+        const drawn = [...svg.sequenceFlow, ...svg.messageFlow, ...svg.association];
 
-        const expectSame = (kind, ids) => {
-          const svgPolys = svg[kind];
-          expect(svgPolys).toHaveLength(ids.length);
-          if (!ids.length) return;
-          // The SVG applies a single canvas offset to everything; derive it once.
-          const dx = svgPolys[0][0][0] - di[ids[0]][0][0];
-          const dy = svgPolys[0][0][1] - di[ids[0]][0][1];
-          for (let i = 0; i < ids.length; i++) {
-            expect(svgPolys[i]).toEqual(shifted(di[ids[i]], dx, dy));
-          }
-        };
+        // Every connection in coordMap that a renderer draws, and nothing else.
+        const lc = loadFixture(fixture);
+        // Edges nest: an expanded subprocess carries its own. Missing them made
+        // an earlier version of this test compare 3 of 6 drawn connections.
+        const edgeIds = (nodes) => (nodes || []).flatMap(n => [
+          ...(n.edges || []).map(e => e.id),
+          ...edgeIds(n.nodes),
+        ]);
+        const ids = [
+          ...(lc.pools || [lc]).flatMap(p => [...(p.edges || []).map(e => e.id), ...edgeIds(p.nodes)]),
+          ...(lc.messageFlows || []).map(m => m.id),
+          ...(lc.associations || []).map(a => a.id),
+        ].filter(id => r.coordMap.edgeCoords[id]);
+        expect(drawn).toHaveLength(ids.length);
 
-        expectSame('messageFlow', (lc.messageFlows || []).map(mf => mf.id));
-        expectSame('association', (lc.associations || []).map(a => a.id));
+        // One offset for all of them: derive it from the leftmost/topmost point
+        // of each side, then require an exact set match under it.
+        const flat = arr => arr.flat();
+        const dx = Math.min(...flat(drawn).map(p => p[0]))
+                 - Math.min(...ids.flatMap(id => r.coordMap.edgeCoords[id].map(p => p.x)));
+        const dy = Math.min(...flat(drawn).map(p => p[1]))
+                 - Math.min(...ids.flatMap(id => r.coordMap.edgeCoords[id].map(p => p.y)));
+
+        expect(new Set(drawn.map(p => poly(p))))
+          .toEqual(new Set(ids.map(id => poly(r.coordMap.edgeCoords[id], dx, dy))));
       });
     }
   }
