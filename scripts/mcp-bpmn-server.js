@@ -125,11 +125,15 @@ async function handleToolCall(request) {
           ...(include.has('xml') ? { bpmnXml: set.parent.bpmnXml } : {}),
           ...(include.has('svg') ? { svg: set.parent.svg } : {}),
           ...(include.has('validation') ? { validation: set.parent.validation } : {}),
+          // Was dropped here although it is in the default include set: the
+          // drill-down caller got no geometry diagnostics at all.
+          ...(include.has('diagnostics') ? { diagnostics: set.parent.diagnostics } : {}),
         },
         subProcesses: Object.fromEntries(
           Object.entries(set.subProcesses).map(([id, r]) => [id, {
             ...(include.has('xml') ? { bpmnXml: r.bpmnXml } : {}),
             ...(include.has('svg') ? { svg: r.svg } : {}),
+            ...(include.has('diagnostics') ? { diagnostics: r.diagnostics } : {}),
           }])
         ),
         navigation: set.navigation,
@@ -164,14 +168,15 @@ async function handleToolCall(request) {
       ruleProfile: args.ruleProfile || null,
       mode: args.mode,
     });
-    return { content: [{ type: 'text', text: JSON.stringify({
+    return text({
       bpmnXml: result.bpmnXml,
       svg: result.svg,
       validation: result.validation,
+      diagnostics: result.diagnostics,
       compliance: result.compliance,
       history: result.history,
       iterations: result.iterations,
-    }, null, 2) }] };
+    });
   }
 
   throw new Error(`Unknown tool: ${name}`);

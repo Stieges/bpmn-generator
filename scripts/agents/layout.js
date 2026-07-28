@@ -48,6 +48,11 @@ export async function layoutAgent(state) {
     svg: result.svg,
     coordMap: result.coordMap,
     validation: result.validation,
+    // Deterministic geometry findings. Passed through, NOT fed back into the
+    // iteration: DI01–DI04 and DI06 are generator defects, and re-running with
+    // the same Logic-Core would produce the same broken geometry. They belong
+    // in the report so a human sees them, not in a retry loop.
+    diagnostics: result.diagnostics,
     layoutFeedback: [],
     done: true,
   };

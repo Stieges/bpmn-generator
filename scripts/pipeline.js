@@ -418,6 +418,26 @@ async function main() {
   }
   console.log(`✓ Logic-Core validated (structural soundness OK)`);
 
+  // Geometry diagnostics. A green validation says nothing about the layout —
+  // the rule engine never sees a coordinate. Printing this next to the
+  // validation line is the whole point of the check: it existed but nobody
+  // surfaced it, so a broken diagram still reported success and exited 0.
+  const diErrors = (result.diagnostics?.issues ?? []).filter(i => i.severity === 'ERROR');
+  const diWarnings = (result.diagnostics?.issues ?? []).filter(i => i.severity !== 'ERROR');
+  if (diWarnings.length) {
+    console.warn('\n⚠ Diagram diagnostics:');
+    diWarnings.forEach(i => console.warn(`  · ${i.code} ${i.message}`));
+  }
+  if (diErrors.length) {
+    console.error('\n✗ Diagram integrity (DI) — the geometry is broken, no files written:');
+    diErrors.forEach(i => console.error(`  · ${i.code} ${i.message}`));
+    process.exit(1);
+  }
+  if (strict && diWarnings.length) {
+    console.error(`\n✗ --strict: ${diWarnings.length} diagram diagnostic(s). No files written.`);
+    process.exit(1);
+  }
+
   const xmlPath = `${outputBase}.bpmn`;
   writeFileSync(xmlPath, result.bpmnXml, 'utf8');
   console.log(`✓ BPMN 2.0 XML → ${xmlPath}`);

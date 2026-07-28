@@ -110,3 +110,33 @@ describe('drillDown honours mode', () => {
     expect(drill.parent.validation.advisories).toEqual([]);
   });
 });
+
+describe('diagnostics reach the callers', () => {
+  // The DI check existed but almost nothing consumed it: the CLI printed a green
+  // checkmark and exited 0 on a broken diagram, the HTTP API never returned it,
+  // and the drill-down branch dropped it although it is in the default include set.
+  test('generate_bpmn returns diagnostics by default', async () => {
+    const r = parse(await call('generate_bpmn', { logicCore: fixture('realistic-collaboration.json') }));
+    expect(r.diagnostics).toBeDefined();
+    expect(r.diagnostics.ok).toBe(true);
+  });
+
+  test('drillDown returns diagnostics for the parent and every subprocess', async () => {
+    const r = parse(await call('generate_bpmn', {
+      logicCore: fixture('expanded-subprocess.json'),
+      drillDown: true,
+    }));
+    expect(r.parent.diagnostics).toBeDefined();
+    for (const sub of Object.values(r.subProcesses)) {
+      expect(sub.diagnostics).toBeDefined();
+    }
+  });
+
+  test("include without 'diagnostics' leaves them out", async () => {
+    const r = parse(await call('generate_bpmn', {
+      logicCore: fixture('simple-approval.json'),
+      include: ['xml'],
+    }));
+    expect(r.diagnostics).toBeUndefined();
+  });
+});
