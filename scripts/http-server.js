@@ -342,6 +342,7 @@ const server = createServer(async (req, res) => {
         bpmnXml: result.bpmnXml,
         svg: result.svg,
         validation: result.validation,
+        diagnostics: result.diagnostics,
         compliance: result.compliance,
         history: result.history,
         iterations: result.iterations,

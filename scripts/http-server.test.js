@@ -236,3 +236,34 @@ describe('POST /api/v1/validate — mode (Optimization Advisory)', () => {
     expect(data.validation.metrics.optimization).toBeDefined();
   });
 });
+
+describe('POST /api/v1/orchestrate — diagnostics', () => {
+  // orchestrator.js computes diagnostics (scripts/orchestrator.js state.diagnostics),
+  // and the MCP orchestrate_bpmn tool already returned it — but the HTTP handler's
+  // response object omitted the field, so a caller reading only `validation` here
+  // would have shipped a geometrically broken diagram as a plain "success".
+  const simple = {
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 't', type: 'task', name: 'Do' },
+      { id: 'e', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 't' },
+      { id: 'f2', source: 't', target: 'e' },
+    ],
+  };
+
+  test('response carries diagnostics for a logicCore-only request', async () => {
+    const res = await realFetch(`${baseUrl}/api/v1/orchestrate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ logicCore: simple }),
+    });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.diagnostics).toBeDefined();
+    expect(data.diagnostics.ok).toBe(true);
+  });
+});
