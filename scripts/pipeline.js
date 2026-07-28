@@ -33,6 +33,7 @@ import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordinates.js';
+import { checkDiagramIntegrity } from './di-check.js';
 import { simplifyAllEdges } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
@@ -59,7 +60,7 @@ async function runPipeline(logicCore, opts = {}) {
   const profile = profileForMode(baseProfile, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
-    return { bpmnXml: null, svg: null, coordMap: null, validation: { errors, warnings, advisories, metrics } };
+    return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, validation: { errors, warnings, advisories, metrics } };
   }
 
   const allProcesses = lc.pools ? lc.pools : [lc];
@@ -109,7 +110,14 @@ async function runPipeline(logicCore, opts = {}) {
   // Round-trip XML validation: parse back through moddle to catch structural issues
   const roundTrip = await validateBpmnXml(bpmnXml);
 
-  return { bpmnXml, svg, coordMap, validation: { errors: [], warnings, advisories, metrics, xmlWarnings: roundTrip.warnings } };
+  // DI integrity: the rule engine never sees a coordinate, so a layout defect
+  // passes validation green. This pass inspects the produced geometry.
+  const diagnostics = checkDiagramIntegrity(coordMap, lc);
+
+  return {
+    bpmnXml, svg, coordMap, diagnostics,
+    validation: { errors: [], warnings, advisories, metrics, xmlWarnings: roundTrip.warnings },
+  };
 }
 
 /**
@@ -234,10 +242,10 @@ function buildNavigation(logicCore) {
  * Generate a diagram set: parent diagram (subprocesses collapsed) + per-subprocess diagrams.
  * @returns {Promise<{parent: object, subProcesses: object, navigation: object}>}
  */
-async function generateDiagramSet(logicCore) {
+async function generateDiagramSet(logicCore, opts = {}) {
   // 1. Parent diagram with subprocesses collapsed
   const parentLc = collapseSubProcesses(logicCore);
-  const parent = await runPipeline(parentLc);
+  const parent = await runPipeline(parentLc, opts);
 
   // 2. Per-subprocess diagrams
   const processes = logicCore.pools ? logicCore.pools : [logicCore];
@@ -250,7 +258,7 @@ async function generateDiagramSet(logicCore) {
   for (const { node } of allSubs) {
     const subLc = extractSubProcessAsLogicCore(logicCore, node.id);
     if (subLc) {
-      subProcesses[node.id] = await runPipeline(subLc);
+      subProcesses[node.id] = await runPipeline(subLc, opts);
     }
   }
 
