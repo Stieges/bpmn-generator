@@ -32,6 +32,7 @@ import { checkWorkflowNetSoundness, bpmnToPN } from './workflow-net.js';
 import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from './http-server.js';
+import { checkDiagramIntegrity } from './di-check.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = resolve(__dirname, '../tests/fixtures');
@@ -2840,5 +2841,250 @@ describe('O04 Parallelisierungs-Kandidat: Bahn-Grenzen in beiden Formaten', () =
     };
     const r = runRules(oneLane, profileForMode(null, 'optimize'));
     expect(r.advisories.some(a => a.id === 'O04')).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §N  Collaboration layout hardening (B1–B3) + DI integrity check
+//
+//     All three defects below were reproducible on 9d5f40a and went
+//     unnoticed because no fixture exercised them: no boundary event
+//     anywhere, and never more than two expanded participants.
+// ═══════════════════════════════════════════════════════════════
+
+function makePool(i, { laned = false } = {}) {
+  const pool = {
+    id: `p${i}`,
+    name: `Pool ${i}`,
+    nodes: [
+      { id: `s${i}`, type: 'startEvent', name: 'Start' },
+      { id: `t${i}`, type: 'userTask', name: `Task ${i}` },
+      { id: `e${i}`, type: 'endEvent', name: 'End' },
+    ],
+    edges: [
+      { id: `a${i}`, source: `s${i}`, target: `t${i}` },
+      { id: `b${i}`, source: `t${i}`, target: `e${i}` },
+    ],
+  };
+  if (laned) {
+    pool.lanes = [{ id: `l${i}`, name: `Lane ${i}` }];
+    pool.nodes.forEach(n => { n.lane = `l${i}`; });
+  }
+  return pool;
+}
+
+function participantBounds(bpmnXml) {
+  const re = /bpmnElement="Participant_([^"]+)"[\s\S]*?<dc:Bounds x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(bpmnXml))) {
+    out.push({ id: m[1], x: +m[2], y: +m[3], w: +m[4], h: +m[5] });
+  }
+  return out;
+}
+
+describe('B1 — boundary events reach the layout', () => {
+  const withBoundary = {
+    id: 'P_bnd',
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Start' },
+      { id: 't', type: 'userTask', name: 'Approve request' },
+      { id: 'b', type: 'boundaryEvent', marker: 'timer', attachedTo: 't', cancelActivity: true, name: '7 days' },
+      { id: 'esc', type: 'serviceTask', name: 'Escalate' },
+      { id: 'e', type: 'endEvent', name: 'Done' },
+      { id: 'e2', type: 'endEvent', name: 'Escalated' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 't' },
+      { id: 'f2', source: 't', target: 'e' },
+      { id: 'f3', source: 'b', target: 'esc' },
+      { id: 'f4', source: 'esc', target: 'e2' },
+    ],
+  };
+
+  test('pipeline completes instead of throwing a JsonImportException', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(withBoundary)));
+    expect(r.bpmnXml).toContain('<bpmn:boundaryEvent id="b"');
+    expect(r.bpmnXml).toContain('attachedToRef="t"');
+  });
+
+  test('boundary event straddles the bottom edge of its host', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(withBoundary)));
+    const host = r.coordMap.coords.t;
+    const bnd = r.coordMap.coords.b;
+    expect(bnd).toBeDefined();
+    expect(bnd.y + bnd.h / 2).toBeCloseTo(host.y + host.h, 5);
+    expect(bnd.x + bnd.w / 2).toBeGreaterThanOrEqual(host.x);
+    expect(bnd.x + bnd.w / 2).toBeLessThanOrEqual(host.x + host.w);
+  });
+
+  test('the outgoing flow starts at the boundary event, not at the host', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(withBoundary)));
+    const pts = r.coordMap.edgeCoords.f3;
+    const bnd = r.coordMap.coords.b;
+    expect(pts.length).toBeGreaterThanOrEqual(2);
+    expect(pts[0].x).toBeGreaterThanOrEqual(bnd.x - 1);
+    expect(pts[0].x).toBeLessThanOrEqual(bnd.x + bnd.w + 1);
+  });
+
+  test('works inside a pool with lanes as well', async () => {
+    const laned = {
+      pools: [{
+        ...JSON.parse(JSON.stringify(withBoundary)),
+        lanes: [{ id: 'L1', name: 'Clerk' }, { id: 'L2', name: 'Manager' }],
+      }],
+    };
+    laned.pools[0].nodes.forEach(n => { n.lane = ['esc', 'e2'].includes(n.id) ? 'L2' : 'L1'; });
+    const r = await runPipeline(laned);
+    expect(r.coordMap.coords.b).toBeDefined();
+  });
+});
+
+describe('B2 — every laned pool keeps its own ELK id', () => {
+  test('three pools with lanes produce three distinct ids', () => {
+    const graph = logicCoreToElk({ pools: [1, 2, 3].map(i => makePool(i, { laned: true })) });
+    const ids = graph.children.map(c => c.id);
+    expect(ids).toEqual(['p1', 'p2', 'p3']);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('B3 — participants never collide, at any count', () => {
+  // Two pools happened to work, so nobody noticed. rectpacking opened a second
+  // column from four participants on, and §5.0b collapsed it onto the first.
+  for (const laned of [false, true]) {
+    for (const count of [2, 3, 4, 5, 6]) {
+      test(`${count} pools (lanes: ${laned}) — no shared coordinates, no overlap`, async () => {
+        const lc = { pools: Array.from({ length: count }, (_, k) => makePool(k + 1, { laned })) };
+        const r = await runPipeline(lc);
+        const bounds = participantBounds(r.bpmnXml);
+        expect(bounds).toHaveLength(count);
+
+        for (let i = 0; i < bounds.length; i++) {
+          for (let j = i + 1; j < bounds.length; j++) {
+            const a = bounds[i], b = bounds[j];
+            expect(`${a.x},${a.y}`).not.toBe(`${b.x},${b.y}`);
+            const overlaps = a.x < b.x + b.w && b.x < a.x + a.w
+                          && a.y < b.y + b.h && b.y < a.y + a.h;
+            expect(overlaps).toBe(false);
+          }
+        }
+      });
+    }
+  }
+});
+
+describe('realistic-collaboration fixture', () => {
+  // 6 participants, 5 of them expanded, 3 with lanes, one boundary event,
+  // one black box. Fails on all three defects at once if any regresses.
+  test('generates a diagram whose DI passes the integrity check', async () => {
+    const r = await runPipeline(loadFixture('realistic-collaboration.json'));
+    expect(r.validation.errors).toEqual([]);
+    expect(r.diagnostics.issues).toEqual([]);
+    expect(r.diagnostics.ok).toBe(true);
+  });
+
+  test('carries all six participants and the boundary event into the XML', async () => {
+    const r = await runPipeline(loadFixture('realistic-collaboration.json'));
+    expect(participantBounds(r.bpmnXml)).toHaveLength(6);
+    expect(r.bpmnXml).toContain('attachedToRef="in_check"');
+  });
+});
+
+describe('DI integrity check', () => {
+  const pool = (id, x, y, w = 100, h = 100) => [id, { x, y, w, h }];
+
+  test('DI01 fires on two participants at the same position', () => {
+    const coordMap = { coords: {}, poolCoords: Object.fromEntries([pool('a', 20, 20), pool('b', 20, 20)]) };
+    const res = checkDiagramIntegrity(coordMap, { pools: [] });
+    expect(res.ok).toBe(false);
+    expect(res.issues.map(i => i.code)).toContain('DI01');
+  });
+
+  test('DI02 fires on partially overlapping participants', () => {
+    const coordMap = { coords: {}, poolCoords: Object.fromEntries([pool('a', 20, 20), pool('b', 20, 80)]) };
+    const res = checkDiagramIntegrity(coordMap, { pools: [] });
+    expect(res.issues.map(i => i.code)).toEqual(['DI02']);
+  });
+
+  test('DI02 accepts participants that merely abut', () => {
+    const coordMap = { coords: {}, poolCoords: Object.fromEntries([pool('a', 20, 20), pool('b', 20, 120)]) };
+    expect(checkDiagramIntegrity(coordMap, { pools: [] }).ok).toBe(true);
+  });
+
+  test('DI03 fires on a node outside its participant', () => {
+    const coordMap = {
+      coords: { n1: { x: 500, y: 500, w: 100, h: 80 } },
+      poolCoords: Object.fromEntries([pool('P', 20, 20, 400, 300)]),
+    };
+    const lc = { pools: [{ id: 'P', nodes: [{ id: 'n1', type: 'userTask' }], edges: [] }] };
+    const res = checkDiagramIntegrity(coordMap, lc);
+    expect(res.issues.map(i => i.code)).toEqual(['DI03']);
+  });
+
+  test('reports ok for a clean layout', () => {
+    const coordMap = {
+      coords: { n1: { x: 100, y: 100, w: 100, h: 80 } },
+      poolCoords: Object.fromEntries([pool('P', 20, 20, 400, 300)]),
+    };
+    const lc = { pools: [{ id: 'P', nodes: [{ id: 'n1', type: 'userTask' }], edges: [] }] };
+    expect(checkDiagramIntegrity(coordMap, lc).ok).toBe(true);
+  });
+});
+
+describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () => {
+  // elk.partitioning groups LAYERS, not bands: with it enabled, every node of
+  // the first lane was forced before every node of the second one, so a lane
+  // working mid-process landed behind the end event and its outgoing flow ran
+  // backwards. Lane bands are derived from node positions instead.
+  test('a mid-flow lane node sits between its predecessor and its successor', async () => {
+    const r = await runPipeline(loadFixture('multi-pool-collaboration.json'));
+    const { s_gw, s_approve, s_merge, s_end } = r.coordMap.coords;
+    expect(s_approve.x).toBeGreaterThan(s_gw.x);
+    expect(s_approve.x).toBeLessThan(s_merge.x);
+    expect(s_approve.x).toBeLessThan(s_end.x);
+  });
+
+  test('no sequence flow runs backwards unless the model itself loops back', async () => {
+    const lc = loadFixture('realistic-collaboration.json');
+    const r = await runPipeline(lc);
+    const backwards = [];
+    for (const proc of lc.pools) {
+      for (const e of proc.edges) {
+        const s = r.coordMap.coords[e.source];
+        const t = r.coordMap.coords[e.target];
+        if (s && t && t.x + t.w < s.x) backwards.push(e.id);
+      }
+    }
+    expect(backwards).toEqual([]);
+  });
+
+  test('lane bands follow the declared lane order, top to bottom', async () => {
+    const lc = loadFixture('realistic-collaboration.json');
+    const r = await runPipeline(lc);
+    for (const proc of lc.pools.filter(p => (p.lanes || []).length > 1)) {
+      const ys = proc.lanes.map(l => r.coordMap.laneCoords[l.id].y);
+      expect(ys).toEqual([...ys].sort((a, b) => a - b));
+    }
+  });
+
+  test('lane bands never overlap, with or without visual refinement', async () => {
+    for (const visualRefinement of [false, true]) {
+      const lc = loadFixture('realistic-collaboration.json');
+      const r = await runPipeline(lc, { visualRefinement });
+      expect(r.diagnostics.issues.filter(i => i.code === 'DI04')).toEqual([]);
+      expect(r.diagnostics.ok).toBe(true);
+    }
+  });
+
+  test('DI04 fires on overlapping lane bands', () => {
+    const coordMap = {
+      coords: {},
+      poolCoords: { P: { x: 0, y: 0, w: 500, h: 400 } },
+      laneCoords: { L1: { x: 30, y: 0, w: 470, h: 200 }, L2: { x: 30, y: 150, w: 470, h: 200 } },
+    };
+    const lc = { pools: [{ id: 'P', lanes: [{ id: 'L1' }, { id: 'L2' }], nodes: [], edges: [] }] };
+    const res = checkDiagramIntegrity(coordMap, lc);
+    expect(res.issues.map(i => i.code)).toContain('DI04');
   });
 });
