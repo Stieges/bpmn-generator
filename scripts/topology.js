@@ -113,6 +113,127 @@ export function orderLanesByFlow(proc) {
   });
 }
 
+/** Above this participant count the exact search is replaced by a heuristic. */
+const EXACT_MAX = 8;
+
+/** Heap's algorithm — every permutation of `arr`, handed to `visit`. */
+function permute(arr, visit, k = arr.length) {
+  if (k === 1) { visit(arr); return; }
+  for (let i = 0; i < k; i++) {
+    permute(arr, visit, k - 1);
+    const j = k % 2 === 0 ? i : 0;
+    [arr[j], arr[k - 1]] = [arr[k - 1], arr[j]];
+  }
+}
+
+/**
+ * Order the participants of a collaboration so that the ones that talk to each
+ * other end up next to each other.
+ *
+ * Participants are stacked vertically, so a message flow between participants
+ * that are N apart in the stack has to cross N-1 uninvolved pools. Crossing a
+ * pool reads as a participation that does not exist, so the sum of those
+ * crossings is what we minimise:
+ *
+ *     cost(order) = Σ over message flows of max(0, |pos(a) - pos(b)| - 1)
+ *
+ * Expanded pools and black-box participants are ordered TOGETHER — keeping the
+ * black boxes at the end (the previous behaviour) is what put an external
+ * register 1140 px away from its only partner.
+ *
+ * Barycentre seed plus adjacent-swap local search. Deterministic: ties keep the
+ * declared order, and the result is only adopted if it beats the declared one.
+ * Writes the id order to `lc._participantOrder`; layout.js and coordinates.js
+ * read it. Sorting the arrays themselves would not help, because expanded and
+ * collapsed participants live in two of them.
+ *
+ * @param {object} lc Logic-Core (mutated)
+ */
+export function orderParticipantsByMessageFlow(lc) {
+  const ids = [
+    ...(lc.pools || []).map(p => p.id),
+    ...(lc.collapsedPools || []).map(p => p.id),
+  ];
+  if (ids.length < 3) { lc._participantOrder = ids; return; }
+
+  // Which participant owns a message flow endpoint? Endpoints are node ids for
+  // expanded pools and the participant id itself for black boxes.
+  const ownerOf = {};
+  for (const p of (lc.pools || [])) {
+    for (const n of (p.nodes || [])) ownerOf[n.id] = p.id;
+  }
+  for (const id of ids) ownerOf[id] ??= id;
+
+  const links = [];
+  for (const mf of (lc.messageFlows || [])) {
+    const a = ownerOf[mf.source];
+    const b = ownerOf[mf.target];
+    if (a && b && a !== b) links.push([a, b]);
+  }
+  if (links.length === 0) { lc._participantOrder = ids; return; }
+
+  const cost = (order) => {
+    const pos = {};
+    order.forEach((id, i) => { pos[id] = i; });
+    return links.reduce((s, [a, b]) => s + Math.max(0, Math.abs(pos[a] - pos[b]) - 1), 0);
+  };
+
+  const declaredIndex = {};
+  ids.forEach((id, i) => { declaredIndex[id] = i; });
+
+  // Up to EXACT_MAX participants the optimum is simply searched for: 8! is
+  // 40320 orders, a few milliseconds, and it is provably the best answer.
+  // Local search was tried first and is not good enough here — on the
+  // six-participant reference collaboration both neighbour swaps and
+  // relocation moves settle at 4 crossings where 2 exists.
+  let best = ids;
+  let bestCost = cost(ids);
+  let bestDrift = 0;
+
+  const consider = (order) => {
+    const c = cost(order);
+    // Among equally good orders keep the one closest to the declared one, so
+    // the result stays predictable for whoever wrote the model.
+    const drift = order.reduce((s, id, i) => s + Math.abs(declaredIndex[id] - i), 0);
+    if (c < bestCost || (c === bestCost && drift < bestDrift)) {
+      best = [...order];
+      bestCost = c;
+      bestDrift = drift;
+    }
+  };
+  bestDrift = 0;
+
+  if (ids.length <= EXACT_MAX) {
+    permute([...ids], consider);
+  } else {
+    // Larger collaborations: barycentre seed plus relocation moves.
+    const partners = {};
+    for (const [a, b] of links) {
+      (partners[a] ??= []).push(b);
+      (partners[b] ??= []).push(a);
+    }
+    const score = id => {
+      const ps = partners[id];
+      return ps?.length ? ps.reduce((s, p) => s + declaredIndex[p], 0) / ps.length : declaredIndex[id];
+    };
+    consider([...ids].sort((a, b) => (score(a) - score(b)) || (declaredIndex[a] - declaredIndex[b])));
+    for (let pass = 0; pass < ids.length; pass++) {
+      const before = bestCost;
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = 0; j < ids.length; j++) {
+          if (i === j) continue;
+          const candidate = [...best];
+          candidate.splice(j, 0, candidate.splice(i, 1)[0]);
+          consider(candidate);
+        }
+      }
+      if (bestCost === before) break;
+    }
+  }
+
+  lc._participantOrder = best;
+}
+
 /**
  * Identify nodes on the happy path (connected by isHappyPath edges).
  * Returns a Set of node IDs.
@@ -186,11 +307,19 @@ export function normalizeLaneAssignments(proc) {
 /**
  * Pre-process a Logic-Core before ELK graph construction.
  */
-export function preprocessLogicCore(lc) {
+export function preprocessLogicCore(lc, opts = {}) {
   const processes = lc.pools ? lc.pools : [lc];
   for (const proc of processes) {
     normalizeLaneAssignments(proc);
     sortNodesTopologically(proc);
     orderLanesByFlow(proc);
+  }
+  if (opts.poolOrder === 'declared') {
+    lc._participantOrder = [
+      ...(lc.pools || []).map(p => p.id),
+      ...(lc.collapsedPools || []).map(p => p.id),
+    ];
+  } else {
+    orderParticipantsByMessageFlow(lc);
   }
 }

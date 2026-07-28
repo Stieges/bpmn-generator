@@ -232,7 +232,8 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
-      const result = await runPipeline(body.logicCore, { mode });
+      const poolOrder = body.poolOrder === 'declared' ? 'declared' : 'auto';
+      const result = await runPipeline(body.logicCore, { mode, poolOrder });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors });

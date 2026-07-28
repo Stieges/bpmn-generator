@@ -107,7 +107,39 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
     }
   }
 
-  return { ok: issues.length === 0, issues };
+  // DI05 — a message flow crossing a participant it does not involve.
+  // WARNING, not ERROR: with a communication cycle across three or more
+  // participants a linear stack cannot avoid it, so this reports rather than
+  // blocks. It is the metric that shows whether the participant ordering
+  // (topology.js) did its job.
+  const participantOf = {};
+  for (const proc of (lc.pools || [])) {
+    for (const n of (proc.nodes || [])) participantOf[n.id] = proc.id;
+  }
+  for (const p of participants) participantOf[p.id] ??= p.id;
+
+  for (const mf of (lc.messageFlows || [])) {
+    const pts = (coordMap.edgeCoords || {})[mf.id || `mf_${mf.source}_${mf.target}`];
+    if (!pts || pts.length < 2) continue;
+    const involved = new Set([participantOf[mf.source], participantOf[mf.target]]);
+    const ys = pts.map(p => p.y);
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    const crossed = participants
+      .filter(p => !involved.has(p.id) && p.y > lo + tol && p.y + p.h < hi - tol)
+      .map(p => p.id);
+    if (crossed.length) {
+      issues.push({
+        code: 'DI05',
+        severity: 'WARNING',
+        message: `Message flow "${mf.id}" crosses uninvolved participant(s): ${crossed.join(', ')}.`,
+        elements: [mf.id, ...crossed],
+      });
+    }
+  }
+
+  // `ok` means "no blocking geometry defect" — warnings are reported but do not
+  // fail the gate.
+  return { ok: !issues.some(i => i.severity === 'ERROR'), issues };
 }
 
 function overlapArea(a, b, tol) {

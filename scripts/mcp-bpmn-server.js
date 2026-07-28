@@ -42,6 +42,7 @@ const TOOLS = [
         drillDown: { type: 'boolean', description: 'Generate per-subprocess diagrams (optional, default false)' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default, faithful IST) or 'optimize' (Soll — adds redesign advisories)" },
         ruleProfile: { type: 'string', description: 'Path to a rule profile JSON, e.g. rules/strict-profile.json (optional)' },
+        poolOrder: { type: 'string', enum: ['auto', 'declared'], description: "'auto' (default) stacks participants so that the ones exchanging messages sit next to each other; 'declared' keeps the input order" },
         include: {
           type: 'array',
           items: { type: 'string', enum: ['xml', 'svg', 'validation', 'diagnostics'] },
@@ -115,7 +116,7 @@ async function handleToolCall(request) {
     if (rejected) return rejected;
 
     const include = new Set(args.include ?? ['xml', 'svg', 'validation', 'diagnostics']);
-    const opts = { mode: args.mode, ruleProfile: ruleProfileOf(args) };
+    const opts = { mode: args.mode, ruleProfile: ruleProfileOf(args), poolOrder: args.poolOrder };
 
     if (args.drillDown) {
       const set = await generateDiagramSet(args.logicCore, opts);
