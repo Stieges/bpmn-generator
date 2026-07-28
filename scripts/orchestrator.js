@@ -36,6 +36,7 @@ export async function orchestrate(input, options = {}) {
     svg: null,
     coordMap: null,
     validation: null,
+    diagnostics: null,
     compliance: null,
     history: [],
     iteration: 0,
@@ -111,6 +112,7 @@ export async function orchestrate(input, options = {}) {
       state.svg = layout.svg;
       state.coordMap = layout.coordMap;
       state.validation = layout.validation;
+      state.diagnostics = layout.diagnostics;
       state.layoutFeedback = layout.layoutFeedback || [];
       state.history.push({
         agent: 'layout', iteration: i,
@@ -163,6 +165,7 @@ export async function orchestrate(input, options = {}) {
     bpmnXml: state.bpmnXml,
     svg: state.svg,
     validation: state.validation,
+    diagnostics: state.diagnostics,
     compliance: state.compliance,
     history: state.history,
     iterations: state.iteration + 1,

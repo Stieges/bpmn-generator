@@ -43,6 +43,12 @@ Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung.
 | S10 | Message Flows: Quell- und Ziel-Nodes muessen existieren | OMG §9.4 | implementiert |
 | S11 | SubProcess-Kinder: Start-Event + End-Event vorhanden | OMG §10.2.1 | implementiert |
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
+| S13 | Boundary Event muss an einer existierenden Aktivität hängen | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
+
+**Zu S13:** `attachedToRef` ist im OMG-Schema Pflicht (1..1). Ohne diese Prüfung lief ein
+ins Leere zeigendes `attachedTo` bis in die Ausgabe durch und erzeugte ein `boundaryEvent`
+ohne `attachedToRef`, ohne DI-Shape und mit einer ausgehenden Kante ohne Wegpunkte — also
+BPMN, das kein Werkzeug lesen kann, bei grüner Validierung.
 
 ## Schicht 2: Style (WARNING)
 

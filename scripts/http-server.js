@@ -232,17 +232,23 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
-      const result = await runPipeline(body.logicCore, { mode });
+      const poolOrder = body.poolOrder === 'declared' ? 'declared' : 'auto';
+      const result = await runPipeline(body.logicCore, { mode, poolOrder });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
-      auditLog({ event: 'completed', correlationId, durationMs, hasErrors });
+      // A green validation says nothing about the layout — the rule engine never
+      // sees a coordinate. A caller that only reads `validation` would ship a
+      // structurally broken diagram as a success.
+      const diBroken = result.diagnostics ? !result.diagnostics.ok : false;
+      auditLog({ event: 'completed', correlationId, durationMs, hasErrors, diBroken });
 
       const payload = {
         correlationId,
-        status: hasErrors ? 'validation_error' : 'success',
+        status: hasErrors ? 'validation_error' : (diBroken ? 'diagram_error' : 'success'),
         bpmnXml: result.bpmnXml,
         svg: result.svg,
         validation: result.validation,
+        diagnostics: result.diagnostics,
       };
 
       let callbackStatus = 'not_requested';
@@ -336,6 +342,7 @@ const server = createServer(async (req, res) => {
         bpmnXml: result.bpmnXml,
         svg: result.svg,
         validation: result.validation,
+        diagnostics: result.diagnostics,
         compliance: result.compliance,
         history: result.history,
         iterations: result.iterations,

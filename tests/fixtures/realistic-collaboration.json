@@ -1,0 +1,121 @@
+{
+  "pools": [
+    {
+      "id": "Process_Applicant",
+      "name": "Applicant",
+      "nodes": [
+        {"id": "ap_start", "type": "startEvent", "name": "Need identified"},
+        {"id": "ap_submit", "type": "sendTask", "name": "Submit application"},
+        {"id": "ap_wait", "type": "receiveTask", "name": "Await decision"},
+        {"id": "ap_end", "type": "endEvent", "name": "Decision received"}
+      ],
+      "edges": [
+        {"id": "apf1", "source": "ap_start", "target": "ap_submit"},
+        {"id": "apf2", "source": "ap_submit", "target": "ap_wait"},
+        {"id": "apf3", "source": "ap_wait", "target": "ap_end"}
+      ]
+    },
+    {
+      "id": "Process_Intake",
+      "name": "Intake Office",
+      "lanes": [
+        {"id": "in_desk", "name": "Front Desk"},
+        {"id": "in_review", "name": "Case Review"}
+      ],
+      "nodes": [
+        {"id": "in_start", "type": "startEvent", "name": "Application received", "lane": "in_desk"},
+        {"id": "in_register", "type": "userTask", "name": "Register application", "lane": "in_desk"},
+        {"id": "in_check", "type": "userTask", "name": "Check completeness", "lane": "in_review"},
+        {"id": "in_timer", "type": "boundaryEvent", "marker": "timer", "attachedTo": "in_check", "cancelActivity": true, "name": "7 days elapsed", "lane": "in_review"},
+        {"id": "in_remind", "type": "sendTask", "name": "Send reminder", "lane": "in_desk"},
+        {"id": "in_gw", "type": "exclusiveGateway", "name": "Complete?", "lane": "in_review"},
+        {"id": "in_forward", "type": "sendTask", "name": "Forward to assessment", "lane": "in_review"},
+        {"id": "in_reject", "type": "userTask", "name": "Reject as incomplete", "lane": "in_review"},
+        {"id": "in_end_ok", "type": "endEvent", "name": "Forwarded", "lane": "in_review"},
+        {"id": "in_end_nok", "type": "endEvent", "name": "Rejected", "lane": "in_review"},
+        {"id": "in_end_rem", "type": "endEvent", "name": "Reminder sent", "lane": "in_desk"}
+      ],
+      "edges": [
+        {"id": "inf1", "source": "in_start", "target": "in_register"},
+        {"id": "inf2", "source": "in_register", "target": "in_check"},
+        {"id": "inf3", "source": "in_check", "target": "in_gw"},
+        {"id": "inf4", "source": "in_gw", "target": "in_forward", "label": "Yes", "isDefault": true},
+        {"id": "inf5", "source": "in_gw", "target": "in_reject", "label": "No"},
+        {"id": "inf6", "source": "in_forward", "target": "in_end_ok"},
+        {"id": "inf7", "source": "in_reject", "target": "in_end_nok"},
+        {"id": "inf8", "source": "in_timer", "target": "in_remind"},
+        {"id": "inf9", "source": "in_remind", "target": "in_end_rem"}
+      ]
+    },
+    {
+      "id": "Process_Assessment",
+      "name": "Assessment Unit",
+      "lanes": [
+        {"id": "as_clerk", "name": "Clerk"},
+        {"id": "as_expert", "name": "Expert"}
+      ],
+      "nodes": [
+        {"id": "as_start", "type": "startEvent", "name": "Assessment requested", "lane": "as_clerk"},
+        {"id": "as_prepare", "type": "userTask", "name": "Prepare case file", "lane": "as_clerk"},
+        {"id": "as_query", "type": "serviceTask", "name": "Query register", "lane": "as_clerk"},
+        {"id": "as_assess", "type": "userTask", "name": "Assess application", "lane": "as_expert"},
+        {"id": "as_report", "type": "sendTask", "name": "Send assessment report", "lane": "as_expert"},
+        {"id": "as_end", "type": "endEvent", "name": "Assessment done", "lane": "as_expert"}
+      ],
+      "edges": [
+        {"id": "asf1", "source": "as_start", "target": "as_prepare"},
+        {"id": "asf2", "source": "as_prepare", "target": "as_query"},
+        {"id": "asf3", "source": "as_query", "target": "as_assess"},
+        {"id": "asf4", "source": "as_assess", "target": "as_report"},
+        {"id": "asf5", "source": "as_report", "target": "as_end"}
+      ]
+    },
+    {
+      "id": "Process_Decision",
+      "name": "Decision Board",
+      "lanes": [
+        {"id": "de_office", "name": "Board Office"},
+        {"id": "de_board", "name": "Board Members"}
+      ],
+      "nodes": [
+        {"id": "de_start", "type": "startEvent", "name": "Report received", "lane": "de_office"},
+        {"id": "de_schedule", "type": "userTask", "name": "Schedule session", "lane": "de_office"},
+        {"id": "de_decide", "type": "userTask", "name": "Decide on application", "lane": "de_board"},
+        {"id": "de_notify", "type": "sendTask", "name": "Notify applicant", "lane": "de_office"},
+        {"id": "de_end", "type": "endEvent", "name": "Decision issued", "lane": "de_office"}
+      ],
+      "edges": [
+        {"id": "def1", "source": "de_start", "target": "de_schedule"},
+        {"id": "def2", "source": "de_schedule", "target": "de_decide"},
+        {"id": "def3", "source": "de_decide", "target": "de_notify"},
+        {"id": "def4", "source": "de_notify", "target": "de_end"}
+      ]
+    },
+    {
+      "id": "Process_Archive",
+      "name": "Archive Service",
+      "nodes": [
+        {"id": "ar_start", "type": "startEvent", "name": "Case closed"},
+        {"id": "ar_store", "type": "serviceTask", "name": "Store case file"},
+        {"id": "ar_end", "type": "endEvent", "name": "Archived"}
+      ],
+      "edges": [
+        {"id": "arf1", "source": "ar_start", "target": "ar_store"},
+        {"id": "arf2", "source": "ar_store", "target": "ar_end"}
+      ]
+    }
+  ],
+  "collapsedPools": [
+    {"id": "Process_Register", "name": "National Register (external)"}
+  ],
+  "messageFlows": [
+    {"id": "mf1", "source": "ap_submit", "target": "in_start", "name": "Application"},
+    {"id": "mf2", "source": "in_forward", "target": "as_start", "name": "Assessment request"},
+    {"id": "mf3", "source": "as_query", "target": "Process_Register", "name": "Register query"},
+    {"id": "mf4", "source": "Process_Register", "target": "as_query", "name": "Register response"},
+    {"id": "mf5", "source": "as_report", "target": "de_start", "name": "Assessment report"},
+    {"id": "mf6", "source": "de_notify", "target": "ap_wait", "name": "Decision"},
+    {"id": "mf7", "source": "de_notify", "target": "ar_start", "name": "Case closed"},
+    {"id": "mf8", "source": "in_remind", "target": "ap_wait", "name": "Reminder"}
+  ]
+}

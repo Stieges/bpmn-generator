@@ -363,6 +363,37 @@ const SOUNDNESS_RULES = [
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },
+  {
+    id: 'S13', layer: 'soundness', defaultSeverity: 'ERROR',
+    description: 'Boundary Event muss an einer existierenden Aktivität hängen (OMG §10.4.3)',
+    ref: { omg: '§10.4.3 Table 10.86', cmof: 'BoundaryEvent.attachedToRef : Activity [1..1]' },
+    scope: 'process',
+    check: (proc) => {
+      // attachedToRef is mandatory in the OMG schema. Without this check a
+      // dangling reference produced a boundaryEvent with no attachedToRef, no DI
+      // shape, and an outgoing flow with no waypoints — invalid BPMN that
+      // validated green.
+      const activities = new Set();
+      const collect = (container) => {
+        for (const n of (container.nodes || [])) {
+          activities.add(n.id);
+          if (n.nodes) collect(n);
+        }
+      };
+      collect(proc);
+
+      const msgs = [];
+      for (const n of (proc.nodes || [])) {
+        if (n.type !== 'boundaryEvent') continue;
+        if (!n.attachedTo) {
+          msgs.push(`Boundary Event "${n.id}" hat kein attachedTo — jedes Boundary Event muss an einer Aktivität hängen.`);
+        } else if (!activities.has(n.attachedTo)) {
+          msgs.push(`Boundary Event "${n.id}" verweist mit attachedTo auf "${n.attachedTo}" — dieser Knoten existiert nicht.`);
+        }
+      }
+      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+    }
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════

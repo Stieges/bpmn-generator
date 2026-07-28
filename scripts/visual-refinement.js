@@ -194,6 +194,16 @@ const LANE_COMPACT_PADDING = 20;
  *
  * Idempotent: running twice produces the same result as running once.
  */
+/**
+ * Lane a node belongs to. A boundary event has no lane of its own — it lives on
+ * the border of its host and must be compacted together with it.
+ */
+function laneIdOf(node, allNodes) {
+  if (node.lane) return node.lane;
+  if (node.attachedTo) return allNodes.find(n => n.id === node.attachedTo)?.lane;
+  return undefined;
+}
+
 export function compactLanes(coordMap, process, opts = {}) {
   const minH = opts.minLaneHeight ?? 80;
   const pad  = opts.padding ?? LANE_COMPACT_PADDING;
@@ -210,32 +220,41 @@ export function compactLanes(coordMap, process, opts = {}) {
     for (const laneId of lanes) {
       const lc = coordMap.laneCoords[laneId];
 
-      const laneNodes = allNodes.filter(n => n.lane === laneId)
+      const laneNodes = allNodes.filter(n => laneIdOf(n, allNodes) === laneId)
                                 .map(n => coordMap.coords[n.id])
                                 .filter(Boolean);
 
-      let newH;
+      // The band shrinks around its content, so its TOP has to follow the
+      // content too. Keeping the old y while cutting the height lets the
+      // lowest nodes fall out of the band (and out of the pool) whenever the
+      // content did not start flush at the old top edge.
+      let newH, newY;
       if (laneNodes.length === 0) {
         newH = minH;
+        newY = lc.y;
       } else {
         const topY    = Math.min(...laneNodes.map(c => c.y));
         const botY    = Math.max(...laneNodes.map(c => c.y + c.h));
         newH = Math.max(minH, (botY - topY) + 2 * pad);
+        // When the floor applies, the content is centred in the band instead.
+        newY = topY - (newH - (botY - topY)) / 2;
       }
 
-      const delta = lc.h - newH;
+      const oldY = lc.y;
+      const oldEndY = lc.y + lc.h;             // before shrink
+      const delta = oldEndY - (newY + newH);   // how far the BOTTOM edge moves up
       if (delta > 0) {
-        const oldEndY = lc.y + lc.h; // before shrink
+        lc.y = newY;
         lc.h = newH;
         const newEndY = lc.y + lc.h;
 
         // Shift nodes in subsequent lanes
         for (const other of lanes) {
           if (other === laneId) continue;
-          if (coordMap.laneCoords[other].y <= lc.y) continue; // lanes above — already processed
+          if (coordMap.laneCoords[other].y <= oldY) continue; // lanes above — already processed
           const otherLane = coordMap.laneCoords[other];
           otherLane.y -= delta;
-          const nodesInOther = allNodes.filter(n => n.lane === other);
+          const nodesInOther = allNodes.filter(n => laneIdOf(n, allNodes) === other);
           for (const n of nodesInOther) {
             if (coordMap.coords[n.id]) coordMap.coords[n.id].y -= delta;
           }

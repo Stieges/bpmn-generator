@@ -1,0 +1,18 @@
+{"pools":[{"id":"P1","name":"Pool One","lanes":[{"id":"L1","name":"Lane"}],
+ "nodes":[
+  {"id":"s","type":"startEvent","name":"Start","lane":"L1"},
+  {"id":"t","type":"userTask","name":"Check","lane":"L1"},
+  {"id":"b","type":"boundaryEvent","marker":"timer","attachedTo":"t","name":"7d","lane":"L1"},
+  {"id":"esc","type":"serviceTask","name":"Escalate","lane":"L1"},
+  {"id":"g","type":"exclusiveGateway","name":"Ok?","lane":"L1"},
+  {"id":"d","type":"dataObjectReference","name":"Form","lane":"L1"},
+  {"id":"ds","type":"dataStoreReference","name":"Registry","lane":"L1"},
+  {"id":"note","type":"textAnnotation","name":"Four eyes","lane":"L1"},
+  {"id":"e","type":"endEvent","name":"Done","lane":"L1"},
+  {"id":"e2","type":"endEvent","name":"Escalated","lane":"L1"}],
+ "edges":[{"id":"f1","source":"s","target":"t"},{"id":"f2","source":"t","target":"g"},
+          {"id":"f3","source":"g","target":"e","label":"yes"},{"id":"f4","source":"b","target":"esc"},
+          {"id":"f5","source":"esc","target":"e2"}]}],
+ "collapsedPools":[{"id":"BB","name":"External"}],
+ "messageFlows":[{"id":"mf1","source":"t","target":"BB","name":"Query"}],
+ "associations":[{"id":"a1","source":"note","target":"t"},{"id":"a2","source":"d","target":"t"}]}

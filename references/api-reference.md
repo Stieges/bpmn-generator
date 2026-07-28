@@ -29,6 +29,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 ```
 - `logicCore` (required, object) — validated against `references/input-schema.json` via the ajv strict gate.
 - `mode` (optional, string) — `"document"` (default, faithful IST) or `"optimize"`/`"soll"`. In optimize mode the response `validation` gains `advisories` (redesign suggestions) and `metrics.optimization` (Lean metrics). Advisories are heuristic, non-blocking, never auto-applied.
+- `poolOrder` (optional, string) — `"auto"` (default) or `"declared"`. With `"auto"` the participants of a collaboration are stacked so that the ones exchanging messages sit next to each other; a message flow spanning N positions has to cross N-1 uninvolved pools, which reads as a participation that does not exist. With `"declared"` the input order is kept instead — routing stays orthogonal, there are simply more crossings, and `diagnostics` reports them as DI05.
 
 `validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
 - `id` — advisory rule id (`O01`–`O04`, see `references/fachliches-regelwerk.md`)
@@ -51,15 +52,42 @@ None of this is applied automatically; turning an advisory into an actual model 
   "bpmnXml": "<?xml ...",
   "svg": "<svg ...",
   "validation": { "errors": [], "warnings": [], "advisories": [], "metrics": {} },
+  "diagnostics": { "ok": true, "issues": [] },
   "callbackStatus": "not_requested"
 }
 ```
-`status` is `"validation_error"` when `validation.errors` is non-empty. `callbackStatus` is `"pending"` when a `callbackUrl` was accepted. `validation.advisories` is populated only in `mode: "optimize"`.
+`status` is `"validation_error"` when `validation.errors` is non-empty, or `"diagram_error"` when `validation.errors` is empty but `diagnostics.ok` is `false` (validation takes priority — a request is never both at once). `callbackStatus` is `"pending"` when a `callbackUrl` was accepted. `validation.advisories` is populated only in `mode: "optimize"`. See "validation vs. diagnostics" below.
 
 **Errors:**
 - `400 { correlationId, status: "schema_error", errors: [...] }` — Logic-Core failed the schema gate.
 - `400 { error: "callbackUrl ..." }` — invalid or internal callback URL.
 - `500 { correlationId, status: "internal_error", error }` — pipeline threw.
+
+### validation vs. diagnostics
+
+They answer different questions, and neither substitutes for the other.
+
+`validation` comes from the rule engine, which reasons about the Logic-Core graph and
+**never sees a coordinate**. A process can be structurally sound — every rule green —
+and still produce an unusable diagram; that combination is what motivated the DI check.
+
+`diagnostics` inspects the geometry actually produced for this request.
+`diagnostics.ok` means "no ERROR-severity finding"; WARNING-severity findings are
+reported but do not flip `status` to `"diagram_error"`.
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| DI01 | ERROR | Two participants at identical coordinates |
+| DI02 | ERROR | Participant shapes overlapping |
+| DI03 | ERROR | A node outside the participant it belongs to |
+| DI04 | ERROR | Lane bands overlapping inside a participant |
+| DI05 | WARNING | A message flow crossing a participant it does not involve |
+| DI06 | ERROR | A child outside its expanded subprocess |
+
+DI05 is a warning rather than an error because a communication cycle across three or
+more participants cannot be linearised into a single vertical stack — some crossings
+are unavoidable; `poolOrder: "auto"` (see above) minimises them but cannot always reach
+zero.
 
 **Example:**
 ```bash
@@ -144,11 +172,13 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
   "bpmnXml": "<?xml ...",
   "svg": "<svg ...",
   "validation": {...},
+  "diagnostics": { "ok": true, "issues": [] },
   "compliance": { "isCompliant": true, "errors": [], "warnings": [], "infos": [], "violations": [] },
   "history": [ { "agent": "modeler", "phase": "extract", ... } ],
   "iterations": 1
 }
 ```
+`diagnostics` is populated once layout has run; see "validation vs. diagnostics" under `/api/v1/generate` above — this endpoint's `status` does not currently flip to `"diagram_error"`, so a caller that only checks `status` should also check `diagnostics.ok`.
 
 **Errors:**
 - `400 { error: "Provide userText (string) or logicCore (object)" }` — neither given.

@@ -5,7 +5,7 @@
 
 import { isEvent, isGateway, isDataArtifact } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H, esc, rn, wrapText } from './utils.js';
-import { messageFlowPorts } from './coordinates.js';
+
 import {
   renderEventMarker, inferEventMarker, renderTaskIcon, renderPentagon,
   renderLoopMarker, renderMIParallelMarker, renderMISequentialMarker,
@@ -154,10 +154,12 @@ function generateSvg(lc, coordMap) {
     const lcc = laneCoords[lane.id];
     if (!lcc) continue;
     out.push(`<rect x="${tx(lcc.x)}" y="${ty(lcc.y)}" width="${lcc.w}" height="${lcc.h}" fill="${CLR.fill}" fill-opacity="0.25" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
-    // Lane header band
+    // Lane header band — INSIDE the lane shape, matching the emitted DI and
+    // bpmn.io: the strip left of the lane belongs to the pool's own header.
+    // Drawing it outside would put it on top of the pool header band.
     const lhw = laneHeaderW(poolCoords, laneToPoolKey[lane.id]);
-    out.push(`<rect x="${tx(lcc.x - lhw)}" y="${ty(lcc.y)}" width="${lhw}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
-    const lcx = tx(lcc.x - lhw) + lhw / 2;
+    out.push(`<rect x="${tx(lcc.x)}" y="${ty(lcc.y)}" width="${lhw}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
+    const lcx = tx(lcc.x) + lhw / 2;
     const lcy = ty(lcc.y) + lcc.h / 2;
     const rendered = lane._renderedLines;
     if (!rendered || rendered.length <= 1) {
@@ -184,41 +186,26 @@ function generateSvg(lc, coordMap) {
   // §7.7  Message flows (dashed, orthogonal routing, OMG spec Fig 9.5)
   if (lc.messageFlows) {
     for (const mf of lc.messageFlows) {
-      const srcCoord = coords[mf.source] || poolCoords[mf.source];
-      const tgtCoord = coords[mf.target] || poolCoords[mf.target];
-      if (!srcCoord || !tgtCoord) continue;
+      // Route comes from coordinates.js §5.4 — the same waypoints the DI gets.
+      // This used to be computed here a second time, which is how the SVG ended
+      // up orthogonal while the .bpmn stayed diagonal.
+      const mfKey = mf.id || `mf_${mf.source}_${mf.target}`;
+      const pts = edgeCoords?.[mfKey];
+      if (!pts || pts.length < 2) continue;
 
-      // Direction-aware ports: source-bottom→target-top for downward flows,
-      // source-top→target-bottom for upward flows
-      const ports = messageFlowPorts(srcCoord, tgtCoord);
-      const sx = tx(ports.sx);
-      const sy = ty(ports.sy);
-      const ex = tx(ports.ex);
-      const ey = ty(ports.ey);
-
-      // Determine if source is above or below target
-      const goingDown = sy < ey;
-      let pathD;
-
-      if (Math.abs(sx - ex) < 2) {
-        // Vertically aligned — straight line
-        pathD = `M ${sx} ${sy} L ${ex} ${ey}`;
-      } else {
-        // Dog-leg: vertical → horizontal → vertical
-        const midY = rn((sy + ey) / 2);
-        pathD = `M ${sx} ${sy} L ${sx} ${midY} L ${ex} ${midY} L ${ex} ${ey}`;
-      }
+      const pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
+                    pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
 
       out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
       if (mf.name) {
-        const mfKey = mf.id || `mf_${mf.source}_${mf.target}`;
         const L = edgeLabels?.[mfKey];
         if (L) {
           renderEdgeLabel(out, L.text, tx(L.x), ty(L.y));
         } else {
-          // Fallback: inline computation (coordMap may be missing mf entry)
-          const mx = rn((sx + ex) / 2), my = rn((sy + ey) / 2);
-          renderEdgeLabel(out, mf.name, mx, my);
+          // Fallback: midpoint of the route
+          const a = pts[Math.floor((pts.length - 1) / 2)];
+          const b = pts[Math.ceil((pts.length - 1) / 2)];
+          renderEdgeLabel(out, mf.name, rn(tx((a.x + b.x) / 2)), rn(ty((a.y + b.y) / 2)));
         }
       }
     }
@@ -227,13 +214,13 @@ function generateSvg(lc, coordMap) {
   // §7.8  Associations (dotted lines, OMG spec §7.2)
   const allAssociations = lc.associations || [];
   for (const assoc of allAssociations) {
-    const srcC = coords[assoc.source];
-    const tgtC = coords[assoc.target];
-    if (!srcC || !tgtC) continue;
-    const sx = tx(srcC.x + srcC.w / 2), sy = ty(srcC.y + srcC.h / 2);
-    const ex = tx(tgtC.x + tgtC.w / 2), ey = ty(tgtC.y + tgtC.h / 2);
+    // Route from coordinates.js §5.4 — the same waypoints the DI gets.
+    const pts = edgeCoords?.[assoc.id];
+    if (!pts || pts.length < 2) continue;
+    const pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
+                  pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
     const markerEnd = assoc.directed ? ` marker-end="url(#assoc-end)"` : '';
-    out.push(`<path d="M ${sx} ${sy} L ${ex} ${ey}" stroke="${CLR.stroke}" stroke-width="1.5" fill="none" stroke-dasharray="0.5,5"${markerEnd}/>`);
+    out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="1.5" fill="none" stroke-dasharray="0.5,5"${markerEnd}/>`);
   }
 
   // §7.9  Nodes

@@ -32,7 +32,8 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordinates.js';
+import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows } from './coordinates.js';
+import { checkDiagramIntegrity } from './di-check.js';
 import { simplifyAllEdges } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
@@ -59,7 +60,7 @@ async function runPipeline(logicCore, opts = {}) {
   const profile = profileForMode(baseProfile, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
-    return { bpmnXml: null, svg: null, coordMap: null, validation: { errors, warnings, advisories, metrics } };
+    return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, validation: { errors, warnings, advisories, metrics } };
   }
 
   const allProcesses = lc.pools ? lc.pools : [lc];
@@ -70,7 +71,10 @@ async function runPipeline(logicCore, opts = {}) {
   // Visual Refinement (opt-in, computed early for layout options)
   const refineOn = opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false;
 
-  const elkGraph  = logicCoreToElk(lc, { elkWrapping: refineOn });
+  // poolOrder: 'auto' (default) orders participants so that the ones exchanging
+  // messages sit next to each other; 'declared' keeps the input order.
+  const poolOrder = opts.poolOrder ?? CFG.layout?.poolOrder ?? 'auto';
+  const elkGraph  = logicCoreToElk(lc, { elkWrapping: refineOn, poolOrder });
   const elkResult = await runElkLayout(elkGraph);
   const coordMap  = buildCoordinateMap(elkResult, lc);
 
@@ -79,9 +83,11 @@ async function runPipeline(logicCore, opts = {}) {
   const allEdges = [
     ...(lc.edges || []),
     ...((lc.pools || []).flatMap(p => p.edges || [])),
-    ...(lc.messageFlows || []),
   ];
-  coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges);
+  // Associations are already clipped to both shapes (coordinates.js §5.4) and
+  // must not be simplified — clearance here is checked against nodes only.
+  const skipSimplify = new Set((lc.associations || []).map(a => a.id));
+  coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges, skipSimplify);
 
   // Visual Refinement (post-layout coordinate transforms)
   if (refineOn) {
@@ -103,13 +109,24 @@ async function runPipeline(logicCore, opts = {}) {
     }
   }
 
+  // Message flows LAST: their horizontal leg has to sit in the gap between two
+  // participants, so every pass that can still move a participant must be done.
+  routeMessageFlows(coordMap, lc);
+
   const bpmnXml   = await generateBpmnXml(lc, coordMap);
   const svg       = generateSvg(lc, coordMap);
 
   // Round-trip XML validation: parse back through moddle to catch structural issues
   const roundTrip = await validateBpmnXml(bpmnXml);
 
-  return { bpmnXml, svg, coordMap, validation: { errors: [], warnings, advisories, metrics, xmlWarnings: roundTrip.warnings } };
+  // DI integrity: the rule engine never sees a coordinate, so a layout defect
+  // passes validation green. This pass inspects the produced geometry.
+  const diagnostics = checkDiagramIntegrity(coordMap, lc);
+
+  return {
+    bpmnXml, svg, coordMap, diagnostics,
+    validation: { errors: [], warnings, advisories, metrics, xmlWarnings: roundTrip.warnings },
+  };
 }
 
 /**
@@ -234,10 +251,10 @@ function buildNavigation(logicCore) {
  * Generate a diagram set: parent diagram (subprocesses collapsed) + per-subprocess diagrams.
  * @returns {Promise<{parent: object, subProcesses: object, navigation: object}>}
  */
-async function generateDiagramSet(logicCore) {
+async function generateDiagramSet(logicCore, opts = {}) {
   // 1. Parent diagram with subprocesses collapsed
   const parentLc = collapseSubProcesses(logicCore);
-  const parent = await runPipeline(parentLc);
+  const parent = await runPipeline(parentLc, opts);
 
   // 2. Per-subprocess diagrams
   const processes = logicCore.pools ? logicCore.pools : [logicCore];
@@ -250,7 +267,7 @@ async function generateDiagramSet(logicCore) {
   for (const { node } of allSubs) {
     const subLc = extractSubProcessAsLogicCore(logicCore, node.id);
     if (subLc) {
-      subProcesses[node.id] = await runPipeline(subLc);
+      subProcesses[node.id] = await runPipeline(subLc, opts);
     }
   }
 
@@ -400,6 +417,26 @@ async function main() {
     process.exit(1);
   }
   console.log(`✓ Logic-Core validated (structural soundness OK)`);
+
+  // Geometry diagnostics. A green validation says nothing about the layout —
+  // the rule engine never sees a coordinate. Printing this next to the
+  // validation line is the whole point of the check: it existed but nobody
+  // surfaced it, so a broken diagram still reported success and exited 0.
+  const diErrors = (result.diagnostics?.issues ?? []).filter(i => i.severity === 'ERROR');
+  const diWarnings = (result.diagnostics?.issues ?? []).filter(i => i.severity !== 'ERROR');
+  if (diWarnings.length) {
+    console.warn('\n⚠ Diagram diagnostics:');
+    diWarnings.forEach(i => console.warn(`  · ${i.code} ${i.message}`));
+  }
+  if (diErrors.length) {
+    console.error('\n✗ Diagram integrity (DI) — the geometry is broken, no files written:');
+    diErrors.forEach(i => console.error(`  · ${i.code} ${i.message}`));
+    process.exit(1);
+  }
+  if (strict && diWarnings.length) {
+    console.error(`\n✗ --strict: ${diWarnings.length} diagram diagnostic(s). No files written.`);
+    process.exit(1);
+  }
 
   const xmlPath = `${outputBase}.bpmn`;
   writeFileSync(xmlPath, result.bpmnXml, 'utf8');

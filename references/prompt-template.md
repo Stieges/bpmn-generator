@@ -75,6 +75,14 @@ Extract a structured Logic-Core JSON from the process description below.
 - For non-interrupting (task continues): set "cancelActivity": false
 - For interrupting (task is cancelled): set "cancelActivity": true (or omit, it's the default)
 
+### Text Annotations
+- Use a text annotation for anything that belongs to the model but cannot be expressed as
+  a flow element: an open factual question, a source reference, a deliberate deviation.
+- Add a node `{"id": "...", "type": "textAnnotation", "name": "<the note>"}` and connect
+  it via the top-level `associations` array:
+  `{"id": "as_1", "source": "<annotation_id>", "target": "<annotated_element_id>"}`
+- Keep the note short — it is rendered inside a fixed-width box.
+
 ### Loop / Multi-Instance
 - If a task repeats → set "loopType": "standard"
 - If multiple instances run in parallel → set "multiInstance": "parallel"
@@ -420,7 +428,9 @@ Zwei verschiedene Personen muessen einen Vorgang pruefen/genehmigen.
 
 ### Pattern 2: Eskalation mit Fristablauf
 
-Timer-Boundary-Event auf einer Aufgabe, das eine Eskalation ausloest.
+Timer-Boundary-Event auf einer Aufgabe, das eine Eskalation ausloest. Zeigt auch die
+Text-Annotation: die Frist ist im Quelltext nicht als konkrete Dauer genannt, das haelt
+die Notiz als offenen Punkt fest, statt eine Dauer zu erfinden.
 
 ```json
 {
@@ -428,11 +438,15 @@ Timer-Boundary-Event auf einer Aufgabe, das eine Eskalation ausloest.
     { "id": "task_bearbeiten", "type": "userTask", "name": "Vorgang bearbeiten" },
     { "id": "evt_frist", "type": "boundaryEvent", "name": "Frist abgelaufen", "attachedTo": "task_bearbeiten", "marker": "timer", "cancelActivity": false },
     { "id": "task_eskalieren", "type": "userTask", "name": "Vorgang eskalieren", "lane": "lane_teamleiter" },
-    { "id": "end_eskaliert", "type": "endEvent", "name": "Eskalation abgeschlossen", "marker": "escalation" }
+    { "id": "end_eskaliert", "type": "endEvent", "name": "Eskalation abgeschlossen", "marker": "escalation" },
+    { "id": "an_frist", "type": "textAnnotation", "name": "Fristdauer im Text nicht spezifiziert — Rueckfrage noetig" }
   ],
   "edges": [
     { "id": "f_frist", "source": "evt_frist", "target": "task_eskalieren" },
     { "id": "f_esk", "source": "task_eskalieren", "target": "end_eskaliert" }
+  ],
+  "associations": [
+    { "id": "as_frist", "source": "an_frist", "target": "evt_frist" }
   ]
 }
 ```

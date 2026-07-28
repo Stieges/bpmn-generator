@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-29 top-level scripts (16 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
+30 top-level scripts (17 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
 tooling) + 7 agent + 9 robustness modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -37,7 +37,8 @@ Core Pipeline (run on every generate call)
     ├── workflow-net.js      ← types.js
     ├── topology.js          ← types.js
     ├── layout.js            ← types.js, utils.js, topology.js, elkjs
-    ├── coordinates.js       ← types.js, utils.js
+    ├── coordinates.js       ← types.js, utils.js, topology.js
+    ├── di-check.js          (no deps — post-layout DI integrity pass, see below)
     ├── visual-refinement.js ← coordinates.js (opt-in compaction passes)
     ├── edge-simplify.js     ← types.js (post-process ELK waypoints, reduce zigzag)
     ├── bpmn-xml.js          ← types.js, utils.js, topology.js, icons.js
@@ -77,12 +78,27 @@ Robustness subsystem (scripts/robustness/)
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
 
+### The geometry contract
+
+`coordMap` (`{ coords, laneCoords, poolCoords, edgeCoords, edgeLabels }`) is the contract between
+layout and rendering. Two rules make it hold:
+
+1. **Every drawable element has its geometry in `coordMap` — renderers only translate, never compute.**
+   ELK is a *producer*, not the contract: its vocabulary is nodes and edges, BPMN's is larger.
+   Boundary events, artifacts, message flows and associations are all outside it, so each needs its
+   own placement step (`coordinates.js` §5.0-, §5.4, `routeMessageFlows`). Letting a renderer compute
+   geometry means computing it *twice* — `svg.js` for humans, `bpmn-xml.js` for tools — and the two
+   copies drift. That has happened three times; see **Do NOT**.
+2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
+   between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
+   the last pass that can still move a participant.
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `scripts/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/rules.js` | Rule Engine: 32 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
+| `scripts/rules.js` | Rule Engine: 33 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
 | `scripts/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
 | `scripts/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
 | `scripts/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
@@ -92,7 +108,9 @@ Robustness subsystem (scripts/robustness/)
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
 | `scripts/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
-| `scripts/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing |
+| `scripts/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
+| `scripts/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
+| `scripts/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
 | `scripts/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
 | `scripts/svg.js` | `generateSvg` — SVG rendering of all BPMN elements |
 | `scripts/icons.js` | Event markers, task icons, bottom markers (Loop, MI, Ad-Hoc) |
@@ -189,6 +207,8 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 - Simple sequential approval flow → `tests/fixtures/simple-approval.json`
 - Multi-pool collaboration with message flows → `tests/fixtures/multi-pool-collaboration.json`
+- Realistic collaboration (6 participants, 5 expanded, 3 with lanes, boundary event, black box) → `tests/fixtures/realistic-collaboration.json` — the regression guard for the whole collaboration-layout class
+- Every element class at once (artifacts, associations, boundary event, black box, message flow) → `tests/fixtures/all-element-classes.json` — the geometry-contract fixture: if a class loses its coordinates, this one fails
 - Subprocess (expanded) → `tests/fixtures/expanded-subprocess.json`
 - Sparse lanes (tests visual-refinement compaction) → `tests/fixtures/sparse-lanes.json`
 - Full list: `ls tests/fixtures/`.
@@ -205,6 +225,18 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 2. Sub-flags live in `scripts/config.json` under `CFG.visualRefinement`: `dynamicLaneHeader`, `laneCompaction`, `edgeLabelCollisionRepair` (all on by default when `visualRefinement: true`). See `scripts/visual-refinement.js` for the pass implementations.
 3. Verify against goldens: `cd scripts && npm test -- --testPathPatterns=visual-refinement`.
 
+### Change the participant order of a collaboration
+
+1. Default is `poolOrder: 'auto'` — participants are stacked so that the ones exchanging messages sit
+   next to each other, because a message flow spanning N positions crosses N-1 uninvolved pools and
+   reads as a participation that does not exist. Expanded pools and black-box participants are
+   ordered together (`orderParticipantsByMessageFlow` in `scripts/topology.js`).
+2. Keep the declared order instead: `runPipeline(lc, { poolOrder: 'declared' })`, project-wide via
+   `config.json → layout.poolOrder`, or per call over MCP (`generate_bpmn`) and the HTTP API
+   (`/api/v1/generate`). Switched off, nothing else changes — routing stays orthogonal, there are
+   simply more crossings, and DI05 reports them.
+3. Verify: `result.diagnostics.issues.filter(i => i.code === 'DI05')` — fewer is better.
+
 ### Run a robustness benchmark
 
 1. Synthetic-data run: `cd scripts/robustness && node cli.js run --target=lc-json`.
@@ -218,7 +250,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
-| Soundness | ERROR | S01-S12 | Structural correctness (OMG compliance) |
+| Soundness | ERROR | S01-S13 | Structural correctness (OMG compliance) |
 | Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |
@@ -254,6 +286,9 @@ Anti-patterns that have caused real problems in this codebase. Each rule has a r
 
 - **No `require()` or CommonJS.** This is an ES-Modules project (`"type": "module"`). A single `require()` breaks everything downstream. If a CommonJS-only dep is unavoidable, use dynamic `import()` with explicit interop wrapping.
 - **No new runtime dependencies without prior discussion.** Current deps: `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats` (`ajv` + `ajv-formats` added in v3.3 for the JSON Schema strict-gate). Each was a deliberate choice. Adding another widens the threat surface and the supply-chain risk — propose it before installing.
+- **Never compute geometry in a renderer.** If `svg.js` or `bpmn-xml.js` needs a coordinate that is not in `coordMap`, the fix is to add it to `coordMap` — not to compute it locally. Computing it locally means computing it twice, and the two copies drift silently because nobody compares the SVG against the DI. This produced three separate defects: the lane header strip, message flow routes (SVG drew a dog-leg while the DI carried a diagonal cutting through a pool), and association endpoints. The guard is the test `geometry contract — the two renderers agree`.
+- **Do not use `elk.partitioning` for lanes.** In `elk.layered` a partition is a group of **layers** along the flow direction, not a horizontal band. Setting partition = lane index forces every node of the first lane before every node of the second, so a lane that acts mid-process gets pushed past the end event and its outgoing flow runs backwards. Lanes own the y axis (`coordinates.js` §5.0a), ELK owns x. This was live for a long time and produced semantically misleading diagrams that every rule called green.
+- **A green validation says nothing about the layout.** The rule engine never sees a coordinate. Any change to `layout.js`, `coordinates.js` or `visual-refinement.js` must be checked against `result.diagnostics` (`di-check.js`), not just against `validation.errors`.
 - **No blind golden-file regeneration.** When a `.expected.bpmn` or `.expected.svg` test fails, inspect the diff first. The test is the alarm — silencing it without understanding is how real regressions enter master.
 - **No LLM output downstream without schema validation.** Any path that lets `references/input-schema.json` be bypassed is a bug. The pipeline assumes well-formed Logic-Core; an LLM that emits malformed JSON should be caught at the gate, not crash at `layout.js`.
 - **No hard-coded constants where `config.json` applies.** Shapes, colors, spacing, font metrics all live in `scripts/config.json` and are loaded via `utils.js → CFG`. Hard-coding bypasses profile customization and tests.
@@ -292,3 +327,7 @@ node mcp-bpmn-server.js
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
 - Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + 13 unit tests; not exhaustive across all BPMN element types
+- Boundary events are placed deterministically on the bottom edge of their host and their outgoing flow is re-routed there (`coordinates.js` §5.0-). ELK does not lay them out; a host carrying many of them will spread them evenly rather than optimally
+- Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right
+- Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, which is why DI05 is a WARNING
+- The DI check (`di-check.js`) covers participants, lane bands, node containment and message flow crossings. It says nothing about sequence-flow crossings, label collisions or readability
