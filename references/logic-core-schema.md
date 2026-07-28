@@ -416,6 +416,18 @@ is unknown or out of scope (Bruce Silver "Method & Style" best practice).
 A diagram should have **one expanded pool** (your process) and N collapsed pools
 for external parties. Message Flows connect to collapsed pools as a whole.
 
+**Position:** The order in which pools and collapsed pools are declared does **not**
+determine their position in the diagram. By default the generator stacks all
+participants so that the ones exchanging messages sit next to each other — a
+message flow spanning N positions has to cross N-1 uninvolved pools, which reads
+as a participation that does not exist. Expanded and collapsed participants are
+ordered together, so an external system ends up next to the pool it talks to.
+
+Pass `poolOrder: "declared"` (pipeline option, `config.json → layout.poolOrder`,
+or the parameter of the same name on `generate_bpmn` and `/api/v1/generate`) to
+keep the declared order instead. Nothing else changes: routing stays orthogonal,
+there are just more crossings, and the DI check reports them as DI05.
+
 ---
 
 ## AssociationObject
