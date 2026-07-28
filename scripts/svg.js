@@ -154,10 +154,12 @@ function generateSvg(lc, coordMap) {
     const lcc = laneCoords[lane.id];
     if (!lcc) continue;
     out.push(`<rect x="${tx(lcc.x)}" y="${ty(lcc.y)}" width="${lcc.w}" height="${lcc.h}" fill="${CLR.fill}" fill-opacity="0.25" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
-    // Lane header band
+    // Lane header band — INSIDE the lane shape, matching the emitted DI and
+    // bpmn.io: the strip left of the lane belongs to the pool's own header.
+    // Drawing it outside would put it on top of the pool header band.
     const lhw = laneHeaderW(poolCoords, laneToPoolKey[lane.id]);
-    out.push(`<rect x="${tx(lcc.x - lhw)}" y="${ty(lcc.y)}" width="${lhw}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
-    const lcx = tx(lcc.x - lhw) + lhw / 2;
+    out.push(`<rect x="${tx(lcc.x)}" y="${ty(lcc.y)}" width="${lhw}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="${CLR.stroke}" stroke-width="${SW.lane}"/>`);
+    const lcx = tx(lcc.x) + lhw / 2;
     const lcy = ty(lcc.y) + lcc.h / 2;
     const rendered = lane._renderedLines;
     if (!rendered || rendered.length <= 1) {

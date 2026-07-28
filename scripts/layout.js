@@ -4,7 +4,7 @@
  */
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
-import { CFG, SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP } from './utils.js';
+import { CFG, SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING } from './utils.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { preprocessLogicCore } from './topology.js';
 
@@ -65,8 +65,36 @@ function buildSingleProcessElk(proc, wrappingOpts = {}) {
     properties: { ...elkDefaults(), ...wrappingOpts },
     children: nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
                    .map(n => buildElkNode(n)),
-    edges: edges.map((e, i) => buildElkEdge(e, i)),
+    edges: buildElkEdges(nodes, edges),
   };
+}
+
+/**
+ * Build the ELK edge list for a node/edge set.
+ *
+ * Boundary events are not ELK children — they are placed on their host's border
+ * after layout (coordinates.js §5.0e).  Their sequence flows must therefore be
+ * re-anchored to the host activity, otherwise ELK rejects the graph with
+ * "Referenced shape does not exist".  Anchoring on the host (instead of dropping
+ * the edge) also keeps the escalation target in a layer after its host.
+ * The edge keeps its own id, so its route lands under the real edge id and the
+ * endpoint is clipped back onto the boundary event in §5.1.
+ */
+function buildElkEdges(nodes, edges) {
+  const hostOf = {};
+  for (const n of nodes) {
+    if (isBoundaryEvent(n) && n.attachedTo) hostOf[n.id] = n.attachedTo;
+  }
+  const known = new Set(nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type)).map(n => n.id));
+
+  return edges
+    .map(e => {
+      const source = hostOf[e.source] || e.source;
+      const target = hostOf[e.target] || e.target;
+      return source === target ? null : { ...e, source, target };
+    })
+    .filter(e => e && known.has(e.source) && known.has(e.target))
+    .map((e, i) => buildElkEdge(e, i));
 }
 
 function buildLanedProcessElk(proc, wrappingOpts = {}) {
@@ -75,42 +103,31 @@ function buildLanedProcessElk(proc, wrappingOpts = {}) {
   const lanes = proc.lanes || [];
 
   // ═══════════════════════════════════════════════════════════════
-  // FLAT LAYOUT APPROACH:
-  // All nodes go into ONE flat ELK graph. ELK's partitioning feature
-  // assigns nodes to horizontal bands (= lanes) while computing
-  // globally consistent X positions (layers).
+  // FLAT LAYOUT APPROACH — one axis each:
+  //   x (layers)  ← ELK, from the sequence flow
+  //   y (bands)   ← us, from the lane order (coordinates.js §5.0a)
   //
-  // This ensures the happy path flows left→right across ALL lanes,
-  // and cross-lane edges are routed properly.
+  // ELK's `partitioning` feature is deliberately NOT used for lanes. In
+  // elk.layered a partition is a LAYER group along the flow direction, not a
+  // horizontal band: giving lane i partition i forces every node of the first
+  // lane before every node of the second one. A lane that does its work in the
+  // middle of the process (an approval that flows back into the main path) then
+  // gets pushed past the end event and its outgoing flow runs backwards.
+  // Lane bands are derived from node positions afterwards anyway, so ELK never
+  // needed to know about lanes in the first place.
   // ═══════════════════════════════════════════════════════════════
-
-  // Build lane → partition index mapping (order lanes as given)
-  const lanePartition = {};
-  lanes.forEach((lane, idx) => { lanePartition[lane.id] = idx; });
 
   const flatChildren = nodes
     .filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
-    .map(n => {
-      const elkNode = buildElkNode(n);
-      // Assign partition based on lane
-      const partIdx = lanePartition[n.lane];
-      if (partIdx !== undefined) {
-        elkNode.properties = {
-          ...elkNode.properties,
-          'elk.partitioning.partition': String(partIdx),
-        };
-      }
-      return elkNode;
-    });
+    .map(n => buildElkNode(n));
 
   // ALL edges (intra-lane + cross-lane) in one flat list
-  const flatEdges = edges.map((e, i) => buildElkEdge(e, i));
+  const flatEdges = buildElkEdges(nodes, edges);
 
   return {
     id: 'pool',
     properties: {
       ...CFG.elk.layered,
-      'elk.partitioning.activate': 'true',   // enable lane partitioning
       'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
       ...wrappingOpts,  // merge last so it wins on conflicts
     },
@@ -128,9 +145,13 @@ function buildMultiPoolElk(lc, wrappingOpts = {}) {
     const lanes = pool.lanes || [];
     if (lanes.length > 0) {
       poolElkChildren.push({
+        // Spread FIRST: buildLanedProcessElk returns the literal id 'pool'
+        // (it is also used as a standalone root). Spreading it after `id`
+        // would give every laned pool the same ELK id and collapse them
+        // onto identical coordinates.
+        ...buildLanedProcessElk(pool, wrappingOpts),
         id: pool.id,
         labels: [{ text: pool.name || pool.id }],
-        ...buildLanedProcessElk(pool, wrappingOpts),
       });
     } else {
       const nodes = pool.nodes || [];
@@ -145,7 +166,7 @@ function buildMultiPoolElk(lc, wrappingOpts = {}) {
         },
         children: nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
                        .map(n => buildElkNode(n)),
-        edges: edges.map((e, i) => buildElkEdge(e, i)),
+        edges: buildElkEdges(nodes, edges),
       });
     }
   }
@@ -166,7 +187,7 @@ function buildMultiPoolElk(lc, wrappingOpts = {}) {
     properties: {
       ...CFG.elk.rectpacking,
       'elk.spacing.nodeNode': `${POOL_GAP}`,
-      'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+      'elk.padding': `[top=${COLLAB_PADDING},left=${COLLAB_PADDING},bottom=${COLLAB_PADDING},right=${COLLAB_PADDING}]`,
     },
     children: poolElkChildren,
     edges: [],
@@ -192,7 +213,7 @@ function buildElkNode(node) {
     const minSz = SHAPE._expandedSubProcess || { w: 350, h: 200 };
     const childNodes = node.nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
                                  .map(n => buildElkNode(n));
-    const childEdges = (node.edges || []).map((e, i) => buildElkEdge(e, i));
+    const childEdges = buildElkEdges(node.nodes, node.edges || []);
     return {
       id: node.id,
       width: minSz.w,
@@ -242,9 +263,40 @@ function elkDefaults() {
   return { ...CFG.elk.layered };
 }
 
+/**
+ * Stack collaboration participants in a single vertical column.
+ *
+ * ELK's rectpacking opens a second column as soon as the aspect ratio suggests
+ * it (4+ participants).  BPMN pools are conventionally stacked vertically, and
+ * the DI post-processing in coordinates.js §5.0b assumes exactly that: it
+ * equalizes all pools to one x.  A second column therefore collapses onto the
+ * first.  We resolve the contradiction on the DI side and lay the participants
+ * out deterministically: same x, y accumulated from height + POOL_GAP.
+ *
+ * Runs on the ELK result, where each pool's children are still relative to
+ * their pool — moving the pool moves its whole content.
+ */
+function stackCollaborationVertically(layouted) {
+  if (layouted.id !== 'collaboration') return layouted;
+  const children = layouted.children || [];
+  if (children.length === 0) return layouted;
+
+  const pad = COLLAB_PADDING;
+  let y = pad;
+  for (const c of children) {
+    c.x = pad;
+    c.y = y;
+    y += (c.height || 0) + POOL_GAP;
+  }
+  layouted.width  = pad * 2 + Math.max(...children.map(c => c.width || 0));
+  layouted.height = y - POOL_GAP + pad;
+  return layouted;
+}
+
 async function runElkLayout(elkGraph) {
   const elk = new ELK();
-  return await elk.layout(elkGraph);
+  const layouted = await elk.layout(elkGraph);
+  return stackCollaborationVertically(layouted);
 }
 
 export { runElkLayout, logicCoreToElk, buildSingleProcessElk, buildLanedProcessElk, buildMultiPoolElk, buildElkNode, buildElkEdge, elkDefaults };

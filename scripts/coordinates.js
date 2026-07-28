@@ -3,9 +3,9 @@
  * Translates raw ELK layout output into absolute coordinates for rendering.
  */
 
-import { isEvent, isGateway } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, CFG } from './utils.js';
-import { identifyHappyPathNodes } from './topology.js';
+import { isEvent, isGateway, isBoundaryEvent } from './types.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, CFG } from './utils.js';
+import { identifyHappyPathNodes, resolveLaneId } from './topology.js';
 
 function buildCoordinateMap(elkResult, lc) {
   const coords     = {};
@@ -90,6 +90,24 @@ function buildCoordinateMap(elkResult, lc) {
 
   collectNodes(elkResult);
 
+  // §5.0-  Place boundary events on their host activity's border.
+  //        Boundary events are excluded from the ELK graph (layout.js) — ELK has
+  //        no notion of "attached to the border of". They are positioned here,
+  //        straddling the host's bottom edge, and spread evenly when a host
+  //        carries more than one.
+  const boundaryIds = placeBoundaryEvents(coords, allProcesses);
+
+  //        Their sequence flows were routed by ELK from the HOST, so the stored
+  //        route starts at the wrong shape and keeps a backtracking bend.
+  //        Drop it — §5.2 re-routes them cleanly from the boundary event.
+  if (boundaryIds.size > 0) {
+    for (const proc of allProcesses) {
+      for (const e of (proc.edges || [])) {
+        if (boundaryIds.has(e.source)) delete edgeCoords[e.id];
+      }
+    }
+  }
+
   // §5.0  Compute lane bounds from node positions (flat layout approach)
   //       Since we use ELK partitioning, nodes are direct children of the pool.
   //       Lane bounds are computed by grouping nodes by their lane assignment
@@ -103,8 +121,9 @@ function buildCoordinateMap(elkResult, lc) {
     const laneNodeGroups = {};
     for (const lane of lanes) laneNodeGroups[lane.id] = [];
     for (const n of procNodes) {
-      if (n.lane && laneNodeGroups[n.lane] && coords[n.id]) {
-        laneNodeGroups[n.lane].push(coords[n.id]);
+      const laneId = laneOfNode(n, proc);
+      if (laneId && laneNodeGroups[laneId] && coords[n.id]) {
+        laneNodeGroups[laneId].push(coords[n.id]);
       }
     }
 
@@ -132,43 +151,44 @@ function buildCoordinateMap(elkResult, lc) {
       };
     }
 
-    // Fix lane overlaps: adjacent lanes share their border line (bpmn.io
-    // convention), so they touch exactly. Only shift if there's a real overlap.
-    const laneSorted = lanes.map(l => l.id).filter(id => laneCoords[id])
-      .sort((a, b) => laneCoords[a].y - laneCoords[b].y);
+    // §5.0a  Stack the lane bands in the process's own lane order.
+    //
+    //        ELK lays out the flow (x = layers) but knows nothing about lanes:
+    //        their y comes from where ELK happened to put the nodes. Left alone,
+    //        the bands would appear in an arbitrary order and could overlap.
+    //        So we take the vertical axis into our own hands: bands are stacked
+    //        top-down in the declared order (topology.js has already sorted
+    //        `proc.lanes` by flow), each node moves with its band, and only the
+    //        edges whose two ends moved differently lose their ELK route — §5.2
+    //        re-routes exactly those.
+    const laneOrder = lanes.map(l => l.id).filter(id => laneCoords[id]);
+    const laneDelta = {};
+    let cursorY = Math.min(...laneOrder.map(id => laneCoords[id].y));
 
-    for (let i = 1; i < laneSorted.length; i++) {
-      const prev = laneCoords[laneSorted[i - 1]];
-      const curr = laneCoords[laneSorted[i]];
-      const prevBottom = prev.y + prev.h;
-      if (curr.y < prevBottom) {
-        // Shift this lane and all its nodes down so it sits flush below prev
-        const delta = prevBottom - curr.y;
-        curr.y += delta;
-        // Shift all nodes in this lane
+    for (const laneId of laneOrder) {
+      const band = laneCoords[laneId];
+      const delta = cursorY - band.y;
+      laneDelta[laneId] = delta;
+      if (delta !== 0) {
+        band.y += delta;
         for (const n of procNodes) {
-          if (n.lane === laneSorted[i] && coords[n.id]) {
-            coords[n.id].y += delta;
-          }
+          if (laneOfNode(n, proc) === laneId && coords[n.id]) coords[n.id].y += delta;
         }
-        // Shift edge waypoints that are within this lane's Y range
-        for (const e of (proc.edges || [])) {
-          const pts = edgeCoords[e.id];
-          if (!pts) continue;
-          for (const p of pts) {
-            if (p.y >= curr.y - delta && p.y < curr.y) {
-              p.y += delta;
-            }
-          }
-        }
-        // Recalculate lane height after shift
-        const nodeCoords = laneNodeGroups[laneSorted[i]];
-        if (nodeCoords.length > 0) {
-          const minY = Math.min(...nodeCoords.map(c => c.y)) - LANE_PADDING;
-          const maxY = Math.max(...nodeCoords.map(c => c.y + c.h)) + LANE_PADDING + EXTERNAL_LABEL_H;
-          curr.y = minY;
-          curr.h = maxY - minY;
-        }
+      }
+      cursorY = band.y + band.h;
+    }
+
+    for (const e of (proc.edges || [])) {
+      const pts = edgeCoords[e.id];
+      if (!pts) continue;
+      const srcNode = procNodes.find(n => n.id === e.source);
+      const tgtNode = procNodes.find(n => n.id === e.target);
+      const ds = laneDelta[laneOfNode(srcNode, proc)] ?? 0;
+      const dt = laneDelta[laneOfNode(tgtNode, proc)] ?? 0;
+      if (ds === dt) {
+        if (ds !== 0) for (const p of pts) p.y += ds;
+      } else {
+        delete edgeCoords[e.id];   // geometry no longer valid — §5.2 re-routes
       }
     }
 
@@ -209,22 +229,39 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
-  // §5.0b2  Reposition collapsed pools below all expanded pools.
-  //         After §5.0 recalculates lane/pool bounds from node positions, expanded
-  //         pools may have grown taller than ELK's original estimate.  Collapsed
-  //         pools (black-box participants) must be pushed below.
-  if (allCollapsedPools.length > 0) {
-    const expandedBottoms = allProcesses.map(p => {
-      const pc = poolCoords[p.id] || poolCoords['_singlePool'];
-      return pc ? pc.y + pc.h : 0;
-    });
-    let nextY = Math.max(...expandedBottoms) + 40;
-    for (const cp of allCollapsedPools) {
-      const pc = poolCoords[cp.id];
-      if (pc) {
-        pc.y = nextY;
-        nextY += pc.h + 40;
+  // §5.0b2  Re-stack all participants vertically, using their FINAL heights.
+  //         layout.js already stacks them, but §5.0 recomputes pool bounds from
+  //         the node positions and a pool can end up taller than the height ELK
+  //         reserved for it — the next pool would then overlap it.  Restacking
+  //         here, after every height has settled, is what makes the result
+  //         collision-free for any number of participants.  Expanded pools keep
+  //         their declared order, black-box participants go below them.
+  const participantOrder = [
+    ...allProcesses.map(p => ({ id: p.id, proc: p })),
+    ...allCollapsedPools.map(cp => ({ id: cp.id, proc: null })),
+  ].filter(e => poolCoords[e.id]);
+
+  if (participantOrder.length > 1) {
+    const shiftParticipant = (entry, delta) => {
+      if (!delta) return;
+      poolCoords[entry.id].y += delta;
+      if (!entry.proc) return;   // black box has no content
+      for (const lane of (entry.proc.lanes || [])) {
+        if (laneCoords[lane.id]) laneCoords[lane.id].y += delta;
       }
+      for (const n of flattenProcessNodes(entry.proc.nodes)) {
+        if (coords[n.id]) coords[n.id].y += delta;
+      }
+      for (const e of flattenProcessEdges(entry.proc)) {
+        for (const p of (edgeCoords[e.id] || [])) p.y += delta;
+      }
+    };
+
+    let nextY = poolCoords[participantOrder[0].id].y;
+    for (const entry of participantOrder) {
+      const pc = poolCoords[entry.id];
+      shiftParticipant(entry, nextY - pc.y);
+      nextY = pc.y + pc.h + POOL_GAP;
     }
   }
 
@@ -647,6 +684,39 @@ function enforceOrthogonal(pts) {
   return result;
 }
 
+/**
+ * Lane a node belongs to, across both Logic-Core lane formats.
+ * A boundary event inherits the lane of the activity it is attached to — it has
+ * no lane of its own and must never drift into a different band than its host.
+ */
+function laneOfNode(node, proc) {
+  if (!node) return undefined;
+  const direct = resolveLaneId(proc, node);
+  if (direct) return direct;
+  if (node.attachedTo) {
+    const host = (proc.nodes || []).find(n => n.id === node.attachedTo);
+    if (host) return resolveLaneId(proc, host);
+  }
+  return undefined;
+}
+
+function flattenProcessNodes(nodes) {
+  const out = [];
+  for (const n of nodes || []) {
+    out.push(n);
+    if (n.nodes) out.push(...flattenProcessNodes(n.nodes));
+  }
+  return out;
+}
+
+function flattenProcessEdges(proc) {
+  const out = [...(proc.edges || [])];
+  for (const n of flattenProcessNodes(proc.nodes)) {
+    if (n.edges) out.push(...n.edges);
+  }
+  return out;
+}
+
 function findNodeInAllProcesses(nodeId, processes) {
   for (const p of processes) {
     for (const n of (p.nodes || [])) {
@@ -659,6 +729,48 @@ function findNodeInAllProcesses(nodeId, processes) {
     }
   }
   return null;
+}
+
+/**
+ * Position boundary events on the border of their host activity.
+ *
+ * ELK never sees boundary events (layout.js filters them out and re-anchors
+ * their sequence flows on the host), so nothing has assigned them coordinates
+ * yet. BPMN convention — and bpmn.io's own behaviour — is to place them
+ * straddling the host's bottom edge; several events on the same host are
+ * spread evenly across that edge.
+ *
+ * Mutates `coords` in place. Hosts without coordinates are skipped, which
+ * leaves the boundary event unplaced rather than placing it at (0,0).
+ *
+ * @returns Set of ids of the boundary events that were placed
+ */
+function placeBoundaryEvents(coords, allProcesses) {
+  const byHost = {};
+  const collect = (nodes) => {
+    for (const n of nodes || []) {
+      if (isBoundaryEvent(n) && n.attachedTo) (byHost[n.attachedTo] ||= []).push(n);
+      if (n.nodes) collect(n.nodes);
+    }
+  };
+  for (const p of allProcesses) collect(p.nodes);
+
+  const placed = new Set();
+  for (const [hostId, events] of Object.entries(byHost)) {
+    const host = coords[hostId];
+    if (!host) continue;
+    events.forEach((ev, i) => {
+      const sz = SHAPE[ev.type] || { w: 36, h: 36 };
+      coords[ev.id] = {
+        x: host.x + (host.w * (i + 1)) / (events.length + 1) - sz.w / 2,
+        y: host.y + host.h - sz.h / 2,
+        w: sz.w,
+        h: sz.h,
+      };
+      placed.add(ev.id);
+    });
+  }
+  return placed;
 }
 
 /**

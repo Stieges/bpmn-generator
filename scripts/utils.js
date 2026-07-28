@@ -36,6 +36,7 @@ export const TASK_RX        = CFG.layout.taskBorderRadius;
 export const INNER_OUTER_GAP = CFG.layout.innerOuterGap;
 export const EXTERNAL_LABEL_H = CFG.layout.externalLabelHeight;
 export const POOL_GAP       = CFG.layout.poolGap;
+export const COLLAB_PADDING = CFG.layout.collabPadding;
 
 export function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
