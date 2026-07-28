@@ -62,12 +62,12 @@
 <path d="M 776 457 L 848.5 457 L 848.5 342" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 885.5 330 L 966 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 1066 330 L 1146 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 336 150 L 336 252.5 L 188 252.5 L 188 491.5" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
-<rect x="235.3" y="244.5" width="53.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="262" y="256.5" text-anchor="middle" font-size="10" fill="#000000">Request</text>
-<path d="M 1016 355 L 1016 266.5 L 516 266.5 L 516 150" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
-<rect x="736" y="258.5" width="60" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="766" y="270.5" text-anchor="middle" font-size="10" fill="#000000">Response</text>
+<path d="M 336 150 L 336 245.5 L 188 245.5 L 188 491.5" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
+<rect x="235.3" y="237.5" width="53.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="262" y="249.5" text-anchor="middle" font-size="10" fill="#000000">Request</text>
+<path d="M 1016 355 L 1016 259.5 L 516 259.5 L 516 150" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
+<rect x="736" y="251.5" width="60" height="16" rx="2" fill="white" fill-opacity="0.9"/>
+<text x="766" y="263.5" text-anchor="middle" font-size="10" fill="#000000">Response</text>
 <circle cx="188" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text x="188" y="147.5" text-anchor="middle" font-size="11" fill="#000000">Need identified</text>
 <rect x="286" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>

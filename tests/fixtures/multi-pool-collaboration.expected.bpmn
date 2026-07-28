@@ -214,14 +214,14 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="mf1_di" bpmnElement="mf1">
         <di:waypoint x="306" y="160" />
-        <di:waypoint x="306" y="275" />
-        <di:waypoint x="158" y="275" />
+        <di:waypoint x="306" y="268" />
+        <di:waypoint x="158" y="268" />
         <di:waypoint x="158" y="501.5" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="mf2_di" bpmnElement="mf2">
         <di:waypoint x="986" y="365" />
-        <di:waypoint x="986" y="289" />
-        <di:waypoint x="486" y="289" />
+        <di:waypoint x="986" y="282" />
+        <di:waypoint x="486" y="282" />
         <di:waypoint x="486" y="160" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
