@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+> **Gap notice.** No entries were recorded here between `[3.3.0]` and today, although
+> six releases and several feature merges shipped in that time: v3.4 (#15), v3.5 (#16),
+> v3.5b (#17), v3.5c/v3.5d (#18), plus PRs #19, #21, #23, #24, #25 and #27. Those
+> entries are not reconstructed retroactively — the pull requests are the record for
+> that period. The docs gate added in a later change exists to stop this recurring.
+
+### Added
+- **DI integrity check** (`scripts/di-check.js`) — a post-layout pass over the produced
+  geometry, reported under `result.diagnostics` (separate from `validation`, which never
+  sees a coordinate). Codes DI01 (identical participant positions), DI02 (overlapping
+  participants), DI03 (node outside its participant), DI04 (overlapping lane bands),
+  DI06 (child outside its expanded subprocess) — all ERROR; DI05 (message flow crossing
+  an uninvolved participant) — WARNING, because a communication cycle across three or
+  more participants cannot always be laid out without one.
+- **`poolOrder` option** (`runPipeline`, `/api/v1/generate`, MCP `generate_bpmn`) —
+  `"auto"` (default) stacks collaboration participants so the ones exchanging messages
+  sit next to each other; `"declared"` keeps the input order.
+- **Rule S13** — a boundary event must reference an existing activity (OMG §10.4.3).
+- **Geometry for artifacts and associations** — text annotations, data objects/stores
+  and their associations now get placed coordinates and reach the DI as shapes/edges,
+  not just as XML semantics.
+- **MCP `include` and `ruleProfile` parameters** on `generate_bpmn` — `include` selects
+  which of `xml`/`svg`/`validation`/`diagnostics` to return (default: all four);
+  `ruleProfile` loads a rule profile JSON, e.g. `rules/strict-profile.json`.
+- **Message flow routing** — flows now get a real route in `coordMap` (through the gap
+  between the two participants involved, fanning out when several flows share a
+  corridor) instead of being improvised independently by each renderer.
+- Fixtures `tests/fixtures/realistic-collaboration.json` (six participants, boundary
+  event, black box, message flows) and `tests/fixtures/all-element-classes.json`.
+
+### Fixed
+- Participant id collision when a collaboration had more than one laned pool (all
+  shared the ELK id `'pool'`).
+- Participant stacking collapsing onto identical positions from four participants on.
+- Boundary events aborting the pipeline (`JsonImportException`) instead of being laid
+  out on their host's border.
+- Lane ordering: `elk.partitioning` was misused for lane bands (it groups layers along
+  the flow direction, not horizontal bands), which could push a mid-process lane's
+  outgoing flow backwards.
+- Lane compaction (`visual-refinement.js`) shrinking a band without moving its top edge,
+  dropping the lowest nodes out of the pool.
+- Expanded-subprocess children not moving with their parent when a lane band shifted
+  (only reproducible with more than one lane, so the single-lane fixture missed it).
+- Text annotations, data objects/stores and associations were semantically present in
+  the XML but had no DI shape/route, making them invisible in every BPMN tool.
+- Message flows: the SVG drew a dog-leg while the DI carried a diagonal, and the
+  diagonal's horizontal leg could land inside the neighbouring pool.
+- A boundary event with a dangling `attachedTo` produced a `boundaryEvent` without the
+  mandatory `attachedToRef` and an edge with zero waypoints, while validation reported
+  green — now caught by rule S13.
+- `validate_bpmn` (MCP) silently dropped `infos` and `metrics` from the validation
+  result; `generate_bpmn`/`validate_bpmn` (MCP) had no schema gate (only
+  `orchestrate_bpmn` did); `generate_bpmn`'s `drillDown` ignored `mode`, so
+  drill-down plus `optimize` returned no advisories.
+- `/api/v1/orchestrate` dropped `diagnostics` from its response even though the
+  orchestrator computed it and the MCP `orchestrate_bpmn` tool already returned it.
+
+### Changed
+- `diagnostics.ok` means "no ERROR-severity finding" — WARNING-severity findings (DI05)
+  are reported but do not fail the gate.
+- The CLI now aborts and writes no files when an ERROR-severity geometry finding is
+  present, alongside the existing validation-error abort.
+- Laned pools now get their frame drawn in the SVG at all (a missing `poolCoords`
+  entry meant it was silently skipped before); the lane header band sits inside the
+  lane, matching the emitted DI and bpmn.io.
+
 ## [3.3.0] — 2026-05-18
 
 ### Added
