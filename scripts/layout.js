@@ -9,8 +9,9 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import { preprocessLogicCore } from './topology.js';
 
 function logicCoreToElk(lc, opts = {}) {
-  // Pre-process: sort nodes topologically, order lanes by flow
-  preprocessLogicCore(lc);
+  // Pre-process: sort nodes topologically, order lanes by flow,
+  // order participants by who talks to whom
+  preprocessLogicCore(lc, { poolOrder: opts.poolOrder });
 
   // Decide if wrapping should be applied at the current subgraph level
   const wrappingOpts = resolveWrappingOpts(lc, opts);
@@ -128,7 +129,13 @@ function buildLanedProcessElk(proc, wrappingOpts = {}) {
     id: 'pool',
     properties: {
       ...CFG.elk.layered,
-      'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
+      // Left padding carries THREE things: the pool's own header strip, the
+      // lane's header strip, and clearance for the first element. The lane strip
+      // used to be missing from the budget, leaving 3 px between an event's
+      // external label and the lane name — buildElkNode reserves height for
+      // external labels but no width, so a 36 px event carries a 90 px label
+      // that overhangs it by 27 px on each side and nothing accounts for it.
+      'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + 2 * LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
       ...wrappingOpts,  // merge last so it wins on conflicts
     },
     children: flatChildren,
@@ -180,6 +187,15 @@ function buildMultiPoolElk(lc, wrappingOpts = {}) {
       height: SHAPE._collapsedPool.h,
       properties: {},
     });
+  }
+
+  // Stack in the order preprocessLogicCore computed — expanded pools and black
+  // boxes interleaved, so partners end up adjacent.
+  const order = lc._participantOrder;
+  if (order) {
+    const rank = {};
+    order.forEach((id, i) => { rank[id] = i; });
+    poolElkChildren.sort((a, b) => (rank[a.id] ?? 1e9) - (rank[b.id] ?? 1e9));
   }
 
   return {

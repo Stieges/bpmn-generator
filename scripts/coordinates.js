@@ -3,8 +3,8 @@
  * Translates raw ELK layout output into absolute coordinates for rendering.
  */
 
-import { isEvent, isGateway, isBoundaryEvent } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, CFG } from './utils.js';
+import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, CFG } from './utils.js';
 import { identifyHappyPathNodes, resolveLaneId } from './topology.js';
 
 function buildCoordinateMap(elkResult, lc) {
@@ -90,12 +90,17 @@ function buildCoordinateMap(elkResult, lc) {
 
   collectNodes(elkResult);
 
-  // §5.0-  Place boundary events on their host activity's border.
-  //        Boundary events are excluded from the ELK graph (layout.js) — ELK has
-  //        no notion of "attached to the border of". They are positioned here,
-  //        straddling the host's bottom edge, and spread evenly when a host
-  //        carries more than one.
+  // §5.0-  Place everything ELK does not lay out.
+  //
+  //        ELK is a producer, not the geometry contract: its vocabulary is nodes
+  //        and edges, BPMN's is larger. Boundary events ("attached to the border
+  //        of") and artifacts (annotative — must not displace the flow) are
+  //        therefore filtered out of the ELK graph in layout.js. Filtering them
+  //        out is right; what was missing is putting them back. Without this,
+  //        an element ends up semantically in the XML but without any DI, i.e.
+  //        invisible in every BPMN tool.
   const boundaryIds = placeBoundaryEvents(coords, allProcesses);
+  placeArtifacts(coords, allProcesses, lc);
 
   //        Their sequence flows were routed by ELK from the HOST, so the stored
   //        route starts at the wrong shape and keeps a backtracking bend.
@@ -236,10 +241,15 @@ function buildCoordinateMap(elkResult, lc) {
   //         here, after every height has settled, is what makes the result
   //         collision-free for any number of participants.  Expanded pools keep
   //         their declared order, black-box participants go below them.
-  const participantOrder = [
-    ...allProcesses.map(p => ({ id: p.id, proc: p })),
-    ...allCollapsedPools.map(cp => ({ id: cp.id, proc: null })),
-  ].filter(e => poolCoords[e.id]);
+  const byId = new Map([
+    ...allProcesses.map(p => [p.id, { id: p.id, proc: p }]),
+    ...allCollapsedPools.map(cp => [cp.id, { id: cp.id, proc: null }]),
+  ]);
+  // Order from topology.js: partners adjacent, expanded and black-box
+  // participants interleaved. Falls back to declaration order.
+  const participantOrder = (lc._participantOrder ?? [...byId.keys()])
+    .map(id => byId.get(id))
+    .filter(e => e && poolCoords[e.id]);
 
   if (participantOrder.length > 1) {
     const shiftParticipant = (entry, delta) => {
@@ -522,6 +532,20 @@ function buildCoordinateMap(elkResult, lc) {
     edgeCoords[eid] = enforceOrthogonal(pts);
   }
 
+  // §5.4  Association routing.
+  //       Associations connect an artifact to the element it annotates. ELK
+  //       never saw either end (both are filtered out of the graph), so like
+  //       message flows they used to be improvised at render time — by svg.js
+  //       and bpmn-xml.js independently, both drawing centre-to-centre, which
+  //       runs the line into the middle of both shapes. Here they get a route
+  //       clipped to the shape borders, from the same source both renderers read.
+  for (const assoc of (lc.associations || [])) {
+    const s = coords[assoc.source];
+    const t = coords[assoc.target];
+    if (!s || !t) continue;
+    edgeCoords[assoc.id] = clipStraight(s, t);
+  }
+
   // §5.5  Final zigzag cleanup: detect and replace routes that zigzag excessively.
   //        Runs AFTER clipping (§5.1) + orthogonal enforcement (§5.3) because those
   //        steps can introduce zigzags when ELK routes start far from the source node
@@ -625,19 +649,9 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
-  // Message-flow labels: use direction-aware ports (bottom-up vs top-down)
-  const allMessageFlows = lc.messageFlows || [];
-  for (const mf of allMessageFlows) {
-    if (!mf.name) continue;
-    const srcCoord = coords[mf.source] || {};
-    const tgtCoord = coords[mf.target] || {};
-    const ports = messageFlowPorts(srcCoord, tgtCoord);
-    edgeLabels[mf.id || `mf_${mf.source}_${mf.target}`] = {
-      text: mf.name,
-      x: (ports.sx + ports.ex) / 2,
-      y: (ports.sy + ports.ey) / 2,
-    };
-  }
+  // Message-flow routes and labels are NOT computed here — see routeMessageFlows(),
+  // which runs after visual refinement because it depends on final participant
+  // geometry.
 
   return { coords, laneCoords, poolCoords, edgeCoords, edgeLabels };
 }
@@ -682,6 +696,151 @@ function enforceOrthogonal(pts) {
     }
   }
   return result;
+}
+
+/**
+ * Place artifacts (text annotations, data objects, data stores, groups).
+ *
+ * They are kept out of the ELK graph on purpose: an artifact without an
+ * association is disconnected, and ELK then hands it the first layer — measured
+ * on a test graph, an unattached data store pushed the start event 184 px to the
+ * right. So they are positioned here instead, against the element they annotate,
+ * which is also where BPMN convention puts them.
+ *
+ * Anchor: the associated element, stacked below it. Below rather than above,
+ * because §5.0 derives the lane band from node positions afterwards and grows
+ * it downwards — placing an artifact above its anchor would push it out of the
+ * top of the pool. Artifacts without any association go below the process,
+ * left-aligned, in declaration order.
+ */
+function placeArtifacts(coords, allProcesses, lc) {
+  const associations = lc.associations || [];
+  const partnerOf = {};
+  for (const a of associations) {
+    // An association may point either way; the partner is whichever end is not
+    // the artifact itself.
+    partnerOf[a.source] ??= a.target;
+    partnerOf[a.target] ??= a.source;
+  }
+
+  const placedBelow = {};   // anchorId → how many artifacts already sit below it
+  const orphans = [];
+
+  for (const proc of allProcesses) {
+    for (const node of flattenProcessNodes(proc.nodes)) {
+      if (!isArtifact(node.type) || coords[node.id]) continue;
+      const sz = SHAPE[node.type] || SHAPE._textAnnotation || { w: 100, h: 80 };
+      const anchor = coords[partnerOf[node.id]];
+      if (!anchor) { orphans.push({ node, sz }); continue; }
+
+      const anchorId = partnerOf[node.id];
+      const slot = placedBelow[anchorId] = (placedBelow[anchorId] ?? -1) + 1;
+      coords[node.id] = {
+        x: anchor.x + anchor.w / 2 - sz.w / 2,
+        y: anchor.y + anchor.h + ARTIFACT_GAP + slot * (sz.h + ARTIFACT_GAP),
+        w: sz.w,
+        h: sz.h,
+      };
+    }
+  }
+
+  if (orphans.length === 0) return;
+  const placed = Object.values(coords);
+  let x = placed.length ? Math.min(...placed.map(c => c.x)) : 0;
+  const y = (placed.length ? Math.max(...placed.map(c => c.y + c.h)) : 0) + ARTIFACT_GAP;
+  for (const { node, sz } of orphans) {
+    coords[node.id] = { x, y, w: sz.w, h: sz.h };
+    x += sz.w + ARTIFACT_GAP;
+  }
+}
+
+/**
+ * Straight connection between two shapes, clipped to both borders.
+ * Associations are drawn as straight lines in BPMN, so this is a plain
+ * centre-to-centre segment cut back to where it meets each rectangle.
+ */
+function clipStraight(a, b) {
+  const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+  const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  return [clipToRect(ac, bc, a), clipToRect(bc, ac, b)];
+}
+
+/** Move `from` (a shape centre) onto the border of `rect`, along from→towards. */
+function clipToRect(from, towards, rect) {
+  const dx = towards.x - from.x;
+  const dy = towards.y - from.y;
+  if (dx === 0 && dy === 0) return { x: from.x, y: from.y };
+  const halfW = rect.w / 2;
+  const halfH = rect.h / 2;
+  const scale = Math.min(
+    dx === 0 ? Infinity : halfW / Math.abs(dx),
+    dy === 0 ? Infinity : halfH / Math.abs(dy),
+  );
+  return { x: from.x + dx * scale, y: from.y + dy * scale };
+}
+
+function messageFlowKey(mf) {
+  return mf.id || `mf_${mf.source}_${mf.target}`;
+}
+
+/**
+ * Orthogonal route for a message flow: out of the source shape, across in the
+ * corridor between two participants, into the target shape.
+ *
+ * The horizontal leg deliberately runs in the POOL_GAP corridor and not at the
+ * midpoint between the two shapes — a midpoint leg would cut horizontally
+ * through a pool body, which reads as a participation that does not exist.
+ */
+function routeMessageFlow(srcCoord, tgtCoord, poolCoords, corridorUse = {}) {
+  const { sx, sy, ex, ey } = messageFlowPorts(srcCoord, tgtCoord);
+  if (Math.abs(sx - ex) < 2) return [{ x: sx, y: sy }, { x: ex, y: ey }];
+
+  const corridorY = fanOut(participantGapY(sy, ey, poolCoords), corridorUse);
+  return [
+    { x: sx, y: sy },
+    { x: sx, y: corridorY },
+    { x: ex, y: corridorY },
+    { x: ex, y: ey },
+  ];
+}
+
+/**
+ * Spread flows that land in the same corridor, so their horizontal legs do not
+ * coincide. Offsets alternate around the corridor centre (0, +14, -14, +28, …)
+ * and stay inside the POOL_GAP, so a fanned-out leg never enters a pool.
+ */
+function fanOut(corridorY, corridorUse) {
+  const key = Math.round(corridorY);
+  const n = corridorUse[key] = (corridorUse[key] ?? -1) + 1;
+  if (n === 0) return corridorY;
+
+  const step = Math.ceil(n / 2) * MESSAGE_FLOW_FAN;
+  const maxOffset = POOL_GAP / 2 - MESSAGE_FLOW_FAN / 2;
+  const offset = Math.min(step, maxOffset) * (n % 2 === 1 ? 1 : -1);
+  return corridorY + offset;
+}
+
+/**
+ * y of the gap between the participant the flow leaves and the next one in the
+ * direction of travel. Falls back to the midpoint when no gap can be identified
+ * (single participant, or a flow that stays inside one band).
+ */
+function participantGapY(fromY, toY, poolCoords) {
+  const bands = Object.values(poolCoords)
+    .filter(p => Number.isFinite(p.y) && Number.isFinite(p.h))
+    .map(p => ({ top: p.y, bottom: p.y + p.h }))
+    .sort((a, b) => a.top - b.top);
+
+  const downward = toY > fromY;
+  const idx = bands.findIndex(b => fromY >= b.top - 1 && fromY <= b.bottom + 1);
+  if (idx === -1) return (fromY + toY) / 2;
+
+  const neighbour = downward ? bands[idx + 1] : bands[idx - 1];
+  if (!neighbour) return (fromY + toY) / 2;
+
+  return downward
+    ? (bands[idx].bottom + neighbour.top) / 2
+    : (neighbour.bottom + bands[idx].top) / 2;
 }
 
 /**
@@ -911,4 +1070,44 @@ export function messageFlowPorts(srcCoord, tgtCoord) {
   };
 }
 
-export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal };
+/**
+ * Route message flows and place their labels. MUTATES coordMap.
+ *
+ * Deliberately NOT part of buildCoordinateMap: a message flow's horizontal leg
+ * has to lie in the gap between two participants, and that gap is only final
+ * once every pass that moves participants has run — including the opt-in
+ * visual-refinement ones. Routed any earlier, a later pass silently invalidates
+ * the invariant: measured with lane compaction on, three of eight legs ended up
+ * inside a pool body.
+ *
+ * Message flows depend on final participant and node geometry, and nothing
+ * except the two renderers depends on them. They are a leaf of the dependency
+ * chain, so they belong at its end.
+ */
+function routeMessageFlows(coordMap, lc) {
+  const { coords, poolCoords, edgeCoords, edgeLabels } = coordMap;
+  const corridorUse = {};
+
+  for (const mf of (lc.messageFlows || [])) {
+    // Fall back to poolCoords: a message flow may end on a black-box
+    // participant, which has no entry in `coords`.
+    const srcCoord = coords[mf.source] || poolCoords[mf.source];
+    const tgtCoord = coords[mf.target] || poolCoords[mf.target];
+    if (!srcCoord || !tgtCoord) continue;
+
+    const key = messageFlowKey(mf);
+    const pts = routeMessageFlow(srcCoord, tgtCoord, poolCoords, corridorUse);
+    edgeCoords[key] = pts;
+
+    if (!mf.name) continue;
+    // Label on the horizontal leg. Deriving it from the shapes instead (and
+    // without the poolCoords fallback) used to drop every black-box flow's
+    // label at the same phantom position, far from the flow it belongs to.
+    const [a, b] = pts.length >= 4 ? [pts[1], pts[2]] : [pts[0], pts[pts.length - 1]];
+    edgeLabels[key] = { text: mf.name, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  return coordMap;
+}
+
+export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows };

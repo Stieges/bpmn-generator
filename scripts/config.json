@@ -58,6 +58,9 @@
     "externalLabelHeight": 25,
     "poolGap":            60,
     "collabPadding":      20,
+    "messageFlowFan":     14,
+    "artifactGap":        30,
+    "poolOrder":          "auto",
     "happyPathLeveling":  false,
     "crossLaneDeconflict": true
   },

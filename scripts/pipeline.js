@@ -32,7 +32,7 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal } from './coordinates.js';
+import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows } from './coordinates.js';
 import { checkDiagramIntegrity } from './di-check.js';
 import { simplifyAllEdges } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
@@ -71,7 +71,10 @@ async function runPipeline(logicCore, opts = {}) {
   // Visual Refinement (opt-in, computed early for layout options)
   const refineOn = opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false;
 
-  const elkGraph  = logicCoreToElk(lc, { elkWrapping: refineOn });
+  // poolOrder: 'auto' (default) orders participants so that the ones exchanging
+  // messages sit next to each other; 'declared' keeps the input order.
+  const poolOrder = opts.poolOrder ?? CFG.layout?.poolOrder ?? 'auto';
+  const elkGraph  = logicCoreToElk(lc, { elkWrapping: refineOn, poolOrder });
   const elkResult = await runElkLayout(elkGraph);
   const coordMap  = buildCoordinateMap(elkResult, lc);
 
@@ -80,9 +83,11 @@ async function runPipeline(logicCore, opts = {}) {
   const allEdges = [
     ...(lc.edges || []),
     ...((lc.pools || []).flatMap(p => p.edges || [])),
-    ...(lc.messageFlows || []),
   ];
-  coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges);
+  // Associations are already clipped to both shapes (coordinates.js §5.4) and
+  // must not be simplified — clearance here is checked against nodes only.
+  const skipSimplify = new Set((lc.associations || []).map(a => a.id));
+  coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges, skipSimplify);
 
   // Visual Refinement (post-layout coordinate transforms)
   if (refineOn) {
@@ -103,6 +108,10 @@ async function runPipeline(logicCore, opts = {}) {
       });
     }
   }
+
+  // Message flows LAST: their horizontal leg has to sit in the gap between two
+  // participants, so every pass that can still move a participant must be done.
+  routeMessageFlows(coordMap, lc);
 
   const bpmnXml   = await generateBpmnXml(lc, coordMap);
   const svg       = generateSvg(lc, coordMap);

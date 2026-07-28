@@ -11,7 +11,6 @@ import { isEvent, isGateway, isBoundaryEvent, bpmnXmlTag } from './types.js';
 import { rn, LANE_HEADER_W, LABEL_DISTANCE } from './utils.js';
 import { inferGatewayDirections } from './topology.js';
 import { inferEventMarker } from './icons.js';
-import { messageFlowPorts } from './coordinates.js';
 
 const moddle = new BpmnModdle();
 
@@ -572,14 +571,10 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
   // Message flow DI — direction-aware ports
   if (lc.messageFlows) {
     for (const mf of lc.messageFlows) {
-      const srcCoord = coords[mf.source] || poolCoords[mf.source];
-      const tgtCoord = coords[mf.target] || poolCoords[mf.target];
-      const waypoints = [];
-      if (srcCoord && tgtCoord) {
-        const ports = messageFlowPorts(srcCoord, tgtCoord);
-        waypoints.push(create('dc:Point', { x: rn(ports.sx), y: rn(ports.sy) }));
-        waypoints.push(create('dc:Point', { x: rn(ports.ex), y: rn(ports.ey) }));
-      }
+      // Route comes from coordinates.js §5.4 — same source as the SVG, so the
+      // two can no longer diverge.
+      const pts = edgeCoords[mf.id || `mf_${mf.source}_${mf.target}`] || [];
+      const waypoints = pts.map(p => create('dc:Point', { x: rn(p.x), y: rn(p.y) }));
       planeElements.push(create('bpmndi:BPMNEdge', {
         id: `${mf.id}_di`,
         bpmnElement: allFlowNodeMaps.get(mf.id) || mf.id,
@@ -588,20 +583,15 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
     }
   }
 
-  // Association DI
+  // Association DI — route from coordinates.js §5.4, clipped to both shapes.
   for (const assoc of associations) {
-    const srcC = coords[assoc.source];
-    const tgtC = coords[assoc.target];
-    if (srcC && tgtC) {
-      planeElements.push(create('bpmndi:BPMNEdge', {
-        id: `${assoc.id}_di`,
-        bpmnElement: allFlowNodeMaps.get(assoc.id) || assoc.id,
-        waypoint: [
-          create('dc:Point', { x: rn(srcC.x + srcC.w / 2), y: rn(srcC.y + srcC.h / 2) }),
-          create('dc:Point', { x: rn(tgtC.x + tgtC.w / 2), y: rn(tgtC.y + tgtC.h / 2) }),
-        ],
-      }));
-    }
+    const pts = edgeCoords[assoc.id] || [];
+    if (pts.length < 2) continue;
+    planeElements.push(create('bpmndi:BPMNEdge', {
+      id: `${assoc.id}_di`,
+      bpmnElement: allFlowNodeMaps.get(assoc.id) || assoc.id,
+      waypoint: pts.map(p => create('dc:Point', { x: rn(p.x), y: rn(p.y) })),
+    }));
   }
 
   // Assign planeElements

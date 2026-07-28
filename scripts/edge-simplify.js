@@ -95,15 +95,22 @@ export function simplifyEdge(waypoints, boxes, sourceId, targetId) {
  * coords: { nodeId: {x,y,w,h} }
  * edgeCoords: { edgeId: [{x,y}, ...] }
  * edges: array of { id, source, target } from logic-core
+ * skipIds: edge ids to leave untouched
  * Returns a new edgeCoords (does not mutate the input).
+ *
+ * `skipIds` exists for message flows: clearance here is checked against NODE
+ * boxes only, so collapsing a message flow to an L-shape would happily lay its
+ * horizontal leg through a pool body — undoing the corridor routing from
+ * coordinates.js §5.4.
  */
-export function simplifyAllEdges(edgeCoords, coords, edges) {
+export function simplifyAllEdges(edgeCoords, coords, edges, skipIds = new Set()) {
   const out = {};
   const edgeBySrcTarget = {};
   for (const e of edges || []) {
     edgeBySrcTarget[e.id] = { source: e.source, target: e.target };
   }
   for (const [id, wp] of Object.entries(edgeCoords)) {
+    if (skipIds.has(id)) { out[id] = wp; continue; }
     const lookup = edgeBySrcTarget[id];
     out[id] = simplifyEdge(wp, coords, lookup?.source, lookup?.target);
   }
