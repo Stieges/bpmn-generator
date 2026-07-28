@@ -98,10 +98,10 @@ export function simplifyEdge(waypoints, boxes, sourceId, targetId) {
  * skipIds: edge ids to leave untouched
  * Returns a new edgeCoords (does not mutate the input).
  *
- * `skipIds` exists for message flows: clearance here is checked against NODE
+ * `skipIds` exists for routes that are already final: clearance here is checked against NODE
  * boxes only, so collapsing a message flow to an L-shape would happily lay its
- * horizontal leg through a pool body — undoing the corridor routing from
- * coordinates.js §5.4.
+ * line through a pool body or into a shape — undoing the clipping and corridor
+ * routing done in coordinates.js §5.4.
  */
 export function simplifyAllEdges(edgeCoords, coords, edges, skipIds = new Set()) {
   const out = {};

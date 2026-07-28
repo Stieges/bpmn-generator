@@ -541,6 +541,9 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
       const eid = edge.id || `flow_${edge.source}_${edge.target}`;
       const pts = edgeCoords[eid] || [];
       const waypoints = buildWaypoints(pts, coords, edge.source, edge.target);
+      // DI requires at least two waypoints. Reachable when an endpoint has no
+      // geometry at all — e.g. a boundary event whose attachedTo points nowhere.
+      if (waypoints.length < 2) continue;
       const edgeEl = create('bpmndi:BPMNEdge', {
         id: `${eid}_di`,
         bpmnElement: allFlowNodeMaps.get(eid) || eid,
@@ -574,6 +577,9 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
       // Route comes from coordinates.js §5.4 — same source as the SVG, so the
       // two can no longer diverge.
       const pts = edgeCoords[mf.id || `mf_${mf.source}_${mf.target}`] || [];
+      // DI requires at least two waypoints; emitting fewer produces XML that no
+      // tool can read. Better no DI edge than an invalid one.
+      if (pts.length < 2) continue;
       const waypoints = pts.map(p => create('dc:Point', { x: rn(p.x), y: rn(p.y) }));
       planeElements.push(create('bpmndi:BPMNEdge', {
         id: `${mf.id}_di`,

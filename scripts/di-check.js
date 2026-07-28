@@ -107,6 +107,29 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
     }
   }
 
+  // DI06 — a child of an expanded subprocess outside its parent's box.
+  // DI03 only knows participants, so a subprocess whose children stayed behind
+  // when the parent moved passed the check while rendering a lane band away.
+  for (const proc of (lc.pools || [lc])) {
+    for (const parent of flattenNodes(proc.nodes)) {
+      if (!parent.isExpanded || !parent.nodes?.length) continue;
+      const pc = coords[parent.id];
+      if (!pc || !Number.isFinite(pc.x)) continue;
+      for (const child of flattenNodes(parent.nodes)) {
+        const cc = coords[child.id];
+        if (!cc || !Number.isFinite(cc.x)) continue;
+        if (!contains(pc, cc, tol)) {
+          issues.push({
+            code: 'DI06',
+            severity: 'ERROR',
+            message: `Node "${child.id}" lies outside its expanded subprocess "${parent.id}".`,
+            elements: [child.id, parent.id],
+          });
+        }
+      }
+    }
+  }
+
   // DI05 — a message flow crossing a participant it does not involve.
   // WARNING, not ERROR: with a communication cycle across three or more
   // participants a linear stack cannot avoid it, so this reports rather than

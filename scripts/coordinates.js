@@ -177,7 +177,16 @@ function buildCoordinateMap(elkResult, lc) {
       if (delta !== 0) {
         band.y += delta;
         for (const n of procNodes) {
-          if (laneOfNode(n, proc) === laneId && coords[n.id]) coords[n.id].y += delta;
+          if (laneOfNode(n, proc) !== laneId) continue;
+          // An expanded subprocess carries its children and their edges with it:
+          // collectNodes gave them their own ABSOLUTE entries, so moving only the
+          // parent box would leave the children behind — a whole lane band away.
+          for (const inner of flattenProcessNodes([n])) {
+            if (coords[inner.id]) coords[inner.id].y += delta;
+          }
+          for (const inner of flattenProcessEdges(n)) {
+            for (const p of (edgeCoords[inner.id] || [])) p.y += delta;
+          }
         }
       }
       cursorY = band.y + band.h;
@@ -734,6 +743,11 @@ function placeArtifacts(coords, allProcesses, lc) {
       if (!anchor) { orphans.push({ node, sz }); continue; }
 
       const anchorId = partnerOf[node.id];
+      // An artifact belongs to the lane of what it annotates. Without this it
+      // has no lane at all, so §5.0 leaves it out of the band's bounding box and
+      // §5.0a does not move it when the band shifts — it stays at the anchor's
+      // OLD position, up to a full band away from it.
+      node.lane ??= laneOfNode(proc.nodes.find(n => n.id === anchorId), proc);
       const slot = placedBelow[anchorId] = (placedBelow[anchorId] ?? -1) + 1;
       coords[node.id] = {
         x: anchor.x + anchor.w / 2 - sz.w / 2,
@@ -791,11 +805,12 @@ function messageFlowKey(mf) {
  * midpoint between the two shapes — a midpoint leg would cut horizontally
  * through a pool body, which reads as a participation that does not exist.
  */
-function routeMessageFlow(srcCoord, tgtCoord, poolCoords, corridorUse = {}) {
+function routeMessageFlow(srcCoord, tgtCoord, poolCoords, fan = null) {
   const { sx, sy, ex, ey } = messageFlowPorts(srcCoord, tgtCoord);
   if (Math.abs(sx - ex) < 2) return [{ x: sx, y: sy }, { x: ex, y: ey }];
 
-  const corridorY = fanOut(participantGapY(sy, ey, poolCoords), corridorUse);
+  const base = participantGapY(sy, ey, poolCoords);
+  const corridorY = fan ? fanOut(base, fan.index, fan.total) : base;
   return [
     { x: sx, y: sy },
     { x: sx, y: corridorY },
@@ -805,19 +820,20 @@ function routeMessageFlow(srcCoord, tgtCoord, poolCoords, corridorUse = {}) {
 }
 
 /**
- * Spread flows that land in the same corridor, so their horizontal legs do not
- * coincide. Offsets alternate around the corridor centre (0, +14, -14, +28, …)
- * and stay inside the POOL_GAP, so a fanned-out leg never enters a pool.
+ * Spread the flows sharing a corridor evenly across it, so their horizontal legs
+ * do not coincide.
+ *
+ * `total` is counted up front rather than assigned as flows arrive: an
+ * incremental ±step saturates against the POOL_GAP bound, and from the sixth
+ * flow in one corridor the offsets started repeating — legs coincided again,
+ * which is exactly what this is here to prevent. With the count known, the
+ * spacing simply shrinks to fit.
  */
-function fanOut(corridorY, corridorUse) {
-  const key = Math.round(corridorY);
-  const n = corridorUse[key] = (corridorUse[key] ?? -1) + 1;
-  if (n === 0) return corridorY;
-
-  const step = Math.ceil(n / 2) * MESSAGE_FLOW_FAN;
-  const maxOffset = POOL_GAP / 2 - MESSAGE_FLOW_FAN / 2;
-  const offset = Math.min(step, maxOffset) * (n % 2 === 1 ? 1 : -1);
-  return corridorY + offset;
+function fanOut(corridorY, index, total) {
+  if (total <= 1) return corridorY;
+  const span = POOL_GAP - MESSAGE_FLOW_FAN;             // usable width, gap edges kept clear
+  const step = Math.min(MESSAGE_FLOW_FAN, span / (total - 1));
+  return corridorY + (index - (total - 1) / 2) * step;
 }
 
 /**
@@ -1086,17 +1102,33 @@ export function messageFlowPorts(srcCoord, tgtCoord) {
  */
 function routeMessageFlows(coordMap, lc) {
   const { coords, poolCoords, edgeCoords, edgeLabels } = coordMap;
-  const corridorUse = {};
+
+  // Fall back to poolCoords: a message flow may end on a black-box participant,
+  // which has no entry in `coords`.
+  const shapes = (mf) => [
+    coords[mf.source] || poolCoords[mf.source],
+    coords[mf.target] || poolCoords[mf.target],
+  ];
+
+  // First pass: how many flows share each corridor? Needed before routing, so
+  // that the fan-out spacing can shrink to fit instead of saturating.
+  const perCorridor = {};
+  for (const mf of (lc.messageFlows || [])) {
+    const [s, t] = shapes(mf);
+    if (!s || !t) continue;
+    const { sx, sy, ex, ey } = messageFlowPorts(s, t);
+    if (Math.abs(sx - ex) < 2) continue;   // straight, no horizontal leg
+    (perCorridor[Math.round(participantGapY(sy, ey, poolCoords))] ??= []).push(messageFlowKey(mf));
+  }
 
   for (const mf of (lc.messageFlows || [])) {
-    // Fall back to poolCoords: a message flow may end on a black-box
-    // participant, which has no entry in `coords`.
-    const srcCoord = coords[mf.source] || poolCoords[mf.source];
-    const tgtCoord = coords[mf.target] || poolCoords[mf.target];
+    const [srcCoord, tgtCoord] = shapes(mf);
     if (!srcCoord || !tgtCoord) continue;
 
     const key = messageFlowKey(mf);
-    const pts = routeMessageFlow(srcCoord, tgtCoord, poolCoords, corridorUse);
+    const group = Object.values(perCorridor).find(g => g.includes(key));
+    const fan = group ? { index: group.indexOf(key), total: group.length } : null;
+    const pts = routeMessageFlow(srcCoord, tgtCoord, poolCoords, fan);
     edgeCoords[key] = pts;
 
     if (!mf.name) continue;
