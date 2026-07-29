@@ -78,7 +78,8 @@ not) and an `apply*` function that performs it:
 
 **No-language-model guarantee:** the toolbox is purely deterministic. `scripts/redesign-core.js` may not
 import `agents/llm-provider.js`, directly or transitively — no LLM call, no API key. Verify with
-`grep -rn "llm-provider" scripts/redesign*.js` (no hit).
+`grep -rn "^import.*llm-provider" scripts/redesign*.js` (no hit; a plain `grep -rn "llm-provider"`
+also matches the comment stating this rule, so it is not a useful check on its own).
 
 **Rollback:** every `apply*` re-checks its result against a fixed, **profile-independent** soundness gate
 (soundness + workflow-net layers, always on — `scripts/redesign-core.js: SOUNDNESS_GATE`) and rolls back
@@ -266,7 +267,10 @@ passes this gate.** Warnings are not noise — they are the alarm.
    ```
    - The schema-gate (`references/input-schema.json`) rejects malformed structure with a
      precise field path and exits non-zero — fix every reported field.
-   - `--strict` also makes **every warning fatal** (exit non-zero, no files written).
+   - `--strict` makes every warning fatal (exit non-zero, no files written), across three
+     independent checks: rule-engine warnings, diagram (DI) integrity, and BPMN
+     serialisation (the round trip of the generated XML through bpmn-moddle — this is what
+     catches an invalid element, e.g. an annotation carrying an illegal attribute).
 3. **Resolve every warning** and re-run until `--strict` exits `0`. Delivering a diagram
    with unresolved warnings is not allowed.
 4. Only then present the output. If a warning is a deliberate, justified exception, say so
@@ -493,7 +497,10 @@ Connect Data Objects, Data Stores, and Text Annotations to flow nodes:
 ```
 
 - SVG: Dotted line (strokeDasharray `0.5,5`)
-- XML: `<association>` element with `associationDirection`
+- XML: `<association>` element with `associationDirection`, placed in `<artifacts>` alongside any
+  TextAnnotation/Group it connects to — never in `<flowElements>` (§10.7). Endpoint resolution has
+  to look in both collections: an association's source or target is very often an artifact, not a
+  flow node.
 
 ---
 
@@ -510,6 +517,9 @@ Connect Data Objects, Data Stores, and Text Annotations to flow nodes:
 | Event definitions with `messageRef`/`errorRef` | ✅ | §10.4 |
 | `<documentation>` on process and nodes | ✅ | §8.3.1 |
 | `<association>` elements | ✅ | §7.2 |
+| Artifacts (TextAnnotation, Group, Association) in `<artifacts>`, never `<flowElements>` | ✅ | §10.7 |
+| TextAnnotation content as a `<text>` child element, never a `name` attribute | ✅ | §10.7.3 |
+| Group label via `categoryValueRef` → a `Category`/`CategoryValue` root element, never a `name` attribute | ✅ | §10.7.2 |
 | Collapsed pool (`<participant>` without `processRef`) | ✅ | §9.3 |
 | DI Label Bounds with `<dc:Bounds>` | ✅ | §12.1 |
 | Loop/MI characteristics as child elements | ✅ | §10.2.2 |
@@ -519,3 +529,10 @@ Connect Data Objects, Data Stores, and Text Annotations to flow nodes:
 | Pool width equalization | ✅ | Visual convention |
 | Deadlock detection (XOR→AND) | ✅ | Structural soundness |
 | Round-tripping (BPMN→JSON→BPMN) | ✅ | Interoperability |
+
+**Why the three artifact rules above matter if you ever hand-write XML (inline mode):** an
+Artifact (TextAnnotation, Group, Association) extends `BaseElement`, which declares only `id` —
+`name` is introduced further down by `FlowElement`, and Artifacts never inherit from it. Most XML
+libraries write the attribute anyway without complaint, so a `name` on a TextAnnotation produces
+no error and an empty box in every real BPMN tool. This shipped once; see
+`references/omg-compliance.md` §10.7 for the full mapping.

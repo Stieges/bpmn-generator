@@ -114,7 +114,9 @@ Copy `SKILL.md` to `.claude/skills/operative/bpmn-prozess-erstellen.md` and adju
 
 ### As a portable .skill file
 
-The `bpmn-generator-v3.skill` ZIP archive can be shared with other projects. It contains everything needed:
+`cd scripts && npm run build:skill` produces `bpmn-generator-v3.skill` at the repo root (gitignored
+— rebuild on demand, not committed). The ZIP can be shared with other projects and contains
+everything needed:
 - `SKILL.md` — Skill definition
 - `references/` — Schema, prompt templates, inline template
 - `scripts/` — Pipeline modules, import.js, package.json
@@ -123,7 +125,7 @@ The `bpmn-generator-v3.skill` ZIP archive can be shared with other projects. It 
 
 ```
 scripts/
-├── pipeline.js        Orchestrator + CLI (~180 LOC)
+├── pipeline.js        Orchestrator + CLI
 │   ├── validate.js    Validation wrapper → rules.js
 │   ├── rules.js       Rule engine (33 rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md` for the catalog
 │   ├── topology.js    Gateway directions, topological sort, lane ordering
@@ -147,11 +149,11 @@ scripts/
 ├── prepare-training-data.js  Training data ETL (BPMN→LC, filter, JSONL)
 ├── evaluate-slm.js    SLM evaluation (pipeline-based metrics)
 ├── mcp-bpmn-server.js MCP server (4 tools)
-├── http-server.js     HTTP API (5 endpoints)
+├── http-server.js     HTTP API (8 endpoints)
 ├── config.json        Externalized constants (shapes, colors, gaps)
 ├── package.json       Dependencies (5 runtime, 3 dev)
-├── pipeline.test.js   114 tests (Jest, ES Modules)
-└── orchestrator.test.js 22 tests (agents + state machine)
+├── pipeline.test.js   224 tests (Jest, ES Modules)
+└── orchestrator.test.js 32 tests (agents + state machine)
 ```
 
 **Dependency graph** (acyclic):
@@ -184,7 +186,7 @@ bpmn-generator/
 ├── CLAUDE.md                             Project instructions for Claude Code
 ├── ROADMAP.md                            Development roadmap (K0-K8, M1-M6, L1-L6)
 ├── COMPATIBILITY.md                      bpmn.io compatibility report
-├── bpmn-generator-v3.skill               Portable ZIP archive
+├── bpmn-generator-v3.skill               Portable ZIP archive (generated, gitignored — `npm run build:skill`)
 ├── .github/workflows/ci.yml             GitHub Actions CI
 ├── references/
 │   ├── logic-core-schema.md              JSON schema documentation (prose)
@@ -232,10 +234,14 @@ import { runPipeline } from './pipeline.js';
 const logicCore = { nodes: [...], edges: [...] };
 const result = await runPipeline(logicCore);
 
-// result.bpmnXml   — BPMN 2.0 XML string (or null on validation error)
-// result.svg       — SVG string
-// result.coordMap  — coordinate map
-// result.validation — { errors: [], warnings: [] }
+// result.bpmnXml    — BPMN 2.0 XML string (or null on validation error)
+// result.svg        — SVG string
+// result.coordMap   — coordinate map
+// result.diagnostics — post-layout DI integrity ({ ok, issues }) — separate from validation,
+//                       since the rule engine never sees a coordinate
+// result.validation — { errors, warnings, advisories, metrics, xmlWarnings }
+//                       xmlWarnings comes from re-parsing the generated XML through bpmn-moddle —
+//                       it is what --strict's serialization check gates on
 ```
 
 Individual modules can be imported directly:

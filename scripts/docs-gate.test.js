@@ -79,7 +79,12 @@ describe('docs-gate — checkNumbers', () => {
     readmeText: 'The rule engine has 33 rules, 5 layers, covering soundness and style.',
     claudeMdText: '29 top-level scripts live under scripts/. The rule engine has 33 rules, 5 layers.',
     apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06.',
+    roadmapText: 'Validation (33 rules, 5 layers) via ElkJS.',
+    skillText: 'No rule/layer count claim in this fixture — SKILL.md does not currently make one.',
+    evaluationText: 'Configurable rule engine | Yes (33 rules, 5 layers, JSON profiles).',
+    pipelineDocText: 'Führt 33 Regeln in 5 Schichten aus.',
     actualRuleCount: 33,
+    actualLayerCount: 5,
     actualTopLevelScriptCount: 29,
     actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06'],
     ...overrides,
@@ -105,12 +110,42 @@ describe('docs-gate — checkNumbers', () => {
   test('an unrelated "N rules" mention does not false-positive', () => {
     // Regression pin: README.md's "WF-Net (3 rules)" mention (WF01-WF03) once
     // matched a broader /\d+ rules\b/ and was wrongly compared to the 33-rule
-    // engine total. Only the "<N> rules, 5 layers" phrasing is a claim about
-    // the whole engine.
+    // engine total. Requiring a layer count in the same match is what protects
+    // this: a subset claim never also states how many layers the engine has.
     const findings = checkNumbers(base({
       readmeText: 'WF-Net soundness (3 rules) is opt-in. The rule engine has 33 rules, 5 layers.',
     }));
     expect(findings).toEqual([]);
+  });
+
+  test('a stale layer count is caught even when the rule count is right', () => {
+    // Regression pin: the original pattern hard-coded the literal "5 layers",
+    // so a doc claiming a wrong layer count with the right rule count was
+    // invisible to it by construction — this is exactly the class of bug
+    // that shipped in ROADMAP.md/EVALUATION.md ("N rules, 4 layers").
+    const findings = checkNumbers(base({ roadmapText: 'Validation (33 rules, 4 layers) via ElkJS.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'rule-count' });
+    expect(findings[0].detail).toContain('ROADMAP.md');
+    expect(findings[0].detail).toContain('distinct layers');
+  });
+
+  test('a stale rule count in ROADMAP.md is a finding — a file the old check never read', () => {
+    const findings = checkNumbers(base({ roadmapText: 'Validation (28 rules, 5 layers) via ElkJS.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('ROADMAP.md');
+  });
+
+  test('the "N rules in M layers" phrasing (no comma) is also caught', () => {
+    const findings = checkNumbers(base({ evaluationText: 'Configurable rule engine | Yes (27 rules in 4 layers).' }));
+    expect(findings).toHaveLength(2); // wrong rule count AND wrong layer count in one match
+    expect(findings.every((f) => f.detail.includes('EVALUATION.md'))).toBe(true);
+  });
+
+  test('the German phrasing in docs/bpmn-generator-pipeline.md is checked too', () => {
+    const findings = checkNumbers(base({ pipelineDocText: 'Führt 22 Regeln in 4 Schichten aus.' }));
+    expect(findings).toHaveLength(2);
+    expect(findings.every((f) => f.detail.includes('docs/bpmn-generator-pipeline.md'))).toBe(true);
   });
 
   test('a missing "N top-level scripts" claim in CLAUDE.md is a finding', () => {

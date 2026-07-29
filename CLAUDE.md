@@ -93,6 +93,13 @@ layout and rendering. Two rules make it hold:
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant.
 
+This is also why a `Lane`'s `flowNodeRef` in `bpmn-xml.js`'s `buildLane` excludes artifacts and
+data references: `flowNodeRef` is typed `FlowNode` and neither qualifies (an Artifact never
+inherits from `FlowNode`; a data reference is a `FlowElement` but still not a `FlowNode`). Which
+lane an artifact sits in visually is answered once, in `coordMap` — putting a second, semantic
+answer in `flowNodeRef` is exactly the kind of duplicate source rule 1 warns about, just for
+membership instead of coordinates.
+
 ## Key Files
 
 | File | Purpose |
@@ -104,12 +111,12 @@ layout and rendering. Two rules make it hold:
 | `scripts/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
 | `scripts/redesign-cli.js` | CLI entry to the redesign toolbox (`node redesign-cli.js <input.json> <transform> [options] [--apply]`); preview is the default, nothing is written without `--apply`, a refusal exits non-zero and writes nothing |
 | `scripts/validate.js` | Thin wrapper around `runRules()` |
-| `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact`, `bpmnXmlTag` |
+| `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact` (layout sense — kept out of the ELK graph; wider than the BPMN class, includes data references), `isBpmnArtifact` (the actual OMG Artifact class — TextAnnotation, Group; use this one for anything that has to be right against the XSD), `bpmnXmlTag` |
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
 | `scripts/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
 | `scripts/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
-| `scripts/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
+| `scripts/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
 | `scripts/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
 | `scripts/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
 | `scripts/svg.js` | `generateSvg` — SVG rendering of all BPMN elements |
@@ -131,6 +138,8 @@ layout and rendering. Two rules make it hold:
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
 | `scripts/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
+| `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them; `schema-gate.js`/`agents/prompt-sections.js` fall back to the repo-root copy when the published one is absent |
+| `scripts/build-skill.mjs` | `npm run build:skill` — bundles `SKILL.md` + `references/` + `scripts/` into `bpmn-generator-v3.skill` (gitignored, rebuilt on demand) |
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
 | `references/logic-core-schema.md` | Schema documentation (prose + examples) |
 | `references/prompt-template.md` | LLM prompts + 5 enterprise few-shot patterns |
@@ -145,8 +154,13 @@ layout and rendering. Two rules make it hold:
 cd scripts/
 npm install
 npm test                                          # Jest, ES Modules; verify count with `npm test 2>&1 | tail -5`
-node pipeline.js tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
+npm run docs-gate                                 # the CI docs gate; add `-- --summary` to pass flags
+node pipeline.js ../tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
 ```
+
+Everything runs from `scripts/` — that is where the only `package.json` lives. The docs gate
+itself sits at `.github/scripts/docs-gate.mjs` and works from any directory, but invoking it by
+relative path only works from the repo root; `npm run docs-gate` avoids having to think about it.
 
 After every change: `npm test` must pass.
 
@@ -191,9 +205,12 @@ response field for three commits.
 2. One **nudge** check (PR-only, never fails the build): if a `feat`/`fix`/`perf` commit in the
    PR's range touches `scripts/**` and `CHANGELOG.md`'s `[Unreleased]` section is untouched or
    empty, prints a ready-to-paste draft built from the commit subjects.
-3. Run locally: `node .github/scripts/docs-gate.mjs --summary` (add `--base <ref> --head <ref>`
-   to also run the nudge check). Exit codes: `0` clean, `1` a proof check found a violation, `2`
-   tooling error (never passes silently).
+3. Run locally: `cd scripts && npm run docs-gate` — same directory as `npm test`. Flags need the
+   npm separator: `npm run docs-gate -- --summary --base <ref> --head <ref>` (`--base`/`--head`
+   also run the nudge check). From the repo root, `node .github/scripts/docs-gate.mjs` works
+   directly; the gate resolves its own paths, so only the path *to* it depends on where you
+   stand. Exit codes: `0` clean, `1` a proof check found a violation, `2` tooling error (never
+   passes silently).
 4. Own tests: `scripts/docs-gate.test.js`, exercising the exported pure(-ish) functions directly
    — see the doc comment on `checkPackageIntegrity` for why that one reads real files instead of
    synthetic fixtures.
@@ -204,7 +221,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ### Debug a wrong layout
 
-1. Reproduce: `cd scripts && node pipeline.js tests/fixtures/<fixture>.json /tmp/dbg`
+1. Reproduce: `cd scripts && node pipeline.js ../tests/fixtures/<fixture>.json /tmp/dbg`
 2. Inspect `/tmp/dbg.svg` (browser) and `/tmp/dbg.bpmn` (text editor).
 3. Open in order: `layout.js` (Elk node/edge build), `coordinates.js` (post-processing), `topology.js` (node/lane ordering).
 4. For pool/lane width issues, suspect `coordinates.js` first (pool width balancing + lane-compaction logic) and `visual-refinement.js` (compaction passes).
@@ -264,7 +281,9 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 1. Synthetic-data run: `cd scripts/robustness && node cli.js run --target=lc-json`.
 2. Multi-target run: `node cli.js run --target=both` (LC-JSON + DOT paths through the LLM).
-3. MaD subset validation: `node cli.js mad-check`.
+3. MaD subset validation: `node cli.js mad-check` — requires `tests/fixtures/mad-subset/` to exist
+   first (one-time curation step, see `scripts/robustness/README.md`); `tests/fixtures/mad-subset-test/`
+   alone is not enough.
 4. Reports land in `tests/robustness-reports/` (gitignored — share by attaching).
 
 ## Rule Engine
@@ -340,6 +359,12 @@ node import.js existing.bpmn extracted.json
 # With documentation export:
 node pipeline.js input.json output --doc
 
+# Abort (no files written) on any unresolved warning — rule engine, DI, or serialization:
+node pipeline.js input.json output --strict
+
+# Enable the opt-in Optimization Advisory layer (soll/optimize mode):
+node pipeline.js input.json output --optimize
+
 # Start MCP server:
 node mcp-bpmn-server.js
 ```
@@ -349,8 +374,18 @@ node mcp-bpmn-server.js
 - Rule placeholders: M05-M06 (Style) registered with severity=OFF (POS tagger problem; tracked in ROADMAP)
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
-- Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + 13 unit tests; not exhaustive across all BPMN element types
+- Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + 13 unit tests; not exhaustive across all BPMN element types. Text annotations and groups are a recent addition to that coverage — the primary importer (`moddle-import.js`) used to walk only `flowElements`, where bpmn-moddle never places an Artifact, so both were silently dropped on import (fixed alongside the export-side defect that produced an illegal `name` attribute on them)
 - Boundary events are placed deterministically on the bottom edge of their host and their outgoing flow is re-routed there (`coordinates.js` §5.0-). ELK does not lay them out; a host carrying many of them will spread them evenly rather than optimally
 - Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right
 - Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, which is why DI05 is a WARNING
 - The DI check (`di-check.js`) covers participants, lane bands, node containment and message flow crossings. It says nothing about sequence-flow crossings, label collisions or readability
+- A single-process Logic-Core (no `pools`) may omit `id` — `input-schema.json`'s `SingleProcess`
+  branch doesn't require it, unlike `Pool`. `bpmn-xml.js` has no fallback for that case, and the
+  result is a `bpmnElement="undefined"` reference in the DI, plus (with lanes present) a phantom
+  black-box pool on re-import and a `TypeError` in `dot.js` on the public `logicCoreToDot` path. No
+  fixture or test exercises this branch end-to-end (tracked in #37; `--strict` now surfaces the
+  `unresolved reference <undefined>` warning this produces, but nothing fixes it)
+- No ESLint — CLAUDE.md's own "Do NOT" rules (no CommonJS, no hard-coded constants where
+  `config.json` applies, etc.) are enforced by review convention, not tooling (#32)
+- No test coverage collection or threshold gate — `npm test -- --coverage` works, nothing runs it
+  in CI or reports the result (#33)

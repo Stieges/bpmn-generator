@@ -197,8 +197,8 @@ New optional fields on Node: `calledElement`, `scriptFormat`, `script`, `impleme
 
 | Change | File | Details |
 |--------|------|---------|
-| Dependency | package.json | bpmn-moddle ^9.0.1 (MIT, ~150KB with deps) |
-| Adapter | moddle-import.js | moddleParse() + moddleToLogicCore() — ~200 LOC |
+| Dependency | package.json | bpmn-moddle ^10.0.0 (MIT) |
+| Adapter | moddle-import.js | moddleParse() + moddleToLogicCore() |
 | Async Import | import.js | bpmnToLogicCore() async via moddle, legacy fallback |
 | Caller Updates | mcp-bpmn-server.js, http-server.js, prepare-training-data.js | +await |
 | Nested Lane Export Fix | bpmn-xml.js | emitLane() recursive with childLaneSet |
