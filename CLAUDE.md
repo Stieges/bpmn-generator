@@ -145,8 +145,13 @@ layout and rendering. Two rules make it hold:
 cd scripts/
 npm install
 npm test                                          # Jest, ES Modules; verify count with `npm test 2>&1 | tail -5`
+npm run docs-gate                                 # the CI docs gate; add `-- --summary` to pass flags
 node pipeline.js tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
 ```
+
+Everything runs from `scripts/` — that is where the only `package.json` lives. The docs gate
+itself sits at `.github/scripts/docs-gate.mjs` and works from any directory, but invoking it by
+relative path only works from the repo root; `npm run docs-gate` avoids having to think about it.
 
 After every change: `npm test` must pass.
 
@@ -191,9 +196,12 @@ response field for three commits.
 2. One **nudge** check (PR-only, never fails the build): if a `feat`/`fix`/`perf` commit in the
    PR's range touches `scripts/**` and `CHANGELOG.md`'s `[Unreleased]` section is untouched or
    empty, prints a ready-to-paste draft built from the commit subjects.
-3. Run locally: `node .github/scripts/docs-gate.mjs --summary` (add `--base <ref> --head <ref>`
-   to also run the nudge check). Exit codes: `0` clean, `1` a proof check found a violation, `2`
-   tooling error (never passes silently).
+3. Run locally: `cd scripts && npm run docs-gate` — same directory as `npm test`. Flags need the
+   npm separator: `npm run docs-gate -- --summary --base <ref> --head <ref>` (`--base`/`--head`
+   also run the nudge check). From the repo root, `node .github/scripts/docs-gate.mjs` works
+   directly; the gate resolves its own paths, so only the path *to* it depends on where you
+   stand. Exit codes: `0` clean, `1` a proof check found a violation, `2` tooling error (never
+   passes silently).
 4. Own tests: `scripts/docs-gate.test.js`, exercising the exported pure(-ish) functions directly
    — see the doc comment on `checkPackageIntegrity` for why that one reads real files instead of
    synthetic fixtures.
