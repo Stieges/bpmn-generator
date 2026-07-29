@@ -54,9 +54,8 @@ The generated `.bpmn` files are designed to be compatible with [bpmn.io](https:/
 ### Known Limitations
 
 1. **No Camunda extensions** — No `camunda:` namespace attributes (formKey, assignee, etc.)
-2. **No color extensions** — Uses default bpmn-js colors only
-3. **Timer expressions** — Timer events have empty `<timerEventDefinition/>` (no duration/cycle)
-4. **Conditional expressions** — Uses `tFormalExpression` with label text as expression body
+2. **Timer expressions** — Timer events have empty `<timerEventDefinition/>` (no duration/cycle)
+3. **Conditional expressions** — Uses `tFormalExpression` with label text as expression body
 
 ### Verification
 

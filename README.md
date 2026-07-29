@@ -234,10 +234,14 @@ import { runPipeline } from './pipeline.js';
 const logicCore = { nodes: [...], edges: [...] };
 const result = await runPipeline(logicCore);
 
-// result.bpmnXml   — BPMN 2.0 XML string (or null on validation error)
-// result.svg       — SVG string
-// result.coordMap  — coordinate map
-// result.validation — { errors: [], warnings: [] }
+// result.bpmnXml    — BPMN 2.0 XML string (or null on validation error)
+// result.svg        — SVG string
+// result.coordMap   — coordinate map
+// result.diagnostics — post-layout DI integrity ({ ok, issues }) — separate from validation,
+//                       since the rule engine never sees a coordinate
+// result.validation — { errors, warnings, advisories, metrics, xmlWarnings }
+//                       xmlWarnings comes from re-parsing the generated XML through bpmn-moddle —
+//                       it is what --strict's serialization check gates on
 ```
 
 Individual modules can be imported directly:

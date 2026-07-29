@@ -23,7 +23,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 | Collapsed Pools (Black-Box) | Participant without processRef, 60px band | Done |
 | Deadlock Detection | XOR-Split → AND-Join + Inclusive-GW detection | Done |
 | OMG XML Compliance | LaneSet, gatewayDirection, conditionExpr, incoming/outgoing, top-level defs, DI Label Bounds | Done |
-| Round-Tripping (import.js) | BPMN XML → Logic-Core JSON → BPMN XML | Done |
+| Round-Tripping (import.js) | BPMN XML → Logic-Core JSON → BPMN XML | Done (text annotations/groups added 2026-07-29 — the primary importer used to drop them silently) |
 | Inline Mode (ElkJS CDN) | HTML artifact with browser-side layout | Done |
 | Associations | Data Objects/Annotations via dotted lines | Done |
 | Process Documentation | `<documentation>` on Process/Nodes | Done |

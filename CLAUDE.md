@@ -93,6 +93,13 @@ layout and rendering. Two rules make it hold:
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant.
 
+This is also why a `Lane`'s `flowNodeRef` in `bpmn-xml.js`'s `buildLane` excludes artifacts and
+data references: `flowNodeRef` is typed `FlowNode` and neither qualifies (an Artifact never
+inherits from `FlowNode`; a data reference is a `FlowElement` but still not a `FlowNode`). Which
+lane an artifact sits in visually is answered once, in `coordMap` — putting a second, semantic
+answer in `flowNodeRef` is exactly the kind of duplicate source rule 1 warns about, just for
+membership instead of coordinates.
+
 ## Key Files
 
 | File | Purpose |
@@ -104,7 +111,7 @@ layout and rendering. Two rules make it hold:
 | `scripts/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
 | `scripts/redesign-cli.js` | CLI entry to the redesign toolbox (`node redesign-cli.js <input.json> <transform> [options] [--apply]`); preview is the default, nothing is written without `--apply`, a refusal exits non-zero and writes nothing |
 | `scripts/validate.js` | Thin wrapper around `runRules()` |
-| `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact`, `bpmnXmlTag` |
+| `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact` (layout sense — kept out of the ELK graph; wider than the BPMN class, includes data references), `isBpmnArtifact` (the actual OMG Artifact class — TextAnnotation, Group; use this one for anything that has to be right against the XSD), `bpmnXmlTag` |
 | `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
 | `scripts/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
@@ -350,6 +357,12 @@ node import.js existing.bpmn extracted.json
 # With documentation export:
 node pipeline.js input.json output --doc
 
+# Abort (no files written) on any unresolved warning — rule engine, DI, or serialization:
+node pipeline.js input.json output --strict
+
+# Enable the opt-in Optimization Advisory layer (soll/optimize mode):
+node pipeline.js input.json output --optimize
+
 # Start MCP server:
 node mcp-bpmn-server.js
 ```
@@ -359,7 +372,7 @@ node mcp-bpmn-server.js
 - Rule placeholders: M05-M06 (Style) registered with severity=OFF (POS tagger problem; tracked in ROADMAP)
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
-- Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + 13 unit tests; not exhaustive across all BPMN element types
+- Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + 13 unit tests; not exhaustive across all BPMN element types. Text annotations and groups are a recent addition to that coverage — the primary importer (`moddle-import.js`) used to walk only `flowElements`, where bpmn-moddle never places an Artifact, so both were silently dropped on import (fixed alongside the export-side defect that produced an illegal `name` attribute on them)
 - Boundary events are placed deterministically on the bottom edge of their host and their outgoing flow is re-routed there (`coordinates.js` §5.0-). ELK does not lay them out; a host carrying many of them will spread them evenly rather than optimally
 - Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right
 - Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, which is why DI05 is a WARNING
