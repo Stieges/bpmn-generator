@@ -160,23 +160,45 @@ export function checkResponseContract(responses, schema, ajv) {
 
 // ==================================================================== 2. numbers
 
+// Matches only phrasing that states the whole rule engine's shape — rule count AND
+// layer count together, in one of the two forms this repo actually uses ("N rules,
+// M layers" / "N rules in M layers"), plus the German form docs/bpmn-generator-pipeline.md
+// uses. Deliberately NOT a bare /(\d+) rules\b/: that also matches README.md's "WF-Net
+// (3 rules)", a true claim about the WF01-WF03 subset, not the engine total. Requiring
+// both numbers in one match is what keeps a subset claim like that from tripping this —
+// a subset mention never also states a layer count in the same breath.
+const RULE_LAYER_PATTERNS = [
+  /(\d+)\s+rules,?\s*(?:in\s+)?(\d+)\s+layers/gi,
+  /(\d+)\s+Regeln\s+in\s+(\d+)\s+Schichten/gi,
+];
+
 /**
  * Pure: every input is text already read from disk, or a number already
  * computed by the caller. See gatherNumberInputs() for the I/O side.
  */
 export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
-  actualRuleCount, actualTopLevelScriptCount, actualDiCodes }) {
+  roadmapText, skillText, evaluationText, pipelineDocText,
+  actualRuleCount, actualLayerCount, actualTopLevelScriptCount, actualDiCodes }) {
   const findings = [];
 
-  // "(\d+) rules, 5 layers" is the phrasing every headline rule-engine claim uses,
-  // consistently, in both files. A bare /\d+ rules\b/ also matches README.md's
-  // unrelated "WF-Net (3 rules)" — a real claim about WF01-WF03, not the engine total.
-  for (const [file, text] of [['README.md', readmeText], ['CLAUDE.md', claudeMdText]]) {
-    for (const m of text.matchAll(/(\d+) rules, 5 layers/g)) {
-      const claimed = Number(m[1]);
-      if (claimed !== actualRuleCount) {
-        findings.push({ check: 'rule-count', detail:
-          `${file} says "${claimed} rules, 5 layers", scripts/rules.js has ${actualRuleCount}` });
+  const numberSources = [
+    ['README.md', readmeText], ['CLAUDE.md', claudeMdText], ['ROADMAP.md', roadmapText],
+    ['SKILL.md', skillText], ['EVALUATION.md', evaluationText],
+    ['docs/bpmn-generator-pipeline.md', pipelineDocText],
+  ];
+  for (const [file, text] of numberSources) {
+    for (const pattern of RULE_LAYER_PATTERNS) {
+      for (const m of text.matchAll(pattern)) {
+        const claimedRules = Number(m[1]);
+        const claimedLayers = Number(m[2]);
+        if (claimedRules !== actualRuleCount) {
+          findings.push({ check: 'rule-count', detail:
+            `${file} says "${m[0]}" — scripts/rules.js has ${actualRuleCount} rules` });
+        }
+        if (claimedLayers !== actualLayerCount) {
+          findings.push({ check: 'rule-count', detail:
+            `${file} says "${m[0]}" — scripts/rules.js has ${actualLayerCount} distinct layers` });
+        }
       }
     }
   }
@@ -216,10 +238,17 @@ function gatherNumberInputs() {
   const readmeText = readFileSync(join(REPO_ROOT, 'README.md'), 'utf8');
   const claudeMdText = readFileSync(join(REPO_ROOT, 'CLAUDE.md'), 'utf8');
   const apiReferenceText = readFileSync(join(REFERENCES_DIR, 'api-reference.md'), 'utf8');
+  const roadmapText = readFileSync(join(REPO_ROOT, 'ROADMAP.md'), 'utf8');
+  const skillText = readFileSync(join(REPO_ROOT, 'SKILL.md'), 'utf8');
+  const evaluationText = readFileSync(join(REPO_ROOT, 'EVALUATION.md'), 'utf8');
+  const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
   const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'rules.js'), 'utf8');
   const diCheckSrc = readFileSync(join(SCRIPTS_DIR, 'di-check.js'), 'utf8');
 
   const actualRuleCount = [...rulesSrc.matchAll(/^\s*id: '/gm)].length;
+  // Each rule declares a `layer:`; the distinct values are the layer count — this
+  // way a new layer (like Optimization was) is picked up without touching the gate.
+  const actualLayerCount = new Set([...rulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
   const actualDiCodes = [...new Set([...diCheckSrc.matchAll(/code: '(DI0\d)'/g)].map((m) => m[1]))];
 
   let topLevelStdout;
@@ -233,7 +262,8 @@ function gatherNumberInputs() {
   }
   const actualTopLevelScriptCount = topLevelStdout.trim().split('\n').filter(Boolean).length;
 
-  return { readmeText, claudeMdText, apiReferenceText, actualRuleCount, actualTopLevelScriptCount, actualDiCodes };
+  return { readmeText, claudeMdText, apiReferenceText, roadmapText, skillText, evaluationText,
+    pipelineDocText, actualRuleCount, actualLayerCount, actualTopLevelScriptCount, actualDiCodes };
 }
 
 // ========================================================= 3. package-integrity

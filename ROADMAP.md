@@ -92,7 +92,7 @@ All K0-K8 items are implemented.
 | K1 | SVG Icon Fidelity | Done | icons.js (real PathMap paths) |
 | K2 | Edge-Label Placement | Done | coordinates.js |
 | K3 | Expanded Sub-Processes | Done | layout.js, svg.js, bpmn-xml.js |
-| K4 | Extend validation | Done | rules.js (28 rules, 4 layers) |
+| K4 | Extend validation | Done | rules.js |
 | K5 | Few-Shot Enterprise Patterns | Done | references/prompt-template.md |
 | K6 | Transaction Sub-Process | Done | types.js, svg.js, bpmn-xml.js, import.js |
 | K7 | Pool width fits content | Done | coordinates.js §5.0b |
