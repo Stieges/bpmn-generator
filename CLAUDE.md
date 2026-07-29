@@ -175,6 +175,29 @@ After every change: `npm test` must pass.
 7. `references/omg-compliance.md` — update OMG mapping
 8. `references/input-schema.json` — extend schema
 
+### Docs gate
+
+CI check (`.github/scripts/docs-gate.mjs`, wired in `.github/workflows/docs-gate.yml`) that
+checks documented claims against the running code instead of trusting the prose — added after
+the CHANGELOG fell six releases behind and `/api/v1/orchestrate` silently dropped a documented
+response field for three commits.
+
+1. Three **proof** checks (exit 1 on violation): the HTTP response contract vs.
+   `references/api-schema.json` (ajv, validated against a real response built from each
+   endpoint), numeric claims ("N rules, 5 layers" in README.md/CLAUDE.md, "N top-level scripts"
+   in CLAUDE.md, DI codes in `references/api-reference.md`) vs. the actual counts, and package
+   integrity — every `join(__dirname, ...)` a packed file reads at runtime, checked against
+   `npm pack`'s output, scoped to files reachable from `scripts/package.json`'s `exports`.
+2. One **nudge** check (PR-only, never fails the build): if a `feat`/`fix`/`perf` commit in the
+   PR's range touches `scripts/**` and `CHANGELOG.md`'s `[Unreleased]` section is untouched or
+   empty, prints a ready-to-paste draft built from the commit subjects.
+3. Run locally: `node .github/scripts/docs-gate.mjs --summary` (add `--base <ref> --head <ref>`
+   to also run the nudge check). Exit codes: `0` clean, `1` a proof check found a violation, `2`
+   tooling error (never passes silently).
+4. Own tests: `scripts/docs-gate.test.js`, exercising the exported pure(-ish) functions directly
+   — see the doc comment on `checkPackageIntegrity` for why that one reads real files instead of
+   synthetic fixtures.
+
 ## Common Tasks
 
 Workflows that come up repeatedly in this codebase. Each lists the file(s) to open first and the verification command.
