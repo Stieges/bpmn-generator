@@ -2,7 +2,7 @@
 
 Reproducible metrics for the BPMN Generator. No marketing claims that aren't backed by a command you can run.
 
-- **Stieges-Bench v1** — pipeline metrics over 9 hand-crafted Logic-Core fixtures. No LLM, no network.
+- **Stieges-Bench v1** — pipeline metrics over every hand-crafted fixture in `tests/fixtures/*.json`. No LLM, no network.
 - **bpmn-auto-layout comparison** — head-to-head against npm `bpmn-auto-layout@1.3.0` on Pools/Lanes-heavy fixtures.
 - **Competitor matrix** — feature-by-feature comparison with ProMoAI, BPMN Assistant, and BPMN-Chatbot. Stieges column verified; competitor columns sourced from their public repos and papers.
 
@@ -107,14 +107,14 @@ Stieges column verified against this repo. Competitor columns sourced from their
 | **Multi-pool collaboration + message flows** | **Yes** ([multi-pool-collaboration.expected.bpmn](tests/fixtures/multi-pool-collaboration.expected.bpmn)) | Yes (POWL-based) | **No** (BPMN Auto Layout limitation, paper §6) | Unclear (no public repo) |
 | **Lane support** | **Yes, multi-lane per pool** ([sparse-lanes.expected.bpmn](tests/fixtures/sparse-lanes.expected.bpmn) — 4 lanes) | Yes (paper) | Limited | Unclear |
 | Soundness check | Workflow-Net (WF01–WF03), 3 rules | POWL-by-construction (mathematical guarantee) | None documented | None documented |
-| Configurable rule engine | **Yes** (27 rules, 4 layers, JSON profiles) | Limited | None | None |
+| Configurable rule engine | **Yes** (33 rules, 5 layers, JSON profiles) | Limited | None | None |
 | Schema-strict input gate | **Yes** (ajv draft-2020-12, [schema-gate.js](scripts/schema-gate.js)) | N/A | Loose | Loose |
 | Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
 | License | MIT | GPL-3.0 | MIT-ish | Unclear |
 | MCP server | **Yes** ([mcp-bpmn-server.js](scripts/mcp-bpmn-server.js)) | No | No | No |
-| Live demo | Pending (v3.5) | streamlit.app | onrender.com | None |
+| Live demo | Pending — no public URL yet; local via `npm run demo` | streamlit.app | onrender.com | None |
 | Paper | None (engineering project) | IJCAI-24, EMMSAD 2024 (Kourani et al.) | arXiv 2509.24592 (2025) | CEUR-WS Vol-3758 |
-| Last commit (2026-05) | This repo | Active | Active | Inactive / unknown |
+| Last commit (2026-07) | This repo | Active | Active | Inactive / unknown |
 
 ### Stieges differentiation, in one sentence
 

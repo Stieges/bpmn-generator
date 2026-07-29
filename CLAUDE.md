@@ -109,7 +109,7 @@ layout and rendering. Two rules make it hold:
 | `scripts/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
 | `scripts/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
-| `scripts/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
+| `scripts/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
 | `scripts/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
 | `scripts/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
 | `scripts/svg.js` | `generateSvg` — SVG rendering of all BPMN elements |
@@ -146,7 +146,7 @@ cd scripts/
 npm install
 npm test                                          # Jest, ES Modules; verify count with `npm test 2>&1 | tail -5`
 npm run docs-gate                                 # the CI docs gate; add `-- --summary` to pass flags
-node pipeline.js tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
+node pipeline.js ../tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
 ```
 
 Everything runs from `scripts/` — that is where the only `package.json` lives. The docs gate
@@ -212,7 +212,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ### Debug a wrong layout
 
-1. Reproduce: `cd scripts && node pipeline.js tests/fixtures/<fixture>.json /tmp/dbg`
+1. Reproduce: `cd scripts && node pipeline.js ../tests/fixtures/<fixture>.json /tmp/dbg`
 2. Inspect `/tmp/dbg.svg` (browser) and `/tmp/dbg.bpmn` (text editor).
 3. Open in order: `layout.js` (Elk node/edge build), `coordinates.js` (post-processing), `topology.js` (node/lane ordering).
 4. For pool/lane width issues, suspect `coordinates.js` first (pool width balancing + lane-compaction logic) and `visual-refinement.js` (compaction passes).
@@ -272,7 +272,9 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 1. Synthetic-data run: `cd scripts/robustness && node cli.js run --target=lc-json`.
 2. Multi-target run: `node cli.js run --target=both` (LC-JSON + DOT paths through the LLM).
-3. MaD subset validation: `node cli.js mad-check`.
+3. MaD subset validation: `node cli.js mad-check` — requires `tests/fixtures/mad-subset/` to exist
+   first (one-time curation step, see `scripts/robustness/README.md`); `tests/fixtures/mad-subset-test/`
+   alone is not enough.
 4. Reports land in `tests/robustness-reports/` (gitignored — share by attaching).
 
 ## Rule Engine

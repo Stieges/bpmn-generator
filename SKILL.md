@@ -78,7 +78,8 @@ not) and an `apply*` function that performs it:
 
 **No-language-model guarantee:** the toolbox is purely deterministic. `scripts/redesign-core.js` may not
 import `agents/llm-provider.js`, directly or transitively — no LLM call, no API key. Verify with
-`grep -rn "llm-provider" scripts/redesign*.js` (no hit).
+`grep -rn "^import.*llm-provider" scripts/redesign*.js` (no hit; a plain `grep -rn "llm-provider"`
+also matches the comment stating this rule, so it is not a useful check on its own).
 
 **Rollback:** every `apply*` re-checks its result against a fixed, **profile-independent** soundness gate
 (soundness + workflow-net layers, always on — `scripts/redesign-core.js: SOUNDNESS_GATE`) and rolls back

@@ -19,7 +19,7 @@ See `docs/superpowers/specs/2026-05-16-pipeline-robustness-via-synthetic-data-de
 | `run --n=N --target=lc-json` | Stress run with N samples |
 | `triage` | Review items in `tests/fixtures/robustness/triage/` |
 | `mad-check` | Run external MaD-subset sanity check |
-| `report --since=DATE` | Aggregate runs since DATE |
+| `report --since=DATE` | Aggregate runs since DATE — **not implemented yet (Phase 4)**, the command exits with that message |
 
 ## Buckets
 

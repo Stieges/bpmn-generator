@@ -13,7 +13,7 @@ npm test             # run all tests (Jest + ES Modules)
 ### Smoke Test
 
 ```bash
-node pipeline.js tests/fixtures/simple-approval.json /tmp/test
+node pipeline.js ../tests/fixtures/simple-approval.json /tmp/test
 # outputs: /tmp/test.bpmn + /tmp/test.svg
 ```
 
@@ -43,11 +43,14 @@ See [README.md](README.md) for the full module architecture and dependency graph
 1. **Fork** the repository and create a feature branch
 2. **Read** the relevant module before modifying it
 3. **Run tests** after every change: `npm test`
-4. **Golden files** — if your change affects layout or XML output, regenerate:
+4. **Golden files** — never regenerate blindly. Inspect the `diff` first, decide whether the
+   change is intended, only then regenerate — and in its own commit. All 7 fixtures with
+   `.expected.bpmn`/`.expected.svg` goldens:
    ```bash
-   node pipeline.js ../tests/fixtures/simple-approval.json ../tests/fixtures/simple-approval.expected
-   node pipeline.js ../tests/fixtures/multi-pool-collaboration.json ../tests/fixtures/multi-pool-collaboration.expected
-   node pipeline.js ../tests/fixtures/expanded-subprocess.json ../tests/fixtures/expanded-subprocess.expected
+   for f in simple-approval multi-pool-collaboration expanded-subprocess \
+            dense-edge-labels long-lane-names sparse-lanes wide-pipeline; do
+     node pipeline.js ../tests/fixtures/$f.json ../tests/fixtures/$f.expected
+   done
    ```
 5. **Submit a PR** with a clear description of what changed and why
 
