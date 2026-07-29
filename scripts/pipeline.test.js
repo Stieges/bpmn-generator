@@ -3145,6 +3145,7 @@ describe('geometry contract — every drawable has coordinates', () => {
     ['boundary event', ['b'], 'coords'],
     ['data object and data store', ['d', 'ds'], 'coords'],
     ['text annotation', ['note'], 'coords'],
+    ['group', ['grp'], 'coords'],
     ['lane', ['L1'], 'laneCoords'],
     ['pool', ['P1'], 'poolCoords'],
     ['black-box participant', ['BB'], 'poolCoords'],
@@ -3168,6 +3169,116 @@ describe('geometry contract — every drawable has coordinates', () => {
     expect(r.bpmnXml).toContain('<bpmn:textAnnotation id="note"');
     expect(r.bpmnXml).toMatch(/bpmnElement="note">\s*<dc:Bounds/);
     expect(r.bpmnXml).toMatch(/bpmnElement="a1"[\s\S]*?<di:waypoint/);
+  });
+});
+
+// A shape can carry perfect geometry and still be empty: an annotation whose
+// text never reached the XML draws an empty box in every BPMN tool. These pin
+// the CONTENT half of the same contract.
+//
+// Per OMG Semantic.xsd, Artifact extends BaseElement — which declares only
+// `id`. `name` is introduced by FlowElement, so it is illegal on TextAnnotation
+// and Group. bpmn-moddle does not reject the unknown attribute; it sinks it
+// into $attrs and writes it back out, which is why this shipped silently. Its
+// content lives in `text` (a child element) and, for Group, in a referenced
+// CategoryValue.
+describe('artifact contract — the label survives serialisation', () => {
+  const ANNOTATION_TEXT = 'Four eyes';
+  const GROUP_LABEL = 'Review block';
+
+  test('the round trip through bpmn-moddle is warning-free', async () => {
+    // This is the guard that was one line away and never written: the three
+    // existing round-trip tests use fixtures with no artifacts in them, so the
+    // detector fired only on the one fixture nobody pointed it at.
+    const r = await runPipeline(loadFixture('all-element-classes.json'));
+    expect(r.validation.xmlWarnings).toEqual([]);
+  });
+
+  test('annotation text is a <bpmn:text> child, never a name attribute', async () => {
+    const r = await runPipeline(loadFixture('all-element-classes.json'));
+    expect(r.bpmnXml).toMatch(new RegExp(`<bpmn:textAnnotation[^>]*>\\s*<bpmn:text>${ANNOTATION_TEXT}</bpmn:text>`));
+    expect(r.bpmnXml).not.toMatch(/<bpmn:textAnnotation[^>]*\sname=/);
+  });
+
+  test('group label is a referenced CategoryValue, never a name attribute', async () => {
+    const r = await runPipeline(loadFixture('all-element-classes.json'));
+    expect(r.bpmnXml).toMatch(new RegExp(`<bpmn:categoryValue[^>]*value="${GROUP_LABEL}"`));
+    expect(r.bpmnXml).toMatch(/<bpmn:group[^>]*categoryValueRef="/);
+    expect(r.bpmnXml).not.toMatch(/<bpmn:group[^>]*\sname=/);
+  });
+
+  test('the two renderers agree on the label, not just on the geometry', async () => {
+    // svg.js reads node.name straight from the Logic-Core and never touches the
+    // XML. That is exactly how this defect stayed invisible in-house: the
+    // preview rendered the text while the delivered file was blank.
+    const r = await runPipeline(loadFixture('all-element-classes.json'));
+    expect(r.svg).toContain(ANNOTATION_TEXT);
+    expect(r.bpmnXml).toContain(`<bpmn:text>${ANNOTATION_TEXT}</bpmn:text>`);
+    expect(r.svg).toContain(GROUP_LABEL);
+    expect(r.bpmnXml).toContain(`value="${GROUP_LABEL}"`);
+  });
+
+  test('artifacts are emitted after flowElements, per the tProcess sequence', async () => {
+    // xsd:sequence in tProcess is laneSet*, flowElement*, artifact* — an
+    // artifact serialised in among the flow elements is schema-invalid even
+    // though every tool tolerates it.
+    const r = await runPipeline(loadFixture('all-element-classes.json'));
+    const body = r.bpmnXml.slice(r.bpmnXml.indexOf('<bpmn:process'), r.bpmnXml.indexOf('</bpmn:process>'));
+    const lastFlow = Math.max(
+      body.lastIndexOf('<bpmn:sequenceFlow'), body.lastIndexOf('<bpmn:endEvent'),
+      body.lastIndexOf('<bpmn:userTask'), body.lastIndexOf('<bpmn:serviceTask'));
+    for (const artifact of ['<bpmn:textAnnotation', '<bpmn:group', '<bpmn:association']) {
+      const at = body.indexOf(artifact);
+      if (at === -1) continue;
+      expect({ artifact, afterLastFlowElement: at > lastFlow }).toEqual({ artifact, afterLastFlowElement: true });
+    }
+  });
+
+  test('lane flowNodeRef lists only FlowNodes', async () => {
+    // Lane#flowNodeRef is typed FlowNode. Artifacts are not FlowNodes, and
+    // DataObjectReference/DataStoreReference are FlowElements but not FlowNodes.
+    const r = await runPipeline(loadFixture('all-element-classes.json'));
+    const refs = [...r.bpmnXml.matchAll(/<bpmn:flowNodeRef>([^<]+)<\/bpmn:flowNodeRef>/g)].map(m => m[1]);
+    expect(refs).not.toContain('note');
+    expect(refs).not.toContain('grp');
+    expect(refs).not.toContain('d');
+    expect(refs).not.toContain('ds');
+    expect(refs).toContain('t');   // a real FlowNode still has to be there
+  });
+
+  test('artifact labels survive the round trip through the primary importer', async () => {
+    // bpmnToLogicCore prefers moddle-import.js, which only ever walked
+    // proc.flowElements — bpmn-moddle parks artifacts in proc.artifacts, so
+    // annotations and groups were dropped outright and their associations were
+    // left pointing at ids that no longer existed.
+    const r = await runPipeline(loadFixture('all-element-classes.json'));
+    const back = await bpmnToLogicCore(r.bpmnXml);
+    const nodes = [...(back.nodes ?? []), ...((back.pools ?? []).flatMap(p => p.nodes ?? []))];
+
+    expect(nodes.find(n => n.type === 'textAnnotation')).toMatchObject({ id: 'note', name: ANNOTATION_TEXT });
+    expect(nodes.find(n => n.type === 'group')).toMatchObject({ id: 'grp', name: GROUP_LABEL });
+
+    const ids = new Set(nodes.map(n => n.id));
+    const dangling = (back.associations ?? []).filter(a => !ids.has(a.source) || !ids.has(a.target));
+    expect(dangling).toEqual([]);
+  });
+
+  test('an annotation written the old way is still readable', async () => {
+    // Files generated before this fix carry name= on the annotation. Dropping
+    // them on import would trade one silent data loss for another.
+    const legacy = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="P" isExecutable="false">
+    <bpmn:startEvent id="s" name="Start" />
+    <bpmn:endEvent id="e" name="End" />
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="e" />
+    <bpmn:textAnnotation id="oldnote" name="Legacy note" />
+    <bpmn:association id="oa" sourceRef="oldnote" targetRef="s" />
+  </bpmn:process>
+</bpmn:definitions>`;
+    const back = await bpmnToLogicCore(legacy);
+    const nodes = [...(back.nodes ?? []), ...((back.pools ?? []).flatMap(p => p.nodes ?? []))];
+    expect(nodes.find(n => n.id === 'oldnote')).toMatchObject({ type: 'textAnnotation', name: 'Legacy note' });
   });
 });
 

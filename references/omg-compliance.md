@@ -44,6 +44,16 @@ Mapping of OMG BPMN 2.0.2 (formal/2013-12-09, ISO/IEC 19510:2013) requirements t
 | §10.5.1 | Default Flow on XOR/Inclusive Gateway | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.5.1 | conditionExpression on non-default outgoing flows | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.6 | Data Objects, Data Stores | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact |
+| §10.7 | Artifacts in `<artifacts>`, not `<flowElements>` (tProcess sequence) | Implemented | bpmn-xml.js:buildProcess |
+| §10.7.1 | Association (sourceRef, targetRef, associationDirection) | Implemented | bpmn-xml.js:generateBpmnXml |
+| §10.7.2 | Group label via categoryValueRef → Category/CategoryValue | Implemented | bpmn-xml.js:buildCategoryForGroup |
+| §10.7.3 | TextAnnotation content in a `<text>` child, not `name` | Implemented | bpmn-xml.js:buildNodeAttrs |
+
+> Artifacts extend `tArtifact` → `tBaseElement`, which declares only `id`; `name` is introduced by
+> `tFlowElement`. It is therefore illegal on TextAnnotation, Group and Association, and each keeps
+> its label elsewhere — see `buildNodeAttrs`. bpmn-moddle accepts the unknown attribute silently
+> (it lands in `$attrs` and is written back out), so this is not caught at write time; the guard is
+> the round-trip warning surfaced via `validation.xmlWarnings`.
 
 ## Chapter 12 — DI (Diagram Interchange)
 

@@ -15,8 +15,27 @@ export function isBoundaryEvent(node) {
   return node.type === 'boundaryEvent' || !!node.attachedTo;
 }
 
+/**
+ * Layout sense of "artifact": drawable, but kept out of the ELK graph because it
+ * is not part of the sequence flow. Wider than the BPMN class of the same name —
+ * data references are FlowElements in the spec. Use isBpmnArtifact for anything
+ * that has to be right against the XSD.
+ */
 export function isArtifact(type) {
   return ['dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group'].includes(type);
+}
+
+/**
+ * The BPMN 2.0 Artifact class proper (OMG Semantic.xsd, tArtifact): TextAnnotation,
+ * Group, Association. These extend BaseElement, which declares only `id` — `name`
+ * is introduced further down by FlowElement and is therefore ILLEGAL on them.
+ * They also belong in <bpmn:artifacts>, not <bpmn:flowElements>.
+ *
+ * Deliberately excludes dataObjectReference/dataStoreReference: those really are
+ * FlowElements and really do carry `name`.
+ */
+export function isBpmnArtifact(type) {
+  return ['textAnnotation', 'group'].includes(type);
 }
 
 export function isDataArtifact(type) {

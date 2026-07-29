@@ -135,10 +135,21 @@ function bpmnToLogicCoreLegacy(xml) {
 
   const isMultiPool = expandedParts.length > 1 || collapsedParts.length > 0;
 
+  // A Group's label lives in a CategoryValue held by a top-level Category, which
+  // the Group references. Flatten them to id → value so convertProcess can
+  // resolve categoryValueRef without walking back up to the root.
+  const categoryValues = {};
+  for (const child of defs.children) {
+    if (stripNs(child.tag) !== 'category') continue;
+    for (const cv of findChildren(child, 'categoryValue')) {
+      if (cv.attrs.id) categoryValues[cv.attrs.id] = cv.attrs.value || '';
+    }
+  }
+
   // Convert each process
   const pools = [];
   for (const proc of processes) {
-    const pool = convertProcess(proc, partMap);
+    const pool = convertProcess(proc, partMap, categoryValues);
     pools.push(pool);
   }
 
@@ -220,7 +231,7 @@ function bpmnToLogicCoreLegacy(xml) {
   return { id: 'Process_1', name: 'Empty', nodes: [], edges: [], lanes: [] };
 }
 
-function convertProcess(proc, partMap) {
+function convertProcess(proc, partMap, categoryValues = {}) {
   const processId = proc.attrs.id;
   const processName = proc.attrs.name || findPartNameForProcess(processId, partMap) || processId;
 
@@ -256,6 +267,15 @@ function convertProcess(proc, partMap) {
       type: tag,
       name: child.attrs.name || '',
     };
+
+    // Artifacts keep their label somewhere other than `name`, which they are not
+    // allowed to have at all. Logic-Core folds all of them back into `name`; the
+    // attribute stays as the fallback for files written before that was fixed.
+    if (tag === 'textAnnotation') {
+      node.name = findChild(child, 'text')?.text || node.name;
+    } else if (tag === 'group' && child.attrs.categoryValueRef) {
+      node.name = categoryValues[child.attrs.categoryValueRef] ?? node.name;
+    }
 
     // Lane assignment
     if (nodeLaneMap[node.id]) node.lane = nodeLaneMap[node.id];
