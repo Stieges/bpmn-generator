@@ -438,6 +438,22 @@ async function main() {
     process.exit(1);
   }
 
+  // Serialisation diagnostics, from re-parsing our own XML through bpmn-moddle.
+  // Kept apart from the rule-engine warnings above on purpose: those are about
+  // the process, these are about whether the file we just wrote is actually
+  // valid BPMN. This channel already existed and already fired — nothing read
+  // it, so invalid output ("unknown attribute <name>" on every text annotation)
+  // shipped for months while the CLI reported success and exited 0.
+  const xmlWarnings = result.validation.xmlWarnings ?? [];
+  if (xmlWarnings.length) {
+    console.warn('\n⚠ BPMN serialisation (round-trip through bpmn-moddle):');
+    xmlWarnings.forEach(w => console.warn('  · ' + w));
+  }
+  if (strict && xmlWarnings.length) {
+    console.error(`\n✗ --strict: ${xmlWarnings.length} serialisation warning(s). No files written.`);
+    process.exit(1);
+  }
+
   const xmlPath = `${outputBase}.bpmn`;
   writeFileSync(xmlPath, result.bpmnXml, 'utf8');
   console.log(`✓ BPMN 2.0 XML → ${xmlPath}`);
