@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Text annotations and groups lost their label in the generated XML.** Per OMG Semantic.xsd an
+  Artifact extends BaseElement, which declares only `id` — `name` is illegal on `TextAnnotation`
+  and `Group`, and bpmn-moddle accepted it silently instead of rejecting it. Annotations rendered
+  as empty boxes in every BPMN tool. The label is now emitted where each class keeps it: a
+  `<bpmn:text>` child for annotations, a referenced `CategoryValue` for groups. Logic-Core is
+  unchanged — `name` remains the single caption field on input.
+- Artifacts were serialised into `<bpmn:flowElements>`; `tProcess` is an `xsd:sequence`
+  (`laneSet*, flowElement*, artifact*`), so they now go to `<bpmn:artifacts>`. Association endpoint
+  resolution widened to match, so associations onto an annotation are no longer dropped.
+- `Lane/flowNodeRef` listed text annotations, groups and data references. It is typed `FlowNode`
+  and none of those qualify.
+- The bpmn-moddle importer walked only `flowElements`, where artifacts never appear — every
+  annotation and group was dropped on import, leaving associations pointing at ids that no longer
+  existed. Both importers now read the current form and fall back to the pre-fix `name`, so
+  existing files still load.
+
+### Changed
+- The CLI now prints BPMN serialisation warnings (the bpmn-moddle round trip over the generated
+  XML) as their own section, and `--strict` aborts on them — consistent with how it already treats
+  rule warnings and diagram diagnostics. The field (`validation.xmlWarnings`) already existed and
+  already fired; nothing read it, so invalid output reported success and exited 0. No behaviour
+  change without the flag beyond the added output.
+
 ## [3.6.0] — 2026-07-29
 
 > **Gap notice.** No entries were recorded here between `[3.3.0]` and `[3.6.0]`, although
@@ -68,29 +92,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `orchestrate_bpmn` did); `generate_bpmn`'s `drillDown` ignored `mode`, so
   drill-down plus `optimize` returned no advisories.
 - `/api/v1/orchestrate` dropped `diagnostics` from its response even though the
-  orchestrator computed it and the MCP `orchestrate_bpmn` tool already returned it.
-- Published npm package threw on first import — `schema-gate.js` and
-  `agents/prompt-sections.js` each read a file from `references/`, outside the package
-  root, and `package.json`'s `files` cannot reach outside it. Fixed with a `prepack` copy
-  step plus a dual-path runtime fallback.
+    orchestrator computed it and the MCP `orchestrate_bpmn` tool already returned it.
+  - Published npm package threw on first import — `schema-gate.js` and
+    `agents/prompt-sections.js` each read a file from `references/`, outside the package
+    root, and `package.json`'s `files` cannot reach outside it. Fixed with a `prepack` copy
+    step plus a dual-path runtime fallback.
 
-### Changed
-- `diagnostics.ok` means "no ERROR-severity finding" — WARNING-severity findings (DI05)
-  are reported but do not fail the gate.
-- The CLI now aborts and writes no files when an ERROR-severity geometry finding is
-  present, alongside the existing validation-error abort.
-- Laned pools now get their frame drawn in the SVG at all (a missing `poolCoords`
-  entry meant it was silently skipped before); the lane header band sits inside the
-  lane, matching the emitted DI and bpmn.io.
+  ### Changed
+  - `diagnostics.ok` means "no ERROR-severity finding" — WARNING-severity findings (DI05)
+    are reported but do not fail the gate.
+  - The CLI now aborts and writes no files when an ERROR-severity geometry finding is
+    present, alongside the existing validation-error abort.
+  - Laned pools now get their frame drawn in the SVG at all (a missing `poolCoords`
+    entry meant it was silently skipped before); the lane header band sits inside the
+    lane, matching the emitted DI and bpmn.io.
 
-## [3.3.0] — 2026-05-18
+  ## [3.3.0] — 2026-05-18
 
-### Added
-- **SSRF complete coverage** — `callbackUrl` validation now blocks IPv4 link-local (169.254.x, including AWS metadata endpoint), IPv6 unique-local (fc00::/7), and IPv6 link-local (fe80::/10). Hostnames are DNS-resolved and the resolved IPs are re-checked against the same denylist, closing the `evil.com → 127.0.0.1` bypass.
-- **Production auth gate** — `BPMN_API_KEY` env var becomes mandatory when `NODE_ENV=production`. Server `startupCheck()` throws and refuses to bind. Dev mode (default) prints a prominent warning.
-- **JSON Schema strict-gate** — `scripts/schema-gate.js` validates every `body.logicCore` at the HTTP API entry (`/generate`, `/validate`, `/orchestrate` when logicCore is provided) using ajv draft-2020-12. LLM-generated Logic-Core from `orchestrator.js` is also gated before reaching the layout phase.
-- **`AUDIT_LOG_PATH` and `DEAD_LETTER_PATH` env vars** — runtime paths configurable for Docker / read-only filesystem deployments. Default: `os.tmpdir()/bpmn-generator/{audit,dead-letter}/`.
-- **`$schemaVersion` field** in `references/input-schema.json` — optional, `const: "1.0"`, backward-compatible (absent value still accepted).
+  ### Added
+  - **SSRF complete coverage** — `callbackUrl` validation now blocks IPv4 link-local (169.254.x, including AWS metadata endpoint), IPv6 unique-local (fc00::/7), and IPv6 link-local (fe80::/10). Hostnames are DNS-resolved and the resolved IPs are re-checked against the same denylist, closing the `evil.com → 127.0.0.1` bypass.
+  - **Production auth gate** — `BPMN_API_KEY` env var becomes mandatory when `NODE_ENV=production`. Server `startupCheck()` throws and refuses to bind. Dev mode (default) prints a prominent warning.
+  - **JSON Schema strict-gate** — `scripts/schema-gate.js` validates every `body.logicCore` at the HTTP API entry (`/generate`, `/validate`, `/orchestrate` when logicCore is provided) using ajv draft-2020-12. LLM-generated Logic-Core from `orchestrator.js` is also gated before reaching the layout phase.
+  - **`AUDIT_LOG_PATH` and `DEAD_LETTER_PATH` env vars** — runtime paths configurable for Docker / read-only filesystem deployments. Default: `os.tmpdir()/bpmn-generator/{audit,dead-letter}/`.
+  - **`$schemaVersion` field** in `references/input-schema.json` — optional, `const: "1.0"`, backward-compatible (absent value still accepted).
 - **`lane.nodeIds`** added to the schema — was supported by code (`topology.js`, `coordinates.js`, rule WF-L1) but missing from the JSON schema. Schema now declares it.
 - **SECURITY.md** at repo root — threat model, deployment guidance, vulnerability reporting.
 - **`ajv` + `ajv-formats`** as direct runtime dependencies (were already transitively present via bpmn-moddle — zero `node_modules` size delta).
