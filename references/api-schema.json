@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpmn-generator.local/api-response.schema.json",
+  "title": "BPMN Generator HTTP API — response contract",
+  "description": "The success-response shape of each POST endpoint in scripts/http-server.js, documented in references/api-reference.md. Validated by .github/scripts/docs-gate.mjs against a response actually produced by the running pipeline — not asserted from memory. Error responses (schema_error / validation_error / diagram_error / internal_error) are simpler and covered in prose in api-reference.md, not schematized here.",
+  "$defs": {
+    "GenerateResponse": {
+      "type": "object",
+      "description": "POST /api/v1/generate — success response.",
+      "required": ["correlationId", "status", "bpmnXml", "svg", "validation", "diagnostics", "callbackStatus"],
+      "properties": {
+        "correlationId": { "type": "string" },
+        "status": { "enum": ["success", "validation_error", "diagram_error"] },
+        "bpmnXml": { "type": "string" },
+        "svg": { "type": "string" },
+        "validation": { "$ref": "#/$defs/Validation" },
+        "diagnostics": { "$ref": "#/$defs/Diagnostics" },
+        "callbackStatus": { "enum": ["not_requested", "pending"] }
+      },
+      "additionalProperties": false
+    },
+
+    "ValidateResponse": {
+      "type": "object",
+      "description": "POST /api/v1/validate — success response. No diagnostics: this endpoint never runs layout.",
+      "required": ["correlationId", "status", "validation"],
+      "properties": {
+        "correlationId": { "type": "string" },
+        "status": { "const": "success" },
+        "validation": { "$ref": "#/$defs/Validation" }
+      },
+      "additionalProperties": false
+    },
+
+    "ImportResponse": {
+      "type": "object",
+      "description": "POST /api/v1/import — success response.",
+      "required": ["correlationId", "status", "logicCore"],
+      "properties": {
+        "correlationId": { "type": "string" },
+        "status": { "const": "success" },
+        "logicCore": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "OrchestrateResponse": {
+      "type": "object",
+      "description": "POST /api/v1/orchestrate — success response. `status` does not currently flip to \"diagram_error\" here (see api-reference.md) — a caller must check diagnostics.ok separately.",
+      "required": ["correlationId", "status", "logicCore", "bpmnXml", "svg", "validation", "diagnostics", "compliance", "history", "iterations"],
+      "properties": {
+        "correlationId": { "type": "string" },
+        "status": { "const": "success" },
+        "logicCore": { "type": "object" },
+        "bpmnXml": { "type": "string" },
+        "svg": { "type": "string" },
+        "validation": { "$ref": "#/$defs/Validation" },
+        "diagnostics": { "$ref": "#/$defs/Diagnostics" },
+        "compliance": { "$ref": "#/$defs/Compliance" },
+        "history": { "type": "array" },
+        "iterations": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "Validation": {
+      "type": "object",
+      "description": "Output of the rule engine (scripts/rules.js runRules). Reasons about the Logic-Core graph — never sees a coordinate. See 'validation vs. diagnostics' in api-reference.md. `xmlWarnings` is only present on the runPipeline path (/generate, /orchestrate) — /validate calls the rule engine directly and never produces it.",
+      "required": ["errors", "warnings", "advisories", "metrics"],
+      "properties": {
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "infos": { "type": "array", "items": { "type": "string" } },
+        "advisories": { "type": "array", "items": { "$ref": "#/$defs/Advisory" } },
+        "metrics": { "type": "object" },
+        "xmlWarnings": { "type": "array", "items": { "type": "string" }, "description": "Round-trip warnings from re-parsing the generated XML through bpmn-moddle (scripts/bpmn-xml.js validateBpmnXml)." }
+      },
+      "additionalProperties": false
+    },
+
+    "Advisory": {
+      "type": "object",
+      "description": "One Optimization Advisory finding (O01-O04, optimize mode only). Field-by-field docs: api-reference.md under POST /api/v1/generate.",
+      "required": ["id", "transform", "targets", "message", "tradeoff", "ref", "judgment"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^O0[1-4]$" },
+        "transform": { "type": "string" },
+        "targets": { "type": "array", "items": { "type": "string" } },
+        "message": { "type": "string" },
+        "tradeoff": { "type": "object" },
+        "ref": { "type": "object" },
+        "judgment": { "type": "boolean" },
+        "pool": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "Diagnostics": {
+      "type": "object",
+      "description": "Output of the post-layout DI integrity check (scripts/di-check.js checkDiagramIntegrity). Inspects the geometry actually produced — never seen by the rule engine.",
+      "required": ["ok", "issues"],
+      "properties": {
+        "ok": { "type": "boolean", "description": "No ERROR-severity finding. WARNING-severity findings (DI05) may still be present." },
+        "issues": { "type": "array", "items": { "$ref": "#/$defs/DiagnosticIssue" } }
+      },
+      "additionalProperties": false
+    },
+
+    "DiagnosticIssue": {
+      "type": "object",
+      "required": ["code", "severity", "message", "elements"],
+      "properties": {
+        "code": { "enum": ["DI01", "DI02", "DI03", "DI04", "DI05", "DI06"] },
+        "severity": { "enum": ["ERROR", "WARNING"] },
+        "message": { "type": "string" },
+        "elements": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "Compliance": {
+      "type": "object",
+      "description": "Output of the compliance agent (scripts/agents/compliance.js) — the rule engine re-run for the orchestrated flow.",
+      "required": ["errors", "warnings", "infos", "violations", "isCompliant"],
+      "properties": {
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "infos": { "type": "array", "items": { "type": "string" } },
+        "violations": { "type": "array", "items": { "type": "string" } },
+        "isCompliant": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
