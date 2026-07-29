@@ -1,0 +1,277 @@
+import { describe, test, expect } from '@jest/globals';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  checkResponseContract,
+  checkNumbers,
+  checkPackageIntegrity,
+  evaluateChangelogNudge,
+  ToolingError,
+} from '../.github/scripts/docs-gate.mjs';
+
+// This file lives in scripts/, so __dirname here is the same absolute path
+// docs-gate.mjs computes as its own SCRIPTS_DIR.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function newAjv() {
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  addFormats(ajv);
+  return ajv;
+}
+
+describe('docs-gate — checkResponseContract', () => {
+  const SCHEMA = {
+    $id: 'https://docs-gate.test/schema.json',
+    $defs: {
+      Thing: {
+        type: 'object',
+        required: ['a'],
+        properties: { a: { type: 'string' } },
+        additionalProperties: false,
+      },
+      Other: {
+        type: 'object',
+        required: ['b'],
+        properties: { b: { type: 'number' } },
+        additionalProperties: false,
+      },
+    },
+  };
+
+  test('responses matching their $defs yield nothing', () => {
+    const findings = checkResponseContract({ Thing: { a: 'x' }, Other: { b: 1 } }, SCHEMA, newAjv());
+    expect(findings).toEqual([]);
+  });
+
+  test('a response missing a required field is a finding naming the $def', () => {
+    const findings = checkResponseContract({ Thing: {} }, SCHEMA, newAjv());
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'response-contract' });
+    expect(findings[0].detail).toContain('Thing');
+  });
+
+  test('an undeclared field is a finding (additionalProperties: false)', () => {
+    // Shape of the real regression this check exists for: a field silently
+    // dropped from a handler shows up as missing-required; a field added to
+    // the handler but never documented shows up here instead.
+    const findings = checkResponseContract({ Thing: { a: 'x', surprise: true } }, SCHEMA, newAjv());
+    expect(findings).toHaveLength(1);
+  });
+
+  test('only the failing response kind is reported, not its passing sibling', () => {
+    const findings = checkResponseContract({ Thing: { a: 'x' }, Other: {} }, SCHEMA, newAjv());
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail.startsWith('Other:')).toBe(true);
+  });
+
+  test('a response key with no matching $def is a tooling error, not a silent skip', () => {
+    // The response-building side and api-schema.json are maintained
+    // separately — a typo in one must stop the build, not read as "nothing to
+    // check".
+    expect(() => checkResponseContract({ Nope: { a: 'x' } }, SCHEMA, newAjv())).toThrow(ToolingError);
+  });
+});
+
+describe('docs-gate — checkNumbers', () => {
+  const base = (overrides = {}) => ({
+    readmeText: 'The rule engine has 33 rules, 5 layers, covering soundness and style.',
+    claudeMdText: '29 top-level scripts live under scripts/. The rule engine has 33 rules, 5 layers.',
+    apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06.',
+    actualRuleCount: 33,
+    actualTopLevelScriptCount: 29,
+    actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06'],
+    ...overrides,
+  });
+
+  test('matching numbers and codes yield nothing', () => {
+    expect(checkNumbers(base())).toEqual([]);
+  });
+
+  test('a stale rule count in README.md is a finding', () => {
+    const findings = checkNumbers(base({ readmeText: 'The rule engine has 32 rules, 5 layers.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'rule-count' });
+    expect(findings[0].detail).toContain('README.md');
+  });
+
+  test('a stale rule count in CLAUDE.md is a finding', () => {
+    const findings = checkNumbers(base({ claudeMdText: '29 top-level scripts. The rule engine has 34 rules, 5 layers.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('CLAUDE.md');
+  });
+
+  test('an unrelated "N rules" mention does not false-positive', () => {
+    // Regression pin: README.md's "WF-Net (3 rules)" mention (WF01-WF03) once
+    // matched a broader /\d+ rules\b/ and was wrongly compared to the 33-rule
+    // engine total. Only the "<N> rules, 5 layers" phrasing is a claim about
+    // the whole engine.
+    const findings = checkNumbers(base({
+      readmeText: 'WF-Net soundness (3 rules) is opt-in. The rule engine has 33 rules, 5 layers.',
+    }));
+    expect(findings).toEqual([]);
+  });
+
+  test('a missing "N top-level scripts" claim in CLAUDE.md is a finding', () => {
+    const findings = checkNumbers(base({ claudeMdText: 'The rule engine has 33 rules, 5 layers.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'script-count' });
+    expect(findings[0].detail).toContain('wording changed');
+  });
+
+  test('a stale top-level script count is a finding', () => {
+    const findings = checkNumbers(base({ claudeMdText: '28 top-level scripts. 33 rules, 5 layers.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'script-count' });
+    expect(findings[0].detail).toContain('28');
+  });
+
+  test('a DI code emitted by di-check.js but undocumented is a finding', () => {
+    const findings = checkNumbers(base({ actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06', 'DI07'] }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'di-codes' });
+    expect(findings[0].detail).toContain('DI07');
+    expect(findings[0].detail).toContain('not documented');
+  });
+
+  test('a DI code documented but not emitted is a finding', () => {
+    const findings = checkNumbers(base({ apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06, DI09.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'di-codes' });
+    expect(findings[0].detail).toContain('DI09');
+    expect(findings[0].detail).toContain('does not emit');
+  });
+});
+
+// checkPackageIntegrity reads real file contents from SCRIPTS_DIR, which
+// docs-gate.mjs computes from its own location, not from an argument — it is
+// not pure in its two parameters alone. These tests exercise it against real
+// files already in this repo instead of synthetic fixtures.
+describe('docs-gate — checkPackageIntegrity', () => {
+  test('a dual-path fallback resolves when the primary target ships', () => {
+    // schema-gate.js reads references/input-schema.json two ways: a published
+    // in-package path and a dev-checkout fallback one level up. The fallback
+    // is SUPPOSED to escape the package (see the function's own doc comment)
+    // — only report when NEITHER candidate resolves.
+    const findings = checkPackageIntegrity(
+      ['schema-gate.js', 'references/input-schema.json'],
+      new Set([join(__dirname, 'schema-gate.js')]),
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('reproduces the original publish-blocker: primary target missing, only the escaping fallback resolves', () => {
+    // Before the prepack fix, references/input-schema.json never shipped —
+    // this is the exact state that made a fresh install of the published
+    // package throw on first import.
+    const findings = checkPackageIntegrity(
+      ['schema-gate.js'],
+      new Set([join(__dirname, 'schema-gate.js')]),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'package-integrity' });
+    expect(findings[0].detail).toContain('schema-gate.js');
+  });
+
+  test('a target shipped via a plain package.json "files" entry resolves', () => {
+    const findings = checkPackageIntegrity(
+      ['utils.js', 'config.json'],
+      new Set([join(__dirname, 'utils.js')]),
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a file unreachable from package.json "exports" is never scanned, even if its target is missing', () => {
+    // robustness/cli.js reads robustness/config.json and robustness/seed-catalog.json
+    // at __dirname-relative paths that are absent from packedFiles below — a
+    // finding here would be correct in isolation, but robustness/ is CLI
+    // tooling invoked from a checkout, never reachable from a package.json
+    // export. This pins the reachability-scoping decision the check exists to enforce.
+    const findings = checkPackageIntegrity(['robustness/cli.js'], new Set());
+    expect(findings).toEqual([]);
+  });
+
+  test('.test.js files are never scanned regardless of packed/reachable state', () => {
+    const findings = checkPackageIntegrity(
+      ['schema-gate.test.js'],
+      new Set([join(__dirname, 'schema-gate.test.js')]),
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a non-.js packed file is skipped without inspection', () => {
+    const findings = checkPackageIntegrity(['config.json'], new Set([join(__dirname, 'config.json')]));
+    expect(findings).toEqual([]);
+  });
+});
+
+describe('docs-gate — evaluateChangelogNudge', () => {
+  test('no conventional feat/fix/perf commits in range: no nudge', () => {
+    const r = evaluateChangelogNudge({
+      subjects: ['Merge pull request #29 from feat-branch', 'wip: exploring'],
+      changedFiles: ['scripts/pipeline.js'],
+      changelogUnreleasedText: '',
+    });
+    expect(r).toEqual({ nudge: false });
+  });
+
+  test('conventional commits present but none touch scripts/: no nudge', () => {
+    const r = evaluateChangelogNudge({
+      subjects: ['feat(docs): add a diagram'],
+      changedFiles: ['docs/readme.md'],
+      changelogUnreleasedText: '',
+    });
+    expect(r).toEqual({ nudge: false });
+  });
+
+  test('scripts/ touched and CHANGELOG.md already has [Unreleased] content: no nudge', () => {
+    const r = evaluateChangelogNudge({
+      subjects: ['feat(gate): add docs-gate check'],
+      changedFiles: ['scripts/pipeline.js', 'CHANGELOG.md'],
+      changelogUnreleasedText: '### Added\n- docs-gate check\n',
+    });
+    expect(r).toEqual({ nudge: false });
+  });
+
+  test('scripts/ touched, CHANGELOG.md touched but [Unreleased] is still empty: nudges', () => {
+    // A junk edit to CHANGELOG.md (here: whitespace-only [Unreleased]) must
+    // not read as "handled" — the nudge checks content, not "file touched".
+    const r = evaluateChangelogNudge({
+      subjects: ['feat(gate): add docs-gate check'],
+      changedFiles: ['scripts/pipeline.js', 'CHANGELOG.md'],
+      changelogUnreleasedText: '   \n  ',
+    });
+    expect(r.nudge).toBe(true);
+    expect(r.reason).toBe('CHANGELOG.md touched but [Unreleased] is still empty');
+  });
+
+  test('scripts/ touched, CHANGELOG.md not touched: nudges with a draft grouped by type, non-conventional subjects ignored', () => {
+    const r = evaluateChangelogNudge({
+      subjects: [
+        'feat(gate): add docs-gate check',
+        'fix(http): pass diagnostics through orchestrate',
+        'perf(layout): skip redundant elk re-layout on cache hit',
+        'feat(api)!: change the generate response shape',
+        'chore: bump deps',
+        'Merge pull request #30',
+      ],
+      changedFiles: ['scripts/http-server.js', '.github/scripts/docs-gate.mjs'],
+      changelogUnreleasedText: '',
+    });
+    expect(r.nudge).toBe(true);
+    expect(r.reason).toBe('CHANGELOG.md not touched');
+    expect(r.commitCount).toBe(4); // chore and Merge are not feat/fix/perf
+    expect(r.draft).toBe([
+      '### Added',
+      '- add docs-gate check',
+      '- change the generate response shape',
+      '',
+      '### Fixed',
+      '- pass diagnostics through orchestrate',
+      '',
+      '### Changed',
+      '- skip redundant elk re-layout on cache hit',
+    ].join('\n'));
+  });
+});

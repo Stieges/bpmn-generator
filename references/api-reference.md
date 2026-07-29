@@ -51,12 +51,12 @@ None of this is applied automatically; turning an advisory into an actual model 
   "status": "success",
   "bpmnXml": "<?xml ...",
   "svg": "<svg ...",
-  "validation": { "errors": [], "warnings": [], "advisories": [], "metrics": {} },
+  "validation": { "errors": [], "warnings": [], "advisories": [], "metrics": {}, "xmlWarnings": [] },
   "diagnostics": { "ok": true, "issues": [] },
   "callbackStatus": "not_requested"
 }
 ```
-`status` is `"validation_error"` when `validation.errors` is non-empty, or `"diagram_error"` when `validation.errors` is empty but `diagnostics.ok` is `false` (validation takes priority — a request is never both at once). `callbackStatus` is `"pending"` when a `callbackUrl` was accepted. `validation.advisories` is populated only in `mode: "optimize"`. See "validation vs. diagnostics" below.
+`status` is `"validation_error"` when `validation.errors` is non-empty, or `"diagram_error"` when `validation.errors` is empty but `diagnostics.ok` is `false` (validation takes priority — a request is never both at once). `callbackStatus` is `"pending"` when a `callbackUrl` was accepted. `validation.advisories` is populated only in `mode: "optimize"`. `validation.xmlWarnings` comes from re-parsing the generated XML through bpmn-moddle (a round-trip check on the generator's own output, distinct from the rule engine) — present here and on `/orchestrate`, absent on `/validate`, which never generates XML. See "validation vs. diagnostics" below.
 
 **Errors:**
 - `400 { correlationId, status: "schema_error", errors: [...] }` — Logic-Core failed the schema gate.

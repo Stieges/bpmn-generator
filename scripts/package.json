@@ -1,6 +1,6 @@
 {
   "name": "bpmn-generator",
-  "version": "3.1.0",
+  "version": "3.6.0",
   "description": "Enterprise BPMN 2.0 Generator — JSON Logic-Core → ElkJS Layout → OMG-compliant XML + SVG",
   "type": "module",
   "license": "MIT",
@@ -31,6 +31,7 @@
     "config.json",
     "agents/",
     "robustness/",
+    "references/",
     "!**/*.test.js"
   ],
   "exports": {
@@ -43,7 +44,8 @@
     "generate": "node pipeline.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache",
     "build:skill": "node build-skill.mjs",
-    "demo": "AUDIT_LOG_PATH=./audit/bpmn-generator.jsonl node http-server.js"
+    "demo": "AUDIT_LOG_PATH=./audit/bpmn-generator.jsonl node http-server.js",
+    "prepack": "node prepack-copy-references.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

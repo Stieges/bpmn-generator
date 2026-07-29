@@ -3,12 +3,18 @@
  * references/prompt-template.md, shared by the modeler and chat agents.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const promptPath = join(__dirname, '..', '..', 'references', 'prompt-template.md');
+// Published package: prepack-copy-references.mjs copies prompt-template.md into
+// scripts/references/, one level up from agents/. Dev checkout / Skill bundle:
+// references/ is a sibling of scripts/, two levels up from agents/.
+const publishedPromptPath = join(__dirname, '..', 'references', 'prompt-template.md');
+const promptPath = existsSync(publishedPromptPath)
+  ? publishedPromptPath
+  : join(__dirname, '..', '..', 'references', 'prompt-template.md');
 
 let _raw = null;
 function loadRaw() {

@@ -1,0 +1,57 @@
+name: Docs Gate
+
+# Checks documented claims (the HTTP response contract, rule/script counts, DI
+# codes, npm package contents) against the running code, instead of trusting
+# the prose. Background and the three proof checks + one nudge check:
+# .github/scripts/docs-gate.mjs
+#
+# Runs on push too, not just pull_request: a merge that skips PR checks (or a
+# direct push to master) is exactly the kind of drift this exists to catch —
+# the CHANGELOG gap this gate was written after happened over six releases,
+# not one bad PR.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-gate:
+    name: Docs gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The changelog-nudge check reads `git log`/`git diff` over the PR's
+          # commit range — a shallow checkout would not contain the base commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      # A full install, unlike dependency-audit.yml's lockfile-only gate: this
+      # one actually imports and runs pipeline.js/orchestrator.js to build a
+      # real response for the response-contract check.
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci
+
+      - name: Run the gate (push)
+        if: github.event_name != 'pull_request'
+        run: node .github/scripts/docs-gate.mjs --summary
+
+      - name: Run the gate (pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          node .github/scripts/docs-gate.mjs \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.sha }}" \
+            --summary
