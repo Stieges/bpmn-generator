@@ -7,7 +7,7 @@
  */
 
 import { BpmnModdle } from 'bpmn-moddle';
-import { isEvent, isGateway, isBoundaryEvent, bpmnXmlTag } from './types.js';
+import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, bpmnXmlTag } from './types.js';
 import { rn, LANE_HEADER_W, LABEL_DISTANCE } from './utils.js';
 import { inferGatewayDirections } from './topology.js';
 import { inferEventMarker } from './icons.js';
@@ -29,6 +29,51 @@ function laneHeaderW(poolCoords, poolKey) {
 /** Helper: create a moddle element with shorthand */
 function create(type, attrs = {}) {
   return moddle.create(type, attrs);
+}
+
+/**
+ * The identity attributes for a node, with the label routed to whichever field
+ * the element's BPMN class actually has.
+ *
+ * Logic-Core carries every label in `name`, which is right for Logic-Core — one
+ * field for "the caption". BPMN is not that uniform: Artifacts extend BaseElement,
+ * which declares only `id`, so `name` is illegal on them (OMG Semantic.xsd;
+ * bpmn-moddle's descriptor agrees). moddle does not reject the unknown attribute,
+ * it parks it in $attrs and writes it straight back out — so the mistake costs no
+ * error at write time and shows up only as an empty annotation in the modeller.
+ *
+ * Translating here, in ONE place used by both the top-level and the subprocess-child
+ * path, is deliberate: the two call sites carried the same literal before, which is
+ * how the defect reached both.
+ */
+function buildNodeAttrs(node) {
+  if (node.type === 'textAnnotation') {
+    // `text` has no isAttr in the descriptor → serialises as a <bpmn:text> child.
+    return { id: node.id, text: node.name || '' };
+  }
+  if (node.type === 'group') {
+    // The label lives in a CategoryValue the group points at; wired up by the
+    // caller, which owns the definitions-level rootElements.
+    return { id: node.id };
+  }
+  return { id: node.id, name: node.name || '' };
+}
+
+/**
+ * A Group's label is not on the Group: it sits in a CategoryValue held by a
+ * Category, which is a rootElement, and the Group references it. Returns the
+ * CategoryValue to point `categoryValueRef` at, plus the Category to publish.
+ */
+function buildCategoryForGroup(node) {
+  const categoryValue = create('bpmn:CategoryValue', {
+    id: `CategoryValue_${node.id}`,
+    value: node.name,
+  });
+  const category = create('bpmn:Category', {
+    id: `Category_${node.id}`,
+    categoryValue: [categoryValue],
+  });
+  return { category, categoryValue };
 }
 
 /**
@@ -172,11 +217,15 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
 
   const flowNodeMap = new Map();
   const flowElements = [];
+  // tProcess is an xsd:sequence — laneSet*, flowElement*, artifact* — so
+  // artifacts have to be collected separately and appended after the flow.
+  const artifacts = [];
+  const categories = [];
 
   // Create flow nodes
   for (const node of nodes) {
     const type = moddleType(node.type);
-    const attrs = { id: node.id, name: node.name || '' };
+    const attrs = buildNodeAttrs(node);
 
     // Gateway direction
     if (isGateway(node.type) && node._direction) {
@@ -247,7 +296,7 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
       const childNodeMap = new Map();
       for (const child of node.nodes) {
         const childType = moddleType(child.type);
-        const childEl = create(childType, { id: child.id, name: child.name || '' });
+        const childEl = create(childType, buildNodeAttrs(child));
         const childEventDef = buildEventDefinition(child, topLevelDefsMap);
         if (childEventDef && childEl.$descriptor.properties.some(p => p.name === 'eventDefinitions')) {
           childEl.get('eventDefinitions').push(childEventDef);
@@ -269,7 +318,16 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     }
 
     flowNodeMap.set(node.id, el);
-    flowElements.push(el);
+    if (isBpmnArtifact(node.type)) {
+      if (node.type === 'group' && node.name) {
+        const { category, categoryValue } = buildCategoryForGroup(node);
+        el.categoryValueRef = categoryValue;
+        categories.push(category);
+      }
+      artifacts.push(el);
+    } else {
+      flowElements.push(el);
+    }
   }
 
   // Resolve boundary event attachedToRef
@@ -361,12 +419,25 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     processEl.get('flowElements').push(fe);
   }
 
-  return { process: processEl, flowNodeMap };
+  // …then the artifacts, keeping the tProcess sequence intact.
+  for (const artifact of artifacts) {
+    processEl.get('artifacts').push(artifact);
+  }
+
+  return { process: processEl, flowNodeMap, categories };
 }
 
 function buildLane(lane, nodes, flowNodeMap) {
   const laneEl = create('bpmn:Lane', { id: lane.id, name: lane.name || lane.id });
-  const refs = nodes.filter(n => n.lane === lane.id).map(n => flowNodeMap.get(n.id)).filter(Boolean);
+  // Lane#flowNodeRef is typed FlowNode. Artifacts are not FlowNodes at all, and
+  // data references are FlowElements but still not FlowNodes — listing either
+  // makes the lane reference something it is not allowed to hold. Which lane an
+  // annotation sits in visually is a geometry question, and geometry lives in
+  // coordMap, not here.
+  const refs = nodes
+    .filter(n => n.lane === lane.id && !isBpmnArtifact(n.type)
+      && n.type !== 'dataObjectReference' && n.type !== 'dataStoreReference')
+    .map(n => flowNodeMap.get(n.id)).filter(Boolean);
   for (const ref of refs) {
     laneEl.get('flowNodeRef').push(ref);
   }
@@ -669,12 +740,14 @@ async function generateBpmnXml(lc, coordMap) {
   // 2. Build processes
   const allFlowNodeMaps = new Map();
   const processElements = [];
+  const categoryElements = [];
   for (const proc of processes) {
     // Need to infer gateway directions before building default flow map
     inferGatewayDirections(proc.nodes || [], proc.edges || []);
     const defaultFlowMap = buildDefaultFlowMap(proc);
-    const { process: processEl, flowNodeMap } = buildProcess(proc, defaultFlowMap, topLevelDefsMap);
+    const { process: processEl, flowNodeMap, categories } = buildProcess(proc, defaultFlowMap, topLevelDefsMap);
     processElements.push(processEl);
+    categoryElements.push(...categories);
     for (const [k, v] of flowNodeMap) allFlowNodeMaps.set(k, v);
     // Also register sequence flows
     for (const fe of processEl.get('flowElements')) {
@@ -733,9 +806,12 @@ async function generateBpmnXml(lc, coordMap) {
   // 4. Associations (at process level)
   for (const assoc of associations) {
     for (const processEl of processElements) {
-      const flowEls = processEl.get('flowElements');
-      const srcInProc = flowEls.some(fe => fe.id === assoc.source);
-      const tgtInProc = flowEls.some(fe => fe.id === assoc.target);
+      // Search flowElements AND artifacts: an association's whole job is to tie
+      // an annotation to something, and annotations live in artifacts. Looking
+      // in flowElements alone would drop exactly the associations that matter.
+      const owned = [...processEl.get('flowElements'), ...processEl.get('artifacts')];
+      const srcInProc = owned.some(fe => fe.id === assoc.source);
+      const tgtInProc = owned.some(fe => fe.id === assoc.target);
       if (srcInProc || tgtInProc) {
         const dir = assoc.directed ? 'One' : undefined;
         const assocEl = create('bpmn:Association', {
@@ -769,6 +845,10 @@ async function generateBpmnXml(lc, coordMap) {
 
   // Top-level definitions first
   for (const el of topLevelElements) rootElements.push(el);
+
+  // Categories carry the Groups' labels and must be resolvable when the
+  // Groups' categoryValueRef is read, so they go in ahead of the processes.
+  for (const category of categoryElements) rootElements.push(category);
 
   // Collaboration before processes
   if (collaboration) rootElements.push(collaboration);

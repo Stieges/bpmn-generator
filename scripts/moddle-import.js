@@ -294,6 +294,29 @@ function convertProcess(proc, partMap) {
     nodes.push(node);
   }
 
+  // Artifacts. bpmn-moddle parks TextAnnotation and Group in proc.artifacts, not
+  // in proc.flowElements — they are Artifacts, not FlowElements — so the loop
+  // above never sees them. Skipping this dropped every annotation and group on
+  // import and left their associations pointing at ids that no longer existed.
+  for (const el of proc.artifacts || []) {
+    const type = shortType(el.$type);
+    if (type !== 'textAnnotation' && type !== 'group') continue;
+
+    // Logic-Core keeps every label in `name`; BPMN splits it per artifact class.
+    // The fallback reads $attrs because `name` is not in the Artifact descriptor:
+    // moddle cannot map it onto the element and parks it there instead — the very
+    // behaviour that let the old, invalid output pass unnoticed. Files written
+    // before the fix are recovered through exactly that channel.
+    let name = el.name || el.$attrs?.name || '';
+    if (type === 'textAnnotation') name = el.text || name;
+    if (type === 'group') name = el.categoryValueRef?.value || name;
+
+    const node = { id: el.id, type, name };
+    if (nodeLaneMap[node.id]) node.lane = nodeLaneMap[node.id];
+    if (el.documentation?.[0]?.text) node.documentation = el.documentation[0].text;
+    nodes.push(node);
+  }
+
   // Sequence flows
   const edges = [];
   for (const el of proc.flowElements || []) {
