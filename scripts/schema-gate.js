@@ -1,11 +1,18 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const schemaPath = join(__dirname, '..', 'references', 'input-schema.json');
+// Published package: prepack-copy-references.mjs copies the schema in alongside
+// this file (references/ cannot be reached from a parent-relative "files" entry
+// in package.json — npm silently drops those). Dev checkout / Skill bundle:
+// references/ is a sibling of scripts/, one level up.
+const publishedSchemaPath = join(__dirname, 'references', 'input-schema.json');
+const schemaPath = existsSync(publishedSchemaPath)
+  ? publishedSchemaPath
+  : join(__dirname, '..', 'references', 'input-schema.json');
 const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
