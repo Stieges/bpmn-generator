@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **Gap notice.** No entries were recorded here between `[3.3.0]` and today, although
+## [3.6.0] — 2026-07-29
+
+> **Gap notice.** No entries were recorded here between `[3.3.0]` and `[3.6.0]`, although
 > six releases and several feature merges shipped in that time: v3.4 (#15), v3.5 (#16),
 > v3.5b (#17), v3.5c/v3.5d (#18), plus PRs #19, #21, #23, #24, #25 and #27. Those
 > entries are not reconstructed retroactively — the pull requests are the record for
-> that period. The docs gate added in a later change exists to stop this recurring.
+> that period. The docs gate added below exists to stop this recurring.
 
 ### Added
 - **DI integrity check** (`scripts/di-check.js`) — a post-layout pass over the produced
@@ -36,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corridor) instead of being improvised independently by each renderer.
 - Fixtures `tests/fixtures/realistic-collaboration.json` (six participants, boundary
   event, black box, message flows) and `tests/fixtures/all-element-classes.json`.
+- **Docs gate** (`.github/scripts/docs-gate.mjs`, CI) — validates the HTTP response
+  contract (`references/api-schema.json`), rule/script counts, DI codes, and npm package
+  integrity against the running code instead of trusting the prose; see `CLAUDE.md` →
+  Docs gate.
 
 ### Fixed
 - Participant id collision when a collaboration had more than one laned pool (all
@@ -63,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drill-down plus `optimize` returned no advisories.
 - `/api/v1/orchestrate` dropped `diagnostics` from its response even though the
   orchestrator computed it and the MCP `orchestrate_bpmn` tool already returned it.
+- Published npm package threw on first import — `schema-gate.js` and
+  `agents/prompt-sections.js` each read a file from `references/`, outside the package
+  root, and `package.json`'s `files` cannot reach outside it. Fixed with a `prepack` copy
+  step plus a dual-path runtime fallback.
 
 ### Changed
 - `diagnostics.ok` means "no ERROR-severity finding" — WARNING-severity findings (DI05)

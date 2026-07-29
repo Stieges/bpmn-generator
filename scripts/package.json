@@ -1,6 +1,6 @@
 {
   "name": "bpmn-generator",
-  "version": "3.1.0",
+  "version": "3.6.0",
   "description": "Enterprise BPMN 2.0 Generator — JSON Logic-Core → ElkJS Layout → OMG-compliant XML + SVG",
   "type": "module",
   "license": "MIT",
