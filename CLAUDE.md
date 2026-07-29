@@ -138,6 +138,8 @@ membership instead of coordinates.
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
 | `scripts/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
+| `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them; `schema-gate.js`/`agents/prompt-sections.js` fall back to the repo-root copy when the published one is absent |
+| `scripts/build-skill.mjs` | `npm run build:skill` — bundles `SKILL.md` + `references/` + `scripts/` into `bpmn-generator-v3.skill` (gitignored, rebuilt on demand) |
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
 | `references/logic-core-schema.md` | Schema documentation (prose + examples) |
 | `references/prompt-template.md` | LLM prompts + 5 enterprise few-shot patterns |
@@ -377,3 +379,13 @@ node mcp-bpmn-server.js
 - Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right
 - Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, which is why DI05 is a WARNING
 - The DI check (`di-check.js`) covers participants, lane bands, node containment and message flow crossings. It says nothing about sequence-flow crossings, label collisions or readability
+- A single-process Logic-Core (no `pools`) may omit `id` — `input-schema.json`'s `SingleProcess`
+  branch doesn't require it, unlike `Pool`. `bpmn-xml.js` has no fallback for that case, and the
+  result is a `bpmnElement="undefined"` reference in the DI, plus (with lanes present) a phantom
+  black-box pool on re-import and a `TypeError` in `dot.js` on the public `logicCoreToDot` path. No
+  fixture or test exercises this branch end-to-end (tracked in #37; `--strict` now surfaces the
+  `unresolved reference <undefined>` warning this produces, but nothing fixes it)
+- No ESLint — CLAUDE.md's own "Do NOT" rules (no CommonJS, no hard-coded constants where
+  `config.json` applies, etc.) are enforced by review convention, not tooling (#32)
+- No test coverage collection or threshold gate — `npm test -- --coverage` works, nothing runs it
+  in CI or reports the result (#33)
