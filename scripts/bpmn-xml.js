@@ -195,6 +195,121 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
 }
 
 /**
+ * Turn one Logic-Core node into its fully enriched moddle element.
+ *
+ * EVERY node goes through here — top-level nodes and the children of an expanded
+ * subprocess alike, at any nesting depth. That is the whole point of the function
+ * existing: the child path used to be a hand-rolled subset of the top-level loop
+ * (id/name plus event definitions, nothing else), so `documentation`, loop and
+ * multi-instance characteristics, the script body, `calledElement`,
+ * `scriptFormat`, `gatewayDirection` and every grandchild were dropped in
+ * silence. Silence is the operative word: bpmn-moddle reports attributes it does
+ * not know, never fields that never arrived, so nothing complained.
+ *
+ * Adding a new per-node field? Add it here and both paths get it. Adding it to a
+ * caller instead is how the divergence came back the last two times.
+ *
+ * `registerNode` collects (node, element) pairs for the callers that need a
+ * second pass — currently boundary-event attachedToRef, which can only be
+ * resolved once every element exists.
+ */
+function buildFlowNode(node, topLevelDefsMap, registerNode) {
+  const attrs = buildNodeAttrs(node);
+
+  // Gateway direction
+  if (isGateway(node.type) && node._direction) {
+    attrs.gatewayDirection = node._direction;
+  }
+
+  // Boundary event — attachedToRef is resolved later, once all nodes exist
+  if (isBoundaryEvent(node)) {
+    if (node.cancelActivity === false) attrs.cancelActivity = false;
+  }
+
+  // Special attributes
+  if (node.isCompensation) attrs.isForCompensation = true;
+  if (node.isCollection && node.type === 'dataObjectReference') attrs.isCollection = true;
+  if (node.isEventSubProcess && node.type === 'subProcess') attrs.triggeredByEvent = true;
+  if (node.calledElement && node.type === 'callActivity') attrs.calledElement = node.calledElement;
+  if (node.scriptFormat && node.type === 'scriptTask') attrs.scriptFormat = node.scriptFormat;
+  if (node.implementation) attrs.implementation = node.implementation;
+  if (node.type === 'eventBasedGateway') {
+    if (node.eventGatewayType) attrs.eventGatewayType = node.eventGatewayType;
+    if (node.instantiate) attrs.instantiate = true;
+  }
+
+  const el = create(moddleType(node.type), attrs);
+
+  // Documentation
+  if (node.documentation) {
+    el.get('documentation').push(create('bpmn:Documentation', { text: node.documentation }));
+  }
+
+  // Event definitions (only Event types have this property, not SubProcess)
+  const eventDef = buildEventDefinition(node, topLevelDefsMap);
+  if (eventDef && el.$descriptor.properties.some(p => p.name === 'eventDefinitions')) {
+    el.get('eventDefinitions').push(eventDef);
+  }
+
+  // Loop / Multi-instance
+  if (node.loopType) {
+    const loopAttrs = {};
+    if (typeof node.loopType === 'object') {
+      if (node.loopType.testBefore) loopAttrs.testBefore = true;
+      if (node.loopType.loopMaximum != null) loopAttrs.loopMaximum = node.loopType.loopMaximum;
+      if (node.loopType.loopCondition) {
+        loopAttrs.loopCondition = create('bpmn:FormalExpression', { body: node.loopType.loopCondition });
+      }
+    }
+    el.loopCharacteristics = create('bpmn:StandardLoopCharacteristics', loopAttrs);
+  } else if (node.multiInstance) {
+    const mi = typeof node.multiInstance === 'object' ? node.multiInstance : { type: node.multiInstance };
+    const miAttrs = { isSequential: mi.type === 'sequential' };
+    if (mi.loopCardinality) {
+      miAttrs.loopCardinality = create('bpmn:FormalExpression', { body: mi.loopCardinality });
+    }
+    if (mi.completionCondition) {
+      miAttrs.completionCondition = create('bpmn:FormalExpression', { body: mi.completionCondition });
+    }
+    el.loopCharacteristics = create('bpmn:MultiInstanceLoopCharacteristics', miAttrs);
+  }
+
+  // Script body
+  if (node.type === 'scriptTask' && node.script) {
+    el.script = node.script;
+  }
+
+  registerNode(node, el);
+
+  // Children of a subprocess. Deliberately NOT gated on isExpanded: whether a
+  // subprocess is drawn open or collapsed is a DI question (BPMNShape's
+  // isExpanded), while its content is semantics and always belongs in the file.
+  // Gating the content made "collapsed but drillable" — a perfectly legal BPMN
+  // state — impossible to express, and produced an empty box instead.
+  if (node.nodes?.length) {
+    inferGatewayDirections(node.nodes, node.edges || []);
+    const childMap = new Map();
+    for (const child of node.nodes) {
+      const childEl = buildFlowNode(child, topLevelDefsMap, registerNode);
+      childMap.set(child.id, childEl);
+      el.get('flowElements').push(childEl);
+    }
+    for (const subEdge of (node.edges || [])) {
+      const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
+      const seAttrs = { id: seid };
+      if (subEdge.label) seAttrs.name = subEdge.label;
+      seAttrs.sourceRef = childMap.get(subEdge.source);
+      seAttrs.targetRef = childMap.get(subEdge.target);
+      const seFlow = create('bpmn:SequenceFlow', seAttrs);
+      el.get('flowElements').push(seFlow);
+      registerNode({ id: seid, _isEdge: true }, seFlow);
+    }
+  }
+
+  return el;
+}
+
+/**
  * Build a single BPMN process with all flow elements.
  * Returns { process, flowNodeMap } where flowNodeMap maps node.id → moddle element.
  */
@@ -222,102 +337,18 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
   const artifacts = [];
   const categories = [];
 
+  // Every node the process contains, at any depth, paired with its element —
+  // boundary-event resolution below needs the pairs, and it must reach nested
+  // hosts too, not just the top level.
+  const builtNodes = [];
+  const registerNode = (node, el) => {
+    flowNodeMap.set(node.id, el);
+    if (!node._isEdge) builtNodes.push({ node, el });
+  };
+
   // Create flow nodes
   for (const node of nodes) {
-    const type = moddleType(node.type);
-    const attrs = buildNodeAttrs(node);
-
-    // Gateway direction
-    if (isGateway(node.type) && node._direction) {
-      attrs.gatewayDirection = node._direction;
-    }
-
-    // Boundary event
-    if (isBoundaryEvent(node)) {
-      // attachedToRef will be resolved after all nodes are created
-      if (node.cancelActivity === false) attrs.cancelActivity = false;
-    }
-
-    // Special attributes
-    if (node.isCompensation) attrs.isForCompensation = true;
-    if (node.isCollection && node.type === 'dataObjectReference') attrs.isCollection = true;
-    if (node.isEventSubProcess && node.type === 'subProcess') attrs.triggeredByEvent = true;
-    if (node.calledElement && node.type === 'callActivity') attrs.calledElement = node.calledElement;
-    if (node.scriptFormat && node.type === 'scriptTask') attrs.scriptFormat = node.scriptFormat;
-    if (node.implementation) attrs.implementation = node.implementation;
-    if (node.type === 'eventBasedGateway') {
-      if (node.eventGatewayType) attrs.eventGatewayType = node.eventGatewayType;
-      if (node.instantiate) attrs.instantiate = true;
-    }
-
-    const el = create(type, attrs);
-
-    // Documentation
-    if (node.documentation) {
-      el.get('documentation').push(create('bpmn:Documentation', { text: node.documentation }));
-    }
-
-    // Event definitions (only Event types have this property, not SubProcess)
-    const eventDef = buildEventDefinition(node, topLevelDefsMap);
-    if (eventDef && el.$descriptor.properties.some(p => p.name === 'eventDefinitions')) {
-      el.get('eventDefinitions').push(eventDef);
-    }
-
-    // Loop / Multi-instance
-    if (node.loopType) {
-      const loopAttrs = {};
-      if (typeof node.loopType === 'object') {
-        if (node.loopType.testBefore) loopAttrs.testBefore = true;
-        if (node.loopType.loopMaximum != null) loopAttrs.loopMaximum = node.loopType.loopMaximum;
-        if (node.loopType.loopCondition) {
-          loopAttrs.loopCondition = create('bpmn:FormalExpression', { body: node.loopType.loopCondition });
-        }
-      }
-      el.loopCharacteristics = create('bpmn:StandardLoopCharacteristics', loopAttrs);
-    } else if (node.multiInstance) {
-      const mi = typeof node.multiInstance === 'object' ? node.multiInstance : { type: node.multiInstance };
-      const miAttrs = { isSequential: mi.type === 'sequential' };
-      if (mi.loopCardinality) {
-        miAttrs.loopCardinality = create('bpmn:FormalExpression', { body: mi.loopCardinality });
-      }
-      if (mi.completionCondition) {
-        miAttrs.completionCondition = create('bpmn:FormalExpression', { body: mi.completionCondition });
-      }
-      el.loopCharacteristics = create('bpmn:MultiInstanceLoopCharacteristics', miAttrs);
-    }
-
-    // Script body
-    if (node.type === 'scriptTask' && node.script) {
-      el.script = node.script;
-    }
-
-    // Expanded SubProcess: add child elements
-    if (node.isExpanded && node.nodes && node.nodes.length > 0) {
-      const childNodeMap = new Map();
-      for (const child of node.nodes) {
-        const childType = moddleType(child.type);
-        const childEl = create(childType, buildNodeAttrs(child));
-        const childEventDef = buildEventDefinition(child, topLevelDefsMap);
-        if (childEventDef && childEl.$descriptor.properties.some(p => p.name === 'eventDefinitions')) {
-          childEl.get('eventDefinitions').push(childEventDef);
-        }
-        childNodeMap.set(child.id, childEl);
-        el.get('flowElements').push(childEl);
-        flowNodeMap.set(child.id, childEl);
-      }
-      for (const subEdge of (node.edges || [])) {
-        const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
-        const seAttrs = { id: seid };
-        if (subEdge.label) seAttrs.name = subEdge.label;
-        seAttrs.sourceRef = childNodeMap.get(subEdge.source);
-        seAttrs.targetRef = childNodeMap.get(subEdge.target);
-        const seFlow = create('bpmn:SequenceFlow', seAttrs);
-        el.get('flowElements').push(seFlow);
-        flowNodeMap.set(seid, seFlow);
-      }
-    }
-
-    flowNodeMap.set(node.id, el);
+    const el = buildFlowNode(node, topLevelDefsMap, registerNode);
     if (isBpmnArtifact(node.type)) {
       if (node.type === 'group' && node.name) {
         const { category, categoryValue } = buildCategoryForGroup(node);
@@ -330,13 +361,14 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     }
   }
 
-  // Resolve boundary event attachedToRef
-  for (const node of nodes) {
-    if (isBoundaryEvent(node) && node.attachedTo) {
-      const el = flowNodeMap.get(node.id);
-      const attachedEl = flowNodeMap.get(node.attachedTo);
-      if (el && attachedEl) el.attachedToRef = attachedEl;
-    }
+  // Resolve boundary event attachedToRef. Walks builtNodes, not proc.nodes: a
+  // boundary event on a subprocess CHILD is just as valid, and iterating the top
+  // level only left it without the attribute the OMG schema makes mandatory —
+  // invalid BPMN that every check reported green.
+  for (const { node, el } of builtNodes) {
+    if (!isBoundaryEvent(node) || !node.attachedTo) continue;
+    const attachedEl = flowNodeMap.get(node.attachedTo);
+    if (attachedEl) el.attachedToRef = attachedEl;
   }
 
   // Create sequence flows
