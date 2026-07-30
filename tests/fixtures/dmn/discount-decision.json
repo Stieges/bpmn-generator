@@ -1,0 +1,80 @@
+{
+  "id": "Definitions_discount",
+  "name": "Discount decision",
+  "namespace": "http://bpmn-generator.local/dmn/discount",
+  "documentation": "Reference fixture: a well-formed decision model exercising every node type and every requirement kind.",
+  "nodes": [
+    {
+      "id": "in_orderValue",
+      "type": "inputData",
+      "name": "Order value",
+      "typeRef": "number"
+    },
+    {
+      "id": "in_customerSince",
+      "type": "inputData",
+      "name": "Customer since",
+      "typeRef": "date"
+    },
+    {
+      "id": "ks_discountPolicy",
+      "type": "knowledgeSource",
+      "name": "Discount policy",
+      "sourceType": "Policy document",
+      "locationURI": "http://bpmn-generator.local/policies/discount"
+    },
+    {
+      "id": "bkm_loyaltyBonus",
+      "type": "businessKnowledgeModel",
+      "name": "Loyalty bonus",
+      "documentation": "Extra percentage points granted for tenure.",
+      "parameters": [
+        { "name": "since", "typeRef": "date" }
+      ],
+      "body": "if since < date(\"2020-01-01\") then 5 else 0"
+    },
+    {
+      "id": "dec_discountLevel",
+      "type": "decision",
+      "name": "Discount level",
+      "question": "Which discount level applies to this order?",
+      "allowedAnswers": "none, bronze, silver",
+      "variable": "discountLevel",
+      "typeRef": "string",
+      "usingTask": "task_applyDiscount",
+      "decisionTable": {
+        "id": "table_discountLevel",
+        "hitPolicy": "UNIQUE",
+        "preferredOrientation": "Rule-as-Row",
+        "outputLabel": "Discount level",
+        "inputs": [
+          { "id": "in_1", "label": "Order value", "expression": "orderValue", "typeRef": "number" }
+        ],
+        "outputs": [
+          { "id": "out_1", "name": "level", "typeRef": "string", "allowedValues": "\"none\",\"bronze\",\"silver\"" }
+        ],
+        "annotations": [{ "name": "Note" }],
+        "rules": [
+          { "id": "r1", "when": ["< 100"], "then": ["\"none\""], "annotations": ["Below threshold"] },
+          { "id": "r2", "when": ["[100..500)"], "then": ["\"bronze\""], "annotations": ["Standard tier"] },
+          { "id": "r3", "when": [">= 500"], "then": ["\"silver\""], "annotations": ["Top tier"] }
+        ]
+      }
+    },
+    {
+      "id": "dec_finalPercentage",
+      "type": "decision",
+      "name": "Final percentage",
+      "variable": "finalPercentage",
+      "typeRef": "number",
+      "expression": "base(discountLevel) + loyaltyBonus(customerSince)"
+    }
+  ],
+  "requirements": [
+    { "id": "ir_1", "type": "information", "source": "in_orderValue", "target": "dec_discountLevel" },
+    { "id": "ir_2", "type": "information", "source": "dec_discountLevel", "target": "dec_finalPercentage" },
+    { "id": "ir_3", "type": "information", "source": "in_customerSince", "target": "dec_finalPercentage" },
+    { "id": "kr_1", "type": "knowledge", "source": "bkm_loyaltyBonus", "target": "dec_finalPercentage" },
+    { "id": "ar_1", "type": "authority", "source": "ks_discountPolicy", "target": "dec_discountLevel" }
+  ]
+}

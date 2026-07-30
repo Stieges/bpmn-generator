@@ -1,0 +1,10 @@
+{
+  "profile": "dmn-default",
+  "version": "1.0",
+  "description": "Default DMN rule profile — every layer active at its declared severity. Mirrors rules/default-profile.json on the BPMN side; the profile format is shared (scripts/rule-profile.js).",
+  "layers": {
+    "soundness": { "enabled": true },
+    "style": { "enabled": true }
+  },
+  "overrides": {}
+}

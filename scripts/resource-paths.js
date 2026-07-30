@@ -45,6 +45,8 @@ const SOURCE_SCHEMA   = join(__dirname, '..', 'references', 'input-schema.json')
 const PACKAGED_SCHEMA = join(__dirname, 'references', 'input-schema.json');
 const SOURCE_PROMPT   = join(__dirname, '..', 'references', 'prompt-template.md');
 const PACKAGED_PROMPT = join(__dirname, 'references', 'prompt-template.md');
+const SOURCE_DECISION   = join(__dirname, '..', 'references', 'decision-core-schema.json');
+const PACKAGED_DECISION = join(__dirname, 'references', 'decision-core-schema.json');
 
 /**
  * Source first, packaged copy second, loud failure last. Exported because it is
@@ -72,4 +74,9 @@ export function inputSchemaPath() {
 /** Absolute path to references/prompt-template.md. */
 export function promptTemplatePath() {
   return resolveWithFallback(SOURCE_PROMPT, PACKAGED_PROMPT, 'prompt-template.md');
+}
+
+/** Absolute path to references/decision-core-schema.json. */
+export function decisionCoreSchemaPath() {
+  return resolveWithFallback(SOURCE_DECISION, PACKAGED_DECISION, 'decision-core-schema.json');
 }

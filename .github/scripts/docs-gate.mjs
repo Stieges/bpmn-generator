@@ -172,13 +172,33 @@ const RULE_LAYER_PATTERNS = [
   /(\d+)\s+Regeln\s+in\s+(\d+)\s+Schichten/gi,
 ];
 
+// There are two rule engines now: scripts/rules.js against Logic-Core, and
+// scripts/dmn/rules.js against Decision-Core. A claim is checked against the DMN
+// engine when the line it sits on says so, and against the BPMN engine otherwise.
+//
+// Routing on the line rather than on which numbers happen to match is deliberate.
+// Accepting a claim that is true of EITHER engine would let a wrong BPMN number
+// through whenever it coincided with the DMN one. This way an unqualified claim is
+// always measured against the BPMN engine — so a DMN sentence that forgets to say
+// "DMN" fails the gate, which is exactly the ambiguity worth failing on: a reader
+// cannot tell those sentences apart either.
+const DMN_CLAIM_RE = /\bdmn\b/i;
+
+/** The line `index` falls on, for deciding which engine a claim is about. */
+function lineContaining(text, index) {
+  const start = text.lastIndexOf('\n', index) + 1;
+  const end = text.indexOf('\n', index);
+  return text.slice(start, end === -1 ? text.length : end);
+}
+
 /**
  * Pure: every input is text already read from disk, or a number already
  * computed by the caller. See gatherNumberInputs() for the I/O side.
  */
 export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   roadmapText, skillText, evaluationText, pipelineDocText,
-  actualRuleCount, actualLayerCount, actualTopLevelScriptCount, actualDiCodes }) {
+  actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
+  actualTopLevelScriptCount, actualDiCodes }) {
   const findings = [];
 
   const numberSources = [
@@ -191,13 +211,17 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
       for (const m of text.matchAll(pattern)) {
         const claimedRules = Number(m[1]);
         const claimedLayers = Number(m[2]);
-        if (claimedRules !== actualRuleCount) {
+        const isDmn = DMN_CLAIM_RE.test(lineContaining(text, m.index));
+        const engine = isDmn ? 'scripts/dmn/rules.js' : 'scripts/rules.js';
+        const rules = isDmn ? actualDmnRuleCount : actualRuleCount;
+        const layers = isDmn ? actualDmnLayerCount : actualLayerCount;
+        if (claimedRules !== rules) {
           findings.push({ check: 'rule-count', detail:
-            `${file} says "${m[0]}" — scripts/rules.js has ${actualRuleCount} rules` });
+            `${file} says "${m[0]}" — ${engine} has ${rules} rules` });
         }
-        if (claimedLayers !== actualLayerCount) {
+        if (claimedLayers !== layers) {
           findings.push({ check: 'rule-count', detail:
-            `${file} says "${m[0]}" — scripts/rules.js has ${actualLayerCount} distinct layers` });
+            `${file} says "${m[0]}" — ${engine} has ${layers} distinct layers` });
         }
       }
     }
@@ -249,6 +273,11 @@ function gatherNumberInputs() {
   // Each rule declares a `layer:`; the distinct values are the layer count — this
   // way a new layer (like Optimization was) is picked up without touching the gate.
   const actualLayerCount = new Set([...rulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
+  // The DMN engine is counted the same way from its own file; which of the two a
+  // documented claim is measured against is decided in checkNumbers().
+  const dmnRulesSrc = readFileSync(join(SCRIPTS_DIR, 'dmn', 'rules.js'), 'utf8');
+  const actualDmnRuleCount = [...dmnRulesSrc.matchAll(/^\s*id: '/gm)].length;
+  const actualDmnLayerCount = new Set([...dmnRulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
   const actualDiCodes = [...new Set([...diCheckSrc.matchAll(/code: '(DI0\d)'/g)].map((m) => m[1]))];
 
   let topLevelStdout;
@@ -263,7 +292,8 @@ function gatherNumberInputs() {
   const actualTopLevelScriptCount = topLevelStdout.trim().split('\n').filter(Boolean).length;
 
   return { readmeText, claudeMdText, apiReferenceText, roadmapText, skillText, evaluationText,
-    pipelineDocText, actualRuleCount, actualLayerCount, actualTopLevelScriptCount, actualDiCodes };
+    pipelineDocText, actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
+    actualTopLevelScriptCount, actualDiCodes };
 }
 
 // ========================================================= 3. package-integrity

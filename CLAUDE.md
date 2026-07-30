@@ -24,8 +24,8 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-31 top-level scripts (18 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
-tooling) + 7 agent + 9 robustness modules under `scripts/`. Verify current inventory with
+32 top-level scripts (19 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
+tooling) + 7 agent + 9 robustness + 2 DMN modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
@@ -66,6 +66,13 @@ Standalone tooling
   audit.js                   Append-only JSONL audit log
   delivery.js                Webhook delivery + dead-letter
   orchestrator.js            Multi-agent orchestration
+
+DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
+  schema-gate.js             ← resource-paths.js (ajv gate for Decision-Core)
+  rules.js                   ← rule-profile.js (D01–D08; own runner `runDmnRules`)
+  (in progress — see docs/superpowers/plans/2026-07-30-dmn-integration.md.
+   Stages 3–7 add layout, DMN 1.3 XML + DMNDI, importer, SVG and the tool surface.
+   Nothing here produces a .dmn file yet.)
 
 Agent subsystem (scripts/agents/)
   chat.js, compliance.js, layout.js, llm-provider.js, modeler.js, prompt-sections.js, reviewer.js
@@ -139,6 +146,11 @@ membership instead of coordinates.
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
 | `scripts/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
+| `scripts/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
+| `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
+| `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules` — 8 rules, 2 layers (D01–D05 soundness/ERROR, D06–D08 style/WARNING). **Counted separately from the BPMN engine**: the docs gate derives "N rules, 5 layers" from `scripts/rules.js` alone, so no doc sentence may make that number cover both |
+| `references/decision-core-schema.json` | Formal JSON Schema for DMN Decision-Core input |
+| `rules/dmn-default-profile.json` | Default DMN rule profile |
 | `scripts/resource-paths.js` | `inputSchemaPath`, `promptTemplatePath` — the single place that decides where `references/` lives. **The source outranks the in-package copy.** The reverse precedence was a silent trap: `npm pack` (including the `--dry-run` the docs gate runs) leaves a copy behind, and every later edit to `references/` then had no effect while `git status` said nothing, because it is gitignored. Filenames are spelled out literally in each `join(__dirname, …)` — the docs gate parses those calls for string literals, and a variable would make it check a directory |
 | `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them. npm's `files` cannot reach outside the package root, hence a copy |
 | `scripts/postpack-clean-references.mjs` | `postpack` lifecycle script — removes that copy again. npm runs it after both `npm pack` and `npm pack --dry-run`, so a build artifact no longer outlives the build |
@@ -318,6 +330,12 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 | Optimization | ADVISORY | O01-O04 | Redesign advisories — `optimize`/`soll` mode only (opt-in); Reijers 2005 + BABOK Lean. Emits `validation.advisories` + `metrics.optimization` |
 
 Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/optimize.js`.
+
+**The DMN engine is a separate count.** `scripts/dmn/rules.js` holds 8 rules in 2 layers (D01–D05
+soundness/ERROR, D06–D08 style/WARNING) against Decision-Core, not Logic-Core. The table above and
+every "N rules, 5 layers" claim in this file and README.md are about `scripts/rules.js` only — that
+is what the docs gate checks them against. A sentence that quietly makes the number cover both
+engines would drift without the gate noticing.
 
 ## Conventions
 

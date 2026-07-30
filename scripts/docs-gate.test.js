@@ -85,6 +85,8 @@ describe('docs-gate — checkNumbers', () => {
     pipelineDocText: 'Führt 33 Regeln in 5 Schichten aus.',
     actualRuleCount: 33,
     actualLayerCount: 5,
+    actualDmnRuleCount: 8,
+    actualDmnLayerCount: 2,
     actualTopLevelScriptCount: 29,
     actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06'],
     ...overrides,
@@ -92,6 +94,43 @@ describe('docs-gate — checkNumbers', () => {
 
   test('matching numbers and codes yield nothing', () => {
     expect(checkNumbers(base())).toEqual([]);
+  });
+
+  // Two rule engines now: scripts/rules.js and scripts/dmn/rules.js. A claim is
+  // routed by whether its own LINE says DMN — see the comment on DMN_CLAIM_RE for
+  // why routing on the text beats accepting whatever matches either engine.
+  test('a DMN claim is measured against the DMN engine, not the BPMN one', () => {
+    expect(checkNumbers(base({
+      claudeMdText: '29 top-level scripts. The DMN engine has 8 rules, 2 layers.',
+    }))).toEqual([]);
+  });
+
+  test('a wrong DMN claim is still caught, and names the DMN file', () => {
+    const findings = checkNumbers(base({
+      claudeMdText: '29 top-level scripts. The DMN engine has 9 rules, 2 layers.',
+    }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('scripts/dmn/rules.js');
+    expect(findings[0].detail).toContain('has 8 rules');
+  });
+
+  test('an unqualified claim is measured against the BPMN engine even when it fits DMN', () => {
+    // The point of routing on the line rather than on "does it match either":
+    // "8 rules, 2 layers" with no mention of DMN is a wrong BPMN claim, and has
+    // to fail. A reader cannot tell those sentences apart either.
+    const findings = checkNumbers(base({
+      readmeText: 'The rule engine has 8 rules, 2 layers.',
+    }));
+    expect(findings).toHaveLength(2);        // rule count and layer count
+    expect(findings[0].detail).toContain('scripts/rules.js');
+  });
+
+  test('the two engines are checked independently in one file', () => {
+    const findings = checkNumbers(base({
+      claudeMdText: '29 top-level scripts. Engine: 33 rules, 5 layers.\nDMN: 7 rules, 2 layers.',
+    }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('scripts/dmn/rules.js');
   });
 
   test('a stale rule count in README.md is a finding', () => {
@@ -191,8 +230,14 @@ describe('docs-gate — checkPackageIntegrity', () => {
     // only report when NEITHER candidate resolves. Note this is order-independent
     // by design: resource-paths.js prefers the CHECKOUT path at runtime, and the
     // check still passes because the in-package candidate ships.
+    // The packed list is spelled out rather than derived, so adding a file to
+    // resource-paths.js without adding it to prepack-copy-references.mjs makes
+    // this test fail. That is the point: it is pinned to the real module.
     const findings = checkPackageIntegrity(
-      ['resource-paths.js', 'references/input-schema.json', 'references/prompt-template.md'],
+      ['resource-paths.js',
+       'references/input-schema.json',
+       'references/prompt-template.md',
+       'references/decision-core-schema.json'],
       new Set([join(__dirname, 'resource-paths.js')]),
     );
     expect(findings).toEqual([]);
@@ -208,7 +253,7 @@ describe('docs-gate — checkPackageIntegrity', () => {
       ['resource-paths.js'],
       new Set([join(__dirname, 'resource-paths.js')]),
     );
-    expect(findings).toHaveLength(2);   // one per referenced file
+    expect(findings).toHaveLength(3);   // one per file resource-paths.js reads
     expect(findings[0]).toMatchObject({ check: 'package-integrity' });
     expect(findings.map(f => f.detail).join(' ')).toContain('resource-paths.js');
   });

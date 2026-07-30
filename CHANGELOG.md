@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Decision-Core: a schema and a rule engine for DMN input.** `references/decision-core-schema.json`
+  (ajv draft-2020-12, strict) plus `scripts/dmn/` with 8 structural rules — D01 dangling requirement
+  references, D02 cycles in the requirement graph, D03 requirement kinds connecting element types DMN
+  does not allow, D04 decision table without an output clause, D05 rule rows that do not match the
+  table width, and as warnings D06 decision without logic, D07 orphaned input data, D08 `aggregation`
+  without hit policy `COLLECT`. Field set decided against the normative DMN13.xsd: `name` is
+  mandatory on every DRG element (`tNamedElement`) and `namespace` on the document (`tDefinitions`).
+  Deliberately out of scope for now: `decisionService`, the boxed-expression types beyond decision
+  table and literal expression, `itemDefinition`, and completeness/overlap analysis.
+  **This does not yet produce a `.dmn` file** — that is Stage 4 of
+  `docs/superpowers/plans/2026-07-30-dmn-integration.md`. Counted separately from the BPMN engine:
+  "34 rules, 5 layers" remains a claim about `scripts/rules.js` alone.
+- **`scripts/rule-profile.js`** — `loadRuleProfile`, `isRuleEnabled` and `getEffectiveSeverity` lifted
+  out of `rules.js` and shared by both engines. Nothing about them was BPMN-specific, and a severity
+  override applying to one engine but not the other would have been the same duplication defect this
+  codebase has already paid for three times. Re-exported from `rules.js`, so no importer changes.
 - **`decisionRef` on a Business Rule Task** — records *which* decision a task invokes. Until now the
   element said "a rule set decides here" and nothing said which one. Serialised into
   `<bpmn:extensionElements>` under the generator's own namespace (`EXTENSION_NS` in `utils.js`), read

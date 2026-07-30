@@ -266,6 +266,45 @@ standardised reverse link.
 
 ---
 
+## DMN Rules (D01–D08) — a separate engine
+
+> Written in English, like M11 above. These rules live in `scripts/dmn/rules.js` and run against
+> **Decision-Core**, not Logic-Core. They are counted separately: every "N rules, 5 layers" claim in
+> README.md and CLAUDE.md is about `scripts/rules.js` alone, which is what the docs gate verifies.
+
+A decision model is not "sound" in the workflow sense — it has no start, no end and no token, so
+S01–S13 and the WF-Net layer have no counterpart here. What a DRG can be wrong about is its graph
+and the shape of its tables.
+
+| ID | Layer | Severity | Rule | Reference |
+|----|-------|----------|------|-----------|
+| D01 | Soundness | ERROR | Every requirement connects two declared nodes | `tDMNElementReference/@href` |
+| D02 | Soundness | ERROR | The requirement graph is acyclic | DMN 1.3 §6.1.2 |
+| D03 | Soundness | ERROR | Each requirement kind connects the element types DMN allows | `tInformationRequirement` / `tKnowledgeRequirement` / `tAuthorityRequirement` |
+| D04 | Soundness | ERROR | A decision table has at least one output clause | `tDecisionTable/output` — no `minOccurs`, so it defaults to 1 |
+| D05 | Soundness | ERROR | Every rule has one entry per input, output and annotation column | DMN 1.3 §8.2 |
+| D06 | Style | WARNING | A decision should carry decision logic | DMN 1.3 §6.3.1 |
+| D07 | Style | WARNING | Every input data element feeds something | — |
+| D08 | Style | WARNING | `aggregation` only means something with hit policy `COLLECT` | DMN 1.3 §8.2.11 |
+
+Two of these deserve a note on why the severity is what it is.
+
+**D05 is an error, not a warning,** because decision-table entries are *positional*. A row with one
+input entry where the table has two columns does not leave a blank — it shifts every later entry, so
+the table silently means something other than it reads.
+
+**D06 is only a warning.** A decision without logic is legal DMN and often deliberate: early in
+modelling a DRD documents *which* decisions exist and what they depend on, before anyone has written
+a single rule. Reporting that as an error would make the tool useless for exactly the phase it is
+most helpful in.
+
+Completeness ("does every input combination hit a rule?") and overlap ("does `UNIQUE` actually
+hold?") are **not** in this set. Both need interval algebra over the input domains, and both are
+tracked as their own piece of work in
+[the integration plan](../docs/superpowers/plans/2026-07-30-dmn-integration.md), fork G7.
+
+---
+
 ## Erweiterung
 
 1. Neues Regel-Objekt in `RULES`-Array in `rules.js` einfuegen
