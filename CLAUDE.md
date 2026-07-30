@@ -230,12 +230,19 @@ checks documented claims against the running code instead of trusting the prose 
 the CHANGELOG fell six releases behind and `/api/v1/orchestrate` silently dropped a documented
 response field for three commits.
 
-1. Three **proof** checks (exit 1 on violation): the HTTP response contract vs.
+1. Four **proof** checks (exit 1 on violation): the HTTP response contract vs.
    `references/api-schema.json` (ajv, validated against a real response built from each
    endpoint), numeric claims ("N rules, 5 layers" in README.md/CLAUDE.md, "N top-level scripts"
-   in CLAUDE.md, DI codes in `references/api-reference.md`) vs. the actual counts, and package
+   in CLAUDE.md, DI codes in `references/api-reference.md`) vs. the actual counts, package
    integrity — every `join(__dirname, ...)` a packed file reads at runtime, checked against
-   `npm pack`'s output, scoped to files reachable from `scripts/package.json`'s `exports`.
+   `npm pack`'s output, scoped to files reachable from `scripts/package.json`'s `exports` — and
+   doc paths — proof #4: every `scripts/`-, `references/`-, `rules/`-, `tests/`-, `docs/`-,
+   `frontend/`- or `.github/`-shaped path string mentioned in prose (and every `node <file>.js`
+   CLI example) across README.md, CLAUDE.md, ROADMAP.md, SKILL.md, EVALUATION.md,
+   `docs/bpmn-generator-pipeline.md`, `references/api-reference.md` and
+   `references/fachliches-regelwerk.md` must resolve to a real file or directory, or be covered
+   by the allowlist in `checkDocPaths`' `DOC_PATH_ALLOWLIST` (transient/generated paths, each
+   with a reason comment).
 2. One **nudge** check (PR-only, never fails the build): if a `feat`/`fix`/`perf` commit in the
    PR's range touches `scripts/**` and `CHANGELOG.md`'s `[Unreleased]` section is untouched or
    empty, prints a ready-to-paste draft built from the commit subjects.

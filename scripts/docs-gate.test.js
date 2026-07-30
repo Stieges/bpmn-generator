@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   checkResponseContract,
   checkNumbers,
+  checkDocPaths,
   checkPackageIntegrity,
   evaluateChangelogNudge,
   ToolingError,
@@ -215,6 +216,103 @@ describe('docs-gate — checkNumbers', () => {
     expect(findings[0]).toMatchObject({ check: 'di-codes' });
     expect(findings[0].detail).toContain('DI09');
     expect(findings[0].detail).toContain('does not emit');
+  });
+});
+
+describe('docs-gate — checkDocPaths', () => {
+  // A synthetic filesystem — a fixed set of relative paths that "exist" —
+  // instead of touching disk, per this file's own convention (pass texts and
+  // a probe function, not the real docs, where feasible).
+  const REAL_PATHS = new Set([
+    'scripts/pipeline.js',
+    'scripts/agents/',
+    'references/input-schema.json',
+    'rules/custom/',
+    'tests/fixtures/',
+  ]);
+  const exists = (relPath) => REAL_PATHS.has(relPath);
+
+  test('an existing path passes', () => {
+    const findings = checkDocPaths([['README.md', 'See `scripts/pipeline.js` for the orchestrator.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a missing path is a finding naming the file and the token', () => {
+    const findings = checkDocPaths([['README.md', 'See `scripts/nope.js` for details.']], exists);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'doc-paths' });
+    expect(findings[0].detail).toBe('README.md mentions "scripts/nope.js" — no such path in the repository');
+  });
+
+  test('a directory claim (trailing slash) passes when the directory exists', () => {
+    const findings = checkDocPaths([['CLAUDE.md', 'Agent modules live under scripts/agents/.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a :<line> anchor is stripped before checking', () => {
+    const findings = checkDocPaths([['CLAUDE.md', 'See scripts/pipeline.js:42 for the entry point.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a #L<line> anchor is stripped before checking', () => {
+    const findings = checkDocPaths([['CLAUDE.md', 'See scripts/pipeline.js#L42 for the entry point.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('trailing punctuation from prose is stripped before checking', () => {
+    const findings = checkDocPaths([['README.md', 'See (scripts/pipeline.js), and also scripts/pipeline.js.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('an allowlisted transient path passes even though it does not exist', () => {
+    const findings = checkDocPaths(
+      [['CLAUDE.md', 'A fresh install writes to scripts/references/ during prepack.']],
+      exists,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a `node pipeline.js` CLI example resolves against scripts/', () => {
+    const findings = checkDocPaths([['README.md', '```\nnode pipeline.js input.json output\n```']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a `node cli.js` CLI example resolves against scripts/robustness/', () => {
+    const findings = checkDocPaths(
+      [['CLAUDE.md', 'Run `node cli.js run --target=lc-json` for a robustness benchmark.']],
+      (relPath) => relPath === 'scripts/robustness/cli.js',
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a missing `node <file>.js` CLI example is a finding', () => {
+    const findings = checkDocPaths([['README.md', 'node ghost.js input.json output']], exists);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('node ghost.js');
+  });
+
+  test('a glob (`*`) is not treated as a real path', () => {
+    const findings = checkDocPaths(
+      [['SKILL.md', 'grep -rn "^import.*llm-provider" scripts/redesign*.js']],
+      exists,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a placeholder (`<...>`) is not treated as a real path', () => {
+    const findings = checkDocPaths(
+      [['references/fachliches-regelwerk.md', "loadRuleProfile('rules/custom/<profile>.json')"]],
+      exists,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('the same token repeated in one file is only reported once', () => {
+    const findings = checkDocPaths(
+      [['README.md', 'scripts/nope.js is used here. Also see scripts/nope.js again.']],
+      exists,
+    );
+    expect(findings).toHaveLength(1);
   });
 });
 

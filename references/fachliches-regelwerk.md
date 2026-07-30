@@ -299,7 +299,7 @@ to look. Recording an existing decision practice and improving it are different 
 ```js
 runDmnRules(dc);                                 // semantic
 runDmnRules(dc, { mode: 'best-practice' });
-runDmnRules(dc, { profile: loadRuleProfile('rules/custom/acme.json'), mode: 'best-practice' });
+runDmnRules(dc, { profile: loadRuleProfile('rules/custom/<profile>.json'), mode: 'best-practice' });
 ```
 
 A profile is more specific than a mode, so an explicit `enabled` in a profile wins over what the

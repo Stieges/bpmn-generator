@@ -13,7 +13,7 @@ Last regenerated: 2026-05-18.
 ```bash
 cd scripts
 npm install                                  # one-time
-node bench/run-stieges-bench-v1.mjs          # → tests/bench/stieges-bench-v1.{json,md}
+node bench/run-stieges-bench-v1.mjs          # → tests/bench/stieges-bench-v1.json, tests/bench/stieges-bench-v1.md
 node bench/compare-bpmn-auto-layout.mjs      # → tests/bench/auto-layout-comparison.md + .bpmn pairs
 node bench/render-comparison.mjs             # → tests/bench/comparison-*.html (side-by-side)
 ```

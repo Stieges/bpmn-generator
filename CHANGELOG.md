@@ -49,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rule M11** (Style, WARNING): `decisionRef` on anything other than a `businessRuleTask` is inert.
   A warning rather than an error, because the file stays valid BPMN — `tExtensionElements` is
   `<xsd:any namespace="##other">`, so the child is legal anywhere. Rule count 33 → 34.
+- **Docs gate proof #4 — `checkDocPaths`.** Every `scripts/`-, `references/`-, `rules/`-,
+  `tests/`-, `docs/`-, `frontend/`- or `.github/`-shaped path string mentioned in prose (plus
+  every `node <file>.js` CLI example) must resolve to a real file or directory, or be covered by
+  a reasoned allowlist entry for transient/generated paths. Guards against exactly what a later
+  restructure commit is about to do: move dozens of files and touch every doc reference to them.
 
 ### Fixed
 - **A build artifact outranked the source of truth.** `npm pack` — including the `--dry-run` the

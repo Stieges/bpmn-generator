@@ -11,7 +11,7 @@
  * that gap the same way the input schema does: by checking a real, running
  * artifact against a written-down contract, not by re-reading the prose.
  *
- * Three PROOF checks (exact, fail the build):
+ * Four PROOF checks (exact, fail the build):
  *   1. response-contract — a real response from each endpoint, built the way
  *      scripts/http-server.js builds it, validated against references/api-schema.json.
  *   2. numbers — every "<N> rules" claim (README.md, CLAUDE.md) against
@@ -22,9 +22,18 @@
  *      at runtime, checked against what `npm pack` actually includes. Catches
  *      the class of bug where a published package throws on first import
  *      because a file it reads at module-load time never shipped.
+ *   4. doc-paths — every `scripts/...`-, `references/...`-, `rules/...`-,
+ *      `tests/...`-, `docs/...`-, `frontend/...`- or `.github/...`-shaped path
+ *      string mentioned in prose (README.md, CLAUDE.md, ROADMAP.md, SKILL.md,
+ *      EVALUATION.md, docs/bpmn-generator-pipeline.md, references/api-reference.md,
+ *      references/fachliches-regelwerk.md), and every `node <file>.js` CLI example
+ *      in them, resolves to a real file or directory. Guards against exactly what
+ *      a later restructure commit is about to do: move dozens of files and touch
+ *      every doc reference to them — a moved file with a stale doc reference used
+ *      to be silent.
  *
  * One NUDGE check (heuristic, warns, never fails the build):
- *   4. changelog-nudge — in a PR's commit range, if any feat/fix/perf commit
+ *   5. changelog-nudge — in a PR's commit range, if any feat/fix/perf commit
  *      touches scripts/** and CHANGELOG.md's [Unreleased] section is untouched
  *      or empty, print a ready-to-paste draft built from the commit subjects.
  *      This is a nudge, not a proof: a junk line in the CHANGELOG satisfies it.
@@ -51,7 +60,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -296,7 +305,125 @@ function gatherNumberInputs() {
     actualTopLevelScriptCount, actualDiCodes };
 }
 
-// ========================================================= 3. package-integrity
+// ==================================================================== 3. doc-paths
+
+// Pattern 1: explicit repo paths anywhere in prose — "scripts/pipeline.js",
+// "references/input-schema.json", "rules/default-profile.json", etc. The
+// character class also admits `*` and `<` — not because either belongs in a
+// real path, but because excluding them would silently truncate a genuine
+// glob or placeholder (e.g. "scripts/redesign*.js" in a grep example,
+// "tests/bench/comparison-*.html") into a shorter token that looks like a
+// real, non-existent path instead of the glob it actually is. Capturing them
+// intact is what lets isAllowlistedDocPath's `*`/`<` check (below) recognize
+// and skip them, per this task's allowlist spec.
+const REPO_PATH_RE = /(?:scripts|references|rules|tests|docs|frontend|\.github)\/[A-Za-z0-9_.\/*<-]+/g;
+
+// Pattern 2: `node <file>.js` CLI examples — "node pipeline.js input.json out",
+// "node scripts/robustness/cli.js run". Only the file argument itself is
+// captured; a CLI token is judged against scripts/, scripts/robustness/ and the
+// repo root (see checkDocPaths) because most examples in this repo are written
+// as if `cd scripts` already happened.
+const CLI_NODE_RE = /\bnode\s+((?:[\w.-]+\/)*[\w.-]+\.m?js)\b/g;
+
+// Documented-but-transient or generated paths: real at some point in the build
+// or CI lifecycle, but not something `git ls-files` (or a plain directory
+// listing of a fresh checkout) will ever show. Each entry needs a reason —
+// an unexplained allowlist entry is indistinguishable from silencing a real
+// finding.
+const DOC_PATH_ALLOWLIST = [
+  'scripts/references/',       // prepack build artifact (scripts/prepack-copy-references.mjs), removed by postpack
+  'references/omg-spec/',      // gitignored, downloaded locally by the OMG-compliance tooling
+  'tests/robustness-reports/', // gitignored, written by scripts/robustness/cli.js runs
+  'docs/specs/',                // documented future location, not yet created
+  'frontend/',                  // documented future location, not yet created
+  'audit/',                     // gitignored, written by scripts/audit.js at runtime (AUDIT_LOG_PATH default)
+  'dead-letter/',                // gitignored, written by scripts/delivery.js at runtime (DEAD_LETTER_PATH default)
+  'scripts/coverage/',          // gitignored, written by `npm test -- --coverage`
+  'tests/fixtures/mad-subset/', // one-time curation output (scripts/robustness/README.md); not committed until that step runs
+];
+
+/** Strips trailing punctuation, a `:<line>`/`:L<line>` suffix and a `#fragment` a doc token picked up from prose. */
+function cleanDocPathToken(raw) {
+  let token = raw;
+  token = token.replace(/#[^\s)]*$/, '');           // #fragment
+  token = token.replace(/:L?\d+$/, '');              // :412 or :L412
+  token = token.replace(/[)\,.`:]+$/, '');           // trailing punctuation
+  return token;
+}
+
+function isAllowlistedDocPath(token) {
+  if (token.includes('*') || token.includes('<')) return true; // glob or placeholder, not a path
+  return DOC_PATH_ALLOWLIST.some((prefix) => token === prefix || token.startsWith(prefix));
+}
+
+/**
+ * Pure: takes already-read doc texts and an `exists(relPath)` probe (a thin
+ * wrapper the caller supplies over fs — kept out of this function so tests can
+ * pass a synthetic filesystem instead of touching disk). Returns findings for
+ * every documented path that resolves to nothing real, is not a directory
+ * claim that exists, and is not covered by the allowlist.
+ */
+export function checkDocPaths(docSources, exists) {
+  const findings = [];
+  const seen = new Set(); // dedupe (file, token) pairs — a path can appear many times in one doc
+
+  for (const [file, text] of docSources) {
+    for (const m of text.matchAll(REPO_PATH_RE)) {
+      const token = cleanDocPathToken(m[0]);
+      if (!token) continue;
+      const key = `${file}::${token}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (isAllowlistedDocPath(token)) continue;
+      if (exists(token)) continue;
+      findings.push({
+        check: 'doc-paths',
+        detail: `${file} mentions "${token}" — no such path in the repository`,
+      });
+    }
+
+    for (const m of text.matchAll(CLI_NODE_RE)) {
+      const token = cleanDocPathToken(m[1]);
+      if (!token) continue;
+      const key = `${file}::node ${token}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const candidates = [token, `scripts/${token}`, `scripts/robustness/${token}`];
+      if (candidates.some((c) => exists(c))) continue;
+      findings.push({
+        check: 'doc-paths',
+        detail: `${file} mentions "node ${token}" — no such path in the repository`,
+      });
+    }
+  }
+
+  return findings;
+}
+
+function gatherDocPathInputs() {
+  const readmeText = readFileSync(join(REPO_ROOT, 'README.md'), 'utf8');
+  const claudeMdText = readFileSync(join(REPO_ROOT, 'CLAUDE.md'), 'utf8');
+  const roadmapText = readFileSync(join(REPO_ROOT, 'ROADMAP.md'), 'utf8');
+  const skillText = readFileSync(join(REPO_ROOT, 'SKILL.md'), 'utf8');
+  const evaluationText = readFileSync(join(REPO_ROOT, 'EVALUATION.md'), 'utf8');
+  const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
+  const apiReferenceText = readFileSync(join(REFERENCES_DIR, 'api-reference.md'), 'utf8');
+  const fachlichesRegelwerkText = readFileSync(join(REFERENCES_DIR, 'fachliches-regelwerk.md'), 'utf8');
+
+  const docSources = [
+    ['README.md', readmeText], ['CLAUDE.md', claudeMdText], ['ROADMAP.md', roadmapText],
+    ['SKILL.md', skillText], ['EVALUATION.md', evaluationText],
+    ['docs/bpmn-generator-pipeline.md', pipelineDocText],
+    ['references/api-reference.md', apiReferenceText],
+    ['references/fachliches-regelwerk.md', fachlichesRegelwerkText],
+  ];
+
+  const exists = (relPath) => existsSync(join(REPO_ROOT, relPath));
+
+  return { docSources, exists };
+}
+
+// ========================================================= 4. package-integrity
 
 const DIRNAME_JOIN_RE = /\b(?:join|resolve)\(\s*__dirname\s*,\s*((?:'[^']*'|"[^"]*"|\s*,\s*)+)\)/g;
 const RELATIVE_IMPORT_RE = /\bimport\s+(?:[^'"]*?\s+from\s+)?['"](\.[^'"]+)['"]/g;
@@ -433,7 +560,7 @@ function getPackedFiles() {
   return files.map((f) => f.path);
 }
 
-// ========================================================== 4. changelog-nudge
+// ========================================================== 5. changelog-nudge
 
 const CONVENTIONAL_RE = /^(feat|fix|perf)(\([^)]*\))?(!)?:\s*(.*)$/;
 
@@ -506,7 +633,7 @@ function render({ violations, nudge }) {
     }
     lines.push('');
   } else {
-    lines.push('PROOF — all checks passed (response contract, numbers, package integrity)');
+    lines.push('PROOF — all checks passed (response contract, numbers, doc paths, package integrity)');
     lines.push('');
   }
   if (nudge?.nudge) {
@@ -541,9 +668,11 @@ async function main(argv) {
   const responses = await buildRealResponses();
   const ajv = loadAjv();
   const reachableAbsPaths = findReachableFiles(getExportsEntryFiles());
+  const { docSources, exists } = gatherDocPathInputs();
   const violations = [
     ...checkResponseContract(responses, schema, ajv),
     ...checkNumbers(gatherNumberInputs()),
+    ...checkDocPaths(docSources, exists),
     ...checkPackageIntegrity(getPackedFiles(), reachableAbsPaths),
   ];
 
