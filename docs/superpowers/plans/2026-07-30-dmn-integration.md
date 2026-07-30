@@ -292,6 +292,59 @@ Plus, per `CLAUDE.md`'s standing rules:
 
 ---
 
+## A third notation is coming (EAM / ArchiMate)
+
+Recorded 2026-07-30, after the question "does it matter that an EAM component docks on later?".
+It does, in three specific ways. **None of them changes Stages 3–7** — nothing built so far blocks
+ArchiMate — but two get more expensive the longer they wait.
+
+**The good news first.** The ArchiMate Model Exchange File Format is split into three schemas —
+Model, View, Diagram. That is the same separation as BPMN (Semantic + BPMNDI) and DMN (Semantic +
+DMNDI). A third pipeline is structurally the same animal as the first two, which is exactly what
+G2 (own format, own pipeline) predicted.
+
+**The one assumption EAM actually challenges: one model, one drawing.** `coordMap` silently assumes
+a single diagram per model. True for BPMN. For DMN it is a simplification we chose (§6.2.4 defines
+partial views; we emit one). ArchiMate makes it false: a model carries many views, each with its own
+geometry, and a view is a *selection* over the model rather than the model itself. Whenever the
+geometry contract is touched from here on, that is the assumption to keep in view — not to build
+for now, but not to entrench further either.
+
+### Decide now, act later
+
+- [ ] **Make the bridge a mechanism, not a field.** `decisionRef` is currently one string on one
+      element type. ArchiMate↔BPMN is a standard link (a Business Process element realized by a BPMN
+      process) and EAM will want many of them — application supporting a task, capability realized
+      by a process, business object behind a data object. Design the cross-model reference once,
+      with target type and target namespace rather than a bare id, before the second one exists.
+      Retrofitting means one four-place round (writer, both importers, schema) **per field** — the
+      #42 shape again.
+- [ ] **Directory symmetry — after Stage 4, not before.** Top level today is not "BPMN" but BPMN
+      *plus* shared code *plus* tooling in one heap, with DMN in a subdirectory. The clean end state
+      is `bpmn/ dmn/ archimate/ shared/` with the tooling beside it. That is a large mechanical diff
+      touching every import, the docs gate's script count, `exports` and the Skill bundle. Do it
+      once DMN produces a real file and it is visible what is genuinely shared — not before, on
+      suspicion.
+
+### Explicitly do NOT
+
+- **Do not extract a generic diagram kernel now.** The expensive defects in this codebase came from
+  *unintentional* duplication, not from abstracting too late. A kernel designed before the third
+  notation exists is built on speculation. After Stage 6 it will be visible what actually repeated.
+
+### Know before planning ArchiMate rules
+
+ArchiMate has roughly 60 element types and a relationship-validity matrix — the same shape as D03,
+at a completely different scale. Transcribing it by hand will not work. **First question, before any
+rule design: does the Open Group publish that matrix machine-readably?** That is precisely the
+question that saved D03 here: checking the source rather than reasoning from the schema alone turned
+up a rule that would have rejected valid models.
+
+Sources: <https://www.opengroup.org/open-group-archimate-model-exchange-file-format> ·
+<https://www.opengroup.org/xsd/archimate/>
+
+---
+
 ## Not in scope
 
 - FEEL parsing or evaluation (G5). We generate and read expressions as text.
