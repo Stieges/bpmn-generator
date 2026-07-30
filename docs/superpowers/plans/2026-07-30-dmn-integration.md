@@ -134,8 +134,12 @@ than one that does not. Commits nobody to the rest of the plan.
 ## Stage 2 — Decision-Core: schema and rules
 
 - [ ] `references/decision-core-schema.json` — ajv draft-2020-12, strict, shape as above.
-- [ ] `scripts/dmn/schema-gate.js` — reuse the `scripts/schema-gate.js` pattern verbatim, including
-      the published-vs-checkout path fallback (and extend `prepack-copy-references.mjs`).
+- [ ] `scripts/dmn/schema-gate.js` — mirrors `scripts/schema-gate.js`, which is now four lines:
+      it delegates path resolution to `resource-paths.js`. **Do not copy a path fallback into it** —
+      add `decision-core-schema.json` to `resource-paths.js` (a third `sourcePath`/`packagedPath`
+      pair plus a wrapper), to `prepack-copy-references.mjs`'s `FILES`, and it is removed again by
+      the existing `postpack` step. Spell the filename out literally in each `join(__dirname, …)`,
+      or the docs gate's package-integrity check resolves a directory and reports a false violation.
 - [ ] `scripts/dmn/rules.js` — same rule object shape as `scripts/rules.js`
       (`{ id, layer, defaultSeverity, description, ref, check }`). First set, all structural:
 
@@ -150,7 +154,13 @@ than one that does not. Commits nobody to the rest of the plan.
       | D07 | WARNING | Input data reached by no requirement (orphan) |
       | D08 | WARNING | `aggregation` set with a hit policy other than `COLLECT` |
 
-- [ ] `rules/dmn-default-profile.json`; confirm the profile loader is format-agnostic or generalise it.
+- [ ] `rules/dmn-default-profile.json`. **Checked, 2026-07-30:** the profile machinery in
+      `scripts/rules.js` — `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — is already
+      format-agnostic; it only ever sees a rule object and a profile. Only `runRules` is
+      BPMN-specific (fixed `RULES` list, `lc.pools ? lc.pools : [lc]`), so DMN needs its own runner
+      and nothing else. Two of the three are not exported today: lift all three into
+      `scripts/rule-profile.js` and have both engines import them, rather than duplicating them.
+      That takes the top-level script count to 32 — update `CLAUDE.md` or the gate will.
 - [ ] Fixtures under `tests/fixtures/dmn/`, one positive and one negative per rule.
 
 **Verify:** `npm test -- --testPathPatterns=dmn`. **Docs-gate watch:** the existing "33 rules,
