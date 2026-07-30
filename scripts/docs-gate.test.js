@@ -357,9 +357,14 @@ describe('docs-gate — checkPackageIntegrity', () => {
   });
 
   test('a target shipped via a plain package.json "files" entry resolves', () => {
+    // shared/utils.js reads config.json via resolve(__dirname, '..', 'config.json') —
+    // a genuine dirname-relative read this check has to follow, not a synthetic one.
+    // Pinned to the real module (like the resource-paths.js tests above) so that if
+    // shared/utils.js stops existing at this path, or stops reading config.json this
+    // way, this test fails loudly instead of quietly reading nothing.
     const findings = checkPackageIntegrity(
-      ['utils.js', 'config.json'],
-      new Set([join(__dirname, 'utils.js')]),
+      ['shared/utils.js', 'config.json'],
+      new Set([join(__dirname, 'shared', 'utils.js')]),
     );
     expect(findings).toEqual([]);
   });
