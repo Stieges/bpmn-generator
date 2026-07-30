@@ -174,11 +174,28 @@ it covers both engines, or extend the gate.
 - [ ] `scripts/dmn/layout.js` — Decision-Core → ELK. A DRG is a plain DAG: no lanes, no pools, no
       boundary events, no message flows. `elk.direction: UP` (input data at the bottom, top-level
       decision at the top), which is the one real difference from `scripts/layout.js`.
-- [ ] `scripts/dmn/coordinates.js` — `buildCoordinateMap` producing the same contract shape
+- [ ] **The layout result is a diagram LIST, not a single coordMap** — `[{ id, name, size, coordMap }]`,
+      with exactly one entry today. Grounds, checked 2026-07-30: DMNDI is `DMNDiagram*` (unbounded,
+      DMNDI13.xsd), §6.2.4 builds partial views on exactly that ("DRDs can be interchanged" —
+      plural), and a partial view in the XML is **pure DI**: a DMNDiagram holding shapes for a
+      subset, nothing in the model part. So the multiplicity belongs to the pipeline contract, not
+      to Decision-Core, which stays coordinate- and view-free like Logic-Core; a future `views`
+      directive in the schema would be a generator input, additive, and can wait. The multiplicity
+      is the target format's shape, not speculation — only our use of it is future. Consumers loop.
+      When views arrive, each entry additionally needs its element selection: §6.2.4 SHOULD-notates
+      hidden requirements with an ellipsis, and a renderer cannot mark hidden what it does not know
+      about. Recorded so the entry shape does not fossilise; not built now.
+- [ ] `scripts/dmn/coordinates.js` — per-diagram `coordMap` in the same contract shape
       (`{ coords, edgeCoords, edgeLabels }`, no `laneCoords`/`poolCoords`).
-      **Reuse, do not copy:** `clipOrthogonal` from `scripts/coordinates.js`. If it needs
-      generalising, generalise it in place rather than forking it — a second copy is the defect
-      class this project has already paid for three times.
+      **Correction (2026-07-30):** this plan originally said to reuse `clipOrthogonal`. Checked
+      against spec and code, that was wrong twice over: DRD requirement edges are drawn as STRAIGHT
+      lines by convention — §6.2.2 mandates line style and arrowheads, not routing; the spec's own
+      figures and the tools draw straight — while `clipOrthogonal` trims orthogonal polylines. The
+      piece to build is a straight-segment clip against the four DRD outlines (rectangle;
+      clipped-corner rectangle; stadium — exact circle intersection at the ends; wavy bottom —
+      rectangle approximation is fine). ELK contributes node positions only; edge routes are
+      computed once, here, so the geometry contract holds. "Reuse, do not copy" still applies where
+      something exists to reuse: `rn()`/`wrapText` from `utils.js`, the ELK bootstrap idiom.
 - [ ] `scripts/config.json` — a `dmn` block with the DRG shape sizes. No hard-coded constants.
 - [ ] `scripts/dmn/di-check.js` — geometry pass, same role as `di-check.js`: overlapping shapes,
       shape outside the diagram bounds, edge endpoint not on its shape. Result into
@@ -200,6 +217,10 @@ Blocked by GATE 1.
 - [ ] DMNDI: `DMNShape`/`DMNEdge` carry `dmnElementRef`. dmn-moddle resolves that to the **element
       object**, not a string — hand it built elements, the way `buildDI` receives `processElements`
       (§2.3).
+- [ ] The DMNDI writer loops over Stage 3's diagram list and gets a test with a hand-built
+      two-diagram input (the schema knows no views yet; the writer does not care). A list of one
+      that never runs with two is unverified generality — the `DMNDiagram*` loop must not be dead
+      code.
 - [ ] **Attribute discipline.** Add a `isDmnElementWithId`-style predicate covering the types that do
       **not** extend `tDMNElement` — `tRuleAnnotation` and `tRuleAnnotationClause` have no `id`.
       Emitting one produces a warning that survives the round trip and reappears in every consumer
