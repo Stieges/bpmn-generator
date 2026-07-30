@@ -24,19 +24,19 @@ import {
   extractSubProcessAsLogicCore,
 } from './pipeline.js';
 import { normalizeLaneAssignments, orderParticipantsByMessageFlow } from './topology.js';
-import { wrapText, wrapTextByPx } from './utils.js';
+import { wrapText, wrapTextByPx } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
 import { checkWorkflowNetSoundness, bpmnToPN } from './workflow-net.js';
 import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
-import { parseBody, validateCallbackUrl } from './http-server.js';
+import { parseBody, validateCallbackUrl } from '../http-server.js';
 import { checkDiagramIntegrity } from './di-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixturesDir = resolve(__dirname, '../tests/fixtures');
+const fixturesDir = resolve(__dirname, '../../tests/fixtures');
 
 function loadFixture(name) {
   return JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
@@ -1250,7 +1250,7 @@ describe('bpmn-moddle Import', () => {
     const { readdirSync, readFileSync, statSync, existsSync } = await import('fs');
     const { join } = await import('path');
 
-    const examplesDir = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn');
+    const examplesDir = resolve(__dirname, '../../references/omg-spec/informative/examples-bpmn');
     if (!existsSync(examplesDir)) {
       // OMG spec files are kept locally but not tracked in git (copyright).
       // Skip this test in CI or when files are not present.
@@ -1287,7 +1287,7 @@ describe('bpmn-moddle Import', () => {
 
   test('OMG nested lanes example imports correctly', async () => {
     const { readFileSync, existsSync } = await import('fs');
-    const nestedLanesFile = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn/2010-06-03/Diagram Interchange/Examples - DI - Lanes and Nested Lanes.bpmn');
+    const nestedLanesFile = resolve(__dirname, '../../references/omg-spec/informative/examples-bpmn/2010-06-03/Diagram Interchange/Examples - DI - Lanes and Nested Lanes.bpmn');
     if (!existsSync(nestedLanesFile)) return; // OMG spec files not in git (copyright)
     const xml = readFileSync(nestedLanesFile, 'utf8');
 
@@ -1833,7 +1833,7 @@ describe('HTTP Server utilities', () => {
   test('validateCallbackUrlAsync rejects host that resolves to internal IP', async () => {
     // ESM `node:dns/promises` exports are read-only in Jest 30, so we inject the
     // lookup function via the test-only `_setDnsLookup` hook on http-server.
-    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('../http-server.js');
     _setDnsLookup(async (h) => h === 'evil.example.com'
       ? [{ address: '127.0.0.1', family: 4 }]
       : [{ address: '93.184.216.34', family: 4 }]);
@@ -1846,7 +1846,7 @@ describe('HTTP Server utilities', () => {
   });
 
   test('validateCallbackUrlAsync accepts host that resolves to public IP', async () => {
-    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('../http-server.js');
     _setDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]); // example.com public IP
     try {
       const result = await validateCallbackUrlAsync('https://example.com/webhook');
@@ -1857,7 +1857,7 @@ describe('HTTP Server utilities', () => {
   });
 
   test('validateCallbackUrlAsync passes through sync errors unchanged', async () => {
-    const { validateCallbackUrlAsync } = await import('./http-server.js');
+    const { validateCallbackUrlAsync } = await import('../http-server.js');
     // Raw internal IP — sync check catches it before DNS lookup is attempted
     expect(await validateCallbackUrlAsync('http://127.0.0.1/hook')).toMatch(/internal/);
     // Bad protocol — sync check catches it
@@ -1867,19 +1867,19 @@ describe('HTTP Server utilities', () => {
 
 describe('http-server production auth gate', () => {
   test('startupCheck refuses production without API key', async () => {
-    const { startupCheck } = await import('./http-server.js');
+    const { startupCheck } = await import('../http-server.js');
     expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: undefined }))
       .toThrow(/BPMN_API_KEY/);
   });
 
   test('startupCheck allows production with API key', async () => {
-    const { startupCheck } = await import('./http-server.js');
+    const { startupCheck } = await import('../http-server.js');
     expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: 'secret' }))
       .not.toThrow();
   });
 
   test('startupCheck warns in dev mode without API key', async () => {
-    const { startupCheck } = await import('./http-server.js');
+    const { startupCheck } = await import('../http-server.js');
     const warns = [];
     expect(() => startupCheck({ NODE_ENV: 'development', BPMN_API_KEY: undefined }, msg => warns.push(msg)))
       .not.toThrow();
@@ -1892,7 +1892,7 @@ describe('audit/dead-letter path configuration', () => {
     delete process.env.AUDIT_LOG_PATH;
     const os = await import('node:os');
     // cache-bust the import so module-init re-evaluates env
-    const { getAuditPath } = await import(`./audit.js?cb=default-${Date.now()}`);
+    const { getAuditPath } = await import(`../audit.js?cb=default-${Date.now()}`);
     const p = getAuditPath();
     expect(p.startsWith(os.tmpdir())).toBe(true);
     expect(p).toMatch(/bpmn-generator/);
@@ -1903,7 +1903,7 @@ describe('audit/dead-letter path configuration', () => {
     process.env.AUDIT_LOG_PATH = '/tmp/test-audit-' + Date.now() + '.jsonl';
     const expected = process.env.AUDIT_LOG_PATH;
     const fs = await import('node:fs');
-    const { auditLog, getAuditPath } = await import(`./audit.js?cb=env-${Date.now()}`);
+    const { auditLog, getAuditPath } = await import(`../audit.js?cb=env-${Date.now()}`);
     expect(getAuditPath()).toBe(expected);
     auditLog({ event: 'env-path-test' });
     expect(fs.existsSync(expected)).toBe(true);
@@ -1914,7 +1914,7 @@ describe('audit/dead-letter path configuration', () => {
   test('delivery module honors DEAD_LETTER_PATH env', async () => {
     const dir = '/tmp/test-dl-' + Date.now();
     process.env.DEAD_LETTER_PATH = dir;
-    const { getDeadLetterDir } = await import(`./delivery.js?cb=env-${Date.now()}`);
+    const { getDeadLetterDir } = await import(`../delivery.js?cb=env-${Date.now()}`);
     expect(getDeadLetterDir()).toBe(dir);
     const fs = await import('node:fs');
     expect(fs.existsSync(dir)).toBe(true);

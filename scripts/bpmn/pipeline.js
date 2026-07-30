@@ -26,7 +26,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 // Module imports
-import { loadConfig, CFG } from './utils.js';
+import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';

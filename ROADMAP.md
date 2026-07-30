@@ -144,7 +144,7 @@ bioc:stroke/bioc:fill attributes on BPMNShape elements, per-node colors in SVG r
 
 Opt-in post-layout polish: dynamic per-pool lane-header widths, edge-label collision repair via bbox-nudge, ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes), and lane padding compaction. Default `visualRefinement.enabled: false` — existing output byte-identical with flag off.
 
-**Files:** scripts/visual-refinement.js (new), scripts/utils.js (wrapText extension), scripts/pipeline.js (flag wiring), scripts/layout.js (wrapping hint), scripts/coordinates.js (per-pool laneHeaderWidth), config.json. Spec + plan in docs/superpowers/.
+**Files:** scripts/bpmn/visual-refinement.js (new), scripts/shared/utils.js (wrapText extension), scripts/bpmn/pipeline.js (flag wiring), scripts/bpmn/layout.js (wrapping hint), scripts/bpmn/coordinates.js (per-pool laneHeaderWidth), config.json. Spec + plan in docs/superpowers/.
 
 ---
 
@@ -190,7 +190,7 @@ Pure-JS Petri-Net verification (no Python bridge): BPMN → Place/Transition-Net
 
 Scope: XOR + AND gateways formalized. OR gateways → info warning. Event-based gateways + timer/signal events → skipped (not modelable in classical WF-Nets).
 
-**Files:** scripts/workflow-net.js (~300 LOC), scripts/rules.js (+WORKFLOW_NET_RULES, integration in runRules), rules/strict-profile.json, rules/default-profile.json, tests/fixtures/deadlock-process.json, pipeline.test.js (+7 WF tests)
+**Files:** scripts/bpmn/workflow-net.js (~300 LOC), scripts/bpmn/rules.js (+WORKFLOW_NET_RULES, integration in runRules), rules/strict-profile.json, rules/default-profile.json, tests/fixtures/deadlock-process.json, pipeline.test.js (+7 WF tests)
 
 ### L5 — BPMN as AI Orchestration Language | DEFERRED
 

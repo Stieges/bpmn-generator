@@ -12,11 +12,11 @@
  *   - BEF4LLM (Kourani et al., 2025)
  */
 
-import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from './rule-profile.js';
+import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
-import { CFG } from './utils.js';
+import { CFG } from '../shared/utils.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Helpers (internal)

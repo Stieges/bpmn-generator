@@ -33,6 +33,11 @@
  * purpose. The docs gate's package-integrity check parses those calls for string
  * literals and verifies the target actually ships; passing the name through a
  * variable would leave it looking at a directory and reporting a false violation.
+ *
+ * This module lives at scripts/shared/ now, so the source branch needs `..`
+ * twice to reach the repo root's references/; the packaged branch needs `..`
+ * once to reach scripts/references/, the copy prepack-copy-references.mjs
+ * leaves at the package root regardless of which scripts/ subdirectory reads it.
  */
 
 import { existsSync } from 'node:fs';
@@ -41,12 +46,12 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const SOURCE_SCHEMA   = join(__dirname, '..', 'references', 'input-schema.json');
-const PACKAGED_SCHEMA = join(__dirname, 'references', 'input-schema.json');
-const SOURCE_PROMPT   = join(__dirname, '..', 'references', 'prompt-template.md');
-const PACKAGED_PROMPT = join(__dirname, 'references', 'prompt-template.md');
-const SOURCE_DECISION   = join(__dirname, '..', 'references', 'decision-core-schema.json');
-const PACKAGED_DECISION = join(__dirname, 'references', 'decision-core-schema.json');
+const SOURCE_SCHEMA   = join(__dirname, '..', '..', 'references', 'input-schema.json');
+const PACKAGED_SCHEMA = join(__dirname, '..', 'references', 'input-schema.json');
+const SOURCE_PROMPT   = join(__dirname, '..', '..', 'references', 'prompt-template.md');
+const PACKAGED_PROMPT = join(__dirname, '..', 'references', 'prompt-template.md');
+const SOURCE_DECISION   = join(__dirname, '..', '..', 'references', 'decision-core-schema.json');
+const PACKAGED_DECISION = join(__dirname, '..', 'references', 'decision-core-schema.json');
 
 /**
  * Source first, packaged copy second, loud failure last. Exported because it is

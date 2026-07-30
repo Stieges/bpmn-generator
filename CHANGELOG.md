@@ -104,6 +104,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing files still load.
 
 ### Changed
+- **Modular layout: `scripts/bpmn/`, `scripts/dmn/`, `scripts/shared/`.** The BPMN pipeline
+  (22 modules incl. both importers and the redesign toolbox) moved to `scripts/bpmn/`; the
+  format-independent core (`utils`, `rule-profile`, `resource-paths`) to `scripts/shared/`;
+  standalone tooling stays top-level. Preparation for a third notation — every notation gets
+  the same internal shape. **The npm API is unchanged** (`exports` maps the public
+  specifiers onto the new paths; no shims, no major bump). CLI invocations change:
+  `node bpmn/pipeline.js …` from `scripts/`. Behaviour is provably identical — generated
+  outputs are byte-identical against the pre-move baseline.
 - A subprocess's content is now serialised whether or not it is expanded. `isExpanded` is a
   presentation property and stays confined to the DI (`BPMNShape`); gating the content on it made
   "collapsed but drillable" — legal BPMN — inexpressible and produced an empty box. Both importers

@@ -10,7 +10,7 @@ BPMN 2.0 diagram generator — converts natural language process descriptions or
 Three things you can verify in the repo, not just claim:
 
 1. **Multi-pool collaborations with lanes and message flows render fully.** The closest open-source comparable (`bpmn-auto-layout@1.3.0`, used by [BPMN Assistant](https://github.com/jtlicardo/bpmn-assistant)) silently drops every participant after the first plus all inter-pool message flows ([data](EVALUATION.md#bpmn-auto-layout-comparison)). Our pipeline renders all participants and all message flows.
-2. **Strict JSON Schema gate at every HTTP API entry.** LLM output cannot reach the layout engine with malformed Logic-Core — `ajv` draft-2020-12 rejects it at the boundary ([scripts/schema-gate.js](scripts/schema-gate.js)).
+2. **Strict JSON Schema gate at every HTTP API entry.** LLM output cannot reach the layout engine with malformed Logic-Core — `ajv` draft-2020-12 rejects it at the boundary ([scripts/bpmn/schema-gate.js](scripts/bpmn/schema-gate.js)).
 3. **Native Claude Code MCP server.** Exposed as a [Skill](SKILL.md) and via [`scripts/mcp-bpmn-server.js`](scripts/mcp-bpmn-server.js). The LLM never touches coordinates — it emits Logic-Core JSON, the pipeline handles layout deterministically.
 
 Reproduce the comparison: `cd scripts && node bench/compare-bpmn-auto-layout.mjs` — produces [tests/bench/auto-layout-comparison.md](tests/bench/auto-layout-comparison.md) + side-by-side HTML.
@@ -86,19 +86,19 @@ cd scripts/
 npm install          # installs runtime + dev dependencies (Node >=20)
 
 # Generate from JSON Logic-Core:
-node pipeline.js my-process.json my-process
+node bpmn/pipeline.js my-process.json my-process
 
 # From stdin:
-echo '{ ... }' | node pipeline.js - output
+echo '{ ... }' | node bpmn/pipeline.js - output
 
 # Import existing BPMN:
-node import.js existing.bpmn extracted.json
+node bpmn/import.js existing.bpmn extracted.json
 
 # DOT export (Graphviz):
-node pipeline.js my-process.json my-process --dot
+node bpmn/pipeline.js my-process.json my-process --dot
 
 # DOT import → Logic-Core JSON:
-node pipeline.js graph.dot output --import-dot
+node bpmn/pipeline.js graph.dot output --import-dot
 
 # Run tests:
 npm test
@@ -218,7 +218,7 @@ bpmn-generator/
 
 ```bash
 # Default profile (all layers active):
-node pipeline.js input.json output
+node bpmn/pipeline.js input.json output
 
 # Strict profile (style warnings → errors):
 # (programmatic: runPipeline(lc, { ruleProfile: 'rules/strict-profile.json' }))

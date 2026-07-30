@@ -16,8 +16,8 @@
  * kept locally under references/omg-spec/normative/dmn/.
  */
 
-import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../rule-profile.js';
-import { CFG } from '../utils.js';
+import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
+import { CFG } from '../shared/utils.js';
 
 /**
  * DMN 1.3 Table 2, "Requirements connection rules", verbatim minus the two

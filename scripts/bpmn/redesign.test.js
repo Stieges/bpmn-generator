@@ -109,7 +109,7 @@ describe('redesign-core', () => {
     // Beweis, dass der Stil-Verstoss real ist: unter dem strict-Profil (rules/strict-profile.json)
     // wird M01 (Objekt+Verb) per Override zu ERROR. Waere er das nicht, waere der Test unten
     // vacuous — er wuerde auch bestehen, wenn checkGate die Stil-Schicht faelschlich einschaltete.
-    const strictProfile = loadRuleProfile(resolve(__dirname, '../rules/strict-profile.json'));
+    const strictProfile = loadRuleProfile(resolve(__dirname, '../../rules/strict-profile.json'));
     expect(strictProfile).not.toBeNull();
     const strictResult = runRules(styleIssue, strictProfile);
     expect(strictResult.errors.length).toBeGreaterThan(0);

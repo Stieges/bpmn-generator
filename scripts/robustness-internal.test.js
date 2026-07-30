@@ -419,7 +419,7 @@ describe('robustness/stress-tester — runPipelineChecks', () => {
 describe('robustness/stress-tester — runRoundtripCheck', () => {
   test('passes on simple LC that roundtrips cleanly', async () => {
     const lc = loadFixture('simple-approval.json');
-    const { runPipeline } = await import('./pipeline.js');
+    const { runPipeline } = await import('./bpmn/pipeline.js');
     const pipelineResult = await runPipeline(lc);
     const rt = await runRoundtripCheck(lc, pipelineResult.bpmnXml);
     expect(rt.equal).toBe(true);

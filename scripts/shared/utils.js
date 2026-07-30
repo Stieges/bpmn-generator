@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function loadConfig(customPath) {
-  const defaults = JSON.parse(readFileSync(resolve(__dirname, 'config.json'), 'utf8'));
+  const defaults = JSON.parse(readFileSync(resolve(__dirname, '..', 'config.json'), 'utf8'));
   if (!customPath) return defaults;
   const custom = JSON.parse(readFileSync(resolve(customPath), 'utf8'));
   const merged = { ...defaults };

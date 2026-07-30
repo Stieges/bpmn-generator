@@ -7,10 +7,10 @@
  * - runRules(lc, profile=null) → returns { errors: string[], warnings: string[], infos: string[], metrics: {} }
  */
 
-import { validateLogicCore } from '../validate.js';
-import { runRules } from '../rules.js';
-import { runPipeline } from '../pipeline.js';
-import { bpmnToLogicCore } from '../import.js';
+import { validateLogicCore } from '../bpmn/validate.js';
+import { runRules } from '../bpmn/rules.js';
+import { runPipeline } from '../bpmn/pipeline.js';
+import { bpmnToLogicCore } from '../bpmn/import.js';
 import { isStructurallyEqual } from './graph-isomorphism.js';
 
 export async function runRoundtripCheck(originalLc, bpmnXml) {

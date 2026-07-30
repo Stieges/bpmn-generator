@@ -86,9 +86,9 @@ export class ToolingError extends Error {}
 async function buildRealResponses() {
   let pipelineMod, rulesMod, importMod, orchestratorMod;
   try {
-    pipelineMod = await import(join(SCRIPTS_DIR, 'pipeline.js'));
-    rulesMod = await import(join(SCRIPTS_DIR, 'rules.js'));
-    importMod = await import(join(SCRIPTS_DIR, 'import.js'));
+    pipelineMod = await import(join(SCRIPTS_DIR, 'bpmn', 'pipeline.js'));
+    rulesMod = await import(join(SCRIPTS_DIR, 'bpmn', 'rules.js'));
+    importMod = await import(join(SCRIPTS_DIR, 'bpmn', 'import.js'));
     orchestratorMod = await import(join(SCRIPTS_DIR, 'orchestrator.js'));
   } catch (err) {
     throw new ToolingError(`could not import a scripts/ module: ${err.message}`);
@@ -275,8 +275,8 @@ function gatherNumberInputs() {
   const skillText = readFileSync(join(REPO_ROOT, 'SKILL.md'), 'utf8');
   const evaluationText = readFileSync(join(REPO_ROOT, 'EVALUATION.md'), 'utf8');
   const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
-  const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'rules.js'), 'utf8');
-  const diCheckSrc = readFileSync(join(SCRIPTS_DIR, 'di-check.js'), 'utf8');
+  const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'rules.js'), 'utf8');
+  const diCheckSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'di-check.js'), 'utf8');
 
   const actualRuleCount = [...rulesSrc.matchAll(/^\s*id: '/gm)].length;
   // Each rule declares a `layer:`; the distinct values are the layer count — this

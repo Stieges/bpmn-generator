@@ -4,7 +4,7 @@
  * Only blocks on ERRORs (soundness). Warnings pass through.
  */
 
-import { validateLogicCore } from '../validate.js';
+import { validateLogicCore } from '../bpmn/validate.js';
 
 export async function reviewerAgent(state) {
   const { errors, warnings } = validateLogicCore(state.logicCore);

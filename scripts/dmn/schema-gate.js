@@ -12,7 +12,7 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { readFileSync } from 'node:fs';
-import { decisionCoreSchemaPath } from '../resource-paths.js';
+import { decisionCoreSchemaPath } from '../shared/resource-paths.js';
 
 const schema = JSON.parse(readFileSync(decisionCoreSchemaPath(), 'utf8'));
 

@@ -19,10 +19,10 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { runPipeline, validateLogicCore, generateDiagramSet } from './pipeline.js';
-import { profileForMode, loadRuleProfile } from './rules.js';
-import { validateLogicCoreSchema } from './schema-gate.js';
-import { bpmnToLogicCore } from './import.js';
+import { runPipeline, validateLogicCore, generateDiagramSet } from './bpmn/pipeline.js';
+import { profileForMode, loadRuleProfile } from './bpmn/rules.js';
+import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
+import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 
 const server = new Server(

@@ -332,11 +332,11 @@ describe('docs-gate — checkPackageIntegrity', () => {
     // resource-paths.js without adding it to prepack-copy-references.mjs makes
     // this test fail. That is the point: it is pinned to the real module.
     const findings = checkPackageIntegrity(
-      ['resource-paths.js',
+      ['shared/resource-paths.js',
        'references/input-schema.json',
        'references/prompt-template.md',
        'references/decision-core-schema.json'],
-      new Set([join(__dirname, 'resource-paths.js')]),
+      new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
     expect(findings).toEqual([]);
   });
@@ -348,8 +348,8 @@ describe('docs-gate — checkPackageIntegrity', () => {
     // dual path today; the defect it guards against is the packaging one, not
     // the module name.
     const findings = checkPackageIntegrity(
-      ['resource-paths.js'],
-      new Set([join(__dirname, 'resource-paths.js')]),
+      ['shared/resource-paths.js'],
+      new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
     expect(findings).toHaveLength(3);   // one per file resource-paths.js reads
     expect(findings[0]).toMatchObject({ check: 'package-integrity' });

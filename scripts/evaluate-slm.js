@@ -18,8 +18,8 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { validateLogicCore } from './validate.js';
-import { runRules } from './rules.js';
+import { validateLogicCore } from './bpmn/validate.js';
+import { runRules } from './bpmn/rules.js';
 import { createLlmProvider } from './agents/llm-provider.js';
 
 // ── Args ────────────────────────────────────────────────────────────────

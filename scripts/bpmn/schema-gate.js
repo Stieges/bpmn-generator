@@ -1,7 +1,7 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { readFileSync } from 'node:fs';
-import { inputSchemaPath } from './resource-paths.js';
+import { inputSchemaPath } from '../shared/resource-paths.js';
 
 // Which of the two layouts applies — and why the source wins over the in-package
 // copy — is decided in one place; see resource-paths.js.

@@ -143,7 +143,7 @@ export async function generateSamples({
     }
 
     if (target === 'dot') {
-      const { dotToLogicCore } = await import('../dot.js');
+      const { dotToLogicCore } = await import('../bpmn/dot.js');
       const { system: sysB, user: userB } = buildDotPrompt(description);
       let rawOutput;
       try { rawOutput = await llm(sysB, userB, {}); }

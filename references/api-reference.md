@@ -33,7 +33,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 
 `validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
 - `id` — advisory rule id (`O01`–`O04`, see `references/fachliches-regelwerk.md`)
-- `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/redesign.js`/`redesign-cli.js` directly.
+- `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/bpmn/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/bpmn/redesign.js`/`redesign-cli.js` directly.
 - `targets` — ids of the affected nodes/gateways
 - `message` — the human-readable line (what the CLI and this response print)
 - `tradeoff` — devil's-quadrangle tag, e.g. `{ "time": "−" }` or `{ "quality": "+" }`

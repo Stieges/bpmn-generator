@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { resolve, dirname } from 'path';
-import { runPipeline } from './pipeline.js';
+import { runPipeline } from './bpmn/pipeline.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const autoDir = resolve(__dirname, '../tests/fixtures/robustness/auto');

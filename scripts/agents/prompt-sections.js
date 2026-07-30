@@ -4,7 +4,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { promptTemplatePath } from '../resource-paths.js';
+import { promptTemplatePath } from '../shared/resource-paths.js';
 
 // Which of the two layouts applies — and why the source wins over the in-package
 // copy — is decided in one place; see resource-paths.js. This module used to

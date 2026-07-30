@@ -120,8 +120,8 @@ widersprechen sich teils (z.B. *Control addition* ↔ *Task elimination*). Quell
 **publizierten** Paper (Reijers/Limam Mansar 2005, *Omega* 33(4); BABOK v3 2015).
 
 **Vom Vorschlag zum Eingriff:** jede Advisory benennt über `transform` einen passenden, deterministischen
-Eingriff aus dem Redesign-Werkzeugkasten (`scripts/redesign.js`, CLI-Zugang `scripts/redesign-cli.js`,
-gemeinsamer Kern `scripts/redesign-core.js`) — je mit `preview*`/`apply*`, geprüft gegen ein festes,
+Eingriff aus dem Redesign-Werkzeugkasten (`scripts/bpmn/redesign.js`, CLI-Zugang `scripts/bpmn/redesign-cli.js`,
+gemeinsamer Kern `scripts/bpmn/redesign-core.js`) — je mit `preview*`/`apply*`, geprüft gegen ein festes,
 **profilunabhängiges** Soundness-Gate. O01→`isolateException`, O02→`reorderKnockouts`, O03→`relane`,
 O04→`parallelize`; `mergeTasks` hat keinen eigenen Detektor und ist nur direkt aufrufbar. Der
 Werkzeugkasten entscheidet **nie**, *ob* ein Eingriff gemacht wird, und rät nie eine fehlende
@@ -251,7 +251,7 @@ The rule descends into subprocesses, because the field does.
 reverse direction *is* standardised — DMN's `tDecision` carries `usingProcess` and `usingTask`
 (DMN13.xsd), pointing from the decision to the task — but there is no BPMN→DMN counterpart.
 `camunda:decisionRef` is a vendor extension, and emitting it would make every file we write claim a
-Camunda binding it does not have. See `EXTENSION_NS` in `scripts/utils.js`.
+Camunda binding it does not have. See `EXTENSION_NS` in `scripts/shared/utils.js`.
 
 **Beispiele:**
 
@@ -270,7 +270,7 @@ standardised reverse link.
 
 > Written in English, like M11 above. These rules live in `scripts/dmn/rules.js` and run against
 > **Decision-Core**, not Logic-Core. They are counted separately: every "N rules, 5 layers" claim in
-> README.md and CLAUDE.md is about `scripts/rules.js` alone. The docs gate routes a claim to the DMN
+> README.md and CLAUDE.md is about `scripts/bpmn/rules.js` alone. The docs gate routes a claim to the DMN
 > engine only when its line says "DMN".
 
 A decision model is not "sound" in the workflow sense — it has no start, no end and no token, so

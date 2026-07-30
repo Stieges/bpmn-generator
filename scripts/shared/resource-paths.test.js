@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { inputSchemaPath, promptTemplatePath, resolveWithFallback } from './resource-paths.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PACKAGED_DIR = join(__dirname, 'references');
-const REPO_REFERENCES = join(__dirname, '..', 'references');
+const PACKAGED_DIR = join(__dirname, '..', 'references');
+const REPO_REFERENCES = join(__dirname, '..', '..', 'references');
 
 // These tests create and remove the very build artifact the resolver has to
 // ignore, so they must leave the checkout exactly as they found it. Nothing here
@@ -65,7 +65,7 @@ describe('resource-paths — the source outranks the build artifact', () => {
     // the wiring rather than re-testing the resolver: a schema poisoned to reject
     // everything would fail this if the copy were being read.
     writePackagedCopy({ schema: JSON.stringify({ type: 'string' }) });
-    return import('./schema-gate.js').then(({ validateLogicCoreSchema }) => {
+    return import('../bpmn/schema-gate.js').then(({ validateLogicCoreSchema }) => {
       const lc = { pools: [{ id: 'P', name: 'P', nodes: [{ id: 's', type: 'startEvent' }], edges: [] }] };
       expect(validateLogicCoreSchema(lc).valid).toBe(true);
     });

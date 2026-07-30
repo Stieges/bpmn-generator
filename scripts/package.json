@@ -25,9 +25,12 @@
     "omg",
     "modeler"
   ],
-  "main": "pipeline.js",
+  "main": "./bpmn/pipeline.js",
   "files": [
     "*.js",
+    "bpmn/",
+    "dmn/",
+    "shared/",
     "config.json",
     "agents/",
     "robustness/",
@@ -35,13 +38,13 @@
     "!**/*.test.js"
   ],
   "exports": {
-    ".": "./pipeline.js",
-    "./import": "./import.js",
-    "./validate": "./validate.js",
+    ".": "./bpmn/pipeline.js",
+    "./import": "./bpmn/import.js",
+    "./validate": "./bpmn/validate.js",
     "./orchestrator": "./orchestrator.js"
   },
   "scripts": {
-    "generate": "node pipeline.js",
+    "generate": "node bpmn/pipeline.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache",
     "docs-gate": "node ../.github/scripts/docs-gate.mjs",
     "build:skill": "node build-skill.mjs",

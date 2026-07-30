@@ -6,7 +6,7 @@
  * With enableLayoutReview: sends SVG to vision LLM for feedback.
  */
 
-import { runPipeline } from '../pipeline.js';
+import { runPipeline } from '../bpmn/pipeline.js';
 
 const LAYOUT_REVIEW_PROMPT = `You are a BPMN diagram layout reviewer.
 Analyze this SVG diagram and identify layout issues:
