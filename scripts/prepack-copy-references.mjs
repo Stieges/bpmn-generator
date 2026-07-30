@@ -4,12 +4,13 @@
  * actually reads at runtime (schema-gate.js, agents/prompt-sections.js) into
  * scripts/references/, so they ship inside the npm tarball.
  *
- * references/ is the canonical source and stays at the repo root — nothing
- * here, in the docs, or in the dev workflow (`cd scripts && npm test`) points
- * at scripts/references/ except the two runtime fallback reads this exists
- * for. scripts/references/ is gitignored; it is a build artifact, regenerated
+ * references/ is the canonical source and stays at the repo root. Runtime reads
+ * go through resource-paths.js, which prefers that source and treats what this
+ * script writes as the fallback for the published layout — see the reasoning
+ * there. scripts/references/ is gitignored; it is a build artifact, regenerated
  * by `npm pack`/`npm publish` (which both run `prepack` automatically) or by
- * running this script directly.
+ * running this script directly, and removed again by
+ * postpack-clean-references.mjs.
  *
  * Why a copy instead of a package.json "files" entry pointing at "../references":
  * npm's `files` field cannot reach outside the package root (verified: an

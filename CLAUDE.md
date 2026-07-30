@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-30 top-level scripts (17 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
+31 top-level scripts (18 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
 tooling) + 7 agent + 9 robustness modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -45,7 +45,8 @@ Core Pipeline (run on every generate call)
     ├── svg.js               ← types.js, utils.js, icons.js
     ├── icons.js             ← utils.js
     ├── dot.js               ← types.js
-    ├── schema-gate.js       ← references/input-schema.json (ajv draft-2020-12 strict gate)
+    ├── schema-gate.js       ← resource-paths.js (ajv draft-2020-12 strict gate)
+    ├── resource-paths.js    (no deps — where references/ lives in each layout)
     ├── types.js             (no deps)
     └── utils.js             (reads config.json)
 
@@ -138,7 +139,9 @@ membership instead of coordinates.
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
 | `scripts/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
-| `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them; `schema-gate.js`/`agents/prompt-sections.js` fall back to the repo-root copy when the published one is absent |
+| `scripts/resource-paths.js` | `inputSchemaPath`, `promptTemplatePath` — the single place that decides where `references/` lives. **The source outranks the in-package copy.** The reverse precedence was a silent trap: `npm pack` (including the `--dry-run` the docs gate runs) leaves a copy behind, and every later edit to `references/` then had no effect while `git status` said nothing, because it is gitignored. Filenames are spelled out literally in each `join(__dirname, …)` — the docs gate parses those calls for string literals, and a variable would make it check a directory |
+| `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them. npm's `files` cannot reach outside the package root, hence a copy |
+| `scripts/postpack-clean-references.mjs` | `postpack` lifecycle script — removes that copy again. npm runs it after both `npm pack` and `npm pack --dry-run`, so a build artifact no longer outlives the build |
 | `scripts/build-skill.mjs` | `npm run build:skill` — bundles `SKILL.md` + `references/` + `scripts/` into `bpmn-generator-v3.skill` (gitignored, rebuilt on demand) |
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
 | `references/logic-core-schema.md` | Schema documentation (prose + examples) |

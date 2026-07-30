@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `<xsd:any namespace="##other">`, so the child is legal anywhere. Rule count 33 → 34.
 
 ### Fixed
+- **A build artifact outranked the source of truth.** `npm pack` — including the `--dry-run` the
+  docs gate runs for its package-integrity check — executes `prepack`, which copies
+  `references/input-schema.json` and `prompt-template.md` into `scripts/references/` so the npm
+  tarball can carry them (npm's `files` field cannot reach outside the package root). Nothing removed
+  the copy afterwards, and both runtime readers preferred it over the repo-root source. So after
+  running the docs gate once, every later edit to `references/` silently had no effect — and because
+  the directory is gitignored, `git status` said nothing either. For `prompt-template.md` no test
+  would ever have noticed. Neither CI (separate workflows, separate checkouts) nor the published
+  package (prepack refreshes the copy immediately before packing) was affected — this was a
+  developer-experience defect, and a quiet one.
+  The precedence is now inverted: the source wins, the in-package copy is the fallback. Resolution
+  moved into one place, `scripts/resource-paths.js`, replacing two copies of the same logic that
+  carried different `..` depths and had no test between them. A `postpack` step removes the artifact
+  so it no longer outlives the build. Script count 30 → 31.
 - **Subprocess children reached the XML with only their id and name.** The child branch of
   `buildProcess` was a hand-rolled subset of the top-level node loop, so `documentation`,
   standard-loop and multi-instance characteristics, `scriptFormat`, the script body,

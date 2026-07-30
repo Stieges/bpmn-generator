@@ -185,13 +185,15 @@ describe('docs-gate — checkNumbers', () => {
 // files already in this repo instead of synthetic fixtures.
 describe('docs-gate — checkPackageIntegrity', () => {
   test('a dual-path fallback resolves when the primary target ships', () => {
-    // schema-gate.js reads references/input-schema.json two ways: a published
-    // in-package path and a dev-checkout fallback one level up. The fallback
-    // is SUPPOSED to escape the package (see the function's own doc comment)
-    // — only report when NEITHER candidate resolves.
+    // resource-paths.js reads references/input-schema.json two ways: an
+    // in-package path and a dev-checkout one a level up. The checkout one is
+    // SUPPOSED to escape the package (see the function's own doc comment) —
+    // only report when NEITHER candidate resolves. Note this is order-independent
+    // by design: resource-paths.js prefers the CHECKOUT path at runtime, and the
+    // check still passes because the in-package candidate ships.
     const findings = checkPackageIntegrity(
-      ['schema-gate.js', 'references/input-schema.json'],
-      new Set([join(__dirname, 'schema-gate.js')]),
+      ['resource-paths.js', 'references/input-schema.json', 'references/prompt-template.md'],
+      new Set([join(__dirname, 'resource-paths.js')]),
     );
     expect(findings).toEqual([]);
   });
@@ -199,14 +201,16 @@ describe('docs-gate — checkPackageIntegrity', () => {
   test('reproduces the original publish-blocker: primary target missing, only the escaping fallback resolves', () => {
     // Before the prepack fix, references/input-schema.json never shipped —
     // this is the exact state that made a fresh install of the published
-    // package throw on first import.
+    // package throw on first import. Kept pointed at whichever module owns the
+    // dual path today; the defect it guards against is the packaging one, not
+    // the module name.
     const findings = checkPackageIntegrity(
-      ['schema-gate.js'],
-      new Set([join(__dirname, 'schema-gate.js')]),
+      ['resource-paths.js'],
+      new Set([join(__dirname, 'resource-paths.js')]),
     );
-    expect(findings).toHaveLength(1);
+    expect(findings).toHaveLength(2);   // one per referenced file
     expect(findings[0]).toMatchObject({ check: 'package-integrity' });
-    expect(findings[0].detail).toContain('schema-gate.js');
+    expect(findings.map(f => f.detail).join(' ')).toContain('resource-paths.js');
   });
 
   test('a target shipped via a plain package.json "files" entry resolves', () => {
