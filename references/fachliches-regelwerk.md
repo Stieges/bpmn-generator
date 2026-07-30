@@ -50,6 +50,13 @@ ins Leere zeigendes `attachedTo` bis in die Ausgabe durch und erzeugte ein `boun
 ohne `attachedToRef`, ohne DI-Shape und mit einer ausgehenden Kante ohne Wegpunkte — also
 BPMN, das kein Werkzeug lesen kann, bei grüner Validierung.
 
+Die Regel prüft **jede Verschachtelungsebene** und zusätzlich das **Containment**: Boundary
+Event und seine Aktivität müssen im selben Container liegen. Anfangs sammelte sie die
+Aktivitäten rekursiv, prüfte aber nur die oberste Ebene — genau verkehrt. Das ließ zwei
+Fehler durch: ein Boundary Event *innerhalb* eines Subprozesses ohne `attachedTo` (ungültiges
+BPMN, grüne Validierung) und den Gegenfall, ein Boundary Event der obersten Ebene, das auf
+einen Knoten *innerhalb* eines Subprozesses zeigt (auflösbar, aber laut BPMN unzulässig).
+
 ## Schicht 2: Style (WARNING)
 
 Modellierungsrichtlinien. Warnt, blockiert nicht.

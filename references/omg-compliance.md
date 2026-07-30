@@ -38,7 +38,8 @@ Mapping of OMG BPMN 2.0.2 (formal/2013-12-09, ISO/IEC 19510:2013) requirements t
 | §10.3.1 | incoming/outgoing references on FlowNodes | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.4.2 | Start Event (at least 1 per process) | Implemented | rules.js:S01 |
 | §10.4.2 | End Event (at least 1 per process) | Implemented | rules.js:S02 |
-| §10.4.4 | Boundary Event (attachedToRef, cancelActivity) | Implemented | bpmn-xml.js:generateBpmnXml, rules.js:S08 |
+| §10.4.4 | Boundary Event (attachedToRef, cancelActivity) — at every nesting level | Implemented | bpmn-xml.js:buildFlowNode, rules.js:S08, rules.js:S13 |
+| §10.2.1 | SubProcess `flowElements` are content, `isExpanded` is presentation (DI only) | Implemented | bpmn-xml.js:buildFlowNode |
 | §10.5 | LaneSet (one laneSet per Process) | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.5.1 | gatewayDirection attribute (Diverging/Converging/Mixed) | Implemented | topology.js:inferGatewayDirections |
 | §10.5.1 | Default Flow on XOR/Inclusive Gateway | Implemented | bpmn-xml.js:generateBpmnXml |

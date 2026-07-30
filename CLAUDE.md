@@ -185,9 +185,25 @@ After every change: `npm test` must pass.
 3. `bpmn-xml.js` — XML serialization
 4. `svg.js` — SVG rendering
 5. `icons.js` — if icon/marker needed
-6. `import.js` — BPMN XML → Logic-Core parsing
+6. `import.js` **and** `moddle-import.js` — BPMN XML → Logic-Core parsing (both; `moddle-import.js`
+   is the primary path, `import.js` the fallback — fixing only one leaves the round trip lossy)
 7. `references/omg-compliance.md` — update OMG mapping
 8. `references/input-schema.json` — extend schema
+
+### Adding a per-node field
+
+Not the same job as adding an element, and the place this project has got wrong twice.
+
+A field lives in **four** places, and every one of them must learn about it: `bpmn-xml.js`
+`buildFlowNode` (write), `moddle-import.js` `nodeFromElement` and `import.js` `nodeFromChild`
+(read back), plus the schema. Each of those three functions is deliberately **recursive** and
+shared between top-level nodes and subprocess children — put the field in a caller instead of in
+the function and it silently applies to one nesting level only.
+
+The failure mode is invisible: bpmn-moddle reports attributes it does not *know*, never fields
+that never arrived, so an omission produces no warning and `validation.errors` stays empty. The
+guard is the field-set round-trip test over `tests/fixtures/subprocess-child-fidelity.json` —
+extend that fixture with the new field and it will tell you which of the four places you missed.
 
 ### Docs gate
 
@@ -374,7 +390,7 @@ node mcp-bpmn-server.js
 - Rule placeholders: M05-M06 (Style) registered with severity=OFF (POS tagger problem; tracked in ROADMAP)
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
-- Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + 13 unit tests; not exhaustive across all BPMN element types. Text annotations and groups are a recent addition to that coverage — the primary importer (`moddle-import.js`) used to walk only `flowElements`, where bpmn-moddle never places an Artifact, so both were silently dropped on import (fixed alongside the export-side defect that produced an illegal `name` attribute on them)
+- Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + unit tests; not exhaustive across all BPMN element types. Two classes were recently added to that coverage after both turned out to be lossy: text annotations and groups (the primary importer walked only `flowElements`, where bpmn-moddle never places an Artifact), and **subprocess children**, which reached the XML with only their id and name — documentation, loop/multi-instance, script, `calledElement`, `gatewayDirection` and the mandatory `attachedToRef` were all dropped, grandchildren entirely. Both directions were affected, so the round trip looked intact while both ends lost the same fields. The guard is now a field-set comparison over `tests/fixtures/subprocess-child-fidelity.json`, not a per-field assertion
 - Boundary events are placed deterministically on the bottom edge of their host and their outgoing flow is re-routed there (`coordinates.js` §5.0-). ELK does not lay them out; a host carrying many of them will spread them evenly rather than optimally
 - Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right
 - Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, which is why DI05 is a WARNING
