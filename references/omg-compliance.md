@@ -6,6 +6,56 @@ Mapping of OMG BPMN 2.0.2 (formal/2013-12-09, ISO/IEC 19510:2013) requirements t
 
 ---
 
+## Specification Sources
+
+The normative OMG files live under `references/omg-spec/` and are **gitignored** — they are third-party
+documents, not our source. Download them locally from the URLs below; nothing in the build depends on
+their presence.
+
+### BPMN 2.0.2 — `references/omg-spec/normative/`
+
+Specification page: <https://www.omg.org/spec/BPMN/2.0.2/About-BPMN> (formal/2013-12-09, ISO/IEC 19510:2013)
+
+| File | URL |
+|------|-----|
+| `Semantic.xsd` | <https://www.omg.org/spec/BPMN/20100501/Semantic.xsd> |
+| `BPMNDI.xsd` | <https://www.omg.org/spec/BPMN/20100501/BPMNDI.xsd> |
+| `DI.xsd` | <https://www.omg.org/spec/BPMN/20100501/DI.xsd> |
+| `DC.xsd` | <https://www.omg.org/spec/BPMN/20100501/DC.xsd> |
+| `BPMN20.xsd` | <https://www.omg.org/spec/BPMN/20100501/BPMN20.xsd> |
+| Specification PDF | <https://www.omg.org/spec/BPMN/2.0.2/PDF> |
+
+Provenance verified 2026-07-30: every URL above returns HTTP 200 with a byte count identical to the
+corresponding local file (`Semantic.xsd` 62 507, `BPMNDI.xsd` 4 010, `DI.xsd` 3 470, `DC.xsd` 1 324,
+`BPMN20.xsd` 1 941, PDF 7 296 515).
+
+`Semantic.xsd` is the file to check first for any question about what an element may legally carry —
+see the artifact-label fix (#36), which turned on `tArtifact` extending `tBaseElement` and therefore
+having no `name`.
+
+### DMN 1.3 — `references/omg-spec/normative/dmn/`
+
+Retrieved 2026-07-30 for the feasibility analysis in
+[2026-07-30-dmn-feasibility-design.md](../docs/superpowers/specs/2026-07-30-dmn-feasibility-design.md).
+Nothing in this project implements DMN — these are reference material only. Keep them in the `dmn/`
+subdirectory: the DMN `DI.xsd`/`DC.xsd` belong to a **different namespace** than the BPMN files of the
+same name, and the schemas reference each other by relative `schemaLocation`.
+
+Specification page: <https://www.omg.org/spec/DMN/1.3/About-DMN> (formal/21-01-01, February 2021)
+
+| File | URL |
+|------|-----|
+| `DMN13.xsd` | <https://www.omg.org/spec/DMN/20191111/DMN13.xsd> |
+| `DMNDI13.xsd` | <https://www.omg.org/spec/DMN/20191111/DMNDI13.xsd> |
+| `DI.xsd` | <https://www.omg.org/spec/DMN/20180521/DI.xsd> |
+| `DC.xsd` | <https://www.omg.org/spec/DMN/20180521/DC.xsd> |
+| `DMN-1.3-spec.pdf` | <https://www.omg.org/spec/DMN/1.3/PDF> |
+
+DMN 1.5 (August 2024) is the current formal version; 1.3 is what the tooling ecosystem implements —
+the same standard-ahead-of-its-readers split as BPMN. Version index: <https://www.omg.org/spec/DMN>
+
+---
+
 ## Chapter 7 — Infrastructure
 
 | OMG Section | Requirement | Status | File:Function |
