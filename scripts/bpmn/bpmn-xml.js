@@ -8,7 +8,8 @@
 
 import { BpmnModdle } from 'bpmn-moddle';
 import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, bpmnXmlTag } from './types.js';
-import { rn, LANE_HEADER_W, LABEL_DISTANCE, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
+import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
+import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { inferGatewayDirections } from './topology.js';
 import { inferEventMarker } from './icons.js';
 

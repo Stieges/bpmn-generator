@@ -26,20 +26,6 @@ export function loadConfig(customPath) {
 
 export const CFG = loadConfig(process.env.BPMN_CONFIG);
 
-export const SHAPE          = CFG.shape;
-export const SW             = CFG.strokeWidth;
-export const CLR            = CFG.color;
-export const LANE_HEADER_W  = CFG.layout.laneHeaderWidth;
-export const LANE_PADDING   = CFG.layout.lanePadding;
-export const LABEL_DISTANCE = CFG.layout.labelDistance;
-export const TASK_RX        = CFG.layout.taskBorderRadius;
-export const INNER_OUTER_GAP = CFG.layout.innerOuterGap;
-export const EXTERNAL_LABEL_H = CFG.layout.externalLabelHeight;
-export const POOL_GAP       = CFG.layout.poolGap;
-export const COLLAB_PADDING = CFG.layout.collabPadding;
-export const MESSAGE_FLOW_FAN = CFG.layout.messageFlowFan;
-export const ARTIFACT_GAP = CFG.layout.artifactGap;
-
 /**
  * Namespace for our own BPMN extension data, carried in `<bpmn:extensionElements>`.
  *

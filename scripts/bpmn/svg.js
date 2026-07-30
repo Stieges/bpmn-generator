@@ -4,7 +4,8 @@
  */
 
 import { isEvent, isGateway, isDataArtifact } from './types.js';
-import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H, esc, rn, wrapText } from '../shared/utils.js';
+import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
+import { esc, rn, wrapText } from '../shared/utils.js';
 
 import {
   renderEventMarker, inferEventMarker, renderTaskIcon, renderPentagon,

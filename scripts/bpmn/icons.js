@@ -3,7 +3,8 @@
  * SVG path data based on bpmn-js PathMap glyphs.
  */
 
-import { CLR, rn } from '../shared/utils.js';
+import { CLR } from './constants.js';
+import { rn } from '../shared/utils.js';
 
 function renderLoopMarker(ox, oy) {
   return `<path d="M 4,8 A 5,5 0 1,0 11,5 L 13,2 L 11,5 L 8,5" fill="none" stroke="${CLR.stroke}" stroke-width="1.5" stroke-linecap="round"/>`;

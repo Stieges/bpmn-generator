@@ -112,6 +112,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   specifiers onto the new paths; no shims, no major bump). CLI invocations change:
   `node bpmn/pipeline.js …` from `scripts/`. Behaviour is provably identical — generated
   outputs are byte-identical against the pre-move baseline.
+  `scripts/shared/utils.js` now carries only what both engines use; the 13 BPMN-only layout
+  constants (`SHAPE`, `SW`, `CLR`, lane/label/gap/padding sizes) moved out to
+  `scripts/bpmn/constants.js` — `dmn/` imports none of them. Same guarantee: byte-identical
+  outputs against the pre-move baseline.
 - A subprocess's content is now serialised whether or not it is expanded. `isExpanded` is a
   presentation property and stays confined to the DI (`BPMNShape`); gating the content on it made
   "collapsed but drillable" — legal BPMN — inexpressible and produced an empty box. Both importers

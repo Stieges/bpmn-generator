@@ -4,7 +4,8 @@
  */
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, CFG } from '../shared/utils.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP } from './constants.js';
+import { CFG } from '../shared/utils.js';
 import { identifyHappyPathNodes, resolveLaneId } from './topology.js';
 
 function buildCoordinateMap(elkResult, lc) {

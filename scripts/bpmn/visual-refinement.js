@@ -10,7 +10,8 @@
  * - compactLanes:               reduce lane height to content bbox + LANE_COMPACT_PADDING; cascade-shift nodes + edge waypoints
  */
 
-import { wrapTextByPx, LANE_HEADER_W } from '../shared/utils.js';
+import { LANE_HEADER_W } from './constants.js';
+import { wrapTextByPx } from '../shared/utils.js';
 
 // Average character-width factors for Arial at fontSize 1 (in px).
 // Calibrated against bpmn.io renderings; accurate to ~±15% which is
