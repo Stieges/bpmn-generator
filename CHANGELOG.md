@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`decisionRef` on a Business Rule Task** — records *which* decision a task invokes. Until now the
+  element said "a rule set decides here" and nothing said which one. Serialised into
+  `<bpmn:extensionElements>` under the generator's own namespace (`EXTENSION_NS` in `utils.js`), read
+  back by both importers, covered by the field-set round-trip guard. Deliberately **not**
+  `camunda:decisionRef`: BPMN 2.0 defines no attribute for this link, and emitting a vendor one would
+  make every file claim a binding it does not have. The reverse direction is standardised — DMN's
+  `tDecision` carries `usingProcess`/`usingTask` — and is where the DMN side will attach.
+- **Rule M11** (Style, WARNING): `decisionRef` on anything other than a `businessRuleTask` is inert.
+  A warning rather than an error, because the file stays valid BPMN — `tExtensionElements` is
+  `<xsd:any namespace="##other">`, so the child is legal anywhere. Rule count 33 → 34.
+
 ### Fixed
 - **Subprocess children reached the XML with only their id and name.** The child branch of
   `buildProcess` was a hand-rolled subset of the top-level node loop, so `documentation`,

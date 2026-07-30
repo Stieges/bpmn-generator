@@ -8,7 +8,7 @@
 
 import { BpmnModdle } from 'bpmn-moddle';
 import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, bpmnXmlTag } from './types.js';
-import { rn, LANE_HEADER_W, LABEL_DISTANCE } from './utils.js';
+import { rn, LANE_HEADER_W, LABEL_DISTANCE, EXTENSION_NS, EXTENSION_PREFIX } from './utils.js';
 import { inferGatewayDirections } from './topology.js';
 import { inferEventMarker } from './icons.js';
 
@@ -277,6 +277,20 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   // Script body
   if (node.type === 'scriptTask' && node.script) {
     el.script = node.script;
+  }
+
+  // decisionRef — which decision model a Business Rule Task invokes.
+  //
+  // BPMN 2.0 has no standard attribute for this; the DMN side of the link IS
+  // standard (Decision/usingTask, DMN13.xsd) but points the other way. So this
+  // goes into extensionElements under our own namespace rather than borrowing
+  // `camunda:`. Created via createAny so the namespace URI travels with the
+  // element — see EXTENSION_NS in utils.js for why that matters.
+  if (node.decisionRef) {
+    const ref = moddle.createAny(`${EXTENSION_PREFIX}:decisionRef`, EXTENSION_NS, {
+      $body: String(node.decisionRef),
+    });
+    el.extensionElements = create('bpmn:ExtensionElements', { values: [ref] });
   }
 
   registerNode(node, el);

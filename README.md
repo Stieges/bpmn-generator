@@ -39,7 +39,7 @@ Full gallery: [docs/screenshots/](docs/screenshots/). All SVGs regenerated from 
 | Multi-pool with lanes + message flows | **✅ verified** | ✅ | ❌ (bpmn-auto-layout limitation) | ? |
 | Strict JSON Schema input gate (ajv) | **✅** | n/a | partial | partial |
 | Soundness check | WF-Net (3 rules) | POWL by construction | none | none |
-| Configurable rule engine | **33 rules, 5 layers, JSON profiles** | limited | none | none |
+| Configurable rule engine | **34 rules, 5 layers, JSON profiles** | limited | none | none |
 | MCP server | **✅** | ❌ | ❌ | ❌ |
 | Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
 | License | MIT | GPL-3.0 | MIT-ish | unclear |
@@ -72,7 +72,7 @@ Think of it as going from **0% → 80%** in seconds. The remaining 20% is domain
 
 ```
 User Text → [Phase 1] Intent Extraction (LLM → JSON Logic-Core)
-          → [Phase 2] Validation (33 rules, 5 layers, deadlock detection)
+          → [Phase 2] Validation (34 rules, 5 layers, deadlock detection)
           → [Phase 3] Auto-Layout (ElkJS Sugiyama layered algorithm)
           → [Phase 4] Serialization → BPMN 2.0 XML + SVG
 ```
@@ -127,7 +127,7 @@ everything needed:
 scripts/
 ├── pipeline.js        Orchestrator + CLI
 │   ├── validate.js    Validation wrapper → rules.js
-│   ├── rules.js       Rule engine (33 rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md` for the catalog
+│   ├── rules.js       Rule engine (34 rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md` for the catalog
 │   ├── topology.js    Gateway directions, topological sort, lane ordering
 │   ├── layout.js      ELK graph construction + layout execution
 │   ├── coordinates.js Coordinate maps, edge clipping, pool equalization
@@ -206,12 +206,12 @@ bpmn-generator/
 
 ## Rule Engine
 
-33 rules across 5 layers with configurable severity via JSON profiles (2 are registered as placeholders). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
+34 rules across 5 layers with configurable severity via JSON profiles (2 are registered as placeholders). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
 
 | Layer | Severity | Rules | Examples |
 |-------|----------|-------|----------|
 | Soundness | ERROR | S01-S12 | Start/End events, deadlocks, boundary events |
-| Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
+| Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Liveness, boundedness, deadlock-freedom (opt-in) |
 | Optimization | ADVISORY | O01-O04 | Redesign opportunities — `optimize`/`soll` mode only (opt-in); each names a transform in the redesign toolbox |
@@ -267,7 +267,7 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 - **Round-tripping** (BPMN XML → Logic-Core JSON → BPMN XML)
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
-- **Configurable rule engine** (33 rules, 5 layers, JSON profiles — 2 registered as placeholders)
+- **Configurable rule engine** (34 rules, 5 layers, JSON profiles — 2 registered as placeholders)
 - **Redesign toolbox** (5 deterministic process transforms with preview/apply, no LLM — see below)
 - **OMG BPMN 2.0.2 compliant** XML output (ISO/IEC 19510:2013)
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)

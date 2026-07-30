@@ -81,22 +81,23 @@ straight to ELK without inversion — even though the XML nests the requirement 
 
 ## GATES
 
-> **🚧 GATE 1 — new runtime dependency.** `dmn-moddle@12.0.1` (MIT, bpmn-io). Its three dependencies
-> are character-identical to `bpmn-moddle@10.0.0`'s and already installed, so the marginal cost is
-> one package and no new subtree (§2.2). `CLAUDE.md` requires prior discussion for any new runtime
-> dependency, and the dependency-audit gate and supply-chain policy both apply.
-> **Blocks Stage 4.** Stages 1–3 do not need it.
+> **✅ GATE 1 — new runtime dependency: APPROVED (2026-07-30).** `dmn-moddle@12.0.1` (MIT, bpmn-io)
+> is taken as a runtime dependency. Its three dependencies are character-identical to
+> `bpmn-moddle@10.0.0`'s and already installed, so the marginal cost is one package and no new
+> subtree (§2.2). The dependency-audit gate and supply-chain policy still apply on the way in —
+> `scripts/package.json` and `THIRD-PARTY-NOTICES.md` both need updating in Stage 4.
 >
-> Fallback if refused: hand-written XML via template strings, the way `bpmn-xml.js` began. Costs an
-> estimated +150–200 lines and gives up the free round-trip check that catches the §2.7(a) class.
+> Rejected alternative, recorded: hand-written XML via template strings, the way `bpmn-xml.js` began
+> — an estimated +150–200 lines, and it gives up the free round-trip check that catches the §2.7(a)
+> class.
 
-> **🚧 GATE 2 — where the LLM sits (G8).** Does the extraction skill learn to produce Decision-Core
-> as well as Logic-Core? The risk is not technical: `SKILL.md` is already large, and teaching a
-> second format may degrade the BPMN extraction that works today.
-> Options: (a) `SKILL.md` gains a DMN half; (b) a separate skill that shares only `references/`;
-> (c) no LLM extraction at all — DMN stays a library/CLI capability fed by hand-written or imported
-> Decision-Core.
-> **Blocks Stage 7 only.** Everything before it is library work that all three options need.
+> **⏸ GATE 2 — where the LLM sits (G8): DEFERRED (2026-07-30).** Deliberately unanswered until
+> Stages 1–6 exist, because all three options need the same library work and the question is easier
+> to answer against something real than against a plan.
+> Options when it comes up: (a) `SKILL.md` gains a DMN half; (b) a separate skill sharing only
+> `references/`; (c) no LLM extraction at all — DMN stays a library/CLI capability fed by
+> hand-written or imported Decision-Core.
+> **Blocks Stage 7 only.** Do not start Stage 7's skill work without answering it.
 
 ---
 

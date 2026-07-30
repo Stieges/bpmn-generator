@@ -40,6 +40,24 @@ export const COLLAB_PADDING = CFG.layout.collabPadding;
 export const MESSAGE_FLOW_FAN = CFG.layout.messageFlowFan;
 export const ARTIFACT_GAP = CFG.layout.artifactGap;
 
+/**
+ * Namespace for our own BPMN extension data, carried in `<bpmn:extensionElements>`.
+ *
+ * Deliberately ours and not `camunda:` — a Camunda-namespaced attribute would make
+ * every file we write claim a vendor binding it does not have, and CLAUDE.md rules
+ * Camunda extensions out. BPMN allows this: `tExtensionElements` is
+ * `<xsd:any namespace="##other">`, so a foreign-namespace child is legal on any
+ * BaseElement (OMG Semantic.xsd).
+ *
+ * Always create these through `moddle.createAny(name, EXTENSION_NS, …)`, which
+ * takes the namespace URI as an argument. The alternative — writing the attribute
+ * into `$attrs` and declaring `xmlns:` separately on Definitions — has a silent
+ * failure mode: forget the declaration and moddle drops the value entirely,
+ * logging to stderr while `warnings` stays empty and no exception is thrown.
+ */
+export const EXTENSION_NS = 'http://bpmn-generator/schema/1.0';
+export const EXTENSION_PREFIX = 'bg';
+
 export function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
                         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');

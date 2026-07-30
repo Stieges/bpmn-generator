@@ -14,6 +14,7 @@
           { "id": "c_mi", "type": "serviceTask", "name": "Notify parties", "multiInstance": "parallel" },
           { "id": "c_script", "type": "scriptTask", "name": "Compute score", "scriptFormat": "groovy", "script": "score = 1" },
           { "id": "c_call", "type": "callActivity", "name": "Call rating", "calledElement": "RatingProcess" },
+          { "id": "c_rule", "type": "businessRuleTask", "name": "Apply rating rules", "decisionRef": "RatingDecision" },
           { "id": "c_gw", "type": "exclusiveGateway", "name": "Complete?" },
           { "id": "c_bnd", "type": "boundaryEvent", "marker": "timer", "attachedTo": "c_doc", "name": "7d" },
           {
@@ -39,7 +40,8 @@
           { "id": "c_f5", "source": "c_gw", "target": "c_script", "label": "no" },
           { "id": "c_f6", "source": "c_mi", "target": "c_call" },
           { "id": "c_f7", "source": "c_script", "target": "c_call" },
-          { "id": "c_f8", "source": "c_call", "target": "inner" },
+          { "id": "c_f8", "source": "c_call", "target": "c_rule" },
+          { "id": "c_f8b", "source": "c_rule", "target": "inner" },
           { "id": "c_f9", "source": "inner", "target": "c_end" },
           { "id": "c_f10", "source": "c_bnd", "target": "c_end2" }
         ]

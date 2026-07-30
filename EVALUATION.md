@@ -107,7 +107,7 @@ Stieges column verified against this repo. Competitor columns sourced from their
 | **Multi-pool collaboration + message flows** | **Yes** ([multi-pool-collaboration.expected.bpmn](tests/fixtures/multi-pool-collaboration.expected.bpmn)) | Yes (POWL-based) | **No** (BPMN Auto Layout limitation, paper §6) | Unclear (no public repo) |
 | **Lane support** | **Yes, multi-lane per pool** ([sparse-lanes.expected.bpmn](tests/fixtures/sparse-lanes.expected.bpmn) — 4 lanes) | Yes (paper) | Limited | Unclear |
 | Soundness check | Workflow-Net (WF01–WF03), 3 rules | POWL-by-construction (mathematical guarantee) | None documented | None documented |
-| Configurable rule engine | **Yes** (33 rules, 5 layers, JSON profiles) | Limited | None | None |
+| Configurable rule engine | **Yes** (34 rules, 5 layers, JSON profiles) | Limited | None | None |
 | Schema-strict input gate | **Yes** (ajv draft-2020-12, [schema-gate.js](scripts/schema-gate.js)) | N/A | Loose | Loose |
 | Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
 | License | MIT | GPL-3.0 | MIT-ish | Unclear |

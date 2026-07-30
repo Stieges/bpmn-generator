@@ -73,6 +73,7 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 | M08 | Jeder XOR-Split hat einen Default-Flow | Silver Ch.5 | implementiert |
 | M09 | Lane-Node-Zuweisung: Format B (lane.nodeIds) ohne Format A (node.lane) | OMG §10.5 | implementiert |
 | M10 | Lane- und Pool-Namen: max. 25 Zeichen | Silver §4.2 | implementiert |
+| M11 | `decisionRef` only on a businessRuleTask | generator convention (no OMG attribute exists) | implementiert |
 
 ## Schicht 3: Pragmatik (INFO)
 
@@ -226,6 +227,42 @@ Lane- und Pool-Namen sollten maximal 25 Zeichen lang sein. Laengere Namen erzwin
 | schlecht | `Kreditorenbuchhaltung (intern)` | 30 |
 
 **Referenz:** Bruce Silver: BPMN Method & Style, 2nd Ed., §4.2 (Naming & Labels)
+
+---
+
+## Rule M11: decisionRef Placement
+
+**Layer:** Style | **Default Severity:** WARNING | **Scope:** process
+
+> Written in English, unlike the older entries above. New content in this repository is English;
+> the German entries are legacy and are not translated as a side effect of adding a rule.
+
+`decisionRef` records which decision model a task invokes. It is meaningful on a `businessRuleTask`
+and on nothing else. Anywhere else it is inert: no engine reads it, and the reader is misled into
+thinking a decision is bound where none is.
+
+**Why WARNING and not ERROR.** The file stays valid BPMN either way. `decisionRef` is serialised
+into `<bpmn:extensionElements>` under the generator's own namespace, and `tExtensionElements` is
+`<xsd:any namespace="##other">` — a foreign-namespace child is legal on any `BaseElement`
+(OMG Semantic.xsd). So this is a modelling defect, not a structural one, and the severity says so.
+The rule descends into subprocesses, because the field does.
+
+**Why our own namespace and not `camunda:`.** BPMN 2.0 defines no attribute for this link. The
+reverse direction *is* standardised — DMN's `tDecision` carries `usingProcess` and `usingTask`
+(DMN13.xsd), pointing from the decision to the task — but there is no BPMN→DMN counterpart.
+`camunda:decisionRef` is a vendor extension, and emitting it would make every file we write claim a
+Camunda binding it does not have. See `EXTENSION_NS` in `scripts/utils.js`.
+
+**Beispiele:**
+
+| Bewertung | Element | Grund |
+|-----------|---------|-------|
+| gut | `businessRuleTask` mit `decisionRef: "RatingDecision"` | the element that invokes a decision |
+| schlecht | `userTask` mit `decisionRef` | a person decides here, not a rule set |
+| schlecht | `serviceTask` mit `decisionRef` | use `implementation` for the service binding |
+
+**Referenz:** OMG BPMN 2.0.2 §10.2.5 (Business Rule Task); OMG DMN 1.3 `tDecision` for the
+standardised reverse link.
 
 ---
 

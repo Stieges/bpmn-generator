@@ -611,6 +611,32 @@ const STYLE_RULES = [
         : { pass: false, message: `Names exceed ${LIMIT} chars — shorten for readability: ${offenders.join('; ')}` };
     }
   },
+  {
+    id: 'M11', layer: 'style', defaultSeverity: 'WARNING',
+    description: 'decisionRef belongs on a businessRuleTask — that is the element that invokes a decision',
+    // Our own convention, not Bruce Silver: `decisionRef` is a generator extension
+    // (see EXTENSION_NS in utils.js). BPMN allows extensionElements on any
+    // BaseElement, so putting it elsewhere is legal XML and round-trips fine — it
+    // just does not mean anything, and no engine will act on it. Hence WARNING,
+    // not ERROR: the file is valid, the modelling is not.
+    ref: { omg: '§10.2.5 Business Rule Task', note: 'generator extension, no OMG attribute exists' },
+    scope: 'process',
+    check: (proc) => {
+      const offenders = [];
+      const walk = (container) => {
+        for (const n of (container.nodes || [])) {
+          if (n.nodes) walk(n);
+          if (n.decisionRef && n.type !== 'businessRuleTask') {
+            offenders.push(`"${n.id}" (${n.type})`);
+          }
+        }
+      };
+      walk(proc);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `decisionRef on a non-businessRuleTask has no meaning: ${offenders.join(', ')}` };
+    }
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════

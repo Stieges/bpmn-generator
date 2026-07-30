@@ -338,6 +338,11 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
       node.implementation = child.attrs.implementation;
     }
 
+    // decisionRef out of our own extensionElements. findChild strips the prefix,
+    // so this reads regardless of which prefix the writer chose for the namespace.
+    const decisionRefEl = findChild(findChild(child, 'extensionElements'), 'decisionRef');
+    if (decisionRefEl?.text) node.decisionRef = decisionRefEl.text;
+
     // EventBasedGateway: eventGatewayType, instantiate (OMG spec §10.5.6)
     if (tag === 'eventBasedGateway') {
       if (child.attrs.eventGatewayType && child.attrs.eventGatewayType !== 'Exclusive') node.eventGatewayType = child.attrs.eventGatewayType;
