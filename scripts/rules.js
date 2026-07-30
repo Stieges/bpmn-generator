@@ -373,24 +373,37 @@ const SOUNDNESS_RULES = [
       // dangling reference produced a boundaryEvent with no attachedToRef, no DI
       // shape, and an outgoing flow with no waypoints — invalid BPMN that
       // validated green.
-      const activities = new Set();
-      const collect = (container) => {
+      // Every activity, and which container it sits in. The container matters:
+      // BPMN requires a boundary event and its host to share one, so knowing
+      // that the id exists somewhere is not enough. Collecting recursively while
+      // only CHECKING the top level — the earlier shape of this rule — was
+      // exactly backwards: it let a dangling boundary event one level down pass,
+      // and accepted a top-level one reaching into a subprocess.
+      const containerOf = new Map();
+      const collect = (container, containerId) => {
         for (const n of (container.nodes || [])) {
-          activities.add(n.id);
-          if (n.nodes) collect(n);
+          containerOf.set(n.id, containerId);
+          if (n.nodes) collect(n, n.id);
         }
       };
-      collect(proc);
+      collect(proc, proc.id ?? '(process)');
 
       const msgs = [];
-      for (const n of (proc.nodes || [])) {
-        if (n.type !== 'boundaryEvent') continue;
-        if (!n.attachedTo) {
-          msgs.push(`Boundary Event "${n.id}" hat kein attachedTo — jedes Boundary Event muss an einer Aktivität hängen.`);
-        } else if (!activities.has(n.attachedTo)) {
-          msgs.push(`Boundary Event "${n.id}" verweist mit attachedTo auf "${n.attachedTo}" — dieser Knoten existiert nicht.`);
+      const check = (container, containerId) => {
+        for (const n of (container.nodes || [])) {
+          if (n.nodes) check(n, n.id);
+          if (n.type !== 'boundaryEvent') continue;
+          if (!n.attachedTo) {
+            msgs.push(`Boundary Event "${n.id}" hat kein attachedTo — jedes Boundary Event muss an einer Aktivität hängen.`);
+          } else if (!containerOf.has(n.attachedTo)) {
+            msgs.push(`Boundary Event "${n.id}" verweist mit attachedTo auf "${n.attachedTo}" — dieser Knoten existiert nicht.`);
+          } else if (containerOf.get(n.attachedTo) !== containerId) {
+            msgs.push(`Boundary Event "${n.id}" liegt in "${containerId}", seine Aktivität "${n.attachedTo}" aber in "${containerOf.get(n.attachedTo)}" — beide müssen im selben Container liegen.`);
+          }
         }
-      }
+      };
+      check(proc, proc.id ?? '(process)');
+
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },

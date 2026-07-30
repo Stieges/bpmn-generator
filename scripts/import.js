@@ -146,10 +146,24 @@ function bpmnToLogicCoreLegacy(xml) {
     }
   }
 
+  // Open-vs-collapsed is a DI property (BPMNShape.isExpanded), not something to
+  // infer from a subprocess having content — see the same collection in
+  // moddle-import.js.
+  const expandedIds = new Set();
+  const diDiagram = findChild(defs, 'BPMNDiagram');
+  const diPlane = diDiagram ? findChild(diDiagram, 'BPMNPlane') : null;
+  if (diPlane) {
+    for (const shape of findChildren(diPlane, 'BPMNShape')) {
+      if (shape.attrs.isExpanded === 'true' && shape.attrs.bpmnElement) {
+        expandedIds.add(shape.attrs.bpmnElement);
+      }
+    }
+  }
+
   // Convert each process
   const pools = [];
   for (const proc of processes) {
-    const pool = convertProcess(proc, partMap, categoryValues);
+    const pool = convertProcess(proc, partMap, categoryValues, expandedIds);
     pools.push(pool);
   }
 
@@ -231,7 +245,7 @@ function bpmnToLogicCoreLegacy(xml) {
   return { id: 'Process_1', name: 'Empty', nodes: [], edges: [], lanes: [] };
 }
 
-function convertProcess(proc, partMap, categoryValues = {}) {
+function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Set()) {
   const processId = proc.attrs.id;
   const processName = proc.attrs.name || findPartNameForProcess(processId, partMap) || processId;
 
@@ -258,9 +272,12 @@ function convertProcess(proc, partMap, categoryValues = {}) {
     'dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group',
   ]);
 
-  for (const child of proc.children) {
+  // One raw element → one Logic-Core node, recursively. Mirrors nodeFromElement
+  // in moddle-import.js and buildFlowNode in bpmn-xml.js: subprocess children
+  // must be read with the same field set as top-level nodes, or the round trip
+  // drops data on the way back in.
+  const nodeFromChild = (child) => {
     const tag = stripNs(child.tag);
-    if (!flowNodeTags.has(tag)) continue;
 
     const node = {
       id: child.attrs.id,
@@ -357,27 +374,28 @@ function convertProcess(proc, partMap, categoryValues = {}) {
       }
     }
 
-    // Expanded SubProcess: parse child flow elements + sequence flows
+    // SubProcess content — read regardless of whether the shape is expanded, and
+    // recursively, so nesting survives.
     if ((tag === 'subProcess' || tag === 'transaction') && child.children && child.children.length > 0) {
       const subFlowNodes = child.children.filter(c => flowNodeTags.has(stripNs(c.tag)));
       const subSeqFlows = findChildren(child, 'sequenceFlow');
       if (subFlowNodes.length > 0) {
-        node.isExpanded = true;
-        node.nodes = subFlowNodes.map(c => {
-          const sn = { id: c.attrs.id, type: stripNs(c.tag), name: c.attrs.name || '' };
-          const sm = detectEventMarker(c);
-          if (sm) sn.marker = sm;
-          return sn;
-        });
+        node.nodes = subFlowNodes.map(nodeFromChild);
         node.edges = subSeqFlows.map(sf => {
           const se = { id: sf.attrs.id, source: sf.attrs.sourceRef, target: sf.attrs.targetRef };
           if (sf.attrs.name) se.label = sf.attrs.name;
           return se;
         });
       }
+      if (expandedIds.has(child.attrs.id)) node.isExpanded = true;
     }
 
-    nodes.push(node);
+    return node;
+  };
+
+  for (const child of proc.children) {
+    if (!flowNodeTags.has(stripNs(child.tag))) continue;
+    nodes.push(nodeFromChild(child));
   }
 
   // Sequence flows

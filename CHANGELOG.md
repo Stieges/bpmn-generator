@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Subprocess children reached the XML with only their id and name.** The child branch of
+  `buildProcess` was a hand-rolled subset of the top-level node loop, so `documentation`,
+  standard-loop and multi-instance characteristics, `scriptFormat`, the script body,
+  `calledElement` and `gatewayDirection` were all dropped — silently, because bpmn-moddle reports
+  unknown attributes but never fields that never arrived. Per-node work now lives in one recursive
+  `buildFlowNode` that both paths share.
+- A boundary event on a subprocess child never received the mandatory `attachedToRef` (OMG
+  `[1..1]`), producing invalid BPMN with `validation.errors: []`. The resolution pass now covers
+  every nesting level.
+- Nested subprocesses lost every grandchild — the child branch did not recurse. Layout already
+  did, so the geometry was correct and only the semantics were missing.
+- Both importers mirrored the same loss (children came back as `{id, type, name, marker}`), so the
+  round trip appeared intact while both ends dropped the same fields.
+- **Rule S13** collected activities recursively but checked only the top level. It now checks every
+  level, and additionally verifies containment — a boundary event and its activity must share a
+  container, so a top-level boundary event reaching into a subprocess is no longer accepted.
+
 - **Text annotations and groups lost their label in the generated XML.** Per OMG Semantic.xsd an
   Artifact extends BaseElement, which declares only `id` — `name` is illegal on `TextAnnotation`
   and `Group`, and bpmn-moddle accepted it silently instead of rejecting it. Annotations rendered
@@ -25,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing files still load.
 
 ### Changed
+- A subprocess's content is now serialised whether or not it is expanded. `isExpanded` is a
+  presentation property and stays confined to the DI (`BPMNShape`); gating the content on it made
+  "collapsed but drillable" — legal BPMN — inexpressible and produced an empty box. Both importers
+  read `isExpanded` from the DI instead of inferring it from the presence of content.
 - The CLI now prints BPMN serialisation warnings (the bpmn-moddle round trip over the generated
   XML) as their own section, and `--strict` aborts on them — consistent with how it already treats
   rule warnings and diagram diagnostics. The field (`validation.xmlWarnings`) already existed and

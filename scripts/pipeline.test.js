@@ -3282,6 +3282,161 @@ describe('artifact contract — the label survives serialisation', () => {
   });
 });
 
+// The child branch of buildProcess used to be a stripped-down copy of the
+// top-level node loop: top level enriched every node in ~14 steps, children got
+// two. Everything else was lost by omission — and omission is invisible to
+// bpmn-moddle, which only reports attributes it does not KNOW, never fields that
+// never arrived. So xmlWarnings stayed empty while seven field classes, the
+// mandatory attachedToRef and every grandchild disappeared.
+//
+// These pin the whole class rather than the individual fields: the round-trip
+// test compares what went in against what comes back, so the next field added to
+// the top-level path cannot quietly skip the child path.
+describe('subprocess children — nothing is lost on the way down', () => {
+  const CHILD_FIXTURE = 'subprocess-child-fidelity.json';
+  const childrenOf = (lc) => {
+    const out = [];
+    const walk = (nodes) => {
+      for (const n of nodes ?? []) { out.push(n); if (n.nodes) walk(n.nodes); }
+    };
+    walk([...(lc.nodes ?? []), ...((lc.pools ?? []).flatMap(p => p.nodes ?? []))]);
+    return out;
+  };
+
+  test('every enrichment the top-level path applies reaches children too', async () => {
+    const r = await runPipeline(loadFixture(CHILD_FIXTURE));
+    const x = r.bpmnXml;
+    expect({
+      documentation: /Child documentation must survive/.test(x),
+      standardLoop: /StandardLoopCharacteristics|standardLoopCharacteristics/.test(x),
+      multiInstance: /multiInstanceLoopCharacteristics/i.test(x),
+      scriptFormat: /scriptFormat="groovy"/.test(x),
+      scriptBody: /score = 1/.test(x),
+      calledElement: /calledElement="RatingProcess"/.test(x),
+      gatewayDirection: /<bpmn:exclusiveGateway id="c_gw"[^>]*gatewayDirection/.test(x),
+    }).toEqual({
+      documentation: true, standardLoop: true, multiInstance: true,
+      scriptFormat: true, scriptBody: true, calledElement: true, gatewayDirection: true,
+    });
+  });
+
+  test('a boundary event on a child gets its mandatory attachedToRef', async () => {
+    // attachedToRef is [1..1] in the OMG schema. Without it the file is invalid
+    // BPMN, and the resolution loop only ever walked the top-level node list.
+    const r = await runPipeline(loadFixture(CHILD_FIXTURE));
+    expect(r.bpmnXml).toMatch(/<bpmn:boundaryEvent id="c_bnd"[^>]*attachedToRef="c_doc"/);
+  });
+
+  test('grandchildren survive — the child branch recurses', async () => {
+    const r = await runPipeline(loadFixture(CHILD_FIXTURE));
+    expect(r.bpmnXml).toContain('id="g_task"');
+    expect(r.bpmnXml).toMatch(/Grandchild documentation must survive/);
+  });
+
+  test('the round trip keeps every child field — the guard for the whole class', async () => {
+    // bpmn-moddle cannot see an omission; comparing field sets can. This is what
+    // makes a future field added on one side but not the other fail loudly.
+    const lc = loadFixture(CHILD_FIXTURE);
+    const r = await runPipeline(lc);
+    const back = await bpmnToLogicCore(r.bpmnXml);
+
+    const before = new Map(childrenOf(lc).map(n => [n.id, n]));
+    const after = new Map(childrenOf(back).map(n => [n.id, n]));
+
+    expect([...before.keys()].filter(id => !after.has(id))).toEqual([]);
+
+    for (const [id, orig] of before) {
+      const got = after.get(id);
+      for (const field of ['documentation', 'scriptFormat', 'script', 'calledElement', 'attachedTo']) {
+        if (orig[field] === undefined) continue;
+        expect({ id, field, value: got[field] }).toEqual({ id, field, value: orig[field] });
+      }
+      if (orig.loopType) expect({ id, loop: !!got.loopType }).toEqual({ id, loop: true });
+      if (orig.multiInstance) expect({ id, mi: !!got.multiInstance }).toEqual({ id, mi: true });
+    }
+  });
+
+  test('a collapsed subprocess may still carry its content', async () => {
+    // BPMN 2.0 allows isExpanded="false" in the DI with flowElements present —
+    // "collapsed but drillable". The serialiser gated the CONTENT on isExpanded,
+    // so that state was not expressible at all: the box came out empty.
+    const lc = loadFixture(CHILD_FIXTURE);
+    const outer = lc.pools[0].nodes.find(n => n.id === 'outer');
+    delete outer.isExpanded;
+    const r = await runPipeline(lc);
+
+    expect(r.bpmnXml).toContain('id="c_doc"');                      // content is there
+    expect(r.bpmnXml).not.toMatch(/bpmnElement="c_doc"/);           // but no DI shape
+    expect(r.bpmnXml).not.toMatch(/<bpmn:subProcess id="outer"[^>]*isExpanded="true"/);
+  });
+
+  test('isExpanded round-trips from the DI, not from the presence of content', async () => {
+    // The importer used to set isExpanded=true whenever flowElements existed —
+    // the same conflation. With content now emitted for collapsed subprocesses
+    // that would flip every collapsed subprocess to expanded on re-import.
+    const lc = loadFixture(CHILD_FIXTURE);
+    delete lc.pools[0].nodes.find(n => n.id === 'outer').isExpanded;
+    const back = await bpmnToLogicCore((await runPipeline(lc)).bpmnXml);
+    const outer = childrenOf(back).find(n => n.id === 'outer');
+    expect(outer.nodes?.length).toBeGreaterThan(0);
+    expect(outer.isExpanded).not.toBe(true);
+  });
+});
+
+describe('rule S13 — boundary events, at every nesting level', () => {
+  const wrap = (nodes, edges) => ({ pools: [{ id: 'P', name: 'P', nodes, edges }] });
+
+  test('a boundary event inside a subprocess with no attachedTo is an ERROR', async () => {
+    // S13 collected activities recursively but only ever CHECKED proc.nodes —
+    // exactly inverted. A dangling boundary event one level down produced
+    // invalid BPMN while validation reported green.
+    const lc = wrap([
+      { id: 's', type: 'startEvent' },
+      { id: 'sub', type: 'subProcess', name: 'Sub', isExpanded: true,
+        nodes: [
+          { id: 'c_s', type: 'startEvent' },
+          { id: 'c_t', type: 'userTask', name: 'T' },
+          { id: 'c_b', type: 'boundaryEvent', marker: 'timer' },   // no attachedTo
+          { id: 'c_e', type: 'endEvent' },
+        ],
+        edges: [{ id: 'cf1', source: 'c_s', target: 'c_t' }, { id: 'cf2', source: 'c_t', target: 'c_e' }] },
+      { id: 'e', type: 'endEvent' },
+    ], [{ id: 'f1', source: 's', target: 'sub' }, { id: 'f2', source: 'sub', target: 'e' }]);
+    const { errors } = validateLogicCore(lc);
+    expect(errors.some(e => /c_b/.test(e))).toBe(true);
+  });
+
+  test('a boundary event whose host lives in another container is an ERROR', async () => {
+    // The inverse hole from the same asymmetry: collect() recursed, so a
+    // top-level boundary event pointing at a CHILD activity looked resolvable
+    // and passed — while BPMN requires host and boundary event to share a
+    // container.
+    const lc = wrap([
+      { id: 's', type: 'startEvent' },
+      { id: 'sub', type: 'subProcess', name: 'Sub', isExpanded: true,
+        nodes: [
+          { id: 'c_s', type: 'startEvent' },
+          { id: 'c_t', type: 'userTask', name: 'T' },
+          { id: 'c_e', type: 'endEvent' },
+        ],
+        edges: [{ id: 'cf1', source: 'c_s', target: 'c_t' }, { id: 'cf2', source: 'c_t', target: 'c_e' }] },
+      { id: 'outsider', type: 'boundaryEvent', marker: 'timer', attachedTo: 'c_t' },
+      { id: 'e', type: 'endEvent' },
+      { id: 'e2', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'sub' }, { id: 'f2', source: 'sub', target: 'e' },
+      { id: 'f3', source: 'outsider', target: 'e2' },
+    ]);
+    const { errors } = validateLogicCore(lc);
+    expect(errors.some(e => /outsider/.test(e))).toBe(true);
+  });
+
+  test('a correctly nested boundary event passes', async () => {
+    const r = await runPipeline(loadFixture('subprocess-child-fidelity.json'));
+    expect(r.validation.errors).toEqual([]);
+  });
+});
+
 describe('geometry contract — the two renderers agree', () => {
   // svg.js draws for humans, bpmn-xml.js writes for tools. Whenever the contract
   // had a gap, both filled it independently and drifted apart: the SVG drew

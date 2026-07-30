@@ -67,8 +67,21 @@ function moddleToLogicCore(definitions) {
   const collapsedParts = participants.filter(p => !p.processRef || !processIds.has(p.processRef.id));
   const isMultiPool = expandedParts.length > 1 || collapsedParts.length > 0;
 
+  // Whether a subprocess is drawn open or collapsed is recorded in the DI, on
+  // BPMNShape.isExpanded — not by whether it happens to contain flowElements.
+  // Inferring it from content presence (the previous behaviour) turns every
+  // legitimately collapsed-but-drillable subprocess into an expanded one on
+  // re-import, and silently changes the diagram.
+  const expandedIds = new Set();
+  for (const diElement of definitions.diagrams?.[0]?.plane?.planeElement || []) {
+    if (diElement.$type === 'bpmndi:BPMNShape' && diElement.isExpanded === true) {
+      const id = diElement.bpmnElement?.id ?? diElement.bpmnElement;
+      if (id) expandedIds.add(id);
+    }
+  }
+
   // Convert each process
-  const pools = processes.map(proc => convertProcess(proc, partMap));
+  const pools = processes.map(proc => convertProcess(proc, partMap, expandedIds));
 
   // Collapsed pools
   const collapsedPools = collapsedParts.map(p => ({
@@ -157,7 +170,7 @@ function moddleToLogicCore(definitions) {
   return { id: 'Process_1', name: 'Empty', nodes: [], edges: [], lanes: [] };
 }
 
-function convertProcess(proc, partMap) {
+function convertProcess(proc, partMap, expandedIds = new Set()) {
   const processId = proc.id;
   const processName = proc.name || findPartNameForProcess(processId, partMap) || processId;
   const documentation = proc.documentation?.[0]?.text || undefined;
@@ -181,10 +194,18 @@ function convertProcess(proc, partMap) {
     'dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group',
   ]);
 
-  for (const el of proc.flowElements || []) {
+  /**
+   * One moddle flow element → one Logic-Core node, recursively.
+   *
+   * The mirror image of buildFlowNode in bpmn-xml.js, and it exists for the same
+   * reason: the child branch here used to read back only {id, type, name, marker},
+   * so documentation, loop/multi-instance, script, calledElement and attachedTo
+   * were dropped on import even once the exporter emitted them. Export and import
+   * have to agree field for field, or the round trip loses data in one direction
+   * while both sides individually look fine.
+   */
+  const nodeFromElement = (el) => {
     const type = shortType(el.$type);
-    if (!flowNodeTags.has(type)) continue;
-
     const node = { id: el.id, type, name: el.name || '' };
 
     // Lane assignment
@@ -265,24 +286,20 @@ function convertProcess(proc, partMap) {
       }
     }
 
-    // Expanded SubProcess
+    // SubProcess content — read whether or not the shape is expanded, and
+    // recursively, so a subprocess inside a subprocess keeps its own children.
     if ((type === 'subProcess' || type === 'transaction') && el.flowElements?.length) {
       const subFlowNodes = el.flowElements.filter(c => flowNodeTags.has(shortType(c.$type)));
       const subSeqFlows = el.flowElements.filter(c => c.$type === 'bpmn:SequenceFlow');
       if (subFlowNodes.length > 0) {
-        node.isExpanded = true;
-        node.nodes = subFlowNodes.map(c => {
-          const sn = { id: c.id, type: shortType(c.$type), name: c.name || '' };
-          const sm = detectEventMarkerModdle(c);
-          if (sm.marker) sn.marker = sm.marker;
-          return sn;
-        });
+        node.nodes = subFlowNodes.map(nodeFromElement);
         node.edges = subSeqFlows.map(sf => {
           const se = { id: sf.id, source: sf.sourceRef?.id || sf.sourceRef, target: sf.targetRef?.id || sf.targetRef };
           if (sf.name) se.label = sf.name;
           return se;
         });
       }
+      if (expandedIds.has(el.id)) node.isExpanded = true;
     }
 
     // Preserve unknown extension attributes for round-trip (Phase B)
@@ -291,7 +308,12 @@ function convertProcess(proc, partMap) {
       node.extensions.$attrs = { ...el.$attrs };
     }
 
-    nodes.push(node);
+    return node;
+  };
+
+  for (const el of proc.flowElements || []) {
+    if (!flowNodeTags.has(shortType(el.$type))) continue;
+    nodes.push(nodeFromElement(el));
   }
 
   // Artifacts. bpmn-moddle parks TextAnnotation and Group in proc.artifacts, not
