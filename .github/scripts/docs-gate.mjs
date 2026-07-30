@@ -18,11 +18,7 @@
  *      scripts/rules.js; the "<N> top-level scripts" claim (CLAUDE.md) against
  *      `scripts/*.js`; every DI code in references/api-reference.md against
  *      scripts/di-check.js, in both directions.
- *   3. package-integrity — every `join(__dirname, ...)` a packed .js file reads
- *      at runtime, checked against what `npm pack` actually includes. Catches
- *      the class of bug where a published package throws on first import
- *      because a file it reads at module-load time never shipped.
- *   4. doc-paths — every `scripts/...`-, `references/...`-, `rules/...`-,
+ *   3. doc-paths — every `scripts/...`-, `references/...`-, `rules/...`-,
  *      `tests/...`-, `docs/...`-, `frontend/...`- or `.github/...`-shaped path
  *      string mentioned in prose (README.md, CLAUDE.md, ROADMAP.md, SKILL.md,
  *      EVALUATION.md, docs/bpmn-generator-pipeline.md, references/api-reference.md,
@@ -31,6 +27,10 @@
  *      a later restructure commit is about to do: move dozens of files and touch
  *      every doc reference to them — a moved file with a stale doc reference used
  *      to be silent.
+ *   4. package-integrity — every `join(__dirname, ...)` a packed .js file reads
+ *      at runtime, checked against what `npm pack` actually includes. Catches
+ *      the class of bug where a published package throws on first import
+ *      because a file it reads at module-load time never shipped.
  *
  * One NUDGE check (heuristic, warns, never fails the build):
  *   5. changelog-nudge — in a PR's commit range, if any feat/fix/perf commit
