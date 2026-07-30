@@ -69,7 +69,8 @@ Standalone tooling
 
 DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
   schema-gate.js             ← resource-paths.js (ajv gate for Decision-Core)
-  rules.js                   ← rule-profile.js (D01–D08; own runner `runDmnRules`)
+  rules.js                   ← rule-profile.js, utils.js (D01–D11 + B01–B06,
+                               3 layers, 2 modes; own runner `runDmnRules`)
   (in progress — see docs/superpowers/plans/2026-07-30-dmn-integration.md.
    Stages 3–7 add layout, DMN 1.3 XML + DMNDI, importer, SVG and the tool surface.
    Nothing here produces a .dmn file yet.)
@@ -148,9 +149,11 @@ membership instead of coordinates.
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
 | `scripts/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
 | `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
-| `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules` — 8 rules, 2 layers (D01–D05 soundness/ERROR, D06–D08 style/WARNING). **Counted separately from the BPMN engine**: the docs gate derives "N rules, 5 layers" from `scripts/rules.js` alone, so no doc sentence may make that number cover both |
+| `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 17 rules, 3 layers, 2 modes. **Counted separately from the BPMN engine** — see the DMN section under Rule Engine |
 | `references/decision-core-schema.json` | Formal JSON Schema for DMN Decision-Core input |
-| `rules/dmn-default-profile.json` | Default DMN rule profile |
+| `rules/dmn-default-profile.json` | Default DMN profile (semantic: soundness + semantics) |
+| `rules/dmn-best-practice-profile.json` | Adds the opt-in `best_practice` layer |
+| `rules/custom/` | Project-specific profiles, loaded by path only — see its README |
 | `scripts/resource-paths.js` | `inputSchemaPath`, `promptTemplatePath` — the single place that decides where `references/` lives. **The source outranks the in-package copy.** The reverse precedence was a silent trap: `npm pack` (including the `--dry-run` the docs gate runs) leaves a copy behind, and every later edit to `references/` then had no effect while `git status` said nothing, because it is gitignored. Filenames are spelled out literally in each `join(__dirname, …)` — the docs gate parses those calls for string literals, and a variable would make it check a directory |
 | `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them. npm's `files` cannot reach outside the package root, hence a copy |
 | `scripts/postpack-clean-references.mjs` | `postpack` lifecycle script — removes that copy again. npm runs it after both `npm pack` and `npm pack --dry-run`, so a build artifact no longer outlives the build |
@@ -331,11 +334,27 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/optimize.js`.
 
-**The DMN engine is a separate count.** `scripts/dmn/rules.js` holds 8 rules in 2 layers (D01–D05
-soundness/ERROR, D06–D08 style/WARNING) against Decision-Core, not Logic-Core. The table above and
-every "N rules, 5 layers" claim in this file and README.md are about `scripts/rules.js` only — that
-is what the docs gate checks them against. A sentence that quietly makes the number cover both
-engines would drift without the gate noticing.
+### DMN rule engine — a separate count
+
+`scripts/dmn/rules.js` holds 17 rules in 3 layers against Decision-Core, not Logic-Core:
+
+| Layer | Default severity | Rules | Focus |
+|-------|-----------------|-------|-------|
+| soundness | ERROR | D01–D05, D09–D11 | Graph, table shape, DMN 1.3 conformance |
+| semantics | WARNING | D06–D08 | Points at something demonstrably wrong |
+| best_practice | WARNING | B01–B06 | Readability and method (opt-in) |
+
+Two modes, mirroring `document`/`optimize`: **`semantic`** (default — does it hold together) and
+**`best-practice`** (adds the third layer). `runDmnRules(dc, { mode, profile, config })`. A profile
+is more specific than a mode, so an explicit `enabled` in a profile wins. Profiles:
+`rules/dmn-default-profile.json`, `rules/dmn-best-practice-profile.json`, and project-specific ones
+under `rules/custom/` — **loaded by path, never scanned**, so dropping a file in cannot change
+behaviour silently. Thresholds in `config.json → dmn`.
+
+The table above and every "N rules, 5 layers" claim in this file and README.md are about
+`scripts/rules.js` only. The docs gate routes a claim to the DMN engine when its own line says
+"DMN", and to the BPMN engine otherwise — so an unqualified DMN sentence fails the gate, which is
+the ambiguity worth failing on.
 
 ## Conventions
 

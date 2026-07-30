@@ -8,18 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Decision-Core: a schema and a rule engine for DMN input.** `references/decision-core-schema.json`
-  (ajv draft-2020-12, strict) plus `scripts/dmn/` with 8 structural rules — D01 dangling requirement
-  references, D02 cycles in the requirement graph, D03 requirement kinds connecting element types DMN
-  does not allow, D04 decision table without an output clause, D05 rule rows that do not match the
-  table width, and as warnings D06 decision without logic, D07 orphaned input data, D08 `aggregation`
-  without hit policy `COLLECT`. Field set decided against the normative DMN13.xsd: `name` is
-  mandatory on every DRG element (`tNamedElement`) and `namespace` on the document (`tDefinitions`).
-  Deliberately out of scope for now: `decisionService`, the boxed-expression types beyond decision
-  table and literal expression, `itemDefinition`, and completeness/overlap analysis.
+- **Decision-Core: a schema and a layered rule engine for DMN input.**
+  `references/decision-core-schema.json` (ajv draft-2020-12, strict) plus `scripts/dmn/` with 17
+  rules in 3 layers and 2 modes. Field set decided against the normative DMN13.xsd, which dictated
+  two constraints that would not have been guessed: `name` is mandatory on every DRG element
+  (`tNamedElement`) and `namespace` on the document (`tDefinitions`).
+  - **`soundness` (ERROR)** — D01 dangling requirement references, D02 cycles, D03 impermissible or
+    mislabelled requirement pairs, D04 decision table without an output clause, D05 rule rows that
+    do not match the table width, D09 Collect operator over a compound output, D10 `PRIORITY`/
+    `OUTPUT ORDER` without output values, D11 crosstab that is not `UNIQUE`.
+  - **`semantics` (WARNING)** — D06 decision without logic, D07 orphaned input data, D08
+    `aggregation` without `COLLECT`.
+  - **`best_practice` (WARNING, opt-in)** — B01 avoid `FIRST` (the specification's own position),
+    B02 table size, B03 decision without a stated question, B04 untyped input data, B05 knowledge
+    source nobody can look up, B06 requirement chain depth. Thresholds in `config.json → dmn`.
+  - Modes `semantic` (default) and `best-practice`, mirroring `document`/`optimize`. A model being
+    documented as it is should not be nagged about how it ought to look. Profiles in
+    `rules/dmn-*.json` and project-specific ones under `rules/custom/` — loaded by path, never
+    scanned, so dropping a file in cannot change behaviour silently.
+  - **D03 checks pairs, not endpoints.** DMN 1.3 §6.2.3: "the type of the requirement is uniquely
+    determined by the types of the two elements connected". An endpoint check has holes in both
+    directions — it accepts `decision → decision` labelled *authority*, and the first version of
+    this rule wrongly rejected `knowledgeSource → businessKnowledgeModel`, which Table 2 permits.
+  - Deliberately out of scope: `decisionService`, boxed-expression types beyond decision table and
+    literal expression, `itemDefinition`, and completeness/overlap analysis.
   **This does not yet produce a `.dmn` file** — that is Stage 4 of
-  `docs/superpowers/plans/2026-07-30-dmn-integration.md`. Counted separately from the BPMN engine:
-  "34 rules, 5 layers" remains a claim about `scripts/rules.js` alone.
+  `docs/superpowers/plans/2026-07-30-dmn-integration.md`. Counted separately from the BPMN engine;
+  the docs gate routes a claim to the DMN engine only when its line says "DMN".
 - **`scripts/rule-profile.js`** — `loadRuleProfile`, `isRuleEnabled` and `getEffectiveSeverity` lifted
   out of `rules.js` and shared by both engines. Nothing about them was BPMN-specific, and a severity
   override applying to one engine but not the other would have been the same duplication defect this

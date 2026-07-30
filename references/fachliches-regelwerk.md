@@ -266,42 +266,121 @@ standardised reverse link.
 
 ---
 
-## DMN Rules (D01–D08) — a separate engine
+## DMN Rules — a separate engine, three layers, two modes
 
 > Written in English, like M11 above. These rules live in `scripts/dmn/rules.js` and run against
 > **Decision-Core**, not Logic-Core. They are counted separately: every "N rules, 5 layers" claim in
-> README.md and CLAUDE.md is about `scripts/rules.js` alone, which is what the docs gate verifies.
+> README.md and CLAUDE.md is about `scripts/rules.js` alone. The docs gate routes a claim to the DMN
+> engine only when its line says "DMN".
 
 A decision model is not "sound" in the workflow sense — it has no start, no end and no token, so
-S01–S13 and the WF-Net layer have no counterpart here. What a DRG can be wrong about is its graph
-and the shape of its tables.
+S01–S13 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the
+shape of its tables, and whether the two agree with the specification.
 
-| ID | Layer | Severity | Rule | Reference |
-|----|-------|----------|------|-----------|
-| D01 | Soundness | ERROR | Every requirement connects two declared nodes | `tDMNElementReference/@href` |
-| D02 | Soundness | ERROR | The requirement graph is acyclic | DMN 1.3 §6.1.2 |
-| D03 | Soundness | ERROR | Each requirement kind connects the element types DMN allows | `tInformationRequirement` / `tKnowledgeRequirement` / `tAuthorityRequirement` |
-| D04 | Soundness | ERROR | A decision table has at least one output clause | `tDecisionTable/output` — no `minOccurs`, so it defaults to 1 |
-| D05 | Soundness | ERROR | Every rule has one entry per input, output and annotation column | DMN 1.3 §8.2 |
-| D06 | Style | WARNING | A decision should carry decision logic | DMN 1.3 §6.3.1 |
-| D07 | Style | WARNING | Every input data element feeds something | — |
-| D08 | Style | WARNING | `aggregation` only means something with hit policy `COLLECT` | DMN 1.3 §8.2.11 |
+### Layers and modes
 
-Two of these deserve a note on why the severity is what it is.
+| Layer | Default severity | Rules | In which mode |
+|-------|-----------------|-------|---------------|
+| `soundness` | ERROR | D01–D05, D09–D11 | both |
+| `semantics` | WARNING | D06–D08 | both |
+| `best_practice` | WARNING | B01–B06 | `best-practice` only |
+
+Two modes, mirroring `document`/`optimize` on the BPMN side:
+
+- **`semantic`** (default) — does the model hold together? Everything reported here is either
+  invalid against the specification or points at something demonstrably wrong.
+- **`best-practice`** — additionally readability and method. Everything B-prefixed produces a file
+  that is valid DMN and that every engine evaluates correctly; what it will not do is stay
+  comprehensible.
+
+The split is the point: a model being documented *as it is* should not be nagged about how it ought
+to look. Recording an existing decision practice and improving it are different jobs.
+
+```js
+runDmnRules(dc);                                 // semantic
+runDmnRules(dc, { mode: 'best-practice' });
+runDmnRules(dc, { profile: loadRuleProfile('rules/custom/acme.json'), mode: 'best-practice' });
+```
+
+A profile is more specific than a mode, so an explicit `enabled` in a profile wins over what the
+mode would set. Profiles: `rules/dmn-default-profile.json`, `rules/dmn-best-practice-profile.json`,
+and your own under [`rules/custom/`](../rules/custom/README.md) — loaded by path, never scanned.
+
+Thresholds live in `scripts/config.json` under `dmn` (`maxRulesPerTable`, `maxDrgDepth`), not in the
+rule code.
+
+### Soundness (ERROR)
+
+| ID | Rule | Reference |
+|----|------|-----------|
+| D01 | Every requirement connects two declared nodes | `tDMNElementReference/@href` |
+| D02 | The requirement graph is acyclic | DMN 1.3 §6.1.2 |
+| D03 | Requirements connect element types DMN permits, with the type the pair implies | DMN 1.3 §6.2.3, Table 2 |
+| D04 | A decision table has at least one output clause | `tDecisionTable/output` — no `minOccurs`, so it defaults to 1 |
+| D05 | Every rule has one entry per input, output and annotation column | DMN 1.3 §8.2 |
+| D09 | A Collect operator needs a single output | DMN 1.3 §8.2.11 |
+| D10 | `PRIORITY` and `OUTPUT ORDER` need output values | DMN 1.3 §8.2.11 |
+| D11 | A crosstab is always `UNIQUE` | DMN 1.3 §8.1 |
+
+### Semantics (WARNING)
+
+| ID | Rule | Reference |
+|----|------|-----------|
+| D06 | A decision should carry decision logic | DMN 1.3 §6.3.1 |
+| D07 | Every input data element feeds something | — |
+| D08 | `aggregation` only means something with hit policy `COLLECT` | DMN 1.3 §8.2.11 |
+
+### Best practice (WARNING, opt-in)
+
+| ID | Rule | Reference |
+|----|------|-----------|
+| B01 | Avoid the `FIRST` hit policy | DMN 1.3 §8.2.11 — the spec's own words, see below |
+| B02 | A decision table should stay small enough to read | `config.json → dmn.maxRulesPerTable` (20) |
+| B03 | A decision should state the question it answers | DMN 1.3 §6.3.6, Table 11 |
+| B04 | Input data should declare its type | — |
+| B05 | A knowledge source should say what it is and where it lives | DMN 1.3 §6.3.12, Table 19 |
+| B06 | The requirement chain should not run too deep | `config.json → dmn.maxDrgDepth` (5) |
+
+### Why these severities
+
+**D03 checks pairs, not endpoints.** §6.2.3 states that "the type of the requirement is uniquely
+determined by the types of the two elements connected", and Table 2 lists every permitted pair. That
+sentence is why the rule is a lookup table rather than two lists of allowed sources and targets: an
+endpoint check has holes in both directions. It accepts `decision → decision` labelled *authority*
+(each end is individually legal for one) although Table 2 says that pair is unambiguously
+*information*; and the first version of this rule rejected `knowledgeSource →
+businessKnowledgeModel`, which Table 2 explicitly permits, because that target had been left off the
+authority list. Both cases are now covered by tests.
 
 **D05 is an error, not a warning,** because decision-table entries are *positional*. A row with one
 input entry where the table has two columns does not leave a blank — it shifts every later entry, so
 the table silently means something other than it reads.
+
+**D09 is an error while the neighbouring D08 is a warning.** The specification says compound-output
+tables support "Collect **without** operator, because the collect operator is undefined over multiple
+outputs". Undefined, not merely unusual. An `aggregation` on a non-`COLLECT` table (D08) is by
+contrast simply ignored — wrong, but harmless.
 
 **D06 is only a warning.** A decision without logic is legal DMN and often deliberate: early in
 modelling a DRD documents *which* decisions exist and what they depend on, before anyone has written
 a single rule. Reporting that as an error would make the tool useless for exactly the phase it is
 most helpful in.
 
+**B01 is not our opinion.** DMN 1.3 §8.2.11 says of first-hit tables: *"first hit tables are not
+considered good practice because they do not offer a clear overview of the decision logic"*. It sits
+in the opt-in layer rather than in `semantics` because such a table is still valid and still
+evaluates correctly.
+
+### Not in this set
+
 Completeness ("does every input combination hit a rule?") and overlap ("does `UNIQUE` actually
-hold?") are **not** in this set. Both need interval algebra over the input domains, and both are
-tracked as their own piece of work in
-[the integration plan](../docs/superpowers/plans/2026-07-30-dmn-integration.md), fork G7.
+hold?" — the specification requires that unique tables contain no overlapping rules) are **not**
+checked. Both need interval algebra over the input domains, and both are tracked as their own piece
+of work in [the integration plan](../docs/superpowers/plans/2026-07-30-dmn-integration.md), fork G7.
+
+Also absent, and deliberately: `decisionService` (a grouping construct with four reference lists and
+its own DI divider line), the boxed-expression types beyond decision table and literal expression,
+and `itemDefinition`.
 
 ---
 

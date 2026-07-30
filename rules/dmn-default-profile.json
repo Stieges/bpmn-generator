@@ -1,10 +1,11 @@
 {
   "profile": "dmn-default",
   "version": "1.0",
-  "description": "Default DMN rule profile — every layer active at its declared severity. Mirrors rules/default-profile.json on the BPMN side; the profile format is shared (scripts/rule-profile.js).",
+  "description": "Default DMN rule profile — the semantic set. Soundness (does the model hold together) plus the semantic warnings that point at something actually wrong. The best_practice layer is off; enable it with mode 'best-practice' or rules/dmn-best-practice-profile.json. Profile format is shared with the BPMN engine (scripts/rule-profile.js).",
   "layers": {
     "soundness": { "enabled": true },
-    "style": { "enabled": true }
+    "semantics": { "enabled": true },
+    "best_practice": { "enabled": false }
   },
   "overrides": {}
 }

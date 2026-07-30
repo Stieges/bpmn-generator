@@ -17,20 +17,39 @@
  */
 
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../rule-profile.js';
+import { CFG } from '../utils.js';
 
-/** Which node types may sit at each end of each requirement kind (DMN13.xsd). */
-const REQUIREMENT_ENDPOINTS = {
-  // tInformationRequirement: requiredDecision | requiredInput, held BY a decision
-  information: { from: ['decision', 'inputData'], to: ['decision'] },
-  // tKnowledgeRequirement: requiredKnowledge (an invocable), held BY a decision or a BKM
-  knowledge: { from: ['businessKnowledgeModel'], to: ['decision', 'businessKnowledgeModel'] },
-  // tAuthorityRequirement: requiredDecision | requiredInput | requiredAuthority,
-  // held BY a knowledgeSource or a decision
-  authority: {
-    from: ['decision', 'inputData', 'knowledgeSource'],
-    to: ['knowledgeSource', 'decision'],
-  },
-};
+/**
+ * DMN 1.3 Table 2, "Requirements connection rules", verbatim minus the two
+ * DecisionService rows (that element is out of scope for now).
+ *
+ * Keyed `from -> to`. The value is the requirement type, and there is exactly
+ * one: the spec states that "the type of the requirement is uniquely determined
+ * by the types of the two elements connected" (§6.2.3). That sentence is why
+ * this is a pair table and not two independent endpoint lists — checking the
+ * ends separately accepts combinations the table forbids. `decision -> decision`
+ * would pass an endpoint check for `authority` (a decision may be the source of
+ * one, a decision may be the target of one), while Table 2 says that pair is
+ * unambiguously `information`.
+ *
+ * The table also answers a question by omission: no row has Input Data as the
+ * target, and §6.2.3 spells it out — "no requirements may be drawn terminating
+ * in Input Data".
+ */
+const CONNECTION_RULES = new Map(Object.entries({
+  'decision -> decision':                                 'information',
+  'inputData -> decision':                                'information',
+  'decision -> knowledgeSource':                          'authority',
+  'inputData -> knowledgeSource':                         'authority',
+  'knowledgeSource -> decision':                          'authority',
+  'knowledgeSource -> businessKnowledgeModel':            'authority',
+  'knowledgeSource -> knowledgeSource':                   'authority',
+  'businessKnowledgeModel -> decision':                   'knowledge',
+  'businessKnowledgeModel -> businessKnowledgeModel':     'knowledge',
+}));
+
+/** Hit policies whose priorities come from the ordered list of output values. */
+const PRIORITY_DRIVEN = new Set(['PRIORITY', 'OUTPUT ORDER']);
 
 const byId = (dc) => new Map((dc.nodes ?? []).map(n => [n.id, n]));
 const requirementsOf = (dc) => dc.requirements ?? [];
@@ -98,22 +117,24 @@ export const DMN_RULES = [
   },
   {
     id: 'D03', layer: 'soundness', defaultSeverity: 'ERROR',
-    description: 'Each requirement kind connects the element types DMN allows for it',
-    ref: { xsd: 'tInformationRequirement / tKnowledgeRequirement / tAuthorityRequirement' },
+    description: 'Requirements connect element types DMN permits, with the type the pair implies',
+    ref: { omg: 'DMN 1.3 §6.2.3, Table 2 "Requirements connection rules"' },
     check: (dc) => {
       const nodes = byId(dc);
       const msgs = [];
       for (const r of requirementsOf(dc)) {
-        const spec = REQUIREMENT_ENDPOINTS[r.type];
-        if (!spec) continue;                       // schema already constrains the enum
         const src = nodes.get(r.source), tgt = nodes.get(r.target);
         if (!src || !tgt) continue;                // D01 reports this
         const label = r.id ? `"${r.id}"` : `${r.source} -> ${r.target}`;
-        if (!spec.from.includes(src.type)) {
-          msgs.push(`${r.type} requirement ${label} starts at a ${src.type}; allowed: ${spec.from.join(', ')}.`);
-        }
-        if (!spec.to.includes(tgt.type)) {
-          msgs.push(`${r.type} requirement ${label} ends at a ${tgt.type}; allowed: ${spec.to.join(', ')}.`);
+        const implied = CONNECTION_RULES.get(`${src.type} -> ${tgt.type}`);
+        if (!implied) {
+          msgs.push(
+            `Requirement ${label} connects a ${src.type} to a ${tgt.type}; DMN permits no requirement between those` +
+            `${tgt.type === 'inputData' ? ' — nothing may require input data' : ''}.`);
+        } else if (implied !== r.type) {
+          // Not a matter of taste: §6.2.3 says the pair determines the type, so a
+          // mislabelled requirement is a different requirement, not a variant.
+          msgs.push(`Requirement ${label} is declared "${r.type}", but a ${src.type} -> ${tgt.type} requirement is always "${implied}".`);
         }
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join(' ') };
@@ -158,7 +179,53 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D06', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'D09', layer: 'soundness', defaultSeverity: 'ERROR',
+    description: 'A Collect operator needs a single output — it is undefined over compound outputs',
+    ref: { omg: 'DMN 1.3 §8.2.11', quote: 'compound outputs support ... Collect without operator, because the collect operator is undefined over multiple outputs' },
+    check: (dc) => {
+      const offenders = (dc.nodes ?? [])
+        .filter(n => n.decisionTable?.aggregation && (n.decisionTable.outputs?.length ?? 0) > 1)
+        .map(n => `"${n.id}" (${n.decisionTable.aggregation} over ${n.decisionTable.outputs.length} outputs)`);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Collect operator on a table with more than one output clause: ${offenders.join(', ')}. The operator has no defined meaning there — drop it or reduce the table to one output.` };
+    },
+  },
+  {
+    id: 'D10', layer: 'soundness', defaultSeverity: 'ERROR',
+    description: 'PRIORITY and OUTPUT ORDER need output values — that is where the priority comes from',
+    ref: { omg: 'DMN 1.3 §8.2.11', quote: 'Output priorities are specified in the ordered list of output values, in decreasing order of priority' },
+    check: (dc) => {
+      const msgs = [];
+      for (const n of dc.nodes ?? []) {
+        const t = n.decisionTable;
+        if (!t || !PRIORITY_DRIVEN.has(t.hitPolicy)) continue;
+        const missing = (t.outputs ?? []).filter(o => !o.allowedValues);
+        if (missing.length) {
+          // Without the ordered list there is nothing to rank by, so the table
+          // has no defined result — an error rather than a hint.
+          msgs.push(`Table "${n.id}" uses hit policy ${t.hitPolicy} but ${missing.length} of its ${t.outputs.length} output clause(s) declare no output values, so there is no priority order to apply.`);
+        }
+      }
+      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join(' ') };
+    },
+  },
+  {
+    id: 'D11', layer: 'soundness', defaultSeverity: 'ERROR',
+    description: 'A CrossTable is always UNIQUE',
+    ref: { omg: 'DMN 1.3 §8.1', quote: 'Crosstab tables are always Unique and need no indicator' },
+    check: (dc) => {
+      const offenders = (dc.nodes ?? [])
+        .filter(n => n.decisionTable?.preferredOrientation === 'CrossTable'
+                  && (n.decisionTable.hitPolicy ?? 'UNIQUE') !== 'UNIQUE')
+        .map(n => `"${n.id}" (${n.decisionTable.hitPolicy})`);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Crosstab table with a hit policy other than UNIQUE: ${offenders.join(', ')}.` };
+    },
+  },
+  {
+    id: 'D06', layer: 'semantics', defaultSeverity: 'WARNING',
     description: 'A decision should carry decision logic',
     ref: { omg: 'DMN 1.3 §6.3.1', note: 'Legal without — the DRD then documents intent only, which is often deliberate early on' },
     check: (dc) => {
@@ -171,7 +238,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D07', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'D07', layer: 'semantics', defaultSeverity: 'WARNING',
     description: 'Every input data element feeds something',
     ref: { note: 'An input nothing requires is either dead or a missing requirement' },
     check: (dc) => {
@@ -185,7 +252,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D08', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'D08', layer: 'semantics', defaultSeverity: 'WARNING',
     description: 'aggregation only means something with hit policy COLLECT',
     ref: { xsd: 'tDecisionTable/@aggregation : tBuiltinAggregator', omg: 'DMN 1.3 §8.2.11' },
     check: (dc) => {
@@ -197,7 +264,150 @@ export const DMN_RULES = [
         : { pass: false, message: `aggregation set on a table whose hit policy is not COLLECT: ${offenders.join(', ')}. It will be ignored.` };
     },
   },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Layer: best_practice — OFF by default, enabled by mode 'best-practice'
+  //
+  // Readability and method, not conformance. Everything here produces a file
+  // that is valid DMN and that every engine will happily evaluate; what it
+  // will not do is stay comprehensible. Off by default on purpose: a model
+  // being documented as-is should not be nagged about how it ought to look.
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    id: 'B01', layer: 'best_practice', defaultSeverity: 'WARNING',
+    description: 'Avoid the FIRST hit policy',
+    // The specification itself takes this position, which is why it is here
+    // rather than in a style guide of our own invention.
+    ref: { omg: 'DMN 1.3 §8.2.11', quote: 'first hit tables are not considered good practice because they do not offer a clear overview of the decision logic' },
+    check: (dc) => {
+      const offenders = (dc.nodes ?? [])
+        .filter(n => n.decisionTable?.hitPolicy === 'FIRST')
+        .map(n => `"${n.name || n.id}"`);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `FIRST hit policy in ${offenders.join(', ')}. The meaning depends on rule order, which makes the table hard to validate by hand; UNIQUE or PRIORITY states the intent instead.` };
+    },
+  },
+  {
+    id: 'B02', layer: 'best_practice', defaultSeverity: 'WARNING',
+    description: 'A decision table should stay small enough to read',
+    ref: { note: 'Threshold in config.json → dmn.maxRulesPerTable (default 20)' },
+    check: (dc, cfg) => {
+      const limit = cfg?.maxRulesPerTable ?? 20;
+      const offenders = (dc.nodes ?? [])
+        .filter(n => (n.decisionTable?.rules?.length ?? 0) > limit)
+        .map(n => `"${n.name || n.id}" (${n.decisionTable.rules.length})`);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Decision table with more than ${limit} rules: ${offenders.join(', ')}. Consider splitting it into decisions that each answer one question.` };
+    },
+  },
+  {
+    id: 'B03', layer: 'best_practice', defaultSeverity: 'WARNING',
+    description: 'A decision should state the question it answers',
+    // DMN models `question` and `allowedAnswers` as first-class properties
+    // precisely so a decision is self-describing without reading its logic.
+    ref: { omg: 'DMN 1.3 §6.3.6, Table 11 (Decision attributes)' },
+    check: (dc) => {
+      const offenders = (dc.nodes ?? [])
+        .filter(n => n.type === 'decision' && !n.question)
+        .map(n => `"${n.name || n.id}"`);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Decision without a question: ${offenders.join(', ')}. The name says what it is called, the question says what it decides.` };
+    },
+  },
+  {
+    id: 'B04', layer: 'best_practice', defaultSeverity: 'WARNING',
+    description: 'Input data should declare its type',
+    ref: { note: 'Untyped input makes the unary tests in every table that uses it unverifiable' },
+    check: (dc) => {
+      const offenders = (dc.nodes ?? [])
+        .filter(n => n.type === 'inputData' && !n.typeRef)
+        .map(n => `"${n.name || n.id}"`);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Input data without a typeRef: ${offenders.join(', ')}. Without it, "< 100" cannot be checked against anything.` };
+    },
+  },
+  {
+    id: 'B05', layer: 'best_practice', defaultSeverity: 'WARNING',
+    description: 'A knowledge source should say what it is and where it lives',
+    ref: { omg: 'DMN 1.3 §6.3.12, Table 19 (KnowledgeSource attributes)' },
+    check: (dc) => {
+      const offenders = (dc.nodes ?? [])
+        .filter(n => n.type === 'knowledgeSource' && !n.sourceType && !n.locationURI)
+        .map(n => `"${n.name || n.id}"`);
+      return offenders.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Knowledge source with neither sourceType nor locationURI: ${offenders.join(', ')}. It names an authority nobody can look up.` };
+    },
+  },
+  {
+    id: 'B06', layer: 'best_practice', defaultSeverity: 'WARNING',
+    description: 'The requirement chain should not run too deep',
+    ref: { note: 'Threshold in config.json → dmn.maxDrgDepth (default 5)' },
+    check: (dc, cfg) => {
+      const limit = cfg?.maxDrgDepth ?? 5;
+      const nodes = byId(dc);
+      const incoming = new Map([...nodes.keys()].map(id => [id, []]));
+      for (const r of requirementsOf(dc)) {
+        if (nodes.has(r.source) && nodes.has(r.target)) incoming.get(r.target).push(r.source);
+      }
+      // Longest path to each node, memoised. Safe against cycles because D02
+      // reports those and the seen-set stops the walk either way.
+      const depthOf = (id, seen = new Set()) => {
+        if (seen.has(id)) return 0;
+        seen.add(id);
+        const parents = incoming.get(id) ?? [];
+        return parents.length === 0 ? 1 : 1 + Math.max(...parents.map(p => depthOf(p, new Set(seen))));
+      };
+      const deepest = [...nodes.keys()].map(id => ({ id, d: depthOf(id) })).filter(x => x.d > limit);
+      return deepest.length === 0
+        ? { pass: true }
+        : { pass: false, message: `Requirement chain deeper than ${limit}: ${deepest.map(x => `"${nodes.get(x.id).name || x.id}" (${x.d})`).join(', ')}. Intermediate decisions that only pass values through can usually be collapsed.` };
+    },
+  },
 ];
+
+/** The layers a mode turns on, beyond what the base profile already says. */
+const MODES = {
+  // Does the model hold together? Graph, table shape, spec conformance, plus the
+  // semantic warnings that point at something actually wrong.
+  semantic: { soundness: true, semantics: true, best_practice: false },
+  // Everything above, plus readability and method.
+  'best-practice': { soundness: true, semantics: true, best_practice: true },
+};
+
+export const DMN_MODES = Object.keys(MODES);
+
+/**
+ * Derive a profile for a mode, mirroring `profileForMode` on the BPMN side.
+ *
+ * The mode sets layer enablement; an explicit profile still wins, because a
+ * profile is the more specific statement. So `--mode best-practice` with a
+ * profile that disables `best_practice` leaves it disabled — the caller said
+ * something precise and the mode is the blunter instrument.
+ *
+ * @param {object|null} baseProfile
+ * @param {string} [mode='semantic']
+ * @returns {object|null}
+ */
+export function dmnProfileForMode(baseProfile, mode = 'semantic') {
+  const layers = MODES[mode];
+  if (!layers) {
+    throw new Error(`Unknown DMN mode "${mode}". Known modes: ${DMN_MODES.join(', ')}.`);
+  }
+  const p = baseProfile ? JSON.parse(JSON.stringify(baseProfile)) : {};
+  p.layers = p.layers || {};
+  for (const [layer, enabled] of Object.entries(layers)) {
+    // Only fill in what the profile is silent about.
+    if (p.layers[layer]?.enabled === undefined) {
+      p.layers[layer] = { ...(p.layers[layer] || {}), enabled };
+    }
+  }
+  return p;
+}
 
 /**
  * Run every enabled DMN rule against a Decision-Core document.
@@ -207,23 +417,28 @@ export const DMN_RULES = [
  * a profile means is shared (rule-profile.js).
  *
  * @param {object} dc - Decision-Core JSON
- * @param {object|null} profile
- * @returns {{ errors: string[], warnings: string[], infos: string[] }}
+ * @param {object} [opts={}]
+ * @param {object|null} [opts.profile] - Rule profile (or a path, via loadRuleProfile)
+ * @param {string} [opts.mode='semantic'] - 'semantic' (default) or 'best-practice'
+ * @param {object} [opts.config] - Thresholds; defaults come from config.json → dmn
+ * @returns {{ errors: string[], warnings: string[], infos: string[], mode: string }}
  */
-export function runDmnRules(dc, profile = null) {
+export function runDmnRules(dc, opts = {}) {
+  const { profile: rawProfile = null, mode = 'semantic', config = CFG.dmn } = opts;
+  const profile = dmnProfileForMode(rawProfile, mode);
   const errors = [], warnings = [], infos = [];
   for (const rule of DMN_RULES) {
     if (!isRuleEnabled(rule, profile)) continue;
     const severity = getEffectiveSeverity(rule, profile);
     if (severity === 'OFF') continue;
-    const result = rule.check(dc);
+    const result = rule.check(dc, config);
     if (result.pass) continue;
     const line = `[${rule.id}] ${result.message}`;
     if (severity === 'ERROR') errors.push(line);
     else if (severity === 'WARNING') warnings.push(line);
     else infos.push(line);
   }
-  return { errors, warnings, infos };
+  return { errors, warnings, infos, mode };
 }
 
 export { loadRuleProfile };

@@ -65,6 +65,7 @@
       "id": "dec_finalPercentage",
       "type": "decision",
       "name": "Final percentage",
+      "question": "What discount percentage does this order finally receive?",
       "variable": "finalPercentage",
       "typeRef": "number",
       "expression": "base(discountLevel) + loyaltyBonus(customerSince)"
