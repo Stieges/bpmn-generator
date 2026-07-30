@@ -37,7 +37,7 @@ ElkJS is used as an unmodified library. No modifications have been made to its s
 - **License:** MIT
 - **Copyright:** Copyright (c) 2015-2021 Evgeny Poberezkin
 - **Repository:** https://github.com/ajv-validator/ajv
-- **Usage:** draft-2020-12 strict gate for untrusted Logic-Core input (`scripts/schema-gate.js`)
+- **Usage:** draft-2020-12 strict gate for untrusted Logic-Core input (`scripts/bpmn/schema-gate.js`)
 
 ### ajv-formats — Format Validators for ajv
 

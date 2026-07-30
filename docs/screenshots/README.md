@@ -1,7 +1,7 @@
 # Screenshot Gallery
 
 SVG diagrams produced by the BPMN Generator from Logic-Core JSON fixtures in [`tests/fixtures/`](../../tests/fixtures/).
-All files in this directory are regenerated from the fixtures by `node scripts/pipeline.js <fixture> <out>`, so they always reflect the current state of the layout engine.
+All files in this directory are regenerated from the fixtures by `node scripts/bpmn/pipeline.js <fixture> <out>`, so they always reflect the current state of the layout engine.
 
 | File | Source fixture | What it shows |
 |---|---|---|

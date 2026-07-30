@@ -97,7 +97,7 @@ describe('docs-gate — checkNumbers', () => {
     expect(checkNumbers(base())).toEqual([]);
   });
 
-  // Two rule engines now: scripts/rules.js and scripts/dmn/rules.js. A claim is
+  // Two rule engines now: scripts/bpmn/rules.js and scripts/dmn/rules.js. A claim is
   // routed by whether its own LINE says DMN — see the comment on DMN_CLAIM_RE for
   // why routing on the text beats accepting whatever matches either engine.
   test('a DMN claim is measured against the DMN engine, not the BPMN one', () => {
@@ -123,7 +123,7 @@ describe('docs-gate — checkNumbers', () => {
       readmeText: 'The rule engine has 8 rules, 2 layers.',
     }));
     expect(findings).toHaveLength(2);        // rule count and layer count
-    expect(findings[0].detail).toContain('scripts/rules.js');
+    expect(findings[0].detail).toContain('scripts/bpmn/rules.js');
   });
 
   test('the two engines are checked independently in one file', () => {

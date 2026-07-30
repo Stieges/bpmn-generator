@@ -2,7 +2,7 @@
  * Stress-tester — runs samples through pre-filter, then full pipeline + roundtrip.
  * See spec Section 4.4.
  *
- * API verified against actual scripts/validate.js and scripts/rules.js:
+ * API verified against actual scripts/bpmn/validate.js and scripts/bpmn/rules.js:
  * - validateLogicCore(lc) → sync, returns { errors: string[], warnings: string[] }
  * - runRules(lc, profile=null) → returns { errors: string[], warnings: string[], infos: string[], metrics: {} }
  */

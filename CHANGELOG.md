@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **This does not yet produce a `.dmn` file** — that is Stage 4 of
   `docs/superpowers/plans/2026-07-30-dmn-integration.md`. Counted separately from the BPMN engine;
   the docs gate routes a claim to the DMN engine only when its line says "DMN".
-- **`scripts/rule-profile.js`** — `loadRuleProfile`, `isRuleEnabled` and `getEffectiveSeverity` lifted
+- **`scripts/shared/rule-profile.js`** — `loadRuleProfile`, `isRuleEnabled` and `getEffectiveSeverity` lifted
   out of `rules.js` and shared by both engines. Nothing about them was BPMN-specific, and a severity
   override applying to one engine but not the other would have been the same duplication defect this
   codebase has already paid for three times. Re-exported from `rules.js`, so no importer changes.
@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package (prepack refreshes the copy immediately before packing) was affected — this was a
   developer-experience defect, and a quiet one.
   The precedence is now inverted: the source wins, the in-package copy is the fallback. Resolution
-  moved into one place, `scripts/resource-paths.js`, replacing two copies of the same logic that
+  moved into one place, `scripts/shared/resource-paths.js`, replacing two copies of the same logic that
   carried different `..` depths and had no test between them. A `postpack` step removes the artifact
   so it no longer outlives the build. Script count 30 → 31.
 - **Subprocess children reached the XML with only their id and name.** The child branch of

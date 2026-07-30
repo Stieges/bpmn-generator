@@ -22,8 +22,8 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { execSync } from 'node:child_process';
-import { runPipeline } from '../pipeline.js';
-import { validateLogicCoreSchema } from '../schema-gate.js';
+import { runPipeline } from '../bpmn/pipeline.js';
+import { validateLogicCoreSchema } from '../bpmn/schema-gate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');

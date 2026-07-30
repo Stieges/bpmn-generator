@@ -36,14 +36,14 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     ├── optimize.js          ← types.js, topology.js (opt-in Optimization Advisory layer O01–O04, invoked by rules.js)
     ├── workflow-net.js      ← types.js
     ├── topology.js          ← types.js
-    ├── layout.js            ← types.js, ../shared/utils.js, topology.js, elkjs
-    ├── coordinates.js       ← types.js, ../shared/utils.js, topology.js
+    ├── layout.js            ← types.js, ../shared/utils.js, constants.js, topology.js, elkjs
+    ├── coordinates.js       ← types.js, ../shared/utils.js, constants.js, topology.js
     ├── di-check.js          (no deps — post-layout DI integrity pass, see below)
-    ├── visual-refinement.js ← coordinates.js (opt-in compaction passes)
+    ├── visual-refinement.js ← coordinates.js, constants.js (opt-in compaction passes)
     ├── edge-simplify.js     ← types.js (post-process ELK waypoints, reduce zigzag)
-    ├── bpmn-xml.js          ← types.js, ../shared/utils.js, topology.js, icons.js
-    ├── svg.js               ← types.js, ../shared/utils.js, icons.js
-    ├── icons.js             ← ../shared/utils.js
+    ├── bpmn-xml.js          ← types.js, ../shared/utils.js, constants.js, topology.js, icons.js
+    ├── svg.js               ← types.js, ../shared/utils.js, constants.js, icons.js
+    ├── icons.js             ← ../shared/utils.js, constants.js
     ├── dot.js               ← types.js
     ├── schema-gate.js       ← ../shared/resource-paths.js (ajv draft-2020-12 strict gate)
     ├── types.js             (no deps)

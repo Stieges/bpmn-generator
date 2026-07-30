@@ -15,18 +15,21 @@
  *   1. response-contract — a real response from each endpoint, built the way
  *      scripts/http-server.js builds it, validated against references/api-schema.json.
  *   2. numbers — every "<N> rules" claim (README.md, CLAUDE.md) against
- *      scripts/rules.js; the "<N> top-level scripts" claim (CLAUDE.md) against
+ *      scripts/bpmn/rules.js; the "<N> top-level scripts" claim (CLAUDE.md) against
  *      `scripts/*.js`; every DI code in references/api-reference.md against
- *      scripts/di-check.js, in both directions.
+ *      scripts/bpmn/di-check.js, in both directions.
  *   3. doc-paths — every `scripts/...`-, `references/...`-, `rules/...`-,
  *      `tests/...`-, `docs/...`-, `frontend/...`- or `.github/...`-shaped path
  *      string mentioned in prose (README.md, CLAUDE.md, ROADMAP.md, SKILL.md,
  *      EVALUATION.md, docs/bpmn-generator-pipeline.md, references/api-reference.md,
- *      references/fachliches-regelwerk.md), and every `node <file>.js` CLI example
- *      in them, resolves to a real file or directory. Guards against exactly what
- *      a later restructure commit is about to do: move dozens of files and touch
- *      every doc reference to them — a moved file with a stale doc reference used
- *      to be silent.
+ *      references/fachliches-regelwerk.md, CONTRIBUTING.md, COMPATIBILITY.md,
+ *      SECURITY.md, THIRD-PARTY-NOTICES.md, docs/ROBUSTNESS-STACK.md,
+ *      rules/custom/README.md, scripts/robustness/README.md), and every
+ *      `node <file>.js` CLI example in them, resolves to a real file or
+ *      directory. Guards against exactly what a restructure commit did to this
+ *      repo: move dozens of files and touch every doc reference to them — a
+ *      moved file with a stale doc reference used to be silent, and still can
+ *      be for any doc file not in this list.
  *   4. package-integrity — every `join(__dirname, ...)` a packed .js file reads
  *      at runtime, checked against what `npm pack` actually includes. Catches
  *      the class of bug where a published package throws on first import
@@ -53,7 +56,7 @@
  *
  * Dependency note: imports `ajv`/`ajv-formats` via createRequire rooted at
  * scripts/package.json. Both are already runtime dependencies of scripts/
- * (used by scripts/schema-gate.js) — this reuses them without adding a
+ * (used by scripts/bpmn/schema-gate.js and scripts/dmn/schema-gate.js) — this reuses them without adding a
  * package.json of its own under .github/, matching dep-audit-gate.mjs's
  * "no dependency footprint for CI-only tooling" convention. Everything else
  * here is node: builtins.
@@ -181,7 +184,7 @@ const RULE_LAYER_PATTERNS = [
   /(\d+)\s+Regeln\s+in\s+(\d+)\s+Schichten/gi,
 ];
 
-// There are two rule engines now: scripts/rules.js against Logic-Core, and
+// There are two rule engines now: scripts/bpmn/rules.js against Logic-Core, and
 // scripts/dmn/rules.js against Decision-Core. A claim is checked against the DMN
 // engine when the line it sits on says so, and against the BPMN engine otherwise.
 //
@@ -221,7 +224,7 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
         const claimedRules = Number(m[1]);
         const claimedLayers = Number(m[2]);
         const isDmn = DMN_CLAIM_RE.test(lineContaining(text, m.index));
-        const engine = isDmn ? 'scripts/dmn/rules.js' : 'scripts/rules.js';
+        const engine = isDmn ? 'scripts/dmn/rules.js' : 'scripts/bpmn/rules.js';
         const rules = isDmn ? actualDmnRuleCount : actualRuleCount;
         const layers = isDmn ? actualDmnLayerCount : actualLayerCount;
         if (claimedRules !== rules) {
@@ -257,11 +260,11 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   const missingInCode = [...docCodes].filter((c) => !codeCodes.has(c));
   if (missingInDocs.length) {
     findings.push({ check: 'di-codes', detail:
-      `scripts/di-check.js emits codes not documented in references/api-reference.md: ${missingInDocs.join(', ')}` });
+      `scripts/bpmn/di-check.js emits codes not documented in references/api-reference.md: ${missingInDocs.join(', ')}` });
   }
   if (missingInCode.length) {
     findings.push({ check: 'di-codes', detail:
-      `references/api-reference.md documents codes scripts/di-check.js does not emit: ${missingInCode.join(', ')}` });
+      `references/api-reference.md documents codes scripts/bpmn/di-check.js does not emit: ${missingInCode.join(', ')}` });
   }
 
   return findings;
@@ -340,6 +343,9 @@ const DOC_PATH_ALLOWLIST = [
   'dead-letter/',                // gitignored, written by scripts/delivery.js at runtime (DEAD_LETTER_PATH default)
   'scripts/coverage/',          // gitignored, written by `npm test -- --coverage`
   'tests/fixtures/mad-subset/', // one-time curation output (scripts/robustness/README.md); not committed until that step runs
+  'tests/fixtures/mad-subset',  // same path without trailing slash — appears as a default param value in docs/ROBUSTNESS-STACK.md
+  'rules/custom/acme.json',     // illustrative example filename in rules/custom/README.md, never meant to exist
+  'rules/custom/acme-dmn.json', // illustrative example filename in rules/custom/README.md, never meant to exist
 ];
 
 /** Strips trailing punctuation, a `:<line>`/`:L<line>` suffix and a `#fragment` a doc token picked up from prose. */
@@ -409,6 +415,13 @@ function gatherDocPathInputs() {
   const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
   const apiReferenceText = readFileSync(join(REFERENCES_DIR, 'api-reference.md'), 'utf8');
   const fachlichesRegelwerkText = readFileSync(join(REFERENCES_DIR, 'fachliches-regelwerk.md'), 'utf8');
+  const contributingText = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8');
+  const compatibilityText = readFileSync(join(REPO_ROOT, 'COMPATIBILITY.md'), 'utf8');
+  const securityText = readFileSync(join(REPO_ROOT, 'SECURITY.md'), 'utf8');
+  const thirdPartyNoticesText = readFileSync(join(REPO_ROOT, 'THIRD-PARTY-NOTICES.md'), 'utf8');
+  const robustnessStackText = readFileSync(join(REPO_ROOT, 'docs', 'ROBUSTNESS-STACK.md'), 'utf8');
+  const rulesCustomReadmeText = readFileSync(join(REPO_ROOT, 'rules', 'custom', 'README.md'), 'utf8');
+  const robustnessReadmeText = readFileSync(join(REPO_ROOT, 'scripts', 'robustness', 'README.md'), 'utf8');
 
   const docSources = [
     ['README.md', readmeText], ['CLAUDE.md', claudeMdText], ['ROADMAP.md', roadmapText],
@@ -416,6 +429,13 @@ function gatherDocPathInputs() {
     ['docs/bpmn-generator-pipeline.md', pipelineDocText],
     ['references/api-reference.md', apiReferenceText],
     ['references/fachliches-regelwerk.md', fachlichesRegelwerkText],
+    ['CONTRIBUTING.md', contributingText],
+    ['COMPATIBILITY.md', compatibilityText],
+    ['SECURITY.md', securityText],
+    ['THIRD-PARTY-NOTICES.md', thirdPartyNoticesText],
+    ['docs/ROBUSTNESS-STACK.md', robustnessStackText],
+    ['rules/custom/README.md', rulesCustomReadmeText],
+    ['scripts/robustness/README.md', robustnessReadmeText],
   ];
 
   const exists = (relPath) => existsSync(join(REPO_ROOT, relPath));
@@ -490,7 +510,8 @@ function getExportsEntryFiles() {
  * Candidates are grouped by (file, target filename) before judging: a file may
  * legitimately try more than one path for the same read — the
  * `existsSync(publishedPath) ? publishedPath : devCheckoutPath` idiom this repo
- * uses in scripts/schema-gate.js and scripts/agents/prompt-sections.js is
+ * uses in scripts/shared/resource-paths.js (the single place scripts/bpmn/schema-gate.js
+ * and scripts/agents/prompt-sections.js both resolve `references/` through) is
  * exactly that, and its second branch is SUPPOSED to point outside the package
  * (it only ever runs when the file was not found inside it, i.e. never once
  * published). Only report a target with NO resolving candidate at all — that

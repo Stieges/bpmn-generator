@@ -6,13 +6,13 @@ is deliberate: a directory that is scanned at startup means dropping a file in
 changes behaviour silently, and a typo in a filename is never noticed by anyone.
 
 Applies to both engines. The profile format is shared
-(`scripts/rule-profile.js`), only the rule ids and layer names differ.
+(`scripts/shared/rule-profile.js`), only the rule ids and layer names differ.
 
 ## Using one
 
 ```js
 // BPMN
-import { runPipeline } from '../scripts/pipeline.js';
+import { runPipeline } from '../scripts/bpmn/pipeline.js';
 await runPipeline(logicCore, { ruleProfile: 'rules/custom/acme.json' });
 
 // DMN

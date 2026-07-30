@@ -1,5 +1,5 @@
 /**
- * Strict schema gate for Decision-Core input, mirroring scripts/schema-gate.js.
+ * Strict schema gate for Decision-Core input, mirroring scripts/bpmn/schema-gate.js.
  *
  * Same guarantee as the BPMN side: nothing reaches the pipeline that the formal
  * schema has not accepted. Hand-written and LLM-produced input is never trusted

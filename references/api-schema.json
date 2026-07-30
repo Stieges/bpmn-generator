@@ -65,7 +65,7 @@
 
     "Validation": {
       "type": "object",
-      "description": "Output of the rule engine (scripts/rules.js runRules). Reasons about the Logic-Core graph — never sees a coordinate. See 'validation vs. diagnostics' in api-reference.md. `xmlWarnings` is only present on the runPipeline path (/generate, /orchestrate) — /validate calls the rule engine directly and never produces it.",
+      "description": "Output of the rule engine (scripts/bpmn/rules.js runRules). Reasons about the Logic-Core graph — never sees a coordinate. See 'validation vs. diagnostics' in api-reference.md. `xmlWarnings` is only present on the runPipeline path (/generate, /orchestrate) — /validate calls the rule engine directly and never produces it.",
       "required": ["errors", "warnings", "advisories", "metrics"],
       "properties": {
         "errors": { "type": "array", "items": { "type": "string" } },

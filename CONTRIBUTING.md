@@ -13,7 +13,7 @@ npm test             # run all tests (Jest + ES Modules)
 ### Smoke Test
 
 ```bash
-node pipeline.js ../tests/fixtures/simple-approval.json /tmp/test
+node bpmn/pipeline.js ../tests/fixtures/simple-approval.json /tmp/test
 # outputs: /tmp/test.bpmn + /tmp/test.svg
 ```
 
@@ -49,14 +49,14 @@ See [README.md](README.md) for the full module architecture and dependency graph
    ```bash
    for f in simple-approval multi-pool-collaboration expanded-subprocess \
             dense-edge-labels long-lane-names sparse-lanes wide-pipeline; do
-     node pipeline.js ../tests/fixtures/$f.json ../tests/fixtures/$f.expected
+     node bpmn/pipeline.js ../tests/fixtures/$f.json ../tests/fixtures/$f.expected
    done
    ```
 5. **Submit a PR** with a clear description of what changed and why
 
 ## Adding a New Rule
 
-1. Add a rule object to `scripts/rules.js` → `RULES` array
+1. Add a rule object to `scripts/bpmn/rules.js` → `RULES` array
 2. Fields: `id`, `layer`, `defaultSeverity`, `description`, `ref`, `check(proc)`
 3. `check` returns `{ pass: true }` or `{ pass: false, message: '...' }`
 4. Document in `references/fachliches-regelwerk.md`
