@@ -31,6 +31,12 @@ describe('DMN schema gate', () => {
     expect(validateDecisionCoreSchema(dc).valid).toBe(false);
   });
 
+  test('an empty namespace is rejected — required does not imply non-empty', () => {
+    const dc = good();
+    dc.namespace = '';
+    expect(validateDecisionCoreSchema(dc).valid).toBe(false);
+  });
+
   test('a DRG element without a name is rejected — tNamedElement requires it', () => {
     const dc = good();
     delete dc.nodes[0].name;

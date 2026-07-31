@@ -21,6 +21,17 @@ describe('runDmnPipeline — schema gate', () => {
     expect(result.validation.errors.length).toBeGreaterThan(0);
     expect(result.validation.errors.join(' ')).toMatch(/namespace/);
   });
+
+  test('a Decision-Core document with an empty namespace is blocked before rules run', async () => {
+    const dc = good();
+    dc.namespace = '';
+    const result = await runDmnPipeline(dc);
+    expect(result.xml).toBeNull();
+    expect(result.diagrams).toBeNull();
+    expect(result.diagnostics).toBeNull();
+    expect(result.validation.errors.length).toBeGreaterThan(0);
+    expect(result.validation.errors.join(' ')).toMatch(/namespace/);
+  });
 });
 
 describe('runDmnPipeline — rule engine gate', () => {

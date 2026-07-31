@@ -15,6 +15,7 @@
     "name": { "type": "string", "description": "Definitions name. tNamedElement declares name as required, so a fallback is emitted when this is absent" },
     "namespace": {
       "type": "string",
+      "minLength": 1,
       "description": "Required by DMN13.xsd tDefinitions/@namespace. The target namespace of this decision model — an absolute URI identifying the model, not a schema location"
     },
     "expressionLanguage": {
