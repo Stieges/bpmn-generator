@@ -147,8 +147,13 @@ hit-testing effectively does.
 **`dmn/di-check.js`** — `checkDmnDiagramIntegrity(diagrams)`, same role and result shape as
 `bpmn/di-check.js`, with its own code namespace so the two can appear side by side in one API
 response: **DD01** overlapping shapes, **DD02** shape outside diagram bounds, **DD03** edge endpoint
-not on its shape, **DD04** duplicate shape position. All ERROR; `ok` means "no ERROR". The result
-lands in `result.diagnostics`, never in `validation`.
+not on its shape. All ERROR; `ok` means "no ERROR". The result lands in `result.diagnostics`, never
+in `validation`.
+
+Three codes, not four. A fourth — "two shapes at an identical position", mirroring BPMN's DI01 —
+was drafted and dropped: DI01 exists because two participants at the same origin is a specific,
+observed layout failure, and no such case has been observed for a DRD, where DD01 would catch it
+anyway. A diagnostic code nobody can name a trigger for is ballast, and adding one later is cheap.
 
 **`dmn/dmn-xml.js`** — `generateDmnXml(dc, diagrams)` (async) and `validateDmnXml(xml)`.
 `tDefinitions` is an `xsd:sequence` ending in `dmndi:DMNDI`; `@name` and `@namespace` are both
