@@ -23,6 +23,14 @@ ElkJS is used as an unmodified library. No modifications have been made to its s
 - **Repository:** https://github.com/bpmn-io/bpmn-moddle
 - **Usage:** CMOF-based BPMN 2.0 XML serialization and parsing
 
+### dmn-moddle — DMN 1.3 Meta-Model for JavaScript
+
+- **Version:** 12.0.1
+- **License:** MIT
+- **Copyright:** Copyright (c) 2014 camunda Services GmbH
+- **Repository:** https://github.com/bpmn-io/dmn-moddle
+- **Usage:** CMOF-based DMN 1.3 XML serialization and parsing, symmetric to bpmn-moddle on the DMN side
+
 ### @modelcontextprotocol/sdk — Model Context Protocol SDK
 
 - **Version:** 1.29.0
@@ -81,6 +89,7 @@ Dev dependencies are not distributed — they are listed for completeness and li
 |---|---|---|---|
 | elkjs | EPL-2.0 | Yes | EPL-2.0 §4 allows combining with differently-licensed code |
 | bpmn-moddle | MIT | Yes | Permissive |
+| dmn-moddle | MIT | Yes | Permissive |
 | @modelcontextprotocol/sdk | MIT | Yes | Permissive |
 | ajv | MIT | Yes | Permissive |
 | ajv-formats | MIT | Yes | Permissive |
