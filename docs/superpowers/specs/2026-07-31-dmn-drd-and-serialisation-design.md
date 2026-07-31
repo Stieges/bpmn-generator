@@ -69,7 +69,36 @@ scripts/dmn/
 reintroduce exactly the asymmetry the restructure removed, and ArchiMate would inherit it. The
 ArchiMate note in the DMN plan sets the criterion for `shared/`: code moves there once it is
 *demonstrably* shared, not on suspicion. A second notation now needs this clip — that is the
-demonstration. `bpmn/coordinates.js` keeps `clipOrthogonal`, which is BPMN-only.
+demonstration.
+
+**Where the boundary actually runs, and why it leaves pure code behind.** The clipping code in
+`bpmn/coordinates.js` divides into maths and a dispatcher, not into straight and orthogonal:
+
+```
+knows no notation:  clipStraight, clipToRect,
+                    clipCircleOrthogonal, clipDiamondOrthogonal, clipRectOrthogonal
+notation-bound:     clipOrthogonal  — branches on isEvent(type) / isGateway(type) from bpmn/types.js
+```
+
+Only the first two move. The three orthogonal helpers are just as free of notation knowledge and
+still stay in `bpmn/` — which looks inconsistent until the rule is named:
+
+> **`shared/` takes what a second notation demonstrably imports — not everything that could be
+> phrased format-independently.**
+
+That is the rule Commit C of the restructure applied when it moved the thirteen layout constants
+*out* of `shared/utils.js`; several of them are as format-independent as a diamond clip. And a
+diamond is, in this repository, a BPMN gateway and nothing else: DMN has none, ArchiMate has none.
+Under the broader rule `clipDiamondOrthogonal` would sit in `shared/` unused forever, and the next
+notation would inherit a `shared/` that has started collecting again. Changing the rule mid-stream
+costs more than a geometry split.
+
+The split's one real price is legibility — clipping code in two files, on a line nobody can guess
+from the filenames. Commit 1 pays it off in two comments: a header in `shared/geometry.js` stating
+the rule above, and a pointer beside the remaining helpers in `bpmn/coordinates.js` saying why they
+did not travel. Rejected alternative: putting the two functions in `shared/utils.js` and skipping the
+new file — it saves a file and mixes geometry into the module that already collects whatever fits
+nowhere else.
 
 ### Module contracts
 
@@ -82,7 +111,8 @@ clipToRect(from, towards, rect) // from, towards: {x, y}; rect: {w, h} → {x, y
 ```
 
 `bpmn/coordinates.js` imports them from here; its behaviour must not change, and the byte-identity
-check proves it. `clipOrthogonal` stays behind — it is BPMN-only.
+check proves it. `clipOrthogonal` and its three helpers stay behind, deliberately — see the boundary
+rule above.
 
 **Note the coordinate shape.** These take `{x, y, w, h}`, and so does every `coordMap` entry —
 verified by running the pipeline, not by reading about it. `CLAUDE.md`'s Conventions section claims
@@ -139,7 +169,7 @@ Six commits, each green on its own.
 
 | # | Content | Hardest proof |
 |---|---|---|
-| 1 | `shared/geometry.js`; `bpmn/coordinates.js` imports from it; the `{x,y,w,h}` correction in `CLAUDE.md` | Byte-identical output for the six canonical fixtures — a pure move cannot move a pixel |
+| 1 | `shared/geometry.js` + the two boundary comments; `bpmn/coordinates.js` imports from it; the `{x,y,w,h}` correction in `CLAUDE.md` | Byte-identical output for the six canonical fixtures — a pure move cannot move a pixel |
 | 2 | `dmn/constants.js`, the `CFG.dmn` shape block, `dmn/layout.js` | Layer order: input data below, top-level decision above, on a **branching** graph |
 | 3 | `dmn/coordinates.js`, `dmn/di-check.js` | Clip maths as unit tests with hand-computed expected values |
 | 4 | `dmn-moddle@12.0.1` as a runtime dependency | dep-audit gate and `docs-gate` green; `THIRD-PARTY-NOTICES.md` updated |
@@ -186,7 +216,7 @@ the fixture's README. The XSD gives no basis for predicting it.
 
 | Decision | Choice | Reason |
 |---|---|---|
-| Where the straight clip lives | `shared/geometry.js` | A second notation needs it — the criterion for `shared/` is met by demonstration, not suspicion |
+| Where the straight clip lives | `shared/geometry.js`, two functions only | A second notation needs those two. The three orthogonal helpers stay in `bpmn/` although they are equally notation-free: `shared/` takes what a second notation demonstrably imports, which is the rule Commit C of the restructure applied |
 | The bridge as a mechanism | **Not now** | `usingTask` is the second cross-model reference and the ArchiMate note calls for designing the mechanism before it exists — but doing it here would touch working BPMN code in both importers and the schema, and would blur this plan's goal. It gets its own small plan |
 | `usingTask` / `usingProcess` shape | Accept string **or** array | Additive, breaks nothing, and covers the XSD's `0..unbounded` |
 | DI code namespace | `DD01`–`DD04` | `DI01`–`DI06` are taken; a shared numbering would hide which notation a code belongs to |
