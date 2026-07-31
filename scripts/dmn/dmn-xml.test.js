@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { DmnModdle } from 'dmn-moddle';
 
-import { generateDmnXml, validateDmnXml } from './dmn-xml.js';
+import { generateDmnXml, validateDmnXml, assertIdAllowed } from './dmn-xml.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = resolve(__dirname, '../../tests/fixtures/dmn');
@@ -17,6 +17,18 @@ const oneNodeDiagram = (nodeId) => [{
   id: 'DMNDiagram_1', name: 'Diagram 1', size: { w: 300, h: 200 },
   coordMap: { coords: { [nodeId]: { x: 10, y: 10, w: 180, h: 80 } }, edgeCoords: {} },
 }];
+
+describe('assertIdAllowed', () => {
+  test('throws for a NO_ID_TYPE that carries an id', () => {
+    expect(() => assertIdAllowed('dmn:DMNElementReference', { id: 'x1', href: '#d1' }))
+      .toThrow(/must not carry an id/);
+  });
+
+  test('passes silently for a normal type with an id, and for a NO_ID_TYPE with no id', () => {
+    expect(() => assertIdAllowed('dmn:Decision', { id: 'd1' })).not.toThrow();
+    expect(() => assertIdAllowed('dmn:DMNElementReference', { href: '#d1' })).not.toThrow();
+  });
+});
 
 describe('generateDmnXml — minimal Definitions', () => {
   test('a single decision with no logic produces required attributes and no drgElement children beyond it', async () => {

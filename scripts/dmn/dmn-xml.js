@@ -18,6 +18,7 @@ import { requirementKey } from './coordinates.js';
 const moddle = new DmnModdle();
 
 function create(type, attrs = {}) {
+  assertIdAllowed(type, attrs);
   return moddle.create(type, attrs);
 }
 
@@ -37,6 +38,17 @@ function asArray(v) {
 const NO_ID_TYPES = new Set([
   'dmn:DMNElementReference', 'dmn:Binding', 'dmn:RuleAnnotationClause', 'dmn:RuleAnnotation',
 ]);
+
+/**
+ * Throws if `type` is one of NO_ID_TYPES and `attrs` carries an `id` — see the rationale on
+ * NO_ID_TYPES above. Exported (rather than `create` itself) so the guard is independently
+ * testable without opening the element construction API.
+ */
+export function assertIdAllowed(type, attrs) {
+  if (NO_ID_TYPES.has(type) && attrs && attrs.id != null) {
+    throw new Error(`${type} must not carry an id (does not extend tDMNElement): ${attrs.id}`);
+  }
+}
 
 const MODDLE_TYPE = {
   decision: 'dmn:Decision',

@@ -20,14 +20,14 @@
  * Associations are drawn as straight lines in BPMN, so this is a plain
  * centre-to-centre segment cut back to where it meets each rectangle.
  */
-function clipStraight(a, b) {
+export function clipStraight(a, b) {
   const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
   const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
   return [clipToRect(ac, bc, a), clipToRect(bc, ac, b)];
 }
 
 /** Move `from` (a shape centre) onto the border of `rect`, along from→towards. */
-function clipToRect(from, towards, rect) {
+export function clipToRect(from, towards, rect) {
   const dx = towards.x - from.x;
   const dy = towards.y - from.y;
   if (dx === 0 && dy === 0) return { x: from.x, y: from.y };
@@ -39,5 +39,3 @@ function clipToRect(from, towards, rect) {
   );
   return { x: from.x + dx * scale, y: from.y + dy * scale };
 }
-
-export { clipStraight, clipToRect };
