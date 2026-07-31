@@ -247,6 +247,7 @@ Test suite green after all changes (current count verified via `npm test`).
 | Inline mode without task icons | HTML inline template renders simplified shapes. For full fidelity: pipeline.js. | — (by design) |
 | Formal soundness only for XOR/AND | WF-Net check covers XOR/AND gateways. OR gateways warning only, event-based GW skipped. | — (classical WF-Net limitation) |
 | Language analysis rules (M05/M06) | German labels require POS tagger — no reliable npm package available. | — (deferred) |
+| `evaluate-slm.js` measures structure, not extraction quality | Checks are JSON-parseable, has the required top-level keys (`pools` or `nodes`+`edges` — not the full `input-schema.json` ajv gate), pipeline validation passes, and node count is roughly right. No precision/recall against a ground-truth structure — gateway types, roles/lanes, conditions, and exception paths are not compared. | — (deferred; would need a scored fixture set with a hand-labeled ground truth per element class) |
 
 ---
 

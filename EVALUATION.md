@@ -6,7 +6,7 @@ Reproducible metrics for the BPMN Generator. No marketing claims that aren't bac
 - **bpmn-auto-layout comparison** — head-to-head against npm `bpmn-auto-layout@1.3.0` on Pools/Lanes-heavy fixtures.
 - **Competitor matrix** — feature-by-feature comparison with ProMoAI, BPMN Assistant, and BPMN-Chatbot. Stieges column verified; competitor columns sourced from their public repos and papers.
 
-Last regenerated: 2026-05-18.
+Last regenerated: 2026-07-31.
 
 ## How to reproduce
 
@@ -28,26 +28,26 @@ Pipeline metrics over every fixture in `tests/fixtures/*.json`. See [tests/bench
 
 | Metric | Value |
 |---|---|
-| Fixtures | 9 |
-| Parse success (runPipeline doesn't throw) | **9 / 9** |
-| Serialize success (non-empty BPMN+SVG) | **8 / 9** |
-| Schema-valid inputs (ajv draft-2020-12) | **9 / 9** |
-| Total nodes | 102 |
-| Total edges | 114 |
+| Fixtures | 12 |
+| Parse success (runPipeline doesn't throw) | **12 / 12** |
+| Serialize success (non-empty BPMN+SVG) | **11 / 12** |
+| Schema-valid inputs (ajv draft-2020-12) | **12 / 12** |
+| Total nodes | 146 |
+| Total edges | 154 |
 | Total soundness errors | 1 (deadlock-process, by design) |
-| Total soundness warnings | 11 (style layer) |
-| Total edge crossings (CCW intersection scan) | 20 |
-| Cumulative wall-clock (cold start) | 374 ms |
+| Total soundness warnings | 57 (style layer) |
+| Total edge crossings (CCW intersection scan) | 17 |
+| Cumulative wall-clock (cold start) | 306 ms |
 
 ### What the numbers mean
 
-- **9/9 parses, 8/9 serialize**: the one fixture that doesn't serialize (`deadlock-process`) intentionally fails Soundness (rule WF03 detects the deadlock). The pipeline aborts serialization rather than emit an unsound model — this is the correct behavior. The other 8 fixtures (single-pool, multi-pool, sub-process, dense edges, sparse lanes, wide pipeline, deeply nested labels) all serialize cleanly.
-- **9/9 schema-valid**: every fixture passes `validateLogicCoreSchema()` (ajv against `references/input-schema.json`). The strict-gate at the HTTP API entry is consistent with what the bench accepts.
-- **20 edge crossings** across 9 fixtures with 114 total edges. The CCW scan includes shared-endpoint touches (e.g., at gateways), so this is an upper bound; visual crossings are fewer.
+- **12/12 parses, 11/12 serialize**: the one fixture that doesn't serialize (`deadlock-process`) intentionally fails Soundness (rule WF03 detects the deadlock). The pipeline aborts serialization rather than emit an unsound model — this is the correct behavior. The other 11 fixtures (single-pool, multi-pool, sub-process, dense edges, sparse lanes, wide pipeline, deeply nested labels, plus the geometry-contract, realistic-collaboration, subprocess-fidelity, and long-lane-name regression fixtures added since) all serialize cleanly.
+- **12/12 schema-valid**: every fixture passes `validateLogicCoreSchema()` (ajv against `references/input-schema.json`). The strict-gate at the HTTP API entry is consistent with what the bench accepts.
+- **17 edge crossings** across 12 fixtures with 154 total edges. The CCW scan includes shared-endpoint touches (e.g., at gateways), so this is an upper bound; visual crossings are fewer.
 
 ### Caveats
 
-- Wall-clock is single-run, no warmup. First call to `bpmn-generator-pipeline` (the largest fixture, 22 nodes / 31 edges) takes ~230 ms; the rest take 10-30 ms. ELK first-call cost dominates.
+- Wall-clock is single-run, no warmup. First call to the largest fixture takes the ELK cold-start hit; the rest take 10-30 ms. ELK first-call cost dominates.
 - The benchmark covers structural correctness on curated inputs. It does not measure: LLM extraction quality (no LLM here), visual aesthetics, layout-quality vs handcrafted reference (no human-rated reference set).
 
 ---

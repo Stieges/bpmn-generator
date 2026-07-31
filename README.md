@@ -3,7 +3,7 @@
 [![CI](https://github.com/Stieges/bpmn-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/Stieges/bpmn-generator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-BPMN 2.0 diagram generator — converts natural language process descriptions or structured JSON into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013).
+BPMN 2.0 diagram generator — converts natural language process descriptions or structured JSON into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013). Also generates DMN 1.3 decision models (opt-in, see [DMN Support](#dmn-support-opt-in)).
 
 ## Why this one
 
@@ -125,52 +125,77 @@ everything needed:
 
 ```
 scripts/
-├── pipeline.js        Orchestrator + CLI
-│   ├── validate.js    Validation wrapper → rules.js
-│   ├── rules.js       Rule engine (34 rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md` for the catalog
-│   ├── topology.js    Gateway directions, topological sort, lane ordering
-│   ├── layout.js      ELK graph construction + layout execution
-│   ├── coordinates.js Coordinate maps, edge clipping, pool equalization
-│   ├── bpmn-xml.js    BPMN 2.0 XML generation (DI, top-level defs)
-│   ├── svg.js         SVG rendering (pools, lanes, activities, events)
-│   ├── icons.js       Event markers, task icons, bottom markers
-│   ├── dot.js         DOT export (Logic-Core → Graphviz) + import
-│   ├── types.js       Type predicates, BPMN XML tag mapping
-│   └── utils.js       Config loader, visual constants, helpers
-├── import.js          BPMN XML → Logic-Core JSON round-trip importer
+├── bpmn/               Core BPMN pipeline (runs on every generate call)
+│   ├── pipeline.js     Orchestrator + CLI (public API: runPipeline)
+│   ├── validate.js     Validation wrapper → rules.js
+│   ├── rules.js        Rule engine (34 rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md`
+│   ├── optimize.js     Optimization Advisory layer (O01-O04, opt-in via optimize/soll mode)
+│   ├── topology.js     Gateway directions, topological sort, lane ordering
+│   ├── layout.js       ELK graph construction + layout execution
+│   ├── coordinates.js  Coordinate maps, edge clipping, pool equalization
+│   ├── di-check.js     Post-layout diagram integrity pass (DI01-DI06)
+│   ├── bpmn-xml.js     BPMN 2.0 XML generation (DI, top-level defs)
+│   ├── svg.js          SVG rendering (pools, lanes, activities, events)
+│   ├── icons.js        Event markers, task icons, bottom markers
+│   ├── dot.js           DOT export (Logic-Core → Graphviz) + import
+│   ├── types.js         Type predicates, BPMN XML tag mapping
+│   ├── import.js         BPMN XML → Logic-Core (DOM parser)
+│   ├── moddle-import.js  BPMN XML → Logic-Core (bpmn-moddle path)
+│   └── redesign*.js      Deterministic redesign toolbox (5 transforms, CLI-driven, opt-in)
+├── dmn/                DMN 1.3 pipeline (opt-in, not reached by runPipeline)
+│   ├── pipeline.js      Orchestrator + CLI (public API: runDmnPipeline)
+│   ├── schema-gate.js    ajv gate for Decision-Core input
+│   ├── rules.js          DMN rule engine (17 rules, 3 layers, 2 modes)
+│   ├── layout.js          DRD ELK layout (decisionCoreToElk, runDmnElkLayout)
+│   ├── coordinates.js      DRD coordinate mapping (buildDmnDiagrams)
+│   ├── di-check.js          Diagram integrity check (DD01-DD03)
+│   └── dmn-xml.js            DMN 1.3 XML + DMNDI generation via dmn-moddle
+├── shared/             Format-independent core, used by both bpmn/ and dmn/
+│   ├── utils.js          Config loader, visual constants, helpers
+│   ├── rule-profile.js    Profile machinery shared by both rule engines
+│   ├── resource-paths.js  Where references/ lives in each layout
+│   └── geometry.js        Straight-segment clip maths (clipStraight, clipToRect)
+├── agents/             Multi-agent orchestration
+│   ├── modeler.js       LLM-powered: text→JSON, refine, amend
+│   ├── reviewer.js       Deterministic: validateLogicCore() wrapper
+│   ├── layout.js          runPipeline() + optional vision review
+│   ├── compliance.js       Deterministic: runRules() gate
+│   └── llm-provider.js      OpenAI-compatible fetch abstraction (cloud + local)
 ├── orchestrator.js    Multi-agent state machine + CLI
-├── agents/
-│   ├── modeler.js     LLM-powered: text→JSON, refine, amend
-│   ├── reviewer.js    Deterministic: validateLogicCore() wrapper
-│   ├── layout.js      runPipeline() + optional vision review
-│   ├── compliance.js  Deterministic: runRules() gate
-│   └── llm-provider.js OpenAI-compatible fetch abstraction (cloud + local)
-├── workflow-net.js    Petri-Net soundness checker (WF01-WF03)
 ├── prepare-training-data.js  Training data ETL (BPMN→LC, filter, JSONL)
-├── evaluate-slm.js    SLM evaluation (pipeline-based metrics)
-├── mcp-bpmn-server.js MCP server (4 tools)
-├── http-server.js     HTTP API (8 endpoints)
-├── config.json        Externalized constants (shapes, colors, gaps)
-├── package.json       Dependencies (5 runtime, 3 dev)
-├── pipeline.test.js   224 tests (Jest, ES Modules)
-└── orchestrator.test.js 32 tests (agents + state machine)
+├── evaluate-slm.js     SLM evaluation (pipeline-based metrics)
+├── mcp-bpmn-server.js  MCP server (4 tools)
+├── http-server.js      HTTP API (8 endpoints)
+├── config.json         Externalized constants (shapes, colors, gaps)
+└── package.json        Runtime deps: elkjs, bpmn-moddle, dmn-moddle, @modelcontextprotocol/sdk, ajv, ajv-formats
 ```
 
-**Dependency graph** (acyclic):
+Run `cd scripts && npm test` for the current test count (Jest, ES Modules) — it changes often enough
+that a number here would go stale immediately; CI enforces it stays green.
+
+**Dependency graph** (acyclic; `dmn/` never imports `bpmn/`, and vice versa):
 ```
-types.js ← (no deps)
-utils.js ← (no deps, reads config.json)
-rules.js ← types, workflow-net
-workflow-net.js ← types
-validate.js ← rules
-topology.js ← types
-layout.js ← types, utils, topology, elkjs
-coordinates.js ← types, utils
-icons.js ← utils
-bpmn-xml.js ← types, utils, topology, icons
-svg.js ← types, utils, icons
-dot.js ← types
-pipeline.js ← all of the above
+shared/utils.js, shared/resource-paths.js ← (no deps)
+shared/rule-profile.js ← shared/utils
+shared/geometry.js ← (no deps)
+bpmn/types.js ← (no deps)
+bpmn/rules.js ← bpmn/types, bpmn/workflow-net, shared/rule-profile
+bpmn/workflow-net.js ← bpmn/types
+bpmn/validate.js ← bpmn/rules
+bpmn/topology.js ← bpmn/types
+bpmn/layout.js ← bpmn/types, shared/utils, bpmn/topology, elkjs
+bpmn/coordinates.js ← bpmn/types, shared/utils, bpmn/topology, shared/geometry
+bpmn/icons.js ← shared/utils
+bpmn/bpmn-xml.js ← bpmn/types, shared/utils, bpmn/topology, bpmn/icons
+bpmn/svg.js ← bpmn/types, shared/utils, bpmn/icons
+bpmn/dot.js ← bpmn/types
+bpmn/pipeline.js ← all of the above bpmn/ modules
+dmn/schema-gate.js ← shared/resource-paths
+dmn/rules.js ← shared/rule-profile, shared/utils
+dmn/layout.js ← dmn/constants, shared/utils, elkjs
+dmn/coordinates.js ← dmn/constants, shared/geometry
+dmn/dmn-xml.js ← shared/utils, dmn/coordinates, dmn-moddle
+dmn/pipeline.js ← all of the above dmn/ modules
 ```
 
 ## Repo Structure
@@ -191,17 +216,20 @@ bpmn-generator/
 ├── references/
 │   ├── logic-core-schema.md              JSON schema documentation (prose)
 │   ├── input-schema.json                 Formal JSON Schema (draft 2020-12)
+│   ├── decision-core-schema.json         Formal JSON Schema for DMN Decision-Core input
 │   ├── prompt-template.md                LLM prompt templates + few-shot patterns
 │   ├── inline-template.md                HTML template for browser-side ElkJS
 │   ├── fachliches-regelwerk.md           Rule documentation (authoritative catalog — per-rule source citations)
 │   ├── omg-compliance.md                 OMG BPMN 2.0.2 compliance mapping
 │   └── review-set/                       Test fixtures for visual review
 ├── rules/
-│   ├── default-profile.json              Default rule profile (all layers active)
-│   └── strict-profile.json               Strict profile (warnings → errors)
+│   ├── default-profile.json              Default BPMN rule profile (all layers active)
+│   ├── strict-profile.json               Strict BPMN profile (warnings → errors)
+│   ├── dmn-default-profile.json          Default DMN profile (soundness + semantics)
+│   └── dmn-best-practice-profile.json    Adds the opt-in DMN best_practice layer
 ├── scripts/                              Pipeline modules (see above)
 └── tests/
-    └── fixtures/                         Test input files (JSON Logic-Core)
+    └── fixtures/                         Test input files (JSON Logic-Core, DMN Decision-Core)
 ```
 
 ## Rule Engine
@@ -401,6 +429,32 @@ Optional fields: `callbackUrl` (async delivery with retry), `clientId` (audit), 
 - **Audit log:** `audit/bpmn-generator.jsonl` (append-only JSON Lines, metadata only)
 - **Dead letter:** `dead-letter/` (failed callback deliveries)
 
+## DMN Support (opt-in)
+
+Alongside the BPMN pipeline, `scripts/dmn/` generates DMN 1.3 decision models: JSON Decision-Core
+→ schema gate → rule engine → ElkJS DRD (Decision Requirements Diagram) layout → coordinate
+mapping → diagram integrity check → DMN 1.3 XML + DMNDI (via `dmn-moddle`). Output validates
+against the normative `DMN13.xsd`.
+
+This is a separate, sibling subsystem — `dmn/` never imports from `bpmn/` and isn't reached by
+`runPipeline`. It has its own rule engine (17 rules, 3 layers — see the "DMN rule engine" section
+of [`CLAUDE.md`](CLAUDE.md) for the layer breakdown), its own CLI, and its own test coverage.
+
+```bash
+# JSON Decision-Core → DMN 1.3 XML
+node dmn/pipeline.js input.json output-basename
+
+# Enable the opt-in best_practice rule layer
+node dmn/pipeline.js input.json output --best-practice
+
+# Abort (no files written) on any unresolved warning
+node dmn/pipeline.js input.json output --strict
+```
+
+Currently covers Decision-Core validation, DRD layout, and DMN 1.3 serialization (Stages 1-4 of
+the DMN integration). Round-trip import (DMN XML → Decision-Core) and SVG rendering are not yet
+implemented — see `docs/superpowers/plans/2026-07-30-dmn-integration.md` for what's still open.
+
 ## OMG Compliance
 
 See `references/omg-compliance.md` for a detailed mapping of OMG BPMN 2.0.2 specification sections to implementation code.
@@ -409,8 +463,9 @@ See `references/omg-compliance.md` for a detailed mapping of OMG BPMN 2.0.2 spec
 
 | Library | License | Purpose |
 |---|---|---|
-| [ElkJS](https://github.com/kieler/elkjs) | EPL-2.0 | Sugiyama layered auto-layout |
+| [ElkJS](https://github.com/kieler/elkjs) | EPL-2.0 | Sugiyama layered auto-layout (BPMN + DMN DRD) |
 | [bpmn-moddle](https://github.com/bpmn-io/bpmn-moddle) | MIT | BPMN 2.0 meta-model (XML serialization) |
+| [dmn-moddle](https://github.com/bpmn-io/dmn-moddle) | MIT | DMN 1.3 meta-model (XML serialization) |
 | [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk) | MIT | MCP server integration |
 | [ajv](https://github.com/ajv-validator/ajv) | MIT | JSON Schema strict gate for untrusted input |
 | [ajv-formats](https://github.com/ajv-validator/ajv-formats) | MIT | Format validators for the schema gate |
