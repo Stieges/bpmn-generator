@@ -27,7 +27,7 @@ ElkJS is used as an unmodified library. No modifications have been made to its s
 
 - **Version:** 12.0.1
 - **License:** MIT
-- **Copyright:** Copyright (c) 2014 camunda Services GmbH
+- **Copyright:** Copyright (c) 2015-present camunda Services GmbH
 - **Repository:** https://github.com/bpmn-io/dmn-moddle
 - **Usage:** CMOF-based DMN 1.3 XML serialization and parsing, symmetric to bpmn-moddle on the DMN side
 
