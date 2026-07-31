@@ -211,6 +211,40 @@ describe('CLI (spawned) — main() wiring', () => {
     expect(r.dmnExists).toBe(true);
     expect(r.stderr).toMatch(/\[B03\]/);
   });
+
+  // Shape mirrors scripts/bpmn/redesign.test.js:1864-1896 — missing/malformed input used to
+  // throw a raw Node stack trace out of the unguarded readFileSync/JSON.parse; now both are
+  // wrapped in a try/catch that reports a clean one-line '✗ ...' message and exits non-zero.
+  test('missing input file → exit ≠ 0, clean "✗ ..." on stderr, no stack trace frame from this file', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmn-cli-missing-'));
+    const missingPath = path.join(dir, 'does-not-exist.json');
+    const outBase = path.join(dir, 'out');
+    const res = spawnSync('node', ['pipeline.js', missingPath, outBase], { cwd: __dirname, encoding: 'utf8' });
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/✗ /);
+    expect(res.stderr).not.toMatch(/at .*pipeline\.js:/);
+    expect(fs.existsSync(`${outBase}.dmn`)).toBe(false);
+  });
+
+  test('malformed JSON input file → exit ≠ 0, clean "✗ ..." on stderr, no stack trace frame from this file', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmn-cli-badjson-'));
+    const inPath = path.join(dir, 'in.json');
+    const outBase = path.join(dir, 'out');
+    fs.writeFileSync(inPath, '{ this is not JSON', 'utf8');
+    const res = spawnSync('node', ['pipeline.js', inPath, outBase], { cwd: __dirname, encoding: 'utf8' });
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/✗ /);
+    expect(res.stderr).not.toMatch(/at .*pipeline\.js:/);
+    expect(fs.existsSync(`${outBase}.dmn`)).toBe(false);
+  });
 });
 
 describe('runDmnPipeline — opts.ruleProfile', () => {

@@ -95,16 +95,21 @@ async function main() {
     process.exit(1);
   }
 
-  let rawInput;
-  if (inputArg === '-') {
-    const chunks = [];
-    for await (const chunk of process.stdin) chunks.push(chunk);
-    rawInput = Buffer.concat(chunks).toString();
-  } else {
-    rawInput = readFileSync(resolve(inputArg), 'utf8');
+  let parsedInput;
+  try {
+    let rawInput;
+    if (inputArg === '-') {
+      const chunks = [];
+      for await (const chunk of process.stdin) chunks.push(chunk);
+      rawInput = Buffer.concat(chunks).toString();
+    } else {
+      rawInput = readFileSync(resolve(inputArg), 'utf8');
+    }
+    parsedInput = JSON.parse(rawInput);
+  } catch (e) {
+    console.error(`✗ ${e.message}`);
+    process.exit(1);
   }
-
-  const parsedInput = JSON.parse(rawInput);
   const result = await runDmnPipeline(parsedInput, { mode: bestPractice ? 'best-practice' : 'semantic' });
 
   if (result.validation.warnings.length) {
@@ -125,6 +130,11 @@ async function main() {
   }
   console.log('✓ Decision-Core validated (structural soundness OK)');
 
+  // ddWarnings (and the `strict && ddWarnings.length` --strict channel below) are structurally
+  // live but currently unreachable: di-check.js classifies every DD code as 'ERROR' severity, so
+  // ddWarnings is always empty today. This mirrors scripts/bpmn/pipeline.js's equivalent channel,
+  // which IS reachable there because BPMN's DI05 is WARNING-severity. Do not remove this channel —
+  // it becomes live the moment a WARNING-severity DD code is added to di-check.js.
   const ddErrors = (result.diagnostics?.issues ?? []).filter((i) => i.severity === 'ERROR');
   const ddWarnings = (result.diagnostics?.issues ?? []).filter((i) => i.severity !== 'ERROR');
   if (ddWarnings.length) {
