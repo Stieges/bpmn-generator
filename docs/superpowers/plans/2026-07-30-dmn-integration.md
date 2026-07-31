@@ -163,10 +163,13 @@ than one that does not. Commits nobody to the rest of the plan.
       | D07 | WARNING | Input data reached by no requirement (orphan) |
       | D08 | WARNING | `aggregation` set with a hit policy other than `COLLECT` |
 
-- [x] `rules/dmn-default-profile.json`. **Checked, 2026-07-30:** the profile machinery in
-      `scripts/bpmn/rules.js` — `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — was
-      already format-agnostic and has since been lifted into `scripts/shared/rule-profile.js`,
-      imported by both engines (done in the modular restructure, commit `e611c67`).
+- [x] `rules/dmn-default-profile.json`. **Checked, 2026-07-30:** the profile machinery —
+      `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — was already format-agnostic and
+      was extracted out of `scripts/rules.js` into its own `scripts/rule-profile.js` in commit
+      `2f255c6` (the Decision-Core schema and rule-engine commit), re-exported from `rules.js` so no
+      importer changed. Commit `e611c67`, the later modular restructure, then did a separate
+      0-line-diff rename that moved the already-extracted file to `scripts/shared/rule-profile.js`,
+      where both engines import it today.
 - [x] Fixtures under `tests/fixtures/dmn/`, one positive and one negative per rule.
 
 **Verify:** `npm test -- --testPathPatterns=dmn`. **Docs-gate watch:** the existing "33 rules,
