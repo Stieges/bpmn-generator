@@ -249,6 +249,40 @@ describe('generateDmnXml — field-set round trip (discount-decision.json, full 
   });
 });
 
+describe('generateDmnXml — hitPolicy round trip for a non-default value', () => {
+  test('a non-UNIQUE hitPolicy survives serialisation (README.md:31 predicts this)', async () => {
+    // The field-set round trip above excludes hitPolicy because the fixture's dec_discountLevel
+    // uses the implicit default 'UNIQUE', which dmn-moddle's writer drops (moddle-xml skips any
+    // attribute value equal to its descriptor default — see tests/fixtures/dmn/README.md's
+    // "Golden-file normalisation" section, specifically line 31: "only a non-default hit policy
+    // (e.g. 'FIRST', 'PRIORITY') would survive the round trip"). That leaves the non-default case
+    // completely unasserted. Deep-clone the fixture (not a new fixture file — see task brief) and
+    // set hitPolicy to a non-default value to close that gap.
+    const dc = structuredClone(good());
+    const srcDecision = dc.nodes.find((n) => n.id === 'dec_discountLevel');
+    srcDecision.decisionTable.hitPolicy = 'FIRST';
+
+    const diagrams = oneNodeDiagram('dec_discountLevel');
+    const xml = await generateDmnXml(dc, diagrams);
+    const reader = new DmnModdle();
+    const { rootElement, warnings } = await reader.fromXML(xml);
+    expect(warnings).toEqual([]);
+
+    const decision = rootElement.get('drgElement').find((e) => e.id === 'dec_discountLevel');
+
+    // Run WITHOUT the hitPolicy exclusion this time — if the library dropped it, `missing` in
+    // assertFieldsSurvive would name 'hitPolicy' and this assertion would fail, proving the gap
+    // instead of just documenting it.
+    assertFieldsSurvive(srcDecision.decisionTable, decision.decisionLogic, {
+      exclude: new Set(['id']),
+      rename: { inputs: 'input', outputs: 'output', annotations: 'annotation', rules: 'rule' },
+    });
+    // Confirm the actual serialised value, not just that the field is present.
+    expect(decision.decisionLogic.hitPolicy).toBe('FIRST');
+    expect(xml).toMatch(/<dmn:decisionTable\b[^>]*\bhitPolicy="FIRST"/);
+  });
+});
+
 describe('generateDmnXml — informationRequirement source-type arms', () => {
   test('a decision source uses requiredDecision and an inputData source uses requiredInput', async () => {
     const dc = good();

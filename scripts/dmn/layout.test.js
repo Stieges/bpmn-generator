@@ -47,6 +47,9 @@ describe('decisionCoreToElk', () => {
     ]);
     expect(graph.edges).toHaveLength(1);
     expect(graph.edges[0]).toMatchObject({ sources: ['in1'], targets: ['dec1'] });
+    // chain()'s single requirement has no `id`, so the `r.id || `req_${i}`` fallback
+    // (layout.js:53-57) must generate 'req_0' for it — otherwise unasserted.
+    expect(graph.edges[0].id).toBe('req_0');
   });
 
   test('sets direction UP and POLYLINE routing — no STRAIGHT value exists in the ELK enum', () => {
