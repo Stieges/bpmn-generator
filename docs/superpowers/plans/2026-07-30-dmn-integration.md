@@ -1,5 +1,14 @@
 # DMN integration — implementation plan
 
+> **Status (2026-07-31): Stages 0–4 done.** GATE 1 is answered (approved). The design for Stages
+> 3–4 was re-verified against the normative XSD, the actual codebase and the actual libraries
+> before being executed — see
+> [2026-07-31-dmn-drd-and-serialisation-design.md](../specs/2026-07-31-dmn-drd-and-serialisation-design.md),
+> whose "What the research corrected" table lists nine claims from earlier planning that did not
+> survive checking, three of which are corrected inline below. A real `.dmn` file exists as of
+> `scripts/dmn/pipeline.js`, XSD-validated. Stages 5–7 (importer, SVG, tool surface) remain; GATE 2
+> is still deferred.
+
 > **For agentic workers:** steps use checkbox (`- [ ]`) syntax for tracking. Work top to bottom;
 > the two **GATES** are blocking and need a human answer, not a judgement call.
 
@@ -117,15 +126,15 @@ Self-contained and useful on its own: a model that records **which** rule set de
 than one that does not. Commits nobody to the rest of the plan.
 
 - [ ] `references/input-schema.json` — optional `decisionRef` (string) on Node.
-- [ ] `scripts/bpmn-xml.js` — `buildFlowNode` emits `extensionElements` carrying the reference for
+- [x] `scripts/bpmn/bpmn-xml.js` — `buildFlowNode` emits `extensionElements` carrying the reference for
       `businessRuleTask`. Neutral namespace, **not** `camunda:`. Follow the §2.7(a) discipline:
       check `Semantic.xsd` before emitting any attribute.
-- [ ] `scripts/moddle-import.js` `nodeFromElement` **and** `scripts/import.js` `nodeFromChild` —
+- [x] `scripts/bpmn/moddle-import.js` `nodeFromElement` **and** `scripts/bpmn/import.js` `nodeFromChild` —
       read it back. Both functions are recursive and shared between top level and subprocess
       children; put the field in the function, never in a caller.
-- [ ] `tests/fixtures/subprocess-child-fidelity.json` — add `decisionRef` to a child node. The
+- [x] `tests/fixtures/subprocess-child-fidelity.json` — add `decisionRef` to a child node. The
       field-set round-trip test then proves all four places learned about it.
-- [ ] Rule: a `decisionRef` on anything that is not a `businessRuleTask` is a warning.
+- [x] Rule: a `decisionRef` on anything that is not a `businessRuleTask` is a warning.
 
 **Verify:** `npm test`; round-trip preserves the field; `xmlWarnings` stays empty.
 
@@ -134,13 +143,13 @@ than one that does not. Commits nobody to the rest of the plan.
 ## Stage 2 — Decision-Core: schema and rules
 
 - [ ] `references/decision-core-schema.json` — ajv draft-2020-12, strict, shape as above.
-- [ ] `scripts/dmn/schema-gate.js` — mirrors `scripts/schema-gate.js`, which is now four lines:
+- [x] `scripts/dmn/schema-gate.js` — mirrors `scripts/bpmn/schema-gate.js`:
       it delegates path resolution to `resource-paths.js`. **Do not copy a path fallback into it** —
       add `decision-core-schema.json` to `resource-paths.js` (a third `sourcePath`/`packagedPath`
       pair plus a wrapper), to `prepack-copy-references.mjs`'s `FILES`, and it is removed again by
       the existing `postpack` step. Spell the filename out literally in each `join(__dirname, …)`,
       or the docs gate's package-integrity check resolves a directory and reports a false violation.
-- [ ] `scripts/dmn/rules.js` — same rule object shape as `scripts/rules.js`
+- [x] `scripts/dmn/rules.js` — same rule object shape as `scripts/bpmn/rules.js`
       (`{ id, layer, defaultSeverity, description, ref, check }`). First set, all structural:
 
       | ID | Severity | Checks |
@@ -154,14 +163,11 @@ than one that does not. Commits nobody to the rest of the plan.
       | D07 | WARNING | Input data reached by no requirement (orphan) |
       | D08 | WARNING | `aggregation` set with a hit policy other than `COLLECT` |
 
-- [ ] `rules/dmn-default-profile.json`. **Checked, 2026-07-30:** the profile machinery in
-      `scripts/rules.js` — `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — is already
-      format-agnostic; it only ever sees a rule object and a profile. Only `runRules` is
-      BPMN-specific (fixed `RULES` list, `lc.pools ? lc.pools : [lc]`), so DMN needs its own runner
-      and nothing else. Two of the three are not exported today: lift all three into
-      `scripts/rule-profile.js` and have both engines import them, rather than duplicating them.
-      That takes the top-level script count to 32 — update `CLAUDE.md` or the gate will.
-- [ ] Fixtures under `tests/fixtures/dmn/`, one positive and one negative per rule.
+- [x] `rules/dmn-default-profile.json`. **Checked, 2026-07-30:** the profile machinery in
+      `scripts/bpmn/rules.js` — `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — was
+      already format-agnostic and has since been lifted into `scripts/shared/rule-profile.js`,
+      imported by both engines (done in the modular restructure, commit `e611c67`).
+- [x] Fixtures under `tests/fixtures/dmn/`, one positive and one negative per rule.
 
 **Verify:** `npm test -- --testPathPatterns=dmn`. **Docs-gate watch:** the existing "33 rules,
 5 layers" claim is derived from `scripts/rules.js` alone — make sure no doc sentence starts implying
@@ -171,9 +177,11 @@ it covers both engines, or extend the gate.
 
 ## Stage 3 — DRD layout
 
-- [ ] `scripts/dmn/layout.js` — Decision-Core → ELK. A DRG is a plain DAG: no lanes, no pools, no
+- [x] `scripts/dmn/layout.js` — Decision-Core → ELK. A DRG is a plain DAG: no lanes, no pools, no
       boundary events, no message flows. `elk.direction: UP` (input data at the bottom, top-level
-      decision at the top), which is the one real difference from `scripts/layout.js`.
+      decision at the top), which is the one real difference from `scripts/bpmn/layout.js`. Verified
+      empirically against elkjs@0.12.0 that `UP` needs no post-hoc y-flip — ELK emits final
+      coordinates directly (`dmn-external-ground-truth.md` §C.10).
 - [ ] **The layout result is a diagram LIST, not a single coordMap** — `[{ id, name, size, coordMap }]`,
       with exactly one entry today. Grounds, checked 2026-07-30: DMNDI is `DMNDiagram*` (unbounded,
       DMNDI13.xsd), §6.2.4 builds partial views on exactly that ("DRDs can be interchanged" —
@@ -185,19 +193,23 @@ it covers both engines, or extend the gate.
       When views arrive, each entry additionally needs its element selection: §6.2.4 SHOULD-notates
       hidden requirements with an ellipsis, and a renderer cannot mark hidden what it does not know
       about. Recorded so the entry shape does not fossilise; not built now.
-- [ ] `scripts/dmn/coordinates.js` — per-diagram `coordMap` in the same contract shape
+- [x] `scripts/dmn/coordinates.js` — per-diagram `coordMap` in the same contract shape
       (`{ coords, edgeCoords, edgeLabels }`, no `laneCoords`/`poolCoords`).
       **Correction (2026-07-30):** this plan originally said to reuse `clipOrthogonal`. Checked
       against spec and code, that was wrong twice over: DRD requirement edges are drawn as STRAIGHT
       lines by convention — §6.2.2 mandates line style and arrowheads, not routing; the spec's own
-      figures and the tools draw straight — while `clipOrthogonal` trims orthogonal polylines. The
-      piece to build is a straight-segment clip against the four DRD outlines (rectangle;
-      clipped-corner rectangle; stadium — exact circle intersection at the ends; wavy bottom —
-      rectangle approximation is fine). ELK contributes node positions only; edge routes are
-      computed once, here, so the geometry contract holds. "Reuse, do not copy" still applies where
-      something exists to reuse: `rn()`/`wrapText` from `utils.js`, the ELK bootstrap idiom.
-- [ ] `scripts/config.json` — a `dmn` block with the DRG shape sizes. No hard-coded constants.
-- [ ] `scripts/dmn/di-check.js` — geometry pass, same role as `di-check.js`: overlapping shapes,
+      figures and the tools draw straight — while `clipOrthogonal` trims orthogonal polylines.
+      **Further correction (2026-07-31):** the straight-segment clip already existed —
+      `clipStraight`/`clipToRect` in `scripts/bpmn/coordinates.js` (lines 777-795), just not
+      exported. They moved to `scripts/shared/geometry.js` so both `bpmn/` and `dmn/` import the
+      same code rather than a second copy; the three orthogonal helpers (`clipCircleOrthogonal`,
+      `clipDiamondOrthogonal`, `clipRectOrthogonal`) stayed in `bpmn/` — see
+      [2026-07-31-dmn-drd-and-serialisation-design.md](../specs/2026-07-31-dmn-drd-and-serialisation-design.md)'s
+      "Where the boundary actually runs" section for why. ELK contributes node positions only; edge
+      routes are computed once, in `coordinates.js`, so the geometry contract holds. `rn()` from
+      `shared/utils.js` is reused as-is.
+- [x] `scripts/config.json` — a `dmn` block with the DRG shape sizes. No hard-coded constants.
+- [x] `scripts/dmn/di-check.js` — geometry pass, same role as `scripts/bpmn/di-check.js`: overlapping shapes,
       shape outside the diagram bounds, edge endpoint not on its shape. Result into
       `result.diagnostics`, **not** into `validation`.
 
@@ -209,27 +221,38 @@ it covers both engines, or extend the gate.
 
 Blocked by GATE 1.
 
-- [ ] `scripts/dmn/xml.js` — `generateDmnXml(dc, coordMap)` building moddle elements, mirroring
-      `bpmn-xml.js`. `tDefinitions` order matters: it is an `xsd:sequence` ending in `dmndi:DMNDI`
-      (max 1), and `@namespace` is required (§2.8).
-- [ ] Requirements nest under their **target**; `usingTask`/`usingProcess` emitted where present,
+- [x] `scripts/dmn/dmn-xml.js` — `generateDmnXml(dc, diagrams)` building moddle elements, mirroring
+      `bpmn/bpmn-xml.js`. `tDefinitions` order matters: it is an `xsd:sequence` ending in
+      `dmndi:DMNDI` (max 1); `@namespace` AND `@name` (inherited from `tNamedElement`, easy to miss)
+      are both required. **Correction (2026-07-31):** a decision's logic slot has no
+      `<decisionLogic>` XML element — that string is only an XSD author's comment above an
+      `xsd:element ref="expression"` slot. The serialised child is whichever concrete
+      substitution-group member is used, `<decisionTable>` in every case this project produces
+      today; emitting a literal `decisionLogic` wrapper is invalid DMN
+      (`dmn13-xsd-ground-truth.md` §F16).
+- [x] Requirements nest under their **target**; `usingTask`/`usingProcess` emitted where present,
       with `<import>` when the reference crosses into a BPMN file (§2.6).
-- [ ] DMNDI: `DMNShape`/`DMNEdge` carry `dmnElementRef`. dmn-moddle resolves that to the **element
+- [x] DMNDI: `DMNShape`/`DMNEdge` carry `dmnElementRef`. dmn-moddle resolves that to the **element
       object**, not a string — hand it built elements, the way `buildDI` receives `processElements`
       (§2.3).
-- [ ] The DMNDI writer loops over Stage 3's diagram list and gets a test with a hand-built
+- [x] The DMNDI writer loops over Stage 3's diagram list and gets a test with a hand-built
       two-diagram input (the schema knows no views yet; the writer does not care). A list of one
       that never runs with two is unverified generality — the `DMNDiagram*` loop must not be dead
       code.
-- [ ] **Attribute discipline.** Add a `isDmnElementWithId`-style predicate covering the types that do
-      **not** extend `tDMNElement` — `tRuleAnnotation` and `tRuleAnnotationClause` have no `id`.
-      Emitting one produces a warning that survives the round trip and reappears in every consumer
-      (§2.7a) — the #36 mechanism exactly.
-- [ ] `validateDmnXml(xml)` — re-parse through dmn-moddle and surface warnings, mirroring
-      `validateBpmnXml`. Wire into the CLI as its own section and into `--strict`.
-- [ ] **Before the first golden file:** pin the normalisation behaviour from §2.7(b) in a test —
-      `hitPolicy="UNIQUE"` is dropped on write, `preferredOrientation="Rule-as-Row"` is kept. Write
-      the goldens against actual output, with that asymmetry documented in the fixture's README.
+- [x] **Attribute discipline.** Covers all FOUR types that do not extend `tDMNElement` and therefore
+      have no `id` — **correction (2026-07-31):** the earlier count of two
+      (`tRuleAnnotation`, `tRuleAnnotationClause`) was incomplete; `tDMNElementReference` and
+      `tBinding` also lack `id` (`dmn13-xsd-ground-truth.md` §C). `tBinding` is structurally
+      unreachable from Decision-Core today (no `invocation` expression type), documented rather
+      than exercised.
+- [x] `validateDmnXml(xml)` — re-parse through dmn-moddle and surface warnings, mirroring
+      `validateBpmnXml`. Wired into the CLI's own section and into `--strict`.
+- [x] **Before the first golden file:** the `hitPolicy`/`preferredOrientation` normalisation was
+      measured against the real library, not derived from the XSD. **Correction (2026-07-31):** the
+      XSD gives no basis for treating the two attributes differently — both are `use="optional"`
+      with an explicit `default`, on the same `xsd:extension` block
+      (`dmn13-xsd-ground-truth.md` §D8). Whatever dmn-moddle actually does on write is recorded in
+      `tests/fixtures/dmn/README.md`, and the golden file matches that observation.
 
 **Verify:** generate the DRD from a fixture, open the `.dmn` in dmn-js **and** Camunda Modeler, and
 confirm the decision table renders. That is the milestone — not a green test run.
@@ -302,7 +325,11 @@ Plus, per `CLAUDE.md`'s standing rules:
 1. **Silent omission on the way down.** Proven present in DMN (§2.7a). Mitigation is Stage 5's
    field-set guard, and it must exist before the importer is trusted, not after.
 2. **A second copy of shared geometry code.** The single most expensive mistake available here.
-   Stage 3 reuses `clipOrthogonal` rather than forking it, on purpose.
+   **Corrected (2026-07-31):** Stage 3 does not reuse `clipOrthogonal` — that helper is
+   orthogonal-routing- and BPMN-shape-specific (branches on `isEvent`/`isGateway`). It reuses
+   `clipStraight`/`clipToRect`, relocated from `scripts/bpmn/coordinates.js` into
+   `scripts/shared/geometry.js` for exactly this purpose, avoiding a second copy of the actual
+   straight-line clip maths.
 3. **Scope creep through table rendering (G6) and completeness checking (G7).** Either can exceed
    everything else. Both are explicitly out; keep them out.
 4. **Doc claims drifting.** The docs gate covers rule counts, script counts, DI codes and the HTTP

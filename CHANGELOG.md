@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **DMN 1.3 XML + DMNDI generation — a real `.dmn` file now exists.**
+  `scripts/dmn/dmn-xml.js` (`generateDmnXml`, `validateDmnXml`) and `scripts/dmn/pipeline.js`
+  (`runDmnPipeline` + CLI), completing Stages 3–4 of
+  `docs/superpowers/plans/2026-07-30-dmn-integration.md`.
+  - New runtime dependency: `dmn-moddle@12.0.1`, symmetric to `bpmn-moddle` on the DMN side —
+    GATE 1, its three transitive dependencies identical to the already-installed `bpmn-moddle`'s.
+  - Requirements nest under their target element with the `href`-wrapper form
+    (`dmn:DMNElementReference`, a string, not an object reference — the opposite pattern from
+    `dmnElementRef`, which is). No literal `<decisionLogic>` element is emitted — DMN13.xsd has no
+    such element, only a comment over an `expression` substitution-group slot; the serialised child
+    is the concrete expression type directly (`decisionTable`, in every case this project produces
+    today).
+  - Attribute discipline against the four DMN 1.3 types that do not extend `tDMNElement` and
+    therefore carry no `id` (`tRuleAnnotation`, `tRuleAnnotationClause`, `tDMNElementReference`,
+    `tBinding` — the last structurally unreachable today, no `invocation` expression support yet).
+  - `usingTask`/`usingProcess` now accept a string or an array in Decision-Core (additive schema
+    change), covering DMN13.xsd's `0..unbounded` cardinality.
+  - XSD-validated via `xmllint` against `references/omg-spec/normative/dmn/DMN13.xsd` (Jest test
+    skips when the tool is absent), round-tripped through `dmn-moddle` and compared by field set —
+    not field by field, the same defect class that was invisible twice on the BPMN side (#36, #42) —
+    and exercised with two diagrams so the `DMNDiagram*` writer loop is not dead code.
+  - The `hitPolicy`/`preferredOrientation` normalisation on write was measured against the real
+    library rather than assumed from the XSD (which treats both attributes identically) — recorded
+    in `tests/fixtures/dmn/README.md`.
+  - Golden file: `tests/fixtures/dmn/discount-decision.expected.dmn`.
+  - **Not yet done:** the importer (DMN → Decision-Core), SVG rendering, and the MCP/HTTP tool
+    surface — Stages 5–7 of the integration plan, tracked there.
 - **Decision-Core: a schema and a layered rule engine for DMN input.**
   `references/decision-core-schema.json` (ajv draft-2020-12, strict) plus `scripts/dmn/` with 17
   rules in 3 layers and 2 modes. Field set decided against the normative DMN13.xsd, which dictated

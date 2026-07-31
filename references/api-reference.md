@@ -98,6 +98,24 @@ curl -X POST http://localhost:3000/api/v1/generate \
 
 ---
 
+## DMN diagnostics (DD01–DD03)
+
+`scripts/dmn/di-check.js`'s `checkDmnDiagramIntegrity` plays the same role for a DRD that
+`di-check.js` plays for a BPMN diagram — its own code namespace so the two can appear side by side.
+Not yet reachable over HTTP or MCP (Stage 7 of `docs/superpowers/plans/2026-07-30-dmn-integration.md`
+adds the tool surface); today it is `runDmnPipeline(dc).diagnostics`, called directly or via the CLI
+(`node dmn/pipeline.js`).
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| DD01 | ERROR | Two DRD shapes overlapping |
+| DD02 | ERROR | A shape outside the diagram's declared bounds |
+| DD03 | ERROR | A requirement-connection endpoint that does not sit on its shape's boundary |
+
+`diagnostics.ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI06 above.
+
+---
+
 ## POST /api/v1/validate
 
 Validate Logic-Core against the rule engine without generating output.

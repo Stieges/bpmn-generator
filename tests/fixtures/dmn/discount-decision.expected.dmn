@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" id="Definitions_discount" name="Discount decision" namespace="http://bpmn-generator.local/dmn/discount">
+  <dmn:description>Reference fixture: a well-formed decision model exercising every node type and every requirement kind.</dmn:description>
+  <dmn:inputData id="in_orderValue" name="Order value">
+    <dmn:variable id="in_orderValue_var" name="Order value" typeRef="number" />
+  </dmn:inputData>
+  <dmn:inputData id="in_customerSince" name="Customer since">
+    <dmn:variable id="in_customerSince_var" name="Customer since" typeRef="date" />
+  </dmn:inputData>
+  <dmn:knowledgeSource id="ks_discountPolicy" name="Discount policy" locationURI="http://bpmn-generator.local/policies/discount">
+    <dmn:type>Policy document</dmn:type>
+  </dmn:knowledgeSource>
+  <dmn:businessKnowledgeModel id="bkm_loyaltyBonus" name="Loyalty bonus">
+    <dmn:description>Extra percentage points granted for tenure.</dmn:description>
+    <dmn:encapsulatedLogic>
+      <dmn:formalParameter name="since" typeRef="date" />
+      <dmn:literalExpression>
+        <dmn:text>if since &lt; date("2020-01-01") then 5 else 0</dmn:text>
+      </dmn:literalExpression>
+    </dmn:encapsulatedLogic>
+  </dmn:businessKnowledgeModel>
+  <dmn:decision id="dec_discountLevel" name="Discount level">
+    <dmn:question>Which discount level applies to this order?</dmn:question>
+    <dmn:allowedAnswers>none, bronze, silver</dmn:allowedAnswers>
+    <dmn:variable id="dec_discountLevel_var" name="discountLevel" typeRef="string" />
+    <dmn:informationRequirement id="ir_1">
+      <dmn:requiredInput href="#in_orderValue" />
+    </dmn:informationRequirement>
+    <dmn:authorityRequirement id="ar_1">
+      <dmn:requiredAuthority href="#ks_discountPolicy" />
+    </dmn:authorityRequirement>
+    <dmn:usingTask href="task_applyDiscount" />
+    <dmn:decisionTable id="table_discountLevel" preferredOrientation="Rule-as-Row" outputLabel="Discount level">
+      <dmn:input id="in_1" label="Order value">
+        <dmn:inputExpression typeRef="number">
+          <dmn:text>orderValue</dmn:text>
+        </dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="out_1" name="level" typeRef="string">
+        <dmn:outputValues>
+          <dmn:text>"none","bronze","silver"</dmn:text>
+        </dmn:outputValues>
+      </dmn:output>
+      <dmn:annotation name="Note" />
+      <dmn:rule id="r1">
+        <dmn:inputEntry>
+          <dmn:text>&lt; 100</dmn:text>
+        </dmn:inputEntry>
+        <dmn:outputEntry>
+          <dmn:text>"none"</dmn:text>
+        </dmn:outputEntry>
+        <dmn:annotationEntry>
+          <dmn:text>Below threshold</dmn:text>
+        </dmn:annotationEntry>
+      </dmn:rule>
+      <dmn:rule id="r2">
+        <dmn:inputEntry>
+          <dmn:text>[100..500)</dmn:text>
+        </dmn:inputEntry>
+        <dmn:outputEntry>
+          <dmn:text>"bronze"</dmn:text>
+        </dmn:outputEntry>
+        <dmn:annotationEntry>
+          <dmn:text>Standard tier</dmn:text>
+        </dmn:annotationEntry>
+      </dmn:rule>
+      <dmn:rule id="r3">
+        <dmn:inputEntry>
+          <dmn:text>&gt;= 500</dmn:text>
+        </dmn:inputEntry>
+        <dmn:outputEntry>
+          <dmn:text>"silver"</dmn:text>
+        </dmn:outputEntry>
+        <dmn:annotationEntry>
+          <dmn:text>Top tier</dmn:text>
+        </dmn:annotationEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+  <dmn:decision id="dec_finalPercentage" name="Final percentage">
+    <dmn:question>What discount percentage does this order finally receive?</dmn:question>
+    <dmn:variable id="dec_finalPercentage_var" name="finalPercentage" typeRef="number" />
+    <dmn:informationRequirement id="ir_2">
+      <dmn:requiredDecision href="#dec_discountLevel" />
+    </dmn:informationRequirement>
+    <dmn:informationRequirement id="ir_3">
+      <dmn:requiredInput href="#in_customerSince" />
+    </dmn:informationRequirement>
+    <dmn:knowledgeRequirement id="kr_1">
+      <dmn:requiredKnowledge href="#bkm_loyaltyBonus" />
+    </dmn:knowledgeRequirement>
+    <dmn:literalExpression id="dec_finalPercentage_expr">
+      <dmn:text>base(discountLevel) + loyaltyBonus(customerSince)</dmn:text>
+    </dmn:literalExpression>
+  </dmn:decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_1" name="Discount decision">
+      <dmndi:Size width="608.8" height="432.7" />
+      <dmndi:DMNShape id="in_orderValue_di" dmnElementRef="in_orderValue">
+        <dc:Bounds height="45" width="125" x="463.8" y="349.7" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="in_customerSince_di" dmnElementRef="in_customerSince">
+        <dc:Bounds height="45" width="125" x="195" y="187.4" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="ks_discountPolicy_di" dmnElementRef="ks_discountPolicy">
+        <dc:Bounds height="63" width="100" x="323.8" y="349.7" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="bkm_loyaltyBonus_di" dmnElementRef="bkm_loyaltyBonus">
+        <dc:Bounds height="46" width="135" x="20" y="187.4" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="dec_discountLevel_di" dmnElementRef="dec_discountLevel">
+        <dc:Bounds height="80" width="180" x="360" y="187.4" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="dec_finalPercentage_di" dmnElementRef="dec_finalPercentage">
+        <dc:Bounds height="80" width="180" x="167.5" y="20" />
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge id="ir_1_di" dmnElementRef="ir_1">
+        <di:waypoint x="514.4" y="349.7" />
+        <di:waypoint x="471.1" y="267.4" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="ir_2_di" dmnElementRef="ir_2">
+        <di:waypoint x="404" y="187.4" />
+        <di:waypoint x="303.5" y="100" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="ir_3_di" dmnElementRef="ir_3">
+        <di:waypoint x="257.5" y="187.4" />
+        <di:waypoint x="257.5" y="100" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="kr_1_di" dmnElementRef="kr_1">
+        <di:waypoint x="113.5" y="187.4" />
+        <di:waypoint x="212.3" y="100" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="ar_1_di" dmnElementRef="ar_1">
+        <di:waypoint x="389.4" y="349.7" />
+        <di:waypoint x="430.2" y="267.4" />
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</dmn:definitions>

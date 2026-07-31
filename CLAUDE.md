@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 2 dmn (growing) + 3 shared + 7 agent +
+7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
 9 robustness modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -62,6 +62,9 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   utils.js                   (reads ../config.json)
   rule-profile.js            (profile machinery: loadRuleProfile, isRuleEnabled, getEffectiveSeverity)
   resource-paths.js          (no deps — where references/ lives in each layout)
+  geometry.js                (straight-segment clip maths: clipStraight, clipToRect — shared by
+                               bpmn/coordinates.js and dmn/coordinates.js; the orthogonal clip
+                               helpers stay in bpmn/ — see dmn-integration plan's Stage 3 note)
 
 Standalone tooling (top-level scripts/)
   http-server.js             HTTP API (/api/v1/generate, /orchestrate, /chat)
@@ -73,12 +76,19 @@ Standalone tooling (top-level scripts/)
   orchestrator.js            Multi-agent orchestration
 
 DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
-  schema-gate.js             ← ../shared/resource-paths.js (ajv gate for Decision-Core)
-  rules.js                   ← ../shared/rule-profile.js, ../shared/utils.js (D01–D11 + B01–B06,
-                               3 layers, 2 modes; own runner `runDmnRules`)
-  (in progress — see docs/superpowers/plans/2026-07-30-dmn-integration.md.
-   Stages 3–7 add layout, DMN 1.3 XML + DMNDI, importer, SVG and the tool surface.
-   Nothing here produces a .dmn file yet.)
+  pipeline.js (Orchestrator + CLI, public API runDmnPipeline)
+    ├── schema-gate.js       ← ../shared/resource-paths.js (ajv gate for Decision-Core)
+    ├── rules.js             ← ../shared/rule-profile.js, ../shared/utils.js (D01–D11 + B01–B06,
+    │                          3 layers, 2 modes; own runner `runDmnRules`)
+    ├── layout.js            ← constants.js, ../shared/utils.js, elkjs (decisionCoreToElk, runDmnElkLayout)
+    ├── coordinates.js       ← constants.js, ../shared/geometry.js (buildDmnDiagrams, per-diagram coordMap)
+    ├── di-check.js          (checkDmnDiagramIntegrity — DD01–DD03, mirrors bpmn/di-check.js)
+    ├── dmn-xml.js           ← ../shared/utils.js, coordinates.js (requirementKey), dmn-moddle
+    │                          (generateDmnXml, validateDmnXml)
+    └── constants.js         ← ../shared/utils.js (DRD shape sizes, spacing, edge markers, from CFG.dmn)
+  (produces a real .dmn file, XSD-validated — see
+   docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: the importer,
+   SVG rendering and the tool surface, Stages 5–7.)
 
 Agent subsystem (scripts/agents/)
   chat.js, compliance.js, layout.js, llm-provider.js, modeler.js, prompt-sections.js, reviewer.js
@@ -156,6 +166,8 @@ membership instead of coordinates.
 | `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
 | `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
 | `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 17 rules, 3 layers, 2 modes. **Counted separately from the BPMN engine** — see the DMN section under Rule Engine |
+| `scripts/dmn/dmn-xml.js` | `generateDmnXml`, `validateDmnXml` — DMN 1.3 XML + DMNDI via dmn-moddle, mirroring `bpmn-xml.js` |
+| `scripts/dmn/pipeline.js` | `runDmnPipeline` — Orchestrator + CLI + Public API for the DMN side, gate order schema→rules→layout→coordinates→di-check→serialisation |
 | `references/decision-core-schema.json` | Formal JSON Schema for DMN Decision-Core input |
 | `rules/dmn-default-profile.json` | Default DMN profile (semantic: soundness + semantics) |
 | `rules/dmn-best-practice-profile.json` | Adds the opt-in `best_practice` layer |
@@ -436,6 +448,21 @@ node bpmn/pipeline.js input.json output --optimize
 
 # Start MCP server:
 node mcp-bpmn-server.js
+```
+
+DMN (mirrors the BPMN CLI's idiom):
+```bash
+# JSON → DMN 1.3 XML
+node dmn/pipeline.js input.json output-basename
+
+# Stdin:
+cat input.json | node dmn/pipeline.js - output
+
+# Abort (no files written) on any unresolved warning:
+node dmn/pipeline.js input.json output --strict
+
+# Enable the opt-in best_practice rule layer:
+node dmn/pipeline.js input.json output --best-practice
 ```
 
 ## Known Limitations
