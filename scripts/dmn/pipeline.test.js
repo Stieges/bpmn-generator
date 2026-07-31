@@ -118,3 +118,118 @@ describe('DMN Golden-File Regression', () => {
     expect(result.xml).toBe(expected);
   });
 });
+
+describe('CLI (spawned) — main() wiring', () => {
+  // Spawns the real CLI to verify main(): flag parsing, exit codes, the '-' stdin path and
+  // writeFileSync — none of this was exercised before. Shape copied from
+  // scripts/bpmn/pipeline.test.js:2562-2582 (fs.mkdtempSync, spawnSync with cwd: __dirname,
+  // assertions on status/stderr/existsSync, no cleanup).
+  const runCli = async (dc, { args = [], stdin = false } = {}) => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmn-cli-'));
+    const outBase = path.join(dir, 'out');
+    const json = JSON.stringify(dc);
+    let cliArgs;
+    let input;
+    if (stdin) {
+      cliArgs = ['pipeline.js', '-', outBase, ...args];
+      input = json;
+    } else {
+      const inPath = path.join(dir, 'in.json');
+      fs.writeFileSync(inPath, json, 'utf8');
+      cliArgs = ['pipeline.js', inPath, outBase, ...args];
+    }
+    const res = spawnSync('node', cliArgs, { cwd: __dirname, encoding: 'utf8', input });
+    return {
+      status: res.status,
+      stdout: res.stdout || '',
+      stderr: res.stderr || '',
+      dmnExists: fs.existsSync(`${outBase}.dmn`),
+    };
+  };
+
+  const missingQuestion = () => {
+    const dc = good();
+    delete dc.nodes.find((n) => n.id === 'dec_discountLevel').question; // B03 trigger, per pipeline.test.js:61-68
+    return dc;
+  };
+
+  test('no positional argument → usage message on stderr, exit ≠ 0', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const res = spawnSync('node', ['pipeline.js'], { cwd: __dirname, encoding: 'utf8' });
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/Usage: node pipeline\.js/);
+  });
+
+  test('happy path: valid Decision-Core file → exit 0, .dmn written', async () => {
+    const r = await runCli(good());
+    expect(r.status).toBe(0);
+    expect(r.dmnExists).toBe(true);
+    expect(r.stdout).toMatch(/DMN 1\.3 XML/);
+  });
+
+  test("'-' reads Decision-Core from stdin → exit 0, .dmn written", async () => {
+    const r = await runCli(good(), { stdin: true });
+    expect(r.status).toBe(0);
+    expect(r.dmnExists).toBe(true);
+  });
+
+  test('schema-gate blocks a Decision-Core missing the required namespace → exit ≠ 0, no file, stderr names it', async () => {
+    const dc = good();
+    delete dc.namespace;
+    const r = await runCli(dc);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/\[schema\]/);
+    expect(r.dmnExists).toBe(false);
+  });
+
+  test('--strict aborts on a B03 (best_practice) warning — channel 1 (validation.warnings) only', async () => {
+    // Channel 2 (diagnostics.issues) is structurally unreachable today: di-check.js classifies
+    // every DD finding as 'ERROR', there is no WARNING-severity DD code yet (pipeline.js:115-129).
+    // Channel 3 (validation.xmlWarnings) has no known trigger in this codebase; this test does not
+    // attempt to force either — only channel 1 is asserted.
+    const r = await runCli(missingQuestion(), { args: ['--strict', '--best-practice'] });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/--strict/);
+    expect(r.stderr).toMatch(/\[B03\]/);
+    expect(r.dmnExists).toBe(false);
+  });
+
+  test("'--best-practice' spelling enables the best_practice layer (B03 warning surfaces, non-fatal without --strict)", async () => {
+    const r = await runCli(missingQuestion(), { args: ['--best-practice'] });
+    expect(r.status).toBe(0);
+    expect(r.dmnExists).toBe(true);
+    expect(r.stderr).toMatch(/\[B03\]/);
+  });
+
+  test("'--mode=best-practice' spelling also enables the best_practice layer (same effect, different flag)", async () => {
+    const r = await runCli(missingQuestion(), { args: ['--mode=best-practice'] });
+    expect(r.status).toBe(0);
+    expect(r.dmnExists).toBe(true);
+    expect(r.stderr).toMatch(/\[B03\]/);
+  });
+});
+
+describe('runDmnPipeline — opts.ruleProfile', () => {
+  test('an object profile changes the rule outcome vs. the mode default: layers.best_practice.enabled ' +
+    'wins over the default semantic mode (rules.js dmnProfileForMode — an explicit profile is more ' +
+    'specific than a mode)', async () => {
+    const dc = good();
+    delete dc.nodes.find((n) => n.id === 'dec_discountLevel').question;
+    const withoutProfile = await runDmnPipeline(dc); // default mode 'semantic' → best_practice off
+    const withProfile = await runDmnPipeline(dc, { ruleProfile: { layers: { best_practice: { enabled: true } } } });
+    expect(withoutProfile.validation.warnings.some((w) => w.startsWith('[B03]'))).toBe(false);
+    expect(withProfile.validation.warnings.some((w) => w.startsWith('[B03]'))).toBe(true);
+  });
+
+  test('a ruleProfile string path that does not resolve falls back to defaults without throwing — ' +
+    'this documents the existing swallow in shared/rule-profile.js\'s loadRuleProfile (try/catch → ' +
+    'null on any read/parse failure), not new behavior added by this commit', async () => {
+    const result = await runDmnPipeline(good(), { ruleProfile: '/nonexistent/does-not-resolve/profile.json' });
+    expect(result.xml).not.toBeNull();
+    expect(result.validation.errors).toEqual([]);
+  });
+});
