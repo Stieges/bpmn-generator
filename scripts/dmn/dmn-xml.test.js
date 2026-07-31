@@ -130,19 +130,81 @@ describe('generateDmnXml — hitPolicy/preferredOrientation normalisation (measu
 });
 
 describe('generateDmnXml — DMNDiagram* loop runs for more than one diagram', () => {
-  test('two diagrams produce two DMNDiagram elements, each with its own shape', async () => {
+  test('two diagrams sharing a node produce two DMNDiagram elements, each containing its own distinct shapes', async () => {
     const dc = good();
+    // dec_discountLevel is deliberately in BOTH diagrams — the case C10 fixes: prior code
+    // generated `${nodeId}_di` by plain interpolation, so two diagrams sharing a node emitted
+    // the same DMNShape id twice (a real xsd:ID duplicate). Disjoint node sets, as this test used
+    // to have, could never exercise that path.
     const diagrams = [
       { id: 'DMNDiagram_1', name: 'Overview', size: { w: 300, h: 200 },
         coordMap: { coords: { dec_discountLevel: { x: 10, y: 10, w: 180, h: 80 } }, edgeCoords: {} } },
       { id: 'DMNDiagram_2', name: 'Loyalty view', size: { w: 300, h: 200 },
-        coordMap: { coords: { bkm_loyaltyBonus: { x: 10, y: 10, w: 135, h: 46 } }, edgeCoords: {} } },
+        coordMap: { coords: {
+          dec_discountLevel: { x: 10, y: 10, w: 180, h: 80 },
+          bkm_loyaltyBonus: { x: 10, y: 100, w: 135, h: 46 },
+        }, edgeCoords: {} } },
     ];
     const xml = await generateDmnXml(dc, diagrams);
-    const diagramTags = [...xml.matchAll(/<dmndi:DMNDiagram\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]);
-    expect(diagramTags).toEqual(['DMNDiagram_1', 'DMNDiagram_2']);
-    expect(xml).toMatch(/<dmndi:DMNShape\b[^>]*dmnElementRef="dec_discountLevel"/);
-    expect(xml).toMatch(/<dmndi:DMNShape\b[^>]*dmnElementRef="bkm_loyaltyBonus"/);
+
+    // Split into each <dmndi:DMNDiagram>...</dmndi:DMNDiagram> block so containment is checked
+    // PER DIAGRAM, not "anywhere in the document" — the weakness in the prior version of this
+    // test, which would still pass even if both shapes landed in the same diagram element.
+    const blocks = [...xml.matchAll(
+      /<dmndi:DMNDiagram\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/dmndi:DMNDiagram>/g
+    )];
+    expect(blocks.map((b) => b[1])).toEqual(['DMNDiagram_1', 'DMNDiagram_2']);
+    const [block1, block2] = blocks.map((b) => b[2]);
+
+    expect(block1).toMatch(/<dmndi:DMNShape\b[^>]*dmnElementRef="dec_discountLevel"/);
+    expect(block1).not.toMatch(/dmnElementRef="bkm_loyaltyBonus"/);
+    expect(block2).toMatch(/<dmndi:DMNShape\b[^>]*dmnElementRef="dec_discountLevel"/);
+    expect(block2).toMatch(/<dmndi:DMNShape\b[^>]*dmnElementRef="bkm_loyaltyBonus"/);
+
+    // The two shapes referencing the SAME node (dec_discountLevel, one per diagram) must not
+    // share an xsd:ID — this is the duplicate-id case itself, not just a proxy for it.
+    const shapeIds = [...xml.matchAll(/<dmndi:DMNShape\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(shapeIds).size).toBe(shapeIds.length);
+    expect(shapeIds).toContain('dec_discountLevel_di');
+    expect(shapeIds).toContain('dec_discountLevel_di_2');
+
+    const { warnings } = await validateDmnXml(xml);
+    expect(warnings).toEqual([]);
+  });
+
+  test('a node id ending in "_di" does not collide with its own generated DMNShape id', async () => {
+    // Failure mode #1 from the review: a Decision-Core with nodes `foo` and `foo_di` used to
+    // emit <dmn:decision id="foo_di"> AND <dmndi:DMNShape id="foo_di"> — two elements sharing
+    // one xsd:ID. nextDcId/usedIds (added for _var/_expr by C7, extended to _di ids by C10) must
+    // suffix the generated shape id instead of colliding with the node's own literal id.
+    const dc = {
+      id: 'Definitions_1', name: 'Di collision test', namespace: 'http://x/di-collision',
+      nodes: [
+        { id: 'foo', type: 'decision', name: 'Foo' },
+        { id: 'foo_di', type: 'decision', name: 'Foo di' },
+      ],
+    };
+    const diagrams = [{
+      id: 'DMNDiagram_1', name: 'D1', size: { w: 300, h: 200 },
+      coordMap: {
+        coords: {
+          foo: { x: 10, y: 10, w: 180, h: 80 },
+          foo_di: { x: 10, y: 100, w: 180, h: 80 },
+        },
+        edgeCoords: {},
+      },
+    }];
+    const xml = await generateDmnXml(dc, diagrams);
+
+    const shapeIds = [...xml.matchAll(/<dmndi:DMNShape\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(shapeIds).size).toBe(shapeIds.length);
+    // Neither generated shape id may equal the literal node id `foo_di` — that is exactly the
+    // collision under test.
+    expect(shapeIds).not.toContain('foo_di');
+
+    const { warnings } = await validateDmnXml(xml);
+    expect(warnings.filter((w) => /duplicate id/i.test(w))).toEqual([]);
+    expect(warnings).toEqual([]);
   });
 });
 

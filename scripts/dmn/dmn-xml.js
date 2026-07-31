@@ -266,7 +266,7 @@ function attachRequirements(dc, nodeMap) {
   return requirementMap;
 }
 
-function buildDmnDI(diagrams, nodeMap, requirementMap) {
+function buildDmnDI(diagrams, nodeMap, requirementMap, usedIds) {
   const dmnDiagrams = [];
   for (const diagram of diagrams) {
     const diagramElements = [];
@@ -274,13 +274,13 @@ function buildDmnDI(diagrams, nodeMap, requirementMap) {
       const nodeEl = nodeMap.get(nodeId);
       if (!nodeEl) continue;
       const bounds = create('dc:Bounds', { x: rn(c.x), y: rn(c.y), width: rn(c.w), height: rn(c.h) });
-      diagramElements.push(create('dmndi:DMNShape', { id: `${nodeId}_di`, dmnElementRef: nodeEl, bounds })); // nest
+      diagramElements.push(create('dmndi:DMNShape', { id: nextDcId(usedIds, `${nodeId}_di`), dmnElementRef: nodeEl, bounds })); // nest
     }
     for (const [reqKey, pts] of Object.entries(diagram.coordMap.edgeCoords)) {
       const reqEl = requirementMap.get(reqKey);
       if (!reqEl || pts.length < 2) continue; // better no DMNEdge than an invalid one
       const waypoint = pts.map((p) => create('dc:Point', { x: rn(p.x), y: rn(p.y) }));
-      diagramElements.push(create('dmndi:DMNEdge', { id: `${reqKey}_di`, dmnElementRef: reqEl, waypoint })); // nest
+      diagramElements.push(create('dmndi:DMNEdge', { id: nextDcId(usedIds, `${reqKey}_di`), dmnElementRef: reqEl, waypoint })); // nest
     }
     dmnDiagrams.push(create('dmndi:DMNDiagram', { // nest
       id: diagram.id,
@@ -327,7 +327,7 @@ export async function generateDmnXml(dc, diagrams) {
   }
 
   const requirementMap = attachRequirements(dc, nodeMap);
-  definitions.set('dmnDI', buildDmnDI(diagrams, nodeMap, requirementMap)); // nest
+  definitions.set('dmnDI', buildDmnDI(diagrams, nodeMap, requirementMap, usedIds)); // nest
 
   const { xml } = await moddle.toXML(definitions, { format: true, preamble: true });
   return xml;
