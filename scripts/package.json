@@ -25,9 +25,12 @@
     "omg",
     "modeler"
   ],
-  "main": "pipeline.js",
+  "main": "./bpmn/pipeline.js",
   "files": [
     "*.js",
+    "bpmn/",
+    "dmn/",
+    "shared/",
     "config.json",
     "agents/",
     "robustness/",
@@ -35,24 +38,26 @@
     "!**/*.test.js"
   ],
   "exports": {
-    ".": "./pipeline.js",
-    "./import": "./import.js",
-    "./validate": "./validate.js",
+    ".": "./bpmn/pipeline.js",
+    "./import": "./bpmn/import.js",
+    "./validate": "./bpmn/validate.js",
     "./orchestrator": "./orchestrator.js"
   },
   "scripts": {
-    "generate": "node pipeline.js",
+    "generate": "node bpmn/pipeline.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --no-cache",
     "docs-gate": "node ../.github/scripts/docs-gate.mjs",
     "build:skill": "node build-skill.mjs",
     "demo": "AUDIT_LOG_PATH=./audit/bpmn-generator.jsonl node http-server.js",
-    "prepack": "node prepack-copy-references.mjs"
+    "prepack": "node prepack-copy-references.mjs",
+    "postpack": "node postpack-clean-references.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "bpmn-moddle": "^10.0.0",
+    "dmn-moddle": "^12.0.1",
     "elkjs": "^0.12.0"
   },
   "devDependencies": {

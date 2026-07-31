@@ -11,20 +11,32 @@
  * that gap the same way the input schema does: by checking a real, running
  * artifact against a written-down contract, not by re-reading the prose.
  *
- * Three PROOF checks (exact, fail the build):
+ * Four PROOF checks (exact, fail the build):
  *   1. response-contract — a real response from each endpoint, built the way
  *      scripts/http-server.js builds it, validated against references/api-schema.json.
  *   2. numbers — every "<N> rules" claim (README.md, CLAUDE.md) against
- *      scripts/rules.js; the "<N> top-level scripts" claim (CLAUDE.md) against
+ *      scripts/bpmn/rules.js; the "<N> top-level scripts" claim (CLAUDE.md) against
  *      `scripts/*.js`; every DI code in references/api-reference.md against
- *      scripts/di-check.js, in both directions.
- *   3. package-integrity — every `join(__dirname, ...)` a packed .js file reads
+ *      scripts/bpmn/di-check.js, in both directions.
+ *   3. doc-paths — every `scripts/...`-, `references/...`-, `rules/...`-,
+ *      `tests/...`-, `docs/...`-, `frontend/...`- or `.github/...`-shaped path
+ *      string mentioned in prose (README.md, CLAUDE.md, ROADMAP.md, SKILL.md,
+ *      EVALUATION.md, docs/bpmn-generator-pipeline.md, references/api-reference.md,
+ *      references/fachliches-regelwerk.md, CONTRIBUTING.md, COMPATIBILITY.md,
+ *      SECURITY.md, THIRD-PARTY-NOTICES.md, docs/ROBUSTNESS-STACK.md,
+ *      rules/custom/README.md, scripts/robustness/README.md), and every
+ *      `node <file>.js` CLI example in them, resolves to a real file or
+ *      directory. Guards against exactly what a restructure commit did to this
+ *      repo: move dozens of files and touch every doc reference to them — a
+ *      moved file with a stale doc reference used to be silent, and still can
+ *      be for any doc file not in this list.
+ *   4. package-integrity — every `join(__dirname, ...)` a packed .js file reads
  *      at runtime, checked against what `npm pack` actually includes. Catches
  *      the class of bug where a published package throws on first import
  *      because a file it reads at module-load time never shipped.
  *
  * One NUDGE check (heuristic, warns, never fails the build):
- *   4. changelog-nudge — in a PR's commit range, if any feat/fix/perf commit
+ *   5. changelog-nudge — in a PR's commit range, if any feat/fix/perf commit
  *      touches scripts/** and CHANGELOG.md's [Unreleased] section is untouched
  *      or empty, print a ready-to-paste draft built from the commit subjects.
  *      This is a nudge, not a proof: a junk line in the CHANGELOG satisfies it.
@@ -44,14 +56,14 @@
  *
  * Dependency note: imports `ajv`/`ajv-formats` via createRequire rooted at
  * scripts/package.json. Both are already runtime dependencies of scripts/
- * (used by scripts/schema-gate.js) — this reuses them without adding a
+ * (used by scripts/bpmn/schema-gate.js and scripts/dmn/schema-gate.js) — this reuses them without adding a
  * package.json of its own under .github/, matching dep-audit-gate.mjs's
  * "no dependency footprint for CI-only tooling" convention. Everything else
  * here is node: builtins.
  */
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -77,9 +89,9 @@ export class ToolingError extends Error {}
 async function buildRealResponses() {
   let pipelineMod, rulesMod, importMod, orchestratorMod;
   try {
-    pipelineMod = await import(join(SCRIPTS_DIR, 'pipeline.js'));
-    rulesMod = await import(join(SCRIPTS_DIR, 'rules.js'));
-    importMod = await import(join(SCRIPTS_DIR, 'import.js'));
+    pipelineMod = await import(join(SCRIPTS_DIR, 'bpmn', 'pipeline.js'));
+    rulesMod = await import(join(SCRIPTS_DIR, 'bpmn', 'rules.js'));
+    importMod = await import(join(SCRIPTS_DIR, 'bpmn', 'import.js'));
     orchestratorMod = await import(join(SCRIPTS_DIR, 'orchestrator.js'));
   } catch (err) {
     throw new ToolingError(`could not import a scripts/ module: ${err.message}`);
@@ -172,13 +184,33 @@ const RULE_LAYER_PATTERNS = [
   /(\d+)\s+Regeln\s+in\s+(\d+)\s+Schichten/gi,
 ];
 
+// There are two rule engines now: scripts/bpmn/rules.js against Logic-Core, and
+// scripts/dmn/rules.js against Decision-Core. A claim is checked against the DMN
+// engine when the line it sits on says so, and against the BPMN engine otherwise.
+//
+// Routing on the line rather than on which numbers happen to match is deliberate.
+// Accepting a claim that is true of EITHER engine would let a wrong BPMN number
+// through whenever it coincided with the DMN one. This way an unqualified claim is
+// always measured against the BPMN engine — so a DMN sentence that forgets to say
+// "DMN" fails the gate, which is exactly the ambiguity worth failing on: a reader
+// cannot tell those sentences apart either.
+const DMN_CLAIM_RE = /\bdmn\b/i;
+
+/** The line `index` falls on, for deciding which engine a claim is about. */
+function lineContaining(text, index) {
+  const start = text.lastIndexOf('\n', index) + 1;
+  const end = text.indexOf('\n', index);
+  return text.slice(start, end === -1 ? text.length : end);
+}
+
 /**
  * Pure: every input is text already read from disk, or a number already
  * computed by the caller. See gatherNumberInputs() for the I/O side.
  */
 export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   roadmapText, skillText, evaluationText, pipelineDocText,
-  actualRuleCount, actualLayerCount, actualTopLevelScriptCount, actualDiCodes }) {
+  actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
+  actualTopLevelScriptCount, actualDiCodes }) {
   const findings = [];
 
   const numberSources = [
@@ -191,13 +223,17 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
       for (const m of text.matchAll(pattern)) {
         const claimedRules = Number(m[1]);
         const claimedLayers = Number(m[2]);
-        if (claimedRules !== actualRuleCount) {
+        const isDmn = DMN_CLAIM_RE.test(lineContaining(text, m.index));
+        const engine = isDmn ? 'scripts/dmn/rules.js' : 'scripts/bpmn/rules.js';
+        const rules = isDmn ? actualDmnRuleCount : actualRuleCount;
+        const layers = isDmn ? actualDmnLayerCount : actualLayerCount;
+        if (claimedRules !== rules) {
           findings.push({ check: 'rule-count', detail:
-            `${file} says "${m[0]}" — scripts/rules.js has ${actualRuleCount} rules` });
+            `${file} says "${m[0]}" — ${engine} has ${rules} rules` });
         }
-        if (claimedLayers !== actualLayerCount) {
+        if (claimedLayers !== layers) {
           findings.push({ check: 'rule-count', detail:
-            `${file} says "${m[0]}" — scripts/rules.js has ${actualLayerCount} distinct layers` });
+            `${file} says "${m[0]}" — ${engine} has ${layers} distinct layers` });
         }
       }
     }
@@ -224,11 +260,11 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   const missingInCode = [...docCodes].filter((c) => !codeCodes.has(c));
   if (missingInDocs.length) {
     findings.push({ check: 'di-codes', detail:
-      `scripts/di-check.js emits codes not documented in references/api-reference.md: ${missingInDocs.join(', ')}` });
+      `scripts/bpmn/di-check.js emits codes not documented in references/api-reference.md: ${missingInDocs.join(', ')}` });
   }
   if (missingInCode.length) {
     findings.push({ check: 'di-codes', detail:
-      `references/api-reference.md documents codes scripts/di-check.js does not emit: ${missingInCode.join(', ')}` });
+      `references/api-reference.md documents codes scripts/bpmn/di-check.js does not emit: ${missingInCode.join(', ')}` });
   }
 
   return findings;
@@ -242,13 +278,18 @@ function gatherNumberInputs() {
   const skillText = readFileSync(join(REPO_ROOT, 'SKILL.md'), 'utf8');
   const evaluationText = readFileSync(join(REPO_ROOT, 'EVALUATION.md'), 'utf8');
   const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
-  const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'rules.js'), 'utf8');
-  const diCheckSrc = readFileSync(join(SCRIPTS_DIR, 'di-check.js'), 'utf8');
+  const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'rules.js'), 'utf8');
+  const diCheckSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'di-check.js'), 'utf8');
 
   const actualRuleCount = [...rulesSrc.matchAll(/^\s*id: '/gm)].length;
   // Each rule declares a `layer:`; the distinct values are the layer count — this
   // way a new layer (like Optimization was) is picked up without touching the gate.
   const actualLayerCount = new Set([...rulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
+  // The DMN engine is counted the same way from its own file; which of the two a
+  // documented claim is measured against is decided in checkNumbers().
+  const dmnRulesSrc = readFileSync(join(SCRIPTS_DIR, 'dmn', 'rules.js'), 'utf8');
+  const actualDmnRuleCount = [...dmnRulesSrc.matchAll(/^\s*id: '/gm)].length;
+  const actualDmnLayerCount = new Set([...dmnRulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
   const actualDiCodes = [...new Set([...diCheckSrc.matchAll(/code: '(DI0\d)'/g)].map((m) => m[1]))];
 
   let topLevelStdout;
@@ -263,10 +304,146 @@ function gatherNumberInputs() {
   const actualTopLevelScriptCount = topLevelStdout.trim().split('\n').filter(Boolean).length;
 
   return { readmeText, claudeMdText, apiReferenceText, roadmapText, skillText, evaluationText,
-    pipelineDocText, actualRuleCount, actualLayerCount, actualTopLevelScriptCount, actualDiCodes };
+    pipelineDocText, actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
+    actualTopLevelScriptCount, actualDiCodes };
 }
 
-// ========================================================= 3. package-integrity
+// ==================================================================== 3. doc-paths
+
+// Pattern 1: explicit repo paths anywhere in prose — "scripts/pipeline.js",
+// "references/input-schema.json", "rules/default-profile.json", etc. The
+// character class also admits `*` and `<` — not because either belongs in a
+// real path, but because excluding them would silently truncate a genuine
+// glob or placeholder (e.g. "scripts/redesign*.js" in a grep example,
+// "tests/bench/comparison-*.html") into a shorter token that looks like a
+// real, non-existent path instead of the glob it actually is. Capturing them
+// intact is what lets isAllowlistedDocPath's `*`/`<` check (below) recognize
+// and skip them, per this task's allowlist spec.
+const REPO_PATH_RE = /(?:scripts|references|rules|tests|docs|frontend|\.github)\/[A-Za-z0-9_.\/*<-]+/g;
+
+// Pattern 2: `node <file>.js` CLI examples — "node pipeline.js input.json out",
+// "node scripts/robustness/cli.js run". Only the file argument itself is
+// captured; a CLI token is judged against scripts/, scripts/robustness/ and the
+// repo root (see checkDocPaths) because most examples in this repo are written
+// as if `cd scripts` already happened.
+const CLI_NODE_RE = /\bnode\s+((?:[\w.-]+\/)*[\w.-]+\.m?js)\b/g;
+
+// Documented-but-transient or generated paths: real at some point in the build
+// or CI lifecycle, but not something `git ls-files` (or a plain directory
+// listing of a fresh checkout) will ever show. Each entry needs a reason —
+// an unexplained allowlist entry is indistinguishable from silencing a real
+// finding.
+const DOC_PATH_ALLOWLIST = [
+  'scripts/references/',       // prepack build artifact (scripts/prepack-copy-references.mjs), removed by postpack
+  'references/omg-spec/',      // gitignored, downloaded locally by the OMG-compliance tooling
+  'tests/robustness-reports/', // gitignored, written by scripts/robustness/cli.js runs
+  'docs/specs/',                // documented future location, not yet created
+  'frontend/',                  // documented future location, not yet created
+  'audit/',                     // gitignored, written by scripts/audit.js at runtime (AUDIT_LOG_PATH default)
+  'dead-letter/',                // gitignored, written by scripts/delivery.js at runtime (DEAD_LETTER_PATH default)
+  'scripts/coverage/',          // gitignored, written by `npm test -- --coverage`
+  'tests/fixtures/mad-subset/', // one-time curation output (scripts/robustness/README.md); not committed until that step runs
+  'tests/fixtures/mad-subset',  // same path without trailing slash — appears as a default param value in docs/ROBUSTNESS-STACK.md
+  'rules/custom/acme.json',     // illustrative example filename in rules/custom/README.md, never meant to exist
+  'rules/custom/acme-dmn.json', // illustrative example filename in rules/custom/README.md, never meant to exist
+];
+
+/** Strips trailing punctuation, a `:<line>`/`:L<line>` suffix and a `#fragment` a doc token picked up from prose. */
+function cleanDocPathToken(raw) {
+  let token = raw;
+  token = token.replace(/#[^\s)]*$/, '');           // #fragment
+  token = token.replace(/:L?\d+$/, '');              // :412 or :L412
+  token = token.replace(/[)\,.`:]+$/, '');           // trailing punctuation
+  return token;
+}
+
+function isAllowlistedDocPath(token) {
+  if (token.includes('*') || token.includes('<')) return true; // glob or placeholder, not a path
+  return DOC_PATH_ALLOWLIST.some((prefix) => token === prefix || token.startsWith(prefix));
+}
+
+/**
+ * Pure: takes already-read doc texts and an `exists(relPath)` probe (a thin
+ * wrapper the caller supplies over fs — kept out of this function so tests can
+ * pass a synthetic filesystem instead of touching disk). Returns findings for
+ * every documented path that resolves to nothing real, is not a directory
+ * claim that exists, and is not covered by the allowlist.
+ */
+export function checkDocPaths(docSources, exists) {
+  const findings = [];
+  const seen = new Set(); // dedupe (file, token) pairs — a path can appear many times in one doc
+
+  for (const [file, text] of docSources) {
+    for (const m of text.matchAll(REPO_PATH_RE)) {
+      const token = cleanDocPathToken(m[0]);
+      if (!token) continue;
+      const key = `${file}::${token}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (isAllowlistedDocPath(token)) continue;
+      if (exists(token)) continue;
+      findings.push({
+        check: 'doc-paths',
+        detail: `${file} mentions "${token}" — no such path in the repository`,
+      });
+    }
+
+    for (const m of text.matchAll(CLI_NODE_RE)) {
+      const token = cleanDocPathToken(m[1]);
+      if (!token) continue;
+      const key = `${file}::node ${token}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const candidates = [token, `scripts/${token}`, `scripts/robustness/${token}`];
+      if (candidates.some((c) => exists(c))) continue;
+      findings.push({
+        check: 'doc-paths',
+        detail: `${file} mentions "node ${token}" — no such path in the repository`,
+      });
+    }
+  }
+
+  return findings;
+}
+
+function gatherDocPathInputs() {
+  const readmeText = readFileSync(join(REPO_ROOT, 'README.md'), 'utf8');
+  const claudeMdText = readFileSync(join(REPO_ROOT, 'CLAUDE.md'), 'utf8');
+  const roadmapText = readFileSync(join(REPO_ROOT, 'ROADMAP.md'), 'utf8');
+  const skillText = readFileSync(join(REPO_ROOT, 'SKILL.md'), 'utf8');
+  const evaluationText = readFileSync(join(REPO_ROOT, 'EVALUATION.md'), 'utf8');
+  const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
+  const apiReferenceText = readFileSync(join(REFERENCES_DIR, 'api-reference.md'), 'utf8');
+  const fachlichesRegelwerkText = readFileSync(join(REFERENCES_DIR, 'fachliches-regelwerk.md'), 'utf8');
+  const contributingText = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8');
+  const compatibilityText = readFileSync(join(REPO_ROOT, 'COMPATIBILITY.md'), 'utf8');
+  const securityText = readFileSync(join(REPO_ROOT, 'SECURITY.md'), 'utf8');
+  const thirdPartyNoticesText = readFileSync(join(REPO_ROOT, 'THIRD-PARTY-NOTICES.md'), 'utf8');
+  const robustnessStackText = readFileSync(join(REPO_ROOT, 'docs', 'ROBUSTNESS-STACK.md'), 'utf8');
+  const rulesCustomReadmeText = readFileSync(join(REPO_ROOT, 'rules', 'custom', 'README.md'), 'utf8');
+  const robustnessReadmeText = readFileSync(join(REPO_ROOT, 'scripts', 'robustness', 'README.md'), 'utf8');
+
+  const docSources = [
+    ['README.md', readmeText], ['CLAUDE.md', claudeMdText], ['ROADMAP.md', roadmapText],
+    ['SKILL.md', skillText], ['EVALUATION.md', evaluationText],
+    ['docs/bpmn-generator-pipeline.md', pipelineDocText],
+    ['references/api-reference.md', apiReferenceText],
+    ['references/fachliches-regelwerk.md', fachlichesRegelwerkText],
+    ['CONTRIBUTING.md', contributingText],
+    ['COMPATIBILITY.md', compatibilityText],
+    ['SECURITY.md', securityText],
+    ['THIRD-PARTY-NOTICES.md', thirdPartyNoticesText],
+    ['docs/ROBUSTNESS-STACK.md', robustnessStackText],
+    ['rules/custom/README.md', rulesCustomReadmeText],
+    ['scripts/robustness/README.md', robustnessReadmeText],
+  ];
+
+  const exists = (relPath) => existsSync(join(REPO_ROOT, relPath));
+
+  return { docSources, exists };
+}
+
+// ========================================================= 4. package-integrity
 
 const DIRNAME_JOIN_RE = /\b(?:join|resolve)\(\s*__dirname\s*,\s*((?:'[^']*'|"[^"]*"|\s*,\s*)+)\)/g;
 const RELATIVE_IMPORT_RE = /\bimport\s+(?:[^'"]*?\s+from\s+)?['"](\.[^'"]+)['"]/g;
@@ -333,7 +510,8 @@ function getExportsEntryFiles() {
  * Candidates are grouped by (file, target filename) before judging: a file may
  * legitimately try more than one path for the same read — the
  * `existsSync(publishedPath) ? publishedPath : devCheckoutPath` idiom this repo
- * uses in scripts/schema-gate.js and scripts/agents/prompt-sections.js is
+ * uses in scripts/shared/resource-paths.js (the single place scripts/bpmn/schema-gate.js
+ * and scripts/agents/prompt-sections.js both resolve `references/` through) is
  * exactly that, and its second branch is SUPPOSED to point outside the package
  * (it only ever runs when the file was not found inside it, i.e. never once
  * published). Only report a target with NO resolving candidate at all — that
@@ -403,7 +581,7 @@ function getPackedFiles() {
   return files.map((f) => f.path);
 }
 
-// ========================================================== 4. changelog-nudge
+// ========================================================== 5. changelog-nudge
 
 const CONVENTIONAL_RE = /^(feat|fix|perf)(\([^)]*\))?(!)?:\s*(.*)$/;
 
@@ -476,7 +654,7 @@ function render({ violations, nudge }) {
     }
     lines.push('');
   } else {
-    lines.push('PROOF — all checks passed (response contract, numbers, package integrity)');
+    lines.push('PROOF — all checks passed (response contract, numbers, doc paths, package integrity)');
     lines.push('');
   }
   if (nudge?.nudge) {
@@ -511,9 +689,11 @@ async function main(argv) {
   const responses = await buildRealResponses();
   const ajv = loadAjv();
   const reachableAbsPaths = findReachableFiles(getExportsEntryFiles());
+  const { docSources, exists } = gatherDocPathInputs();
   const violations = [
     ...checkResponseContract(responses, schema, ajv),
     ...checkNumbers(gatherNumberInputs()),
+    ...checkDocPaths(docSources, exists),
     ...checkPackageIntegrity(getPackedFiles(), reachableAbsPaths),
   ];
 

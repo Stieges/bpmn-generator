@@ -10,15 +10,15 @@ const frontendDir = join(__dirname, '..', 'frontend');
 
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
-import { runPipeline, validateLogicCore } from './pipeline.js';
-import { profileForMode } from './rules.js';
-import { bpmnToLogicCore } from './import.js';
+import { runPipeline, validateLogicCore } from './bpmn/pipeline.js';
+import { profileForMode } from './bpmn/rules.js';
+import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 import { chatAgent } from './agents/chat.js';
 import { createLlmProvider } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
-import { validateLogicCoreSchema } from './schema-gate.js';
+import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.BPMN_API_KEY || null; // null = no auth (dev mode)

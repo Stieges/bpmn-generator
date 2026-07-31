@@ -33,7 +33,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 
 `validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
 - `id` — advisory rule id (`O01`–`O04`, see `references/fachliches-regelwerk.md`)
-- `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/redesign.js`/`redesign-cli.js` directly.
+- `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/bpmn/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/bpmn/redesign.js`/`redesign-cli.js` directly.
 - `targets` — ids of the affected nodes/gateways
 - `message` — the human-readable line (what the CLI and this response print)
 - `tradeoff` — devil's-quadrangle tag, e.g. `{ "time": "−" }` or `{ "quality": "+" }`
@@ -95,6 +95,24 @@ curl -X POST http://localhost:3000/api/v1/generate \
   -H 'Content-Type: application/json' \
   -d '{"logicCore":{"nodes":[{"id":"s","type":"startEvent","name":"Start"},{"id":"e","type":"endEvent","name":"End"}],"edges":[{"id":"f1","source":"s","target":"e"}]}}'
 ```
+
+---
+
+## DMN diagnostics (DD01–DD03)
+
+`scripts/dmn/di-check.js`'s `checkDmnDiagramIntegrity` plays the same role for a DRD that
+`di-check.js` plays for a BPMN diagram — its own code namespace so the two can appear side by side.
+Not yet reachable over HTTP or MCP (Stage 7 of `docs/superpowers/plans/2026-07-30-dmn-integration.md`
+adds the tool surface); today it is `runDmnPipeline(dc).diagnostics`, called directly or via the CLI
+(`node dmn/pipeline.js`).
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| DD01 | ERROR | Two DRD shapes overlapping |
+| DD02 | ERROR | A shape outside the diagram's declared bounds |
+| DD03 | ERROR | A requirement-connection endpoint that does not sit on its shape's boundary |
+
+`diagnostics.ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI06 above.
 
 ---
 

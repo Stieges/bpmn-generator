@@ -12,9 +12,9 @@
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, basename, extname } from 'node:path';
-import { bpmnToLogicCore } from './import.js';
-import { validateLogicCore } from './validate.js';
-import { runRules } from './rules.js';
+import { bpmnToLogicCore } from './bpmn/import.js';
+import { validateLogicCore } from './bpmn/validate.js';
+import { runRules } from './bpmn/rules.js';
 
 // ── Config ─────────────────────────────────────────────────────────────
 

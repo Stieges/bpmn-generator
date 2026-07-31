@@ -1,94 +1,180 @@
 {
   "shape": {
-    "startEvent":              { "w": 36,  "h": 36  },
-    "endEvent":                { "w": 36,  "h": 36  },
-    "intermediateCatchEvent":  { "w": 36,  "h": 36  },
-    "intermediateThrowEvent":  { "w": 36,  "h": 36  },
-    "boundaryEvent":           { "w": 36,  "h": 36  },
-    "task":                    { "w": 100, "h": 80  },
-    "userTask":                { "w": 100, "h": 80  },
-    "serviceTask":             { "w": 100, "h": 80  },
-    "scriptTask":              { "w": 100, "h": 80  },
-    "sendTask":                { "w": 100, "h": 80  },
-    "receiveTask":             { "w": 100, "h": 80  },
-    "manualTask":              { "w": 100, "h": 80  },
-    "businessRuleTask":        { "w": 100, "h": 80  },
-    "callActivity":            { "w": 100, "h": 80  },
-    "subProcess":              { "w": 100, "h": 80  },
-    "exclusiveGateway":        { "w": 50,  "h": 50  },
-    "parallelGateway":         { "w": 50,  "h": 50  },
-    "inclusiveGateway":        { "w": 50,  "h": 50  },
-    "eventBasedGateway":       { "w": 50,  "h": 50  },
-    "complexGateway":          { "w": 50,  "h": 50  },
-    "dataObjectReference":     { "w": 36,  "h": 50  },
-    "dataStoreReference":      { "w": 50,  "h": 50  },
-    "textAnnotation":          { "w": 100, "h": 30  },
-    "group":                   { "w": 300, "h": 300 },
-    "_collapsedPool":          { "w": 600, "h": 60  },
-    "_expandedSubProcess":     { "w": 350, "h": 200 },
-    "_transaction":            { "w": 350, "h": 200 }
+    "startEvent": {
+      "w": 36,
+      "h": 36
+    },
+    "endEvent": {
+      "w": 36,
+      "h": 36
+    },
+    "intermediateCatchEvent": {
+      "w": 36,
+      "h": 36
+    },
+    "intermediateThrowEvent": {
+      "w": 36,
+      "h": 36
+    },
+    "boundaryEvent": {
+      "w": 36,
+      "h": 36
+    },
+    "task": {
+      "w": 100,
+      "h": 80
+    },
+    "userTask": {
+      "w": 100,
+      "h": 80
+    },
+    "serviceTask": {
+      "w": 100,
+      "h": 80
+    },
+    "scriptTask": {
+      "w": 100,
+      "h": 80
+    },
+    "sendTask": {
+      "w": 100,
+      "h": 80
+    },
+    "receiveTask": {
+      "w": 100,
+      "h": 80
+    },
+    "manualTask": {
+      "w": 100,
+      "h": 80
+    },
+    "businessRuleTask": {
+      "w": 100,
+      "h": 80
+    },
+    "callActivity": {
+      "w": 100,
+      "h": 80
+    },
+    "subProcess": {
+      "w": 100,
+      "h": 80
+    },
+    "exclusiveGateway": {
+      "w": 50,
+      "h": 50
+    },
+    "parallelGateway": {
+      "w": 50,
+      "h": 50
+    },
+    "inclusiveGateway": {
+      "w": 50,
+      "h": 50
+    },
+    "eventBasedGateway": {
+      "w": 50,
+      "h": 50
+    },
+    "complexGateway": {
+      "w": 50,
+      "h": 50
+    },
+    "dataObjectReference": {
+      "w": 36,
+      "h": 50
+    },
+    "dataStoreReference": {
+      "w": 50,
+      "h": 50
+    },
+    "textAnnotation": {
+      "w": 100,
+      "h": 30
+    },
+    "group": {
+      "w": 300,
+      "h": 300
+    },
+    "_collapsedPool": {
+      "w": 600,
+      "h": 60
+    },
+    "_expandedSubProcess": {
+      "w": 350,
+      "h": 200
+    },
+    "_transaction": {
+      "w": 350,
+      "h": 200
+    }
   },
   "strokeWidth": {
-    "startEvent":    2,
-    "endEvent":      4,
-    "intermediate":  1.5,
-    "task":          2,
-    "callActivity":  5,
-    "gateway":       2,
-    "pool":          1.5,
-    "lane":          1.5,
-    "connection":    1.5,
-    "dataObject":    2,
-    "annotation":    2
+    "startEvent": 2,
+    "endEvent": 4,
+    "intermediate": 1.5,
+    "task": 2,
+    "callActivity": 5,
+    "gateway": 2,
+    "pool": 1.5,
+    "lane": 1.5,
+    "connection": 1.5,
+    "dataObject": 2,
+    "annotation": 2
   },
   "color": {
-    "fill":       "#ffffff",
-    "stroke":     "#000000",
-    "label":      "#000000",
-    "canvasBg":   "#fafafa",
+    "fill": "#ffffff",
+    "stroke": "#000000",
+    "label": "#000000",
+    "canvasBg": "#fafafa",
     "laneHeader": "#f0f0f0",
     "poolHeader": "#e8e8e8"
   },
   "layout": {
-    "laneHeaderWidth":    30,
-    "lanePadding":        60,
-    "labelDistance":       10,
-    "taskBorderRadius":   10,
-    "innerOuterGap":      3,
+    "laneHeaderWidth": 30,
+    "lanePadding": 60,
+    "labelDistance": 10,
+    "taskBorderRadius": 10,
+    "innerOuterGap": 3,
     "externalLabelHeight": 25,
-    "poolGap":            60,
-    "collabPadding":      20,
-    "messageFlowFan":     14,
-    "artifactGap":        30,
-    "poolOrder":          "auto",
-    "happyPathLeveling":  false,
+    "poolGap": 60,
+    "collabPadding": 20,
+    "messageFlowFan": 14,
+    "artifactGap": 30,
+    "poolOrder": "auto",
+    "happyPathLeveling": false,
     "crossLaneDeconflict": true
   },
   "elk": {
     "layered": {
-      "elk.algorithm":                                    "layered",
-      "elk.direction":                                    "RIGHT",
-      "elk.spacing.nodeNode":                             "60",
-      "elk.spacing.edgeLabel":                            "5",
-      "elk.layered.spacing.nodeNodeBetweenLayers":        "80",
-      "elk.layered.spacing.edgeEdgeBetweenLayers":        "15",
-      "elk.layered.spacing.edgeNodeBetweenLayers":        "30",
-      "elk.edgeRouting":                                  "ORTHOGONAL",
-      "elk.layered.crossingMinimization.strategy":        "LAYER_SWEEP",
+      "elk.algorithm": "layered",
+      "elk.direction": "RIGHT",
+      "elk.spacing.nodeNode": "60",
+      "elk.spacing.edgeLabel": "5",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "80",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "15",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "30",
+      "elk.edgeRouting": "ORTHOGONAL",
+      "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
       "elk.layered.crossingMinimization.greedySwitch.type": "TWO_SIDED",
-      "elk.layered.nodePlacement.strategy":               "NETWORK_SIMPLEX",
-      "elk.layered.nodePlacement.favorStraightEdges":     "true",
-      "elk.layered.considerModelOrder.strategy":          "NODES_AND_EDGES",
-      "elk.layered.thoroughness":                         "20",
-      "elk.layered.compaction.postCompaction.strategy":    "EDGE_LENGTH",
-      "elk.layered.cycleBreaking.strategy":               "GREEDY_MODEL_ORDER",
-      "elk.layered.highDegreeNodes.treatment":            "true",
-      "elk.layered.highDegreeNodes.threshold":            "6"
+      "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+      "elk.layered.nodePlacement.favorStraightEdges": "true",
+      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+      "elk.layered.thoroughness": "20",
+      "elk.layered.compaction.postCompaction.strategy": "EDGE_LENGTH",
+      "elk.layered.cycleBreaking.strategy": "GREEDY_MODEL_ORDER",
+      "elk.layered.highDegreeNodes.treatment": "true",
+      "elk.layered.highDegreeNodes.threshold": "6"
     },
     "rectpacking": {
-      "elk.algorithm":                        "rectpacking",
-      "elk.rectpacking.desiredAspectRatio":   "0.1",
-      "elk.contentAlignment":                 "V_TOP H_LEFT"
+      "elk.algorithm": "rectpacking",
+      "elk.rectpacking.desiredAspectRatio": "0.1",
+      "elk.contentAlignment": "V_TOP H_LEFT"
+    },
+    "dmn": {
+      "elk.algorithm": "layered",
+      "elk.direction": "UP",
+      "elk.edgeRouting": "POLYLINE"
     }
   },
   "visualRefinement": {
@@ -108,5 +194,34 @@
     "minKnockoutChain": 2,
     "maxHandoffs": 6,
     "minExceptionEnds": 2
+  },
+  "dmn": {
+    "maxRulesPerTable": 20,
+    "maxDrgDepth": 5,
+    "shape": {
+      "decision": { "w": 180, "h": 80 },
+      "inputData": { "w": 125, "h": 45 },
+      "knowledgeSource": { "w": 100, "h": 63 },
+      "businessKnowledgeModel": { "w": 135, "h": 46 }
+    },
+    "spacing": {
+      "nodeNode": 40,
+      "layerNode": 80,
+      "margin": 20
+    },
+    "edge": {
+      "information": {
+        "line": { "stroke": "#000000", "strokeWidth": 1, "dasharray": null, "linecap": "round", "linejoin": "round" },
+        "marker": { "shape": "triangle", "path": "M 1 5 L 11 10 L 1 15 Z", "filled": true, "refX": 11, "refY": 10, "scale": 1 }
+      },
+      "knowledge": {
+        "line": { "stroke": "#000000", "strokeWidth": 1, "dasharray": "5", "linecap": "round", "linejoin": "round" },
+        "marker": { "shape": "chevron", "path": "M 1 3 L 11 10 L 1 17", "filled": false, "strokeWidth": 2, "refX": 11, "refY": 10, "scale": 0.8 }
+      },
+      "authority": {
+        "line": { "stroke": "#000000", "strokeWidth": 1.5, "dasharray": "5", "linecap": "round", "linejoin": "round" },
+        "marker": { "shape": "circle", "cx": 3, "cy": 3, "r": 3, "filled": true, "refX": 3, "refY": 3, "scale": 0.9 }
+      }
+    }
   }
 }

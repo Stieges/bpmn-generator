@@ -49,7 +49,7 @@ Two distinct intents — keep them separate:
   Lean metrics) as **non-blocking `advisories`** — never auto-applied.
 
 Select the mode consistently across entry points:
-- CLI: `node pipeline.js in.json out --optimize`
+- CLI: `node bpmn/pipeline.js in.json out --optimize`
 - Programmatic: `runPipeline(lc, { mode: 'optimize' })`
 - HTTP: `{ "logicCore": {...}, "mode": "optimize" }` on `/api/v1/generate|validate|orchestrate`
 - MCP: `mode: "optimize"` on `generate_bpmn` / `validate_bpmn` / `orchestrate_bpmn`
@@ -62,7 +62,7 @@ is the human-readable line, `transform` names the matching intervention in the t
 ### Redesign Toolbox
 
 In `optimize` mode, an advisory's `transform` field names a concrete, mechanical intervention. The
-interventions live in `scripts/redesign.js`; each has a `preview*` function (what would be feasible, and why
+interventions live in `scripts/bpmn/redesign.js`; each has a `preview*` function (what would be feasible, and why
 not) and an `apply*` function that performs it:
 
 - `parallelize` — puts a linear, same-lane task chain into a parallel-gateway split/join
@@ -76,13 +76,13 @@ not) and an `apply*` function that performs it:
   incoming edge, an **explicit `edgeIds`** naming which ones belong to this task — it refuses rather than
   guess
 
-**No-language-model guarantee:** the toolbox is purely deterministic. `scripts/redesign-core.js` may not
+**No-language-model guarantee:** the toolbox is purely deterministic. `scripts/bpmn/redesign-core.js` may not
 import `agents/llm-provider.js`, directly or transitively — no LLM call, no API key. Verify with
 `grep -rn "^import.*llm-provider" scripts/redesign*.js` (no hit; a plain `grep -rn "llm-provider"`
 also matches the comment stating this rule, so it is not a useful check on its own).
 
 **Rollback:** every `apply*` re-checks its result against a fixed, **profile-independent** soundness gate
-(soundness + workflow-net layers, always on — `scripts/redesign-core.js: SOUNDNESS_GATE`) and rolls back
+(soundness + workflow-net layers, always on — `scripts/bpmn/redesign-core.js: SOUNDNESS_GATE`) and rolls back
 (throws, writes nothing) on structural errors. Style warnings never block; they come back in the result's
 `warnings` array instead.
 
@@ -106,7 +106,7 @@ name every element (node, edge, or lane) that differs between input and result.
 CLI (preview is the default; nothing is written without `--apply`; a refusal exits non-zero and writes
 nothing):
 ```bash
-node redesign-cli.js <input.json> <parallelize|mergeTasks|relane|reorderKnockouts|isolateException> \
+node bpmn/redesign-cli.js <input.json> <parallelize|mergeTasks|relane|reorderKnockouts|isolateException> \
   [--nodes a,b,c] [--name "..."] [--lane X] [--order g2,g1] [--end xend] [--attach-to task] \
   [--marker timer] [--cancel-activity true|false] [--edges j2,j5] [--policy '{"protectNodes":[...]}'] \
   [--apply] [-o out.json]
@@ -193,7 +193,7 @@ Read these when needed:
 | User uploads/provides existing Logic-Core JSON | Skip Phase 1, start at Phase 2 |
 | User wants to add/change something in existing diagram | Amendment flow |
 | User describes multiple organizations interacting | Multi-pool mode |
-| User is in Claude Code with Node.js | Use `scripts/pipeline.js` |
+| User is in Claude Code with Node.js | Use `scripts/bpmn/pipeline.js` |
 | User is in Claude.ai (no script execution) | Inline mode: generate XML + SVG as artifacts |
 
 ---
@@ -263,7 +263,7 @@ passes this gate.** Warnings are not noise — they are the alarm.
    against it — do not guess field names or values.
 2. **Validate the draft against the schema and run it strictly:**
    ```bash
-   node pipeline.js <input>.json <output> --strict
+   node bpmn/pipeline.js <input>.json <output> --strict
    ```
    - The schema-gate (`references/input-schema.json`) rejects malformed structure with a
      precise field path and exits non-zero — fix every reported field.
@@ -289,10 +289,10 @@ npm install   # installs runtime + dev dependencies (see package.json)
 ### Run pipeline
 ```bash
 # From JSON file:
-node pipeline.js my-process.json my-process
+node bpmn/pipeline.js my-process.json my-process
 
 # From stdin (inline JSON):
-echo '{ ... }' | node pipeline.js - output
+echo '{ ... }' | node bpmn/pipeline.js - output
 
 # Outputs:
 #   output.bpmn  — BPMN 2.0 XML with full DI coordinates
@@ -421,7 +421,7 @@ Import existing BPMN 2.0 XML files to extract a Logic-Core JSON for editing.
 ### Claude Code
 ```bash
 cd scripts/
-node import.js existing-diagram.bpmn extracted.json
+node bpmn/import.js existing-diagram.bpmn extracted.json
 ```
 
 ### Workflow

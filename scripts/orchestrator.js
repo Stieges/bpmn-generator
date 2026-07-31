@@ -20,7 +20,7 @@ import { modelerAgent } from './agents/modeler.js';
 import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
-import { validateLogicCoreSchema } from './schema-gate.js';
+import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
 
 export async function orchestrate(input, options = {}) {
   const maxReviewIterations = options.maxReviewIterations ?? 3;

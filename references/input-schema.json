@@ -135,6 +135,7 @@
         "scriptFormat": { "type": "string", "description": "For scriptTask: script language (e.g. groovy, javascript)" },
         "script": { "type": "string", "description": "For scriptTask: script body" },
         "implementation": { "type": "string", "description": "For service/send/receive/businessRule tasks: implementation type" },
+        "decisionRef": { "type": "string", "description": "For businessRuleTask: id of the decision this task invokes. Serialised into bpmn:extensionElements under the generator's own namespace, not camunda:" },
         "eventGatewayType": { "enum": ["Exclusive", "Parallel"], "description": "For eventBasedGateway" },
         "instantiate": { "type": "boolean", "description": "For eventBasedGateway: instantiate process" },
         "linkName": { "type": "string", "description": "For link events: linkEventDefinition name" },

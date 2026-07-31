@@ -173,8 +173,8 @@ Two-phase execution per sample.
 
 | Step | API | On failure |
 |---|---|---|
-| Schema validation | `validateLogicCore(lc)` from `scripts/validate.js` | Stop, return `{passed: false, schemaErrors, …}` |
-| Rule engine | `runRules(lc)` from `scripts/rules.js` (default profile) | Only ERROR-level fails; WARNING-level passes through |
+| Schema validation | `validateLogicCore(lc)` from `scripts/bpmn/validate.js` | Stop, return `{passed: false, schemaErrors, …}` |
+| Rule engine | `runRules(lc)` from `scripts/bpmn/rules.js` (default profile) | Only ERROR-level fails; WARNING-level passes through |
 
 Schema and rule errors mean the LLM produced garbage. These don't go to the pipeline at all — they're routed to `llm-signal/` (gated).
 

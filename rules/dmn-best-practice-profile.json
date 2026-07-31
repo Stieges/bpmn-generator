@@ -1,0 +1,11 @@
+{
+  "profile": "dmn-best-practice",
+  "version": "1.0",
+  "description": "Enables the best_practice layer on top of the default. Equivalent to running in mode 'best-practice'; kept as a file so it can be combined with severity overrides. Readability and method — every rule here reports something that is valid DMN and would evaluate correctly.",
+  "layers": {
+    "soundness": { "enabled": true },
+    "semantics": { "enabled": true },
+    "best_practice": { "enabled": true }
+  },
+  "overrides": {}
+}

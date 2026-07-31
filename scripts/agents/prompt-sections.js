@@ -3,22 +3,17 @@
  * references/prompt-template.md, shared by the modeler and chat agents.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { promptTemplatePath } from '../shared/resource-paths.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// Published package: prepack-copy-references.mjs copies prompt-template.md into
-// scripts/references/, one level up from agents/. Dev checkout / Skill bundle:
-// references/ is a sibling of scripts/, two levels up from agents/.
-const publishedPromptPath = join(__dirname, '..', 'references', 'prompt-template.md');
-const promptPath = existsSync(publishedPromptPath)
-  ? publishedPromptPath
-  : join(__dirname, '..', '..', 'references', 'prompt-template.md');
+// Which of the two layouts applies — and why the source wins over the in-package
+// copy — is decided in one place; see resource-paths.js. This module used to
+// carry its own copy of that logic with a different `..` depth, which meant the
+// same defect had to be fixed twice and no test covered either.
 
 let _raw = null;
 function loadRaw() {
-  if (_raw === null) _raw = readFileSync(promptPath, 'utf8');
+  if (_raw === null) _raw = readFileSync(promptTemplatePath(), 'utf8');
   return _raw;
 }
 

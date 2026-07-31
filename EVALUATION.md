@@ -6,14 +6,14 @@ Reproducible metrics for the BPMN Generator. No marketing claims that aren't bac
 - **bpmn-auto-layout comparison** — head-to-head against npm `bpmn-auto-layout@1.3.0` on Pools/Lanes-heavy fixtures.
 - **Competitor matrix** — feature-by-feature comparison with ProMoAI, BPMN Assistant, and BPMN-Chatbot. Stieges column verified; competitor columns sourced from their public repos and papers.
 
-Last regenerated: 2026-05-18.
+Last regenerated: 2026-07-31.
 
 ## How to reproduce
 
 ```bash
 cd scripts
 npm install                                  # one-time
-node bench/run-stieges-bench-v1.mjs          # → tests/bench/stieges-bench-v1.{json,md}
+node bench/run-stieges-bench-v1.mjs          # → tests/bench/stieges-bench-v1.json, tests/bench/stieges-bench-v1.md
 node bench/compare-bpmn-auto-layout.mjs      # → tests/bench/auto-layout-comparison.md + .bpmn pairs
 node bench/render-comparison.mjs             # → tests/bench/comparison-*.html (side-by-side)
 ```
@@ -28,26 +28,26 @@ Pipeline metrics over every fixture in `tests/fixtures/*.json`. See [tests/bench
 
 | Metric | Value |
 |---|---|
-| Fixtures | 9 |
-| Parse success (runPipeline doesn't throw) | **9 / 9** |
-| Serialize success (non-empty BPMN+SVG) | **8 / 9** |
-| Schema-valid inputs (ajv draft-2020-12) | **9 / 9** |
-| Total nodes | 102 |
-| Total edges | 114 |
+| Fixtures | 12 |
+| Parse success (runPipeline doesn't throw) | **12 / 12** |
+| Serialize success (non-empty BPMN+SVG) | **11 / 12** |
+| Schema-valid inputs (ajv draft-2020-12) | **12 / 12** |
+| Total nodes | 146 |
+| Total edges | 154 |
 | Total soundness errors | 1 (deadlock-process, by design) |
-| Total soundness warnings | 11 (style layer) |
-| Total edge crossings (CCW intersection scan) | 20 |
-| Cumulative wall-clock (cold start) | 374 ms |
+| Total soundness warnings | 57 (style layer) |
+| Total edge crossings (CCW intersection scan) | 17 |
+| Cumulative wall-clock (cold start) | 306 ms |
 
 ### What the numbers mean
 
-- **9/9 parses, 8/9 serialize**: the one fixture that doesn't serialize (`deadlock-process`) intentionally fails Soundness (rule WF03 detects the deadlock). The pipeline aborts serialization rather than emit an unsound model — this is the correct behavior. The other 8 fixtures (single-pool, multi-pool, sub-process, dense edges, sparse lanes, wide pipeline, deeply nested labels) all serialize cleanly.
-- **9/9 schema-valid**: every fixture passes `validateLogicCoreSchema()` (ajv against `references/input-schema.json`). The strict-gate at the HTTP API entry is consistent with what the bench accepts.
-- **20 edge crossings** across 9 fixtures with 114 total edges. The CCW scan includes shared-endpoint touches (e.g., at gateways), so this is an upper bound; visual crossings are fewer.
+- **12/12 parses, 11/12 serialize**: the one fixture that doesn't serialize (`deadlock-process`) intentionally fails Soundness (rule WF03 detects the deadlock). The pipeline aborts serialization rather than emit an unsound model — this is the correct behavior. The other 11 fixtures (single-pool, multi-pool, sub-process, dense edges, sparse lanes, wide pipeline, deeply nested labels, plus the geometry-contract, realistic-collaboration, subprocess-fidelity, and long-lane-name regression fixtures added since) all serialize cleanly.
+- **12/12 schema-valid**: every fixture passes `validateLogicCoreSchema()` (ajv against `references/input-schema.json`). The strict-gate at the HTTP API entry is consistent with what the bench accepts.
+- **17 edge crossings** across 12 fixtures with 154 total edges. The CCW scan includes shared-endpoint touches (e.g., at gateways), so this is an upper bound; visual crossings are fewer.
 
 ### Caveats
 
-- Wall-clock is single-run, no warmup. First call to `bpmn-generator-pipeline` (the largest fixture, 22 nodes / 31 edges) takes ~230 ms; the rest take 10-30 ms. ELK first-call cost dominates.
+- Wall-clock is single-run, no warmup. First call to the largest fixture takes the ELK cold-start hit; the rest take 10-30 ms. ELK first-call cost dominates.
 - The benchmark covers structural correctness on curated inputs. It does not measure: LLM extraction quality (no LLM here), visual aesthetics, layout-quality vs handcrafted reference (no human-rated reference set).
 
 ---
@@ -107,8 +107,8 @@ Stieges column verified against this repo. Competitor columns sourced from their
 | **Multi-pool collaboration + message flows** | **Yes** ([multi-pool-collaboration.expected.bpmn](tests/fixtures/multi-pool-collaboration.expected.bpmn)) | Yes (POWL-based) | **No** (BPMN Auto Layout limitation, paper §6) | Unclear (no public repo) |
 | **Lane support** | **Yes, multi-lane per pool** ([sparse-lanes.expected.bpmn](tests/fixtures/sparse-lanes.expected.bpmn) — 4 lanes) | Yes (paper) | Limited | Unclear |
 | Soundness check | Workflow-Net (WF01–WF03), 3 rules | POWL-by-construction (mathematical guarantee) | None documented | None documented |
-| Configurable rule engine | **Yes** (33 rules, 5 layers, JSON profiles) | Limited | None | None |
-| Schema-strict input gate | **Yes** (ajv draft-2020-12, [schema-gate.js](scripts/schema-gate.js)) | N/A | Loose | Loose |
+| Configurable rule engine | **Yes** (34 rules, 5 layers, JSON profiles) | Limited | None | None |
+| Schema-strict input gate | **Yes** (ajv draft-2020-12, [schema-gate.js](scripts/bpmn/schema-gate.js)) | N/A | Loose | Loose |
 | Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
 | License | MIT | GPL-3.0 | MIT-ish | Unclear |
 | MCP server | **Yes** ([mcp-bpmn-server.js](scripts/mcp-bpmn-server.js)) | No | No | No |

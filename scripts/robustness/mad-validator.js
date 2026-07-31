@@ -6,7 +6,7 @@
 import { readdirSync, readFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { dotToLogicCore } from '../dot.js';
+import { dotToLogicCore } from '../bpmn/dot.js';
 import { runPipelineChecks } from './stress-tester.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   checkResponseContract,
   checkNumbers,
+  checkDocPaths,
   checkPackageIntegrity,
   evaluateChangelogNudge,
   ToolingError,
@@ -85,6 +86,8 @@ describe('docs-gate — checkNumbers', () => {
     pipelineDocText: 'Führt 33 Regeln in 5 Schichten aus.',
     actualRuleCount: 33,
     actualLayerCount: 5,
+    actualDmnRuleCount: 8,
+    actualDmnLayerCount: 2,
     actualTopLevelScriptCount: 29,
     actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06'],
     ...overrides,
@@ -92,6 +95,43 @@ describe('docs-gate — checkNumbers', () => {
 
   test('matching numbers and codes yield nothing', () => {
     expect(checkNumbers(base())).toEqual([]);
+  });
+
+  // Two rule engines now: scripts/bpmn/rules.js and scripts/dmn/rules.js. A claim is
+  // routed by whether its own LINE says DMN — see the comment on DMN_CLAIM_RE for
+  // why routing on the text beats accepting whatever matches either engine.
+  test('a DMN claim is measured against the DMN engine, not the BPMN one', () => {
+    expect(checkNumbers(base({
+      claudeMdText: '29 top-level scripts. The DMN engine has 8 rules, 2 layers.',
+    }))).toEqual([]);
+  });
+
+  test('a wrong DMN claim is still caught, and names the DMN file', () => {
+    const findings = checkNumbers(base({
+      claudeMdText: '29 top-level scripts. The DMN engine has 9 rules, 2 layers.',
+    }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('scripts/dmn/rules.js');
+    expect(findings[0].detail).toContain('has 8 rules');
+  });
+
+  test('an unqualified claim is measured against the BPMN engine even when it fits DMN', () => {
+    // The point of routing on the line rather than on "does it match either":
+    // "8 rules, 2 layers" with no mention of DMN is a wrong BPMN claim, and has
+    // to fail. A reader cannot tell those sentences apart either.
+    const findings = checkNumbers(base({
+      readmeText: 'The rule engine has 8 rules, 2 layers.',
+    }));
+    expect(findings).toHaveLength(2);        // rule count and layer count
+    expect(findings[0].detail).toContain('scripts/bpmn/rules.js');
+  });
+
+  test('the two engines are checked independently in one file', () => {
+    const findings = checkNumbers(base({
+      claudeMdText: '29 top-level scripts. Engine: 33 rules, 5 layers.\nDMN: 7 rules, 2 layers.',
+    }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('scripts/dmn/rules.js');
   });
 
   test('a stale rule count in README.md is a finding', () => {
@@ -179,19 +219,124 @@ describe('docs-gate — checkNumbers', () => {
   });
 });
 
+describe('docs-gate — checkDocPaths', () => {
+  // A synthetic filesystem — a fixed set of relative paths that "exist" —
+  // instead of touching disk, per this file's own convention (pass texts and
+  // a probe function, not the real docs, where feasible).
+  const REAL_PATHS = new Set([
+    'scripts/pipeline.js',
+    'scripts/agents/',
+    'references/input-schema.json',
+    'rules/custom/',
+    'tests/fixtures/',
+  ]);
+  const exists = (relPath) => REAL_PATHS.has(relPath);
+
+  test('an existing path passes', () => {
+    const findings = checkDocPaths([['README.md', 'See `scripts/pipeline.js` for the orchestrator.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a missing path is a finding naming the file and the token', () => {
+    const findings = checkDocPaths([['README.md', 'See `scripts/nope.js` for details.']], exists);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'doc-paths' });
+    expect(findings[0].detail).toBe('README.md mentions "scripts/nope.js" — no such path in the repository');
+  });
+
+  test('a directory claim (trailing slash) passes when the directory exists', () => {
+    const findings = checkDocPaths([['CLAUDE.md', 'Agent modules live under scripts/agents/.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a :<line> anchor is stripped before checking', () => {
+    const findings = checkDocPaths([['CLAUDE.md', 'See scripts/pipeline.js:42 for the entry point.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a #L<line> anchor is stripped before checking', () => {
+    const findings = checkDocPaths([['CLAUDE.md', 'See scripts/pipeline.js#L42 for the entry point.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('trailing punctuation from prose is stripped before checking', () => {
+    const findings = checkDocPaths([['README.md', 'See (scripts/pipeline.js), and also scripts/pipeline.js.']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('an allowlisted transient path passes even though it does not exist', () => {
+    const findings = checkDocPaths(
+      [['CLAUDE.md', 'A fresh install writes to scripts/references/ during prepack.']],
+      exists,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a `node pipeline.js` CLI example resolves against scripts/', () => {
+    const findings = checkDocPaths([['README.md', '```\nnode pipeline.js input.json output\n```']], exists);
+    expect(findings).toEqual([]);
+  });
+
+  test('a `node cli.js` CLI example resolves against scripts/robustness/', () => {
+    const findings = checkDocPaths(
+      [['CLAUDE.md', 'Run `node cli.js run --target=lc-json` for a robustness benchmark.']],
+      (relPath) => relPath === 'scripts/robustness/cli.js',
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a missing `node <file>.js` CLI example is a finding', () => {
+    const findings = checkDocPaths([['README.md', 'node ghost.js input.json output']], exists);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('node ghost.js');
+  });
+
+  test('a glob (`*`) is not treated as a real path', () => {
+    const findings = checkDocPaths(
+      [['SKILL.md', 'grep -rn "^import.*llm-provider" scripts/redesign*.js']],
+      exists,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a placeholder (`<...>`) is not treated as a real path', () => {
+    const findings = checkDocPaths(
+      [['references/fachliches-regelwerk.md', "loadRuleProfile('rules/custom/<profile>.json')"]],
+      exists,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('the same token repeated in one file is only reported once', () => {
+    const findings = checkDocPaths(
+      [['README.md', 'scripts/nope.js is used here. Also see scripts/nope.js again.']],
+      exists,
+    );
+    expect(findings).toHaveLength(1);
+  });
+});
+
 // checkPackageIntegrity reads real file contents from SCRIPTS_DIR, which
 // docs-gate.mjs computes from its own location, not from an argument — it is
 // not pure in its two parameters alone. These tests exercise it against real
 // files already in this repo instead of synthetic fixtures.
 describe('docs-gate — checkPackageIntegrity', () => {
   test('a dual-path fallback resolves when the primary target ships', () => {
-    // schema-gate.js reads references/input-schema.json two ways: a published
-    // in-package path and a dev-checkout fallback one level up. The fallback
-    // is SUPPOSED to escape the package (see the function's own doc comment)
-    // — only report when NEITHER candidate resolves.
+    // resource-paths.js reads references/input-schema.json two ways: an
+    // in-package path and a dev-checkout one a level up. The checkout one is
+    // SUPPOSED to escape the package (see the function's own doc comment) —
+    // only report when NEITHER candidate resolves. Note this is order-independent
+    // by design: resource-paths.js prefers the CHECKOUT path at runtime, and the
+    // check still passes because the in-package candidate ships.
+    // The packed list is spelled out rather than derived, so adding a file to
+    // resource-paths.js without adding it to prepack-copy-references.mjs makes
+    // this test fail. That is the point: it is pinned to the real module.
     const findings = checkPackageIntegrity(
-      ['schema-gate.js', 'references/input-schema.json'],
-      new Set([join(__dirname, 'schema-gate.js')]),
+      ['shared/resource-paths.js',
+       'references/input-schema.json',
+       'references/prompt-template.md',
+       'references/decision-core-schema.json'],
+      new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
     expect(findings).toEqual([]);
   });
@@ -199,20 +344,27 @@ describe('docs-gate — checkPackageIntegrity', () => {
   test('reproduces the original publish-blocker: primary target missing, only the escaping fallback resolves', () => {
     // Before the prepack fix, references/input-schema.json never shipped —
     // this is the exact state that made a fresh install of the published
-    // package throw on first import.
+    // package throw on first import. Kept pointed at whichever module owns the
+    // dual path today; the defect it guards against is the packaging one, not
+    // the module name.
     const findings = checkPackageIntegrity(
-      ['schema-gate.js'],
-      new Set([join(__dirname, 'schema-gate.js')]),
+      ['shared/resource-paths.js'],
+      new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
-    expect(findings).toHaveLength(1);
+    expect(findings).toHaveLength(3);   // one per file resource-paths.js reads
     expect(findings[0]).toMatchObject({ check: 'package-integrity' });
-    expect(findings[0].detail).toContain('schema-gate.js');
+    expect(findings.map(f => f.detail).join(' ')).toContain('resource-paths.js');
   });
 
   test('a target shipped via a plain package.json "files" entry resolves', () => {
+    // shared/utils.js reads config.json via resolve(__dirname, '..', 'config.json') —
+    // a genuine dirname-relative read this check has to follow, not a synthetic one.
+    // Pinned to the real module (like the resource-paths.js tests above) so that if
+    // shared/utils.js stops existing at this path, or stops reading config.json this
+    // way, this test fails loudly instead of quietly reading nothing.
     const findings = checkPackageIntegrity(
-      ['utils.js', 'config.json'],
-      new Set([join(__dirname, 'utils.js')]),
+      ['shared/utils.js', 'config.json'],
+      new Set([join(__dirname, 'shared', 'utils.js')]),
     );
     expect(findings).toEqual([]);
   });

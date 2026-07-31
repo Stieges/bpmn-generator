@@ -16,48 +16,57 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 - **WF-Net**: Workflow-Net — a restricted Petri-Net with one source and one sink. Used for soundness analysis (WF01–WF03 rules).
 - **Soundness**: a process is sound if every case can reach the end state, no dead activities, no proper deadlocks. Petri-Net property.
 - **Sugiyama**: layered graph drawing algorithm (Sugiyama et al., 1981). ElkJS implements a variant; we use it via the `org.eclipse.elk.layered` algorithm.
-- **ElkJS Layered**: JavaScript port of the Eclipse Layout Kernel's layered algorithm. Our auto-layout engine — see `scripts/layout.js`.
-- **Bruce Silver Method & Style**: industry-recognized style conventions for BPMN diagrams. Most M-layer rules (M01–M10) derive from this work.
+- **ElkJS Layered**: JavaScript port of the Eclipse Layout Kernel's layered algorithm. Our auto-layout engine — see `scripts/bpmn/layout.js`.
+- **Bruce Silver Method & Style**: industry-recognized style conventions for BPMN diagrams. Most M-layer rules derive from this work — M11 is our own (the decisionRef bridge), not Silver.
 - **MCP**: Model Context Protocol — the protocol Claude Code uses to talk to external tools. We expose the generator via `scripts/mcp-bpmn-server.js`.
 - **MaD**: Model-and-Data sanity check used by the robustness subsystem to validate synthetic fixtures.
 - **Golden file**: an `.expected.bpmn` (or `.expected.svg`) committed alongside a fixture; tests fail if output diverges.
 
 ## Architecture
 
-30 top-level scripts (17 core-pipeline + 1 optimization-advisory + 3 redesign-toolbox + 9 standalone
-tooling) + 7 agent + 9 robustness modules under `scripts/`. Verify current inventory with
+7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
+9 robustness modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
-Core Pipeline (run on every generate call)
+scripts/bpmn/ — Core Pipeline (run on every generate call)
   pipeline.js (Orchestrator, public API runPipeline)
     ├── validate.js          ← rules.js
     ├── rules.js             ← types.js, workflow-net.js, optimize.js
     ├── optimize.js          ← types.js, topology.js (opt-in Optimization Advisory layer O01–O04, invoked by rules.js)
     ├── workflow-net.js      ← types.js
     ├── topology.js          ← types.js
-    ├── layout.js            ← types.js, utils.js, topology.js, elkjs
-    ├── coordinates.js       ← types.js, utils.js, topology.js
+    ├── layout.js            ← types.js, ../shared/utils.js, constants.js, topology.js, elkjs
+    ├── coordinates.js       ← types.js, ../shared/utils.js, constants.js, topology.js
     ├── di-check.js          (no deps — post-layout DI integrity pass, see below)
-    ├── visual-refinement.js ← coordinates.js (opt-in compaction passes)
+    ├── visual-refinement.js ← coordinates.js, constants.js (opt-in compaction passes)
     ├── edge-simplify.js     ← types.js (post-process ELK waypoints, reduce zigzag)
-    ├── bpmn-xml.js          ← types.js, utils.js, topology.js, icons.js
-    ├── svg.js               ← types.js, utils.js, icons.js
-    ├── icons.js             ← utils.js
+    ├── bpmn-xml.js          ← types.js, ../shared/utils.js, constants.js, topology.js, icons.js
+    ├── svg.js               ← types.js, ../shared/utils.js, constants.js, icons.js
+    ├── icons.js             ← ../shared/utils.js, constants.js
     ├── dot.js               ← types.js
-    ├── schema-gate.js       ← references/input-schema.json (ajv draft-2020-12 strict gate)
+    ├── schema-gate.js       ← ../shared/resource-paths.js (ajv draft-2020-12 strict gate)
     ├── types.js             (no deps)
-    └── utils.js             (reads config.json)
+    ├── constants.js         ← ../shared/utils.js (13 BPMN-only layout constants: SHAPE, SW, CLR,
+    │                          lane/label/gap/padding sizes — derived from CFG, never touched by dmn/)
+    ├── import.js             BPMN XML → Logic-Core (DOM parser)
+    └── moddle-import.js      BPMN XML → Logic-Core (bpmn-moddle path)
 
-Redesign toolbox (opt-in; CLI-driven, not invoked by runPipeline)
+scripts/bpmn/ — Redesign toolbox (opt-in; CLI-driven, not invoked by runPipeline)
   redesign-cli.js            ← redesign.js (CLI entry; preview is the default, --apply writes)
   redesign.js                ← redesign-core.js (5 deterministic transforms, each preview*/apply*)
   redesign-core.js           ← rules.js, topology.js (soundness gate, deterministic IDs, protection lists;
                                 may NOT import agents/llm-provider.js, directly or transitively)
 
-Standalone tooling
-  import.js                  BPMN XML → Logic-Core (DOM parser)
-  moddle-import.js           BPMN XML → Logic-Core (bpmn-moddle path)
+scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
+  utils.js                   (reads ../config.json)
+  rule-profile.js            (profile machinery: loadRuleProfile, isRuleEnabled, getEffectiveSeverity)
+  resource-paths.js          (no deps — where references/ lives in each layout)
+  geometry.js                (straight-segment clip maths: clipStraight, clipToRect — shared by
+                               bpmn/coordinates.js and dmn/coordinates.js; the orthogonal clip
+                               helpers stay in bpmn/ — see dmn-integration plan's Stage 3 note)
+
+Standalone tooling (top-level scripts/)
   http-server.js             HTTP API (/api/v1/generate, /orchestrate, /chat)
   mcp-bpmn-server.js         MCP server entry point
   evaluate-slm.js            Pipeline evaluation runner
@@ -65,6 +74,21 @@ Standalone tooling
   audit.js                   Append-only JSONL audit log
   delivery.js                Webhook delivery + dead-letter
   orchestrator.js            Multi-agent orchestration
+
+DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
+  pipeline.js (Orchestrator + CLI, public API runDmnPipeline)
+    ├── schema-gate.js       ← ../shared/resource-paths.js (ajv gate for Decision-Core)
+    ├── rules.js             ← ../shared/rule-profile.js, ../shared/utils.js (D01–D11 + B01–B06,
+    │                          3 layers, 2 modes; own runner `runDmnRules`)
+    ├── layout.js            ← constants.js, ../shared/utils.js, elkjs (decisionCoreToElk, runDmnElkLayout)
+    ├── coordinates.js       ← constants.js, ../shared/geometry.js (buildDmnDiagrams, per-diagram coordMap)
+    ├── di-check.js          (checkDmnDiagramIntegrity — DD01–DD03, mirrors bpmn/di-check.js)
+    ├── dmn-xml.js           ← ../shared/utils.js, coordinates.js (requirementKey), dmn-moddle
+    │                          (generateDmnXml, validateDmnXml)
+    └── constants.js         ← ../shared/utils.js (DRD shape sizes, spacing, edge markers, from CFG.dmn)
+  (produces a real .dmn file, XSD-validated — see
+   docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: the importer,
+   SVG rendering and the tool surface, Stages 5–7.)
 
 Agent subsystem (scripts/agents/)
   chat.js, compliance.js, layout.js, llm-provider.js, modeler.js, prompt-sections.js, reviewer.js
@@ -104,29 +128,30 @@ membership instead of coordinates.
 
 | File | Purpose |
 |------|---------|
-| `scripts/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/rules.js` | Rule Engine: 33 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/rules.js` |
-| `scripts/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
-| `scripts/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
-| `scripts/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
-| `scripts/redesign-cli.js` | CLI entry to the redesign toolbox (`node redesign-cli.js <input.json> <transform> [options] [--apply]`); preview is the default, nothing is written without `--apply`, a refusal exits non-zero and writes nothing |
-| `scripts/validate.js` | Thin wrapper around `runRules()` |
-| `scripts/types.js` | `isEvent`, `isGateway`, `isArtifact` (layout sense — kept out of the ELK graph; wider than the BPMN class, includes data references), `isBpmnArtifact` (the actual OMG Artifact class — TextAnnotation, Group; use this one for anything that has to be right against the XSD), `bpmnXmlTag` |
-| `scripts/utils.js` | `loadConfig`, `CFG`, constants, `esc`, `wrapText` |
-| `scripts/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
-| `scripts/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
-| `scripts/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
-| `scripts/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
-| `scripts/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
-| `scripts/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
-| `scripts/svg.js` | `generateSvg` — SVG rendering of all BPMN elements |
-| `scripts/icons.js` | Event markers, task icons, bottom markers (Loop, MI, Ad-Hoc) |
-| `scripts/dot.js` | `logicCoreToDot` / `dotToLogicCore` — Graphviz DOT support |
-| `scripts/workflow-net.js` | WF-Net soundness checks (used by WF01–WF03 rules) |
-| `scripts/visual-refinement.js` | Optional compaction/refinement passes P1–P7.1 (off by default) |
-| `scripts/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends |
-| `scripts/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API |
-| `scripts/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
+| `scripts/bpmn/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
+| `scripts/bpmn/rules.js` | Rule Engine: 34 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/bpmn/rules.js` |
+| `scripts/bpmn/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
+| `scripts/bpmn/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
+| `scripts/bpmn/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
+| `scripts/bpmn/redesign-cli.js` | CLI entry to the redesign toolbox (`node bpmn/redesign-cli.js <input.json> <transform> [options] [--apply]`); preview is the default, nothing is written without `--apply`, a refusal exits non-zero and writes nothing |
+| `scripts/bpmn/validate.js` | Thin wrapper around `runRules()` |
+| `scripts/bpmn/types.js` | `isEvent`, `isGateway`, `isArtifact` (layout sense — kept out of the ELK graph; wider than the BPMN class, includes data references), `isBpmnArtifact` (the actual OMG Artifact class — TextAnnotation, Group; use this one for anything that has to be right against the XSD), `bpmnXmlTag` |
+| `scripts/shared/utils.js` | `loadConfig`, `CFG`, `esc`, `wrapText`, `EXTENSION_NS` (our own `extensionElements` namespace — always create those via `moddle.createAny(name, EXTENSION_NS, …)`; setting a prefixed attribute in `$attrs` without a matching `xmlns:` declaration makes moddle **drop the value silently**, logging to stderr while `warnings` stays empty). Carries only what both `bpmn/` and `dmn/` use — the 13 BPMN-only layout constants live in `scripts/bpmn/constants.js` |
+| `scripts/bpmn/constants.js` | The 13 BPMN-only layout constants (`SHAPE`, `SW`, `CLR`, `LANE_HEADER_W`, `LANE_PADDING`, `LABEL_DISTANCE`, `TASK_RX`, `INNER_OUTER_GAP`, `EXTERNAL_LABEL_H`, `POOL_GAP`, `COLLAB_PADDING`, `MESSAGE_FLOW_FAN`, `ARTIFACT_GAP`), derived from `CFG` (`../shared/utils.js`) — never imported by `dmn/` |
+| `scripts/bpmn/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
+| `scripts/bpmn/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
+| `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
+| `scripts/bpmn/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
+| `scripts/bpmn/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
+| `scripts/bpmn/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
+| `scripts/bpmn/svg.js` | `generateSvg` — SVG rendering of all BPMN elements |
+| `scripts/bpmn/icons.js` | Event markers, task icons, bottom markers (Loop, MI, Ad-Hoc) |
+| `scripts/bpmn/dot.js` | `logicCoreToDot` / `dotToLogicCore` — Graphviz DOT support |
+| `scripts/bpmn/workflow-net.js` | WF-Net soundness checks (used by WF01–WF03 rules) |
+| `scripts/bpmn/visual-refinement.js` | Optional compaction/refinement passes P1–P7.1 (off by default) |
+| `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends |
+| `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API |
+| `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |
 | `scripts/mcp-bpmn-server.js` | MCP server entry point |
 | `scripts/orchestrator.js` | Multi-agent orchestration (modeler → layout → reviewer → compliance) |
@@ -136,9 +161,21 @@ membership instead of coordinates.
 | `scripts/prepare-training-data.js` | Training-data prep for SLM eval |
 | `scripts/agents/` | 7 agent modules: chat, compliance, layout, llm-provider, modeler, prompt-sections, reviewer |
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
-| `scripts/import.js` | BPMN XML Parser → Logic-Core JSON |
+| `scripts/bpmn/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
-| `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them; `schema-gate.js`/`agents/prompt-sections.js` fall back to the repo-root copy when the published one is absent |
+| `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
+| `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
+| `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 17 rules, 3 layers, 2 modes. **Counted separately from the BPMN engine** — see the DMN section under Rule Engine |
+| `scripts/dmn/dmn-xml.js` | `generateDmnXml`, `validateDmnXml` — DMN 1.3 XML + DMNDI via dmn-moddle, mirroring `bpmn-xml.js` |
+| `scripts/dmn/pipeline.js` | `runDmnPipeline` — Orchestrator + CLI + Public API for the DMN side, gate order schema→rules→layout→coordinates→di-check→serialisation |
+| `references/decision-core-schema.json` | Formal JSON Schema for DMN Decision-Core input |
+| `rules/dmn-default-profile.json` | Default DMN profile (semantic: soundness + semantics) |
+| `rules/dmn-best-practice-profile.json` | Adds the opt-in `best_practice` layer |
+| `rules/custom/` | Project-specific profiles, loaded by path only — see its README |
+| `scripts/shared/geometry.js` | `clipStraight`, `clipToRect` — straight-segment clip maths shared by `bpmn/coordinates.js` and `dmn/coordinates.js` (DMN's DRD draws requirement connections as unstyled straight lines, same as a BPMN Association). The orthogonal clip helpers stay in `scripts/bpmn/coordinates.js` |
+| `scripts/shared/resource-paths.js` | `inputSchemaPath`, `promptTemplatePath` — the single place that decides where `references/` lives. **The source outranks the in-package copy.** The reverse precedence was a silent trap: `npm pack` (including the `--dry-run` the docs gate runs) leaves a copy behind, and every later edit to `references/` then had no effect while `git status` said nothing, because it is gitignored. Filenames are spelled out literally in each `join(__dirname, …)` — the docs gate parses those calls for string literals, and a variable would make it check a directory |
+| `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them. npm's `files` cannot reach outside the package root, hence a copy |
+| `scripts/postpack-clean-references.mjs` | `postpack` lifecycle script — removes that copy again. npm runs it after both `npm pack` and `npm pack --dry-run`, so a build artifact no longer outlives the build |
 | `scripts/build-skill.mjs` | `npm run build:skill` — bundles `SKILL.md` + `references/` + `scripts/` into `bpmn-generator-v3.skill` (gitignored, rebuilt on demand) |
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
 | `references/logic-core-schema.md` | Schema documentation (prose + examples) |
@@ -155,7 +192,7 @@ cd scripts/
 npm install
 npm test                                          # Jest, ES Modules; verify count with `npm test 2>&1 | tail -5`
 npm run docs-gate                                 # the CI docs gate; add `-- --summary` to pass flags
-node pipeline.js ../tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
+node bpmn/pipeline.js ../tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
 ```
 
 Everything runs from `scripts/` — that is where the only `package.json` lives. The docs gate
@@ -172,7 +209,7 @@ After every change: `npm test` must pass.
 
 ### Adding a New Rule
 
-1. Insert rule object into `scripts/rules.js` → `RULES` array
+1. Insert rule object into `scripts/bpmn/rules.js` → `RULES` array
 2. Fields: `id`, `layer`, `defaultSeverity`, `description`, `ref`, `check(proc)`
 3. `check` returns `{ pass: true }` or `{ pass: false, message: '...' }`
 4. Update documentation in `references/fachliches-regelwerk.md`
@@ -212,12 +249,19 @@ checks documented claims against the running code instead of trusting the prose 
 the CHANGELOG fell six releases behind and `/api/v1/orchestrate` silently dropped a documented
 response field for three commits.
 
-1. Three **proof** checks (exit 1 on violation): the HTTP response contract vs.
+1. Four **proof** checks (exit 1 on violation): the HTTP response contract vs.
    `references/api-schema.json` (ajv, validated against a real response built from each
    endpoint), numeric claims ("N rules, 5 layers" in README.md/CLAUDE.md, "N top-level scripts"
-   in CLAUDE.md, DI codes in `references/api-reference.md`) vs. the actual counts, and package
-   integrity — every `join(__dirname, ...)` a packed file reads at runtime, checked against
-   `npm pack`'s output, scoped to files reachable from `scripts/package.json`'s `exports`.
+   in CLAUDE.md, DI codes in `references/api-reference.md`) vs. the actual counts, doc paths —
+   proof #3: every `scripts/`-, `references/`-, `rules/`-, `tests/`-, `docs/`-, `frontend/`- or
+   `.github/`-shaped path string mentioned in prose (and every `node <file>.js` CLI example)
+   across README.md, CLAUDE.md, ROADMAP.md, SKILL.md, EVALUATION.md,
+   `docs/bpmn-generator-pipeline.md`, `references/api-reference.md` and
+   `references/fachliches-regelwerk.md` must resolve to a real file or directory, or be covered
+   by the allowlist in `checkDocPaths`' `DOC_PATH_ALLOWLIST` (transient/generated paths, each
+   with a reason comment) — and package integrity — every `join(__dirname, ...)` a packed file
+   reads at runtime, checked against `npm pack`'s output, scoped to files reachable from
+   `scripts/package.json`'s `exports`.
 2. One **nudge** check (PR-only, never fails the build): if a `feat`/`fix`/`perf` commit in the
    PR's range touches `scripts/**` and `CHANGELOG.md`'s `[Unreleased]` section is untouched or
    empty, prints a ready-to-paste draft built from the commit subjects.
@@ -237,7 +281,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ### Debug a wrong layout
 
-1. Reproduce: `cd scripts && node pipeline.js ../tests/fixtures/<fixture>.json /tmp/dbg`
+1. Reproduce: `cd scripts && node bpmn/pipeline.js ../tests/fixtures/<fixture>.json /tmp/dbg`
 2. Inspect `/tmp/dbg.svg` (browser) and `/tmp/dbg.bpmn` (text editor).
 3. Open in order: `layout.js` (Elk node/edge build), `coordinates.js` (post-processing), `topology.js` (node/lane ordering).
 4. For pool/lane width issues, suspect `coordinates.js` first (pool width balancing + lane-compaction logic) and `visual-refinement.js` (compaction passes).
@@ -248,12 +292,12 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 1. **Never blind-regenerate.** First inspect the diff:
    - `diff -u tests/fixtures/<name>.expected.bpmn /tmp/output.bpmn`
 2. Decide: is the change intended (then the golden is stale and must be regenerated) or unintended (then the code is broken)?
-3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`).
+3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node bpmn/pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`).
 4. Commit golden updates in their own commit, separate from code changes.
 
 ### Extend the rule engine
 
-1. Insert the rule object into the `RULES` array in `scripts/rules.js`.
+1. Insert the rule object into the `RULES` array in `scripts/bpmn/rules.js`.
 2. Fields: `id`, `layer`, `defaultSeverity`, `description`, `ref`, `check(proc) → { pass: true } | { pass: false, message }`.
 3. Document the rule in `references/fachliches-regelwerk.md` with source citation.
 4. Add a positive and a negative fixture under `tests/fixtures/` and assertions in `pipeline.test.js`.
@@ -278,7 +322,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 ### Run a visual-refinement pass
 
 1. Default: `visualRefinement: false`. Opt in per call: `runPipeline(lc, { visualRefinement: true })`.
-2. Sub-flags live in `scripts/config.json` under `CFG.visualRefinement`: `dynamicLaneHeader`, `laneCompaction`, `edgeLabelCollisionRepair` (all on by default when `visualRefinement: true`). See `scripts/visual-refinement.js` for the pass implementations.
+2. Sub-flags live in `scripts/config.json` under `CFG.visualRefinement`: `dynamicLaneHeader`, `laneCompaction`, `edgeLabelCollisionRepair` (all on by default when `visualRefinement: true`). See `scripts/bpmn/visual-refinement.js` for the pass implementations.
 3. Verify against goldens: `cd scripts && npm test -- --testPathPatterns=visual-refinement`.
 
 ### Change the participant order of a collaboration
@@ -286,7 +330,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 1. Default is `poolOrder: 'auto'` — participants are stacked so that the ones exchanging messages sit
    next to each other, because a message flow spanning N positions crosses N-1 uninvolved pools and
    reads as a participation that does not exist. Expanded pools and black-box participants are
-   ordered together (`orderParticipantsByMessageFlow` in `scripts/topology.js`).
+   ordered together (`orderParticipantsByMessageFlow` in `scripts/bpmn/topology.js`).
 2. Keep the declared order instead: `runPipeline(lc, { poolOrder: 'declared' })`, project-wide via
    `config.json → layout.poolOrder`, or per call over MCP (`generate_bpmn`) and the HTTP API
    (`/api/v1/generate`). Switched off, nothing else changes — routing stays orthogonal, there are
@@ -309,23 +353,45 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
 | Soundness | ERROR | S01-S13 | Structural correctness (OMG compliance) |
-| Style | WARNING | M01-M10 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
+| Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |
 | Optimization | ADVISORY | O01-O04 | Redesign advisories — `optimize`/`soll` mode only (opt-in); Reijers 2005 + BABOK Lean. Emits `validation.advisories` + `metrics.optimization` |
 
-Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/optimize.js`.
+Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/bpmn/optimize.js`.
+
+### DMN rule engine — a separate count
+
+`scripts/dmn/rules.js` holds 17 rules in 3 layers against Decision-Core, not Logic-Core:
+
+| Layer | Default severity | Rules | Focus |
+|-------|-----------------|-------|-------|
+| soundness | ERROR | D01–D05, D09–D11 | Graph, table shape, DMN 1.3 conformance |
+| semantics | WARNING | D06–D08 | Points at something demonstrably wrong |
+| best_practice | WARNING | B01–B06 | Readability and method (opt-in) |
+
+Two modes, mirroring `document`/`optimize`: **`semantic`** (default — does it hold together) and
+**`best-practice`** (adds the third layer). `runDmnRules(dc, { mode, profile, config })`. A profile
+is more specific than a mode, so an explicit `enabled` in a profile wins. Profiles:
+`rules/dmn-default-profile.json`, `rules/dmn-best-practice-profile.json`, and project-specific ones
+under `rules/custom/` — **loaded by path, never scanned**, so dropping a file in cannot change
+behaviour silently. Thresholds in `config.json → dmn`.
+
+The table above and every "N rules, 5 layers" claim in this file and README.md are about
+`scripts/bpmn/rules.js` only. The docs gate routes a claim to the DMN engine when its own line says
+"DMN", and to the BPMN engine otherwise — so an unqualified DMN sentence fails the gate, which is
+the ambiguity worth failing on.
 
 ## Conventions
 
 - ES Modules (`import`/`export`) — no CommonJS
 - Node `>=20` (declared in `package.json` `engines`; CI tests 20 and 22)
-- Runtime deps (5): `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`. Dev deps: `jest`, `@jest/globals`, `bpmn-auto-layout`. No new deps without prior discussion.
+- Runtime deps (6): `elkjs`, `bpmn-moddle`, `dmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`. Dev deps: `jest`, `@jest/globals`, `bpmn-auto-layout`. No new deps without prior discussion.
 - Config in `config.json`, not hardcoded
 - Functions are pure (no global state except `CFG`)
 - IDs in Logic-Core: `^[a-zA-Z_][a-zA-Z0-9_-]*$`
 - XML escaping via `esc()` from `utils.js`
-- Coordinates always as `{ x, y, width, height }` objects
+- Coordinates in the internal `coordMap` contract (`{ coords, laneCoords, poolCoords, edgeCoords, edgeLabels }`, and its DMN analogue) are always `{ x, y, w, h }` — **`w`/`h`, not `width`/`height`**. Only the emitted DI attributes (`dc:Bounds`) use `width`/`height`; `bpmn-xml.js` and `svg.js` translate on the way out.
 
 ### Security defaults (HTTP API + MCP)
 
@@ -333,7 +399,7 @@ Profiles in `rules/*.json` override severities or disable layers. Mode: `documen
 - `AUDIT_LOG_PATH` env var: where the audit JSONL is written. Default `<os.tmpdir>/bpmn-generator/audit/bpmn-generator.jsonl`.
 - `DEAD_LETTER_PATH` env var: where failed webhook deliveries are written. Default `<os.tmpdir>/bpmn-generator/dead-letter/`.
 - SSRF: callback URLs are validated against IPv4 private/link-local ranges (10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x), IPv6 (::1, fc00::/7, fe80::/10), and the hostname is DNS-resolved with the resolved IP re-checked against the same denylist.
-- Schema-strict gate: every Logic-Core input at the HTTP entry passes through `scripts/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw.
+- Schema-strict gate: every Logic-Core input at the HTTP entry passes through `scripts/bpmn/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw.
 - Body size cap: 10 MB. Rate limit: 30 req/min per IP. Both in `scripts/http-server.js`.
 
 See `SECURITY.md` for the threat model and deployment guidance.
@@ -343,7 +409,7 @@ See `SECURITY.md` for the threat model and deployment guidance.
 Anti-patterns that have caused real problems in this codebase. Each rule has a reason; understand it before deciding the rule does not apply.
 
 - **No `require()` or CommonJS.** This is an ES-Modules project (`"type": "module"`). A single `require()` breaks everything downstream. If a CommonJS-only dep is unavoidable, use dynamic `import()` with explicit interop wrapping.
-- **No new runtime dependencies without prior discussion.** Current deps: `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats` (`ajv` + `ajv-formats` added in v3.3 for the JSON Schema strict-gate). Each was a deliberate choice. Adding another widens the threat surface and the supply-chain risk — propose it before installing.
+- **No new runtime dependencies without prior discussion.** Current deps: `elkjs`, `bpmn-moddle`, `dmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats` (`ajv` + `ajv-formats` added in v3.3 for the JSON Schema strict-gate; `dmn-moddle` added for DMN 1.3 XML serialisation — GATE 1 in `docs/superpowers/plans/2026-07-30-dmn-integration.md`, its three transitive dependencies identical to already-installed `bpmn-moddle`'s). Each was a deliberate choice. Adding another widens the threat surface and the supply-chain risk — propose it before installing.
 - **Never compute geometry in a renderer.** If `svg.js` or `bpmn-xml.js` needs a coordinate that is not in `coordMap`, the fix is to add it to `coordMap` — not to compute it locally. Computing it locally means computing it twice, and the two copies drift silently because nobody compares the SVG against the DI. This produced three separate defects: the lane header strip, message flow routes (SVG drew a dog-leg while the DI carried a diagonal cutting through a pool), and association endpoints. The guard is the test `geometry contract — the two renderers agree`.
 - **Do not use `elk.partitioning` for lanes.** In `elk.layered` a partition is a group of **layers** along the flow direction, not a horizontal band. Setting partition = lane index forces every node of the first lane before every node of the second, so a lane that acts mid-process gets pushed past the end event and its outgoing flow runs backwards. Lanes own the y axis (`coordinates.js` §5.0a), ELK owns x. This was live for a long time and produced semantically misleading diagrams that every rule called green.
 - **A green validation says nothing about the layout.** The rule engine never sees a coordinate. Any change to `layout.js`, `coordinates.js` or `visual-refinement.js` must be checked against `result.diagnostics` (`di-check.js`), not just against `validation.errors`.
@@ -358,31 +424,46 @@ Anti-patterns that have caused real problems in this codebase. Each rule has a r
 
 ```bash
 # Standard: JSON → BPMN + SVG
-node pipeline.js input.json output-basename
+node bpmn/pipeline.js input.json output-basename
 
 # Stdin:
-cat input.json | node pipeline.js - output
+cat input.json | node bpmn/pipeline.js - output
 
 # With DOT export:
-node pipeline.js input.json output --dot
+node bpmn/pipeline.js input.json output --dot
 
 # DOT → Logic-Core JSON:
-node pipeline.js graph.dot output --import-dot
+node bpmn/pipeline.js graph.dot output --import-dot
 
 # BPMN → Logic-Core (Round-Trip):
-node import.js existing.bpmn extracted.json
+node bpmn/import.js existing.bpmn extracted.json
 
 # With documentation export:
-node pipeline.js input.json output --doc
+node bpmn/pipeline.js input.json output --doc
 
 # Abort (no files written) on any unresolved warning — rule engine, DI, or serialization:
-node pipeline.js input.json output --strict
+node bpmn/pipeline.js input.json output --strict
 
 # Enable the opt-in Optimization Advisory layer (soll/optimize mode):
-node pipeline.js input.json output --optimize
+node bpmn/pipeline.js input.json output --optimize
 
 # Start MCP server:
 node mcp-bpmn-server.js
+```
+
+DMN (mirrors the BPMN CLI's idiom):
+```bash
+# JSON → DMN 1.3 XML
+node dmn/pipeline.js input.json output-basename
+
+# Stdin:
+cat input.json | node dmn/pipeline.js - output
+
+# Abort (no files written) on any unresolved warning:
+node dmn/pipeline.js input.json output --strict
+
+# Enable the opt-in best_practice rule layer:
+node dmn/pipeline.js input.json output --best-practice
 ```
 
 ## Known Limitations

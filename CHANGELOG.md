@@ -7,7 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **DMN 1.3 XML + DMNDI generation — a real `.dmn` file now exists.**
+  `scripts/dmn/dmn-xml.js` (`generateDmnXml`, `validateDmnXml`) and `scripts/dmn/pipeline.js`
+  (`runDmnPipeline` + CLI), completing Stages 3–4 of
+  `docs/superpowers/plans/2026-07-30-dmn-integration.md`.
+  - New runtime dependency: `dmn-moddle@12.0.1`, symmetric to `bpmn-moddle` on the DMN side —
+    GATE 1, its three transitive dependencies identical to the already-installed `bpmn-moddle`'s.
+  - Requirements nest under their target element with the `href`-wrapper form
+    (`dmn:DMNElementReference`, a string, not an object reference — the opposite pattern from
+    `dmnElementRef`, which is). No literal `<decisionLogic>` element is emitted — DMN13.xsd has no
+    such element, only a comment over an `expression` substitution-group slot; the serialised child
+    is the concrete expression type directly (`decisionTable`, in every case this project produces
+    today).
+  - Attribute discipline against the four DMN 1.3 types that do not extend `tDMNElement` and
+    therefore carry no `id` (`tRuleAnnotation`, `tRuleAnnotationClause`, `tDMNElementReference`,
+    `tBinding` — the last structurally unreachable today, no `invocation` expression support yet).
+  - `usingTask`/`usingProcess` now accept a string or an array in Decision-Core (additive schema
+    change), covering DMN13.xsd's `0..unbounded` cardinality.
+  - XSD-validated via `xmllint` against `references/omg-spec/normative/dmn/DMN13.xsd` (Jest test
+    skips when the tool is absent), round-tripped through `dmn-moddle` and compared by field set —
+    not field by field, the same defect class that was invisible twice on the BPMN side (#36, #42) —
+    and exercised with two diagrams so the `DMNDiagram*` writer loop is not dead code.
+  - The `hitPolicy`/`preferredOrientation` normalisation on write was measured against the real
+    library rather than assumed from the XSD (which treats both attributes identically) — recorded
+    in `tests/fixtures/dmn/README.md`.
+  - Golden file: `tests/fixtures/dmn/discount-decision.expected.dmn`.
+  - **Not yet done:** the importer (DMN → Decision-Core), SVG rendering, and the MCP/HTTP tool
+    surface — Stages 5–7 of the integration plan, tracked there.
+- **Decision-Core: a schema and a layered rule engine for DMN input.**
+  `references/decision-core-schema.json` (ajv draft-2020-12, strict) plus `scripts/dmn/` with 17
+  rules in 3 layers and 2 modes. Field set decided against the normative DMN13.xsd, which dictated
+  two constraints that would not have been guessed: `name` is mandatory on every DRG element
+  (`tNamedElement`) and `namespace` on the document (`tDefinitions`).
+  - **`soundness` (ERROR)** — D01 dangling requirement references, D02 cycles, D03 impermissible or
+    mislabelled requirement pairs, D04 decision table without an output clause, D05 rule rows that
+    do not match the table width, D09 Collect operator over a compound output, D10 `PRIORITY`/
+    `OUTPUT ORDER` without output values, D11 crosstab that is not `UNIQUE`.
+  - **`semantics` (WARNING)** — D06 decision without logic, D07 orphaned input data, D08
+    `aggregation` without `COLLECT`.
+  - **`best_practice` (WARNING, opt-in)** — B01 avoid `FIRST` (the specification's own position),
+    B02 table size, B03 decision without a stated question, B04 untyped input data, B05 knowledge
+    source nobody can look up, B06 requirement chain depth. Thresholds in `config.json → dmn`.
+  - Modes `semantic` (default) and `best-practice`, mirroring `document`/`optimize`. A model being
+    documented as it is should not be nagged about how it ought to look. Profiles in
+    `rules/dmn-*.json` and project-specific ones under `rules/custom/` — loaded by path, never
+    scanned, so dropping a file in cannot change behaviour silently.
+  - **D03 checks pairs, not endpoints.** DMN 1.3 §6.2.3: "the type of the requirement is uniquely
+    determined by the types of the two elements connected". An endpoint check has holes in both
+    directions — it accepts `decision → decision` labelled *authority*, and the first version of
+    this rule wrongly rejected `knowledgeSource → businessKnowledgeModel`, which Table 2 permits.
+  - Deliberately out of scope: `decisionService`, boxed-expression types beyond decision table and
+    literal expression, `itemDefinition`, and completeness/overlap analysis.
+  **This does not yet produce a `.dmn` file** — that is Stage 4 of
+  `docs/superpowers/plans/2026-07-30-dmn-integration.md`. Counted separately from the BPMN engine;
+  the docs gate routes a claim to the DMN engine only when its line says "DMN".
+- **`scripts/shared/rule-profile.js`** — `loadRuleProfile`, `isRuleEnabled` and `getEffectiveSeverity` lifted
+  out of `rules.js` and shared by both engines. Nothing about them was BPMN-specific, and a severity
+  override applying to one engine but not the other would have been the same duplication defect this
+  codebase has already paid for three times. Re-exported from `rules.js`, so no importer changes.
+- **`decisionRef` on a Business Rule Task** — records *which* decision a task invokes. Until now the
+  element said "a rule set decides here" and nothing said which one. Serialised into
+  `<bpmn:extensionElements>` under the generator's own namespace (`EXTENSION_NS` in `utils.js`), read
+  back by both importers, covered by the field-set round-trip guard. Deliberately **not**
+  `camunda:decisionRef`: BPMN 2.0 defines no attribute for this link, and emitting a vendor one would
+  make every file claim a binding it does not have. The reverse direction is standardised — DMN's
+  `tDecision` carries `usingProcess`/`usingTask` — and is where the DMN side will attach.
+- **Rule M11** (Style, WARNING): `decisionRef` on anything other than a `businessRuleTask` is inert.
+  A warning rather than an error, because the file stays valid BPMN — `tExtensionElements` is
+  `<xsd:any namespace="##other">`, so the child is legal anywhere. Rule count 33 → 34.
+- **Docs gate proof #4 — `checkDocPaths`.** Every `scripts/`-, `references/`-, `rules/`-,
+  `tests/`-, `docs/`-, `frontend/`- or `.github/`-shaped path string mentioned in prose (plus
+  every `node <file>.js` CLI example) must resolve to a real file or directory, or be covered by
+  a reasoned allowlist entry for transient/generated paths. Guards against exactly what a later
+  restructure commit is about to do: move dozens of files and touch every doc reference to them.
+
 ### Fixed
+- **A build artifact outranked the source of truth.** `npm pack` — including the `--dry-run` the
+  docs gate runs for its package-integrity check — executes `prepack`, which copies
+  `references/input-schema.json` and `prompt-template.md` into `scripts/references/` so the npm
+  tarball can carry them (npm's `files` field cannot reach outside the package root). Nothing removed
+  the copy afterwards, and both runtime readers preferred it over the repo-root source. So after
+  running the docs gate once, every later edit to `references/` silently had no effect — and because
+  the directory is gitignored, `git status` said nothing either. For `prompt-template.md` no test
+  would ever have noticed. Neither CI (separate workflows, separate checkouts) nor the published
+  package (prepack refreshes the copy immediately before packing) was affected — this was a
+  developer-experience defect, and a quiet one.
+  The precedence is now inverted: the source wins, the in-package copy is the fallback. Resolution
+  moved into one place, `scripts/shared/resource-paths.js`, replacing two copies of the same logic that
+  carried different `..` depths and had no test between them. A `postpack` step removes the artifact
+  so it no longer outlives the build. Script count 30 → 31.
 - **Subprocess children reached the XML with only their id and name.** The child branch of
   `buildProcess` was a hand-rolled subset of the top-level node loop, so `documentation`,
   standard-loop and multi-instance characteristics, `scriptFormat`, the script body,
@@ -42,6 +131,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing files still load.
 
 ### Changed
+- **Modular layout: `scripts/bpmn/`, `scripts/dmn/`, `scripts/shared/`.** The BPMN pipeline
+  (22 modules incl. both importers and the redesign toolbox) moved to `scripts/bpmn/`; the
+  format-independent core (`utils`, `rule-profile`, `resource-paths`) to `scripts/shared/`;
+  standalone tooling stays top-level. Preparation for a third notation — every notation gets
+  the same internal shape. **The npm API is unchanged** (`exports` maps the public
+  specifiers onto the new paths; no shims, no major bump). CLI invocations change:
+  `node bpmn/pipeline.js …` from `scripts/`. Behaviour is provably identical — generated
+  outputs are byte-identical against the pre-move baseline.
+  `scripts/shared/utils.js` now carries only what both engines use; the 13 BPMN-only layout
+  constants (`SHAPE`, `SW`, `CLR`, lane/label/gap/padding sizes) moved out to
+  `scripts/bpmn/constants.js` — `dmn/` imports none of them. Same guarantee: byte-identical
+  outputs against the pre-move baseline.
 - A subprocess's content is now serialised whether or not it is expanded. `isExpanded` is a
   presentation property and stays confined to the DI (`BPMNShape`); gating the content on it made
   "collapsed but drillable" — legal BPMN — inexpressible and produced an empty box. Both importers

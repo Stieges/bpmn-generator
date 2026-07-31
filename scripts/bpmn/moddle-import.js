@@ -250,6 +250,12 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
       node.implementation = el.implementation;
     }
 
+    // decisionRef out of our own extensionElements. Matched on the local name so
+    // a file written with a different prefix for the same namespace still reads.
+    const decisionRefEl = (el.extensionElements?.values ?? [])
+      .find(v => v.$type?.split(':').pop() === 'decisionRef');
+    if (decisionRefEl?.$body) node.decisionRef = decisionRefEl.$body;
+
     // EventBasedGateway
     if (type === 'eventBasedGateway') {
       if (el.eventGatewayType && el.eventGatewayType !== 'Exclusive') node.eventGatewayType = el.eventGatewayType;

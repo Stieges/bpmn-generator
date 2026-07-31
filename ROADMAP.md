@@ -5,7 +5,7 @@ Created by: Daniel Stiegler + Claude
 
 ## 1 Current State (v3.6.0)
 
-The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (33 rules, 5 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
+The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (34 rules, 5 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
 
 ### 1.1 Implemented Features
 
@@ -13,7 +13,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 |---------|---------|--------|
 | Pipeline Architecture | 4 phases: LLM→JSON→ELK→XML/SVG | Done |
 | Modular Architecture | 13 ES modules, acyclic dependency graph | Done |
-| Rule Engine | 33 rules in 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization), configurable JSON profiles | Done |
+| Rule Engine | 34 rules in 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization), configurable JSON profiles | Done |
 | Flat Layout + Partitioning | Global Sugiyama layout, lanes as constraints | Done |
 | Topological Sorting | Nodes in happy-path order, ELK Model Order | Done |
 | Lane Ordering by Flow | Start lane on top, end lane at bottom | Done |
@@ -49,7 +49,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 scripts/
 ├── pipeline.js        Orchestrator + CLI
 │   ├── validate.js    Validation Wrapper → rules.js
-│   ├── rules.js       Rule Engine (33 rules, 5 layers, profiles)
+│   ├── rules.js       Rule Engine (34 rules, 5 layers, profiles)
 │   ├── topology.js    Gateway directions, topological sorting, lane ordering
 │   ├── layout.js      ELK graph construction + layout execution
 │   ├── coordinates.js Coordinate maps, edge clipping, pool equalization
@@ -144,7 +144,7 @@ bioc:stroke/bioc:fill attributes on BPMNShape elements, per-node colors in SVG r
 
 Opt-in post-layout polish: dynamic per-pool lane-header widths, edge-label collision repair via bbox-nudge, ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes), and lane padding compaction. Default `visualRefinement.enabled: false` — existing output byte-identical with flag off.
 
-**Files:** scripts/visual-refinement.js (new), scripts/utils.js (wrapText extension), scripts/pipeline.js (flag wiring), scripts/layout.js (wrapping hint), scripts/coordinates.js (per-pool laneHeaderWidth), config.json. Spec + plan in docs/superpowers/.
+**Files:** scripts/bpmn/visual-refinement.js (new), scripts/shared/utils.js (wrapText extension), scripts/bpmn/pipeline.js (flag wiring), scripts/bpmn/layout.js (wrapping hint), scripts/bpmn/coordinates.js (per-pool laneHeaderWidth), config.json. Spec + plan in docs/superpowers/.
 
 ---
 
@@ -190,7 +190,7 @@ Pure-JS Petri-Net verification (no Python bridge): BPMN → Place/Transition-Net
 
 Scope: XOR + AND gateways formalized. OR gateways → info warning. Event-based gateways + timer/signal events → skipped (not modelable in classical WF-Nets).
 
-**Files:** scripts/workflow-net.js (~300 LOC), scripts/rules.js (+WORKFLOW_NET_RULES, integration in runRules), rules/strict-profile.json, rules/default-profile.json, tests/fixtures/deadlock-process.json, pipeline.test.js (+7 WF tests)
+**Files:** scripts/bpmn/workflow-net.js (~300 LOC), scripts/bpmn/rules.js (+WORKFLOW_NET_RULES, integration in runRules), rules/strict-profile.json, rules/default-profile.json, tests/fixtures/deadlock-process.json, pipeline.test.js (+7 WF tests)
 
 ### L5 — BPMN as AI Orchestration Language | DEFERRED
 
@@ -247,6 +247,7 @@ Test suite green after all changes (current count verified via `npm test`).
 | Inline mode without task icons | HTML inline template renders simplified shapes. For full fidelity: pipeline.js. | — (by design) |
 | Formal soundness only for XOR/AND | WF-Net check covers XOR/AND gateways. OR gateways warning only, event-based GW skipped. | — (classical WF-Net limitation) |
 | Language analysis rules (M05/M06) | German labels require POS tagger — no reliable npm package available. | — (deferred) |
+| `evaluate-slm.js` measures structure, not extraction quality | Checks are JSON-parseable, has the required top-level keys (`pools` or `nodes`+`edges` — not the full `input-schema.json` ajv gate), pipeline validation passes, and node count is roughly right. No precision/recall against a ground-truth structure — gateway types, roles/lanes, conditions, and exception paths are not compared. | — (deferred; would need a scored fixture set with a hand-labeled ground truth per element class) |
 
 ---
 

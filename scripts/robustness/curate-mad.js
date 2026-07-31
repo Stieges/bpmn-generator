@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { dotToLogicCore } from '../dot.js';
+import { dotToLogicCore } from '../bpmn/dot.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = resolve(__dirname, '../../tests/fixtures/mad-subset');

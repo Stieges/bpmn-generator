@@ -4,7 +4,7 @@
  * Never loops — always returns done: true.
  */
 
-import { runRules, loadRuleProfile } from '../rules.js';
+import { runRules, loadRuleProfile } from '../bpmn/rules.js';
 
 export async function complianceAgent(state) {
   const profilePath = state.options?.ruleProfile || null;

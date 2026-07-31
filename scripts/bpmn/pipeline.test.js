@@ -24,18 +24,19 @@ import {
   extractSubProcessAsLogicCore,
 } from './pipeline.js';
 import { normalizeLaneAssignments, orderParticipantsByMessageFlow } from './topology.js';
-import { wrapText, wrapTextByPx } from './utils.js';
+import { wrapText, wrapTextByPx } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
 import { checkWorkflowNetSoundness, bpmnToPN } from './workflow-net.js';
 import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
-import { parseBody, validateCallbackUrl } from './http-server.js';
+import { parseBody, validateCallbackUrl } from '../http-server.js';
 import { checkDiagramIntegrity } from './di-check.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixturesDir = resolve(__dirname, '../tests/fixtures');
+const fixturesDir = resolve(__dirname, '../../tests/fixtures');
 
 function loadFixture(name) {
   return JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
@@ -1249,7 +1250,7 @@ describe('bpmn-moddle Import', () => {
     const { readdirSync, readFileSync, statSync, existsSync } = await import('fs');
     const { join } = await import('path');
 
-    const examplesDir = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn');
+    const examplesDir = resolve(__dirname, '../../references/omg-spec/informative/examples-bpmn');
     if (!existsSync(examplesDir)) {
       // OMG spec files are kept locally but not tracked in git (copyright).
       // Skip this test in CI or when files are not present.
@@ -1286,7 +1287,7 @@ describe('bpmn-moddle Import', () => {
 
   test('OMG nested lanes example imports correctly', async () => {
     const { readFileSync, existsSync } = await import('fs');
-    const nestedLanesFile = resolve(__dirname, '../references/omg-spec/informative/examples-bpmn/2010-06-03/Diagram Interchange/Examples - DI - Lanes and Nested Lanes.bpmn');
+    const nestedLanesFile = resolve(__dirname, '../../references/omg-spec/informative/examples-bpmn/2010-06-03/Diagram Interchange/Examples - DI - Lanes and Nested Lanes.bpmn');
     if (!existsSync(nestedLanesFile)) return; // OMG spec files not in git (copyright)
     const xml = readFileSync(nestedLanesFile, 'utf8');
 
@@ -1832,7 +1833,7 @@ describe('HTTP Server utilities', () => {
   test('validateCallbackUrlAsync rejects host that resolves to internal IP', async () => {
     // ESM `node:dns/promises` exports are read-only in Jest 30, so we inject the
     // lookup function via the test-only `_setDnsLookup` hook on http-server.
-    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('../http-server.js');
     _setDnsLookup(async (h) => h === 'evil.example.com'
       ? [{ address: '127.0.0.1', family: 4 }]
       : [{ address: '93.184.216.34', family: 4 }]);
@@ -1845,7 +1846,7 @@ describe('HTTP Server utilities', () => {
   });
 
   test('validateCallbackUrlAsync accepts host that resolves to public IP', async () => {
-    const { validateCallbackUrlAsync, _setDnsLookup } = await import('./http-server.js');
+    const { validateCallbackUrlAsync, _setDnsLookup } = await import('../http-server.js');
     _setDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]); // example.com public IP
     try {
       const result = await validateCallbackUrlAsync('https://example.com/webhook');
@@ -1856,7 +1857,7 @@ describe('HTTP Server utilities', () => {
   });
 
   test('validateCallbackUrlAsync passes through sync errors unchanged', async () => {
-    const { validateCallbackUrlAsync } = await import('./http-server.js');
+    const { validateCallbackUrlAsync } = await import('../http-server.js');
     // Raw internal IP — sync check catches it before DNS lookup is attempted
     expect(await validateCallbackUrlAsync('http://127.0.0.1/hook')).toMatch(/internal/);
     // Bad protocol — sync check catches it
@@ -1866,19 +1867,19 @@ describe('HTTP Server utilities', () => {
 
 describe('http-server production auth gate', () => {
   test('startupCheck refuses production without API key', async () => {
-    const { startupCheck } = await import('./http-server.js');
+    const { startupCheck } = await import('../http-server.js');
     expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: undefined }))
       .toThrow(/BPMN_API_KEY/);
   });
 
   test('startupCheck allows production with API key', async () => {
-    const { startupCheck } = await import('./http-server.js');
+    const { startupCheck } = await import('../http-server.js');
     expect(() => startupCheck({ NODE_ENV: 'production', BPMN_API_KEY: 'secret' }))
       .not.toThrow();
   });
 
   test('startupCheck warns in dev mode without API key', async () => {
-    const { startupCheck } = await import('./http-server.js');
+    const { startupCheck } = await import('../http-server.js');
     const warns = [];
     expect(() => startupCheck({ NODE_ENV: 'development', BPMN_API_KEY: undefined }, msg => warns.push(msg)))
       .not.toThrow();
@@ -1891,7 +1892,7 @@ describe('audit/dead-letter path configuration', () => {
     delete process.env.AUDIT_LOG_PATH;
     const os = await import('node:os');
     // cache-bust the import so module-init re-evaluates env
-    const { getAuditPath } = await import(`./audit.js?cb=default-${Date.now()}`);
+    const { getAuditPath } = await import(`../audit.js?cb=default-${Date.now()}`);
     const p = getAuditPath();
     expect(p.startsWith(os.tmpdir())).toBe(true);
     expect(p).toMatch(/bpmn-generator/);
@@ -1902,7 +1903,7 @@ describe('audit/dead-letter path configuration', () => {
     process.env.AUDIT_LOG_PATH = '/tmp/test-audit-' + Date.now() + '.jsonl';
     const expected = process.env.AUDIT_LOG_PATH;
     const fs = await import('node:fs');
-    const { auditLog, getAuditPath } = await import(`./audit.js?cb=env-${Date.now()}`);
+    const { auditLog, getAuditPath } = await import(`../audit.js?cb=env-${Date.now()}`);
     expect(getAuditPath()).toBe(expected);
     auditLog({ event: 'env-path-test' });
     expect(fs.existsSync(expected)).toBe(true);
@@ -1913,7 +1914,7 @@ describe('audit/dead-letter path configuration', () => {
   test('delivery module honors DEAD_LETTER_PATH env', async () => {
     const dir = '/tmp/test-dl-' + Date.now();
     process.env.DEAD_LETTER_PATH = dir;
-    const { getDeadLetterDir } = await import(`./delivery.js?cb=env-${Date.now()}`);
+    const { getDeadLetterDir } = await import(`../delivery.js?cb=env-${Date.now()}`);
     expect(getDeadLetterDir()).toBe(dir);
     const fs = await import('node:fs');
     expect(fs.existsSync(dir)).toBe(true);
@@ -3347,7 +3348,7 @@ describe('subprocess children — nothing is lost on the way down', () => {
 
     for (const [id, orig] of before) {
       const got = after.get(id);
-      for (const field of ['documentation', 'scriptFormat', 'script', 'calledElement', 'attachedTo']) {
+      for (const field of ['documentation', 'scriptFormat', 'script', 'calledElement', 'attachedTo', 'decisionRef']) {
         if (orig[field] === undefined) continue;
         expect({ id, field, value: got[field] }).toEqual({ id, field, value: orig[field] });
       }
@@ -3434,6 +3435,102 @@ describe('rule S13 — boundary events, at every nesting level', () => {
   test('a correctly nested boundary event passes', async () => {
     const r = await runPipeline(loadFixture('subprocess-child-fidelity.json'));
     expect(r.validation.errors).toEqual([]);
+  });
+});
+
+describe('the bridge — which decision a Business Rule Task invokes', () => {
+  // BPMN 2.0 has no standard attribute for this. The DMN side of the link IS
+  // standard (Decision/usingTask in DMN13.xsd) but points the other way, so the
+  // BPMN side goes into extensionElements under our own namespace rather than
+  // borrowing camunda:, which CLAUDE.md rules out.
+  const wrap = (nodes, edges) => ({ pools: [{ id: 'P', name: 'P', nodes, edges }] });
+  const simple = (extra = {}) => wrap([
+    { id: 's', type: 'startEvent', name: 'Start' },
+    { id: 'r', type: 'businessRuleTask', name: 'Rate request', ...extra },
+    { id: 'e', type: 'endEvent', name: 'End' },
+  ], [
+    { id: 'f1', source: 's', target: 'r' },
+    { id: 'f2', source: 'r', target: 'e' },
+  ]);
+
+  test('it is written into extensionElements, with its namespace declared', async () => {
+    // The namespace is the whole risk here: written via $attrs without an xmlns
+    // declaration, moddle drops the value entirely — logging to stderr while
+    // warnings stays empty and nothing throws. createAny carries the URI along.
+    const r = await runPipeline(simple({ decisionRef: 'RatingDecision' }));
+    expect(r.bpmnXml).toMatch(/<bpmn:extensionElements>[\s\S]*decisionRef[\s\S]*<\/bpmn:extensionElements>/);
+    expect(r.bpmnXml).toContain('RatingDecision');
+    expect(r.bpmnXml).toMatch(/xmlns:\w+="http:\/\/bpmn-generator\/schema\/1\.0"/);
+  });
+
+  test('the file we write is still clean BPMN', async () => {
+    // extensionElements takes <xsd:any namespace="##other">, so a foreign-namespace
+    // child is legal on any BaseElement. This asserts we actually got that right
+    // rather than repeating the #36 mistake in a new place.
+    const r = await runPipeline(simple({ decisionRef: 'RatingDecision' }));
+    expect(r.validation.xmlWarnings ?? []).toEqual([]);
+  });
+
+  test('both importers read it back — not just the primary one', async () => {
+    // import.js is the fallback path. Fixing only moddle-import.js leaves the
+    // round trip lossy through the other door, which is how this class of defect
+    // has twice looked repaired while it was not.
+    const r = await runPipeline(simple({ decisionRef: 'RatingDecision' }));
+    const viaModdle = await bpmnToLogicCore(r.bpmnXml);
+    const viaLegacy = bpmnToLogicCoreLegacy(r.bpmnXml);
+    const find = (lc) => (lc.pools ? lc.pools[0].nodes : lc.nodes).find(n => n.id === 'r');
+    expect(find(viaModdle).decisionRef).toBe('RatingDecision');
+    expect(find(viaLegacy).decisionRef).toBe('RatingDecision');
+  });
+
+  test('a node without one gets no empty extensionElements', async () => {
+    const r = await runPipeline(simple());
+    expect(r.bpmnXml).not.toContain('extensionElements');
+  });
+
+  test('M11 warns when it sits on something that cannot invoke a decision', async () => {
+    const lc = wrap([
+      { id: 's', type: 'startEvent' },
+      { id: 'u', type: 'userTask', name: 'Check by hand', decisionRef: 'RatingDecision' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'u' },
+      { id: 'f2', source: 'u', target: 'e' },
+    ]);
+    const v = validateLogicCore(lc);
+    expect(v.errors).toEqual([]);                       // legal BPMN, so not an error
+    expect(v.warnings.join(' ')).toMatch(/decisionRef on a non-businessRuleTask/);
+  });
+
+  test('M11 stays quiet where it belongs, at any nesting depth', async () => {
+    const v = validateLogicCore(simple({ decisionRef: 'RatingDecision' }));
+    expect(v.warnings.join(' ')).not.toMatch(/decisionRef/);
+
+    const nested = wrap([
+      { id: 's', type: 'startEvent' },
+      { id: 'sub', type: 'subProcess', name: 'Sub', isExpanded: true,
+        nodes: [
+          { id: 'cs', type: 'startEvent' },
+          { id: 'cr', type: 'businessRuleTask', name: 'Rate', decisionRef: 'D1' },
+          { id: 'ce', type: 'endEvent' },
+        ],
+        edges: [{ id: 'cf1', source: 'cs', target: 'cr' }, { id: 'cf2', source: 'cr', target: 'ce' }] },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'sub' },
+      { id: 'f2', source: 'sub', target: 'e' },
+    ]);
+    expect(validateLogicCore(nested).warnings.join(' ')).not.toMatch(/decisionRef/);
+  });
+
+  test('the schema accepts it', () => {
+    expect(validateLogicCoreSchema(simple({ decisionRef: 'RatingDecision' })).valid).toBe(true);
+  });
+
+  test('the schema still rejects an unknown neighbour of it', () => {
+    // additionalProperties:false on Node is what makes the schema a gate rather
+    // than a suggestion — assert the door is still shut next to the new field.
+    expect(validateLogicCoreSchema(simple({ decisionReff: 'typo' })).valid).toBe(false);
   });
 });
 

@@ -11,7 +11,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runPipeline } from '../pipeline.js';
+import { runPipeline } from '../bpmn/pipeline.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, '..', '..', 'tests', 'fixtures');

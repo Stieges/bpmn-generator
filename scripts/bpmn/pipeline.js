@@ -26,7 +26,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 // Module imports
-import { loadConfig, CFG } from './utils.js';
+import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
@@ -347,7 +347,7 @@ async function main() {
 
   // Schema-Gate (ajv, draft-2020-12): LLM/handwritten Logic-Core is never trusted
   // raw — enforce the formal input-schema before the pipeline, same guarantee the
-  // HTTP entry already has. See references/input-schema.json + scripts/schema-gate.js.
+  // HTTP entry already has. See references/input-schema.json + scripts/bpmn/schema-gate.js.
   const schemaCheck = validateLogicCoreSchema(parsedInput);
   if (!schemaCheck.valid) {
     console.error('\n✗ Schema-Gate: Logic-Core input violates references/input-schema.json:');

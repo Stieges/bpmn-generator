@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpmn-generator.local/decision-core.schema.json",
+  "title": "DMN Decision-Core",
+  "description": "Input format for the DMN generator. Sibling of the BPMN Logic-Core, deliberately shaped the same way: a flat node list plus a flat edge list. DMN 1.3 (OMG formal/21-01-01) nests requirements inside the element that requires them; the writer nests on the way out and the importer flattens on the way in, exactly as the BPMN side already does for boundary events.",
+  "type": "object",
+  "required": ["namespace", "nodes"],
+  "properties": {
+    "$schemaVersion": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Optional schema version (current: \"1.0\"). Absent or \"1.0\" accepted."
+    },
+    "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$", "description": "Definitions id" },
+    "name": { "type": "string", "description": "Definitions name. tNamedElement declares name as required, so a fallback is emitted when this is absent" },
+    "namespace": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Required by DMN13.xsd tDefinitions/@namespace. The target namespace of this decision model — an absolute URI identifying the model, not a schema location"
+    },
+    "expressionLanguage": {
+      "type": "string",
+      "description": "Defaults to FEEL (https://www.omg.org/spec/DMN/20191111/FEEL/) when omitted. Expressions are carried as text either way — nothing here parses FEEL"
+    },
+    "documentation": { "type": "string", "description": "Serialised as tDMNElement/description" },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/Node" }, "minItems": 1 },
+    "requirements": { "type": "array", "items": { "$ref": "#/$defs/Requirement" } }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "Node": {
+      "type": "object",
+      "required": ["id", "type", "name"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "type": {
+          "enum": ["decision", "inputData", "knowledgeSource", "businessKnowledgeModel"],
+          "description": "The DRG element classes that substitute into DMN13.xsd's drgElement group. decisionService is deliberately out of scope for now — it is a grouping construct with four reference lists and its own DI divider line"
+        },
+        "name": {
+          "type": "string",
+          "description": "Required, and not by our choice: every DRG element extends tNamedElement, which declares name use=\"required\""
+        },
+        "documentation": { "type": "string", "description": "Serialised as tDMNElement/description" },
+        "variable": { "type": "string", "description": "Name of the information item this element produces. Defaults to the element name when omitted" },
+        "typeRef": { "type": "string", "description": "Type of the produced variable, e.g. string, number, boolean, date" },
+
+        "question": { "type": "string", "description": "decision only — tDecision/question" },
+        "allowedAnswers": { "type": "string", "description": "decision only — tDecision/allowedAnswers" },
+        "usingTask": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ],
+          "description": "decision only — id(s) of the BPMN Business Rule Task(s) this decision serves. The OMG-standard direction of the BPMN<->DMN link (tDecision/usingTask, 0..unbounded); the BPMN side carries the mirror in extensionElements because BPMN 2.0 defines no attribute for it. A single string covers the common one-task case; an array covers the XSD's unbounded cardinality"
+        },
+        "usingProcess": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ],
+          "description": "decision only — id(s) of the BPMN process(es) this decision serves (tDecision/usingProcess, 0..unbounded)"
+        },
+        "decisionTable": { "$ref": "#/$defs/DecisionTable", "description": "decision only — decision logic as a table" },
+        "expression": { "type": "string", "description": "decision only — decision logic as a literal expression. Mutually exclusive with decisionTable" },
+
+        "sourceType": { "type": "string", "description": "knowledgeSource only — tKnowledgeSource/type, e.g. \"Policy document\"" },
+        "locationURI": { "type": "string", "description": "knowledgeSource only — where the authority lives" },
+
+        "parameters": {
+          "type": "array",
+          "description": "businessKnowledgeModel only — the formal parameters of its encapsulated logic",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "typeRef": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "body": { "type": "string", "description": "businessKnowledgeModel only — the literal expression its encapsulated logic evaluates" }
+      },
+      "additionalProperties": false
+    },
+
+    "Requirement": {
+      "type": "object",
+      "required": ["type", "source", "target"],
+      "description": "An edge of the decision requirement graph. source/target read in FLOW direction: the required element is the source, the requiring element is the target. The XML nests the requirement under the target.",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "type": {
+          "enum": ["information", "knowledge", "authority"],
+          "description": "information: decision|inputData -> decision. knowledge: businessKnowledgeModel -> decision|businessKnowledgeModel. authority: decision|inputData|knowledgeSource -> knowledgeSource|decision"
+        },
+        "source": { "type": "string" },
+        "target": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "DecisionTable": {
+      "type": "object",
+      "required": ["outputs"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "hitPolicy": {
+          "enum": ["UNIQUE", "FIRST", "PRIORITY", "ANY", "COLLECT", "RULE ORDER", "OUTPUT ORDER"],
+          "description": "Defaults to UNIQUE. Note bpmn-io's dmn-moddle drops hitPolicy=\"UNIQUE\" on write because it is the schema default, while keeping preferredOrientation=\"Rule-as-Row\" which is also a default — relevant to golden files, not to meaning"
+        },
+        "aggregation": { "enum": ["SUM", "COUNT", "MIN", "MAX"], "description": "Only meaningful with hitPolicy COLLECT" },
+        "preferredOrientation": { "enum": ["Rule-as-Row", "Rule-as-Column", "CrossTable"] },
+        "outputLabel": { "type": "string" },
+        "inputs": { "type": "array", "items": { "$ref": "#/$defs/InputClause" } },
+        "outputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OutputClause" },
+          "minItems": 1,
+          "description": "At least one is mandatory: DMN13.xsd gives tDecisionTable/output no minOccurs, so it defaults to 1"
+        },
+        "annotations": {
+          "type": "array",
+          "description": "Rule annotation COLUMNS (headers). Note tRuleAnnotationClause carries only a name — unlike almost everything else in DMN it does not extend tDMNElement and therefore has no id",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": { "name": { "type": "string" } },
+            "additionalProperties": false
+          }
+        },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/DecisionRule" } }
+      },
+      "additionalProperties": false
+    },
+
+    "InputClause": {
+      "type": "object",
+      "required": ["expression"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "label": { "type": "string", "description": "Column header shown to readers" },
+        "expression": { "type": "string", "description": "The value being tested, as text. Not parsed" },
+        "typeRef": { "type": "string" },
+        "allowedValues": { "type": "string", "description": "Unary tests constraining the input domain, as text" }
+      },
+      "additionalProperties": false
+    },
+
+    "OutputClause": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "name": { "type": "string", "description": "Required when the table has more than one output clause" },
+        "typeRef": { "type": "string" },
+        "allowedValues": { "type": "string" },
+        "defaultValue": { "type": "string", "description": "Used when no rule matches" }
+      },
+      "additionalProperties": false
+    },
+
+    "DecisionRule": {
+      "type": "object",
+      "required": ["then"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "when": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "One unary test per input clause, in order. Text, not parsed"
+        },
+        "then": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "One result expression per output clause, in order"
+        },
+        "annotations": { "type": "array", "items": { "type": "string" }, "description": "One entry per annotation column, in order" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
