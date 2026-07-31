@@ -60,7 +60,7 @@ scripts/dmn/
   constants.js     the four DRD shape sizes, edge markers, spacing (from CFG.dmn)
   layout.js        Decision-Core → ELK → positioned graph
   coordinates.js   positioned graph → diagram LIST
-  di-check.js      geometry pass → diagnostics (DD01–DD04)
+  di-check.js      geometry pass → diagnostics (DD01–DD03)
   dmn-xml.js       generateDmnXml + validateDmnXml (dmn-moddle)
   pipeline.js      runDmnPipeline + CLI
 ```
@@ -224,7 +224,7 @@ the fixture's README. The XSD gives no basis for predicting it.
 | Where the straight clip lives | `shared/geometry.js`, two functions only | A second notation needs those two. The three orthogonal helpers stay in `bpmn/` although they are equally notation-free: `shared/` takes what a second notation demonstrably imports, which is the rule Commit C of the restructure applied |
 | The bridge as a mechanism | **Not now** | `usingTask` is the second cross-model reference and the ArchiMate note calls for designing the mechanism before it exists — but doing it here would touch working BPMN code in both importers and the schema, and would blur this plan's goal. It gets its own small plan |
 | `usingTask` / `usingProcess` shape | Accept string **or** array | Additive, breaks nothing, and covers the XSD's `0..unbounded` |
-| DI code namespace | `DD01`–`DD04` | `DI01`–`DI06` are taken; a shared numbering would hide which notation a code belongs to |
+| DI code namespace | `DD01`–`DD03` | `DI01`–`DI06` are taken; a shared numbering would hide which notation a code belongs to |
 | XSD validation | Test, skipping when absent | Strongest available proof without making the suite depend on a system tool |
 | The Stage 3–7 plan document | Refreshed in commit 6 | It stays the map for Stages 5–7; leaving it with dead paths and three refuted claims would mislead whoever picks it up |
 | `package.json` `exports` | **Untouched** | Public entry points are Stage 7. The package-integrity check is scoped to exports-reachable files, so `dmn/` correctly stays out of it for now |
