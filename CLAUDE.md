@@ -378,7 +378,7 @@ the ambiguity worth failing on.
 - Functions are pure (no global state except `CFG`)
 - IDs in Logic-Core: `^[a-zA-Z_][a-zA-Z0-9_-]*$`
 - XML escaping via `esc()` from `utils.js`
-- Coordinates always as `{ x, y, width, height }` objects
+- Coordinates in the internal `coordMap` contract (`{ coords, laneCoords, poolCoords, edgeCoords, edgeLabels }`, and its DMN analogue) are always `{ x, y, w, h }` — **`w`/`h`, not `width`/`height`**. Only the emitted DI attributes (`dc:Bounds`) use `width`/`height`; `bpmn-xml.js` and `svg.js` translate on the way out.
 
 ### Security defaults (HTTP API + MCP)
 

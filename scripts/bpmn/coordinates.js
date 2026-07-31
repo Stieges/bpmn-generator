@@ -7,6 +7,7 @@ import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP } from './constants.js';
 import { CFG } from '../shared/utils.js';
 import { identifyHappyPathNodes, resolveLaneId } from './topology.js';
+import { clipStraight, clipToRect } from '../shared/geometry.js';
 
 function buildCoordinateMap(elkResult, lc) {
   const coords     = {};
@@ -769,30 +770,8 @@ function placeArtifacts(coords, allProcesses, lc) {
   }
 }
 
-/**
- * Straight connection between two shapes, clipped to both borders.
- * Associations are drawn as straight lines in BPMN, so this is a plain
- * centre-to-centre segment cut back to where it meets each rectangle.
- */
-function clipStraight(a, b) {
-  const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
-  const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-  return [clipToRect(ac, bc, a), clipToRect(bc, ac, b)];
-}
-
-/** Move `from` (a shape centre) onto the border of `rect`, along from→towards. */
-function clipToRect(from, towards, rect) {
-  const dx = towards.x - from.x;
-  const dy = towards.y - from.y;
-  if (dx === 0 && dy === 0) return { x: from.x, y: from.y };
-  const halfW = rect.w / 2;
-  const halfH = rect.h / 2;
-  const scale = Math.min(
-    dx === 0 ? Infinity : halfW / Math.abs(dx),
-    dy === 0 ? Infinity : halfH / Math.abs(dy),
-  );
-  return { x: from.x + dx * scale, y: from.y + dy * scale };
-}
+// clipStraight/clipToRect moved to scripts/shared/geometry.js — a second notation (DMN's DRD)
+// needs the same straight-line clip. See that file's header comment for the shared/ boundary rule.
 
 function messageFlowKey(mf) {
   return mf.id || `mf_${mf.source}_${mf.target}`;
@@ -948,6 +927,19 @@ function placeBoundaryEvents(coords, allProcesses) {
   }
   return placed;
 }
+
+// clipOrthogonal and its three helpers below (clipCircleOrthogonal, clipDiamondOrthogonal,
+// clipRectOrthogonal) stay here rather than moving to shared/geometry.js with clipStraight and
+// clipToRect, even though they know no more about BPMN's semantics than those two did — the
+// dispatcher branches on isEvent(type)/isGateway(type), but the three helpers it dispatches to are
+// themselves plain shape maths. They stay anyway: shared/ takes what a second notation
+// demonstrably imports, not everything that could be phrased format-independently. DMN's
+// requirement connections are straight lines (DMN 1.3 §6.2.2 prescribes arrowheads and line style,
+// not routing), so DMN only ever needed the straight clip. A diamond is, in this repository, a
+// BPMN gateway and nothing else — DMN has none, ArchiMate has none — so under the broader rule
+// clipDiamondOrthogonal would sit in shared/ unused forever. See
+// docs/superpowers/specs/2026-07-31-dmn-drd-and-serialisation-design.md, "Where the boundary
+// actually runs, and why it leaves pure code behind".
 
 /**
  * Orthogonal clipping: project endpoint onto shape boundary while keeping
