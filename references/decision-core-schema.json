@@ -48,10 +48,19 @@
         "question": { "type": "string", "description": "decision only — tDecision/question" },
         "allowedAnswers": { "type": "string", "description": "decision only — tDecision/allowedAnswers" },
         "usingTask": {
-          "type": "string",
-          "description": "decision only — id of the BPMN Business Rule Task this decision serves. The OMG-standard direction of the BPMN<->DMN link (tDecision/usingTask); the BPMN side carries the mirror in extensionElements because BPMN 2.0 defines no attribute for it"
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ],
+          "description": "decision only — id(s) of the BPMN Business Rule Task(s) this decision serves. The OMG-standard direction of the BPMN<->DMN link (tDecision/usingTask, 0..unbounded); the BPMN side carries the mirror in extensionElements because BPMN 2.0 defines no attribute for it. A single string covers the common one-task case; an array covers the XSD's unbounded cardinality"
         },
-        "usingProcess": { "type": "string", "description": "decision only — id of the BPMN process this decision serves" },
+        "usingProcess": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ],
+          "description": "decision only — id(s) of the BPMN process(es) this decision serves (tDecision/usingProcess, 0..unbounded)"
+        },
         "decisionTable": { "$ref": "#/$defs/DecisionTable", "description": "decision only — decision logic as a table" },
         "expression": { "type": "string", "description": "decision only — decision logic as a literal expression. Mutually exclusive with decisionTable" },
 

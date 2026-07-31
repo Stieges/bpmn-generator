@@ -50,6 +50,12 @@ describe('DMN schema gate', () => {
     dc.nodes[4].decisionTable.outputs = [];
     expect(validateDecisionCoreSchema(dc).valid).toBe(false);
   });
+
+  test('usingTask accepts an array, not only a single string (DMN13.xsd: 0..unbounded)', () => {
+    const dc = good();
+    dc.nodes[4].usingTask = ['task_applyDiscount', 'task_reviewDiscount'];
+    expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+  });
 });
 
 describe('DMN rule engine — the reference model is clean', () => {
