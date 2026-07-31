@@ -55,8 +55,21 @@ export async function runDmnPipeline(dc, opts = {}) {
   const diagrams = buildDmnDiagrams(input, laidOut);
   const diagnostics = checkDmnDiagramIntegrity(diagrams);
 
-  const xml = await generateDmnXml(input, diagrams);
-  const roundTrip = await validateDmnXml(xml);
+  let xml, roundTrip;
+  try {
+    xml = await generateDmnXml(input, diagrams);
+    roundTrip = await validateDmnXml(xml);
+  } catch (err) {
+    // diagrams/diagnostics are already computed and correct at this point — unlike the two
+    // early returns above, where null means "never reached this stage", here it would mean
+    // "computed but discarded". Keeping them real preserves a usable diagnostic even when
+    // serialisation itself fails (e.g. an illegal requirement pairing that only reached this
+    // point because the corresponding rule was disabled in the profile).
+    return {
+      xml: null, diagrams, diagnostics,
+      validation: { errors: [`[serialisation] ${err.message}`], warnings, infos, xmlWarnings: [], mode },
+    };
+  }
 
   return {
     xml, diagrams, diagnostics,

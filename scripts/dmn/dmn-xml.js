@@ -179,7 +179,19 @@ function attachRequirements(dc, nodeMap) {
     let reqEl;
     if (req.type === 'information') {
       reqEl = create('dmn:InformationRequirement', { id: key });
-      if (sourceNode.type === 'decision') reqEl.requiredDecision = ref; else reqEl.requiredInput = ref;
+      if (sourceNode.type === 'decision') reqEl.requiredDecision = ref;
+      else if (sourceNode.type === 'inputData') reqEl.requiredInput = ref;
+      else {
+        // DMN 1.3 §6.2.3 Table 2: an InformationRequirement's source must be a decision
+        // (-> requiredDecision) or inputData (-> requiredInput). A knowledgeSource (or any
+        // other node type) is not a legal source for this requirement kind — only an
+        // AuthorityRequirement may point at a knowledgeSource. D03 rejects this pairing by
+        // default; this throw is the last line of defense when that rule has been disabled.
+        throw new Error(
+          `Illegal information requirement: source "${req.source}" is a ${sourceNode.type}, ` +
+          `but an InformationRequirement's source must be a decision or inputData ` +
+          `(DMN 1.3 §6.2.3, Table 2).`);
+      }
       targetEl.get('informationRequirement').push(reqEl); // nest
     } else if (req.type === 'knowledge') {
       reqEl = create('dmn:KnowledgeRequirement', { id: key, requiredKnowledge: ref });

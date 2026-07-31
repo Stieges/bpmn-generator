@@ -84,6 +84,28 @@ describe('runDmnPipeline — degenerate inputs', () => {
   });
 });
 
+describe('runDmnPipeline — serialisation error surfaces as a structured result', () => {
+  test('an illegal information-requirement source that only reaches the writer because D03 is OFF ' +
+    'surfaces as xml: null with diagrams/diagnostics still populated, not an unhandled rejection', async () => {
+    const dc = good();
+    // ks_discountPolicy is a knowledgeSource; DMN 1.3 §6.2.3 Table 2 forbids a knowledgeSource as
+    // the source of an 'information' requirement (only 'authority' requirements may point at one).
+    // D03 would normally catch this before layout — disable it via ruleProfile to reach dmn-xml.js.
+    dc.requirements.push({ id: 'ir_illegal', type: 'information', source: 'ks_discountPolicy', target: 'dec_discountLevel' });
+    const result = await runDmnPipeline(dc, { ruleProfile: { overrides: { D03: { severity: 'OFF' } } } });
+    expect(result.xml).toBeNull();
+    // Unlike the schema-gate and rule-engine early returns above, layout/coordinates/di-check DID
+    // run and produced real values — those must survive, not collapse into null alongside xml.
+    expect(Array.isArray(result.diagrams)).toBe(true);
+    expect(result.diagrams.length).toBeGreaterThan(0);
+    expect(result.diagnostics).not.toBeNull();
+    expect(result.diagnostics.ok).toBe(true);
+    expect(result.validation.errors.length).toBeGreaterThan(0);
+    expect(result.validation.errors.join(' ')).toMatch(/\[serialisation\]/);
+    expect(result.validation.errors.join(' ')).toMatch(/knowledgeSource/);
+  });
+});
+
 describe('DMN Golden-File Regression', () => {
   test('discount-decision.json: xml matches golden file byte-for-byte', async () => {
     const result = await runDmnPipeline(good());

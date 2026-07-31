@@ -249,6 +249,38 @@ describe('generateDmnXml — field-set round trip (discount-decision.json, full 
   });
 });
 
+describe('generateDmnXml — informationRequirement source-type arms', () => {
+  test('a decision source uses requiredDecision and an inputData source uses requiredInput', async () => {
+    const dc = good();
+    const diagrams = oneNodeDiagram('dec_finalPercentage');
+    const xml = await generateDmnXml(dc, diagrams);
+    const reader = new DmnModdle();
+    const { rootElement, warnings } = await reader.fromXML(xml);
+    expect(warnings).toEqual([]);
+
+    const decision = rootElement.get('drgElement').find((e) => e.id === 'dec_finalPercentage');
+    const reqs = decision.get('informationRequirement');
+    // ir_2: dec_discountLevel (decision) -> dec_finalPercentage
+    const fromDecision = reqs.find((r) => r.requiredDecision?.href === '#dec_discountLevel');
+    expect(fromDecision).toBeDefined();
+    expect(fromDecision.requiredInput).toBeUndefined();
+    // ir_3: in_customerSince (inputData) -> dec_finalPercentage
+    const fromInputData = reqs.find((r) => r.requiredInput?.href === '#in_customerSince');
+    expect(fromInputData).toBeDefined();
+    expect(fromInputData.requiredDecision).toBeUndefined();
+  });
+
+  test('a knowledgeSource source for an information requirement throws, naming the illegal type', async () => {
+    const dc = good();
+    // ks_discountPolicy is a knowledgeSource; DMN 1.3 §6.2.3 Table 2 permits only decision or
+    // inputData as the source of an InformationRequirement — a knowledgeSource may only be the
+    // source of an AuthorityRequirement.
+    dc.requirements.push({ id: 'ir_illegal', type: 'information', source: 'ks_discountPolicy', target: 'dec_discountLevel' });
+    const diagrams = oneNodeDiagram('dec_discountLevel');
+    await expect(generateDmnXml(dc, diagrams)).rejects.toThrow(/knowledgeSource/);
+  });
+});
+
 function xmllintAvailable() {
   try {
     execFileSync('xmllint', ['--version'], { stdio: 'ignore' });
