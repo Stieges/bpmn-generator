@@ -122,6 +122,53 @@ describe('buildDmnDiagrams — degenerate inputs', () => {
     expect(coordMap.coords.ks_C).toEqual({ x: 620, y: 220, w: 100, h: 63 });
     expect(size).toEqual({ w: 740, h: 303 });
   });
+
+  test('a degenerate ELK child with NaN/undefined dimensions does not poison the canvas and does not throw', () => {
+    const dc = {
+      id: 'Definitions_nan', name: 'NaN guard', namespace: 'urn:test',
+      nodes: [
+        { id: 'dec_A', type: 'decision', name: 'A' },
+        { id: 'dec_bad', type: 'decision', name: 'Bad' },
+      ],
+      requirements: [
+        { id: 'req_1', type: 'information', source: 'dec_bad', target: 'dec_A' },
+      ],
+    };
+    const laidOutGraph = {
+      id: 'root',
+      children: [
+        { id: 'dec_A', x: 0, y: 0, width: 180, height: 80 },
+        // A degenerate ELK layout: NaN x, undefined y/width/height.
+        { id: 'dec_bad', x: NaN, y: undefined, width: NaN, height: undefined },
+      ],
+    };
+
+    expect(() => buildDmnDiagrams(dc, laidOutGraph)).not.toThrow();
+    const diagrams = buildDmnDiagrams(dc, laidOutGraph);
+    const { coordMap } = diagrams[0];
+
+    // Every non-finite dimension degrades to 0, never NaN.
+    expect(coordMap.coords.dec_bad.x).not.toBeNaN();
+    expect(coordMap.coords.dec_bad.y).not.toBeNaN();
+    expect(coordMap.coords.dec_bad.w).toBe(0);
+    expect(coordMap.coords.dec_bad.h).toBe(0);
+    // The edge touching the degenerate shape also stays finite (clipStraight
+    // works off already-guarded coords, so no NaN can flow into edgeCoords).
+    for (const pt of coordMap.edgeCoords.req_1) {
+      expect(pt.x).not.toBeNaN();
+      expect(pt.y).not.toBeNaN();
+    }
+  });
+
+  test('absent children (undefined, not even an empty array) does not throw and yields empty coords', () => {
+    const dc = { id: 'Definitions_absent', name: 'Absent children', namespace: 'urn:test', nodes: [] };
+    const laidOutGraph = { id: 'root' }; // no `children` key at all
+    expect(() => buildDmnDiagrams(dc, laidOutGraph)).not.toThrow();
+    const diagrams = buildDmnDiagrams(dc, laidOutGraph);
+    expect(diagrams[0].coordMap.coords).toEqual({});
+    expect(diagrams[0].coordMap.edgeCoords).toEqual({});
+    expect(diagrams[0].size).toEqual({ w: 40, h: 40 });
+  });
 });
 
 describe('buildDmnDiagrams — every node/requirement kind from the reference fixture', () => {

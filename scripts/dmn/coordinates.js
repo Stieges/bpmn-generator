@@ -52,6 +52,8 @@ import { DRD_SPACING } from './constants.js';
  * @returns {string}
  */
 export function requirementKey(req) {
+  // `||`, not `??`, is deliberate: an empty-string id is not a usable identity either, and
+  // should fall through to the derived key just like `undefined`/`null` do.
   return req.id || `req_${req.source}_${req.target}`;
 }
 
@@ -64,8 +66,18 @@ export function buildDmnDiagrams(dc, laidOutGraph) {
   const margin = DRD_SPACING.margin;
 
   const rawCoords = {};
-  for (const child of (laidOutGraph?.children || [])) {
-    rawCoords[child.id] = { x: child.x || 0, y: child.y || 0, w: child.width, h: child.height };
+  for (const child of (laidOutGraph?.children ?? [])) {
+    // A degenerate ELK layout can hand back a non-finite x/y/width/height (e.g. NaN) instead of
+    // an absent one; `??`/`||` only catch absence. Guard each dimension individually so a bad
+    // child degrades to a 0-sized shape at 0,0 instead of poisoning every downstream coordinate
+    // (di-check.js's DD01-DD03 flag the resulting degenerate geometry). This must never throw —
+    // it runs one line before pipeline.js's try/catch around XML generation.
+    rawCoords[child.id] = {
+      x: Number.isFinite(child.x) ? child.x : 0,
+      y: Number.isFinite(child.y) ? child.y : 0,
+      w: Number.isFinite(child.width) ? child.width : 0,
+      h: Number.isFinite(child.height) ? child.height : 0,
+    };
   }
 
   const ids = Object.keys(rawCoords);
