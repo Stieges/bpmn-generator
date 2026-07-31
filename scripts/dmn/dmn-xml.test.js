@@ -38,6 +38,17 @@ describe('generateDmnXml — minimal Definitions', () => {
     const xml = await generateDmnXml(dc, oneNodeDiagram('d1'));
     expect(xml).toContain('name="Definitions_1"');
   });
+
+  test('a missing namespace throws rather than silently emitting XSD-invalid XML — tDefinitions/@namespace is required', async () => {
+    // Reachable directly: the JSON schema requires `namespace` and normally gates this before it
+    // reaches generateDmnXml, but generateDmnXml is exported and callable on its own (Task 6,
+    // tests, future callers). Without this guard the function emits <dmn:definitions> with no
+    // namespace attribute, validateDmnXml reports zero warnings (dmn-moddle's own round trip does
+    // not notice the omission), and only xmllint against DMN13.xsd catches it downstream.
+    const dc = { id: 'Definitions_1', name: 'No namespace',
+      nodes: [{ id: 'd1', type: 'decision', name: 'D1' }] };
+    await expect(generateDmnXml(dc, oneNodeDiagram('d1'))).rejects.toThrow(/namespace/i);
+  });
 });
 
 describe('generateDmnXml — businessKnowledgeModel', () => {
@@ -136,6 +147,26 @@ function fieldsOf(moddleEl) {
   return out;
 }
 
+/**
+ * Assert that every field present on `srcObj` — a plain Decision-Core JS object taken directly
+ * from the fixture, not a hand-picked list — reaches `moddleEl`'s field set (`fieldsOf`). `rename`
+ * covers fields whose serialised name legitimately differs (e.g. Decision-Core's plural
+ * `inputs` vs. moddle's `input`); `exclude` covers fields with no SAME-LEVEL XML counterpart at
+ * all. Every `exclude`/`rename` entry is commented at its call site with why, per the review
+ * finding that a static list can go stale silently: add a field to the fixture (or the schema)
+ * with no entry here and this assertion fails on its own, naming exactly the field that did not
+ * make the round trip — the completeness guarantee CLAUDE.md's "Adding a per-node field" section
+ * asks for, and the reason Step 11 asked for a field-set comparison in the first place.
+ */
+function assertFieldsSurvive(srcObj, moddleEl, { rename = {}, exclude = new Set() } = {}) {
+  const actual = fieldsOf(moddleEl);
+  const expected = [...new Set(
+    Object.keys(srcObj).filter((f) => !exclude.has(f)).map((f) => rename[f] ?? f)
+  )];
+  const missing = expected.filter((f) => !actual.has(f));
+  expect(missing).toEqual([]);
+}
+
 describe('generateDmnXml — field-set round trip (discount-decision.json, full fixture)', () => {
   test('every populated field on dec_discountLevel survives write + re-read', async () => {
     const dc = good();
@@ -146,40 +177,75 @@ describe('generateDmnXml — field-set round trip (discount-decision.json, full 
     expect(warnings).toEqual([]);
 
     const decision = rootElement.get('drgElement').find((e) => e.id === 'dec_discountLevel');
-    const fields = fieldsOf(decision);
-    // dec_discountLevel in the fixture carries: name, question, allowedAnswers, variable,
-    // decisionLogic (a decisionTable), usingTask, informationRequirement, authorityRequirement.
-    for (const expected of [
-      'name', 'question', 'allowedAnswers', 'variable',
-      'decisionLogic', 'usingTask', 'informationRequirement', 'authorityRequirement',
-    ]) {
-      expect(fields).toContain(expected);
-    }
+    const srcDecision = dc.nodes.find((n) => n.id === 'dec_discountLevel');
+
+    assertFieldsSurvive(srcDecision, decision, {
+      exclude: new Set([
+        // fieldsOf() treats id as bookkeeping — it is still decision.id itself, just not part of
+        // the field SET being compared here.
+        'id',
+        // structural — selects the moddle type (dmn:Decision) at construction time; not a field
+        // carried on the instance.
+        'type',
+      ]),
+      rename: {
+        typeRef: 'variable',            // folds into the nested InformationItem, not a same-level field
+        documentation: 'description',   // tDMNElement/description (not on this node today, but correct if it is later)
+        decisionTable: 'decisionLogic', // decisionTable and expression both fill the same decisionLogic
+        expression: 'decisionLogic',    // slot; Decision-Core makes them mutually exclusive, XSD does not care which
+      },
+    });
+
+    // Requirements pointing at dec_discountLevel come from a DIFFERENT part of the Decision-Core
+    // input (dc.requirements, not the node object itself) and nest onto the target as a side
+    // effect of attachRequirements — so they get their own derivation from that array rather than
+    // folding into assertFieldsSurvive above, which only ever sees one object at a time.
+    const REQ_FIELD = { information: 'informationRequirement', knowledge: 'knowledgeRequirement', authority: 'authorityRequirement' };
+    const expectedReqFields = new Set(
+      dc.requirements.filter((r) => r.target === 'dec_discountLevel').map((r) => REQ_FIELD[r.type])
+    );
+    expect(expectedReqFields.size).toBeGreaterThan(0); // guard against a fixture edit silently emptying this check
+    const decisionFields = fieldsOf(decision);
+    for (const f of expectedReqFields) expect(decisionFields).toContain(f);
 
     // One level deeper: the decision table itself must not have silently dropped a class of
-    // child. hitPolicy is asserted separately in Step 9 (it may legitimately be normalised
-    // away); everything else must be there.
-    const tableFields = fieldsOf(decision.decisionLogic);
-    for (const expected of ['input', 'output', 'annotation', 'rule']) {
-      expect(tableFields).toContain(expected);
-    }
+    // child. hitPolicy is excluded here — dropped whenever it equals the descriptor default
+    // 'UNIQUE' (measured library normalisation, recorded in tests/fixtures/dmn/README.md; also
+    // asserted directly in the "hitPolicy/preferredOrientation normalisation" describe above),
+    // not an omission this test should flag.
+    assertFieldsSurvive(srcDecision.decisionTable, decision.decisionLogic, {
+      exclude: new Set(['id', 'hitPolicy']),
+      rename: { inputs: 'input', outputs: 'output', annotations: 'annotation', rules: 'rule' },
+    });
     expect(decision.decisionLogic.rule).toHaveLength(3); // r1, r2, r3 in the fixture
 
     // One level deeper still: in_1 in the fixture carries both `label` and `typeRef` — the two
     // InputClause/inputExpression fields buildDecisionTable dropped until this task fixed it
     // (label lives on the InputClause, typeRef on its inputExpression; see the field-set
-    // discipline note in CLAUDE.md's "Adding a per-node field"). OutputClause is checked the same
-    // way: out_1 carries name/typeRef/allowedValues, all already covered by buildDecisionTable.
+    // discipline note in CLAUDE.md's "Adding a per-node field").
+    const srcInput0 = srcDecision.decisionTable.inputs[0];
     const input0 = decision.decisionLogic.input[0];
-    expect(fieldsOf(input0)).toContain('label');
+    assertFieldsSurvive(srcInput0, input0, {
+      exclude: new Set([
+        'id',
+        // typeRef lands on the NESTED inputExpression (tExpression/@typeRef), not a same-level
+        // InputClause field — checked directly by value below instead.
+        'typeRef',
+      ]),
+      rename: { expression: 'inputExpression' }, // the literal text lands inside the wrapper element
+    });
     expect(input0.label).toBe('Order value');
     expect(input0.inputExpression.typeRef).toBe('number');
+    expect(input0.inputExpression.text).toBe('orderValue');
 
+    // OutputClause: out_1 carries name/typeRef/allowedValues — allowedValues renames to
+    // outputValues (tOutputClause's own child element name).
+    const srcOutput0 = srcDecision.decisionTable.outputs[0];
     const output0 = decision.decisionLogic.output[0];
-    const outputFields = fieldsOf(output0);
-    for (const expected of ['name', 'typeRef', 'outputValues']) {
-      expect(outputFields).toContain(expected);
-    }
+    assertFieldsSurvive(srcOutput0, output0, {
+      exclude: new Set(['id']),
+      rename: { allowedValues: 'outputValues', defaultValue: 'defaultOutputEntry' },
+    });
   });
 });
 

@@ -18,3 +18,14 @@ The observed tag was `<dmn:decisionTable id="Table_1" preferredOrientation="Rule
 `hitPolicy="UNIQUE"` was dropped, `preferredOrientation="Rule-as-Row"` was kept.
 `discount-decision.expected.dmn` (Task 6) must match this observation byte-for-byte — do not
 hand-edit the golden file to "restore" an attribute that dmn-moddle itself omits.
+
+**The mechanism** (found on review, confirmed against the real descriptor): moddle-xml's writer
+omits any attribute value that equals its property's descriptor `default`. `hitPolicy`'s
+descriptor carries `"default": "UNIQUE"`; `preferredOrientation`'s descriptor carries no `default`
+key at all. Verified directly —
+`moddle.getType('dmn:DecisionTable').$descriptor.properties` shows `hitPolicy: { default: "UNIQUE",
+... }` and `preferredOrientation: { ... }` with no `default` field. So the asymmetry is not
+per-attribute special-casing in dmn-moddle; it is the same one rule ("skip a value equal to the
+default") applied to two attributes whose descriptors happen to differ on whether a default is
+declared at all. Setting `hitPolicy: 'UNIQUE'` explicitly therefore always serialises as absent —
+only a non-default hit policy (e.g. `'FIRST'`, `'PRIORITY'`) would survive the round trip.

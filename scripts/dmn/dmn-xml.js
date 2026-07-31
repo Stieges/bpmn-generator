@@ -230,6 +230,18 @@ function buildDmnDI(diagrams, nodeMap, requirementMap) {
 }
 
 export async function generateDmnXml(dc, diagrams) {
+  if (!dc.namespace) {
+    // DMN13.xsd tDefinitions/@namespace is use="required" — omitting it produces XML that
+    // xmllint rejects ("The attribute 'namespace' is required but missing"), but neither
+    // dmn-moddle's writer nor validateDmnXml's round trip notices: moddle happily serialises the
+    // attribute as absent and re-parses its own output without complaint, so nothing downstream
+    // of this function would catch it. references/decision-core-schema.json already requires
+    // `namespace`, so the schema gate rejects this before generateDmnXml is ever reached in
+    // production — but this function is exported and callable directly (Task 6, tests, future
+    // callers), and a fallback value here would invent a namespace URI, which is worse than
+    // refusing outright.
+    throw new Error('generateDmnXml: dc.namespace is required (DMN13.xsd tDefinitions/@namespace, use="required")');
+  }
   const definitions = create('dmn:Definitions', {
     id: dc.id || 'Definitions_1',
     name: dc.name || dc.id || 'Definitions_1',
