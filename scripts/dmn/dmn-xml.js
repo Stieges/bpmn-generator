@@ -45,6 +45,50 @@ const MODDLE_TYPE = {
   businessKnowledgeModel: 'dmn:BusinessKnowledgeModel',
 };
 
+/**
+ * Every xsd:ID already in use across the WHOLE Decision-Core document — node ids,
+ * decisionTable.id, every input[]/output[]/rule[] id, and every requirement key (via
+ * requirementKey(), reused rather than reimplemented — see its doc comment in coordinates.js).
+ * DMN 1.3's xsd:ID is a single document-wide namespace, not scoped per element type, so a
+ * generated id (below) must be checked against all of these, not just node ids.
+ */
+function collectDcIds(dc) {
+  const ids = new Set();
+  for (const node of (dc.nodes ?? [])) {
+    if (node.id) ids.add(node.id);
+    const t = node.decisionTable;
+    if (t) {
+      if (t.id) ids.add(t.id);
+      for (const input of (t.inputs ?? [])) if (input.id) ids.add(input.id);
+      for (const output of (t.outputs ?? [])) if (output.id) ids.add(output.id);
+      for (const rule of (t.rules ?? [])) if (rule.id) ids.add(rule.id);
+    }
+  }
+  for (const req of (dc.requirements ?? [])) ids.add(requirementKey(req));
+  return ids;
+}
+
+/**
+ * Deterministic, collision-free id: the candidate unchanged if free, else `${candidate}_2`,
+ * `_3`, … Mirrors the idiom in scripts/bpmn/redesign-core.js:104 (nextId) — collect the full id
+ * space into a Set first, then probe suffixed candidates until one is free. Reimplemented here
+ * rather than imported: dmn/ must not depend on bpmn/ (CLAUDE.md's architecture treats
+ * scripts/dmn/ as a sibling subsystem, not a consumer, of scripts/bpmn/).
+ *
+ * Mutates `usedIds` with the chosen id, so a second generated id in the same document (e.g. a
+ * different node's `_var`) cannot collide with the first one's suffix either.
+ */
+function nextDcId(usedIds, candidate) {
+  let id = candidate;
+  if (usedIds.has(id)) {
+    let i = 2;
+    while (usedIds.has(`${candidate}_${i}`)) i++;
+    id = `${candidate}_${i}`;
+  }
+  usedIds.add(id);
+  return id;
+}
+
 function buildDecisionTable(t) {
   const attrs = { id: t.id };
   if (t.hitPolicy) attrs.hitPolicy = t.hitPolicy;
@@ -99,7 +143,7 @@ function buildFunctionDefinition(node) {
   return create('dmn:FunctionDefinition', attrs);
 }
 
-function buildDrgElement(node) {
+function buildDrgElement(node, usedIds) {
   const attrs = { id: node.id, name: node.name };
   if (node.documentation) attrs.description = node.documentation;
   const el = create(MODDLE_TYPE[node.type], attrs);
@@ -111,7 +155,7 @@ function buildDrgElement(node) {
   // by dmn-moddle or produce an invalid element. Guard by type, not just by presence of the field.
   if (node.type !== 'knowledgeSource' && (node.variable || node.typeRef)) {
     el.variable = create('dmn:InformationItem', { // nest
-      id: `${node.id}_var`, name: node.variable || node.name, typeRef: node.typeRef,
+      id: nextDcId(usedIds, `${node.id}_var`), name: node.variable || node.name, typeRef: node.typeRef,
     });
   }
 
@@ -121,7 +165,7 @@ function buildDrgElement(node) {
     if (node.decisionTable) {
       el.decisionLogic = buildDecisionTable(node.decisionTable); // nest
     } else if (node.expression != null) {
-      el.decisionLogic = create('dmn:LiteralExpression', { id: `${node.id}_expr`, text: node.expression }); // nest
+      el.decisionLogic = create('dmn:LiteralExpression', { id: nextDcId(usedIds, `${node.id}_expr`), text: node.expression }); // nest
     }
     // Bare id, no leading '#' — unlike attachRequirements below, which points at a DRG element in
     // THIS document and uses an XPointer-style fragment (`#id`). usingTask/usingProcess point at a
@@ -262,9 +306,10 @@ export async function generateDmnXml(dc, diagrams) {
     ...(dc.documentation ? { description: dc.documentation } : {}),
   });
 
+  const usedIds = collectDcIds(dc);
   const nodeMap = new Map();
   for (const node of dc.nodes) {
-    const el = buildDrgElement(node);
+    const el = buildDrgElement(node, usedIds);
     nodeMap.set(node.id, el);
     definitions.get('drgElement').push(el); // nest
   }

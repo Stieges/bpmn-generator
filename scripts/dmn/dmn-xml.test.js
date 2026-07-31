@@ -315,6 +315,79 @@ describe('generateDmnXml — informationRequirement source-type arms', () => {
   });
 });
 
+describe('generateDmnXml — generated ids cannot collide with a document id', () => {
+  test('a node "foo" and a node "foo_var" produce distinct ids and a clean round trip', async () => {
+    const dc = {
+      id: 'Definitions_1', name: 'Collision test', namespace: 'http://x/collision',
+      nodes: [
+        { id: 'foo', type: 'decision', name: 'Foo', variable: 'fooVar', typeRef: 'string' },
+        { id: 'foo_var', type: 'inputData', name: 'Foo var', typeRef: 'string' },
+      ],
+    };
+    const diagrams = [{
+      id: 'DMNDiagram_1', name: 'Diagram 1', size: { w: 400, h: 200 },
+      coordMap: {
+        coords: {
+          foo: { x: 10, y: 10, w: 180, h: 80 },
+          foo_var: { x: 220, y: 10, w: 180, h: 80 },
+        },
+        edgeCoords: {},
+      },
+    }];
+    const xml = await generateDmnXml(dc, diagrams);
+    const reader = new DmnModdle();
+    const { rootElement, warnings } = await reader.fromXML(xml);
+    expect(warnings).toEqual([]);
+
+    // node "foo_var" itself keeps its own id — its dmn:InputData element is unaffected.
+    const fooVarNode = rootElement.get('drgElement').find((e) => e.id === 'foo_var');
+    expect(fooVarNode).toBeDefined();
+    expect(fooVarNode.$type).toBe('dmn:InputData');
+
+    // node "foo"'s generated variable id would naively be "foo_var" — the exact string already
+    // taken by the other node above. The fix must suffix it instead.
+    const fooNode = rootElement.get('drgElement').find((e) => e.id === 'foo');
+    expect(fooNode.variable).toBeDefined();
+    expect(fooNode.variable.id).not.toBe('foo_var');
+    expect(fooNode.variable.id).toBe('foo_var_2');
+
+    // No two elements anywhere in the document share an id — the xsd:ID uniqueness property
+    // this fix exists to protect, checked directly rather than just trusting zero warnings.
+    const allIds = [];
+    (function collect(el) {
+      if (el && typeof el === 'object') {
+        if (typeof el.id === 'string') allIds.push(el.id);
+        for (const key of Object.keys(el)) {
+          if (key === '$parent' || key.startsWith('$')) continue;
+          const v = el[key];
+          if (Array.isArray(v)) v.forEach(collect);
+          else if (v && typeof v === 'object') collect(v);
+        }
+      }
+    })(rootElement);
+    expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
+  test('the ordinary no-collision case is unaffected — ids come out exactly as {id}_var/{id}_expr', async () => {
+    const dc = good(); // discount-decision.json — no naming collision, verified by inspection
+    const diagrams = [
+      ...oneNodeDiagram('dec_discountLevel'),
+    ];
+    // Exercise both a table-backed decision (variable id) and an expression-backed decision
+    // (expression id) from the same fixture.
+    const dcWithBoth = {
+      ...dc,
+      nodes: dc.nodes,
+    };
+    const xmlTable = await generateDmnXml(dcWithBoth, oneNodeDiagram('dec_discountLevel'));
+    expect(xmlTable).toMatch(/<dmn:variable\b[^>]*\bid="dec_discountLevel_var"/);
+
+    const xmlExpr = await generateDmnXml(dcWithBoth, oneNodeDiagram('dec_finalPercentage'));
+    expect(xmlExpr).toMatch(/<dmn:variable\b[^>]*\bid="dec_finalPercentage_var"/);
+    expect(xmlExpr).toMatch(/id="dec_finalPercentage_expr"/);
+  });
+});
+
 function xmllintAvailable() {
   try {
     execFileSync('xmllint', ['--version'], { stdio: 'ignore' });
