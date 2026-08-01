@@ -25,7 +25,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 ## Architecture
 
 7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
-9 robustness modules under `scripts/`. Verify current inventory with
+9 robustness + 1 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
@@ -98,6 +98,13 @@ Robustness subsystem (scripts/robustness/)
   graph-isomorphism.js, mad-validator.js, report-generator.js,
   stress-tester.js, synthetic-generator.js
   (+ seed-catalog.json, config.json, README.md)
+
+Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
+  enumerate.js               ← ../bpmn/workflow-net.js, ../shared/utils.js
+                               (enumerateScenarios — every distinct path a token can take
+                               through ONE process, with a per-backward-edge cycle bound
+                               and parallel interleavings collapsed to one canonical order
+                               plus a count. Enumerates, never judges.)
 ```
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
@@ -161,6 +168,7 @@ membership instead of coordinates.
 | `scripts/prepare-training-data.js` | Training-data prep for SLM eval |
 | `scripts/agents/` | 7 agent modules: chat, compliance, layout, llm-provider, modeler, prompt-sections, reviewer |
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
+| `scripts/scenarios/enumerate.js` | `enumerateScenarios(proc)` — path enumeration over one process's Petri net. Reuses `bpmnToPN` and the firing primitives from `scripts/bpmn/workflow-net.js`, but runs its own traversal: `checkSoundness` deduplicates markings, which is right for "is the sink reachable?" and wrong for "which distinct paths reach it?". Cycles are bounded per backward edge (graph back edges via DFS colouring — **never** `loopType`/`loopMaximum`, which is one activity repeating, not a rework loop); parallel branches collapse to one canonical order carrying `interleavingCount`. Bounds in `config.json → scenarios` |
 | `scripts/bpmn/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
 | `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |

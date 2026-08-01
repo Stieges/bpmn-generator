@@ -223,5 +223,11 @@
         "marker": { "shape": "circle", "cx": 3, "cy": 3, "r": 3, "filled": true, "refX": 3, "refY": 3, "scale": 0.9 }
       }
     }
+  },
+  "scenarios": {
+    "defaultCycleBound": 1,
+    "maxScenarios": 10000,
+    "maxTraceLength": 500,
+    "maxInterleavingIdeals": 100000
   }
 }

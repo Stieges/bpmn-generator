@@ -1,0 +1,25 @@
+{
+  "pools": [{
+    "id": "Process_Parallel",
+    "name": "Shipment Preparation",
+    "nodes": [
+      {"id": "start1", "type": "startEvent", "name": "Order received"},
+      {"id": "fork", "type": "parallelGateway", "name": "Prepare in parallel"},
+      {"id": "task_pack", "type": "userTask", "name": "Pack goods"},
+      {"id": "task_invoice", "type": "serviceTask", "name": "Print invoice"},
+      {"id": "task_carrier", "type": "serviceTask", "name": "Book carrier"},
+      {"id": "join", "type": "parallelGateway", "name": "All prepared"},
+      {"id": "end1", "type": "endEvent", "name": "Shipment ready"}
+    ],
+    "edges": [
+      {"id": "p1", "source": "start1", "target": "fork"},
+      {"id": "p2", "source": "fork", "target": "task_pack"},
+      {"id": "p3", "source": "fork", "target": "task_invoice"},
+      {"id": "p4", "source": "fork", "target": "task_carrier"},
+      {"id": "p5", "source": "task_pack", "target": "join"},
+      {"id": "p6", "source": "task_invoice", "target": "join"},
+      {"id": "p7", "source": "task_carrier", "target": "join"},
+      {"id": "p8", "source": "join", "target": "end1"}
+    ]
+  }]
+}

@@ -491,3 +491,12 @@ export function checkWorkflowNetSoundness(lc, options = {}) {
 }
 
 export { bpmnToPN, checkSoundness };
+
+// Firing primitives and the subprocess-flattening helpers, exported verbatim (no
+// behaviour change) for scripts/scenarios/enumerate.js. The scenario enumerator needs
+// its own traversal loop — checkSoundness deduplicates markings, which is right for
+// "is the sink reachable?" and wrong for "which distinct paths reach it?" — but it must
+// use exactly these firing semantics, and it must detect graph cycles on exactly the
+// same flattened graph bpmnToPN builds its places from. Re-implementing either would
+// let the two copies drift.
+export { getEnabledTransitions, fireTransition, encodeMarking, flattenNodes, flattenEdges };
