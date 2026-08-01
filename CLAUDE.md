@@ -127,9 +127,10 @@ Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
                                SC01 a branch no scenario reaches (acyclic gateways only),
                                SC02/SC03 an unresolved/ambiguous decisionRef, SC04/SC05 a
                                decision-table gap/illegal overlap, SC06 improper completion
-                               at a scenario's shared sink. Severity is always ERROR — no
-                               WARNING tier. Reads Tasks 1-5's outputs, never re-derives
-                               them; no fachliche/business-sense judgment.)
+                               at a scenario's shared sink. Severity is always WARNING — a
+                               structural finding, not a build-blocking error. Reads Tasks
+                               1-5's outputs, never re-derives them; no fachliche/
+                               business-sense judgment.)
   pipeline.js                ← collaboration.js, decision-table.js, bridge.js, format.js,
                                rules.js
                                (runScenarioPipeline — Orchestrator + CLI, mirrors
@@ -209,7 +210,7 @@ membership instead of coordinates.
 | `scripts/scenarios/format.js` | `formatScenarioResult` / `formatCollaborationResult` — the presentation layer over `enumerate.js`/`collaboration.js`'s output: a complete JSON view (every scenario tagged with its decision sequence, group key, happy-path distance) and a grouped, capped Markdown view. Decision labels are recovered from `t_<gw>_choice_<i>` transition ids against the process's own flattened edges (only XOR/inclusive-gateway SPLITs count, never a merge or pass-through). Happy path is `isHappyPath`-marked when declared, else a deterministic BFS fallback (`deriveHappyPathEdges`) excluding backward and boundary-event-adjacent edges — the output always says which. Grouping key is BPMN gateways only, not DMN choices (see the module doc). Cap in `config.json → scenarios.format.maxGroupsRendered` |
 | `scripts/scenarios/decision-table.js` | `analyzeDecisionTable(table)` — DMN hit-policy-aware branching (UNIQUE exact, FIRST/PRIORITY overestimated-and-flagged, COLLECT/ANY/RULE ORDER/OUTPUT ORDER aggregated not branched) plus gap/overlap analysis over a Decision-Core table's `when`/`then` FEEL-subset text (numbers, dates, strings, intervals, enumerations, `-` wildcard). A column outside that grammar makes its whole rule "unanalyzable", never guessed at column-by-column. Cap in `config.json → scenarios.decisionTable.maxPartitionCells` |
 | `scripts/scenarios/bridge.js` | `resolveBridge(lc, decisionCores)` — resolves every BPMN `decisionRef` occurrence (recursive walk into subprocess/transaction children) against every Decision-Core document's decision tables, by id. Three outcomes per occurrence: `resolved` (exactly one match), `unresolved` (none), `ambiguous` (more than one distinct Decision-Core document claims the same id). A static pre-pass, no per-firing lookup during enumeration |
-| `scripts/scenarios/rules.js` | `runScenarioRules(context)` — the judging layer over Tasks 1-5's outputs, six rules `SC01`-`SC06`, severity always `ERROR`. `tableAnalysisKey(link)` is the exact key `context.tableAnalyses` must be indexed by. No business-sense judgment — only structurally objective findings (unreached branch, unresolved/ambiguous `decisionRef`, table gap/overlap, improper completion) |
+| `scripts/scenarios/rules.js` | `runScenarioRules(context)` — the judging layer over Tasks 1-5's outputs, six rules `SC01`-`SC06`, severity always `WARNING`. `tableAnalysisKey(link)` is the exact key `context.tableAnalyses` must be indexed by. No business-sense judgment — only structurally objective findings (unreached branch, unresolved/ambiguous `decisionRef`, table gap/overlap, improper completion) |
 | `scripts/scenarios/pipeline.js` | `runScenarioPipeline(lc, decisionCores, options)` — Orchestrator + CLI + Public API for the scenario-enumeration subsystem, mirroring `dmn/pipeline.js`'s idiom; always routes through `enumerateCollaboration`/`formatCollaborationResult`, even for a pool-less `lc` (the plain single-process `enumerateScenarios`/`formatScenarioResult` pair is never called, since it would silently drop SC06 coverage — see the module's own doc comment), resolves the bridge, analyzes every resolved table, formats, then judges — integration only, no new computation |
 | `scripts/bpmn/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
