@@ -1,0 +1,423 @@
+/**
+ * Phase A2 — scenario enumeration across pools: message flows as synchronisation.
+ *
+ * `enumerate.js` enumerates ONE process. A collaboration's interesting failure class is
+ * exactly the one a per-pool view cannot see: a receive that waits for a message nobody
+ * ever sends. This module composes the per-pool Petri nets into one net and runs the same
+ * traversal (`enumerateNet`, enumerate.js) over the result, so a joint scenario lists the
+ * steps of all pools in an order that respects send-before-receive.
+ *
+ * ── What is deliberately NOT done here ────────────────────────────────────────────────
+ * `bpmnToPN` (workflow-net.js:49) is called once per pool and is **not modified**. It is
+ * also what `checkWorkflowNetSoundness` (workflow-net.js:477-495) calls per pool for
+ * WF01-WF03; teaching it about `messageFlows` would change every collaboration's
+ * soundness verdict as a side effect of a feature that is not about soundness. Everything
+ * below therefore operates on `bpmnToPN`'s OUTPUT.
+ *
+ * ── Namespacing: why every place and transition gets a pool prefix ────────────────────
+ * `bpmnToPN` names its source and sink `p_source` / `p_sink` (workflow-net.js:75-78) —
+ * the same two ids in every pool's net. Merging the nets as they come would silently fuse
+ * five pools' sources into one place holding one token, i.e. only one pool could ever
+ * start. So every place and transition id is prefixed with `${pool.id}::` on the way in.
+ * Trace entries and `cycleUseCounts` keys carry that prefix; `Scenario.nodes` does not —
+ * it stays BPMN node ids, exactly as in the single-process contract.
+ *
+ * ── Black-box participants: the decision ──────────────────────────────────────────────
+ * A `collapsedPools` entry has no internal process and therefore no transition. Two
+ * codings were on the table (see the task brief): seed the message place with one initial
+ * token, or never gate on it at all. **Chosen: never gate.** A message flow whose SOURCE
+ * is a black box adds no input requirement to the receiving transitions — the environment
+ * is treated as always able to deliver. Seeding one token is the same thing exactly once
+ * and an artificial cap from the second time on: a receive inside a loop, or a second
+ * receive of the same conversation, would deadlock for no reason in the model. Since the
+ * black box is unobservable anyway, "it answers whenever asked" is the only assumption
+ * that adds no claim the model does not make. These flows are reported by id in
+ * `stats.ungatedMessageFlows`, so a consumer can see which orderings were NOT enforced.
+ * The other direction needs nothing: a message flow whose TARGET is a black box gets its
+ * place and its producing arc, and the token simply stays there — an unconsumed token
+ * blocks nothing, and `Scenario.residualPlaces` names it rather than hiding it.
+ *
+ * ── Several message flows into one node ───────────────────────────────────────────────
+ * Not anticipated by the plan, and unavoidable here: `realistic-collaboration.json`'s
+ * `ap_wait` is the target of BOTH `mf6` (decision) and `mf8` (reminder). Requiring both
+ * tokens is Petri-net AND semantics and is wrong for BPMN — a receive task consumes ONE
+ * message — and it would deadlock this fixture outright, because `mf8`'s sender hangs off
+ * a boundary timer that `bpmnToPN` leaves unfireable. So a node gated by k > 1 message
+ * flows is split into one transition per gating flow, the same device `bpmnToPN` itself
+ * uses for an implicit merge (workflow-net.js:136-165): id `${tId}__recv_${mfId}`, same
+ * `bpmnNodeId`, same sequence-flow inputs and outputs, one message place each. Which
+ * message a scenario arrived on is then readable off the trace.
+ */
+
+import { bpmnToPN, fireTransition } from '../bpmn/workflow-net.js';
+import {
+  enumerateNet, resolveLimits, findBackwardEdges, backwardEdgePlaceId,
+} from './enumerate.js';
+
+const SEP = '::';
+
+/** Prefixed id of a per-pool place or transition inside the composed net. */
+export function scopedId(poolId, localId) {
+  return `${poolId}${SEP}${localId}`;
+}
+
+/** The place a message flow becomes. Cannot collide with `p_${src}_${tgt}` or a prefix. */
+export function messagePlaceId(messageFlowId) {
+  return `pmsg_${messageFlowId}`;
+}
+
+/**
+ * Every transition of `pn` that stands for `nodeId`.
+ *
+ * Not 1:1 on purpose: an XOR split contributes one transition per outgoing edge
+ * (workflow-net.js:111-122) and an implicit merge one per incoming edge
+ * (workflow-net.js:136-165). A message arc has to apply to ALL of them — any one of them
+ * firing IS that node executing.
+ *
+ * @param {object} pn - a net from `bpmnToPN`
+ * @param {string} nodeId
+ * @returns {string[]} local (unprefixed) transition ids, in insertion order
+ */
+export function transitionsForNode(pn, nodeId) {
+  const out = [];
+  for (const [tId, t] of pn.transitions) if (t.bpmnNodeId === nodeId) out.push(tId);
+  return out;
+}
+
+/**
+ * The composed net plus everything a caller needs to interpret it.
+ *
+ * @typedef {object} ComposedNet
+ * @property {Map<string, object>} transitions - id → {id, label, bpmnNodeId, poolId,
+ *   messageFlowId?} (the last one only on a receive transition split per message flow).
+ * @property {Array<object>} arcs - `{from, to, type}`, exactly `bpmnToPN`'s shape.
+ * @property {Map<string, number>} initialMarking - one token on every real pool's source.
+ * @property {Map<string, object>} places
+ * @property {Array<object>} pools - `{poolId, sourcePlace, sinkPlace, backwardEdges}`,
+ *   one per REAL pool, place ids already prefixed.
+ * @property {string[]} collapsedPoolIds
+ * @property {Map<string, object>} cappedPlaces - union of every pool's backward-edge
+ *   places, value `{poolId, edge}`.
+ * @property {Array<object>} messagePlaces - one per wired message flow:
+ *   `{messageFlowId, placeId, senderTransitions, receiverTransitions, senderIsBlackBox,
+ *   receiverIsBlackBox, gates}`.
+ * @property {string[]} unconsumablePlaces - message places no transition consumes.
+ * @property {Array<object>} unresolved - message flows an endpoint could not be resolved
+ *   for: `{messageFlowId, endpoint: 'source'|'target', id}`. Reported, never thrown.
+ */
+
+/**
+ * Compose one Petri net out of all pools of a Logic-Core collaboration.
+ *
+ * @param {object} lc - Logic-Core with `pools` (and optionally `collapsedPools`,
+ *   `messageFlows`). A single-process document (no `pools`) is accepted and composes to
+ *   exactly one pool, so callers do not need a special case.
+ * @returns {ComposedNet}
+ */
+export function composeCollaboration(lc) {
+  const pools = lc.pools ? lc.pools : [lc];
+  const collapsedPoolIds = (lc.collapsedPools || []).map(p => p.id);
+  const collapsed = new Set(collapsedPoolIds);
+  const messageFlows = lc.messageFlows || [];
+
+  const places = new Map();
+  const transitions = new Map();
+  let arcs = [];
+  const initialMarking = new Map();
+  const cappedPlaces = new Map();
+  const poolInfos = [];
+  // BPMN node id → [{poolId, transitionIds (prefixed)}]. A node id is expected to be
+  // unique across pools; if it is not, every match is wired, which is the only reading
+  // that cannot silently drop a synchronisation.
+  const nodeOwners = new Map();
+
+  for (const pool of pools) {
+    const poolId = pool.id || `pool_${poolInfos.length}`;
+    const pn = bpmnToPN(pool);
+
+    for (const [pid, p] of pn.places) {
+      const sid = scopedId(poolId, pid);
+      places.set(sid, { ...p, id: sid, poolId });
+      initialMarking.set(sid, pn.initialMarking.get(pid) || 0);
+    }
+    for (const [tId, t] of pn.transitions) {
+      const sid = scopedId(poolId, tId);
+      transitions.set(sid, { ...t, id: sid, poolId });
+    }
+    for (const a of pn.arcs) {
+      arcs.push({ from: scopedId(poolId, a.from), to: scopedId(poolId, a.to), type: a.type });
+    }
+
+    // Cycle bounds stay per pool: message flows are in neither `flatNodes` nor
+    // `flatEdges`, so they cannot participate in a pool's own graph cycles, and they
+    // cannot create new ones either (see the module-level note in the report).
+    const backEdges = findBackwardEdges(pn.flatNodes, pn.flatEdges);
+    for (const e of backEdges) {
+      cappedPlaces.set(scopedId(poolId, backwardEdgePlaceId(e)), { poolId, edge: e });
+    }
+
+    for (const n of pn.flatNodes) {
+      const tIds = transitionsForNode(pn, n.id).map(t => scopedId(poolId, t));
+      if (!tIds.length) continue;
+      if (!nodeOwners.has(n.id)) nodeOwners.set(n.id, []);
+      nodeOwners.get(n.id).push({ poolId, transitionIds: tIds });
+    }
+
+    poolInfos.push({
+      poolId,
+      sourcePlace: scopedId(poolId, pn.sourcePlace),
+      sinkPlace: scopedId(poolId, pn.sinkPlace),
+      backwardEdges: backEdges.map(e => ({
+        id: e.id, source: e.source, target: e.target,
+        placeId: scopedId(poolId, backwardEdgePlaceId(e)),
+      })),
+      orGateways: [...pn.orGateways],
+      skipped: pn.skipped.map(s => ({ ...s })),
+    });
+  }
+
+  const resolve = (id) => {
+    const owners = nodeOwners.get(id);
+    if (owners) return { kind: 'node', transitionIds: owners.flatMap(o => o.transitionIds) };
+    if (collapsed.has(id)) return { kind: 'blackBox', transitionIds: [] };
+    return { kind: 'unresolved', transitionIds: [] };
+  };
+
+  const messagePlaces = [];
+  const unresolved = [];
+  // Pass 1 — the place itself and the producing arcs.
+  for (const mf of messageFlows) {
+    const src = resolve(mf.source);
+    const tgt = resolve(mf.target);
+    if (src.kind === 'unresolved') unresolved.push({ messageFlowId: mf.id, endpoint: 'source', id: mf.source });
+    if (tgt.kind === 'unresolved') unresolved.push({ messageFlowId: mf.id, endpoint: 'target', id: mf.target });
+
+    const placeId = messagePlaceId(mf.id);
+    places.set(placeId, { id: placeId, label: mf.name || '', messageFlowId: mf.id });
+    initialMarking.set(placeId, 0);
+
+    for (const t of src.transitionIds) arcs.push({ from: t, to: placeId, type: 'T→P' });
+
+    messagePlaces.push({
+      messageFlowId: mf.id,
+      placeId,
+      senderTransitions: src.transitionIds,
+      receiverTransitions: tgt.transitionIds,
+      senderIsBlackBox: src.kind === 'blackBox',
+      receiverIsBlackBox: tgt.kind === 'blackBox',
+      // "gates" = does this flow actually constrain the receiver? Only a real sender does;
+      // a black-box sender is the always-available environment (module header).
+      gates: src.kind === 'node' && tgt.kind === 'node',
+    });
+  }
+
+  // Pass 2/3 — the consuming side. Grouped by receiving node, because a node gated by
+  // more than one flow is split rather than AND-joined (module header).
+  const gatingByTransition = new Map();
+  for (const mp of messagePlaces) {
+    if (!mp.gates) continue;
+    for (const t of mp.receiverTransitions) {
+      if (!gatingByTransition.has(t)) gatingByTransition.set(t, []);
+      gatingByTransition.get(t).push(mp);
+    }
+  }
+
+  for (const [tId, gating] of gatingByTransition) {
+    if (gating.length === 1) {
+      arcs.push({ from: gating[0].placeId, to: tId, type: 'P→T' });
+      continue;
+    }
+    const base = transitions.get(tId);
+    const inArcs = arcs.filter(a => a.type === 'P→T' && a.to === tId);
+    const outArcs = arcs.filter(a => a.type === 'T→P' && a.from === tId);
+    for (const mp of gating) {
+      const cloneId = `${tId}__recv_${mp.messageFlowId}`;
+      transitions.set(cloneId, { ...base, id: cloneId, messageFlowId: mp.messageFlowId });
+      for (const a of inArcs) arcs.push({ from: a.from, to: cloneId, type: 'P→T' });
+      arcs.push({ from: mp.placeId, to: cloneId, type: 'P→T' });
+      for (const a of outArcs) arcs.push({ from: cloneId, to: a.to, type: 'T→P' });
+      mp.receiverTransitions = mp.receiverTransitions.map(t => (t === tId ? cloneId : t));
+    }
+    transitions.delete(tId);
+    arcs = arcs.filter(a => a.to !== tId && a.from !== tId);
+  }
+
+  const consumed = new Set(arcs.filter(a => a.type === 'P→T').map(a => a.from));
+  const unconsumablePlaces = messagePlaces
+    .map(mp => mp.placeId)
+    .filter(p => !consumed.has(p));
+
+  return {
+    places, transitions, arcs, initialMarking,
+    pools: poolInfos, collapsedPoolIds, cappedPlaces,
+    messagePlaces, unconsumablePlaces, unresolved,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Public API
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * One joint execution scenario across all pools.
+ *
+ * Extends `Scenario` (enumerate.js) — every field there is present with the same meaning;
+ * three are added. A consumer written against the single-process shape keeps working, it
+ * just does not read the new fields.
+ *
+ * @typedef {object} CompositeScenario
+ * @property {number} index - as `Scenario.index`.
+ * @property {string[]} transitions - composed-net transition ids in canonical firing
+ *   order. **Prefixed**: `${poolId}::${localTransitionId}`, and a receive split per
+ *   incoming message flow additionally carries `__recv_${messageFlowId}` (see the module
+ *   header). The local part is exactly what the single-process enumerator would emit.
+ * @property {string[]} nodes - the BPMN node id behind each entry, same length and order,
+ *   unprefixed — identical in meaning to `Scenario.nodes`.
+ * @property {string[]} poolIds - the pool each entry belongs to, same length and order.
+ *   A parallel array rather than a richer entry object: `nodes` and `transitions` are
+ *   already parallel arrays, and later phases (output formatting, judging) want to slice
+ *   one pool's steps out of a joint trace without rewriting the two arrays they already
+ *   read.
+ * @property {number|null} interleavingCount - as `Scenario.interleavingCount`; across
+ *   pools it now also counts the orders in which independent pools could have run.
+ * @property {Object<string, number>} cycleUseCounts - as `Scenario.cycleUseCounts`, keys
+ *   prefixed with the owning pool.
+ * @property {string[]} messagesSent - message flow ids whose place received a token in
+ *   this scenario, in the order they were produced.
+ * @property {string[]} messagesReceived - message flow ids this scenario consumed, in
+ *   order. A flow in `messagesSent` but not here was sent and never picked up — either to
+ *   a black box, or a genuine loose end worth showing.
+ * @property {string[]} residualPlaces - places still holding a token when the net ran dry,
+ *   excluding the pool sinks. Normally the black-box-directed message places; anything
+ *   else here is improper completion, which is WF03's verdict to give, not this module's.
+ */
+
+/**
+ * The result of enumerating a collaboration.
+ *
+ * Mirrors `EnumerationResult` (enumerate.js) field for field, with `processId` replaced —
+ * there is no single process — and the message-flow bookkeeping added.
+ *
+ * @typedef {object} CollaborationEnumerationResult
+ * @property {string[]} poolIds - the REAL pools, in document order.
+ * @property {string[]} collapsedPoolIds - black-box participants, from `lc.collapsedPools`.
+ * @property {CompositeScenario[]} scenarios
+ * @property {boolean} truncated - as `EnumerationResult.truncated`.
+ * @property {object} stats - every field of `EnumerationResult.stats`, plus:
+ * @property {Array<object>} stats.backwardEdges - as before, each additionally carrying
+ *   `poolId`; `placeId` is prefixed.
+ * @property {Array<object>} stats.orGateways - `{poolId, nodeId}` instead of a bare id,
+ *   because two pools can both have one. Same warning as in the single-process contract:
+ *   an OR split is fired as an AND, so the list is an under-enumeration marker.
+ * @property {Array<object>} stats.skipped - `{poolId, id, reason}`.
+ * @property {Array<object>} stats.messageFlows - one per flow: `{id, placeId, gates,
+ *   senderIsBlackBox, receiverIsBlackBox, senderTransitions, receiverTransitions}`.
+ * @property {string[]} stats.ungatedMessageFlows - flows that enforce NO ordering: either
+ *   sent by a black box (nothing produces the token, and by the decision above nothing
+ *   waits for it) or received by one (nothing consumes it). **Read this before trusting
+ *   the joint order** — for these, the two ends are not synchronised at all.
+ * @property {string[]} stats.unconsumedMessagePlaces - message places no transition can
+ *   ever consume (black-box receivers).
+ * @property {Array<object>} stats.unresolvedEndpoints - message flow endpoints that
+ *   matched neither a node nor a collapsed pool. Never thrown, always reported.
+ * @property {number} stats.deadEndPaths - includes genuine CROSS-POOL deadlocks: a path
+ *   where one pool's branch means a message is never sent and the partner waits forever.
+ *   Deliberately not a separate category — the accounting is the same as Task 1's, and
+ *   `stats.messageFlows` plus the trace say which message was missing.
+ */
+
+/**
+ * Enumerate the joint scenarios of a multi-pool collaboration.
+ *
+ * A joint scenario is complete when EVERY real pool's own sink holds a token and the net
+ * has run dry (no transition enabled) — the cross-pool generalisation of the single
+ * process rule that draining beats "the sink was touched". Tokens may remain in message
+ * places nobody consumes; those are listed per scenario in `residualPlaces` instead of
+ * disqualifying an otherwise finished run, because a message sent to a black box is not
+ * an unfinished process.
+ *
+ * @param {object} lc - Logic-Core collaboration.
+ * @param {object} [options] - identical to `enumerateScenarios`'s options.
+ * @returns {CollaborationEnumerationResult}
+ */
+export function enumerateCollaboration(lc, options = {}) {
+  const limits = resolveLimits(options);
+  const net = composeCollaboration(lc);
+
+  const sinkPlaces = net.pools.map(p => p.sinkPlace);
+  const run = enumerateNet({
+    transitions: net.transitions,
+    arcs: net.arcs,
+    initialMarking: net.initialMarking,
+    cappedPlaces: net.cappedPlaces,
+    isComplete: (marking) => sinkPlaces.every(p => (marking.get(p) || 0) >= 1),
+  }, limits);
+
+  const placeByMessage = new Map(net.messagePlaces.map(mp => [mp.placeId, mp.messageFlowId]));
+  const produces = new Map();  // transition id → message flow ids it puts a token on
+  const consumes = new Map();
+  for (const a of net.arcs) {
+    const mfId = placeByMessage.get(a.type === 'T→P' ? a.to : a.from);
+    if (!mfId) continue;
+    const map = a.type === 'T→P' ? produces : consumes;
+    const key = a.type === 'T→P' ? a.from : a.to;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(mfId);
+  }
+
+  const sinkSet = new Set(sinkPlaces);
+  const scenarios = run.scenarios.map(s => {
+    const marking = replay(net, s.transitions);
+    const residualPlaces = [...marking.entries()]
+      .filter(([p, n]) => n > 0 && !sinkSet.has(p))
+      .map(([p]) => p)
+      .sort();
+    return {
+      ...s,
+      poolIds: s.transitions.map(t => net.transitions.get(t)?.poolId ?? null),
+      messagesSent: s.transitions.flatMap(t => produces.get(t) || []),
+      messagesReceived: s.transitions.flatMap(t => consumes.get(t) || []),
+      residualPlaces,
+    };
+  });
+
+  return {
+    poolIds: net.pools.map(p => p.poolId),
+    collapsedPoolIds: net.collapsedPoolIds,
+    scenarios,
+    truncated: run.truncated,
+    stats: {
+      backwardEdges: net.pools.flatMap(p =>
+        p.backwardEdges.map(e => ({ ...e, poolId: p.poolId }))),
+      cycleBound: limits.cycleBound,
+      scenarioCount: scenarios.length,
+      cappedPaths: run.cappedPaths,
+      deadEndPaths: run.deadEndPaths,
+      lengthTruncatedPaths: run.lengthTruncatedPaths,
+      statesExplored: run.statesExplored,
+      orGateways: net.pools.flatMap(p =>
+        p.orGateways.map(nodeId => ({ poolId: p.poolId, nodeId }))),
+      skipped: net.pools.flatMap(p => p.skipped.map(s => ({ poolId: p.poolId, ...s }))),
+      messageFlows: net.messagePlaces.map(mp => ({
+        id: mp.messageFlowId,
+        placeId: mp.placeId,
+        gates: mp.gates,
+        senderIsBlackBox: mp.senderIsBlackBox,
+        receiverIsBlackBox: mp.receiverIsBlackBox,
+        senderTransitions: [...mp.senderTransitions],
+        receiverTransitions: [...mp.receiverTransitions],
+      })),
+      ungatedMessageFlows: net.messagePlaces.filter(mp => !mp.gates).map(mp => mp.messageFlowId),
+      unconsumedMessagePlaces: [...net.unconsumablePlaces],
+      unresolvedEndpoints: net.unresolved.map(u => ({ ...u })),
+    },
+  };
+}
+
+/**
+ * Re-fire a recorded trace to get its final marking (for `residualPlaces`), by the very
+ * firing rule the traversal used — `fireTransition`, not a second copy of it.
+ */
+function replay(net, trace) {
+  return trace.reduce((m, tId) => fireTransition(m, tId, net.arcs), new Map(net.initialMarking));
+}

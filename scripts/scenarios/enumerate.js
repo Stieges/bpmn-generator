@@ -20,7 +20,8 @@
  *
  * Scope: ONE process. Message flows between pools are deliberately not composed here —
  * `bpmnToPN` never reads `messageFlows`, and joining pools is its own piece of work.
- * Call this once per pool.
+ * Call this once per pool, or use `collaboration.js`, which composes the per-pool nets
+ * and drives the same traversal (`enumerateNet` below) over the composed one.
  */
 
 import { bpmnToPN, getEnabledTransitions, fireTransition } from '../bpmn/workflow-net.js';
@@ -113,7 +114,7 @@ export function backwardEdgePlaceId(edge) {
 // Net indices
 // ═══════════════════════════════════════════════════════════════════════
 
-function indexArcs(transitions, arcs) {
+export function indexArcs(transitions, arcs) {
   const inputs = new Map();
   const outputs = new Map();
   for (const [tId] of transitions) {
@@ -137,21 +138,35 @@ function indexArcs(transitions, arcs) {
  * each spawn their own scenario, or one parallel block turns into multinomially many
  * copies of the same scenario written in different orders.
  *
- * INVARIANT this relies on, and a warning for Task 2: under today's `bpmnToPN`, two
- * transitions either share ALL their input places or none of them — an XOR split's
- * branch transitions all consume the same set (workflow-net.js:116-119), a merge
- * transition consumes exactly one (workflow-net.js:142), and no transition mixes places
- * from different sources. With no partial overlap, transitive grouping is exact:
- * "connected in the sharing graph" and "actually competing" coincide. Composing pools
- * over message flows breaks that — a receive task would consume both a sequence-flow
- * place and a message place, so an A-B-C chain could link two transitions that do not
- * compete at all and collapse a real choice into one group. Revisit this function then;
- * do not assume it still holds.
+ * PARTIAL OVERLAP — the warning this comment used to carry, now measured (Task 2).
+ * Under `bpmnToPN` alone, two transitions share either ALL their input places or none:
+ * an XOR split's branch transitions consume the same set (workflow-net.js:116-119), a
+ * merge transition consumes exactly one (workflow-net.js:142). Composing pools over
+ * message flows **does** break that, as predicted — a receive consumes a sequence-flow
+ * place AND a message place, and `collaboration.test.js`'s "an implicit merge that is
+ * also a message target" reproduces both halves: input sets that overlap partially
+ * ({p_x_R, pmsg_ma} vs {p_y_R, pmsg_ma}) and, through them, a group holding two
+ * transitions that do not compete at all.
+ *
+ * What does NOT follow is that the grouping became wrong. Two facts settle it:
+ *
+ *   - Over-grouping cannot lose a scenario. A transition is deferred only when it lands
+ *     in another component, i.e. its inputs are disjoint from every advanced one, so
+ *     firing here cannot disable it — it is still enabled when its turn comes. The only
+ *     price is redundancy: a component larger than the true conflict set may enumerate
+ *     the same steps in more than one order.
+ *   - The transitive closure is also the SMALLEST safe grouping for this traversal.
+ *     Deferring a transition that shares a place with any advanced one risks it being
+ *     disabled, and "shares with an advanced one" is closed transitively because every
+ *     member of a group gets advanced in turn. Anything finer needs persistent/stubborn
+ *     sets, which is a different piece of work.
+ *
+ * So: partial overlap exists in composed nets, is exercised by a test, and is safe.
  *
  * @returns {Array<Array<string>>} groups, each sorted by transition id, groups sorted by
  *   their first member — so the choice of which group to advance is deterministic.
  */
-function groupBySharedInput(enabled, inputs) {
+export function groupBySharedInput(enabled, inputs) {
   const parent = new Map(enabled.map(t => [t, t]));
   const find = (t) => {
     while (parent.get(t) !== t) {
@@ -264,6 +279,150 @@ function countLinearExtensions(trace, inputs, outputs, initialMarking, idealCap)
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Traversal core
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Enumerate the distinct firing paths of an already-built net.
+ *
+ * Extracted verbatim from `enumerateScenarios` so that `collaboration.js` can drive the
+ * SAME traversal over a net composed from several pools instead of writing a second copy
+ * of the walk. Nothing about the traversal is aware of where the net came from: it reads
+ * `{transitions, arcs, initialMarking}` and two policy inputs, `cappedPlaces` (which
+ * places carry a per-path traversal bound) and `isComplete` (when a drained marking
+ * counts as a finished scenario rather than a dead end). For one process those are
+ * "the backward-edge places" and "the sink holds a token"; for a collaboration they are
+ * "every pool's backward-edge places" and "every real pool's sink holds a token".
+ *
+ * @param {object} net
+ * @param {Map<string, object>} net.transitions - transition id → {bpmnNodeId, ...}
+ * @param {Array<object>} net.arcs
+ * @param {Map<string, number>} net.initialMarking
+ * @param {Map<string, object>} net.cappedPlaces - place id → whatever the caller wants to
+ *   remember about the bound; only the key set is read here.
+ * @param {(marking: Map<string, number>) => boolean} net.isComplete
+ * @param {object} limits - {cycleBound, maxScenarios, maxTraceLength, idealCap}
+ * @returns {{scenarios, truncated, cappedPaths, deadEndPaths, lengthTruncatedPaths,
+ *   statesExplored}} `scenarios` entries carry `index`, `transitions`, `nodes`,
+ *   `interleavingCount`, `cycleUseCounts` — a caller may add fields, not remove them.
+ */
+export function enumerateNet(net, limits) {
+  const { transitions, arcs, initialMarking, cappedPlaces, isComplete } = net;
+  const { cycleBound, maxScenarios, maxTraceLength, idealCap } = limits;
+
+  const { inputs, outputs } = indexArcs(transitions, arcs);
+
+  const scenarios = [];
+  let truncated = false;
+  let cappedPaths = 0;
+  let deadEndPaths = 0;
+  let lengthTruncatedPaths = 0;
+  let statesExplored = 0;
+
+  const zeroCounts = () => {
+    const m = new Map();
+    for (const p of cappedPlaces.keys()) m.set(p, 0);
+    return m;
+  };
+
+  const record = (trace, counts) => {
+    // The cap is checked here and nowhere else. Checking it on entering a state instead
+    // would flag runs that had states left to visit but no scenarios left to find, and
+    // `truncated` has to mean "something was actually cut", or it is worthless.
+    if (scenarios.length >= maxScenarios) { truncated = true; return; }
+    scenarios.push({
+      index: scenarios.length,
+      transitions: [...trace],
+      nodes: trace.map(t => transitions.get(t)?.bpmnNodeId ?? t),
+      interleavingCount: countLinearExtensions(trace, inputs, outputs, initialMarking, idealCap),
+      cycleUseCounts: Object.fromEntries(counts),
+    });
+  };
+
+  const walk = (marking, trace, counts) => {
+    if (truncated) return;
+    statesExplored++;
+
+    if (trace.length >= maxTraceLength) {
+      lengthTruncatedPaths++;
+      truncated = true;
+      return;
+    }
+
+    const enabled = getEnabledTransitions(marking, transitions, arcs).slice().sort();
+
+    // Cycle bound: a transition that would push one of its output places past the bound
+    // is not eligible in THIS path. Nothing about the model changes — only this path.
+    const eligible = enabled.filter(t =>
+      (outputs.get(t) || []).every(p => !cappedPlaces.has(p) || (counts.get(p) || 0) + 1 <= cycleBound)
+    );
+    // Count every branch the bound suppressed, not only the case where it emptied the
+    // whole set. A back edge that starts at the gateway itself (gw →No→ task) is one of
+    // several competing alternatives, so the state stays alive and the suppression would
+    // otherwise be invisible — a path the model has, dropped with no accounting.
+    cappedPaths += enabled.length - eligible.length;
+
+    if (eligible.length > 0) {
+      // Advance exactly one concurrency group. Deferring the others loses nothing: their
+      // input places are disjoint from this group's, so firing here cannot disable them —
+      // they stay enabled and get their turn. What it does lose is the redundant copies of
+      // this scenario in every other interleaving, which is the point (see A1).
+      const group = groupBySharedInput(eligible, inputs)[0];
+
+      for (const tId of group) {
+        const nextMarking = fireTransition(marking, tId, arcs);
+        const nextCounts = new Map(counts);
+        for (const p of outputs.get(tId) || []) {
+          if (cappedPlaces.has(p)) nextCounts.set(p, (nextCounts.get(p) || 0) + 1);
+        }
+        trace.push(tId);
+        walk(nextMarking, trace, nextCounts);
+        trace.pop();
+        if (truncated) return;
+      }
+      return;
+    }
+
+    // Nothing left to fire: this is where the path ends, and only here.
+    //
+    // Reaching the sink is deliberately NOT the stop condition. `bpmnToPN` wires every
+    // end event to one shared `p_sink` (workflow-net.js:161/181), so with an AND split
+    // whose branches finish at different end events, the first branch to arrive would end
+    // the trace and the second would never be recorded — a wrong enumeration handed over
+    // as a complete one, in a subsystem whose entire purpose is that the reviewer can see
+    // what is missing. Draining the net first costs nothing on a single-end process (the
+    // marking after the end event holds only the sink token anyway) and is the difference
+    // between right and wrong on a multi-end one.
+    if (isComplete(marking)) { record(trace, counts); return; }
+
+    // Not at the sink either. If the bound took the last option away, the increment above
+    // already accounts for it — this path was capped, not deadlocked. Only a state that
+    // had nothing on offer in the first place is a dead end.
+    if (enabled.length === 0) deadEndPaths++;
+  };
+
+  walk(initialMarking, [], zeroCounts());
+
+  return { scenarios, truncated, cappedPaths, deadEndPaths, lengthTruncatedPaths, statesExplored };
+}
+
+/**
+ * Resolve the four caps, in the one place both public entry points read them from.
+ *
+ * @param {object} options - as accepted by `enumerateScenarios` / `enumerateCollaboration`
+ * @returns {{cycleBound, maxScenarios, maxTraceLength, idealCap}}
+ */
+export function resolveLimits(options = {}) {
+  const cfg = { ...DEFAULTS, ...(((options.config || CFG) || {}).scenarios || {}) };
+  return {
+    cycleBound: options.cycleBound ?? cfg.defaultCycleBound,
+    maxScenarios: options.maxScenarios ?? cfg.maxScenarios,
+    maxTraceLength: options.maxTraceLength ?? cfg.maxTraceLength,
+    idealCap: options.maxInterleavingIdeals ?? cfg.maxInterleavingIdeals,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Public API
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -348,11 +507,7 @@ function countLinearExtensions(trace, inputs, outputs, initialMarking, idealCap)
  * @returns {EnumerationResult}
  */
 export function enumerateScenarios(proc, options = {}) {
-  const cfg = { ...DEFAULTS, ...(((options.config || CFG) || {}).scenarios || {}) };
-  const cycleBound = options.cycleBound ?? cfg.defaultCycleBound;
-  const maxScenarios = options.maxScenarios ?? cfg.maxScenarios;
-  const maxTraceLength = options.maxTraceLength ?? cfg.maxTraceLength;
-  const idealCap = options.maxInterleavingIdeals ?? cfg.maxInterleavingIdeals;
+  const limits = resolveLimits(options);
 
   const pn = bpmnToPN(proc);
   const { transitions, arcs, initialMarking, sinkPlace } = pn;
@@ -362,106 +517,21 @@ export function enumerateScenarios(proc, options = {}) {
   // backward edge of the net, and identity beats agreement here.
   const backEdges = findBackwardEdges(pn.flatNodes, pn.flatEdges);
 
-  const { inputs, outputs } = indexArcs(transitions, arcs);
-
   const cappedPlaces = new Map(); // place id → the backward edge it came from
   for (const e of backEdges) cappedPlaces.set(backwardEdgePlaceId(e), e);
 
-  const scenarios = [];
-  let truncated = false;
-  let cappedPaths = 0;
-  let deadEndPaths = 0;
-  let lengthTruncatedPaths = 0;
-  let statesExplored = 0;
-
-  const zeroCounts = () => {
-    const m = new Map();
-    for (const p of cappedPlaces.keys()) m.set(p, 0);
-    return m;
-  };
-
-  const record = (trace, counts) => {
-    // The cap is checked here and nowhere else. Checking it on entering a state instead
-    // would flag runs that had states left to visit but no scenarios left to find, and
-    // `truncated` has to mean "something was actually cut", or it is worthless.
-    if (scenarios.length >= maxScenarios) { truncated = true; return; }
-    scenarios.push({
-      index: scenarios.length,
-      transitions: [...trace],
-      nodes: trace.map(t => transitions.get(t)?.bpmnNodeId ?? t),
-      interleavingCount: countLinearExtensions(trace, inputs, outputs, initialMarking, idealCap),
-      cycleUseCounts: Object.fromEntries(counts),
-    });
-  };
-
-  const walk = (marking, trace, counts) => {
-    if (truncated) return;
-    statesExplored++;
-
-    if (trace.length >= maxTraceLength) {
-      lengthTruncatedPaths++;
-      truncated = true;
-      return;
-    }
-
-    const enabled = getEnabledTransitions(marking, transitions, arcs).slice().sort();
-
-    // Cycle bound: a transition that would push one of its output places past the bound
-    // is not eligible in THIS path. Nothing about the model changes — only this path.
-    const eligible = enabled.filter(t =>
-      (outputs.get(t) || []).every(p => !cappedPlaces.has(p) || (counts.get(p) || 0) + 1 <= cycleBound)
-    );
-    // Count every branch the bound suppressed, not only the case where it emptied the
-    // whole set. A back edge that starts at the gateway itself (gw →No→ task) is one of
-    // several competing alternatives, so the state stays alive and the suppression would
-    // otherwise be invisible — a path the model has, dropped with no accounting.
-    cappedPaths += enabled.length - eligible.length;
-
-    if (eligible.length > 0) {
-      // Advance exactly one concurrency group. Deferring the others loses nothing: their
-      // input places are disjoint from this group's, so firing here cannot disable them —
-      // they stay enabled and get their turn. What it does lose is the redundant copies of
-      // this scenario in every other interleaving, which is the point (see A1).
-      const group = groupBySharedInput(eligible, inputs)[0];
-
-      for (const tId of group) {
-        const nextMarking = fireTransition(marking, tId, arcs);
-        const nextCounts = new Map(counts);
-        for (const p of outputs.get(tId) || []) {
-          if (cappedPlaces.has(p)) nextCounts.set(p, (nextCounts.get(p) || 0) + 1);
-        }
-        trace.push(tId);
-        walk(nextMarking, trace, nextCounts);
-        trace.pop();
-        if (truncated) return;
-      }
-      return;
-    }
-
-    // Nothing left to fire: this is where the path ends, and only here.
-    //
-    // Reaching the sink is deliberately NOT the stop condition. `bpmnToPN` wires every
-    // end event to one shared `p_sink` (workflow-net.js:161/181), so with an AND split
-    // whose branches finish at different end events, the first branch to arrive would end
-    // the trace and the second would never be recorded — a wrong enumeration handed over
-    // as a complete one, in a subsystem whose entire purpose is that the reviewer can see
-    // what is missing. Draining the net first costs nothing on a single-end process (the
-    // marking after the end event holds only the sink token anyway) and is the difference
-    // between right and wrong on a multi-end one.
-    if ((marking.get(sinkPlace) || 0) >= 1) { record(trace, counts); return; }
-
-    // Not at the sink either. If the bound took the last option away, the increment above
-    // already accounts for it — this path was capped, not deadlocked. Only a state that
-    // had nothing on offer in the first place is a dead end.
-    if (enabled.length === 0) deadEndPaths++;
-  };
-
-  walk(initialMarking, [], zeroCounts());
+  const run = enumerateNet({
+    transitions,
+    arcs,
+    initialMarking,
+    cappedPlaces,
+    isComplete: (marking) => (marking.get(sinkPlace) || 0) >= 1,
+  }, limits);
 
   return {
     processId: proc.id,
-    scenarios,
-    truncated,
+    scenarios: run.scenarios,
+    truncated: run.truncated,
     stats: {
       backwardEdges: backEdges.map(e => ({
         id: e.id,
@@ -469,12 +539,12 @@ export function enumerateScenarios(proc, options = {}) {
         target: e.target,
         placeId: backwardEdgePlaceId(e),
       })),
-      cycleBound,
-      scenarioCount: scenarios.length,
-      cappedPaths,
-      deadEndPaths,
-      lengthTruncatedPaths,
-      statesExplored,
+      cycleBound: limits.cycleBound,
+      scenarioCount: run.scenarios.length,
+      cappedPaths: run.cappedPaths,
+      deadEndPaths: run.deadEndPaths,
+      lengthTruncatedPaths: run.lengthTruncatedPaths,
+      statesExplored: run.statesExplored,
       orGateways: [...pn.orGateways],
       skipped: pn.skipped.map(s => ({ ...s })),
     },
