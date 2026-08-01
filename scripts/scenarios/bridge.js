@@ -63,7 +63,10 @@
  * @property {string} decisionId - the decision node's own id (e.g. `dec_discountLevel`).
  * @property {string} decisionCoreId - the id of the Decision-Core document it came from
  *   (`Decision-Core.id`, e.g. `Definitions_discount`). Falls back to the document's array
- *   index (as a string, `'#0'`-style) if the document carries no `id`.
+ *   index (as a string, `'#0'`-style) if the document carries no `id`. NOTE: that fallback
+ *   is call-scoped, not a stable identifier across separate `resolveBridge`/
+ *   `findDecisionTables` invocations — the same document at index 0 in one call and index 1
+ *   in another gets `'#0'` then `'#1'`. Treat it as opaque within a single call only.
  * @property {string} decisionName - the decision node's `name`, for readable reporting.
  * @property {object} decisionTable - the raw `decisionTable` object, passed through
  *   unchanged. NOT analyzed here — hand it to `analyzeDecisionTable` (decision-table.js).
@@ -95,7 +98,10 @@
  * @property {'ambiguous'} status
  * @property {DecisionRefOccurrence} occurrence
  * @property {DecisionTableEntry[]} candidates - every matching decision, so a caller can
- *   see exactly what collided (their `decisionCoreId`s in particular).
+ *   see exactly what collided (their `decisionCoreId`s in particular). "Ambiguous" here
+ *   means more than one DISTINCT `decisionCoreId` backs the match — the same Decision-Core
+ *   document passed twice in `decisionCores` contributes multiple `candidates` entries but
+ *   resolves cleanly, since they share one `decisionCoreId`.
  */
 
 /**
@@ -241,11 +247,19 @@ export function resolveBridge(lc, decisionCores) {
 
   for (const occurrence of occurrences) {
     const candidates = decisionsById.get(occurrence.decisionRef) || [];
+    // Dedup by document identity before deciding resolved vs. ambiguous: raw candidate
+    // COUNT is not the right signal, because the same Decision-Core document object can
+    // legitimately appear more than once in `decisionCores` (e.g. reachable via two paths
+    // through a broader manifest) and contribute more than one candidate for the same
+    // decision id without that being a real collision. What actually collides is two
+    // DISTINCT documents both claiming the same decision id — so ambiguity is decided on
+    // the set of distinct `decisionCoreId`s behind the candidates, not their raw count.
+    const distinctCoreIds = new Set(candidates.map((c) => c.decisionCoreId));
     let entry;
     if (candidates.length === 0) {
       entry = { status: 'unresolved', occurrence };
       unresolved.push(entry);
-    } else if (candidates.length === 1) {
+    } else if (distinctCoreIds.size === 1) {
       entry = { status: 'resolved', occurrence, decision: candidates[0] };
       resolved.push(entry);
     } else {

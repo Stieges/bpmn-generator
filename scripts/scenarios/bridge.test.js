@@ -142,6 +142,34 @@ describe('ambiguous: the same decision id declared in two different Decision-Cor
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// 3b. Same Decision-Core document passed twice — must NOT be reported ambiguous
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('not ambiguous: the SAME Decision-Core document object passed twice', () => {
+  test('resolveBridge(lc, [dc, dc]) resolves cleanly instead of flagging a spurious collision', () => {
+    const lc = {
+      nodes: [
+        { id: 'rule1', type: 'businessRuleTask', name: 'Classify', decisionRef: 'SharedDecision' },
+      ],
+      edges: [],
+    };
+    const dc = decisionCore('Definitions_same', 'SharedDecision');
+
+    // The exact same document object, twice — realistic if a later caller assembles
+    // `decisionCores` from a manifest where the same DMN artifact is reachable via two
+    // paths. Raw candidate count is 2, but both come from one document, so this must
+    // resolve, not go ambiguous.
+    const result = resolveBridge(lc, [dc, dc]);
+
+    expect(result.ambiguous).toHaveLength(0);
+    expect(result.unresolved).toHaveLength(0);
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].occurrence.nodeId).toBe('rule1');
+    expect(result.resolved[0].decision.decisionCoreId).toBe('Definitions_same');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // 4. Multi-pool
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -217,6 +245,29 @@ describe('clean empty result when there is no decisionRef at all', () => {
   test('empty Decision-Core array is valid input on its own — no crash, findDecisionTables returns empty', () => {
     expect(findDecisionTables([])).toEqual([]);
     expect(findDecisionTables(undefined)).toEqual([]);
+  });
+
+  test('resolveBridge(null, ...) does not throw and returns empty result', () => {
+    const dc = decisionCore('Definitions_x', 'SomeDecision');
+    const result = resolveBridge(null, [dc]);
+    expect(result.occurrences).toHaveLength(0);
+    expect(result.resolved).toHaveLength(0);
+    expect(result.unresolved).toHaveLength(0);
+    expect(result.ambiguous).toHaveLength(0);
+  });
+
+  test('resolveBridge(lc, undefined) does not throw and reports every occurrence unresolved', () => {
+    const lc = {
+      nodes: [
+        { id: 'rule1', type: 'businessRuleTask', name: 'Classify', decisionRef: 'SomeDecision' },
+      ],
+      edges: [],
+    };
+    const result = resolveBridge(lc, undefined);
+    expect(result.occurrences).toHaveLength(1);
+    expect(result.resolved).toHaveLength(0);
+    expect(result.unresolved).toHaveLength(1);
+    expect(result.ambiguous).toHaveLength(0);
   });
 });
 
