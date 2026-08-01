@@ -122,6 +122,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restructure commit is about to do: move dozens of files and touch every doc reference to them.
 
 ### Fixed
+- **An `exclusiveGateway` used as a join was analysed as an AND-join, deadlocking by
+  construction.** `scripts/bpmn/workflow-net.js`'s implicit-merge rewrite (one Petri-net
+  transition per incoming edge, so any single arrival fires it) only applied to non-gateway
+  nodes — a task with two incoming flows got it, but an exclusiveGateway with two incoming flows
+  and no more than one outgoing flow (an ordinary XOR-join, same shape, just gateway-typed) fell
+  through to the default single-transition path instead, which requires a token from *every*
+  incoming edge at once. An XOR split feeding such a join can structurally never deliver both, so
+  WF01/WF03 reported a deadlock on two real fixtures — `dense-edge-labels.json`, `multi-pool-
+  collaboration.json` — despite both being correctly-modelled, ordinary joins. Found while
+  investigating a misattributed finding in the new scenario-enumeration subsystem (below); the
+  fix lives in the shared translation both engines use, so both benefit.
 - **A build artifact outranked the source of truth.** `npm pack` — including the `--dry-run` the
   docs gate runs for its package-integrity check — executes `prepack`, which copies
   `references/input-schema.json` and `prompt-template.md` into `scripts/references/` so the npm
