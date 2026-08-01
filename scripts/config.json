@@ -228,6 +228,9 @@
     "defaultCycleBound": 1,
     "maxScenarios": 10000,
     "maxTraceLength": 500,
-    "maxInterleavingIdeals": 100000
+    "maxInterleavingIdeals": 100000,
+    "decisionTable": {
+      "maxPartitionCells": 20000
+    }
   }
 }
