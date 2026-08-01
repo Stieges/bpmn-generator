@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-08-01
+
 ### Added
 - **Scenario enumeration — every path a token can take, listed instead of drawn.**
   A new opt-in subsystem, `scripts/scenarios/`, implementing
