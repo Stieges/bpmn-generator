@@ -25,7 +25,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 ## Architecture
 
 7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
-9 robustness + 5 scenarios (growing) modules under `scripts/`. Verify current inventory with
+9 robustness + 7 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
@@ -122,6 +122,21 @@ Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
                                grouped around the model's happy path — marked via
                                isHappyPath, derived via BFS otherwise. Grouping key is BPMN
                                gateways only, not DMN — see the module doc for why.)
+  rules.js                   ← ../bpmn/workflow-net.js
+                               (runScenarioRules — the judging layer, own prefix SC01-SC06:
+                               SC01 a branch no scenario reaches (acyclic gateways only),
+                               SC02/SC03 an unresolved/ambiguous decisionRef, SC04/SC05 a
+                               decision-table gap/illegal overlap, SC06 improper completion
+                               at a scenario's shared sink. Severity is always ERROR — no
+                               WARNING tier. Reads Tasks 1-5's outputs, never re-derives
+                               them; no fachliche/business-sense judgment.)
+  pipeline.js                ← enumerate.js, collaboration.js, decision-table.js, bridge.js,
+                               format.js, rules.js
+                               (runScenarioPipeline — Orchestrator + CLI, mirrors
+                               dmn/pipeline.js's idiom. Auto-detects single-process vs.
+                               collaboration from lc.pools, then calls the six modules above
+                               in order and assembles their outputs. Integration only — no
+                               new computation or judgment.)
 ```
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
@@ -187,6 +202,10 @@ membership instead of coordinates.
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
 | `scripts/scenarios/enumerate.js` | `enumerateScenarios(proc)` — path enumeration over one process's Petri net. Reuses `bpmnToPN` and the firing primitives from `scripts/bpmn/workflow-net.js`, but runs its own traversal: `checkSoundness` deduplicates markings, which is right for "is the sink reachable?" and wrong for "which distinct paths reach it?". Cycles are bounded per backward edge (graph back edges via DFS colouring — **never** `loopType`/`loopMaximum`, which is one activity repeating, not a rework loop); parallel branches collapse to one canonical order carrying `interleavingCount`. Bounds in `config.json → scenarios` |
 | `scripts/scenarios/format.js` | `formatScenarioResult` / `formatCollaborationResult` — the presentation layer over `enumerate.js`/`collaboration.js`'s output: a complete JSON view (every scenario tagged with its decision sequence, group key, happy-path distance) and a grouped, capped Markdown view. Decision labels are recovered from `t_<gw>_choice_<i>` transition ids against the process's own flattened edges (only XOR/inclusive-gateway SPLITs count, never a merge or pass-through). Happy path is `isHappyPath`-marked when declared, else a deterministic BFS fallback (`deriveHappyPathEdges`) excluding backward and boundary-event-adjacent edges — the output always says which. Grouping key is BPMN gateways only, not DMN choices (see the module doc). Cap in `config.json → scenarios.format.maxGroupsRendered` |
+| `scripts/scenarios/decision-table.js` | `analyzeDecisionTable(table)` — DMN hit-policy-aware branching (UNIQUE exact, FIRST/PRIORITY overestimated-and-flagged, COLLECT/ANY/RULE ORDER/OUTPUT ORDER aggregated not branched) plus gap/overlap analysis over a Decision-Core table's `when`/`then` FEEL-subset text (numbers, dates, strings, intervals, enumerations, `-` wildcard). A column outside that grammar makes its whole rule "unanalyzable", never guessed at column-by-column. Cap in `config.json → scenarios.decisionTable.maxPartitionCells` |
+| `scripts/scenarios/bridge.js` | `resolveBridge(lc, decisionCores)` — resolves every BPMN `decisionRef` occurrence (recursive walk into subprocess/transaction children) against every Decision-Core document's decision tables, by id. Three outcomes per occurrence: `resolved` (exactly one match), `unresolved` (none), `ambiguous` (more than one distinct Decision-Core document claims the same id). A static pre-pass, no per-firing lookup during enumeration |
+| `scripts/scenarios/rules.js` | `runScenarioRules(context)` — the judging layer over Tasks 1-5's outputs, six rules `SC01`-`SC06`, severity always `ERROR`. `tableAnalysisKey(link)` is the exact key `context.tableAnalyses` must be indexed by. No business-sense judgment — only structurally objective findings (unreached branch, unresolved/ambiguous `decisionRef`, table gap/overlap, improper completion) |
+| `scripts/scenarios/pipeline.js` | `runScenarioPipeline(lc, decisionCores, options)` — Orchestrator + CLI + Public API for the scenario-enumeration subsystem, mirroring `dmn/pipeline.js`'s idiom; auto-detects single-process (`enumerateScenarios`) vs. collaboration (`enumerateCollaboration`) from `lc.pools`, resolves the bridge, analyzes every resolved table, formats, then judges — integration only, see the module's own header for why it deliberately contains no new computation |
 | `scripts/bpmn/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
 | `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
