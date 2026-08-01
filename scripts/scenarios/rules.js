@@ -49,6 +49,36 @@
  * exclusion bug in that logic; re-deriving it a second time here risks silently
  * reintroducing either.
  *
+ * A second, independently necessary limitation: SC01 declines ENTIRELY (returns no findings
+ * for that rule, not a partial answer) when enumeration itself is a PREFIX rather than the
+ * complete set — `enumerationResult.truncated === true` (the `maxScenarios` cap fired) or
+ * `stats.lengthTruncatedPaths > 0` (`maxTraceLength` cut a path short). The plan states this
+ * explicitly: a branch must be judged unreachable only "nach Abzug der Schranken-Sperrungen"
+ * (after subtracting cap-suppressed cases). The cycle-bound cap needs no separate handling
+ * here — every continuation it suppresses is, by construction, adjacent to a backward edge,
+ * so the gateway exclusion above already removes it from consideration — but the two
+ * count-based caps are orthogonal to cycles entirely: an un-enumerated acyclic branch under
+ * either of them may simply not have been reached YET, and reporting it as an objective
+ * defect would be exactly the false-positive class the rest of this plan's truncation
+ * honesty (`truncated`, `cappedPaths` vs. `deadEndPaths`, `gapAnalysis.attempted`) exists to
+ * prevent.
+ *
+ * ── SC01's pool-id keys: read from the enumeration result, never re-derived from `lc` ────────
+ * A gateway's `poolId` (used to build the lookup key compared against `formatted`'s
+ * `decisions`) is taken from `enumerationResult.poolIds` when present (the collaboration
+ * path) — NEVER independently computed as `pool.id` off `lc`. `composeCollaboration`
+ * (`collaboration.js`) synthesizes an id for any pool that declares none (`pool.id ||
+ * freshPoolId(index)`), and every `CompositeScenario.poolIds` entry — and therefore every
+ * `FormattedScenario.decisions[].poolId` derived from it — carries that SYNTHESIZED id, never
+ * `undefined`/`null`. Deriving this module's own gateway `poolId` as `pool.id ?? null`
+ * independently would silently disagree with what `decisions` actually contains for any
+ * pool without a declared `id` (or a fully non-pooled `lc`, handed to the collaboration
+ * functions per this module's own documented calling convention below) — producing an empty
+ * "taken" match for every one of that pool's gateways and reporting every branch as SC01,
+ * regardless of real coverage. Positional alignment holds because `enumerationResult.poolIds`
+ * and this module's own pool walk both iterate `lc.pools` (or `[lc]`) in the same order
+ * `composeCollaboration` does.
+ *
  * ── SC04/SC05's input: pre-computed analyses, not a live call ────────────────────────────────
  * `runScenarioRules` takes `context.tableAnalyses`, a `Map` from `tableAnalysisKey(link)` to
  * an already-computed `DecisionTableAnalysis` (Task 3's `analyzeDecisionTable`) — this module
@@ -84,17 +114,23 @@ import { bpmnToPN } from '../bpmn/workflow-net.js';
 
 /**
  * The pools this rule set should walk, normalized: a real collaboration's `pools` array, or
- * the whole document treated as a single unnamed pool — the exact fallback `collaboration.js`
- * (`composeCollaboration`) and `format.js` (`formatScenarioResult`'s implicit `poolId: null`)
- * already use. `poolId` is `null` for the single-process case so it matches the `poolId` a
- * `FormattedScenario`'s `decisions` entries carry in that same case.
+ * the whole document treated as a single unnamed pool — the exact fallback
+ * `composeCollaboration` (`collaboration.js`) uses. `poolId` is read POSITIONALLY from
+ * `actualPoolIds` (typically `enumerationResult.poolIds`) rather than derived from `pool.id`
+ * — see the module header's "SC01's pool-id keys" section for why that distinction matters.
+ * When `actualPoolIds` is absent (the single-process path has no such field — there is only
+ * ever one implicit pool, `poolId: null`, and no synthesis ever happens for it), every entry
+ * falls back to `null`, matching `formatScenarioResult`'s own convention.
  *
  * @param {object} lc
+ * @param {string[]} [actualPoolIds] - `enumerationResult.poolIds`, positionally aligned with
+ *   `lc.pools` (or `[lc]` when `lc` has no `pools`).
  * @returns {Array<{poolId: string|null, pool: object}>}
  */
-function poolsOf(lc) {
-  if (Array.isArray(lc?.pools)) return lc.pools.map((pool) => ({ poolId: pool.id ?? null, pool }));
-  return [{ poolId: null, pool: lc }];
+function poolsOf(lc, actualPoolIds) {
+  const rawPools = Array.isArray(lc?.pools) ? lc.pools : [lc];
+  const hasActualIds = Array.isArray(actualPoolIds);
+  return rawPools.map((pool, i) => ({ poolId: hasActualIds ? (actualPoolIds[i] ?? null) : null, pool }));
 }
 
 /**
@@ -107,9 +143,12 @@ function poolsOf(lc) {
  * @param {object} lc
  * @param {Array<{id: string, source: string, target: string, poolId?: string}>} backwardEdges -
  *   `EnumerationResult.stats.backwardEdges` or `CollaborationEnumerationResult.stats.backwardEdges`.
+ * @param {string[]} [actualPoolIds] - `enumerationResult.poolIds`, when the result is a
+ *   `CollaborationEnumerationResult` — see `poolsOf` and the module header for why this must
+ *   NOT be re-derived from `lc.pools[i].id` independently.
  * @returns {Array<{poolId: string|null, gatewayId: string, edges: Array<{id: string, label: string|null}>}>}
  */
-export function findAcyclicDecisionGateways(lc, backwardEdges) {
+export function findAcyclicDecisionGateways(lc, backwardEdges, actualPoolIds) {
   const excluded = new Set();
   for (const e of backwardEdges || []) {
     const scope = e.poolId ?? null;
@@ -118,7 +157,7 @@ export function findAcyclicDecisionGateways(lc, backwardEdges) {
   }
 
   const gateways = [];
-  for (const { poolId, pool } of poolsOf(lc)) {
+  for (const { poolId, pool } of poolsOf(lc, actualPoolIds)) {
     const { flatNodes, flatEdges } = bpmnToPN(pool);
     const outBySource = new Map();
     for (const e of flatEdges) {
@@ -149,7 +188,15 @@ export function findAcyclicDecisionGateways(lc, backwardEdges) {
  * @returns {Array<object>} SC01 issues.
  */
 function checkUnreachableBranches(lc, enumerationResult, formatted) {
-  const gateways = findAcyclicDecisionGateways(lc, enumerationResult?.stats?.backwardEdges || []);
+  // Enumeration is a PREFIX, not the complete set, under either count-based cap — see the
+  // module header. SC01 declines entirely rather than report an un-enumerated branch as an
+  // objective defect.
+  if (enumerationResult?.truncated || (enumerationResult?.stats?.lengthTruncatedPaths || 0) > 0) {
+    return [];
+  }
+
+  const actualPoolIds = Array.isArray(enumerationResult?.poolIds) ? enumerationResult.poolIds : undefined;
+  const gateways = findAcyclicDecisionGateways(lc, enumerationResult?.stats?.backwardEdges || [], actualPoolIds);
   if (gateways.length === 0) return [];
 
   const takenEdges = new Set(); // `${poolId}::${gatewayId}::${edgeId}`
@@ -225,6 +272,28 @@ function checkAmbiguousDecisionRefs(bridge) {
  */
 export function tableAnalysisKey(link) {
   return `${link.decision.decisionCoreId}::${link.decision.decisionId}`;
+}
+
+/**
+ * Count resolved bridge links whose table has NO entry in `tableAnalyses` — a link SC04/SC05
+ * silently skipped, e.g. because the caller's map was built with a different key scheme than
+ * `tableAnalysisKey` produces. Zero when `tableAnalyses` was not supplied at all (that is the
+ * documented "skip SC04/SC05 entirely" case, not a mismatch) — this only counts the case
+ * where a caller clearly intended those two rules to run but a specific link fell through.
+ * Surfaced on the return value of `runScenarioRules` so this failure mode reads as visible
+ * ("N links could not be judged") rather than being indistinguishable from "clean".
+ *
+ * @param {object} bridge - `BridgeResult`, or undefined.
+ * @param {Map<string, object>} [tableAnalyses]
+ * @returns {number}
+ */
+function countSkippedTableAnalyses(bridge, tableAnalyses) {
+  if (!tableAnalyses) return 0;
+  let skipped = 0;
+  for (const link of bridge?.resolved || []) {
+    if (!tableAnalyses.has(tableAnalysisKey(link))) skipped++;
+  }
+  return skipped;
 }
 
 function checkTableGaps(bridge, tableAnalyses) {
@@ -353,7 +422,9 @@ function checkImproperCompletion(enumerationResult) {
  *   DecisionTableAnalysis` (decision-table.js), one entry per resolved bridge link the caller
  *   wants judged. This module never calls `analyzeDecisionTable` itself — see the module
  *   header for why. Omit (or a link missing from the map) to skip SC04/SC05 for that link.
- * @returns {{issues: ScenarioRuleIssue[]}}
+ * @returns {{issues: ScenarioRuleIssue[], skippedTableAnalyses: number}} `skippedTableAnalyses`
+ *   counts resolved bridge links `tableAnalyses` was supplied for but had no entry matching —
+ *   see `countSkippedTableAnalyses`. Always 0 when `context.tableAnalyses` is omitted.
  */
 export function runScenarioRules(context) {
   const { lc, enumerationResult, formatted, bridge, tableAnalyses } = context || {};
@@ -365,5 +436,5 @@ export function runScenarioRules(context) {
     ...checkTableOverlaps(bridge, tableAnalyses),
     ...checkImproperCompletion(enumerationResult),
   ];
-  return { issues };
+  return { issues, skippedTableAnalyses: countSkippedTableAnalyses(bridge, tableAnalyses) };
 }

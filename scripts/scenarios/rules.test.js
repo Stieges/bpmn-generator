@@ -1,12 +1,14 @@
 /**
  * Phase E — tests for the judging layer (`rules.js`).
  *
- * Eight cases per the task-6 brief's Verification section: SC01 acyclic (a genuinely dead
+ * Seven cases per the task-6 brief's Verification section: SC01 acyclic (a genuinely dead
  * branch fires), SC01 cyclic exclusion (both directions: coverage holds AND the exclusion
  * holds even with a genuine gap), SC02/SC03 (distinct, from the bridge), SC04 (gap fires,
  * "not attempted" does not), SC05 (UNIQUE fires, FIRST with the identical shape does not),
  * SC06 (AND-fork-to-two-ends), and a clean model producing zero issues from all six rules
- * at once.
+ * at once — plus a post-review regression block (SC01's pool-id consistency for id-less
+ * pools and fully non-pooled documents, the truncation blind spot, the SOURCE-side cyclic
+ * exclusion, and `skippedTableAnalyses`).
  */
 
 import { describe, test, expect } from '@jest/globals';
@@ -102,7 +104,7 @@ describe('SC01 — cyclic gateways are excluded entirely', () => {
     expect(enumerationResult.stats.backwardEdges.some((e) => e.source === 'gw1' || e.target === 'gw1'))
       .toBe(false);
 
-    const gateways = findAcyclicDecisionGateways(lc, enumerationResult.stats.backwardEdges);
+    const gateways = findAcyclicDecisionGateways(lc, enumerationResult.stats.backwardEdges, enumerationResult.poolIds);
     expect(gateways.some((g) => g.gatewayId === 'gw1')).toBe(true); // not excluded
 
     const result = runScenarioRules({ lc, enumerationResult, formatted });
@@ -137,11 +139,130 @@ describe('SC01 — cyclic gateways are excluded entirely', () => {
     expect(enumerationResult.stats.backwardEdges).toHaveLength(1);
     expect(enumerationResult.stats.backwardEdges[0]).toMatchObject({ source: 'c', target: 'gw' });
 
-    const gateways = findAcyclicDecisionGateways(lc, enumerationResult.stats.backwardEdges);
+    const gateways = findAcyclicDecisionGateways(lc, enumerationResult.stats.backwardEdges, enumerationResult.poolIds);
     expect(gateways.some((g) => g.gatewayId === 'gw')).toBe(false); // excluded entirely
 
     const result = runScenarioRules({ lc, enumerationResult, formatted });
     expect(issuesOf(result, 'SC01').filter((i) => i.gatewayId === 'gw')).toEqual([]);
+  });
+
+  test('a gateway that is the SOURCE (not target) of a backward edge is also excluded entirely', () => {
+    // gw's own outgoing "loop" edge closes the cycle back to an ancestor (mid), so gw is the
+    // SOURCE of the backward edge this time — the reviewer confirmed this direction by hand;
+    // this pins it down as a committed regression test. Branch "b" dead-ends and must NOT be
+    // reported, exactly as in the target-direction case above.
+    const lc = {
+      pools: [{
+        id: 'P2b',
+        nodes: [
+          { id: 's', type: 'startEvent' }, { id: 'mid', type: 'userTask' },
+          { id: 'gw', type: 'exclusiveGateway' },
+          { id: 'a', type: 'userTask' }, { id: 'b', type: 'userTask' }, { id: 'e', type: 'endEvent' },
+        ],
+        edges: [
+          { id: 'e1', source: 's', target: 'mid' },
+          { id: 'e2', source: 'mid', target: 'gw' },
+          { id: 'e3', source: 'gw', target: 'a', label: 'happy' },
+          { id: 'e4', source: 'gw', target: 'b', label: 'dead-end' },
+          { id: 'e5', source: 'gw', target: 'mid', label: 'loop' }, // backward edge: gw → mid
+          { id: 'e6', source: 'a', target: 'e' },
+        ],
+      }],
+    };
+    const { enumerationResult, formatted } = enumerateAndFormat(lc);
+
+    expect(enumerationResult.stats.backwardEdges).toHaveLength(1);
+    expect(enumerationResult.stats.backwardEdges[0]).toMatchObject({ source: 'gw', target: 'mid' });
+
+    const gateways = findAcyclicDecisionGateways(lc, enumerationResult.stats.backwardEdges, enumerationResult.poolIds);
+    expect(gateways.some((g) => g.gatewayId === 'gw')).toBe(false); // excluded entirely
+
+    const result = runScenarioRules({ lc, enumerationResult, formatted });
+    expect(issuesOf(result, 'SC01').filter((i) => i.gatewayId === 'gw')).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 2b. SC01 — post-review regression: pool-id consistency and truncation
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('SC01 — pool-id consistency (id-less pools, fully non-pooled documents)', () => {
+  const twoBranchNodes = () => ([
+    { id: 's', type: 'startEvent' }, { id: 'gw', type: 'exclusiveGateway' },
+    { id: 'a', type: 'userTask' }, { id: 'b', type: 'userTask' }, { id: 'e', type: 'endEvent' },
+  ]);
+  const twoBranchEdges = () => ([
+    { id: 'e1', source: 's', target: 'gw' },
+    { id: 'e2', source: 'gw', target: 'a', label: 'Yes' },
+    { id: 'e3', source: 'gw', target: 'b', label: 'No' },
+    { id: 'e4', source: 'a', target: 'e' },
+    { id: 'e5', source: 'b', target: 'e' },
+  ]);
+
+  test('a pool with no explicit "id" field: both branches covered, no false SC01', () => {
+    // `composeCollaboration` synthesizes an id ("pool_0") for this pool. Before the fix,
+    // `formatCollaborationResult` keyed its per-pool context by the raw (undefined) `pool.id`
+    // instead, so every scenario's `decisions` came out empty and SC01 reported BOTH branches
+    // as unreached, regardless of actual coverage.
+    const lc = { pools: [{ nodes: twoBranchNodes(), edges: twoBranchEdges() }] };
+    const { enumerationResult, formatted } = enumerateAndFormat(lc);
+
+    expect(enumerationResult.poolIds).toEqual(['pool_0']);
+    expect(formatted.json.scenarios.every((s) => s.decisions.length > 0)).toBe(true);
+
+    const result = runScenarioRules({ lc, enumerationResult, formatted });
+    expect(issuesOf(result, 'SC01')).toEqual([]);
+  });
+
+  test('a fully non-pooled document run through the collaboration functions: both branches covered, no false SC01', () => {
+    // Per this module's own documented calling convention (module header, "Single process vs.
+    // collaboration"), a caller wanting SC06 coverage for a plain document still calls
+    // `enumerateCollaboration`/`formatCollaborationResult` on it. Before the fix,
+    // `formatCollaborationResult`'s `lc.pools || []` produced ZERO pools for this shape (not
+    // one implicit pool, unlike `composeCollaboration`), so every scenario's `decisions` came
+    // out empty and SC01 again reported both branches as unreached.
+    const lc = { nodes: twoBranchNodes(), edges: twoBranchEdges() };
+    const { enumerationResult, formatted } = enumerateAndFormat(lc);
+
+    expect(enumerationResult.poolIds).toEqual(['pool_0']);
+    expect(formatted.json.scenarios.every((s) => s.decisions.length > 0)).toBe(true);
+
+    const result = runScenarioRules({ lc, enumerationResult, formatted });
+    expect(issuesOf(result, 'SC01')).toEqual([]);
+  });
+});
+
+describe('SC01 — declines under enumeration truncation', () => {
+  test('an artificially tiny maxScenarios cap suppresses SC01 for the un-enumerated branch', () => {
+    const lc = {
+      pools: [{
+        id: 'P_Trunc',
+        nodes: [
+          { id: 's', type: 'startEvent' }, { id: 'gw', type: 'exclusiveGateway' },
+          { id: 'a', type: 'userTask' }, { id: 'b', type: 'userTask' }, { id: 'e', type: 'endEvent' },
+        ],
+        edges: [
+          { id: 'e1', source: 's', target: 'gw' },
+          { id: 'e2', source: 'gw', target: 'a', label: 'Yes' },
+          { id: 'e3', source: 'gw', target: 'b', label: 'No' },
+          { id: 'e4', source: 'a', target: 'e' },
+          { id: 'e5', source: 'b', target: 'e' },
+        ],
+      }],
+    };
+    const enumerationResult = enumerateCollaboration(lc, { maxScenarios: 1 });
+    expect(enumerationResult.truncated).toBe(true);
+    expect(enumerationResult.scenarios).toHaveLength(1); // branch "b" was never reached — by the cap, not reality
+    const formatted = formatCollaborationResult(enumerationResult, lc);
+
+    const result = runScenarioRules({ lc, enumerationResult, formatted });
+    expect(issuesOf(result, 'SC01')).toEqual([]);
+
+    // Sanity: with truncation NOT flagged, the same data WOULD have produced a false positive
+    // — proves the guard is doing real work, not merely absent because there was nothing to find.
+    const untruncated = { ...enumerationResult, truncated: false };
+    const wouldHaveFired = runScenarioRules({ lc, enumerationResult: untruncated, formatted });
+    expect(issuesOf(wouldHaveFired, 'SC01')).toHaveLength(1);
   });
 });
 
@@ -258,6 +379,26 @@ describe('SC04 — decision table gap, never confused with "not attempted"', () 
 
     const result = runScenarioRules({ lc, enumerationResult, formatted, bridge, tableAnalyses });
     expect(issuesOf(result, 'SC04')).toEqual([]);
+  });
+
+  test('a resolved link with no matching tableAnalyses entry is silently skipped but counted', () => {
+    const table = discountTable();
+    const lc = lcFor('dec_discountLevel');
+    const dc = decisionCore('Definitions_discount', 'dec_discountLevel', table);
+    const bridge = resolveBridge(lc, [dc]);
+    expect(bridge.resolved).toHaveLength(1);
+    const { enumerationResult, formatted } = enumerateAndFormat(lc);
+
+    // tableAnalyses supplied, but empty — the one resolved link has no matching entry.
+    const result = runScenarioRules({ lc, enumerationResult, formatted, bridge, tableAnalyses: new Map() });
+    expect(issuesOf(result, 'SC04')).toEqual([]);
+    expect(issuesOf(result, 'SC05')).toEqual([]);
+    expect(result.skippedTableAnalyses).toBe(1);
+
+    // Omitting tableAnalyses altogether is the documented "skip SC04/SC05 entirely" case, not
+    // a mismatch — it must NOT be counted the same way.
+    const withoutMap = runScenarioRules({ lc, enumerationResult, formatted, bridge });
+    expect(withoutMap.skippedTableAnalyses).toBe(0);
   });
 });
 

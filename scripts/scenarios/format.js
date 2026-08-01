@@ -647,20 +647,36 @@ export function formatScenarioResult(enumerationResult, proc, options = {}) {
  * @returns {FormattedView}
  */
 export function formatCollaborationResult(collabResult, lc, options = {}) {
-  const pools = lc.pools || [];
+  // Mirror `collaboration.js`'s `composeCollaboration` exactly: a document without `pools`
+  // is one unnamed pool, not zero pools. Getting this wrong used to mean a fully flat `lc`
+  // silently produced NO per-pool context at all (the loop below never ran), which in turn
+  // made every scenario's `decisions` come out empty — not a rendering quirk, a correctness
+  // bug that `rules.js`'s SC01 surfaced downstream as false positives on every branch.
+  const pools = lc.pools ? lc.pools : [lc];
   const flatContextByPool = new Map();
   const nameById = new Map();
   const perPool = [];
 
-  for (const pool of pools) {
+  pools.forEach((pool, i) => {
+    // The id actually wired into the composed net: `collabResult.poolIds[i]`, positionally
+    // aligned with `pools` (both walk `lc.pools`/`[lc]` in the same order — see
+    // `composeCollaboration`'s own loop). NOT `pool.id` directly: `composeCollaboration`
+    // synthesizes an id (`freshPoolId`) whenever a pool declares none, and `CompositeScenario
+    // .poolIds` carries that synthesized id, never `undefined`. Keying this module's own
+    // per-pool context by the raw (possibly-undefined) `pool.id` instead made every lookup
+    // against a synthesized id miss, silently — the map held a `undefined` key nothing ever
+    // queried for. Falling back to `pool.id` only covers the pathological case where
+    // `collabResult` was not actually produced by `enumerateCollaboration(lc)` for this same
+    // `lc` (a caller contract violation, not a shape this function needs to serve well).
+    const poolId = collabResult.poolIds?.[i] ?? pool.id ?? null;
     const pn = bpmnToPN(pool);
-    flatContextByPool.set(pool.id, { flatNodes: pn.flatNodes, flatEdges: pn.flatEdges });
+    flatContextByPool.set(poolId, { flatNodes: pn.flatNodes, flatEdges: pn.flatEdges });
     // Node ids are assumed globally unique across pools (the same assumption
     // `collaboration.js`'s `nodeOwners` makes); a collision has the later pool's name win.
     for (const [id, name] of buildNameIndex(pn.flatNodes)) nameById.set(id, name);
-    const hp = computeHappyPath(pn.flatNodes, pn.flatEdges, pool.id);
-    perPool.push({ poolId: pool.id, ...hp });
-  }
+    const hp = computeHappyPath(pn.flatNodes, pn.flatEdges, poolId);
+    perPool.push({ poolId, ...hp });
+  });
 
   const happyPath = {
     derived: perPool.some(p => p.derived),
