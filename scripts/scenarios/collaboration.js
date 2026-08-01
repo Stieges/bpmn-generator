@@ -131,8 +131,19 @@ export function composeCollaboration(lc) {
   // that cannot silently drop a synchronisation.
   const nodeOwners = new Map();
 
+  // A pool without an `id` still needs one to scope its places with. Generated rather
+  // than assumed free: `pool_0` is a legal pool id, and colliding with a real one would
+  // fuse two pools' sources into a single place — the exact defect the scoping prevents.
+  const declaredIds = new Set(pools.map(p => p.id).filter(Boolean));
+  const freshPoolId = (i) => {
+    let candidate = `pool_${i}`;
+    while (declaredIds.has(candidate)) candidate = `_${candidate}`;
+    declaredIds.add(candidate);
+    return candidate;
+  };
+
   for (const pool of pools) {
-    const poolId = pool.id || `pool_${poolInfos.length}`;
+    const poolId = pool.id || freshPoolId(poolInfos.length);
     const pn = bpmnToPN(pool);
 
     for (const [pid, p] of pn.places) {
@@ -230,8 +241,10 @@ export function composeCollaboration(lc) {
     const base = transitions.get(tId);
     const inArcs = arcs.filter(a => a.type === 'P→T' && a.to === tId);
     const outArcs = arcs.filter(a => a.type === 'T→P' && a.from === tId);
+    const cloneIds = [];
     for (const mp of gating) {
       const cloneId = `${tId}__recv_${mp.messageFlowId}`;
+      cloneIds.push(cloneId);
       transitions.set(cloneId, { ...base, id: cloneId, messageFlowId: mp.messageFlowId });
       for (const a of inArcs) arcs.push({ from: a.from, to: cloneId, type: 'P→T' });
       arcs.push({ from: mp.placeId, to: cloneId, type: 'P→T' });
@@ -240,6 +253,19 @@ export function composeCollaboration(lc) {
     }
     transitions.delete(tId);
     arcs = arcs.filter(a => a.to !== tId && a.from !== tId);
+
+    // The id `tId` no longer exists in the net, so EVERY record still naming it is now a
+    // dangling reference — not only the gated receiver entries remapped above. A split
+    // node that also SENDS a flow, or that receives a second, ungated one, kept the
+    // pre-split id and a consumer correlating it against a trace would conclude the
+    // message was never sent, while `messagesSent` (built from the arcs) says it was:
+    // two contradicting answers in one result object. On these sides the id expands to
+    // ALL clones — any clone firing IS that node executing — unlike a gated receiver,
+    // which maps to the one clone that consumes its own message.
+    for (const mp of messagePlaces) {
+      mp.senderTransitions = mp.senderTransitions.flatMap(t => (t === tId ? cloneIds : [t]));
+      mp.receiverTransitions = mp.receiverTransitions.flatMap(t => (t === tId ? cloneIds : [t]));
+    }
   }
 
   const consumed = new Set(arcs.filter(a => a.type === 'P→T').map(a => a.from));
@@ -286,10 +312,26 @@ export function composeCollaboration(lc) {
  *   this scenario, in the order they were produced.
  * @property {string[]} messagesReceived - message flow ids this scenario consumed, in
  *   order. A flow in `messagesSent` but not here was sent and never picked up — either to
- *   a black box, or a genuine loose end worth showing.
+ *   a black box, or a genuine loose end worth showing. **An ungated flow never appears
+ *   here at all**, because nothing consumes its place: the receive happened, it was simply
+ *   not synchronised. `stats.ungatedMessageFlows` lists which ones those are.
  * @property {string[]} residualPlaces - places still holding a token when the net ran dry,
- *   excluding the pool sinks. Normally the black-box-directed message places; anything
- *   else here is improper completion, which is WF03's verdict to give, not this module's.
+ *   **excluding the pool sinks** — see `sinkTokens` for those. Normally the message places
+ *   nothing consumes; anything else here is a stranded token, which is WF03's to call a
+ *   deadlock, not this module's.
+ * @property {Object<string, number>} sinkTokens - tokens on each real pool's sink at the
+ *   end, one entry per pool, normally all 1. **More than 1 is improper completion**:
+ *   `bpmnToPN` wires every end event to the same sink (workflow-net.js:161/181), so an AND
+ *   fork ending at two end events leaves 2 there. Reported because `residualPlaces` skips
+ *   the sinks and would otherwise make that case read as a clean finish. Still no verdict
+ *   — WF03 is where improper completion gets named.
+ *
+ * A caveat this shape inherits from the traversal, carried forward for anyone COUNTING
+ * scenarios: in a composed net `groupBySharedInput`'s grouping can be coarser than the
+ * true conflict set (see its JSDoc in enumerate.js), so two scenarios could in principle
+ * describe the same execution in two different orders. No construction has been found
+ * that makes it happen, and none has been proven impossible either; nothing is ever lost,
+ * only possibly repeated.
  */
 
 /**
@@ -317,9 +359,14 @@ export function composeCollaboration(lc) {
  *   waits for it) or received by one (nothing consumes it). **Read this before trusting
  *   the joint order** — for these, the two ends are not synchronised at all.
  * @property {string[]} stats.unconsumedMessagePlaces - message places no transition can
- *   ever consume (black-box receivers).
- * @property {Array<object>} stats.unresolvedEndpoints - message flow endpoints that
- *   matched neither a node nor a collapsed pool. Never thrown, always reported.
+ *   ever consume: every ungated flow qualifies, whether because its receiver is a black
+ *   box or because its black-box SENDER means no consuming arc was added (`mf4` in
+ *   `realistic-collaboration.json` is the second kind — its receiver is a real node).
+ * @property {Array<object>} stats.unresolvedEndpoints - message flow endpoints this
+ *   module could not map to a transition: an id matching no node and no collapsed pool
+ *   (malformed), but also the legal shape of addressing an expanded participant by its
+ *   POOL id rather than by a node inside it, which is simply not handled. Never thrown,
+ *   always reported — such a flow synchronises nothing.
  * @property {number} stats.deadEndPaths - includes genuine CROSS-POOL deadlocks: a path
  *   where one pool's branch means a message is never sent and the partner waits forever.
  *   Deliberately not a separate category — the accounting is the same as Task 1's, and
@@ -378,6 +425,12 @@ export function enumerateCollaboration(lc, options = {}) {
       messagesSent: s.transitions.flatMap(t => produces.get(t) || []),
       messagesReceived: s.transitions.flatMap(t => consumes.get(t) || []),
       residualPlaces,
+      // The sinks are excluded from `residualPlaces` (a token there is the point), which
+      // used to hide the one thing that place can still say: `bpmnToPN` wires every end
+      // event to the SAME sink (workflow-net.js:161/181), so an AND fork to two end
+      // events lands two tokens on it. That is the WF03 improper-completion shape, and
+      // with the sink filtered out unconditionally the result read as a clean finish.
+      sinkTokens: Object.fromEntries(net.pools.map(p => [p.poolId, marking.get(p.sinkPlace) || 0])),
     };
   });
 

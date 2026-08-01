@@ -136,6 +136,99 @@ describe('collaboration composition — mechanics', () => {
     expect(r.stats.deadEndPaths).toBe(0);
   });
 
+  // A node that is split because two gated flows target it, and that ALSO sends a flow
+  // and receives a third, ungated one. Splitting deletes the pre-split transition id, so
+  // every record still naming it dangles — the sender side and the ungated receiver side
+  // are not covered by the gated-receiver remap.
+  const splitNodeThatAlsoSends = () => ({
+    pools: [
+      {
+        id: 'PR',
+        nodes: [
+          { id: 'r0', type: 'startEvent' }, { id: 'R', type: 'receiveTask' },
+          { id: 'r9', type: 'endEvent' },
+        ],
+        edges: [{ id: 'r1', source: 'r0', target: 'R' }, { id: 'r2', source: 'R', target: 'r9' }],
+      },
+      {
+        id: 'PA',
+        nodes: [{ id: 'a0', type: 'startEvent' }, { id: 'a1', type: 'sendTask' }, { id: 'a9', type: 'endEvent' }],
+        edges: [{ id: 'ax', source: 'a0', target: 'a1' }, { id: 'ay', source: 'a1', target: 'a9' }],
+      },
+      {
+        id: 'PB',
+        nodes: [{ id: 'b0', type: 'startEvent' }, { id: 'b1', type: 'sendTask' }, { id: 'b9', type: 'endEvent' }],
+        edges: [{ id: 'bx', source: 'b0', target: 'b1' }, { id: 'by', source: 'b1', target: 'b9' }],
+      },
+      {
+        id: 'PC',
+        nodes: [{ id: 'c0', type: 'startEvent' }, { id: 'c1', type: 'receiveTask' }, { id: 'c9', type: 'endEvent' }],
+        edges: [{ id: 'cx', source: 'c0', target: 'c1' }, { id: 'cy', source: 'c1', target: 'c9' }],
+      },
+    ],
+    collapsedPools: [{ id: 'BB', name: 'External' }],
+    messageFlows: [
+      { id: 'ma', source: 'a1', target: 'R' },   // gated, splits R
+      { id: 'mb', source: 'b1', target: 'R' },   // gated, splits R
+      { id: 'mc', source: 'R', target: 'c1' },   // the split node as SENDER
+      { id: 'md', source: 'BB', target: 'R' },   // the split node as UNGATED receiver
+    ],
+  });
+
+  test('splitting a node leaves no message record pointing at a transition that no longer exists', () => {
+    const lc = splitNodeThatAlsoSends();
+    const net = composeCollaboration(lc);
+    const r = enumerateCollaboration(lc);
+
+    // The general invariant, which is what a downstream consumer relies on.
+    for (const m of r.stats.messageFlows) {
+      for (const t of [...m.senderTransitions, ...m.receiverTransitions]) {
+        expect(net.transitions.has(t)).toBe(true);
+      }
+    }
+    // The specific stale case: `mc` used to read ['PR::t_R'], an id deleted by the split,
+    // so correlating it against a trace said "never sent" while messagesSent said "sent".
+    const byId = new Map(r.stats.messageFlows.map(m => [m.id, m]));
+    expect(byId.get('mc').senderTransitions).toEqual(
+      ['PR::t_R__recv_ma', 'PR::t_R__recv_mb']);
+    expect(byId.get('md').receiverTransitions).toEqual(
+      ['PR::t_R__recv_ma', 'PR::t_R__recv_mb']);
+    // A gated receiver still maps to its OWN clone, not to all of them.
+    expect(byId.get('ma').receiverTransitions).toEqual(['PR::t_R__recv_ma']);
+    expect(byId.get('mb').receiverTransitions).toEqual(['PR::t_R__recv_mb']);
+
+    // And the two answers now agree: every scenario that says it sent mc contains a
+    // transition mc's record names.
+    for (const s of r.scenarios) {
+      expect(s.messagesSent.includes('mc'))
+        .toBe(byId.get('mc').senderTransitions.some(t => s.transitions.includes(t)));
+    }
+    expect(r.scenarios.some(s => s.messagesSent.includes('mc'))).toBe(true);
+  });
+
+  test('a pool without an id cannot take an id another pool already uses', () => {
+    // `pool_0` is a legal pool id; handing it to an anonymous pool as a fallback would
+    // fuse the two pools' sources into one place.
+    const lc = {
+      pools: [
+        {
+          nodes: [{ id: 'n0', type: 'startEvent' }, { id: 'n9', type: 'endEvent' }],
+          edges: [{ id: 'n1', source: 'n0', target: 'n9' }],
+        },
+        {
+          id: 'pool_0',
+          nodes: [{ id: 'k0', type: 'startEvent' }, { id: 'k9', type: 'endEvent' }],
+          edges: [{ id: 'k1', source: 'k0', target: 'k9' }],
+        },
+      ],
+    };
+    const net = composeCollaboration(lc);
+    expect(new Set(net.pools.map(p => p.poolId)).size).toBe(2);
+    expect(new Set(net.pools.map(p => p.sourcePlace)).size).toBe(2);
+    expect([...net.initialMarking.entries()].filter(([, n]) => n > 0)).toHaveLength(2);
+    expect(enumerateCollaboration(lc).scenarios).toHaveLength(1);
+  });
+
   test('a message place cannot collide with a sequence-flow place', () => {
     const net = composeCollaboration(fixture('realistic-collaboration'));
     for (const mf of fixture('realistic-collaboration').messageFlows) {
@@ -339,6 +432,44 @@ describe('collaboration enumeration — joint termination', () => {
     expect(getEnabledTransitions(marking, net.transitions, net.arcs)).toEqual([]);
     for (const p of net.pools) expect(marking.get(p.sinkPlace)).toBe(1);
     expect(s.residualPlaces).toEqual([]);
+    expect(s.sinkTokens).toEqual({ P_Ask: 1, P_Answer: 1 });
+  });
+
+  test('improper completion at the shared sink is visible, not filtered away', () => {
+    // bpmnToPN wires every end event to ONE sink (workflow-net.js:161/181), so an AND
+    // fork ending at two end events lands two tokens there. residualPlaces excludes the
+    // sinks — a token there is the point — which used to make this read as a clean
+    // finish. sinkTokens is where it shows.
+    const lc = {
+      pools: [{
+        id: 'P_TwoEnds',
+        nodes: [
+          { id: 's', type: 'startEvent' }, { id: 'fork', type: 'parallelGateway' },
+          { id: 'x', type: 'userTask' }, { id: 'y', type: 'userTask' },
+          { id: 'e1', type: 'endEvent' }, { id: 'e2', type: 'endEvent' },
+        ],
+        edges: [
+          { id: 'a1', source: 's', target: 'fork' }, { id: 'a2', source: 'fork', target: 'x' },
+          { id: 'a3', source: 'fork', target: 'y' }, { id: 'a4', source: 'x', target: 'e1' },
+          { id: 'a5', source: 'y', target: 'e2' },
+        ],
+      }],
+    };
+    const s = enumerateCollaboration(lc).scenarios[0];
+
+    expect(s.nodes).toEqual(['s', 'fork', 'x', 'e1', 'y', 'e2']);
+    expect(s.residualPlaces).toEqual([]);          // by design: sinks are excluded there
+    expect(s.sinkTokens).toEqual({ P_TwoEnds: 2 }); // and this is where >1 becomes visible
+    // Still no verdict of our own — naming it improper completion is WF03's job.
+    expect(JSON.stringify(s)).not.toMatch(/improper|deadlock|unsound|WF0/i);
+  });
+
+  test('a normal single-end run reports exactly one token per sink', () => {
+    const r = enumerateCollaboration(fixture('realistic-collaboration'));
+    expect(r.scenarios[0].sinkTokens).toEqual({
+      Process_Applicant: 1, Process_Intake: 1, Process_Assessment: 1,
+      Process_Decision: 1, Process_Archive: 1,
+    });
   });
 });
 
@@ -536,8 +667,9 @@ describe('collaboration enumeration — the composed scenario shape', () => {
     for (const s of r.scenarios) {
       expect(Object.keys(s).sort()).toEqual([
         'cycleUseCounts', 'index', 'interleavingCount', 'messagesReceived', 'messagesSent',
-        'nodes', 'poolIds', 'residualPlaces', 'transitions',
+        'nodes', 'poolIds', 'residualPlaces', 'sinkTokens', 'transitions',
       ]);
+      expect(Object.keys(s.sinkTokens)).toEqual(r.poolIds);
       expect(s.nodes).toHaveLength(s.transitions.length);
       expect(s.poolIds).toHaveLength(s.transitions.length);
       for (let i = 0; i < s.transitions.length; i++) {
