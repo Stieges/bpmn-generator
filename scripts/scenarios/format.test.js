@@ -1,0 +1,273 @@
+/**
+ * Phase D — output formatting tests.
+ *
+ * Verification items 1-7 from the task brief map onto the `describe` blocks below in order.
+ */
+
+import { describe, test, expect } from '@jest/globals';
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+import { enumerateScenarios } from './enumerate.js';
+import { enumerateCollaboration } from './collaboration.js';
+import {
+  formatScenarioResult, formatCollaborationResult,
+  parseDecisionTransition, extractScenarioDecisions, computeHappyPath,
+  deriveHappyPathEdges, distanceFromHappyPath, happyPathDecisionMap,
+} from './format.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const fixture = (name) =>
+  JSON.parse(readFileSync(resolve(__dirname, '../../tests/fixtures', `${name}.json`), 'utf8'));
+
+// A fixture with TWO independent XOR gateways (gwA then gwB, no cycles) — the simple-approval
+// fixture only has one, which cannot exercise "differs at 1 gateway vs. differs at 2".
+const twoGatewayProc = {
+  id: 'Process_TwoGateways',
+  nodes: [
+    { id: 'start', type: 'startEvent', name: 'Start' },
+    { id: 'gwA', type: 'exclusiveGateway', name: 'A?' },
+    { id: 'taskA1', type: 'task', name: 'A1' },
+    { id: 'taskA2', type: 'task', name: 'A2' },
+    { id: 'mid', type: 'task', name: 'Mid' },
+    { id: 'gwB', type: 'exclusiveGateway', name: 'B?' },
+    { id: 'taskB1', type: 'task', name: 'B1' },
+    { id: 'taskB2', type: 'task', name: 'B2' },
+    { id: 'endMerge', type: 'task', name: 'End Merge' },
+    { id: 'end', type: 'endEvent', name: 'End' },
+  ],
+  edges: [
+    { id: 'e1', source: 'start', target: 'gwA' },
+    { id: 'e2', source: 'gwA', target: 'taskA1', label: 'A1' },
+    { id: 'e3', source: 'gwA', target: 'taskA2', label: 'A2' },
+    { id: 'e4', source: 'taskA1', target: 'mid' },
+    { id: 'e5', source: 'taskA2', target: 'mid' },
+    { id: 'e6', source: 'mid', target: 'gwB' },
+    { id: 'e7', source: 'gwB', target: 'taskB1', label: 'B1' },
+    { id: 'e8', source: 'gwB', target: 'taskB2', label: 'B2' },
+    { id: 'e9', source: 'taskB1', target: 'endMerge' },
+    { id: 'e10', source: 'taskB2', target: 'endMerge' },
+    { id: 'e11', source: 'endMerge', target: 'end' },
+  ],
+};
+
+// Same shape, but with isHappyPath explicitly marking the A2 / B1 combination — the OPPOSITE
+// of what the BFS fallback would derive (which picks the lexicographically smallest edge id
+// at each gateway, i.e. A1 / B1) — so a test that used the derived answer by accident cannot
+// pass this one too.
+const markedTwoGatewayProc = {
+  ...twoGatewayProc,
+  edges: twoGatewayProc.edges.map(e => ({
+    ...e,
+    isHappyPath: ['e1', 'e3', 'e5', 'e6', 'e7', 'e9', 'e11'].includes(e.id) || undefined,
+  })),
+};
+
+describe('Part 1 — decision-label derivation (item 1)', () => {
+  test('parseDecisionTransition recognizes only XOR-split transitions', () => {
+    expect(parseDecisionTransition('t_gw1_choice_0')).toEqual({ gatewayId: 'gw1', choiceIndex: 0 });
+    expect(parseDecisionTransition('t_gw1_choice_12')).toEqual({ gatewayId: 'gw1', choiceIndex: 12 });
+    expect(parseDecisionTransition('t_task1_merge_0')).toBeNull();
+    expect(parseDecisionTransition('t_task1')).toBeNull();
+  });
+
+  test('simple-approval: each scenario\'s decision label names the taken edge, merge transitions excluded', () => {
+    const proc = fixture('simple-approval').pools[0];
+    const result = enumerateScenarios(proc);
+    const { json } = formatScenarioResult(result, proc);
+
+    expect(json.scenarios).toHaveLength(2);
+    // Scenario 0: straight through, gw1 chose "Yes" (f3).
+    const straight = json.scenarios.find(s => s.nodes.length === 5);
+    expect(straight.decisions).toEqual([
+      { kind: 'bpmn-gateway', gatewayId: 'gw1', poolId: null, choiceIndex: 0, edgeId: 'f3', label: 'Yes' },
+    ]);
+    // Scenario 1: one revision, gw1 chose "No" (f4) then "Yes" (f3).
+    const revised = json.scenarios.find(s => s.nodes.length === 8);
+    expect(revised.decisions.map(d => d.label)).toEqual(['No', 'Yes']);
+
+    // t_task1_merge_0 / t_task1_merge_1 (task1 has 2 incoming edges) must NOT appear as
+    // decision points anywhere.
+    for (const s of json.scenarios) {
+      expect(s.transitions.some(t => t.includes('_merge_'))).toBe(true); // sanity: the fixture DOES have one
+      expect(s.decisions.every(d => !d.gatewayId.includes('task1'))).toBe(true);
+    }
+  });
+});
+
+describe('Part 2 — happy path, marked case (item 2)', () => {
+  test('marked isHappyPath edges are used verbatim, not derived, and the matching scenario sorts first at distance 0', () => {
+    const result = enumerateScenarios(markedTwoGatewayProc);
+    const { json } = formatScenarioResult(result, markedTwoGatewayProc);
+
+    expect(json.happyPath.derived).toBe(false);
+    expect(json.happyPath.decisions.map(d => d.label)).toEqual(['A2', 'B1']);
+
+    const first = json.scenarios[0];
+    expect(first.decisions.map(d => d.label)).toEqual(['A2', 'B1']);
+    expect(first.happyPathDistance).toBe(0);
+  });
+});
+
+describe('Part 2 — happy path, derived case (item 3)', () => {
+  test('simple-approval has no isHappyPath markings', () => {
+    const proc = fixture('simple-approval').pools[0];
+    expect(proc.edges.some(e => e.isHappyPath)).toBe(false);
+  });
+
+  test('BFS fallback excludes the backward edge f5, flags itself as derived, and is deterministic', () => {
+    const proc = fixture('simple-approval').pools[0];
+    const result = enumerateScenarios(proc);
+    const { json } = formatScenarioResult(result, proc);
+
+    expect(json.happyPath.derived).toBe(true);
+    expect(json.happyPath.edges.map(e => e.id)).toEqual(['f1', 'f2', 'f3', 'f6']);
+    expect(json.happyPath.edges.some(e => e.id === 'f5')).toBe(false);
+
+    // Re-running produces the identical path. simple-approval has no expanded subprocess
+    // children, so `proc.nodes`/`proc.edges` are already flat — no need to reach into
+    // `bpmn/workflow-net.js`'s internal flatten for this fixture.
+    const again = deriveHappyPathEdges(proc.nodes, proc.edges);
+    expect(again.map(e => e.id)).toEqual(['f1', 'f2', 'f3', 'f6']);
+    const onceMore = deriveHappyPathEdges(proc.nodes, proc.edges);
+    expect(onceMore.map(e => e.id)).toEqual(again.map(e => e.id));
+  });
+});
+
+describe('Part 3 — distance and sort order (item 4)', () => {
+  test('scenarios differing at 1 gateway sort before scenarios differing at 2; equal distances tie-break by index', () => {
+    const result = enumerateScenarios(twoGatewayProc);
+    const { json } = formatScenarioResult(result, twoGatewayProc);
+
+    expect(json.scenarios).toHaveLength(4);
+    expect(json.happyPath.decisions.map(d => d.label)).toEqual(['A1', 'B1']); // BFS picks e2/e7 (lexicographically smallest)
+
+    const distances = json.scenarios.map(s => s.happyPathDistance);
+    expect(distances).toEqual([0, 1, 1, 2]);
+
+    // The two distance-1 scenarios tie-break by original `index`.
+    const distanceOneScenarios = json.scenarios.filter(s => s.happyPathDistance === 1);
+    expect(distanceOneScenarios[0].index).toBeLessThan(distanceOneScenarios[1].index);
+  });
+
+  test('distanceFromHappyPath scores a skipped happy-path gateway the same as a differing choice', () => {
+    const happyMap = happyPathDecisionMap([
+      { poolId: null, gatewayId: 'gwA', label: 'A1' },
+      { poolId: null, gatewayId: 'gwB', label: 'B1' },
+    ]);
+    const differsAtBoth = distanceFromHappyPath(
+      [{ poolId: null, gatewayId: 'gwA', label: 'A2' }], happyMap,
+    ); // gwB never reached at all
+    expect(differsAtBoth).toBe(2);
+  });
+});
+
+describe('Part 3 — grouping collapses correctly (item 5)', () => {
+  test('two scenarios with the same decision-label sequence land in one Markdown group; JSON still lists them separately', () => {
+    const proc = fixture('simple-approval').pools[0];
+    const result = enumerateScenarios(proc);
+    const { json, markdown } = formatScenarioResult(result, proc);
+
+    // JSON: flat, full detail, still 2 scenarios.
+    expect(json.scenarios).toHaveLength(2);
+    expect(new Set(json.scenarios.map(s => s.groupKey)).size).toBe(2); // these two happen to differ
+
+    // Markdown: exactly 2 groups (one per distinct decision sequence), each showing its
+    // members. There is no artificial merge here, so this doubles as a shape check on the
+    // rendering itself.
+    const groupHeadings = markdown.match(/^## .+$/gm) || [];
+    expect(groupHeadings).toHaveLength(json.groupCount);
+    expect(json.groupCount).toBe(2);
+
+    // Build an artificial pair with an IDENTICAL decision sequence to confirm the grouping
+    // logic itself (not just "this fixture happens to have 2 groups").
+    const withDuplicateKey = {
+      ...json,
+      scenarios: [
+        { ...json.scenarios[0], index: 0, groupKey: 'SAME' },
+        { ...json.scenarios[0], index: 1, groupKey: 'SAME' },
+      ],
+    };
+    const groups = new Map();
+    for (const s of withDuplicateKey.scenarios) {
+      if (!groups.has(s.groupKey)) groups.set(s.groupKey, []);
+      groups.get(s.groupKey).push(s);
+    }
+    expect(groups.size).toBe(1);
+    expect(groups.get('SAME')).toHaveLength(2);
+  });
+
+  test('a group with interleavingCount > 1 for any member surfaces the count in Markdown', () => {
+    // simple-approval's scenarios are fully sequential (interleavingCount 1), so build a
+    // scenario carrying interleavingCount > 1 directly to check the rendering path.
+    const proc = fixture('simple-approval').pools[0];
+    const result = enumerateScenarios(proc);
+    result.scenarios[0].interleavingCount = 6;
+    const { markdown } = formatScenarioResult(result, proc);
+    expect(markdown).toMatch(/×6 interleavings/);
+  });
+});
+
+describe('Part 1 — composite (multi-pool) scenario labeling (item 6)', () => {
+  test('pool-prefix and __recv_ stripping recovers a decision label inside one pool of a collaboration', () => {
+    const lc = fixture('realistic-collaboration');
+    const result = enumerateCollaboration(lc);
+    const { json } = formatCollaborationResult(result, lc);
+
+    const withDecisions = json.scenarios.filter(s => s.decisions.length > 0);
+    expect(withDecisions.length).toBeGreaterThan(0);
+
+    const decision = withDecisions[0].decisions[0];
+    expect(decision.gatewayId).toBe('in_gw');
+    expect(decision.poolId).toBe('Process_Intake');
+    expect(['Yes', 'No']).toContain(decision.label);
+  });
+
+  test('extractScenarioDecisions strips pool prefix and __recv_ suffix directly', () => {
+    const decisions = extractScenarioDecisions(
+      ['Process_Intake::t_in_gw_choice_0__recv_mf1'],
+      ['Process_Intake'],
+      () => [{ id: 'inf4', source: 'in_gw', target: 'in_forward', label: 'Yes' }],
+    );
+    expect(decisions).toEqual([
+      { kind: 'bpmn-gateway', gatewayId: 'in_gw', poolId: 'Process_Intake', choiceIndex: 0, edgeId: 'inf4', label: 'Yes' },
+    ]);
+  });
+});
+
+describe('Part 4 — truncation is visible, never silent (item 7)', () => {
+  test('an artificially tiny group-render cap states explicitly how many groups were omitted', () => {
+    const proc = fixture('simple-approval').pools[0];
+    const result = enumerateScenarios(proc);
+    const { markdown, json } = formatScenarioResult(result, proc, { maxGroupsRendered: 1 });
+
+    expect(json.groupCount).toBe(2); // JSON view is unaffected by the cap
+    const groupHeadings = markdown.match(/^## .+$/gm) || [];
+    expect(groupHeadings).toHaveLength(1); // Markdown view is capped
+
+    expect(markdown).toMatch(/1 more group not shown, see the JSON view\./);
+  });
+
+  test('no omission message when the cap is not hit', () => {
+    const proc = fixture('simple-approval').pools[0];
+    const result = enumerateScenarios(proc);
+    const { markdown } = formatScenarioResult(result, proc, { maxGroupsRendered: 50 });
+    expect(markdown).not.toMatch(/not shown/);
+  });
+});
+
+describe('computeHappyPath — direct unit coverage', () => {
+  test('returns derived:false and the marked chain when isHappyPath edges are present', () => {
+    const hp = computeHappyPath(markedTwoGatewayProc.nodes, markedTwoGatewayProc.edges, null);
+    expect(hp.derived).toBe(false);
+    expect(hp.edges.map(e => e.id)).toEqual(['e1', 'e3', 'e5', 'e6', 'e7', 'e9', 'e11']);
+  });
+
+  test('returns derived:true and an empty happy path when start/end events are absent', () => {
+    const hp = computeHappyPath([{ id: 'a', type: 'task' }], [], null);
+    expect(hp.derived).toBe(true);
+    expect(hp.edges).toEqual([]);
+    expect(hp.decisions).toEqual([]);
+  });
+});

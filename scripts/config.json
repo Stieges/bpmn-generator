@@ -231,6 +231,9 @@
     "maxInterleavingIdeals": 100000,
     "decisionTable": {
       "maxPartitionCells": 20000
+    },
+    "format": {
+      "maxGroupsRendered": 50
     }
   }
 }

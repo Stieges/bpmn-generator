@@ -25,7 +25,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 ## Architecture
 
 7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
-9 robustness + 1 scenarios (growing) modules under `scripts/`. Verify current inventory with
+9 robustness + 5 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
@@ -105,6 +105,23 @@ Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
                                through ONE process, with a per-backward-edge cycle bound
                                and parallel interleavings collapsed to one canonical order
                                plus a count. Enumerates, never judges.)
+  collaboration.js           ← ../bpmn/workflow-net.js, enumerate.js
+                               (enumerateCollaboration — composes per-pool Petri nets over
+                               message flows, drives the same traversal jointly.)
+  decision-table.js          ← ../shared/utils.js
+                               (analyzeDecisionTable — DMN hit-policy branching + gap/overlap
+                               analysis over a Decision-Core table, symbolic, never a
+                               reachability claim.)
+  bridge.js                  (resolveBridge — resolves BPMN decisionRef against DMN decision
+                               tables; pure static matching, no per-firing lookup.)
+  format.js                  ← ../bpmn/workflow-net.js, ../bpmn/topology.js, enumerate.js,
+                               ../shared/utils.js
+                               (formatScenarioResult / formatCollaborationResult — the JSON
+                               and Markdown views over enumerated scenarios: decision labels
+                               recovered from t_<gw>_choice_<i> transition ids, sorted and
+                               grouped around the model's happy path — marked via
+                               isHappyPath, derived via BFS otherwise. Grouping key is BPMN
+                               gateways only, not DMN — see the module doc for why.)
 ```
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
@@ -169,6 +186,7 @@ membership instead of coordinates.
 | `scripts/agents/` | 7 agent modules: chat, compliance, layout, llm-provider, modeler, prompt-sections, reviewer |
 | `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
 | `scripts/scenarios/enumerate.js` | `enumerateScenarios(proc)` — path enumeration over one process's Petri net. Reuses `bpmnToPN` and the firing primitives from `scripts/bpmn/workflow-net.js`, but runs its own traversal: `checkSoundness` deduplicates markings, which is right for "is the sink reachable?" and wrong for "which distinct paths reach it?". Cycles are bounded per backward edge (graph back edges via DFS colouring — **never** `loopType`/`loopMaximum`, which is one activity repeating, not a rework loop); parallel branches collapse to one canonical order carrying `interleavingCount`. Bounds in `config.json → scenarios` |
+| `scripts/scenarios/format.js` | `formatScenarioResult` / `formatCollaborationResult` — the presentation layer over `enumerate.js`/`collaboration.js`'s output: a complete JSON view (every scenario tagged with its decision sequence, group key, happy-path distance) and a grouped, capped Markdown view. Decision labels are recovered from `t_<gw>_choice_<i>` transition ids against the process's own flattened edges (only XOR/inclusive-gateway SPLITs count, never a merge or pass-through). Happy path is `isHappyPath`-marked when declared, else a deterministic BFS fallback (`deriveHappyPathEdges`) excluding backward and boundary-event-adjacent edges — the output always says which. Grouping key is BPMN gateways only, not DMN choices (see the module doc). Cap in `config.json → scenarios.format.maxGroupsRendered` |
 | `scripts/bpmn/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
 | `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
