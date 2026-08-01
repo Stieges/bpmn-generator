@@ -125,13 +125,19 @@ function bpmnToPN(proc) {
       }
     }
 
-    // Check for implicit merge: non-gateway node with multiple incoming edges
-    // In BPMN, a task with 2+ incoming flows acts as implicit XOR merge (any one activates it)
-    // In Petri-Nets, a transition with 2+ input places requires ALL tokens (AND semantics)
-    // Fix: create one transition per incoming edge for implicit merges
+    // Check for implicit merge: a node with multiple incoming edges and no more than
+    // one outgoing edge acts as an OR-join (any one incoming token activates it) — either
+    // a plain task with 2+ incoming flows (BPMN's implicit merge), or an exclusiveGateway
+    // used as a join rather than a split. Naively giving such a node ONE transition with
+    // one P→T arc per incoming place would require ALL of them to hold a token at once —
+    // AND semantics — which is wrong for both shapes. `outEdges.length > 1` above already
+    // `continue`s an exclusiveGateway that's splitting, so any exclusiveGateway reaching
+    // this line has at most one outgoing edge and is a join if it is anything.
+    // Fix: create one transition per incoming edge, so any single arrival can fire it.
     const inEdges = flatEdges.filter(e => e.target === node.id);
     const outEdges = flatEdges.filter(e => e.source === node.id);
-    const isImplicitMerge = !isGateway(node.type) && inEdges.length > 1;
+    const isExclusiveJoin = node.type === 'exclusiveGateway' && outEdges.length <= 1;
+    const isImplicitMerge = (!isGateway(node.type) || isExclusiveJoin) && inEdges.length > 1;
 
     if (isImplicitMerge) {
       for (let i = 0; i < inEdges.length; i++) {

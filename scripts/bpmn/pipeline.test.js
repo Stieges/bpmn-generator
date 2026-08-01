@@ -723,6 +723,36 @@ describe('Workflow-Net Soundness', () => {
     expect(Object.keys(result.stats)).toHaveLength(poolCount);
   });
 
+  test('exclusiveGateway used as a join → OR semantics, no false deadlock', () => {
+    // A gateway acting as a join used to fall through bpmnToPN's implicit-merge guard, which
+    // only rewrote NON-gateway nodes (`!isGateway(node.type) && inEdges.length > 1`). A join
+    // gateway kept the default single-transition path instead, which wires every incoming place
+    // onto the SAME transition — AND semantics, requiring a token from both branches of an XOR
+    // split at once, which it can never deliver. Regression guard for the fix that extends the
+    // implicit-merge treatment to any exclusiveGateway with multiple incoming edges and at most
+    // one outgoing edge (a join, not a split — the split branch above it already `continue`s).
+    const lc = {
+      id: 'P1', name: 'XOR-join', nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'gw1', type: 'exclusiveGateway', name: 'Split' },
+        { id: 'a', type: 'task', name: 'A' },
+        { id: 'b', type: 'task', name: 'B' },
+        { id: 'gw2', type: 'exclusiveGateway', name: 'Join' },
+        { id: 'e', type: 'endEvent' },
+      ], edges: [
+        { id: 'f1', source: 's', target: 'gw1' },
+        { id: 'f2', source: 'gw1', target: 'a', label: 'Yes' },
+        { id: 'f3', source: 'gw1', target: 'b', label: 'No' },
+        { id: 'f4', source: 'a', target: 'gw2' },
+        { id: 'f5', source: 'b', target: 'gw2' },
+        { id: 'f6', source: 'gw2', target: 'e' },
+      ], lanes: [],
+    };
+    const result = checkWorkflowNetSoundness(lc);
+    const errors = result.issues.filter((i) => i.severity === 'ERROR');
+    expect(errors).toHaveLength(0);
+  });
+
   test('bpmnToPN creates places for edges', () => {
     const proc = {
       nodes: [

@@ -107,15 +107,19 @@
  * gateway for a defect that lives downstream, sending a reader to the one place in the model
  * that is fine.
  *
- * Reproduced on `tests/fixtures/multi-pool-collaboration.json`: SC01 reported both branches of
- * `s_gw` as never taken. Both are taken. The real stall is at `s_merge`, an `exclusiveGateway`
- * with two incoming edges, which `bpmnToPN`'s implicit-merge guard (`workflow-net.js`,
- * `!isGateway(node.type) && inEdges.length > 1`) does not catch precisely BECAUSE it is a
- * gateway — so it falls through to the default single-transition path and acquires AND
- * semantics, requiring a token from both incoming edges at once, which an XOR split can never
- * deliver. That is a pre-existing `bpmnToPN` limitation, not this subsystem's: the same fixture
- * already produces a WF03 deadlock at the same place. SC01's job is not to fix it but to
- * recognise that it cannot be trusted in its presence.
+ * Originally reproduced on `tests/fixtures/multi-pool-collaboration.json`: SC01 reported both
+ * branches of `s_gw` as never taken, though both were taken — the real stall was at `s_merge`,
+ * an `exclusiveGateway` with two incoming edges that `bpmnToPN`'s implicit-merge guard did not
+ * catch precisely BECAUSE it was a gateway, so it fell through to the default single-transition
+ * path and acquired AND semantics, requiring a token from both incoming edges at once, which an
+ * XOR split can never deliver. That `bpmnToPN` limitation is fixed now (`workflow-net.js`'s
+ * `isImplicitMerge` also covers an `exclusiveGateway` acting as a join, not only non-gateway
+ * nodes), so this exact fixture no longer dead-ends and is no longer a live example — it is kept
+ * here as the historical motivation for the guard below, not a current reproduction. The guard
+ * itself stays: `deadEndPaths > 0` can still arise from other structural causes (an unresolved
+ * black-box gap, a genuinely unreachable branch, a model shape nobody has hit yet), and SC01
+ * still cannot tell "never entered" from "entered, stalled downstream" in any of them without
+ * re-deriving the traversal it deliberately does not own.
  *
  * So: `stats.deadEndPaths > 0` ⇒ no SC01 findings. This is blunt — it declines for the WHOLE
  * document, including gateways whose branches all completed fine — and that bluntness is the

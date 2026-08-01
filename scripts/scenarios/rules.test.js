@@ -120,18 +120,22 @@ describe('SC01 — unreachable branch, acyclic gateway', () => {
     expect(sc01[0].message).toMatch(/gw.*e3/);
   });
 
-  test('multi-pool-collaboration.json: the review\'s reproduction — no SC01 for s_gw, whose two '
-    + 'branches are both taken; the stall is downstream at s_merge', () => {
-    // The regression guard for the misattribution the whole-branch review found. `s_merge` is an
-    // exclusiveGateway with 2 incoming edges; bpmnToPN's implicit-merge guard only rewrites
-    // NON-gateway nodes, so s_merge keeps AND semantics and deadlocks. That is a pre-existing
-    // bpmnToPN limitation (the same fixture already reports WF03 there) — SC01's job here is
-    // only to not blame s_gw for it.
+  test('multi-pool-collaboration.json: s_merge no longer deadlocks, so both s_gw branches '
+    + 'genuinely complete and SC01 has nothing to decline', () => {
+    // Was the whole-branch review's reproduction of an SC01 misattribution: `s_merge` is an
+    // exclusiveGateway with 2 incoming edges, and bpmnToPN's implicit-merge guard used to only
+    // rewrite NON-gateway nodes, so s_merge kept AND semantics and deadlocked (the same fixture
+    // used to report WF03 there too, on master). Fixed directly in workflow-net.js: an
+    // exclusiveGateway acting as a join (multiple incoming, at most one outgoing — the split
+    // branch above already `continue`s otherwise) now gets the same one-transition-per-incoming-
+    // edge OR-join treatment as an ordinary implicit merge. Both s_gw branches now complete for
+    // real, so this is a positive case, not a decline case — SC01's job here is simply to stay
+    // quiet because there is genuinely nothing to report.
     const lc = fixture('multi-pool-collaboration');
     const { enumerationResult, formatted } = enumerateAndFormat(lc);
 
-    expect(enumerationResult.scenarios).toHaveLength(0);
-    expect(enumerationResult.stats.deadEndPaths).toBe(2);
+    expect(enumerationResult.scenarios).toHaveLength(2);
+    expect(enumerationResult.stats.deadEndPaths).toBe(0);
 
     const result = runScenarioRules({ lc, enumerationResult, formatted });
     expect(issuesOf(result, 'SC01')).toEqual([]);
