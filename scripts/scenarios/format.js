@@ -29,6 +29,18 @@
  * other transition shape (`t_<node>_merge_<i>`, a plain `t_<node>`) is not a decision point
  * and never contributes an entry — an implicit merge or a pass-through node is not a choice.
  *
+ * Only `exclusiveGateway` produces `_choice_` transitions at all — `bpmnToPN` never branches
+ * an `inclusiveGateway` split into one transition per edge, it falls through to the default
+ * single-transition (forced-AND) handling, same as any plain node. So `_choice_` naming a
+ * SHAPE match is not enough either way: the regex `/^t_(.+)_choice_(\d+)$/` matches on string
+ * shape alone, and node ids are only constrained by `input-schema.json`'s
+ * `^[a-zA-Z_][a-zA-Z0-9_-]*$` — an ordinary task legally named `my_choice_1` produces
+ * transition `t_my_choice_1`, which the regex parses exactly like a real gateway choice.
+ * `extractScenarioDecisions` therefore verifies the captured id against `flatNodes`/
+ * `flatEdges` before accepting a match: it must name an actual `exclusiveGateway` node with
+ * more than one outgoing edge, or the match is rejected outright (not a decision point) —
+ * never turned into a fabricated label.
+ *
  * ── Happy path: marked or derived ─────────────────────────────────────────────────────────
  * `isHappyPath` is a declared edge field; `identifyHappyPathNodes` (`../bpmn/topology.js`)
  * already tells us whether any edge carries it. When none does, the fallback is the
@@ -66,14 +78,39 @@ const CHOICE_TRANSITION_RE = /^t_(.+)_choice_(\d+)$/;
  * one at all.
  *
  * @param {string} localTransitionId
- * @returns {{gatewayId: string, choiceIndex: number}|null} null for anything that is not an
- *   XOR/inclusive-gateway SPLIT transition (an implicit merge `t_<node>_merge_<i>`, a plain
- *   `t_<node>`, or an event-based-gateway `t_<node>` — none of those are decision points).
+ * @returns {{gatewayId: string, choiceIndex: number}|null} null for anything that does not
+ *   even have the right SHAPE for an exclusiveGateway split transition (an implicit merge
+ *   `t_<node>_merge_<i>`, a plain `t_<node>`, or an event-based-gateway `t_<node>` — none of
+ *   those are decision points). A shape match alone is not proof — see
+ *   `resolveGatewayChoice`, which `extractScenarioDecisions` also runs before accepting one.
  */
 export function parseDecisionTransition(localTransitionId) {
   const m = CHOICE_TRANSITION_RE.exec(localTransitionId);
   if (!m) return null;
   return { gatewayId: m[1], choiceIndex: Number(m[2]) };
+}
+
+/**
+ * Confirm a `parseDecisionTransition` match is a REAL exclusiveGateway split, not just a
+ * transition id that happens to have the right shape. See the module doc's "Recovering a
+ * decision label from a transition id" section for why this check exists: node ids are only
+ * constrained by `^[a-zA-Z_][a-zA-Z0-9_-]*$`, so an ordinary task named e.g. `my_choice_1`
+ * produces a transition id indistinguishable from a real gateway choice by shape alone.
+ *
+ * @param {string} gatewayId
+ * @param {number} choiceIndex
+ * @param {Map<string, object>} nodeById - node lookup for the SAME (flattened) process/pool
+ *   the transition came from.
+ * @param {Array<object>} flatEdges - the SAME flattened edge list.
+ * @returns {object|null} the taken edge if `gatewayId` really is an exclusiveGateway split
+ *   and `choiceIndex` is in range; `null` otherwise (reject, do not fabricate).
+ */
+function resolveGatewayChoice(gatewayId, choiceIndex, nodeById, flatEdges) {
+  const node = nodeById.get(gatewayId);
+  if (!node || node.type !== 'exclusiveGateway') return null;
+  const outEdges = flatEdges.filter(e => e.source === gatewayId);
+  if (outEdges.length <= 1 || choiceIndex >= outEdges.length) return null;
+  return outEdges[choiceIndex];
 }
 
 /**
@@ -95,18 +132,22 @@ export function stripTransitionPrefix(transitionId, poolId) {
 }
 
 /**
- * Recover the decision sequence of one scenario: one entry per XOR/inclusive-gateway SPLIT
- * transition it fired, in firing order, naming the edge actually taken.
+ * Recover the decision sequence of one scenario: one entry per exclusiveGateway SPLIT
+ * transition it fired, in firing order, naming the edge actually taken. A transition id
+ * that merely LOOKS like a gateway choice (see `resolveGatewayChoice`) but does not resolve
+ * to a real exclusiveGateway split is silently excluded, not fabricated.
  *
  * @param {string[]} transitions - `Scenario.transitions` / `CompositeScenario.transitions`.
  * @param {Array<string|null>} poolIds - parallel array; `null`/absent entries for a
  *   single-process scenario (every transition has no pool prefix to strip).
- * @param {(poolId: string|null) => Array<object>} edgesForPool - returns the flattened edge
- *   list of the pool (or the single process) a step belongs to.
- * @returns {Array<{kind: 'bpmn-gateway', gatewayId: string, poolId: string|null,
- *   choiceIndex: number, edgeId: string|null, label: string}>}
+ * @param {(poolId: string|null) => {flatNodes: Array<object>, flatEdges: Array<object>}} contextForPool -
+ *   returns the flattened node/edge lists of the pool (or the single process) a step
+ *   belongs to.
+ * @returns {DecisionEntry[]}
  */
-export function extractScenarioDecisions(transitions, poolIds, edgesForPool) {
+export function extractScenarioDecisions(transitions, poolIds, contextForPool) {
+  const nodeIndexCache = new Map(); // poolId → Map(nodeId → node), built once per pool
+
   const decisions = [];
   transitions.forEach((tId, i) => {
     const poolId = poolIds[i] ?? null;
@@ -114,38 +155,66 @@ export function extractScenarioDecisions(transitions, poolIds, edgesForPool) {
     const parsed = parseDecisionTransition(local);
     if (!parsed) return;
 
-    const flatEdges = edgesForPool(poolId) || [];
-    const outEdges = flatEdges.filter(e => e.source === parsed.gatewayId);
-    const edge = outEdges[parsed.choiceIndex];
-    // `edge` is expected to always exist — the index came from the same construction rule
-    // `bpmnToPN` used to build the transition in the first place. The fallback label below
-    // is defence in depth, never expected to fire, and deliberately still informative
-    // rather than silently dropping the decision point.
-    const label = edge ? (edge.label || edge.id) : `${parsed.gatewayId}[${parsed.choiceIndex}]`;
+    const { flatNodes = [], flatEdges = [] } = contextForPool(poolId) || {};
+    if (!nodeIndexCache.has(poolId)) {
+      nodeIndexCache.set(poolId, new Map(flatNodes.map(n => [n.id, n])));
+    }
+    const edge = resolveGatewayChoice(parsed.gatewayId, parsed.choiceIndex, nodeIndexCache.get(poolId), flatEdges);
+    if (!edge) return; // shape matched, but not a real gateway split — reject, don't guess
 
     decisions.push({
       kind: 'bpmn-gateway',
       gatewayId: parsed.gatewayId,
       poolId,
       choiceIndex: parsed.choiceIndex,
-      edgeId: edge ? edge.id : null,
-      label,
+      edgeId: edge.id,
+      label: edge.label || edge.id,
     });
   });
   return decisions;
 }
 
 /**
+ * The gateway/decision-point identity a `DecisionEntry` belongs to, independent of `kind`.
+ * Only `'bpmn-gateway'` exists today (keyed on `gatewayId`); this is the one place a future
+ * `kind` (e.g. `'dmn-rule'`, keyed on its own `decisionId`-style field) needs to be taught
+ * about, so `decisionSequenceKey`/`happyPathDecisionMap`/`distanceFromHappyPath` do not have
+ * to change themselves when that day comes.
+ *
+ * @param {object} d - a `DecisionEntry`.
+ * @returns {string}
+ */
+function decisionPointKey(d) {
+  const subject = d.kind === 'bpmn-gateway' ? d.gatewayId : (d.gatewayId ?? d.id ?? d.kind);
+  return `${d.poolId ?? ''}::${subject}`;
+}
+
+/**
+ * The identity of the CHOICE made at one decision point — `edgeId` when the taken edge was
+ * resolved (always true for `extractScenarioDecisions`/`decisionsFromEdgePath` output),
+ * falling back to `choiceIndex` otherwise. Deliberately NOT `label`: M04 only requires an
+ * XOR split's outgoing edges to carry A label, not a DISTINCT one per edge, so two edges out
+ * of the same gateway may legally share identical label text while being structurally
+ * different choices — grouping/distance must not collapse them just because they read the
+ * same. `label` stays display-only (see `renderDecisionLabel`).
+ *
+ * @param {object} d - a `DecisionEntry`.
+ * @returns {string}
+ */
+function decisionChoiceKey(d) {
+  return d.edgeId ?? (d.choiceIndex != null ? `#${d.choiceIndex}` : `label:${d.label}`);
+}
+
+/**
  * Canonical string key for a decision sequence — two scenarios group together exactly when
- * this is identical. Deliberately keyed on `(poolId, gatewayId, label)`, not `edgeId`: the
- * label IS the human-readable identity of the choice; `edgeId` still travels on each entry
- * for anything that wants the exact edge.
+ * this is identical. Keyed on `(poolId, gatewayId, edgeId)`, not `label` — see
+ * `decisionChoiceKey`.
  *
  * @param {ReturnType<typeof extractScenarioDecisions>} decisions
  * @returns {string}
  */
 export function decisionSequenceKey(decisions) {
-  return JSON.stringify(decisions.map(d => [d.poolId, d.gatewayId, d.label]));
+  return JSON.stringify(decisions.map(d => [decisionPointKey(d), decisionChoiceKey(d)]));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -244,8 +313,15 @@ export function deriveHappyPathEdges(flatNodes, flatEdges) {
 
 /**
  * Turn an ordered edge path into the Part 1 decision sequence it represents: one entry per
- * edge whose source is an XOR/inclusive-gateway SPLIT (matching the same "only splits are
- * decision points" rule `extractScenarioDecisions` applies to transitions).
+ * edge whose source is an exclusiveGateway SPLIT — deliberately the SAME node-type
+ * restriction `resolveGatewayChoice` applies to a transition id, and for the same reason:
+ * `bpmnToPN` only ever emits a `_choice_` transition (a real decision point in the net) for
+ * `exclusiveGateway`; an `inclusiveGateway` split falls through to the forced-AND default
+ * handling and produces no `_choice_` transition at all (workflow-net.js ~89-92, 105-122,
+ * 168). Counting an inclusive split here would put a decision point into the happy path's
+ * key that no scenario's own `extractScenarioDecisions` can ever match — every scenario
+ * would silently carry a constant +1 `happyPathDistance` penalty for it, including the
+ * scenario that IS the happy path.
  *
  * @param {Array<object>} pathEdges
  * @param {Array<object>} flatNodes
@@ -262,7 +338,7 @@ function decisionsFromEdgePath(pathEdges, flatNodes, flatEdges, poolId) {
   for (const e of pathEdges) {
     const src = nodeById.get(e.source);
     const isSplitGateway = src
-      && (src.type === 'exclusiveGateway' || src.type === 'inclusiveGateway')
+      && src.type === 'exclusiveGateway'
       && (outCount.get(e.source) || 0) > 1;
     if (!isSplitGateway) continue;
     decisions.push({
@@ -285,28 +361,46 @@ function decisionsFromEdgePath(pathEdges, flatNodes, flatEdges, poolId) {
  * @param {Array<object>} flatEdges
  * @param {string|null} [poolId] - null for a single process; the pool id for a collaboration
  *   pool, so the resulting decision entries carry the same `poolId` a scenario's would.
- * @returns {{derived: boolean, edges: Array<object>, decisions: ReturnType<typeof extractScenarioDecisions>}}
+ * @returns {{derived: boolean, found: boolean, edges: Array<object>, decisions: DecisionEntry[]}}
+ *   `found` is false only for the derived (BFS) case when no start/end event exists or
+ *   nothing connects them under the exclusions — an honest "no happy path could be
+ *   identified", distinct from "found one with zero decision points on it".
  */
 export function computeHappyPath(flatNodes, flatEdges, poolId = null) {
   const markedNodeIds = identifyHappyPathNodes(flatNodes, flatEdges);
   if (markedNodeIds.size > 0) {
     const edges = orderHappyPathEdges(flatEdges.filter(e => e.isHappyPath));
-    return { derived: false, edges, decisions: decisionsFromEdgePath(edges, flatNodes, flatEdges, poolId) };
+    return {
+      derived: false,
+      found: edges.length > 0,
+      edges,
+      decisions: decisionsFromEdgePath(edges, flatNodes, flatEdges, poolId),
+    };
   }
   const edges = deriveHappyPathEdges(flatNodes, flatEdges);
-  return { derived: true, edges, decisions: decisionsFromEdgePath(edges, flatNodes, flatEdges, poolId) };
+  return {
+    derived: true,
+    found: edges.length > 0,
+    edges,
+    decisions: decisionsFromEdgePath(edges, flatNodes, flatEdges, poolId),
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // Part 3 — distance and sort
 // ═══════════════════════════════════════════════════════════════════════
 
-/** `(poolId, gatewayId)` → the happy path's label there, first occurrence wins. */
+/**
+ * `decisionPointKey(d)` → the happy path's `decisionChoiceKey(d)` there, first occurrence
+ * wins — relevant when the happy path (marked or derived) visits the same gateway more than
+ * once, e.g. because a marked chain loops; only the first choice counts as "the" happy
+ * answer for that gateway.
+ */
 export function happyPathDecisionMap(happyDecisions) {
   const map = new Map();
   for (const d of happyDecisions) {
-    const key = `${d.poolId ?? ''}::${d.gatewayId}`;
-    if (!map.has(key)) map.set(key, d.label);
+    const key = decisionPointKey(d);
+    if (!map.has(key)) map.set(key, decisionChoiceKey(d));
   }
   return map;
 }
@@ -314,7 +408,9 @@ export function happyPathDecisionMap(happyDecisions) {
 /**
  * Distance of one scenario's decisions from the happy path: the count of happy-path
  * gateways where this scenario chose differently OR never reached the gateway at all. See
- * the module doc for why both cases score identically.
+ * the module doc for why both cases score identically. Compared by `decisionChoiceKey`
+ * (effectively `edgeId`), never by `label` — two edges out of the same gateway may legally
+ * share identical label text (M04 requires A label, not a unique one).
  *
  * @param {ReturnType<typeof extractScenarioDecisions>} decisions
  * @param {Map<string, string>} happyMap - from `happyPathDecisionMap`.
@@ -324,12 +420,14 @@ export function distanceFromHappyPath(decisions, happyMap) {
   if (happyMap.size === 0) return 0;
   const scenarioMap = new Map();
   for (const d of decisions) {
-    const key = `${d.poolId ?? ''}::${d.gatewayId}`;
-    if (!scenarioMap.has(key)) scenarioMap.set(key, d.label);
+    // First occurrence wins here too, mirroring `happyPathDecisionMap` — relevant for a
+    // scenario that visits the same gateway more than once inside a loop.
+    const key = decisionPointKey(d);
+    if (!scenarioMap.has(key)) scenarioMap.set(key, decisionChoiceKey(d));
   }
   let dist = 0;
-  for (const [key, happyLabel] of happyMap) {
-    if (scenarioMap.get(key) !== happyLabel) dist++;
+  for (const [key, happyChoice] of happyMap) {
+    if (scenarioMap.get(key) !== happyChoice) dist++;
   }
   return dist;
 }
@@ -356,11 +454,23 @@ function groupScenarios(sortedScenarios) {
   return [...groups.values()];
 }
 
-function renderDecisionLabel(d) {
-  return d.poolId ? `${d.gatewayId}@${d.poolId} → ${d.label}` : `${d.gatewayId} → ${d.label}`;
+/** `id` → display name, falling back to `id` itself when the node has none. */
+function buildNameIndex(flatNodes) {
+  const map = new Map();
+  for (const n of flatNodes) map.set(n.id, n.name || n.id);
+  return map;
 }
 
-function renderMarkdown(groups, happyPath, maxGroupsRendered) {
+function displayName(nameById, id) {
+  return nameById.get(id) || id;
+}
+
+function renderDecisionLabel(d, nameById) {
+  const gwName = displayName(nameById, d.gatewayId);
+  return d.poolId ? `${gwName}@${d.poolId} → ${d.label}` : `${gwName} → ${d.label}`;
+}
+
+function renderMarkdown(groups, happyPath, maxGroupsRendered, nameById) {
   const lines = [];
   lines.push('# Scenario Overview');
   lines.push('');
@@ -368,17 +478,22 @@ function renderMarkdown(groups, happyPath, maxGroupsRendered) {
     ? '_Happy path: DERIVED — no `isHappyPath` edge was declared; this is the shortest ' +
       'start→end path excluding boundary-event and backward (cycle) edges._'
     : '_Happy path: declared via `isHappyPath` edges._');
+  if (!happyPath.found) {
+    lines.push('_No happy path could be identified at all (disconnected process, or no ' +
+      'start/end event) — distances below are all 0 and carry no information._');
+  }
   lines.push('');
 
   const rendered = groups.slice(0, maxGroupsRendered);
   for (const g of rendered) {
     const heading = g.decisions.length
-      ? g.decisions.map(renderDecisionLabel).join('; ')
+      ? g.decisions.map(d => renderDecisionLabel(d, nameById)).join('; ')
       : '(no decision points — single path)';
     lines.push(`## ${heading}`);
     for (const m of g.members) {
       const interleaving = m.interleavingCount > 1 ? ` (×${m.interleavingCount} interleavings)` : '';
-      lines.push(`- Scenario #${m.index} — distance ${m.happyPathDistance}${interleaving}: ${m.nodes.join(' → ')}`);
+      const trace = m.nodes.map(id => displayName(nameById, id)).join(' → ');
+      lines.push(`- Scenario #${m.index} — distance ${m.happyPathDistance}${interleaving}: ${trace}`);
     }
     lines.push('');
   }
@@ -390,7 +505,7 @@ function renderMarkdown(groups, happyPath, maxGroupsRendered) {
   return lines.join('\n');
 }
 
-function assemble(scenarios, decisionsFor, happyPath, options) {
+function assemble(scenarios, decisionsFor, happyPath, options, nameById) {
   const happyMap = happyPathDecisionMap(happyPath.decisions);
   const enriched = scenarios.map(s => {
     const decisions = decisionsFor(s);
@@ -412,9 +527,88 @@ function assemble(scenarios, decisionsFor, happyPath, options) {
       scenarios: enriched,
       groupCount: groups.length,
     },
-    markdown: renderMarkdown(groups, happyPath, maxGroupsRendered),
+    markdown: renderMarkdown(groups, happyPath, maxGroupsRendered, nameById),
   };
 }
+
+/**
+ * One decision-point entry, as produced by `extractScenarioDecisions` (from a scenario's own
+ * transitions) or `decisionsFromEdgePath` (from the happy path's edges). Deliberately
+ * `kind`-tagged and shaped as one entry in an ordered list — see the module doc's "Grouping
+ * key: BPMN gateways only, not DMN" section for why, and `decisionPointKey` for the one place
+ * a future `kind` needs to be taught about.
+ *
+ * @typedef {object} DecisionEntry
+ * @property {'bpmn-gateway'} kind
+ * @property {string} gatewayId - the exclusiveGateway node's own (unprefixed) BPMN id.
+ * @property {string|null} poolId - null for a single-process scenario/happy path.
+ * @property {number|null} choiceIndex - the `_choice_<i>` index this entry came from; null
+ *   when the entry was derived directly from an edge (`decisionsFromEdgePath`) rather than a
+ *   transition id.
+ * @property {string|null} edgeId - the taken edge's own id. This, not `label`, is the
+ *   identity used for grouping and distance (`decisionChoiceKey`).
+ * @property {string} label - the taken edge's `label`, falling back to its `id`. DISPLAY
+ *   ONLY: two distinct edges out of the same gateway may legally share an identical label
+ *   (M04 only requires A label per edge, not a unique one).
+ */
+
+/**
+ * The happy path used as the sorting/distance reference for one `FormattedView`.
+ *
+ * @typedef {object} FormattedHappyPath
+ * @property {boolean} derived - true = the BFS fallback was used (no relevant
+ *   `isHappyPath` edge declared); false = an `isHappyPath`-marked chain was found and used
+ *   verbatim. A consumer must check this before treating the path as authored.
+ * @property {boolean} found - false only when no happy path could be identified at all
+ *   (disconnected process, or missing start/end event) — distinct from "found one with zero
+ *   decision points on it", which is `found: true` with an empty `decisions` array.
+ * @property {DecisionEntry[]} decisions - the happy path's own decision sequence.
+ * @property {Array<object>} [edges] - single-process (`formatScenarioResult`) only: the
+ *   happy path's own edge chain, start to end.
+ * @property {Array<{poolId: string, derived: boolean, found: boolean, edges: Array<object>, decisions: DecisionEntry[]}>} [perPool] -
+ *   collaboration (`formatCollaborationResult`) only: one entry per pool, since a
+ *   collaboration's happy path is computed per pool and concatenated, not walked jointly.
+ */
+
+/**
+ * One scenario as it appears in the JSON view: every field of `Scenario`
+ * (`enumerate.js`)/`CompositeScenario` (`collaboration.js`), unchanged, plus the three this
+ * module adds.
+ *
+ * @typedef {object} FormattedScenario
+ * @property {number} index
+ * @property {string[]} transitions
+ * @property {string[]} nodes
+ * @property {number|null} interleavingCount
+ * @property {Object<string, number>} cycleUseCounts
+ * @property {string[]} [poolIds] - `CompositeScenario` only.
+ * @property {string[]} [messagesSent] - `CompositeScenario` only.
+ * @property {string[]} [messagesReceived] - `CompositeScenario` only.
+ * @property {string[]} [residualPlaces] - `CompositeScenario` only.
+ * @property {Object<string, number>} [sinkTokens] - `CompositeScenario` only.
+ * @property {DecisionEntry[]} decisions - this scenario's own decision sequence (Part 1).
+ * @property {string} groupKey - canonical string from `decisionSequenceKey(decisions)`; two
+ *   scenarios share a Markdown group iff their `groupKey`s are identical.
+ * @property {number} happyPathDistance - see `distanceFromHappyPath`.
+ */
+
+/**
+ * The complete result of formatting one `EnumerationResult`/`CollaborationEnumerationResult`.
+ *
+ * @typedef {object} FormattedView
+ * @property {object} json
+ * @property {FormattedHappyPath} json.happyPath
+ * @property {FormattedScenario[]} json.scenarios - EVERY scenario, sorted ascending by
+ *   `(happyPathDistance, index)`; nothing dropped or summarized.
+ * @property {number} json.groupCount - distinct `groupKey`s over the FULL set, independent
+ *   of any Markdown rendering cap.
+ * @property {string} markdown - the grouped, capped, human-readable rendering: a heading, a
+ *   line stating whether the happy path is declared or DERIVED, one `##` section per
+ *   rendered group (decision sequence in plain language, member scenarios with their node
+ *   trace and, when `interleavingCount > 1`, that count), and — if `maxGroupsRendered`
+ *   truncated the group list — an explicit `_N more group(s) not shown, see the JSON view._`
+ *   line. See `renderMarkdown`.
+ */
 
 /**
  * Format the result of `enumerateScenarios` (single process, `../scenarios/enumerate.js`)
@@ -424,14 +618,16 @@ function assemble(scenarios, decisionsFor, happyPath, options) {
  * @param {object} proc - the SAME process object `enumerateScenarios` was called with.
  * @param {object} [options] - `{maxGroupsRendered?, config?}`; `config` mirrors
  *   `enumerateScenarios`'s option of the same name (defaults to the loaded `CFG`).
- * @returns {{json: object, markdown: string}}
+ * @returns {FormattedView}
  */
 export function formatScenarioResult(enumerationResult, proc, options = {}) {
   const pn = bpmnToPN(proc);
   const happyPath = computeHappyPath(pn.flatNodes, pn.flatEdges, null);
+  const context = { flatNodes: pn.flatNodes, flatEdges: pn.flatEdges };
   const decisionsFor = (s) =>
-    extractScenarioDecisions(s.transitions, s.transitions.map(() => null), () => pn.flatEdges);
-  return assemble(enumerationResult.scenarios, decisionsFor, happyPath, options);
+    extractScenarioDecisions(s.transitions, s.transitions.map(() => null), () => context);
+  const nameById = buildNameIndex(pn.flatNodes);
+  return assemble(enumerationResult.scenarios, decisionsFor, happyPath, options, nameById);
 }
 
 /**
@@ -443,32 +639,38 @@ export function formatScenarioResult(enumerationResult, proc, options = {}) {
  * "the favoured route through each participant"), then concatenated in `lc.pools`'
  * declaration order. `happyPath.derived` is true if ANY pool's contribution was derived —
  * a joint result is never allowed to read as fully declared when part of it was inferred.
+ * `happyPath.found` is true only if EVERY pool found one.
  *
  * @param {import('./collaboration.js').CollaborationEnumerationResult} collabResult
  * @param {object} lc - the SAME Logic-Core `enumerateCollaboration` was called with.
  * @param {object} [options] - as `formatScenarioResult`.
- * @returns {{json: object, markdown: string}}
+ * @returns {FormattedView}
  */
 export function formatCollaborationResult(collabResult, lc, options = {}) {
   const pools = lc.pools || [];
-  const flatEdgesByPool = new Map();
+  const flatContextByPool = new Map();
+  const nameById = new Map();
   const perPool = [];
 
   for (const pool of pools) {
     const pn = bpmnToPN(pool);
-    flatEdgesByPool.set(pool.id, pn.flatEdges);
+    flatContextByPool.set(pool.id, { flatNodes: pn.flatNodes, flatEdges: pn.flatEdges });
+    // Node ids are assumed globally unique across pools (the same assumption
+    // `collaboration.js`'s `nodeOwners` makes); a collision has the later pool's name win.
+    for (const [id, name] of buildNameIndex(pn.flatNodes)) nameById.set(id, name);
     const hp = computeHappyPath(pn.flatNodes, pn.flatEdges, pool.id);
     perPool.push({ poolId: pool.id, ...hp });
   }
 
   const happyPath = {
     derived: perPool.some(p => p.derived),
+    found: perPool.length > 0 && perPool.every(p => p.found),
     decisions: perPool.flatMap(p => p.decisions),
     perPool,
   };
 
   const decisionsFor = (s) =>
-    extractScenarioDecisions(s.transitions, s.poolIds, (poolId) => flatEdgesByPool.get(poolId) || []);
+    extractScenarioDecisions(s.transitions, s.poolIds, (poolId) => flatContextByPool.get(poolId) || {});
 
-  return assemble(collabResult.scenarios, decisionsFor, happyPath, options);
+  return assemble(collabResult.scenarios, decisionsFor, happyPath, options, nameById);
 }

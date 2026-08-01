@@ -225,10 +225,17 @@ describe('Part 1 — composite (multi-pool) scenario labeling (item 6)', () => {
   });
 
   test('extractScenarioDecisions strips pool prefix and __recv_ suffix directly', () => {
+    const context = {
+      flatNodes: [{ id: 'in_gw', type: 'exclusiveGateway' }],
+      flatEdges: [
+        { id: 'inf4', source: 'in_gw', target: 'in_forward', label: 'Yes' },
+        { id: 'inf5', source: 'in_gw', target: 'in_reject', label: 'No' },
+      ],
+    };
     const decisions = extractScenarioDecisions(
       ['Process_Intake::t_in_gw_choice_0__recv_mf1'],
       ['Process_Intake'],
-      () => [{ id: 'inf4', source: 'in_gw', target: 'in_forward', label: 'Yes' }],
+      () => context,
     );
     expect(decisions).toEqual([
       { kind: 'bpmn-gateway', gatewayId: 'in_gw', poolId: 'Process_Intake', choiceIndex: 0, edgeId: 'inf4', label: 'Yes' },
@@ -267,7 +274,91 @@ describe('computeHappyPath — direct unit coverage', () => {
   test('returns derived:true and an empty happy path when start/end events are absent', () => {
     const hp = computeHappyPath([{ id: 'a', type: 'task' }], [], null);
     expect(hp.derived).toBe(true);
+    expect(hp.found).toBe(false);
     expect(hp.edges).toEqual([]);
     expect(hp.decisions).toEqual([]);
+  });
+
+  test('found:true with a non-empty path', () => {
+    const hp = computeHappyPath(twoGatewayProc.nodes, twoGatewayProc.edges, null);
+    expect(hp.found).toBe(true);
+  });
+});
+
+describe('Regression — reviewer findings', () => {
+  test('CRITICAL: a plain task node whose id collides with the _choice_<i> shape is NOT read as a fabricated decision (format.js:62)', () => {
+    // Node ids only have to match input-schema.json's ^[a-zA-Z_][a-zA-Z0-9_-]*$ — an
+    // ordinary task legally named "my" produces transition id "t_my_choice_1" for its
+    // (non-existent) choice, indistinguishable BY SHAPE ALONE from a real gateway split.
+    const context = {
+      flatNodes: [{ id: 'my', type: 'task', name: 'Ordinary Task' }],
+      flatEdges: [{ id: 'e1', source: 'my', target: 'next' }],
+    };
+    const decisions = extractScenarioDecisions(['t_my_choice_1'], [null], () => context);
+    expect(decisions).toEqual([]);
+  });
+
+  test('IMPORTANT 1: an inclusiveGateway split contributes NO decision point, so the happy path scores distance 0 against itself (format.js:264-266 vs :73)', () => {
+    // bpmnToPN never emits a t_<gw>_choice_<i> transition for an inclusiveGateway — it
+    // falls through to the forced-AND default (single transition, all branches fire
+    // together). Counting it on the happy-path side but never on the scenario side used to
+    // give every scenario a constant +1 penalty it could never pay off.
+    const proc = {
+      id: 'P',
+      nodes: [
+        { id: 'start', type: 'startEvent' },
+        { id: 'gwOr', type: 'inclusiveGateway', name: 'Or?' },
+        { id: 'taskX', type: 'task', name: 'X' },
+        { id: 'taskY', type: 'task', name: 'Y' },
+        { id: 'endMerge', type: 'task', name: 'Merge' },
+        { id: 'end', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'e1', source: 'start', target: 'gwOr' },
+        { id: 'e2', source: 'gwOr', target: 'taskX', label: 'X' },
+        { id: 'e3', source: 'gwOr', target: 'taskY', label: 'Y' },
+        { id: 'e4', source: 'taskX', target: 'endMerge' },
+        { id: 'e5', source: 'taskY', target: 'endMerge' },
+        { id: 'e6', source: 'endMerge', target: 'end' },
+      ],
+    };
+    const result = enumerateScenarios(proc);
+    const { json } = formatScenarioResult(result, proc);
+
+    expect(json.happyPath.decisions).toEqual([]); // no inclusiveGateway entry
+    expect(json.scenarios).toHaveLength(1);
+    expect(json.scenarios[0].decisions).toEqual([]);
+    expect(json.scenarios[0].happyPathDistance).toBe(0); // NOT 1
+  });
+
+  test('IMPORTANT 2: two edges out of the same gateway sharing an identical label are NOT collapsed, and do NOT both score distance 0 (format.js:148, :328)', () => {
+    // M04 only requires an XOR split's outgoing edges to carry A label, not a DISTINCT one
+    // — two edges legally sharing the label text "Yes" must still be told apart by edgeId.
+    const proc = {
+      id: 'P',
+      nodes: [
+        { id: 'start', type: 'startEvent' },
+        { id: 'gw1', type: 'exclusiveGateway', name: 'Gw' },
+        { id: 'taskA', type: 'task', name: 'A' },
+        { id: 'taskB', type: 'task', name: 'B' },
+        { id: 'end', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'e1', source: 'start', target: 'gw1' },
+        { id: 'e2', source: 'gw1', target: 'taskA', label: 'Yes' },
+        { id: 'e3', source: 'gw1', target: 'taskB', label: 'Yes' },
+        { id: 'e4', source: 'taskA', target: 'end' },
+        { id: 'e5', source: 'taskB', target: 'end' },
+      ],
+    };
+    const result = enumerateScenarios(proc);
+    const { json } = formatScenarioResult(result, proc);
+
+    expect(json.scenarios).toHaveLength(2);
+    expect(json.groupCount).toBe(2); // NOT collapsed into 1 despite identical labels
+    const distances = json.scenarios.map(s => s.happyPathDistance).sort();
+    expect(distances).toEqual([0, 1]); // NOT both 0
+    // The two scenarios differ by edgeId, not by (the identical) label.
+    expect(json.scenarios[0].decisions[0].edgeId).not.toBe(json.scenarios[1].decisions[0].edgeId);
   });
 });
