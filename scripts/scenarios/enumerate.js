@@ -23,13 +23,7 @@
  * Call this once per pool.
  */
 
-import {
-  bpmnToPN,
-  getEnabledTransitions,
-  fireTransition,
-  flattenNodes,
-  flattenEdges,
-} from '../bpmn/workflow-net.js';
+import { bpmnToPN, getEnabledTransitions, fireTransition } from '../bpmn/workflow-net.js';
 import { CFG } from '../shared/utils.js';
 
 const DEFAULTS = {
@@ -81,12 +75,18 @@ export function findBackwardEdges(nodes, edges) {
     state.set(id, DONE);
   };
 
+  // `dfs` recurses once per node, so its depth is bounded by the graph, not by
+  // `maxTraceLength` the way the enumeration traversal is. Every model this has been run
+  // against is orders of magnitude away from the stack limit; a genuinely huge imported
+  // model would want an explicit stack here.
   const starts = nodes.filter(n => n.type === 'startEvent').map(n => n.id);
   const roots = starts.length ? starts : (nodes[0] ? [nodes[0].id] : []);
   for (const r of roots) if (!state.has(r)) dfs(r);
-  // Sweep anything the start events do not reach. `countBackEdges` stops after the
-  // roots; here an unvisited cycle would be an unbounded loop in the traversal below,
-  // so every node gets a root eventually.
+  // Sweep anything the start events do not reach — `countBackEdges` stops after the
+  // roots. Not a correctness requirement: a component no token can reach is never fired,
+  // so its cycles could not have run away either. It is defence in depth, and it makes
+  // `stats.backwardEdges` an honest description of the graph rather than of the part of
+  // the graph that happens to be live.
   for (const n of nodes) if (!state.has(n.id)) dfs(n.id);
 
   return back;
@@ -136,6 +136,17 @@ function indexArcs(transitions, arcs) {
  * branched. Disjoint inputs = genuinely concurrent (AND-split branches); those must not
  * each spawn their own scenario, or one parallel block turns into multinomially many
  * copies of the same scenario written in different orders.
+ *
+ * INVARIANT this relies on, and a warning for Task 2: under today's `bpmnToPN`, two
+ * transitions either share ALL their input places or none of them — an XOR split's
+ * branch transitions all consume the same set (workflow-net.js:116-119), a merge
+ * transition consumes exactly one (workflow-net.js:142), and no transition mixes places
+ * from different sources. With no partial overlap, transitive grouping is exact:
+ * "connected in the sharing graph" and "actually competing" coincide. Composing pools
+ * over message flows breaks that — a receive task would consume both a sequence-flow
+ * place and a message place, so an A-B-C chain could link two transitions that do not
+ * compete at all and collapse a real choice into one group. Revisit this function then;
+ * do not assume it still holds.
  *
  * @returns {Array<Array<string>>} groups, each sorted by transition id, groups sorted by
  *   their first member — so the choice of which group to advance is deterministic.
@@ -283,23 +294,39 @@ function countLinearExtensions(trace, inputs, outputs, initialMarking, idealCap)
  * @typedef {object} EnumerationResult
  * @property {string|undefined} processId - `proc.id`, passed through unchanged.
  * @property {Scenario[]} scenarios
- * @property {boolean} truncated - true when a cap stopped the enumeration, so
- *   `scenarios` is a prefix and not the complete set. Never silently false.
+ * @property {boolean} truncated - true when a cap actually suppressed something, so
+ *   `scenarios` is a prefix and not the complete set. A run that finds fewer scenarios
+ *   than `maxScenarios` allows is never flagged, however much state it walked to get
+ *   there. Never silently false either.
  * @property {object} stats
  * @property {Array<{id, source, target, placeId}>} stats.backwardEdges - the detected
  *   graph cycles and the places they map to.
  * @property {number} stats.cycleBound - the bound actually applied.
  * @property {number} stats.scenarioCount - `scenarios.length`.
- * @property {number} stats.cappedPaths - partial paths dropped because continuing would
- *   have exceeded the cycle bound. These are NOT dead ends and NOT a soundness finding:
- *   the path exists in the model, it was simply not followed further. A later judging
- *   layer must be able to tell these from the next field, which is why they are counted
- *   apart.
+ * @property {number} stats.cappedPaths - how many branch continuations were not followed
+ *   because taking them would have exceeded the cycle bound. Counted per suppressed
+ *   branch, not only when the bound emptied a whole state: a back edge starting at the
+ *   gateway itself is one alternative among several, and the suppression has to show up
+ *   anyway. These are NOT dead ends and NOT a soundness finding — the path exists in the
+ *   model, it was simply not explored. A later judging layer must be able to tell them
+ *   from the next field, which is why they are counted apart.
  * @property {number} stats.deadEndPaths - partial paths that reached a marking with no
- *   enabled transition at all and no token on the sink. Reported as a number, without
- *   judgement — WF03 in `workflow-net.js` is where deadlocks get called deadlocks.
+ *   enabled transition at all (before any capping) and no token on the sink. Reported as
+ *   a number, without judgement — WF03 in `workflow-net.js` is where deadlocks get called
+ *   deadlocks.
  * @property {number} stats.lengthTruncatedPaths - paths abandoned at `maxTraceLength`.
  * @property {number} stats.statesExplored
+ * @property {string[]} stats.orGateways - inclusive gateways in this process, passed
+ *   through from `pn.orGateways`. **Read this before treating the scenario list as
+ *   complete.** `bpmnToPN` models an OR split as a forced AND (workflow-net.js:90-92 —
+ *   it records the id and then builds the ordinary transition, which fires every
+ *   branch), so an OR split with two branches yields one scenario where the semantics
+ *   allow three: x only, y only, both. That is a limitation of the existing translation,
+ *   not something this module fixes; it is surfaced so a consumer cannot mistake the
+ *   under-enumeration for the whole truth.
+ * @property {Array<{id, reason}>} stats.skipped - passed through from `pn.skipped`:
+ *   artifacts (no control-flow role, harmless here) and `eventBasedGateway`, whose race
+ *   semantics are not modelled at all (workflow-net.js:95-101). Same warning as above.
  */
 
 /**
@@ -327,15 +354,14 @@ export function enumerateScenarios(proc, options = {}) {
   const maxTraceLength = options.maxTraceLength ?? cfg.maxTraceLength;
   const idealCap = options.maxInterleavingIdeals ?? cfg.maxInterleavingIdeals;
 
-  // Cycles are found on the same flattened graph bpmnToPN derives its places from
-  // (workflow-net.js:60-61) — a backward edge inside an expanded subprocess is a
-  // backward edge of the net.
-  const flatNodes = flattenNodes(proc.nodes || []);
-  const flatEdges = flattenEdges(proc.nodes || [], proc.edges || []);
-  const backEdges = findBackwardEdges(flatNodes, flatEdges);
-
   const pn = bpmnToPN(proc);
   const { transitions, arcs, initialMarking, sinkPlace } = pn;
+
+  // Cycles are found on the very arrays bpmnToPN named its places from, not on a second
+  // flatten of the same input — a backward edge inside an expanded subprocess is a
+  // backward edge of the net, and identity beats agreement here.
+  const backEdges = findBackwardEdges(pn.flatNodes, pn.flatEdges);
+
   const { inputs, outputs } = indexArcs(transitions, arcs);
 
   const cappedPlaces = new Map(); // place id → the backward edge it came from
@@ -354,24 +380,23 @@ export function enumerateScenarios(proc, options = {}) {
     return m;
   };
 
+  const record = (trace, counts) => {
+    // The cap is checked here and nowhere else. Checking it on entering a state instead
+    // would flag runs that had states left to visit but no scenarios left to find, and
+    // `truncated` has to mean "something was actually cut", or it is worthless.
+    if (scenarios.length >= maxScenarios) { truncated = true; return; }
+    scenarios.push({
+      index: scenarios.length,
+      transitions: [...trace],
+      nodes: trace.map(t => transitions.get(t)?.bpmnNodeId ?? t),
+      interleavingCount: countLinearExtensions(trace, inputs, outputs, initialMarking, idealCap),
+      cycleUseCounts: Object.fromEntries(counts),
+    });
+  };
+
   const walk = (marking, trace, counts) => {
     if (truncated) return;
-    // The cap is checked on entry, not on push: reaching it means there was still state
-    // left to explore, which is exactly what "truncated" has to mean. A run that finds
-    // fewer scenarios than the cap never touches this and stays untruncated.
-    if (scenarios.length >= maxScenarios) { truncated = true; return; }
     statesExplored++;
-
-    if ((marking.get(sinkPlace) || 0) >= 1) {
-      scenarios.push({
-        index: scenarios.length,
-        transitions: [...trace],
-        nodes: trace.map(t => transitions.get(t)?.bpmnNodeId ?? t),
-        interleavingCount: countLinearExtensions(trace, inputs, outputs, initialMarking, idealCap),
-        cycleUseCounts: Object.fromEntries(counts),
-      });
-      return;
-    }
 
     if (trace.length >= maxTraceLength) {
       lengthTruncatedPaths++;
@@ -380,37 +405,55 @@ export function enumerateScenarios(proc, options = {}) {
     }
 
     const enabled = getEnabledTransitions(marking, transitions, arcs).slice().sort();
-    if (enabled.length === 0) { deadEndPaths++; return; }
 
     // Cycle bound: a transition that would push one of its output places past the bound
     // is not eligible in THIS path. Nothing about the model changes — only this path.
     const eligible = enabled.filter(t =>
       (outputs.get(t) || []).every(p => !cappedPlaces.has(p) || (counts.get(p) || 0) + 1 <= cycleBound)
     );
-    if (eligible.length === 0) {
-      // Filtering removed everything that was on offer: the path needed another loop
-      // traversal it was not allowed. That is a discarded path, not a deadlock.
-      cappedPaths++;
+    // Count every branch the bound suppressed, not only the case where it emptied the
+    // whole set. A back edge that starts at the gateway itself (gw →No→ task) is one of
+    // several competing alternatives, so the state stays alive and the suppression would
+    // otherwise be invisible — a path the model has, dropped with no accounting.
+    cappedPaths += enabled.length - eligible.length;
+
+    if (eligible.length > 0) {
+      // Advance exactly one concurrency group. Deferring the others loses nothing: their
+      // input places are disjoint from this group's, so firing here cannot disable them —
+      // they stay enabled and get their turn. What it does lose is the redundant copies of
+      // this scenario in every other interleaving, which is the point (see A1).
+      const group = groupBySharedInput(eligible, inputs)[0];
+
+      for (const tId of group) {
+        const nextMarking = fireTransition(marking, tId, arcs);
+        const nextCounts = new Map(counts);
+        for (const p of outputs.get(tId) || []) {
+          if (cappedPlaces.has(p)) nextCounts.set(p, (nextCounts.get(p) || 0) + 1);
+        }
+        trace.push(tId);
+        walk(nextMarking, trace, nextCounts);
+        trace.pop();
+        if (truncated) return;
+      }
       return;
     }
 
-    // Advance exactly one concurrency group. Deferring the others loses nothing: their
-    // input places are disjoint from this group's, so firing here cannot disable them —
-    // they stay enabled and get their turn. What it does lose is the redundant copies of
-    // this scenario in every other interleaving, which is the point (see A1).
-    const group = groupBySharedInput(eligible, inputs)[0];
+    // Nothing left to fire: this is where the path ends, and only here.
+    //
+    // Reaching the sink is deliberately NOT the stop condition. `bpmnToPN` wires every
+    // end event to one shared `p_sink` (workflow-net.js:161/181), so with an AND split
+    // whose branches finish at different end events, the first branch to arrive would end
+    // the trace and the second would never be recorded — a wrong enumeration handed over
+    // as a complete one, in a subsystem whose entire purpose is that the reviewer can see
+    // what is missing. Draining the net first costs nothing on a single-end process (the
+    // marking after the end event holds only the sink token anyway) and is the difference
+    // between right and wrong on a multi-end one.
+    if ((marking.get(sinkPlace) || 0) >= 1) { record(trace, counts); return; }
 
-    for (const tId of group) {
-      const nextMarking = fireTransition(marking, tId, arcs);
-      const nextCounts = new Map(counts);
-      for (const p of outputs.get(tId) || []) {
-        if (cappedPlaces.has(p)) nextCounts.set(p, (nextCounts.get(p) || 0) + 1);
-      }
-      trace.push(tId);
-      walk(nextMarking, trace, nextCounts);
-      trace.pop();
-      if (truncated) return;
-    }
+    // Not at the sink either. If the bound took the last option away, the increment above
+    // already accounts for it — this path was capped, not deadlocked. Only a state that
+    // had nothing on offer in the first place is a dead end.
+    if (enabled.length === 0) deadEndPaths++;
   };
 
   walk(initialMarking, [], zeroCounts());
@@ -432,6 +475,8 @@ export function enumerateScenarios(proc, options = {}) {
       deadEndPaths,
       lengthTruncatedPaths,
       statesExplored,
+      orGateways: [...pn.orGateways],
+      skipped: pn.skipped.map(s => ({ ...s })),
     },
   };
 }

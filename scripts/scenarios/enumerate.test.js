@@ -112,6 +112,44 @@ describe('scenario enumeration — cycles', () => {
 });
 
 describe('scenario enumeration — capping is not a verdict', () => {
+  // A back edge that starts AT the gateway, so the capped transition is one competing
+  // alternative among several instead of the only thing on offer. No fixture has this
+  // shape, and it is the shape that hid a silent undercount: the state stays alive
+  // through the other branch, so a suppression that is only counted when it empties the
+  // whole state never gets counted at all.
+  const gatewayLoop = () => ({
+    id: 'P_GatewayLoop',
+    nodes: [
+      { id: 'start1', type: 'startEvent', name: 'Received' },
+      { id: 'task1', type: 'userTask', name: 'Review' },
+      { id: 'gw1', type: 'exclusiveGateway', name: 'Approved?' },
+      { id: 'task2', type: 'serviceTask', name: 'Approve' },
+      { id: 'end1', type: 'endEvent', name: 'Done' },
+    ],
+    edges: [
+      { id: 'g1', source: 'start1', target: 'task1' },
+      { id: 'g2', source: 'task1', target: 'gw1' },
+      { id: 'g3', source: 'gw1', target: 'task2', label: 'Yes' },
+      { id: 'g4', source: 'gw1', target: 'task1', label: 'No' },
+      { id: 'g5', source: 'task2', target: 'end1' },
+    ],
+  });
+
+  test('a branch suppressed by the bound is counted even when other branches remain', () => {
+    const atZero = enumerateScenarios(gatewayLoop(), { cycleBound: 0 });
+    expect(atZero.stats.backwardEdges.map(e => e.id)).toEqual(['g4']);
+    expect(atZero.scenarios).toHaveLength(1);
+    expect(atZero.stats.cappedPaths).toBe(1); // the "No" branch, suppressed at gw1
+    expect(atZero.stats.deadEndPaths).toBe(0);
+
+    // Bound 1: one loop allowed, so two scenarios — and the second lap still runs into
+    // the bound once, which must show up.
+    const atOne = enumerateScenarios(gatewayLoop(), { cycleBound: 1 });
+    expect(atOne.scenarios).toHaveLength(2);
+    expect(atOne.stats.cappedPaths).toBe(1);
+    expect(atOne.stats.deadEndPaths).toBe(0);
+  });
+
   test('a path dropped by the cycle bound is not reported as a dead end', () => {
     // The "No" branch at bound 0 is a path the model has and the enumerator did not
     // follow — not a deadlock, and nothing in the result may claim otherwise. A later
@@ -122,6 +160,95 @@ describe('scenario enumeration — capping is not a verdict', () => {
     expect(result.stats.deadEndPaths).toBe(0);
     expect(result.truncated).toBe(false);
     expect(JSON.stringify(result)).not.toMatch(/deadlock|unsound|WF0/i);
+  });
+
+  test('a genuine dead end is counted as one, and separately', () => {
+    // The other side of the distinction the JSDoc promises. deadlock-process.json has an
+    // AND join fed by only one branch, so tokens strand with nothing enabled — no cycle
+    // is involved and nothing was capped.
+    const doc = fixture('deadlock-process');
+    const result = enumerateScenarios((doc.pools || [doc])[0]);
+
+    expect(result.stats.deadEndPaths).toBeGreaterThan(0);
+    expect(result.stats.cappedPaths).toBe(0);
+    expect(result.scenarios).toHaveLength(0);
+    expect(result.truncated).toBe(false);
+    // Still no verdict: naming it a deadlock is WF03's job, in workflow-net.js. Checked
+    // on `stats` alone — `processId` echoes the fixture's own id ("Process_Deadlock"),
+    // which is the model's word, not ours.
+    expect(JSON.stringify(result.stats)).not.toMatch(/deadlock|unsound|WF0/i);
+  });
+});
+
+describe('scenario enumeration — completeness of a recorded scenario', () => {
+  // Every end event shares one p_sink (workflow-net.js:161/181), so "a token reached the
+  // sink" is not the same question as "the process finished".
+  const twoEnds = () => ({
+    id: 'P_TwoEnds',
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Start' },
+      { id: 'fork', type: 'parallelGateway', name: 'Fork' },
+      { id: 'x', type: 'userTask', name: 'Left' },
+      { id: 'y', type: 'userTask', name: 'Right' },
+      { id: 'e1', type: 'endEvent', name: 'Left done' },
+      { id: 'e2', type: 'endEvent', name: 'Right done' },
+    ],
+    edges: [
+      { id: 'a1', source: 's', target: 'fork' },
+      { id: 'a2', source: 'fork', target: 'x' },
+      { id: 'a3', source: 'fork', target: 'y' },
+      { id: 'a4', source: 'x', target: 'e1' },
+      { id: 'a5', source: 'y', target: 'e2' },
+    ],
+  });
+
+  test('a parallel branch ending at its own end event is not dropped from the trace', () => {
+    const result = enumerateScenarios(twoEnds());
+
+    expect(result.scenarios).toHaveLength(1);
+    // The whole net, not just whichever branch reached the shared sink first.
+    expect(result.scenarios[0].nodes).toEqual(['s', 'fork', 'x', 'e1', 'y', 'e2']);
+    expect(result.scenarios[0].interleavingCount).toBe(6); // ⟨x,e1⟩ ∥ ⟨y,e2⟩ = 4!/(2!2!)
+    expect(result.truncated).toBe(false);
+    expect(result.stats.deadEndPaths).toBe(0);
+  });
+
+  test('a single-end process is unaffected by draining the net first', () => {
+    const result = enumerateScenarios(fixture('simple-approval').pools[0]);
+    expect(result.scenarios[0].nodes).toEqual(['start1', 'task1', 'gw1', 'task2', 'end1']);
+    expect(result.scenarios).toHaveLength(2);
+  });
+});
+
+describe('scenario enumeration — unmodelled branching is declared', () => {
+  test('an inclusive gateway is reported, because bpmnToPN fires it as an AND', () => {
+    // Not a bug this module fixes: bpmnToPN models an OR split as a forced AND, so this
+    // yields ONE scenario where the semantics allow three (x, y, both). The point of the
+    // assertion is that the result says so, instead of passing the under-enumeration off
+    // as the complete set.
+    const orSplit = {
+      id: 'P_Or',
+      nodes: [
+        { id: 's', type: 'startEvent' }, { id: 'orgw', type: 'inclusiveGateway' },
+        { id: 'x', type: 'userTask' }, { id: 'y', type: 'userTask' },
+        { id: 'join', type: 'inclusiveGateway' }, { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'o1', source: 's', target: 'orgw' }, { id: 'o2', source: 'orgw', target: 'x' },
+        { id: 'o3', source: 'orgw', target: 'y' }, { id: 'o4', source: 'x', target: 'join' },
+        { id: 'o5', source: 'y', target: 'join' }, { id: 'o6', source: 'join', target: 'e' },
+      ],
+    };
+    const result = enumerateScenarios(orSplit);
+
+    expect(result.stats.orGateways).toEqual(['orgw', 'join']);
+    expect(result.scenarios).toHaveLength(1);
+  });
+
+  test('an event-based gateway is reported as skipped', () => {
+    const result = enumerateScenarios(fixture('all-element-classes').pools[0]);
+    expect(Array.isArray(result.stats.skipped)).toBe(true);
+    for (const s of result.stats.skipped) expect(typeof s.reason).toBe('string');
   });
 });
 

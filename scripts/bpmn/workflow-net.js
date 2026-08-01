@@ -189,7 +189,14 @@ function bpmnToPN(proc) {
   }
   initialMarking.set(sourcePlace, 1);
 
-  return { places, transitions, arcs, initialMarking, sinkPlace, sourcePlace, orGateways, skipped };
+  // flatNodes/flatEdges travel with the net on purpose. Anything reasoning about cycles
+  // has to use the *same* graph the places were named from — `scripts/scenarios/`
+  // does — and handing back the actual arrays guarantees identity, where re-running the
+  // flatten outside would only ever guarantee agreement.
+  return {
+    places, transitions, arcs, initialMarking, sinkPlace, sourcePlace, orGateways, skipped,
+    flatNodes, flatEdges,
+  };
 }
 
 function connectTransition(tId, nodeId, edges, places, arcs) {
@@ -492,11 +499,10 @@ export function checkWorkflowNetSoundness(lc, options = {}) {
 
 export { bpmnToPN, checkSoundness };
 
-// Firing primitives and the subprocess-flattening helpers, exported verbatim (no
-// behaviour change) for scripts/scenarios/enumerate.js. The scenario enumerator needs
-// its own traversal loop — checkSoundness deduplicates markings, which is right for
-// "is the sink reachable?" and wrong for "which distinct paths reach it?" — but it must
-// use exactly these firing semantics, and it must detect graph cycles on exactly the
-// same flattened graph bpmnToPN builds its places from. Re-implementing either would
-// let the two copies drift.
-export { getEnabledTransitions, fireTransition, encodeMarking, flattenNodes, flattenEdges };
+// Firing primitives, exported verbatim (no behaviour change) for
+// scripts/scenarios/enumerate.js. The scenario enumerator needs its own traversal loop —
+// checkSoundness deduplicates markings, which is right for "is the sink reachable?" and
+// wrong for "which distinct paths reach it?" — but it must fire transitions by exactly
+// these semantics. The flattened graph it also needs travels on the net itself
+// (`flatNodes`/`flatEdges` above), so there is no second flatten to drift.
+export { getEnabledTransitions, fireTransition, encodeMarking };
