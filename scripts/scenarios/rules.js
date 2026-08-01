@@ -5,11 +5,25 @@
  * allowed to say something is wrong. Modeled on `scripts/bpmn/workflow-net.js`'s WF01-WF03
  * pattern (compute over an already-built structure, then a thin rule layer names only what
  * is objectively broken): six rules, each reading a fact Tasks 1-5 already produced, never
- * re-deriving it. `severity` is always `'ERROR'` — there is no WARNING tier here, unlike the
- * BPMN/DMN rule engines, because every one of these six findings is a structural defect, not
- * a style opinion. Rule-id prefix `SC` (Scenario) — `D`/`B` (DMN, `dmn/rules.js`) and
+ * re-deriving it. Rule-id prefix `SC` (Scenario) — `D`/`B` (DMN, `dmn/rules.js`) and
  * `S`/`M`/`P`/`WF`/`O` (BPMN, `bpmn/rules.js`) are taken; confirmed clear at the time of
  * writing (`grep -c "id: '" bpmn/rules.js dmn/rules.js`).
+ *
+ * ── Severity: WARNING, deliberately ─────────────────────────────────────────────────────────
+ * `severity` is always `'WARNING'`. An earlier version declared `'ERROR'` on all six, on the
+ * argument that each names a structural defect rather than a style opinion. The whole-branch
+ * review rejected that on two grounds, both correct. First, it contradicted the CLI: every
+ * pipeline in this repo reserves "print under `⚠`, exit 0 unless `--strict`" for the WARNING
+ * tier and blocks by default (exit 1, no flag needed) on ERROR — `scripts/scenarios/pipeline.js`
+ * printed these six as warnings while the value said ERROR, so the declaration and the
+ * behaviour disagreed and one of them was wrong. Second, and the reason the CLI was the half
+ * that was right: every one of these six is a statement about a COMPUTED model — a Petri-net
+ * translation with documented limitations (`bpmnToPN` fires an OR split as an AND, does not
+ * model `eventBasedGateway` at all, and gives a gateway JOIN AND semantics), enumerated under
+ * configurable caps. A finding derived through that much machinery is a strong signal worth a
+ * human's attention, not the "definitely broken, must not ship" verdict an ERROR carries
+ * elsewhere in this codebase, where ERRORs sit on things like schema violations and broken
+ * geometry. `--strict` remains the way to make them block.
  *
  * **No fachliche/business-sense judgment. Ever.** If a check would ask "is this a reasonable
  * process", it does not belong here — that question is explicitly out of scope for the whole
@@ -28,7 +42,18 @@
  *   SC05 — a decision table has an illegal overlap (UNIQUE only) (DecisionTableAnalysis.overlaps)
  *   SC06 — improper completion at a scenario's shared sink     (CompositeScenario.sinkTokens)
  *
- * ── SC01's scope, deliberately narrow: acyclic decision points only ──────────────────────────
+ * ── SC01 declines to judge THREE things ──────────────────────────────────────────────────────
+ * SC01's whole claim is "no enumerated scenario ever takes this branch". That claim is only
+ * worth making when the enumerated set is a trustworthy stand-in for the model's real
+ * behaviour. Three situations break that, and in each SC01 returns NO findings at all rather
+ * than a partial answer — a declined judgment is honest, a misattributed one is worse than
+ * silence:
+ *
+ *   1. **cyclic gateways** — excluded per gateway (see below);
+ *   2. **truncated runs** — declined for the whole rule (see below);
+ *   3. **runs containing dead-end paths** — declined for the whole rule (see below).
+ *
+ * ── (1) SC01's scope, deliberately narrow: acyclic decision points only ──────────────────────
  * A branch's reachability at a gateway that is part of a graph cycle is inherently
  * bound-dependent (`enumerate.js`'s `cycleBound`): whether a loop-continuation edge "was
  * never reached" or "just needed one more lap" is not something this module can honestly
@@ -49,19 +74,61 @@
  * exclusion bug in that logic; re-deriving it a second time here risks silently
  * reintroducing either.
  *
+ * ── (2) Truncated runs: SC01 declines entirely ───────────────────────────────────────────────
  * A second, independently necessary limitation: SC01 declines ENTIRELY (returns no findings
  * for that rule, not a partial answer) when enumeration itself is a PREFIX rather than the
  * complete set — `enumerationResult.truncated === true` (the `maxScenarios` cap fired) or
  * `stats.lengthTruncatedPaths > 0` (`maxTraceLength` cut a path short). The plan states this
  * explicitly: a branch must be judged unreachable only "nach Abzug der Schranken-Sperrungen"
- * (after subtracting cap-suppressed cases). The cycle-bound cap needs no separate handling
- * here — every continuation it suppresses is, by construction, adjacent to a backward edge,
- * so the gateway exclusion above already removes it from consideration — but the two
- * count-based caps are orthogonal to cycles entirely: an un-enumerated acyclic branch under
- * either of them may simply not have been reached YET, and reporting it as an objective
- * defect would be exactly the false-positive class the rest of this plan's truncation
- * honesty (`truncated`, `cappedPaths` vs. `deadEndPaths`, `gapAnalysis.attempted`) exists to
- * prevent.
+ * (after subtracting cap-suppressed cases). Both count-based caps are orthogonal to cycles
+ * entirely: an un-enumerated acyclic branch under either of them may simply not have been
+ * reached YET, and reporting it as an objective defect would be exactly the false-positive
+ * class the rest of this plan's truncation honesty (`truncated`, `cappedPaths` vs.
+ * `deadEndPaths`, `gapAnalysis.attempted`) exists to prevent.
+ *
+ * The THIRD cap, `stats.cappedPaths` (the cycle bound), has NO guard here, and that is a known
+ * residual gap rather than a proof of safety. An earlier version of this comment argued one
+ * was unnecessary because "every continuation the cycle bound suppresses is, by construction,
+ * adjacent to a backward edge, so the gateway exclusion above already removes it". That is
+ * false, and the counter-example is small: `gw --e3--> b`, `b → c`, `c → b`. The suppressed
+ * continuation IS adjacent to the backward edge `c → b`, but `gw` is not adjacent to anything
+ * cyclic, so the per-gateway exclusion never fires and SC01 reports `e3` as never taken — when
+ * `e3` was taken and only its continuation ran out of laps. Deliberately NOT fixed in the same
+ * round as limitation (3), because a fourth decline would leave SC01 with almost no reach at
+ * all and the trade deserves its own decision; recorded here so nobody re-derives the false
+ * argument from the code's silence.
+ *
+ * ── (3) Dead-end paths: SC01 declines entirely ───────────────────────────────────────────────
+ * The third limitation, and the one the whole-branch review found live in production. SC01
+ * reads only COMPLETED scenarios' decision lists. It therefore cannot distinguish "this branch
+ * was never entered" from "this branch WAS entered, and its continuation later stalled before
+ * reaching completion" — in both cases the branch is simply absent from every completed
+ * scenario. The second reading makes the finding a MISATTRIBUTION: it names an upstream
+ * gateway for a defect that lives downstream, sending a reader to the one place in the model
+ * that is fine.
+ *
+ * Reproduced on `tests/fixtures/multi-pool-collaboration.json`: SC01 reported both branches of
+ * `s_gw` as never taken. Both are taken. The real stall is at `s_merge`, an `exclusiveGateway`
+ * with two incoming edges, which `bpmnToPN`'s implicit-merge guard (`workflow-net.js`,
+ * `!isGateway(node.type) && inEdges.length > 1`) does not catch precisely BECAUSE it is a
+ * gateway — so it falls through to the default single-transition path and acquires AND
+ * semantics, requiring a token from both incoming edges at once, which an XOR split can never
+ * deliver. That is a pre-existing `bpmnToPN` limitation, not this subsystem's: the same fixture
+ * already produces a WF03 deadlock at the same place. SC01's job is not to fix it but to
+ * recognise that it cannot be trusted in its presence.
+ *
+ * So: `stats.deadEndPaths > 0` ⇒ no SC01 findings. This is blunt — it declines for the WHOLE
+ * document, including gateways whose branches all completed fine — and that bluntness is the
+ * point. A dead end anywhere means the completed-scenario set is not the set of paths the
+ * traversal attempted, and SC01 has no way to attribute a specific missing branch to a specific
+ * stall without re-deriving the traversal it deliberately does not own. The cost is real:
+ * SC01's remaining reach is narrow, because most genuinely-dead branches also produce a dead
+ * end (the branch is explored, then goes nowhere). It is still worth having — a declined rule
+ * costs a reader nothing, a misattributed one costs them a search in the wrong place — and the
+ * `⚠ Enumeration completeness` channel (`format.js`'s `describeEnumerationCompleteness`,
+ * surfaced by `pipeline.js` and in the Markdown view) now reports the dead-end count itself, so
+ * declining here hides nothing: the reader still learns that something stalled, just not a
+ * fabricated claim about where.
  *
  * ── SC01's pool-id keys: read from the enumeration result, never re-derived from `lc` ────────
  * A gateway's `poolId` (used to build the lookup key compared against `formatted`'s
@@ -180,7 +247,11 @@ export function findAcyclicDecisionGateways(lc, backwardEdges, actualPoolIds) {
 }
 
 /**
- * SC01 — a branch no enumerated scenario ever reaches, restricted to acyclic gateways.
+ * SC01 — a branch no enumerated scenario ever reaches, restricted to acyclic gateways, and
+ * only when the enumerated set can be trusted to stand in for the model's behaviour. See the
+ * module header's "SC01 declines to judge THREE things" for the full argument behind each of
+ * the two guards below (the third, cyclic gateways, is applied per gateway inside
+ * `findAcyclicDecisionGateways`).
  *
  * @param {object} lc
  * @param {object} enumerationResult - `EnumerationResult` or `CollaborationEnumerationResult`.
@@ -192,6 +263,13 @@ function checkUnreachableBranches(lc, enumerationResult, formatted) {
   // module header. SC01 declines entirely rather than report an un-enumerated branch as an
   // objective defect.
   if (enumerationResult?.truncated || (enumerationResult?.stats?.lengthTruncatedPaths || 0) > 0) {
+    return [];
+  }
+  // A dead end anywhere means the completed-scenario set is NOT the set of paths the traversal
+  // attempted, so "absent from every completed scenario" stops meaning "never taken" — see the
+  // module header's limitation (3). Blunt on purpose: attributing a specific missing branch to
+  // a specific downstream stall would mean re-deriving the traversal this module does not own.
+  if ((enumerationResult?.stats?.deadEndPaths || 0) > 0) {
     return [];
   }
 
@@ -214,7 +292,7 @@ function checkUnreachableBranches(lc, enumerationResult, formatted) {
       if (takenEdges.has(key)) continue;
       issues.push({
         rule: 'SC01',
-        severity: 'ERROR',
+        severity: 'WARNING',
         gatewayId: gw.gatewayId,
         poolId: gw.poolId,
         edgeId: edge.id,
@@ -234,7 +312,7 @@ function checkUnreachableBranches(lc, enumerationResult, formatted) {
 function checkUnresolvedDecisionRefs(bridge) {
   return (bridge?.unresolved || []).map((f) => ({
     rule: 'SC02',
-    severity: 'ERROR',
+    severity: 'WARNING',
     nodeId: f.occurrence.nodeId,
     poolId: f.occurrence.poolId ?? null,
     decisionRef: f.occurrence.decisionRef,
@@ -247,7 +325,7 @@ function checkUnresolvedDecisionRefs(bridge) {
 function checkAmbiguousDecisionRefs(bridge) {
   return (bridge?.ambiguous || []).map((f) => ({
     rule: 'SC03',
-    severity: 'ERROR',
+    severity: 'WARNING',
     nodeId: f.occurrence.nodeId,
     poolId: f.occurrence.poolId ?? null,
     decisionRef: f.occurrence.decisionRef,
@@ -309,7 +387,7 @@ function checkTableGaps(bridge, tableAnalyses) {
     for (const gap of analysis.gaps) {
       issues.push({
         rule: 'SC04',
-        severity: 'ERROR',
+        severity: 'WARNING',
         nodeId: link.occurrence.nodeId,
         poolId: link.occurrence.poolId ?? null,
         tableId: analysis.tableId,
@@ -336,7 +414,7 @@ function checkTableOverlaps(bridge, tableAnalyses) {
     for (const overlap of analysis.overlaps || []) {
       issues.push({
         rule: 'SC05',
-        severity: 'ERROR',
+        severity: 'WARNING',
         nodeId: link.occurrence.nodeId,
         poolId: link.occurrence.poolId ?? null,
         tableId: analysis.tableId,
@@ -378,7 +456,7 @@ function checkImproperCompletion(enumerationResult) {
     if (overfull.length === 0) continue;
     issues.push({
       rule: 'SC06',
-      severity: 'ERROR',
+      severity: 'WARNING',
       scenarioIndex: s.index,
       pools: overfull.map(([poolId]) => poolId),
       message: `scenario #${s.index} completes improperly: pool(s) `
@@ -399,7 +477,8 @@ function checkImproperCompletion(enumerationResult) {
  *
  * @typedef {object} ScenarioRuleIssue
  * @property {'SC01'|'SC02'|'SC03'|'SC04'|'SC05'|'SC06'} rule
- * @property {'ERROR'} severity - always ERROR; this module has no WARNING tier.
+ * @property {'WARNING'} severity - always WARNING; this module has no ERROR tier. See the
+ *   module header's "Severity: WARNING, deliberately" for why, and what `--strict` is for.
  * @property {string} message - human-readable, self-contained.
  * (Structured fields beyond `rule`/`severity`/`message` vary per rule — see each `check*`
  * function above for the exact shape; every one carries enough of node/table/edge/scenario id

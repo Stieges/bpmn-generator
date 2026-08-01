@@ -237,6 +237,95 @@ describe('CLI (spawned) — main() wiring', () => {
     expect(r.stderr).toMatch(/⚠ Findings/);
   });
 
+  // ─────────────────────────────────────────────────────────────────────────────────────────
+  // The whole-branch review's seam, end to end. Six individually-correct modules combined into
+  // a CLI that reported "✓ Scenarios enumerated: 0" at exit 0 for a document where EVERY path
+  // deadlocks, wrote a JSON file with `"scenarios": []` and no explanation, a three-line
+  // Markdown file with no scenario count at all, and two SC01 findings blaming the upstream
+  // gateway for a downstream stall. Each half was invisible to its own module's tests, which is
+  // why the guard belongs here, at the seam, and not in format.test.js or rules.test.js.
+  //
+  // deadlock-process.json is purpose-built for it: an XOR split whose two branches both feed a
+  // parallelGateway JOIN, which needs both tokens at once and can never get them. Both branches
+  // ARE taken; both dead-end. checkWorkflowNetSoundness already reports WF03 on this fixture on
+  // master, i.e. the deadlock is real and pre-existing, not something this subsystem created.
+  // ─────────────────────────────────────────────────────────────────────────────────────────
+  test('deadlock-process.json: total enumeration failure is reported, not silently passed off '
+    + 'as an empty scenario list', async () => {
+    const r = await runCli(fixture('deadlock-process'));
+
+    // Still exit 0 and still writes files (no --strict): the run itself did not fail, it just
+    // has nothing to show and says so. Matches the WARNING-tier convention of both sibling CLIs.
+    expect(r.status).toBe(0);
+    expect(r.jsonExists).toBe(true);
+    expect(r.mdExists).toBe(true);
+
+    // 1. stdout/stderr names the failure instead of only "✓ Scenarios enumerated: 0".
+    expect(r.stdout).toMatch(/Scenarios enumerated: 0/);
+    expect(r.stderr).toMatch(/⚠ Enumeration completeness/);
+    expect(r.stderr).toMatch(/No scenario reached completion/);
+    expect(r.stderr).toMatch(/2 path\(s\) dead-ended/);
+
+    // 2. the written JSON carries the enumeration's own bookkeeping, not just an empty array.
+    const written = JSON.parse(readFileSync(`${r.outBase}.scenarios.json`, 'utf8'));
+    expect(written.scenarios).toEqual([]);
+    expect(written.truncated).toBe(false);
+    expect(written.stats.deadEndPaths).toBe(2);
+    expect(written.stats.cappedPaths).toBe(0);
+    expect(written.stats.lengthTruncatedPaths).toBe(0);
+
+    // 3. the Markdown says it too — a human reading only that file must not be misled either.
+    const md = readFileSync(`${r.outBase}.scenarios.md`, 'utf8');
+    expect(md).toMatch(/## Enumeration summary/);
+    expect(md).toMatch(/Scenarios enumerated: \*\*0\*\*/);
+    expect(md).toMatch(/2 path\(s\) dead-ended/);
+
+    // 4. and SC01 does NOT blame xor1 for a stall that lives at and1 — the misattribution class.
+    //    xor1's branches f2/f3 are both taken; the parallelGateway JOIN is what cannot proceed.
+    expect(written.issues).toEqual([]);
+    expect(r.stderr).not.toMatch(/SC01/);
+  });
+
+  test('deadlock-process.json --strict: blocks on the completeness warnings alone, with no SC0x '
+    + 'finding involved, and writes nothing', async () => {
+    // The choice this fix round made explicit: --strict blocks on the completeness channel too,
+    // not only on SC01-SC06. Otherwise a totally failed run would still pass --strict as long as
+    // no rule happened to fire — exactly the seam. The message must show 0 findings, so the
+    // reason for blocking cannot be confused with the old (misattributed) SC01 pair.
+    const r = await runCli(fixture('deadlock-process'), { args: ['--strict'] });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/✗ --strict: 0 finding\(s\), 2 completeness warning\(s\)/);
+    expect(r.jsonExists).toBe(false);
+    expect(r.mdExists).toBe(false);
+  });
+
+  test('a healthy fixture prints no completeness warning and passes --strict — the guard is not '
+    + 'simply always on', async () => {
+    // parallel-split-join.json: 1 scenario, no dead ends, no caps, nothing skipped. Without this
+    // the two tests above would pass just as well against a CLI that warned unconditionally.
+    const r = await runCli(fixture('parallel-split-join'), { args: ['--strict'] });
+    expect(r.status).toBe(0);
+    expect(r.jsonExists).toBe(true);
+    expect(r.stderr).not.toMatch(/⚠ Enumeration completeness/);
+    const written = JSON.parse(readFileSync(`${r.outBase}.scenarios.json`, 'utf8'));
+    expect(written.stats.deadEndPaths).toBe(0);
+    expect(written.scenarios.length).toBeGreaterThan(0);
+  });
+
+  test('the non-blocking notes channel: simple-approval\'s cycle-bound suppression is printed as '
+    + 'a 💡 note on stdout and does NOT block --strict', async () => {
+    // The second tier. `cappedPaths` is the cycle bound working as configured, and enumerate.js's
+    // own stats doc instructs consumers to keep it apart from deadEndPaths — so it is surfaced
+    // (never hidden) but never treated as an unresolved warning.
+    const r = await runCli(fixture('simple-approval'), { args: ['--strict'] });
+    expect(r.status).toBe(0);
+    expect(r.jsonExists).toBe(true);
+    expect(r.stdout).toMatch(/💡 Enumeration notes/);
+    expect(r.stdout).toMatch(/cycle bound \(1\)/);
+    const written = JSON.parse(readFileSync(`${r.outBase}.scenarios.json`, 'utf8'));
+    expect(written.stats.cappedPaths).toBe(1);
+  });
+
   // Shape mirrors scripts/dmn/pipeline.test.js's missing-file/malformed-JSON test pair.
   test('missing input file → exit ≠ 0, clean "✗ ..." on stderr, no stack trace frame from this file', async () => {
     const { spawnSync } = await import('node:child_process');

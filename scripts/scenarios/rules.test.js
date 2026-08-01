@@ -1,14 +1,20 @@
 /**
  * Phase E — tests for the judging layer (`rules.js`).
  *
- * Seven cases per the task-6 brief's Verification section: SC01 acyclic (a genuinely dead
- * branch fires), SC01 cyclic exclusion (both directions: coverage holds AND the exclusion
- * holds even with a genuine gap), SC02/SC03 (distinct, from the bridge), SC04 (gap fires,
- * "not attempted" does not), SC05 (UNIQUE fires, FIRST with the identical shape does not),
- * SC06 (AND-fork-to-two-ends), and a clean model producing zero issues from all six rules
- * at once — plus a post-review regression block (SC01's pool-id consistency for id-less
- * pools and fully non-pooled documents, the truncation blind spot, the SOURCE-side cyclic
- * exclusion, and `skippedTableAnalyses`).
+ * Seven cases per the task-6 brief's Verification section: SC01 acyclic, SC01 cyclic exclusion
+ * (both directions: coverage holds AND the exclusion holds even with a genuine gap), SC02/SC03
+ * (distinct, from the bridge), SC04 (gap fires, "not attempted" does not), SC05 (UNIQUE fires,
+ * FIRST with the identical shape does not), SC06 (AND-fork-to-two-ends), and a clean model
+ * producing zero issues from all six rules at once — plus a post-review regression block
+ * (SC01's pool-id consistency for id-less pools and fully non-pooled documents, the truncation
+ * blind spot, the SOURCE-side cyclic exclusion, and `skippedTableAnalyses`).
+ *
+ * The SC01 block's first case INVERTED after the whole-branch review: what used to be SC01's
+ * canonical positive fixture ("a branch that dead-ends before any end event is reported") turned
+ * out to be the review's misattribution class — the branch IS taken, its continuation dead-ends —
+ * so SC01 now declines on `stats.deadEndPaths > 0` and the block asserts the decline, keeping the
+ * positive shape under test through the same flag-flip device the truncation block already used.
+ * All six rules' `severity` is `'WARNING'`, not `'ERROR'`; see `rules.js`'s header for why.
  */
 
 import { describe, test, expect } from '@jest/globals';
@@ -58,35 +64,78 @@ const issuesOf = (result, rule) => result.issues.filter((i) => i.rule === rule);
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('SC01 — unreachable branch, acyclic gateway', () => {
-  test('a branch that dead-ends before any end event is reported', () => {
-    const lc = {
-      pools: [{
-        id: 'P1',
-        nodes: [
-          { id: 's', type: 'startEvent' }, { id: 'gw', type: 'exclusiveGateway' },
-          { id: 'a', type: 'userTask' }, { id: 'b', type: 'userTask' }, // b: no outgoing edge
-          { id: 'e', type: 'endEvent' },
-        ],
-        edges: [
-          { id: 'e1', source: 's', target: 'gw' },
-          { id: 'e2', source: 'gw', target: 'a', label: 'Yes' },
-          { id: 'e3', source: 'gw', target: 'b', label: 'No' },
-          { id: 'e4', source: 'a', target: 'e' },
-        ],
-      }],
-    };
+  // This fixture used to be SC01's canonical POSITIVE case ("branch e3 is never taken"). The
+  // whole-branch review showed the claim is wrong on exactly this shape: e3 IS taken — the
+  // traversal explores every branch of a reached XOR split — its continuation simply dead-ends
+  // at `b`, which has no outgoing edge. SC01 reads only COMPLETED scenarios, so an entered-but-
+  // stalled branch looks identical to a never-entered one, and naming the upstream gateway
+  // sends the reader to the one node that is fine. See rules.js's limitation (3).
+  const deadEndLc = () => ({
+    pools: [{
+      id: 'P1',
+      nodes: [
+        { id: 's', type: 'startEvent' }, { id: 'gw', type: 'exclusiveGateway' },
+        { id: 'a', type: 'userTask' }, { id: 'b', type: 'userTask' }, // b: no outgoing edge
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'e1', source: 's', target: 'gw' },
+        { id: 'e2', source: 'gw', target: 'a', label: 'Yes' },
+        { id: 'e3', source: 'gw', target: 'b', label: 'No' },
+        { id: 'e4', source: 'a', target: 'e' },
+      ],
+    }],
+  });
+
+  test('a branch whose continuation dead-ends is NOT reported — SC01 declines on deadEndPaths', () => {
+    const lc = deadEndLc();
     const { enumerationResult, formatted } = enumerateAndFormat(lc);
 
-    // Sanity: gw is not on any cycle, and only the "a" branch produced a complete scenario.
+    // Sanity: gw is not on any cycle, nothing was truncated, and the run DID produce a dead end
+    // — so the decline below is the dead-end guard doing the work, not the cyclic or truncation
+    // guard standing in for it.
     expect(enumerationResult.stats.backwardEdges).toEqual([]);
+    expect(enumerationResult.truncated).toBe(false);
+    expect(enumerationResult.stats.lengthTruncatedPaths).toBe(0);
     expect(enumerationResult.scenarios).toHaveLength(1);
     expect(enumerationResult.stats.deadEndPaths).toBe(1);
 
     const result = runScenarioRules({ lc, enumerationResult, formatted });
+    expect(issuesOf(result, 'SC01')).toEqual([]);
+  });
+
+  test('with deadEndPaths forced to 0, the SAME data DOES produce the SC01 finding — the guard '
+    + 'is what suppresses it, and SC01\'s machinery still works', () => {
+    // Mirrors the truncation block's own "wouldHaveFired" sanity check: proves the decline is a
+    // deliberate guard rather than an accidental absence of anything to find, and keeps SC01's
+    // gateway/edge/severity shape under test now that the natural positive fixture is gone.
+    const lc = deadEndLc();
+    const { enumerationResult, formatted } = enumerateAndFormat(lc);
+    const noDeadEnds = { ...enumerationResult, stats: { ...enumerationResult.stats, deadEndPaths: 0 } };
+
+    const result = runScenarioRules({ lc, enumerationResult: noDeadEnds, formatted });
     const sc01 = issuesOf(result, 'SC01');
     expect(sc01).toHaveLength(1);
-    expect(sc01[0]).toMatchObject({ rule: 'SC01', severity: 'ERROR', gatewayId: 'gw', edgeId: 'e3' });
+    expect(sc01[0]).toMatchObject({ rule: 'SC01', severity: 'WARNING', gatewayId: 'gw', edgeId: 'e3' });
     expect(sc01[0].message).toMatch(/gw.*e3/);
+  });
+
+  test('multi-pool-collaboration.json: the review\'s reproduction — no SC01 for s_gw, whose two '
+    + 'branches are both taken; the stall is downstream at s_merge', () => {
+    // The regression guard for the misattribution the whole-branch review found. `s_merge` is an
+    // exclusiveGateway with 2 incoming edges; bpmnToPN's implicit-merge guard only rewrites
+    // NON-gateway nodes, so s_merge keeps AND semantics and deadlocks. That is a pre-existing
+    // bpmnToPN limitation (the same fixture already reports WF03 there) — SC01's job here is
+    // only to not blame s_gw for it.
+    const lc = fixture('multi-pool-collaboration');
+    const { enumerationResult, formatted } = enumerateAndFormat(lc);
+
+    expect(enumerationResult.scenarios).toHaveLength(0);
+    expect(enumerationResult.stats.deadEndPaths).toBe(2);
+
+    const result = runScenarioRules({ lc, enumerationResult, formatted });
+    expect(issuesOf(result, 'SC01')).toEqual([]);
+    expect(result.issues).toEqual([]);
   });
 });
 
@@ -290,7 +339,7 @@ describe('SC02 / SC03 — unresolved vs. ambiguous decisionRef', () => {
 
     const result = runScenarioRules({ lc, enumerationResult, formatted, bridge });
     expect(issuesOf(result, 'SC02')).toEqual([{
-      rule: 'SC02', severity: 'ERROR', nodeId: 'rule', poolId: 'P3', decisionRef: 'NoSuchDecision',
+      rule: 'SC02', severity: 'WARNING', nodeId: 'rule', poolId: 'P3', decisionRef: 'NoSuchDecision',
       message: expect.stringContaining('NoSuchDecision'),
     }]);
     expect(issuesOf(result, 'SC03')).toEqual([]);
@@ -485,7 +534,7 @@ describe('SC06 — improper completion at the shared sink', () => {
     const result = runScenarioRules({ lc, enumerationResult, formatted });
     const sc06 = issuesOf(result, 'SC06');
     expect(sc06).toHaveLength(1);
-    expect(sc06[0]).toMatchObject({ rule: 'SC06', severity: 'ERROR', scenarioIndex: 0, pools: ['P_TwoEnds'] });
+    expect(sc06[0]).toMatchObject({ rule: 'SC06', severity: 'WARNING', scenarioIndex: 0, pools: ['P_TwoEnds'] });
   });
 
   test('a normal single-end scenario does not fire SC06', () => {

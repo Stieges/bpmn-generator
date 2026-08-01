@@ -8,6 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scenario enumeration — every path a token can take, listed instead of drawn.**
+  A new opt-in subsystem, `scripts/scenarios/`, implementing
+  `docs/superpowers/plans/2026-08-01-scenario-enumeration.md`. The rule engine only ever sees the
+  generated Logic-Core, never the text it came from, so it cannot notice that an XOR should have
+  been an AND. This lists the distinct executions so a reviewer can spot a missing or wrong
+  scenario in a list, where it is findable, rather than in a diagram, where it is not.
+  - **CLI + public API** — `scripts/scenarios/pipeline.js` (`runScenarioPipeline`):
+    `node scenarios/pipeline.js input.json out [--decisions <files>] [--strict]`, writing
+    `out.scenarios.json` and `out.scenarios.md`. Mirrors `scripts/dmn/pipeline.js`'s idiom.
+    Every document, pooled or not, is routed through the collaboration pair — the composed net is
+    a strict superset of the plain one, and it is the only path that yields `SC06` coverage.
+  - **Six analytical modules.** `enumerate.js` walks one process's Petri net; `collaboration.js`
+    composes the per-pool nets over message flows and drives the same traversal;
+    `decision-table.js` computes hit-policy-aware branching plus gap/overlap analysis;
+    `bridge.js` resolves a BPMN `decisionRef` to a DMN decision table; `format.js` produces the
+    machine (JSON) and human (Markdown) views; `rules.js` is the one module allowed to judge.
+  - **Reuses `bpmnToPN` rather than forking it.** `scripts/bpmn/workflow-net.js` gained only
+    additive exports (`getEnabledTransitions`, `fireTransition`, `encodeMarking`, and
+    `flatNodes`/`flatEdges` on the returned net); WF01–WF03 verdicts are byte-identical.
+    `checkSoundness`'s own traversal is deliberately NOT reused — it deduplicates markings, which
+    is right for "is the sink reachable?" and wrong for "which distinct paths reach it?".
+    Termination instead rests on a per-backward-edge bound plus caps from `config.json`.
+  - **Six rules, `SC01`–`SC06`, all WARNING-tier**, counted separately from both existing engines:
+    SC01 a branch no enumerated scenario reaches, SC02/SC03 a `decisionRef` resolving to nothing
+    or to more than one table, SC04/SC05 a decision table gap or an overlap illegal under
+    `UNIQUE`, SC06 improper completion at a scenario's shared sink. SC01 declines to judge three
+    situations outright rather than guess: cyclic gateways, truncated runs, and runs containing
+    dead-end paths — in each, "absent from every completed scenario" stops meaning "never taken".
+  - **Incompleteness is part of the output, not a footnote.** Both written files carry the
+    enumeration's own bookkeeping (`deadEndPaths`, `truncated`, `cappedPaths`,
+    `lengthTruncatedPaths`, `orGateways`, `skipped`, and the collaboration's message-flow
+    fields), and the CLI prints two channels: `⚠ Enumeration completeness` for a run that did not
+    finish the job (`--strict` blocks on it, so a totally failed run cannot pass), and
+    `💡 Enumeration notes` for what the Petri-net translation structurally cannot see — an OR
+    split fired as an AND, an unmodelled `eventBasedGateway`, a message flow with a black-box
+    end. Without this an input whose every path deadlocks reported `✓ Scenarios enumerated: 0`
+    at exit 0.
+  - Deliberately out of scope: any business-sense judgment. Whether a process is *reasonable* is
+    not a question this subsystem is allowed to answer.
 - **DMN 1.3 XML + DMNDI generation — a real `.dmn` file now exists.**
   `scripts/dmn/dmn-xml.js` (`generateDmnXml`, `validateDmnXml`) and `scripts/dmn/pipeline.js`
   (`runDmnPipeline` + CLI), completing Stages 3–4 of

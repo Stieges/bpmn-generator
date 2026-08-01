@@ -491,6 +491,14 @@ export function resolveLimits(options = {}) {
 /**
  * Enumerate every distinct execution scenario of ONE process.
  *
+ * **Prefer `enumerateCollaboration` (`./collaboration.js`)**: it accepts a pool-less document
+ * as one pool, so it is a strict superset of this function for single-process input, and it
+ * is the only path that produces `CompositeScenario.sinkTokens` — the field `SC06`
+ * (`./rules.js`) reads, which a plain `Scenario` does not carry at all. `pipeline.js`
+ * therefore routes every document through the collaboration pair and never calls this one.
+ * Kept for direct single-process library use, where the plain `Scenario` shape (no pool
+ * prefixes on transition ids, no message-flow bookkeeping) is what the caller wants.
+ *
  * @param {object} proc - a Logic-Core process/pool ({nodes, edges, ...}); for a
  *   multi-pool document call this once per entry of `lc.pools`.
  * @param {object} [options]

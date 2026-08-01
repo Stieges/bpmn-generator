@@ -58,6 +58,18 @@
  * to "same route, different choice", which is deliberate: both are one gateway's worth of
  * divergence from the reference path, and a scenario that skips more of the happy path's
  * gateways is, by construction, further from it. See `distanceFromHappyPath`.
+ *
+ * ── Completeness travels WITH the views, it is not a separate channel ─────────────────────
+ * Both views carry the enumeration's own incompleteness bookkeeping (`stats`, `truncated`)
+ * verbatim — see `describeEnumerationCompleteness` and the `FormattedView` typedef. The
+ * whole-branch review found the opposite: every signal `enumerate.js`/`collaboration.js`
+ * compute (`deadEndPaths`, `truncated`, `cappedPaths`, …) was dropped here, so a run that
+ * enumerated NOTHING because every path dead-ended was presented as an empty scenario list
+ * with no explanation, in both files and on stdout. A presentation layer is exactly where
+ * that must not happen: the reader of these two views has no other source. `stats` is passed
+ * through whole rather than curated for the same reason — a curated subset silently stops
+ * carrying whatever field a later task adds upstream, which is how the signal got lost once
+ * already.
  */
 
 import { bpmnToPN } from '../bpmn/workflow-net.js';
@@ -433,6 +445,121 @@ export function distanceFromHappyPath(decisions, happyMap) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Part 3b — enumeration completeness, in words
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Render up to `limit` ids as a quoted, comma-separated list, with a `(+N more)` tail. */
+function idList(ids, limit = 8) {
+  const shown = ids.slice(0, limit).map((id) => `"${id}"`).join(', ');
+  const rest = ids.length - Math.min(ids.length, limit);
+  return rest > 0 ? `${shown} (+${rest} more)` : shown;
+}
+
+/** `stats.orGateways` is `string[]` single-process, `{poolId, nodeId}[]` for a collaboration;
+ *  `stats.skipped` is `{id, reason}[]` / `{poolId, id, reason}[]`. One id shape out of both. */
+function scopedIds(entries, idKey) {
+  return (entries || []).map((e) =>
+    (typeof e === 'string' ? e : (e.poolId ? `${e.poolId}::${e[idKey]}` : e[idKey])));
+}
+
+/**
+ * Everything an `EnumerationResult`/`CollaborationEnumerationResult` knows about its own
+ * incompleteness, in two tiers a consumer must treat differently. Pure derivation from
+ * `stats`/`truncated` — the single source both the Markdown view and the CLI render from, so
+ * the file a human reads and the line the CLI prints cannot say different things.
+ *
+ * ── Why two tiers ─────────────────────────────────────────────────────────────────────────
+ * `enumerate.js`'s own `stats.cappedPaths` doc states the distinction and instructs this
+ * layer to keep it: cycle-bound suppressions "are NOT dead ends and NOT a soundness finding —
+ * the path exists in the model, it was simply not explored. A later judging layer must be
+ * able to tell them from the next field, which is why they are counted apart."
+ *
+ *   - `warnings` — **the enumeration did not finish the job**: it produced nothing, ran into
+ *     states it could not leave, or was cut off mid-way. Something is unresolved, and the
+ *     CLI's `--strict` blocks on these, exactly as it blocks on an unresolved warning in
+ *     `scripts/bpmn/pipeline.js` and `scripts/dmn/pipeline.js`.
+ *   - `notes` — **the enumeration finished; here is what it structurally cannot see**: a
+ *     configured cycle bound doing its job, an OR split the Petri-net translation fires as an
+ *     AND, a node class it does not model, a message flow with a black-box end. These are
+ *     properties of the input and the translation, not failures of this run, so they are
+ *     printed (never hidden) but never block — mirroring the non-blocking `💡` advisory
+ *     channel `scripts/bpmn/pipeline.js` already uses for its Optimization layer.
+ *
+ * @param {object} enumerationResult - `EnumerationResult` (enumerate.js) or
+ *   `CollaborationEnumerationResult` (collaboration.js).
+ * @returns {{warnings: string[], notes: string[]}} both empty for a run that enumerated a
+ *   complete scenario set over a fully modelled process — the only case in which silence is
+ *   the honest answer.
+ */
+export function describeEnumerationCompleteness(enumerationResult) {
+  const stats = enumerationResult?.stats || {};
+  const scenarioCount = enumerationResult?.scenarios?.length ?? 0;
+  const warnings = [];
+  const notes = [];
+
+  if (scenarioCount === 0) {
+    warnings.push('No scenario reached completion — not one path ended with every pool\'s end '
+      + 'event reached. An empty scenario list is a total enumeration failure, not a clean process.');
+  }
+  if ((stats.deadEndPaths || 0) > 0) {
+    warnings.push(`${stats.deadEndPaths} path(s) dead-ended: reached a state with no enabled `
+      + 'transition and no completion. Counted, not judged — WF03 (`scripts/bpmn/workflow-net.js`) '
+      + 'is where a deadlock gets called a deadlock.');
+  }
+  if (enumerationResult?.truncated) {
+    warnings.push('The scenario cap fired: the list is a PREFIX of the scenario set, not the '
+      + 'complete set.');
+  }
+  if ((stats.lengthTruncatedPaths || 0) > 0) {
+    warnings.push(`${stats.lengthTruncatedPaths} path(s) were abandoned at the maximum trace `
+      + 'length before reaching completion.');
+  }
+
+  if ((stats.cappedPaths || 0) > 0) {
+    notes.push(`${stats.cappedPaths} branch continuation(s) were not followed because the cycle `
+      + `bound (${stats.cycleBound}) would have been exceeded. Those paths exist in the model; `
+      + 'they were simply not explored — this is the bound working, not a defect.');
+  }
+  const orIds = scopedIds(stats.orGateways, 'nodeId');
+  if (orIds.length > 0) {
+    notes.push(`${orIds.length} inclusive (OR) gateway(s) are modelled as a forced AND (every `
+      + `branch fires): ${idList(orIds)}. For those, the scenario set is an under-enumeration.`);
+  }
+  // Split by reason: an artifact has no control-flow role to lose, an eventBasedGateway does —
+  // its race semantics are simply not modelled, so scenarios ARE missing. Reporting the two
+  // under one count would bury the second in the first, which is the common case.
+  const skippedArtifacts = scopedIds((stats.skipped || []).filter((s) => s.reason === 'artifact'), 'id');
+  const skippedOther = (stats.skipped || []).filter((s) => s.reason !== 'artifact');
+  if (skippedArtifacts.length > 0) {
+    notes.push(`${skippedArtifacts.length} artifact(s) carry no control-flow model: `
+      + `${idList(skippedArtifacts)}. Harmless here — an artifact has no control-flow role to lose.`);
+  }
+  if (skippedOther.length > 0) {
+    notes.push(`${skippedOther.length} node(s) are not modelled at all: `
+      + `${idList(scopedIds(skippedOther, 'id'))} (${[...new Set(skippedOther.map((s) => s.reason))].join(', ')}). `
+      + 'An eventBasedGateway\'s race semantics have no Petri-net translation here, so its '
+      + 'scenarios are missing from the list entirely.');
+  }
+  if ((stats.ungatedMessageFlows || []).length > 0) {
+    notes.push(`${stats.ungatedMessageFlows.length} message flow(s) enforce no ordering at all `
+      + `(a black-box endpoint): ${idList(stats.ungatedMessageFlows)}. The joint order across `
+      + 'pools is not synchronised for these.');
+  }
+  if ((stats.unconsumedMessagePlaces || []).length > 0) {
+    notes.push(`${stats.unconsumedMessagePlaces.length} message place(s) are never consumed by `
+      + `any transition: ${idList(stats.unconsumedMessagePlaces)}.`);
+  }
+  const unresolved = stats.unresolvedEndpoints || [];
+  if (unresolved.length > 0) {
+    notes.push(`${unresolved.length} message flow endpoint(s) could not be mapped to a node: `
+      + `${idList(unresolved.map((u) => `${u.messageFlowId}/${u.endpoint}=${u.id}`))}. Those flows `
+      + 'synchronise nothing.');
+  }
+
+  return { warnings, notes };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Part 4 — assembling the two views
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -470,7 +597,7 @@ function renderDecisionLabel(d, nameById) {
   return d.poolId ? `${gwName}@${d.poolId} → ${d.label}` : `${gwName} → ${d.label}`;
 }
 
-function renderMarkdown(groups, happyPath, maxGroupsRendered, nameById) {
+function renderMarkdown(groups, happyPath, maxGroupsRendered, nameById, scenarioCount, completeness) {
   const lines = [];
   lines.push('# Scenario Overview');
   lines.push('');
@@ -481,6 +608,26 @@ function renderMarkdown(groups, happyPath, maxGroupsRendered, nameById) {
   if (!happyPath.found) {
     lines.push('_No happy path could be identified at all (disconnected process, or no ' +
       'start/end event) — distances below are all 0 and carry no information._');
+  }
+  lines.push('');
+
+  // The summary goes FIRST, above the groups: when `scenarioCount` is 0 there are no groups to
+  // read at all, and the reader's only question is why. A completeness note appended after an
+  // empty list would be a footnote to nothing.
+  lines.push('## Enumeration summary');
+  lines.push('');
+  lines.push(`- Scenarios enumerated: **${scenarioCount}**, in ${groups.length} decision group(s).`);
+  if (completeness.warnings.length > 0) {
+    lines.push('');
+    lines.push('**⚠ Completeness — resolve these before reading the list below as the whole truth:**');
+    lines.push('');
+    for (const w of completeness.warnings) lines.push(`- ${w}`);
+  }
+  if (completeness.notes.length > 0) {
+    lines.push('');
+    lines.push('**Notes — what the Petri-net translation structurally cannot see (no verdict):**');
+    lines.push('');
+    for (const n of completeness.notes) lines.push(`- ${n}`);
   }
   lines.push('');
 
@@ -505,9 +652,9 @@ function renderMarkdown(groups, happyPath, maxGroupsRendered, nameById) {
   return lines.join('\n');
 }
 
-function assemble(scenarios, decisionsFor, happyPath, options, nameById) {
+function assemble(enumerationResult, decisionsFor, happyPath, options, nameById) {
   const happyMap = happyPathDecisionMap(happyPath.decisions);
-  const enriched = scenarios.map(s => {
+  const enriched = (enumerationResult.scenarios || []).map(s => {
     const decisions = decisionsFor(s);
     return {
       ...s,
@@ -520,14 +667,20 @@ function assemble(scenarios, decisionsFor, happyPath, options, nameById) {
 
   const groups = groupScenarios(enriched);
   const maxGroupsRendered = resolveMaxGroupsRendered(options);
+  const completeness = describeEnumerationCompleteness(enumerationResult);
 
   return {
     json: {
       happyPath,
       scenarios: enriched,
       groupCount: groups.length,
+      // Passed through whole, never curated — see the module header's "Completeness travels
+      // WITH the views" section. `truncated` sits alongside `stats` rather than inside it
+      // because that is where `EnumerationResult` itself puts it.
+      truncated: enumerationResult.truncated ?? false,
+      stats: enumerationResult.stats ?? {},
     },
-    markdown: renderMarkdown(groups, happyPath, maxGroupsRendered, nameById),
+    markdown: renderMarkdown(groups, happyPath, maxGroupsRendered, nameById, enriched.length, completeness),
   };
 }
 
@@ -602,17 +755,34 @@ function assemble(scenarios, decisionsFor, happyPath, options, nameById) {
  *   `(happyPathDistance, index)`; nothing dropped or summarized.
  * @property {number} json.groupCount - distinct `groupKey`s over the FULL set, independent
  *   of any Markdown rendering cap.
+ * @property {boolean} json.truncated - `EnumerationResult.truncated` /
+ *   `CollaborationEnumerationResult.truncated`, passed through unchanged: true means
+ *   `json.scenarios` is a PREFIX of the scenario set.
+ * @property {object} json.stats - the source `EnumerationResult.stats` /
+ *   `CollaborationEnumerationResult.stats`, **passed through whole and unchanged** —
+ *   `deadEndPaths`, `cappedPaths`, `lengthTruncatedPaths`, `backwardEdges`, `orGateways`,
+ *   `skipped`, `statesExplored`, and, on the collaboration path, `messageFlows`,
+ *   `ungatedMessageFlows`, `unconsumedMessagePlaces`, `unresolvedEndpoints`. A consumer that
+ *   reads `json.scenarios` without reading this is reading an answer without its error bars;
+ *   `describeEnumerationCompleteness` turns the same data into prose for a human.
  * @property {string} markdown - the grouped, capped, human-readable rendering: a heading, a
- *   line stating whether the happy path is declared or DERIVED, one `##` section per
- *   rendered group (decision sequence in plain language, member scenarios with their node
- *   trace and, when `interleavingCount > 1`, that count), and — if `maxGroupsRendered`
- *   truncated the group list — an explicit `_N more group(s) not shown, see the JSON view._`
- *   line. See `renderMarkdown`.
+ *   line stating whether the happy path is declared or DERIVED, an `## Enumeration summary`
+ *   section carrying the scenario count and `describeEnumerationCompleteness`'s two tiers,
+ *   one `##` section per rendered group (decision sequence in plain language, member
+ *   scenarios with their node trace and, when `interleavingCount > 1`, that count), and — if
+ *   `maxGroupsRendered` truncated the group list — an explicit `_N more group(s) not shown,
+ *   see the JSON view._` line. See `renderMarkdown`.
  */
 
 /**
  * Format the result of `enumerateScenarios` (single process, `../scenarios/enumerate.js`)
  * into the JSON and Markdown views.
+ *
+ * **Prefer `formatCollaborationResult`** (with `enumerateCollaboration`): that pair is a
+ * strict superset for single-process input and the only one that yields `SC06` coverage.
+ * `pipeline.js` routes every document, pooled or not, through it. This function is kept for
+ * direct single-process library use, where the plain `Scenario` shape is what the caller
+ * wants.
  *
  * @param {import('./enumerate.js').EnumerationResult} enumerationResult
  * @param {object} proc - the SAME process object `enumerateScenarios` was called with.
@@ -627,7 +797,7 @@ export function formatScenarioResult(enumerationResult, proc, options = {}) {
   const decisionsFor = (s) =>
     extractScenarioDecisions(s.transitions, s.transitions.map(() => null), () => context);
   const nameById = buildNameIndex(pn.flatNodes);
-  return assemble(enumerationResult.scenarios, decisionsFor, happyPath, options, nameById);
+  return assemble(enumerationResult, decisionsFor, happyPath, options, nameById);
 }
 
 /**
@@ -688,5 +858,5 @@ export function formatCollaborationResult(collabResult, lc, options = {}) {
   const decisionsFor = (s) =>
     extractScenarioDecisions(s.transitions, s.poolIds, (poolId) => flatContextByPool.get(poolId) || {});
 
-  return assemble(collabResult.scenarios, decisionsFor, happyPath, options, nameById);
+  return assemble(collabResult, decisionsFor, happyPath, options, nameById);
 }

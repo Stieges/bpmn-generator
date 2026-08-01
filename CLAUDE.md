@@ -182,7 +182,7 @@ membership instead of coordinates.
 | `scripts/bpmn/types.js` | `isEvent`, `isGateway`, `isArtifact` (layout sense — kept out of the ELK graph; wider than the BPMN class, includes data references), `isBpmnArtifact` (the actual OMG Artifact class — TextAnnotation, Group; use this one for anything that has to be right against the XSD), `bpmnXmlTag` |
 | `scripts/shared/utils.js` | `loadConfig`, `CFG`, `esc`, `wrapText`, `EXTENSION_NS` (our own `extensionElements` namespace — always create those via `moddle.createAny(name, EXTENSION_NS, …)`; setting a prefixed attribute in `$attrs` without a matching `xmlns:` declaration makes moddle **drop the value silently**, logging to stderr while `warnings` stays empty). Carries only what both `bpmn/` and `dmn/` use — the 13 BPMN-only layout constants live in `scripts/bpmn/constants.js` |
 | `scripts/bpmn/constants.js` | The 13 BPMN-only layout constants (`SHAPE`, `SW`, `CLR`, `LANE_HEADER_W`, `LANE_PADDING`, `LABEL_DISTANCE`, `TASK_RX`, `INNER_OUTER_GAP`, `EXTERNAL_LABEL_H`, `POOL_GAP`, `COLLAB_PADDING`, `MESSAGE_FLOW_FAN`, `ARTIFACT_GAP`), derived from `CFG` (`../shared/utils.js`) — never imported by `dmn/` |
-| `scripts/bpmn/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
+| `scripts/bpmn/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `identifyHappyPathNodes` (which nodes an `isHappyPath` edge chain touches — also read by `scripts/scenarios/format.js`), `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/bpmn/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
 | `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
 | `scripts/bpmn/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
@@ -531,7 +531,10 @@ node dmn/pipeline.js input.json output --best-practice
   result is a `bpmnElement="undefined"` reference in the DI, plus (with lanes present) a phantom
   black-box pool on re-import and a `TypeError` in `dot.js` on the public `logicCoreToDot` path. No
   fixture or test exercises this branch end-to-end (tracked in #37; `--strict` now surfaces the
-  `unresolved reference <undefined>` warning this produces, but nothing fixes it)
+  `unresolved reference <undefined>` warning this produces, but nothing fixes it). Second call
+  site of the same limitation: `scripts/scenarios/` synthesizes a `pool_0`-style id for this
+  input shape (`composeCollaboration`), and that synthesized id reaches the human-facing
+  scenario Markdown as a pool label — inherited from #37, not created by the scenario subsystem
 - No ESLint — CLAUDE.md's own "Do NOT" rules (no CommonJS, no hard-coded constants where
   `config.json` applies, etc.) are enforced by review convention, not tooling (#32)
 - No test coverage collection or threshold gate — `npm test -- --coverage` works, nothing runs it

@@ -12,6 +12,20 @@
  * doc comment for why a pool-less `lc` is not special-cased) -> bridge -> analyze every
  * resolved table -> format -> judge (`runScenarioRules`).
  *
+ * ── What the CLI writes ───────────────────────────────────────────────────────────────────
+ * `<basename>.scenarios.json` — every field of `FormattedView.json` (`format.js`), i.e.
+ * `happyPath`, `scenarios`, `groupCount`, **`truncated` and `stats`** (the enumeration's own
+ * incompleteness bookkeeping: `deadEndPaths`, `cappedPaths`, `lengthTruncatedPaths`,
+ * `orGateways`, `skipped`, and the collaboration's message-flow fields), plus `issues` and
+ * `skippedTableAnalyses`, which `FormattedView` has no slot for.
+ * `<basename>.scenarios.md` — the human view, which now opens with an
+ * `## Enumeration summary` section carrying the same completeness information in prose.
+ *
+ * Both of those carry `stats` because the whole-branch review found the seam where they did
+ * not: an input whose every path deadlocks produced an empty scenario list, a three-line
+ * Markdown file and `✓ Scenarios enumerated: 0` at exit 0 — six individually-correct modules
+ * combining into a CLI that reported success on total failure.
+ *
  * Usage:
  *   node pipeline.js input.json [output-basename] [--decisions <files>] [--strict]
  *   cat input.json | node pipeline.js - output-basename
@@ -24,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { enumerateCollaboration } from './collaboration.js';
 import { analyzeDecisionTable } from './decision-table.js';
 import { resolveBridge } from './bridge.js';
-import { formatCollaborationResult } from './format.js';
+import { formatCollaborationResult, describeEnumerationCompleteness } from './format.js';
 import { runScenarioRules, tableAnalysisKey } from './rules.js';
 
 /**
@@ -45,8 +59,12 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
  *   writing this to disk must convert it; the CLI below does not include it in the written
  *   `.scenarios.json` for that reason.
  * @property {import('./format.js').FormattedView} formatted - the JSON + Markdown views, built
- *   with `formatCollaborationResult` to match `enumerationResult`.
- * @property {import('./rules.js').ScenarioRuleIssue[]} issues - every SC01-SC06 finding.
+ *   with `formatCollaborationResult` to match `enumerationResult`. `formatted.json` carries
+ *   `enumerationResult`'s `stats`/`truncated` verbatim, so a caller writing only this to disk
+ *   still ships the incompleteness signals.
+ * @property {import('./rules.js').ScenarioRuleIssue[]} issues - every SC01-SC06 finding, all
+ *   WARNING-tier (see `rules.js`'s header) — present findings do not by themselves make this
+ *   run a failure; the CLI's `--strict` is what turns them into one.
  * @property {number} skippedTableAnalyses - see `runScenarioRules`'s return value; always 0
  *   here in practice, since `tableAnalyses` is always built from exactly `bridgeResult.resolved`
  *   using the same key function `runScenarioRules` reads with — surfaced anyway because it is
@@ -193,14 +211,39 @@ async function main() {
 
   const result = runScenarioPipeline(lc, decisionCores);
 
+  // Three channels, in the order a reader needs them, mirroring scripts/dmn/pipeline.js's
+  // two-tier shape and scripts/bpmn/pipeline.js's non-blocking `💡` advisory channel:
+  //
+  //   ⚠ Findings              — SC01-SC06 (WARNING tier, see rules.js's header). --strict blocks.
+  //   ⚠ Enumeration completeness — the run did not finish the job. --strict blocks.
+  //   💡 Enumeration notes    — what the translation structurally cannot see. Never blocks.
+  //
+  // The completeness channel is the fix for the seam the whole-branch review found: without it
+  // a document whose every path deadlocks printed "✓ Scenarios enumerated: 0" at exit 0, which
+  // reads as "this process has no branches" rather than "enumeration failed completely".
   if (result.issues.length) {
     console.warn('\n⚠ Findings:');
     result.issues.forEach((i) => console.warn(`  · [${i.rule}] ${i.message}`));
   }
-  // --strict: abort BEFORE writing files if any SC01-SC06 finding is present — mirroring the
-  // --strict convention in scripts/bpmn/pipeline.js and scripts/dmn/pipeline.js exactly.
-  if (strict && result.issues.length) {
-    console.error(`\n✗ --strict: ${result.issues.length} finding(s). No files written.`);
+  const completeness = describeEnumerationCompleteness(result.enumerationResult);
+  if (completeness.warnings.length) {
+    console.warn('\n⚠ Enumeration completeness:');
+    completeness.warnings.forEach((w) => console.warn(`  · ${w}`));
+  }
+  if (completeness.notes.length) {
+    console.log('\n💡 Enumeration notes (no verdict — what the Petri-net translation cannot see):');
+    completeness.notes.forEach((n) => console.log(`  · ${n}`));
+  }
+  // --strict: abort BEFORE writing files on any unresolved warning — mirroring the --strict
+  // convention in scripts/bpmn/pipeline.js and scripts/dmn/pipeline.js, which treat every
+  // warning channel as a --strict channel. The completeness warnings are included on purpose:
+  // "the enumeration produced nothing" is precisely the class of failure --strict exists to
+  // stop from reaching delivery, and leaving it out would mean a totally failed run still
+  // passes --strict as long as no SC0x rule happens to fire.
+  const blocking = result.issues.length + completeness.warnings.length;
+  if (strict && blocking) {
+    console.error(`\n✗ --strict: ${result.issues.length} finding(s), `
+      + `${completeness.warnings.length} completeness warning(s). No files written.`);
     process.exit(1);
   }
   console.log(`✓ Scenarios enumerated: ${result.formatted.json.scenarios.length}`);
@@ -209,7 +252,8 @@ async function main() {
   const mdPath = `${outputBase}.scenarios.md`;
   // The Map `tableAnalyses` is not part of the written JSON (see ScenarioPipelineResult's
   // JSDoc) — `formatted.json` already carries everything Task 5 designed for machine
-  // consumption; `issues`/`skippedTableAnalyses` are added because they are the one thing
+  // consumption, INCLUDING the enumeration's own `stats`/`truncated` bookkeeping (see
+  // `FormattedView`); `issues`/`skippedTableAnalyses` are added because they are the one thing
   // `formatted.json` never had a slot for and a caller reading only the file would otherwise
   // never see them.
   const jsonOutput = {

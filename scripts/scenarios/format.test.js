@@ -21,6 +21,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) =>
   JSON.parse(readFileSync(resolve(__dirname, '../../tests/fixtures', `${name}.json`), 'utf8'));
 
+/** The `##` headings that are decision GROUPS. `## Enumeration summary` is a `##` section too
+ *  (added when the whole-branch review found the completeness signals never reached either
+ *  output), and a bare `/^## /` count would silently include it — so it is named and excluded
+ *  here rather than the summary being demoted to `###`, which would misrepresent it as a
+ *  subsection of the group that happens to precede it. */
+const groupHeadingsOf = (markdown) =>
+  (markdown.match(/^## .+$/gm) || []).filter(h => h !== '## Enumeration summary');
+
 // A fixture with TWO independent XOR gateways (gwA then gwB, no cycles) — the simple-approval
 // fixture only has one, which cannot exercise "differs at 1 gateway vs. differs at 2".
 const twoGatewayProc = {
@@ -176,7 +184,7 @@ describe('Part 3 — grouping collapses correctly (item 5)', () => {
     // Markdown: exactly 2 groups (one per distinct decision sequence), each showing its
     // members. There is no artificial merge here, so this doubles as a shape check on the
     // rendering itself.
-    const groupHeadings = markdown.match(/^## .+$/gm) || [];
+    const groupHeadings = groupHeadingsOf(markdown);
     expect(groupHeadings).toHaveLength(json.groupCount);
     expect(json.groupCount).toBe(2);
 
@@ -250,7 +258,7 @@ describe('Part 4 — truncation is visible, never silent (item 7)', () => {
     const { markdown, json } = formatScenarioResult(result, proc, { maxGroupsRendered: 1 });
 
     expect(json.groupCount).toBe(2); // JSON view is unaffected by the cap
-    const groupHeadings = markdown.match(/^## .+$/gm) || [];
+    const groupHeadings = groupHeadingsOf(markdown);
     expect(groupHeadings).toHaveLength(1); // Markdown view is capped
 
     expect(markdown).toMatch(/1 more group not shown, see the JSON view\./);
