@@ -41,7 +41,11 @@ const ratingDecisionCore = () => ({
   ],
 });
 
-describe('runScenarioPipeline — end-to-end, single process', () => {
+// NOTE: simple-approval.json declares `"pools": [...]` (one pool) — this exercises the
+// collaboration code path with a single participant, NOT the pool-less shape. See the
+// "genuinely pool-less document" describe block below for a fixture with no `pools` key at
+// all, which is the other input class `runScenarioPipeline` must handle.
+describe('runScenarioPipeline — end-to-end, single pool', () => {
   test('simple-approval.json: 2 scenarios, no findings (gateway fully covered, no decisionRef)', async () => {
     const lc = fixture('simple-approval');
     const result = runScenarioPipeline(lc);
@@ -51,6 +55,50 @@ describe('runScenarioPipeline — end-to-end, single process', () => {
     expect(result.skippedTableAnalyses).toBe(0);
     expect(result.bridgeResult.occurrences).toEqual([]);
     expect(result.tableAnalyses.size).toBe(0);
+  });
+});
+
+// A flat Logic-Core document with NO `pools` key at all — `nodes`/`edges` directly at the top
+// level, the "legacy flat single-process" shape `input-schema.json` also accepts. Confirms
+// `runScenarioPipeline` runs this class of input end-to-end through the SAME composed
+// (`enumerateCollaboration`/`formatCollaborationResult`) path as a pooled document — see the
+// "Why always the collaboration pair" section in pipeline.js's own doc comment for why there
+// is no separate `enumerateScenarios`/`formatScenarioResult` branch to exercise here: this
+// module intentionally never calls that pair.
+describe('runScenarioPipeline — genuinely pool-less document (no `pools` key)', () => {
+  const flatTwoEnds = () => ({
+    id: 'Process_TwoEnds',
+    nodes: [
+      { id: 's', type: 'startEvent' }, { id: 'fork', type: 'parallelGateway' },
+      { id: 'x', type: 'userTask' }, { id: 'y', type: 'userTask' },
+      { id: 'e1', type: 'endEvent' }, { id: 'e2', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'a1', source: 's', target: 'fork' }, { id: 'a2', source: 'fork', target: 'x' },
+      { id: 'a3', source: 'fork', target: 'y' }, { id: 'a4', source: 'x', target: 'e1' },
+      { id: 'a5', source: 'y', target: 'e2' },
+    ],
+  });
+
+  test('runs end-to-end and produces a CollaborationEnumerationResult (poolIds, sinkTokens present)', () => {
+    const lc = flatTwoEnds();
+    const result = runScenarioPipeline(lc);
+    // poolIds/sinkTokens only exist on the composed (CollaborationEnumerationResult) shape —
+    // their presence IS the assertion that the pool-less path was routed through
+    // enumerateCollaboration, not the plain single-process enumerateScenarios.
+    expect(result.enumerationResult.poolIds).toEqual(['Process_TwoEnds']);
+    expect(result.enumerationResult.scenarios[0].sinkTokens).toBeDefined();
+  });
+
+  test('SC06 fires for a pool-less document with an AND fork to two end events (mirrors ' +
+    "collaboration.test.js's own sinkTokens fixture, without the `pools` wrapper) — proof " +
+    'that pool-less input keeps SC06 coverage after routing through the collaboration pair', () => {
+    const lc = flatTwoEnds();
+    const result = runScenarioPipeline(lc);
+    expect(result.enumerationResult.scenarios[0].sinkTokens).toEqual({ Process_TwoEnds: 2 });
+    const sc06 = result.issues.filter((i) => i.rule === 'SC06');
+    expect(sc06).toHaveLength(1);
+    expect(sc06[0].pools).toEqual(['Process_TwoEnds']);
   });
 });
 
@@ -237,6 +285,23 @@ describe('CLI (spawned) — main() wiring', () => {
     expect(res.status).not.toBe(0);
     expect(res.stderr).toMatch(/✗ /);
     expect(res.stderr).not.toMatch(/at .*pipeline\.js:/);
+    expect(fs.existsSync(`${outBase}.scenarios.json`)).toBe(false);
+    expect(fs.existsSync(`${outBase}.scenarios.md`)).toBe(false);
+  });
+
+  test('trailing --decisions with no value → exit ≠ 0, clean "✗ ..." naming the flag, no files written', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scenarios-cli-decisionsnoval-'));
+    const inPath = path.join(dir, 'in.json');
+    const outBase = path.join(dir, 'out');
+    fs.writeFileSync(inPath, JSON.stringify(fixture('simple-approval')), 'utf8');
+    // --decisions is the LAST argument — no value follows it.
+    const res = spawnSync('node', ['pipeline.js', inPath, outBase, '--decisions'], { cwd: __dirname, encoding: 'utf8' });
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/✗ --decisions requires a value/);
     expect(fs.existsSync(`${outBase}.scenarios.json`)).toBe(false);
     expect(fs.existsSync(`${outBase}.scenarios.md`)).toBe(false);
   });

@@ -8,8 +8,9 @@
  * outputs. No new computation, no new judgment: any check that looks like a decision belongs
  * in `rules.js` (the only module in this subsystem allowed to call something wrong), not here.
  *
- * Call order: enumerate (single-process or collaboration, auto-detected) -> bridge -> analyze
- * every resolved table -> format -> judge (`runScenarioRules`).
+ * Call order: enumerate (always via the collaboration pair — see `runScenarioPipeline`'s own
+ * doc comment for why a pool-less `lc` is not special-cased) -> bridge -> analyze every
+ * resolved table -> format -> judge (`runScenarioRules`).
  *
  * Usage:
  *   node pipeline.js input.json [output-basename] [--decisions <files>] [--strict]
@@ -20,11 +21,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { enumerateScenarios } from './enumerate.js';
 import { enumerateCollaboration } from './collaboration.js';
 import { analyzeDecisionTable } from './decision-table.js';
 import { resolveBridge } from './bridge.js';
-import { formatScenarioResult, formatCollaborationResult } from './format.js';
+import { formatCollaborationResult } from './format.js';
 import { runScenarioRules, tableAnalysisKey } from './rules.js';
 
 /**
@@ -32,9 +32,10 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
  * document. This is the public contract the whole plan (Tasks 1-7) has been building toward.
  *
  * @typedef {object} ScenarioPipelineResult
- * @property {import('./enumerate.js').EnumerationResult|import('./collaboration.js').CollaborationEnumerationResult} enumerationResult -
- *   `EnumerationResult` (single process, `lc` has no `pools`) or `CollaborationEnumerationResult`
- *   (`lc.pools` present, even if it holds only one pool) — see the auto-detection rule below.
+ * @property {import('./collaboration.js').CollaborationEnumerationResult} enumerationResult -
+ *   ALWAYS a `CollaborationEnumerationResult`, even for a pool-less `lc` — see "Why always the
+ *   collaboration pair" below for why `enumerateScenarios`/`formatScenarioResult` (the plain
+ *   single-process pair) are never called from here.
  * @property {import('./bridge.js').BridgeResult} bridgeResult - always computed, even with
  *   `decisionCores` empty (`resolveBridge` documents empty as valid input: every `decisionRef`
  *   occurrence found simply comes back `unresolved`, which is what surfaces as SC02).
@@ -44,7 +45,7 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
  *   writing this to disk must convert it; the CLI below does not include it in the written
  *   `.scenarios.json` for that reason.
  * @property {import('./format.js').FormattedView} formatted - the JSON + Markdown views, built
- *   with `formatScenarioResult` or `formatCollaborationResult` to match `enumerationResult`.
+ *   with `formatCollaborationResult` to match `enumerationResult`.
  * @property {import('./rules.js').ScenarioRuleIssue[]} issues - every SC01-SC06 finding.
  * @property {number} skippedTableAnalyses - see `runScenarioRules`'s return value; always 0
  *   here in practice, since `tableAnalyses` is always built from exactly `bridgeResult.resolved`
@@ -56,14 +57,24 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
 /**
  * Run the complete scenario-enumeration subsystem over one Logic-Core document.
  *
- * Auto-detects single-process vs. collaboration the same way `checkWorkflowNetSoundness`
- * does (`scripts/bpmn/workflow-net.js`: `lc.pools ? lc.pools : [lc]`), but at the granularity
- * of choosing which pair of Tasks 1/4 functions to call, not per pool: `lc.pools` present ->
- * `enumerateCollaboration`/`formatCollaborationResult` on the whole document (this also covers
- * a collaboration with exactly one declared pool — it still goes through the composed net,
- * which is a strict superset of the single-process net when there are no message flows);
- * `lc.pools` absent -> `lc` itself is the one process, `enumerateScenarios`/
- * `formatScenarioResult` are called on it directly.
+ * ── Why always the collaboration pair ─────────────────────────────────────────────────────
+ * An earlier version of this function auto-detected single-process vs. collaboration from
+ * `lc.pools` (mirroring `checkWorkflowNetSoundness`'s `lc.pools ? lc.pools : [lc]`,
+ * `scripts/bpmn/workflow-net.js`) and, for a pool-less `lc`, called `enumerateScenarios`/
+ * `formatScenarioResult` (the plain single-process pair) directly. That silently dropped SC06
+ * coverage for every pool-less input: SC06 reads `sinkTokens`, a field `enumerateCollaboration`
+ * computes (via `CompositeScenario`) but `enumerateScenarios`'s plain `Scenario` never carries
+ * at all — `rules.js`'s own module header names this exact gap and its own recommended fix:
+ * "A caller who wants SC06 coverage for a single, non-pooled process should still call the
+ * collaboration functions on it: `enumerateCollaboration` accepts an `lc` without `pools`."
+ * `composeCollaboration` (`collaboration.js`) documents accepting a pool-less `lc` as exactly
+ * this case — treating the whole document as one synthesized pool — so there is no capability
+ * gap to route around: every `lc`, with or without `pools`, now goes through
+ * `enumerateCollaboration`/`formatCollaborationResult` uniformly, and the single-process pair
+ * (`enumerate.js`/`format.js`'s `enumerateScenarios`/`formatScenarioResult`) is simply never
+ * called from this orchestrator. That also removes a branch this module had to maintain for
+ * no coverage benefit — the composed net is a strict superset of the plain net when there are
+ * no message flows, which is always true for a pool-less document.
  *
  * The bridge is always resolved (never conditionally skipped on empty `decisionCores`) so that
  * a `decisionRef` with no `decisionCores` supplied still surfaces as an SC02 finding rather
@@ -71,27 +82,21 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
  * input as exactly this case, and `rules.js`'s SC02 reads `bridge.unresolved`, which needs a
  * real (if empty-handed) `BridgeResult` to be non-empty.
  *
- * @param {object} lc - Logic-Core document, collaboration or flat single-process.
+ * @param {object} lc - Logic-Core document, collaboration (`lc.pools`) or flat single-process
+ *   (no `pools` key — treated as one synthesized pool, per `composeCollaboration`'s own
+ *   documented acceptance of that shape).
  * @param {object[]} [decisionCores] - Decision-Core documents to resolve `decisionRef`
  *   occurrences against. Default `[]` — every occurrence then comes back unresolved.
- * @param {object} [options] - passed through unchanged to `enumerateScenarios`/
- *   `enumerateCollaboration` (cycle/scenario/trace-length bounds), `formatScenarioResult`/
- *   `formatCollaborationResult` (`maxGroupsRendered`) and `analyzeDecisionTable`
- *   (`maxPartitionCells`) — each reads only the option keys it defines, so one shared object
- *   is safe to hand to all of them, mirroring how they all fall back to the same `config.json
- *   -> scenarios` block.
+ * @param {object} [options] - passed through unchanged to `enumerateCollaboration`
+ *   (cycle/scenario/trace-length bounds), `formatCollaborationResult` (`maxGroupsRendered`)
+ *   and `analyzeDecisionTable` (`maxPartitionCells`) — each reads only the option keys it
+ *   defines, so one shared object is safe to hand to all of them, mirroring how they all fall
+ *   back to the same `config.json -> scenarios` block.
  * @returns {ScenarioPipelineResult}
  */
 export function runScenarioPipeline(lc, decisionCores = [], options = {}) {
-  const isCollaboration = Array.isArray(lc?.pools);
-
-  const enumerationResult = isCollaboration
-    ? enumerateCollaboration(lc, options)
-    : enumerateScenarios(lc, options);
-
-  const formatted = isCollaboration
-    ? formatCollaborationResult(enumerationResult, lc, options)
-    : formatScenarioResult(enumerationResult, lc, options);
+  const enumerationResult = enumerateCollaboration(lc, options);
+  const formatted = formatCollaborationResult(enumerationResult, lc, options);
 
   const bridgeResult = resolveBridge(lc, decisionCores);
 
@@ -111,11 +116,19 @@ export function runScenarioPipeline(lc, decisionCores = [], options = {}) {
 // CLI ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════════
 
-/** Read and JSON.parse one input source ('-' for stdin, else a file path), with a clean
- * `✗ <message>` error and exit 1 on any read/parse failure — never a raw Node stack trace. */
-async function readJsonInput(arg) {
+/** Read and JSON.parse one input source, with a clean `✗ <message>` error and exit 1 on any
+ * read/parse failure — never a raw Node stack trace.
+ *
+ * @param {string} arg - a file path, or `-` for stdin when `allowStdin` is true.
+ * @param {object} [opts]
+ * @param {boolean} [opts.allowStdin=true] - the `-`-for-stdin convention is only meaningful
+ *   for the main input (there is exactly one stdin, and it can be read only once); `--decisions`
+ *   entries always pass `allowStdin: false` so a literal `-` there is read as a file named `-`
+ *   (and fails cleanly with ENOENT) rather than silently trying to read stdin a second time.
+ */
+async function readJsonInput(arg, { allowStdin = true } = {}) {
   let raw;
-  if (arg === '-') {
+  if (allowStdin && arg === '-') {
     const chunks = [];
     for await (const chunk of process.stdin) chunks.push(chunk);
     raw = Buffer.concat(chunks).toString();
@@ -133,6 +146,13 @@ async function main() {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--decisions') {
+      // args[i + 1] is required — a bare trailing `--decisions` (no value follows) is a
+      // malformed flag, not "no --decisions given"; silently swallowing it used to mean
+      // every decisionRef came back unresolved with no hint the flag itself was broken.
+      if (i + 1 >= args.length) {
+        console.error('✗ --decisions requires a value (comma-separated Decision-Core file paths)');
+        process.exit(1);
+      }
       decisionsArg = args[++i];
     } else if (a.startsWith('--decisions=')) {
       decisionsArg = a.slice('--decisions='.length);
@@ -163,7 +183,7 @@ async function main() {
     const paths = decisionsArg.split(',').map((p) => p.trim()).filter(Boolean);
     for (const p of paths) {
       try {
-        decisionCores.push(await readJsonInput(p));
+        decisionCores.push(await readJsonInput(p, { allowStdin: false }));
       } catch (e) {
         console.error(`✗ ${e.message}`);
         process.exit(1);
