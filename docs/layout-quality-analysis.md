@@ -296,6 +296,17 @@ one golden pair affected — was regenerated with a reviewed diff; every other g
 **DI07** (`scripts/bpmn/di-check.js`) now checks this invariant — a sequence-flow endpoint on its own
 node's shape — permanently, in every pipeline run, not just in tests.
 
+One side effect worth recording rather than silently accepting: on `multi-pool-collaboration`, the
+gap between the two participants after refinement is 100 px, not the 60 px `POOL_GAP` a naive reading
+would expect. Traced and confirmed additive, not a bug: pool 2 correctly shifts −65 px (matching pool
+1's own lane-shrink delta — that's this fix), and pool 2's *own* first lane independently re-centers
+its box by +40 px when pool 2's own compaction runs (confirmed by compacting pool 2 in total isolation
+— same +40 with no pool 1 involved at all). That re-centering (`newY = topY - (newH - contentH) / 2`
+in `compactLanes`) is pre-existing and unmodified; it already moved pool 1's own top edge by the same
++40 before this fix touched anything. It just had nowhere to become *visible* as a gap before, because
+the participant below never moved at all. Same category as the pre-existing 40 px lane-tiling gap
+noted in §3 — cosmetic, not a correctness defect, and out of scope here.
+
 Open, in the order the evidence supports:
 
 1. **Obstacle-aware pathfinding for the two remaining crossings**, both in
