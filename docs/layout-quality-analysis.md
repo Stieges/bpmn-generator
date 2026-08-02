@@ -241,8 +241,11 @@ that this is heuristic, not optimal, throughout.
 
 | Idea | Benefit measured? | Status |
 |---|---|---|
-| #6 Crossing repair for rebuilt routes | **Yes — the only defect found.** 5 crossings across two fixtures, none of them in ELK's own output | **Done.** `repairCrossings`; clears 1 of 5 |
-| #6b Full obstacle-aware pathfinding | The 4 remaining crossings, in congested regions | **Open** — the only item with evidence behind it |
+| `compactLanes` cross-pool detachment | **Yes — the largest defect found in this whole analysis.** 34/16/34 detached edge ends across three fixtures | **Done.** Edge/label ownership scoped per pool, participants shifted rigidly; DI07 now guards it permanently |
+| Boundary-event exit direction + nesting | **Yes.** Flow left through its own host; nested boundary flows never corrected at all | **Done.** Outward reroute on interior entry; `flattenProcessEdges` used throughout |
+| `--refine` CLI flag | Documentation/tooling gap, not a layout defect | **Done.** 14 of 28 goldens now have a documented regeneration path |
+| #6 Crossing repair for rebuilt routes | **Yes.** 5 crossings across two fixtures, none of them in ELK's own output | **Done.** `repairCrossings`; clears 1 of 5, plus the 2 the boundary fix cleared |
+| #6b Full obstacle-aware pathfinding | 2 remaining crossings, in a congested region; a 3rd, refinement-only crossing pair newly found (below) | **Open** — the only item with evidence behind it |
 | A — `BRANDES_KOEPF` node placement | Bends 38 → 35 end-to-end; gate passed | **Measured, not adopted** — 8 % for 28 golden regenerations (§7 A) |
 | #4 Run-and-Anchor alignment | **No** — alignment is already 100 % (§4) | Rejected; would risk branch placement |
 | #3 Lane-constrained barycenter reorder | **No** — no placement-induced crossings exist | Rejected |
@@ -274,24 +277,39 @@ The boundary-event work, since it changed the picture:
 - Measured: `realistic-collaboration` goes from 2 crossings to **0**, and total crossings across the
   eight fixtures from 4 to 2.
 
+**`compactLanes` pulled edges off their shapes in multi-participant models — fixed.** Found while
+verifying the boundary fix, and the largest defect this whole analysis turned up. It shifted edge
+waypoints across the *whole* collaboration (`Object.values(coordMap.edgeCoords)`) but shifted nodes
+only within the pool whose lane it was compacting, so compacting one participant dragged every
+participant below it out of alignment with its own edges. Measured with `visualRefinement: true`
+before the fix: **34 detached edge ends in `realistic-collaboration`, 16 in
+`multi-pool-collaboration`, 34 in `bpmn-generator-pipeline`, 0 in every single-pool fixture** — the
+single-pool result is the control that identified the cause. It went unnoticed because
+`visualRefinement` is off by default and no test asserted that an edge ends at its own shape.
+
+Fixed by resolving edge (and label) ownership per pool via `flattenProcessNodes`/`flattenProcessEdges`
+— the same primitives `coordinates.js`'s `shiftParticipant` (§5.0b2) already uses for the equivalent
+problem one layout stage earlier — and shifting every participant positioned below the one being
+compacted as a rigid body: box, lanes, every node (recursively, so a subprocess child no longer gets
+left behind), and every owned edge's waypoints and label. `multi-pool-collaboration.refined.*` — the
+one golden pair affected — was regenerated with a reviewed diff; every other golden is byte-identical.
+**DI07** (`scripts/bpmn/di-check.js`) now checks this invariant — a sequence-flow endpoint on its own
+node's shape — permanently, in every pipeline run, not just in tests.
+
 Open, in the order the evidence supports:
 
-1. **`compactLanes` pulls edges off their shapes in multi-participant models.** Found while verifying
-   the boundary fix, and the largest defect currently known. `visual-refinement.js` shifts edge
-   waypoints across the *whole* collaboration (`Object.values(coordMap.edgeCoords)`) but shifts nodes
-   only within the pool whose lane it is compacting, so compacting one participant drags every
-   participant below it out of alignment with its own edges. Measured with `visualRefinement: true`:
-   **34 detached edge ends in `realistic-collaboration`, 16 in `multi-pool-collaboration`, 0 in
-   single-pool `sparse-lanes`** — the single-pool result is the control that identifies the cause.
-   Mitigating factors: `visualRefinement` is off by default, and no test asserts that an edge ends at
-   its own shape, which is why it went unnoticed. Note that `multi-pool-collaboration.refined.*` are
-   golden files, so they currently encode the broken geometry and would have to be regenerated.
-2. **Obstacle-aware pathfinding for the two remaining crossings**, both in
+1. **Obstacle-aware pathfinding for the two remaining crossings**, both in
    `bpmn-generator-pipeline`'s rework loop, where every candidate corridor runs through `t_refine`.
    A real router (A\* over a visibility graph, per Petrov's step 8) would resolve them.
-3. **A `--refine` CLI flag,** so all 28 goldens have a documented regeneration path rather than 14.
-   Not a layout improvement, but it is what makes any global layout change expensive — including
-   `BRANDES_KOEPF` above and, now, item 1.
+2. **A newly-found, `visualRefinement`-only crossing pair on `realistic-collaboration`.** With
+   refinement off, the boundary-event fix above leaves this fixture crossing-free. With it on, 2
+   crossings reappear (`inf2 × inf8`, `inf3 × inf8`) — none of them the ones just fixed. The
+   refinement-only passes (dynamic lane headers, lane compaction, ELK wrapping) run *after*
+   `repairCrossings`, so a route it had already cleared can end up crossing again once those passes
+   move things further. `scripts/bpmn/pipeline.test.js`'s boundary-event suite records this as a
+   known, separate gap (`visualRefinement: true keeps the host-containment fix, but not the crossing
+   count`) rather than asserting a crossing count that isn't true yet. The fix is either running
+   `repairCrossings` again after refinement, or the same obstacle-aware routing as item 1.
 
 The recommendations in the original version of this section are superseded in full.
 
@@ -313,3 +331,8 @@ The recommendations in the original version of this section are superseded in fu
 - **Crossings (§1, §6).** `countCrossings` in the `repairCrossings` suite in
   `scripts/bpmn/pipeline.test.js` restates the bench harness's definition, and the suite asserts the
   3 → 2 result on `bpmn-generator-pipeline` by toggling `CFG.layout.crossingRepair`.
+- **`compactLanes` detachment (§8).** `describe('compactLanes — multi-pool', ...)` in
+  `scripts/bpmn/visual-refinement.test.js` reproduces the two-pool rigid-shift case directly against
+  synthetic coordMaps. The `'DI07 holds across every fixture, refined or not'` test in
+  `scripts/bpmn/pipeline.test.js` is the same check run against every real fixture in both refinement
+  modes — this is what a regression would fail first.

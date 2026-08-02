@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--refine` CLI flag.** 14 of the 28 golden fixtures (`*.refined.*`, visual refinement enabled)
+  had no documented way to regenerate them — `pipeline.js` parsed `--dot`/`--doc`/`--drill-down`/
+  `--strict`/`--optimize` but nothing for `visualRefinement`, and `CONTRIBUTING.md`'s regeneration
+  loop covered only the other 14 (`.expected.*`). `node bpmn/pipeline.js input.json out --refine`
+  closes that gap; omitting the flag leaves the pipeline's own default unaffected.
+- **DI07 — a sequence-flow endpoint not on its own node's shape.** The exact class of defect
+  `compactLanes` had (below) now has a permanent runtime guard in `scripts/bpmn/di-check.js`,
+  checked on every pipeline run rather than only where a test happened to look. Message flows and
+  associations are intentionally out of scope — DI05 and the geometry-contract tests already cover
+  those.
+
 ### Fixed
+- **`compactLanes` shifted every edge in the collaboration, not just its own — the largest defect
+  this project's layout-quality analysis found.** It shrinks a lane and moves everything below it up
+  by the freed space; that shift was scoped to the pool being compacted for nodes, but walked every
+  edge in the whole collaboration for waypoints. Compacting one participant's lane therefore dragged
+  every *other* participant's edges upward without moving their nodes. Measured with
+  `visualRefinement: true` before the fix: 34 detached edge ends in `realistic-collaboration`, 16 in
+  `multi-pool-collaboration`, 34 in `bpmn-generator-pipeline`, 0 in every single-pool fixture — the
+  single-pool zero is the control that pins the cause to cross-pool scope. Edge and label ownership
+  is now resolved per pool, and every participant positioned below the one being compacted shifts as
+  a rigid body — box, lanes, every node (recursively, so a subprocess child no longer gets left
+  behind by its own parent), and every owned edge's waypoints and label — mirroring
+  `coordinates.js`'s `shiftParticipant`. `multi-pool-collaboration.refined.{bpmn,svg}` — the one
+  golden pair this touches — was regenerated with a reviewed diff; every other golden is untouched.
 - **A boundary event's flow could leave through its own host.** A boundary event straddles its host's
   outline, so half of it sits inside the host; the exit side was chosen purely from where the target
   lies, which for a target on the far side routed the flow through the host's body — it then reads as
