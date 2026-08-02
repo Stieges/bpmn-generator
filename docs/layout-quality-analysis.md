@@ -252,29 +252,46 @@ that this is heuristic, not optimal, throughout.
 
 **What was done, and what remains.**
 
-Done in this pass: the metric was repaired so it can tell a defect from correct behaviour (§0), and
-the one real defect — crossings introduced by our own route rebuilding — got a bounded repair pass
-that clears the tractable case. Both are covered by tests; no golden file changed, because the pass
-is a no-op on crossing-free diagrams.
+Done in this pass: the metric was repaired so it can tell a defect from correct behaviour (§0); the
+crossings our own route rebuilding introduced got a bounded repair pass; and the boundary-event exit
+direction was fixed, which turned out to be two defects rather than one. All are covered by tests and
+no golden file changed — no golden fixture contains a boundary event, and the repair pass is a no-op
+on crossing-free diagrams.
+
+The boundary-event work, since it changed the picture:
+
+- **Leaving through its own host.** A boundary event straddles its host's outline, so half of it is
+  inside the host. The exit side was chosen purely from where the target lies, which for a target on
+  the far side meant leaving through the host's body. Now the route is rebuilt outward whenever the
+  default would enter the host's *interior* — strictly, so a flow running along the outline (normal,
+  and the common case) is left alone. That distinction matters: the space directly outward is often
+  occupied by the host's own artifacts, and forcing every boundary flow downward would have driven
+  `all-element-classes`'s flow straight through the data object stacked under the same host.
+- **Nested boundary flows were never corrected at all.** The discard-and-reroute pass walked only
+  top-level `proc.edges`, so a boundary event inside an expanded subprocess kept ELK's host-anchored
+  route and its arrow visibly started at the wrong shape (`subprocess-child-fidelity`'s `c_f10`).
+  This is the failure mode CLAUDE.md warns about under "Adding a per-node field", in a new place.
+- Measured: `realistic-collaboration` goes from 2 crossings to **0**, and total crossings across the
+  eight fixtures from 4 to 2.
 
 Open, in the order the evidence supports:
 
-1. **Obstacle-aware pathfinding for the four remaining crossings.** They sit where every candidate
-   corridor from the repair pass runs through a node — in `realistic-collaboration`, the boundary
-   event `in_timer` exits upward *through its own host* `in_check` and then along the column `inf2`
-   descends in; in `bpmn-generator-pipeline`, two edges in a rework loop are boxed in by `t_refine`.
-   A real router (A\* over a visibility graph, per Petrov's step 8) would resolve these. Worth doing
-   only if these crossings are judged visually harmful — four crossings across two of eight
-   fixtures, neither of which has a golden file.
-2. **The boundary-event exit direction, separately and more cheaply.** That `in_timer` case is not
-   really a routing problem: an edge leaving a boundary event should exit *away* from its host, and
-   §5.2 picks the exit side purely from where the target sits, which for a boundary event straddling
-   its host's bottom edge sends it back through the host. Fixing that is small, local, and would
-   likely take `realistic-collaboration` to zero crossings on its own. It also explains that
-   fixture's `edgeThroughNode: 1`.
+1. **`compactLanes` pulls edges off their shapes in multi-participant models.** Found while verifying
+   the boundary fix, and the largest defect currently known. `visual-refinement.js` shifts edge
+   waypoints across the *whole* collaboration (`Object.values(coordMap.edgeCoords)`) but shifts nodes
+   only within the pool whose lane it is compacting, so compacting one participant drags every
+   participant below it out of alignment with its own edges. Measured with `visualRefinement: true`:
+   **34 detached edge ends in `realistic-collaboration`, 16 in `multi-pool-collaboration`, 0 in
+   single-pool `sparse-lanes`** — the single-pool result is the control that identifies the cause.
+   Mitigating factors: `visualRefinement` is off by default, and no test asserts that an edge ends at
+   its own shape, which is why it went unnoticed. Note that `multi-pool-collaboration.refined.*` are
+   golden files, so they currently encode the broken geometry and would have to be regenerated.
+2. **Obstacle-aware pathfinding for the two remaining crossings**, both in
+   `bpmn-generator-pipeline`'s rework loop, where every candidate corridor runs through `t_refine`.
+   A real router (A\* over a visibility graph, per Petrov's step 8) would resolve them.
 3. **A `--refine` CLI flag,** so all 28 goldens have a documented regeneration path rather than 14.
-   Not a layout improvement, but it is what currently makes any global layout change expensive —
-   including `BRANDES_KOEPF` above.
+   Not a layout improvement, but it is what makes any global layout change expensive — including
+   `BRANDES_KOEPF` above and, now, item 1.
 
 The recommendations in the original version of this section are superseded in full.
 

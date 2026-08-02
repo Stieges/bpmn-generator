@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A boundary event's flow could leave through its own host.** A boundary event straddles its host's
+  outline, so half of it sits inside the host; the exit side was chosen purely from where the target
+  lies, which for a target on the far side routed the flow through the host's body — it then reads as
+  if the flow came out of the activity itself. The route is now rebuilt outward whenever the default
+  would enter the host's *interior*, tested strictly so that a flow running along the outline stays
+  untouched. That distinction is load-bearing: artifacts are stacked directly below their anchor, so
+  forcing every boundary flow downward would have driven `all-element-classes`'s flow straight through
+  the data object under the same host. Clearance is `layout.boundaryExitClearance` and must stay below
+  `visual-refinement.js`'s lane-compaction padding, or compaction strands the corridor waypoint.
+  Measured: `realistic-collaboration` drops from two sequence-flow crossings to none.
+- **A boundary event inside a subprocess kept its host-anchored route.** The pass that discards ELK's
+  boundary routes and rebuilds them from the event walked only top-level `proc.edges`, so a boundary
+  event nested in an expanded subprocess was never corrected and its arrow visibly started at the host
+  shape (`tests/fixtures/subprocess-child-fidelity.json`, edge `c_f10`). Both the discard and the
+  re-route now use `flattenProcessEdges`. Same failure mode CLAUDE.md documents under "Adding a
+  per-node field": a recursive structure handled at one level only.
+- The three identical copies of the from-scratch orthogonal route construction (§5.0e, §5.2, §5.5 in
+  `scripts/bpmn/coordinates.js`) are now one `orthogonalConnect` helper. §5.2's long-standing
+  asymmetry — always exiting right and entering left — is preserved behind a flag rather than
+  silently "fixed", since changing it would move edges in fixtures that have golden files.
 - **A rebuilt edge route could cross where ELK's route did not.** `coordinates.js` discards a route
   whenever the lane-band shift moves its endpoints by different deltas (§5.0a) or its source is a
   boundary event (§5.0-), and rebuilds it as a fixed 4-point Z whose axis is picked from

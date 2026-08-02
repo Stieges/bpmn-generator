@@ -52,11 +52,10 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node |
 |---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 6 | 20/23 | 0 | 932×1358 (45202/node) | 0.69 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary | 0 |
-| default | 2 | 8 | 22/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 |
-| visualRefinement: true | 2 | 5 | 23/23 | 0 | 752×2904 (75304/node) | 0.26 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 3 |
+| default | 0 | 8 | 22/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 |
+| visualRefinement: true | 2 | 8 | 22/23 | 0 | 752×2904 (75304/node) | 0.26 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 3 |
 
-Crossings introduced by our own post-processing (default − ELK raw): **+2** —
-ELK routed around these; the routes we delete and rebuild do not.
+Our post-processing introduces no crossings beyond ELK's own result.
 
 ## all-element-classes.json
 
