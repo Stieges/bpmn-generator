@@ -42,9 +42,10 @@ but our own route rebuilding introduced crossings ELK had routed around — 2 in
 the lane-band shift moves its endpoints by different deltas, then rebuilds it as a fixed 4-point Z
 picked from `|dy| > |dx|` alone, with no obstacle or crossing test. This is Petrov's idea #6
 (obstacle-aware routing), which the first version of this document had deferred for lack of evidence.
-A bounded repair pass (`repairCrossings` in `scripts/bpmn/edge-simplify.js`) now clears one of them;
-the remainder sit in congested regions where every candidate corridor runs through a node and would
-need real pathfinding (§6, idea 6).
+A bounded repair pass (`repairCrossings` in `scripts/bpmn/edge-simplify.js`) clears the tractable
+ones directly; for the remainder — congested regions where every fixed candidate shape runs through
+a node — it now falls back to `scripts/bpmn/orthogonal-router.js`, an obstacle-aware Dijkstra
+pathfinder (§6 idea 6, §10). Both fixtures measure 0 crossings after the fix.
 
 **Everything else measured as adequate.** ELK option tuning moves almost nothing end-to-end (§7 A);
 `BRANDES_KOEPF` passes its gate but earns only an 8 % bend reduction for 28 golden-file
@@ -189,7 +190,7 @@ that this is heuristic, not optimal, throughout.
 | 3 | Lane-constrained barycenter crossing minimization | No. ELK's `LAYER_SWEEP` is lane-blind by design (`layout.js` explains why `elk.partitioning` cannot be used for lanes). | **No.** This was the first version's claim and it does not survive measurement: raw ELK is crossing-free on all eight fixtures, and the crossings that do appear come from route *rebuilding*, not from node placement (idea 6). | Would be a lane-capped barycenter sweep before §5.0a derives bands. | **None measurable.** There are no placement-induced crossings on any fixture to remove. | **Not adopted.** No defect to fix. Revisit only if a future dense fixture shows placement-induced crossings — which would be visible as a non-zero crossing count in the ELK-raw row. |
 | 4 | Run-and-Anchor vertical alignment | Partly — `favorStraightEdges: true`. | **No.** All 59 structurally alignable links are already exactly aligned, in both refinement modes (§4). The 839 px and 497 px "breaks" the first version cited are cross-lane links, which cannot be straight by definition. | Would generalize `coordinates.js` §5.0c beyond happy-path edges. | **None measurable.** Alignment is at 100 %; a pass can only preserve it, not improve it — and would risk the barycenter placements that keep branch edges straight. | **Not adopted.** Nothing to fix, and a real risk of making split/join placement worse. |
 | 5 | Left-shift compressor | Partially — `elk.layered.compaction.postCompaction.strategy: EDGE_LENGTH` plus our opt-in `compactLanes`, which compacts lane *height*, not layer *width*. | Not broken; not attempted on the width axis. | Would target layer spacing. | Not measured. The area growth the first version pointed to turned out to be swimlane geometry, not bloat (§3), so the motivating evidence is gone. | **Defer.** No measured evidence it is a bottleneck. |
-| 6 | **Orthogonal router with obstacle avoidance** | Yes for the *initial* route (`elk.edgeRouting: ORTHOGONAL`) — and ELK's is good: 0 crossings everywhere. No for anything downstream. | **Yes, and this is the one real defect found.** Every route `coordinates.js` deletes and rebuilds (§5.0a → §5.2, plus §5.0e/§5.5) picks its axis from `\|dy\| > \|dx\|` with no obstacle or crossing test, discarding exactly the obstacle-awareness ELK had. Result: +2 crossings in `realistic-collaboration`, +3 in `bpmn-generator-pipeline`. | **Done, partially:** `repairCrossings` in `scripts/bpmn/edge-simplify.js` re-routes edges that cross, keeping the clipped endpoints and the shape side they attach to; a no-op when no crossing exists, so no golden fixture is touched. | `bpmn-generator-pipeline` 3 → 2 crossings. The remaining two, and the two in `realistic-collaboration`, sit where every candidate corridor runs through a node. | **Shipped for the tractable cases.** Full obstacle-aware pathfinding (A\* over a visibility graph) remains open and is the only Petrov idea with evidence behind it — see §8. |
+| 6 | **Orthogonal router with obstacle avoidance** | Yes for the *initial* route (`elk.edgeRouting: ORTHOGONAL`) — and ELK's is good: 0 crossings everywhere. No for anything downstream. | **Yes, and this is the one real defect found.** Every route `coordinates.js` deletes and rebuilds (§5.0a → §5.2, plus §5.0e/§5.5) picks its axis from `\|dy\| > \|dx\|` with no obstacle or crossing test, discarding exactly the obstacle-awareness ELK had. Result: +2 crossings in `realistic-collaboration`, +3 in `bpmn-generator-pipeline`. | **Done in full.** `repairCrossings` in `scripts/bpmn/edge-simplify.js` re-routes edges that cross, keeping the clipped endpoints and the shape side they attach to; a no-op when no crossing exists, so no golden fixture is touched. Its own fixed-shape candidate search now falls back to `scripts/bpmn/orthogonal-router.js` — an obstacle-aware Dijkstra pathfinder — when nothing admissible is found. | `bpmn-generator-pipeline` (`visualRefinement: false`) 3 → **0**. `realistic-collaboration` (`visualRefinement: true`) 2 → **0**. | **Shipped.** The obstacle-aware pathfinding this row used to call "open" is now the fallback candidate source in `repairCrossings` — see §10 for the design and the per-fixture routing decisions. |
 
 ## 7. Alternative coordinate-computation methods
 
@@ -244,8 +245,8 @@ that this is heuristic, not optimal, throughout.
 | `compactLanes` cross-pool detachment | **Yes — the largest defect found in this whole analysis.** 34/16/34 detached edge ends across three fixtures | **Done.** Edge/label ownership scoped per pool, participants shifted rigidly; DI07 now guards it permanently |
 | Boundary-event exit direction + nesting | **Yes.** Flow left through its own host; nested boundary flows never corrected at all | **Done.** Outward reroute on interior entry; `flattenProcessEdges` used throughout |
 | `--refine` CLI flag | Documentation/tooling gap, not a layout defect | **Done.** 14 of 28 goldens now have a documented regeneration path |
-| #6 Crossing repair for rebuilt routes | **Yes.** 5 crossings across two fixtures, none of them in ELK's own output | **Done.** `repairCrossings`; clears 1 of 5, plus the 2 the boundary fix cleared |
-| #6b Full obstacle-aware pathfinding | 2 remaining crossings, in a congested region; a 3rd, refinement-only crossing pair newly found (below) | **Open** — the only item with evidence behind it |
+| #6 Crossing repair for rebuilt routes | **Yes.** 5 crossings across two fixtures, none of them in ELK's own output | **Done.** `repairCrossings`; clears 1 of 5 via its fixed-shape search, plus the 2 the boundary fix cleared |
+| #6b Full obstacle-aware pathfinding | 2 remaining crossings in `bpmn-generator-pipeline`'s rework loop; a 3rd, wrapping-triggered crossing pair on `realistic-collaboration` | **Done.** `scripts/bpmn/orthogonal-router.js`, wired into `repairCrossings` as a fallback candidate source — both fixtures now measure 0 crossings, see §10 |
 | A — `BRANDES_KOEPF` node placement | Bends 38 → 35 end-to-end; gate passed | **Measured, not adopted** — 8 % for 28 golden regenerations (§7 A) |
 | #4 Run-and-Anchor alignment | **No** — alignment is already 100 % (§4) | Rejected; would risk branch placement |
 | #3 Lane-constrained barycenter reorder | **No** — no placement-induced crossings exist | Rejected |
@@ -307,24 +308,165 @@ in `compactLanes`) is pre-existing and unmodified; it already moved pool 1's own
 the participant below never moved at all. Same category as the pre-existing 40 px lane-tiling gap
 noted in §3 — cosmetic, not a correctness defect, and out of scope here.
 
-Open, in the order the evidence supports:
+**Correction (found while planning the fix): the causal story above was wrong about *why*.**
+ELK wrapping is not one of the "refinement-only passes that run after `repairCrossings`" — it is
+an ELK layout decision (`resolveWrappingOpts` in `scripts/bpmn/layout.js:37`) made *before*
+`buildCoordinateMap` runs, hence before `repairCrossings`'s single existing call. Verified by
+setting `CFG.visualRefinement.elkWrapping = 'off'` explicitly: `realistic-collaboration` with
+`visualRefinement: true` and wrapping forced off measures **0 crossings**. The 2 crossings are not
+a *second* pass undoing a fix — they exist because `repairCrossings` already ran once, on the
+wrapping-changed layout, and its bounded candidate search (L-shapes, offset Z-shapes, offset
+staircases — `scripts/bpmn/edge-simplify.js`) didn't find an improving route for `inf2 × inf8` and
+`inf3 × inf8`. This is not a new bug — it's the **identical gap as item 1** below, surfacing via a
+different trigger (wrapping-changed topology here; static neighbor density in
+`bpmn-generator-pipeline`, where wrapping is not even active since that measurement uses
+`visualRefinement: false`). Both fixtures cross the wrapping node threshold (20) —
+`realistic-collaboration` has 29 nodes, `bpmn-generator-pipeline` has 22 — but only the former is
+ever measured with refinement on, which is why only it shows the wrapping-triggered variant.
 
-1. **Obstacle-aware pathfinding for the two remaining crossings**, both in
-   `bpmn-generator-pipeline`'s rework loop, where every candidate corridor runs through `t_refine`.
-   A real router (A\* over a visibility graph, per Petrov's step 8) would resolve them.
-2. **A newly-found, `visualRefinement`-only crossing pair on `realistic-collaboration`.** With
-   refinement off, the boundary-event fix above leaves this fixture crossing-free. With it on, 2
-   crossings reappear (`inf2 × inf8`, `inf3 × inf8`) — none of them the ones just fixed. The
-   refinement-only passes (dynamic lane headers, lane compaction, ELK wrapping) run *after*
-   `repairCrossings`, so a route it had already cleared can end up crossing again once those passes
-   move things further. `scripts/bpmn/pipeline.test.js`'s boundary-event suite records this as a
-   known, separate gap (`visualRefinement: true keeps the host-containment fix, but not the crossing
-   count`) rather than asserting a crossing count that isn't true yet. The fix is either running
-   `repairCrossings` again after refinement, or the same obstacle-aware routing as item 1.
+**One item, not two: `repairCrossings` has no real pathfinder.** Both remaining crossing pairs are
+the same failure mode: the bounded candidate search (`candidateRoutes` in
+`scripts/bpmn/edge-simplify.js` — 2 L-shapes, 2×|CORRIDOR_STEPS| Z-shapes, 2×|CORRIDOR_STEPS|
+staircases) tries only a fixed, small set of shapes around the direct source-target line, and in a
+congested local cluster every one of them is blocked.
+
+*`bpmn-generator-pipeline`, `visualRefinement: false`:* `fo10` (`t_refine → t_validate`, exits
+`t_refine`'s left edge, enters `t_validate`'s right edge) routes through a single horizontal jog at
+y=1048, which is itself clear of every *node* box — the jog crosses two *other edges'* vertical
+segments instead: `fo6`'s (`gw_review → t_topo`, vertical run at x=1001, y∈[894.5,1260]) and
+`fo9`'s (`gw_maxiter → t_topo`, vertical run at x=1041, y∈[1005.5,1220]). Both of those vertical
+runs span almost the *entire* relevant y-range in this cluster, so no alternative y for a single
+horizontal jog clears both — the fix requires a path that goes *around* the cluster, not merely a
+different horizontal offset. The existing candidate generator never tries that, because it only
+ever emits offset variants of the direct line. **Confirmed by prototype, not by inspection:** an
+obstacle-aware route for `fo10` (fixed endpoints, fixed exit/entry sides) takes this fixture from 2
+crossings to **0** in 3 ms. Rerouting either of the two *other* participants in the crossings
+(`fo6`, `fo9`) achieves nothing — only `fo10` has a free path, which is why the repair has to be
+search-driven rather than rule-driven.
+
+*`realistic-collaboration`, `visualRefinement: true`:* `inf8` (`in_timer → in_remind`, a
+boundary-event flow routed by `boundaryOutwardRoute` in `coordinates.js`) detours left around its
+host `in_check` via a fixed, non-obstacle-aware rule —
+`[(486,2030),(486,2042),(424,2042),(424,1812),(436,1812)]`. Its horizontal leg at y=2042
+(x∈[424,486]) crosses `inf3`'s vertical leg at x=436.5 (y∈[1959,2177]); its vertical leg at x=424
+(y∈[1812,2042]) crosses `inf2`'s horizontal leg at y=1932 (x∈[306,486]). `boundaryOutwardRoute` was
+designed to keep a boundary-event flow out of its own host (that fix is correct and unaffected) —
+it was never designed to also avoid *other* edges, because at the time it was written no fixture
+exercised a case where it needed to. **Confirmed by prototype:** an obstacle-aware reroute of
+`inf8`, keeping both endpoints and both exit/entry sides exactly as they are, takes this fixture
+from 2 crossings to **0** in 2 ms. As with `bpmn-generator-pipeline`, only one of the three edges
+involved has a free path — rerouting `inf2` instead not only fails to help but *introduces* a new
+crossing with `inf9`, a concrete reason the repair must evaluate candidates against the crossing
+count rather than apply a fixed rule.
+
+Given the two are the same gap, one fix — an obstacle-aware router used as a fallback when the
+existing candidate search fails — addresses both. See §10.
+
+**The lane-tiling gap and the pool gap (§3, and the 100 px note above) are the same mechanism, and
+a bounded fix for it does not work — confirmed by building one.**
+
+`compactLanes` (`scripts/bpmn/visual-refinement.js`) positions each lane independently from its own
+content bounding box:
+```
+newH = max(minLaneHeight, contentH + 2*pad)
+newY = topY - (newH - contentH) / 2        // centers the slack when the minLaneHeight floor applies
+```
+When lane *i*'s shrink cascades to lane *i+1* (`otherLane.y -= delta`), lane *i+1*'s band is
+correctly nudged flush against lane *i*'s new bottom edge — **but only until lane *i+1* becomes the
+current lane in the outer loop**, at which point it re-derives its own `newY` from its own content
+bbox via the same formula above, independently of where the cascade just placed it. That
+re-derivation is what reopens the gap; the cascade step itself is not the bug.
+
+The same formula, applied to a pool's *own first lane*, also explains the >`POOL_GAP` participant
+spacing on `multi-pool-collaboration`: confirmed by compacting `Process_Service` (pool 2) **in
+total isolation** (a synthetic Logic-Core containing only that one pool, no `Process_Customer` at
+all) — its own box top still moves +40 px (305→345), from nothing but its own first lane's
+content-centering. Combined with this session's rigid-shift fix correctly moving pool 2 by −65 px
+(matching pool 1's own lane-shrink delta), the two independent, individually-correct effects add up
+to the measured 100 px gap (60 original `POOL_GAP` + 40 self-recenter) instead of the naively
+expected 60 px.
+
+**A bounded fix was prototyped and disproven, not just judged difficult.** The obvious minimal
+patch — for lane *i+1*, use `newY = <lane i's new bottom>` (flush) instead of re-deriving from
+content, but only when doing so wouldn't let content escape the new band (an escape hatch back to
+today's centering) — was implemented and run against all 11 available fixtures with lanes. Result:
+**the escape hatch fired 100% of the time; the flush placement was never once judged safe.**
+Reason, once traced through the arithmetic: lane *i+1*'s content sits at a distance below lane i's
+new bottom that, after the cascade shift, is *still exactly as far* as it originally was below lane
+i's *old* bottom (both moved by the same delta, so their difference is invariant) — and that
+original inter-lane gap comes from `coordinates.js §5.0`'s own padding scheme (`LANE_PADDING=60` +
+`EXTERNAL_LABEL_H=25`, i.e. roughly 85–145 px depending on band), far larger than `compactLanes`'
+own `pad=20`. `newH` is sized only for `contentH + 2×pad` (a tight wrap around the content), so a
+band anchored flush at lane *i*'s new bottom is *never* tall enough to reach back down to where the
+content actually sits — the escape hatch's safety check (`flushY + newH >= botY`) fails by
+construction, every time.
+
+**What an actual fix requires:** not just repositioning the band box, but *also* re-shifting lane
+*i+1*'s own content (nodes, and any edges/labels touching it) to sit flush at `newY + pad`, in
+addition to the *existing* cascade-to-later-lanes shift and the *existing*
+shift-participants-below rigid shift. That is a third, distinct kind of shift interacting with the
+two this session already implemented, with its own version of the "boundary edge case" partial
+waypoint clamp (an edge's waypoint that sits between the content's old and new position needs the
+same partial-clamp logic `compactLanes` already has for the lane-shrink case, duplicated for this
+new content-realignment case). This is materially more bookkeeping than either of the two shifts
+already shipped this session, in a function the project's own history (the original
+visual-refinement plan) already flags as its highest-risk phase, and it would touch three golden
+pairs at once (`multi-pool-collaboration.refined.*` again, plus `long-lane-names.refined.*` and
+`sparse-lanes.refined.*`, both currently untouched by any fix this project has made). Deliberately
+not attempted in this pass — see §10.
 
 The recommendations in the original version of this section are superseded in full.
 
-## 9. Appendix — reproducing the numbers
+## 9. Approaches for the open items
+
+**Items 1+2 (unified) — obstacle-aware routing. Done.** `scripts/bpmn/orthogonal-router.js` is a
+narrowly-scoped orthogonal router used as a *fallback candidate source* inside `repairCrossings`,
+invoked only when the existing bounded candidate search fails to find an improving route for an
+edge that's still crossing after the normal pass. Endpoints and their exit side stay fixed — the
+router never re-derives a clip point, preserving the geometry-contract rule that endpoint clipping
+happens in exactly one place. Algorithm: build a sparse coordinate grid from every obstacle's
+boundary lines plus the two endpoints (the standard "trellis"/extended-lines technique for
+orthogonal connector routing — not a dense pixel grid), connect axis-adjacent grid points whose
+segment is obstacle-clear, run Dijkstra with a per-bend cost penalty and a soft penalty for crossing
+another edge's current route, and collapse the resulting grid path into minimal waypoints. Returns
+`null` (graceful degradation, same convention as `repairEdgeLabels` and `repairCrossings` itself)
+when no path exists within a bounded search region.
+
+Measured end-to-end through the real pipeline, not just the router in isolation:
+
+| Fixture | rerouted edge | crossings | time |
+|---|---|---|---|
+| `bpmn-generator-pipeline` (vr=false) | `fo10` | **2 → 0** | 3 ms |
+| | `fo6` | 2 → 2 (no gain, correctly rejected) | 26 ms |
+| | `fo9` | 2 → 2 (no gain, correctly rejected) | 0 ms |
+| `realistic-collaboration` (vr=true) | `inf8` | **2 → 0** | 2 ms |
+| | `inf3` | 2 → 1 (not adopted — `inf8` alone already reaches 0) | 3 ms |
+| | `inf2` | 2 → 2, **would create a new `inf2 × inf9`; correctly rejected** | 4 ms |
+
+Only rerouting the one edge whose own crossing count strictly drops (`fo10`, `inf8`) reaches 0;
+rerouting `fo6`/`fo9`/`inf2` instead does not help, and `inf2` would actively make things worse.
+This is why the repair evaluates every candidate against the resulting crossing count rather than
+applying a fixed rule — `repairCrossings`'s existing strict-improvement guard (`after < before`)
+rejects `fo6`, `fo9` and `inf2` on exactly that basis, both in the standalone router measurements
+above and in the full pipeline run. Full pipeline result: `bpmn-generator-pipeline`
+(`visualRefinement: false`) 3 → **0** crossings; `realistic-collaboration` (`visualRefinement: true`)
+2 → **0** crossings — both confirmed by `tests/bench/layout-metrics-baseline.md` and by
+`scripts/bpmn/pipeline.test.js`'s crossing-count assertions. Strictly additive: it only ever
+replaces a route that is *already* crossing, and neither affected fixture has a golden file, so no
+`.expected.*`/`.refined.*` pair changed.
+
+**Item 3 — lane/pool gap-closing. Not attempted.** Requires reworking `compactLanes`'s per-lane
+positioning to also re-shift each lane's own content flush against the previous lane's new bottom,
+on top of the two shift mechanisms already present. A bounded, lower-risk partial fix was designed
+and tested; it does not work (0/11 fixtures found flush placement safe without also moving content
+— see above). The full fix touches three golden pairs and a function with a documented history of
+being failure-prone. **Recommendation: defer.** It's a cosmetic defect (no detachment, DI07 stays
+clean, nothing crosses) — lower severity than items 1+2, which were actual rendered crossings and
+are now fixed. If pursued, do it as its own dedicated task, ideally with a stronger model, and
+budget for the three-golden diff-review this session's `multi-pool-collaboration.refined.*` review
+already demonstrated is necessary and time-consuming to do properly.
+
+## 10. Appendix — reproducing the numbers
 
 - Full baseline table: [`tests/bench/layout-metrics-baseline.md`](../tests/bench/layout-metrics-baseline.md),
   regenerated with `cd scripts && node bench/layout-metrics.mjs`.

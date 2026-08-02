@@ -146,7 +146,9 @@
     "crossLaneDeconflict": true,
     "crossingRepair": true,
     "crossingRepairMaxPasses": 2,
-    "boundaryExitClearance": 12
+    "boundaryExitClearance": 12,
+    "orthogonalRouterEnabled": true,
+    "orthogonalRouterMaxGridPoints": 4000
   },
   "elk": {
     "layered": {

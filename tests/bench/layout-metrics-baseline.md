@@ -53,7 +53,7 @@ Our post-processing introduces no crossings beyond ELK's own result.
 |---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 6 | 20/23 | 0 | 932×1358 (45202/node) | 0.69 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary | 0 |
 | default | 0 | 8 | 22/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 |
-| visualRefinement: true | 2 | 8 | 22/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 |
+| visualRefinement: true | 0 | 10 | 22/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -102,9 +102,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node |
 |---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 18 | 15/24 | 0 | 2542×745 (86081/node) | 3.41 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 |
-| default | 2 | 14 | 23/24 | 0 | 2542×1433 (165519/node) | 1.77 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 |
-| visualRefinement: true | 2 | 15 | 24/24 | 0 | 2302×2460 (257353/node) | 0.94 | 4/4 (100%) | 2 cross-lane, 1 fold-back, 5 branch | 0 |
+| default | 0 | 17 | 22/24 | 0 | 2542×1433 (165519/node) | 1.77 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 |
+| visualRefinement: true | 0 | 18 | 23/24 | 0 | 2302×2460 (257353/node) | 0.94 | 4/4 (100%) | 2 cross-lane, 1 fold-back, 5 branch | 0 |
 
-Crossings introduced by our own post-processing (default − ELK raw): **+2** —
-ELK routed around these; the routes we delete and rebuild do not.
+Our post-processing introduces no crossings beyond ELK's own result.
 

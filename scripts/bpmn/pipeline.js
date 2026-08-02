@@ -32,7 +32,7 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel } from './coordinates.js';
+import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges } from './coordinates.js';
 import { checkDiagramIntegrity } from './di-check.js';
 import { simplifyAllEdges, repairCrossings } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
@@ -80,10 +80,10 @@ async function runPipeline(logicCore, opts = {}) {
 
   // Edge simplification: collapse ELK's layer-column jogs into clean L-shapes
   // where node-bbox collision allows it. Reduces cross-lane zigzag.
-  const allEdges = [
-    ...(lc.edges || []),
-    ...((lc.pools || []).flatMap(p => p.edges || [])),
-  ];
+  // flattenProcessEdges, not proc.edges: a subprocess child's edges must reach
+  // simplifyAllEdges/repairCrossings too, or a nested crossing is invisible to
+  // both passes (see the coordinates.js §5.0- comment for the same pattern).
+  const allEdges = allProcesses.flatMap(p => flattenProcessEdges(p));
   // Associations are already clipped to both shapes (coordinates.js §5.4) and
   // must not be simplified — clearance here is checked against nodes only.
   const skipSimplify = new Set((lc.associations || []).map(a => a.id));
@@ -97,6 +97,8 @@ async function runPipeline(logicCore, opts = {}) {
     const beforeRepair = coordMap.edgeCoords;
     coordMap.edgeCoords = repairCrossings(beforeRepair, coordMap.coords, allEdges, skipSimplify, {
       maxPasses: CFG.layout?.crossingRepairMaxPasses ?? 2,
+      orthogonalRouter: CFG.layout?.orthogonalRouterEnabled !== false,
+      orthogonalRouterMaxGridPoints: CFG.layout?.orthogonalRouterMaxGridPoints,
     });
     // Labels were placed on the pre-repair geometry (coordinates.js §5.6).
     // Refresh only the ones whose route actually moved — repairCrossings keeps

@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
+7 top-level scripts (standalone tooling) + 24 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
 9 robustness + 7 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -40,7 +40,12 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     ├── coordinates.js       ← types.js, ../shared/utils.js, constants.js, topology.js
     ├── di-check.js          (no deps — post-layout DI integrity pass, see below)
     ├── visual-refinement.js ← coordinates.js, constants.js (opt-in compaction passes)
-    ├── edge-simplify.js     ← types.js (post-process ELK waypoints, reduce zigzag)
+    ├── edge-simplify.js     ← types.js, orthogonal-router.js (post-process ELK waypoints, reduce zigzag;
+    │                          repairCrossings falls back to the router when its own fixed-shape
+    │                          candidate search finds nothing admissible)
+    ├── orthogonal-router.js (no deps — obstacle-aware Dijkstra pathfinder, called only from
+    │                          edge-simplify.js; duplicates its own segment/box clearance test to
+    │                          avoid a circular import)
     ├── bpmn-xml.js          ← types.js, ../shared/utils.js, constants.js, topology.js, icons.js
     ├── svg.js               ← types.js, ../shared/utils.js, constants.js, icons.js
     ├── icons.js             ← ../shared/utils.js, constants.js
@@ -194,7 +199,8 @@ membership instead of coordinates.
 | `scripts/bpmn/dot.js` | `logicCoreToDot` / `dotToLogicCore` — Graphviz DOT support |
 | `scripts/bpmn/workflow-net.js` | WF-Net soundness checks (used by WF01–WF03 rules) |
 | `scripts/bpmn/visual-refinement.js` | Optional compaction/refinement passes P1–P7.1 (off by default) |
-| `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends |
+| `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends; `repairCrossings` re-routes edges that cross another, falling back to `orthogonal-router.js` when its own fixed-shape candidate search finds nothing admissible |
+| `scripts/bpmn/orthogonal-router.js` | `routeAroundObstacles` — obstacle-aware orthogonal Dijkstra pathfinder ("trellis"/extended-lines grid + per-bend cost penalty + soft crossing penalty), used only as `repairCrossings`' fallback candidate source; endpoints are always fixed, never re-derived |
 | `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API |
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |

@@ -3996,6 +3996,41 @@ describe('repairCrossings', () => {
     }
   });
 
+  test('the orthogonal-router fallback never leaves the total crossing count worse than before', () => {
+    // A third edge, e3, sits directly on the route the obstacle-aware router
+    // would otherwise prefer for e1 — a synthetic version of the real
+    // inf2 x inf9 case found while measuring the fix (see
+    // docs/layout-quality-analysis.md §10): rerouting one crossing edge can
+    // create a new crossing with an edge that wasn't part of the original
+    // problem. The strict-improvement guard (`after < before`) must reject
+    // any router candidate that doesn't leave e1 with fewer crossings than
+    // it started with, even if the fixed-shape search found nothing.
+    const denseCoords = {
+      a: { x: 0, y: 0, w: 40, h: 40 },
+      b: { x: 400, y: 0, w: 40, h: 40 },
+      c: { x: 0, y: 300, w: 40, h: 40 },
+      d: { x: 400, y: 300, w: 40, h: 40 },
+      // A wall of obstacles blocking every fixed L/Z/staircase candidate
+      // between a and b, forcing the router to find a path around them.
+      w1: { x: 150, y: -100, w: 40, h: 500 },
+      w2: { x: 250, y: -100, w: 40, h: 500 },
+    };
+    const denseEdges = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'c', target: 'd' },
+      { id: 'e3', source: 'c', target: 'd' },
+    ];
+    const crossing = {
+      e1: [{ x: 40, y: 20 }, { x: 200, y: 20 }, { x: 200, y: -80 }, { x: 300, y: -80 }, { x: 300, y: 20 }, { x: 400, y: 20 }],
+      e2: [{ x: 40, y: 320 }, { x: 200, y: 320 }, { x: 300, y: 320 }, { x: 400, y: 320 }],
+      e3: [{ x: 40, y: 340 }, { x: 400, y: 340 }],
+    };
+    const before = countCrossings(crossing, denseEdges);
+    const repaired = repairCrossings(crossing, denseCoords, denseEdges);
+    const after = countCrossings(repaired, denseEdges);
+    expect(after).toBeLessThanOrEqual(before);
+  });
+
   test('is idempotent', () => {
     const crossing = {
       e1: [{ x: 60, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 200 }, { x: 300, y: 200 }],
@@ -4053,15 +4088,16 @@ describe('repairCrossings', () => {
         }
       }
       // The concrete win this pass was written for: one of the three crossings
-      // in bpmn-generator-pipeline's rework loop. The other two sit where every
-      // candidate corridor runs through a node — clearing those needs real
-      // pathfinding, which this pass deliberately is not.
+      // in bpmn-generator-pipeline's rework loop, via the fixed-shape candidate
+      // search. The other two sat where every candidate corridor ran through a
+      // node — orthogonal-router.js's obstacle-aware fallback now clears those
+      // too (see docs/layout-quality-analysis.md §10).
       CFG.layout.crossingRepair = false;
       const off = await measure('bpmn-generator-pipeline.json', false);
       CFG.layout.crossingRepair = true;
       const on = await measure('bpmn-generator-pipeline.json', false);
       expect(off.crossings).toBe(3);
-      expect(on.crossings).toBe(2);
+      expect(on.crossings).toBe(0);
     } finally {
       CFG.layout.crossingRepair = original;
     }
@@ -4188,19 +4224,19 @@ describe('boundary event flows', () => {
     expect(r.diagnostics.ok).toBe(true);
   });
 
-  test('visualRefinement: true keeps the host-containment fix, but not the crossing count', async () => {
-    // A separate, pre-existing gap, not this fix's target: the layout passes
-    // that only run under refinement (dynamic lane headers, lane compaction,
-    // ELK wrapping) move nodes AFTER crossingRepair already ran, so a route it
-    // had cleared can end up crossing again. The two properties this fix does
-    // own — the flow no longer cuts through its own host, and it still starts
-    // exactly on the event — hold in both modes and are covered by the tests
-    // above. This one just keeps the crossing-count gap visible and named
-    // instead of silently asserting something that isn't true yet.
+  test('visualRefinement: true keeps the host-containment fix and reaches zero crossings', async () => {
+    // Was a separate, pre-existing gap: the layout passes that only run under
+    // refinement (dynamic lane headers, lane compaction) move nodes AFTER
+    // crossingRepair's fixed-shape candidate search already ran, and ELK
+    // wrapping (also refinement-only, but a pre-buildCoordinateMap ELK
+    // decision, not a post-repair pass — see docs/layout-quality-analysis.md
+    // §8 correction) changes the topology it has to solve. Both left the
+    // candidate search with nothing admissible. orthogonal-router.js's
+    // obstacle-aware fallback clears it — same fix as the vr:false case above.
     const lc = loadFixture('realistic-collaboration.json');
     const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement: true });
     expect(r.diagnostics.ok).toBe(true);
-    expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(2);
+    expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
   });
 
   test('the diagram integrity check stays clean on every boundary fixture', async () => {

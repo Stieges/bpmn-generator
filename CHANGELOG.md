@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`scripts/bpmn/orthogonal-router.js` — obstacle-aware crossing repair.** `repairCrossings`'s own
+  candidate search tries only a fixed, small set of shapes around the direct source-target line;
+  in a congested cluster every one of them can be blocked while a path around the cluster still
+  exists. The router (an obstacle-aware Dijkstra over a sparse "trellis"/extended-lines grid, fixed
+  endpoints, per-bend and soft-crossing cost penalties) is now tried as a fallback exactly when
+  that happens, subject to the same strict-improvement guard as every other candidate. Both
+  fixtures the layout-quality analysis found still crossing after the earlier repair pass —
+  `bpmn-generator-pipeline` (`visualRefinement: false`) and `realistic-collaboration`
+  (`visualRefinement: true`) — now measure 0 crossings, down from 2 each. See
+  `docs/layout-quality-analysis.md` §10 for the full mechanism writeup and the two open items
+  (lane/pool gap-closing) this pass deliberately does not attempt.
 - **`--refine` CLI flag.** 14 of the 28 golden fixtures (`*.refined.*`, visual refinement enabled)
   had no documented way to regenerate them — `pipeline.js` parsed `--dot`/`--doc`/`--drill-down`/
   `--strict`/`--optimize` but nothing for `visualRefinement`, and `CONTRIBUTING.md`'s regeneration

@@ -17,6 +17,8 @@
  * or single-bend (3 waypoints).
  */
 
+import { routeAroundObstacles } from './orthogonal-router.js';
+
 const NODE_PADDING = 4;  // px buffer around each node bbox for clearance
 
 function segmentClearOfBox(p1, p2, box) {
@@ -257,6 +259,11 @@ function sideOf(point, box) {
 const OUTWARD = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
 const INWARD  = { left: [1, 0], right: [-1, 0], top: [0, 1], bottom: [0, -1] };
 
+// Same two directions, named the way orthogonal-router.js's routeAroundObstacles
+// wants them ('up'|'down'|'left'|'right' instead of a unit vector).
+const OUT_DIR_NAME = { left: 'left', right: 'right', top: 'up', bottom: 'down' };
+const IN_DIR_NAME  = { left: 'right', right: 'left', top: 'down', bottom: 'up' };
+
 function firstDirection(points) {
   const segs = segmentsOf(points);
   if (!segs.length) return null;
@@ -357,9 +364,18 @@ function candidateRoutes(points) {
  * repair: it takes the first strict improvement it finds and gives up quietly
  * rather than searching for an optimum. Crossing minimization is NP-hard; this
  * is a repair pass, not a solver.
+ *
+ * `candidateRoutes` tries only a fixed, small set of shapes around the direct
+ * source-target line; in a congested local cluster every one of them can be
+ * blocked while a path around the cluster still exists. When that happens —
+ * `candidateRoutes` found nothing admissible and clear — `orthogonal-router.js`
+ * is tried as a fallback, same strict-improvement rule, same fixed endpoints.
+ * Opt-out via `opts.orthogonalRouter: false` (default on).
  */
 export function repairCrossings(edgeCoords, coords, edges, skipIds = new Set(), opts = {}) {
   const maxPasses = opts.maxPasses ?? DEFAULT_MAX_PASSES;
+  const orthogonalRouterEnabled = opts.orthogonalRouter ?? true;
+  const routerMaxGridPoints = opts.orthogonalRouterMaxGridPoints;
 
   const entries = [];
   for (const e of edges || []) {
@@ -398,6 +414,35 @@ export function repairCrossings(edgeCoords, coords, edges, skipIds = new Set(), 
         // Fewest crossings first, then fewest bends, then shortest path.
         const score = { after, bends: bendCount(cand), length: pathLength(cand) };
         if (!best || betterScore(score, best.score)) best = { points: cand, score };
+      }
+      if (!best && orthogonalRouterEnabled) {
+        const start = entry.points[0];
+        const end = entry.points[entry.points.length - 1];
+        const srcSide = sideOf(start, srcBox);
+        const tgtSide = sideOf(end, tgtBox);
+        // No identifiable side (a boundary event straddling its host's
+        // outline) means no fixed exit/entry direction to route from —
+        // same case candidateRoutes already falls back on via admissible().
+        if (srcSide && tgtSide) {
+          const obstacles = Object.entries(coords)
+            .filter(([id]) => id !== entry.source && id !== entry.target)
+            .map(([, box]) => box);
+          const softObstacles = entries
+            .filter((other) => other.id !== entry.id && !adjacent(entry, other))
+            .map((other) => other.points);
+          const routed = routeAroundObstacles(
+            start, OUT_DIR_NAME[srcSide],
+            end, IN_DIR_NAME[tgtSide],
+            obstacles,
+            { softObstacles, maxGridPoints: routerMaxGridPoints },
+          );
+          if (routed) {
+            const after = crossingsAgainstOthers(entry, routed, entries);
+            if (after < before) {
+              best = { points: routed, score: { after, bends: bendCount(routed), length: pathLength(routed) } };
+            }
+          }
+        }
       }
       if (best) {
         entry.points = best.points;
