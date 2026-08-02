@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect } from '@jest/globals';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -3066,6 +3066,113 @@ describe('DI integrity check', () => {
     const lc = { pools: [{ id: 'P', nodes: [{ id: 'n1', type: 'userTask' }], edges: [] }] };
     expect(checkDiagramIntegrity(coordMap, lc).ok).toBe(true);
   });
+
+  test('DI07 fires when a sequence flow does not start on its source', () => {
+    const coordMap = {
+      coords: {
+        n1: { x: 100, y: 100, w: 100, h: 80 },
+        n2: { x: 300, y: 100, w: 100, h: 80 },
+      },
+      poolCoords: Object.fromEntries([pool('P', 20, 20, 500, 300)]),
+      edgeCoords: { e1: [{ x: 999, y: 999 }, { x: 300, y: 140 }] }, // detached start
+    };
+    const lc = { pools: [{
+      id: 'P',
+      nodes: [{ id: 'n1', type: 'userTask' }, { id: 'n2', type: 'userTask' }],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
+    }] };
+    const res = checkDiagramIntegrity(coordMap, lc);
+    expect(res.issues.map(i => i.code)).toEqual(['DI07']);
+    expect(res.issues[0].elements).toEqual(['e1', 'n1']);
+  });
+
+  test('DI07 fires when a sequence flow does not end on its target', () => {
+    const coordMap = {
+      coords: {
+        n1: { x: 100, y: 100, w: 100, h: 80 },
+        n2: { x: 300, y: 100, w: 100, h: 80 },
+      },
+      poolCoords: Object.fromEntries([pool('P', 20, 20, 500, 300)]),
+      edgeCoords: { e1: [{ x: 200, y: 140 }, { x: 999, y: 999 }] }, // detached end
+    };
+    const lc = { pools: [{
+      id: 'P',
+      nodes: [{ id: 'n1', type: 'userTask' }, { id: 'n2', type: 'userTask' }],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
+    }] };
+    const res = checkDiagramIntegrity(coordMap, lc);
+    expect(res.issues.map(i => i.code)).toEqual(['DI07']);
+    expect(res.issues[0].elements).toEqual(['e1', 'n2']);
+  });
+
+  test('DI07 accepts an endpoint exactly on the shape outline', () => {
+    const coordMap = {
+      coords: {
+        n1: { x: 100, y: 100, w: 100, h: 80 },
+        n2: { x: 300, y: 100, w: 100, h: 80 },
+      },
+      poolCoords: Object.fromEntries([pool('P', 20, 20, 500, 300)]),
+      // Right edge of n1 (x=200) to left edge of n2 (x=300), both mid-height.
+      edgeCoords: { e1: [{ x: 200, y: 140 }, { x: 300, y: 140 }] },
+    };
+    const lc = { pools: [{
+      id: 'P',
+      nodes: [{ id: 'n1', type: 'userTask' }, { id: 'n2', type: 'userTask' }],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
+    }] };
+    expect(checkDiagramIntegrity(coordMap, lc).ok).toBe(true);
+  });
+
+  test('DI07 finds a detached flow nested inside an expanded subprocess', () => {
+    const coordMap = {
+      coords: {
+        sub: { x: 20, y: 20, w: 300, h: 200 },
+        c1: { x: 40, y: 40, w: 100, h: 80 },
+        c2: { x: 180, y: 40, w: 100, h: 80 },
+      },
+      poolCoords: { _singlePool: { x: 0, y: 0, w: 400, h: 300 } },
+      edgeCoords: { cf1: [{ x: 999, y: 999 }, { x: 180, y: 80 }] }, // detached start
+    };
+    const lc = {
+      nodes: [{
+        id: 'sub', type: 'subProcess', isExpanded: true,
+        nodes: [{ id: 'c1', type: 'userTask' }, { id: 'c2', type: 'userTask' }],
+        edges: [{ id: 'cf1', source: 'c1', target: 'c2' }],
+      }],
+      edges: [],
+    };
+    const res = checkDiagramIntegrity(coordMap, lc);
+    expect(res.issues.map(i => i.code)).toEqual(['DI07']);
+  });
+
+  test('DI07 skips an edge with fewer than 2 waypoints', () => {
+    const coordMap = {
+      coords: { n1: { x: 100, y: 100, w: 100, h: 80 }, n2: { x: 300, y: 100, w: 100, h: 80 } },
+      poolCoords: Object.fromEntries([pool('P', 20, 20, 500, 300)]),
+      edgeCoords: { e1: [] },
+    };
+    const lc = { pools: [{
+      id: 'P',
+      nodes: [{ id: 'n1', type: 'userTask' }, { id: 'n2', type: 'userTask' }],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
+    }] };
+    expect(checkDiagramIntegrity(coordMap, lc).ok).toBe(true);
+  });
+
+  test('DI07 holds across every fixture, refined or not', async () => {
+    const fixtureNames = readdirSync(fixturesDir).filter(f => f.endsWith('.json'));
+    for (const name of fixtureNames) {
+      const lc = JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
+      if (!lc.pools && !lc.nodes) continue; // not a Logic-Core document
+      for (const visualRefinement of [false, true]) {
+        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement });
+        if (!r.coordMap) continue; // fixture intentionally fails validation (e.g. deadlock-process)
+        const di07 = r.diagnostics.issues.filter(i => i.code === 'DI07');
+        expect(`${name} vr=${visualRefinement}: ${JSON.stringify(di07)}`)
+          .toBe(`${name} vr=${visualRefinement}: []`);
+      }
+    }
+  });
 });
 
 describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () => {
@@ -3969,12 +4076,13 @@ describe('repairCrossings', () => {
 // the host's body, and (for an event nested in a subprocess) never being
 // re-routed off the host at all.
 //
-// Scoped to visualRefinement: false. With refinement ON, compactLanes shifts
-// edge waypoints across the whole collaboration while shifting nodes only
-// within the pool it is compacting, so in a multi-participant model edges come
-// away from their shapes wholesale — 34 loose ends in realistic-collaboration,
-// 16 in multi-pool-collaboration, none in single-pool sparse-lanes. That is a
-// separate, pre-existing defect; asserting around it here would just encode it.
+// Runs under both refinement modes. It used to be scoped to
+// visualRefinement: false only, because compactLanes shifted edge waypoints
+// across the whole collaboration while shifting nodes only within the pool it
+// was compacting — 34 loose ends in realistic-collaboration, 16 in
+// multi-pool-collaboration, none in single-pool sparse-lanes. That is fixed
+// (see the compactLanes tests in visual-refinement.test.js and DI07 above),
+// so both modes now hold.
 // ═══════════════════════════════════════════════════════════════════════
 
 const BOUNDARY_FIXTURES = [
@@ -4031,17 +4139,19 @@ describe('boundary event flows', () => {
 
   test('no boundary flow cuts through its own host', async () => {
     for (const name of BOUNDARY_FIXTURES) {
-      const lc = loadFixture(name);
-      const nodes = allNodesDeep(lc);
-      const r = await runPipeline(loadFixture(name), { visualRefinement: false });
-      for (const e of allEdgesDeep(lc)) {
-        const src = nodes[e.source];
-        if (src?.type !== 'boundaryEvent') continue;
-        const host = r.coordMap.coords[src.attachedTo];
-        const pts = r.coordMap.edgeCoords[e.id];
-        expect(pts).toBeDefined();
-        expect(`${name} ${e.id} enters host: ${routeEntersBox(pts, host)}`)
-          .toBe(`${name} ${e.id} enters host: false`);
+      for (const visualRefinement of [false, true]) {
+        const lc = loadFixture(name);
+        const nodes = allNodesDeep(lc);
+        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        for (const e of allEdgesDeep(lc)) {
+          const src = nodes[e.source];
+          if (src?.type !== 'boundaryEvent') continue;
+          const host = r.coordMap.coords[src.attachedTo];
+          const pts = r.coordMap.edgeCoords[e.id];
+          expect(pts).toBeDefined();
+          expect(`${name} vr=${visualRefinement} ${e.id} enters host: ${routeEntersBox(pts, host)}`)
+            .toBe(`${name} vr=${visualRefinement} ${e.id} enters host: false`);
+        }
       }
     }
   });
@@ -4051,35 +4161,55 @@ describe('boundary event flows', () => {
     // only top-level proc.edges, so a boundary flow inside an expanded
     // subprocess kept ELK's route, which starts at the HOST shape.
     for (const name of BOUNDARY_FIXTURES) {
-      const lc = loadFixture(name);
-      const nodes = allNodesDeep(lc);
-      const r = await runPipeline(loadFixture(name), { visualRefinement: false });
-      for (const e of allEdgesDeep(lc)) {
-        const src = nodes[e.source];
-        if (src?.type !== 'boundaryEvent') continue;
-        const ev = r.coordMap.coords[e.source];
-        const start = r.coordMap.edgeCoords[e.id][0];
-        const onEvent = Math.abs(start.x - (ev.x + ev.w / 2)) <= ev.w / 2 + 1
-                     && Math.abs(start.y - (ev.y + ev.h / 2)) <= ev.h / 2 + 1;
-        expect(`${name} ${e.id} starts on event: ${onEvent}`)
-          .toBe(`${name} ${e.id} starts on event: true`);
+      for (const visualRefinement of [false, true]) {
+        const lc = loadFixture(name);
+        const nodes = allNodesDeep(lc);
+        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        for (const e of allEdgesDeep(lc)) {
+          const src = nodes[e.source];
+          if (src?.type !== 'boundaryEvent') continue;
+          const ev = r.coordMap.coords[e.source];
+          const start = r.coordMap.edgeCoords[e.id][0];
+          const onEvent = Math.abs(start.x - (ev.x + ev.w / 2)) <= ev.w / 2 + 1
+                       && Math.abs(start.y - (ev.y + ev.h / 2)) <= ev.h / 2 + 1;
+          expect(`${name} vr=${visualRefinement} ${e.id} starts on event: ${onEvent}`)
+            .toBe(`${name} vr=${visualRefinement} ${e.id} starts on event: true`);
+        }
       }
     }
   });
 
-  test('routing the flow away from its host clears realistic-collaboration', async () => {
+  test('routing the flow away from its host clears realistic-collaboration (visualRefinement: false)', async () => {
     const lc = loadFixture('realistic-collaboration.json');
     const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement: false });
-    // in_timer used to leave upward through in_check and along the column inf2
-    // descends in, which cost two crossings. Both are gone.
+    // in_timer used to leave upward through in_check and along the column
+    // inf2 descends in, which cost two crossings. Both are gone.
     expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
     expect(r.diagnostics.ok).toBe(true);
   });
 
+  test('visualRefinement: true keeps the host-containment fix, but not the crossing count', async () => {
+    // A separate, pre-existing gap, not this fix's target: the layout passes
+    // that only run under refinement (dynamic lane headers, lane compaction,
+    // ELK wrapping) move nodes AFTER crossingRepair already ran, so a route it
+    // had cleared can end up crossing again. The two properties this fix does
+    // own — the flow no longer cuts through its own host, and it still starts
+    // exactly on the event — hold in both modes and are covered by the tests
+    // above. This one just keeps the crossing-count gap visible and named
+    // instead of silently asserting something that isn't true yet.
+    const lc = loadFixture('realistic-collaboration.json');
+    const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement: true });
+    expect(r.diagnostics.ok).toBe(true);
+    expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(2);
+  });
+
   test('the diagram integrity check stays clean on every boundary fixture', async () => {
     for (const name of BOUNDARY_FIXTURES) {
-      const r = await runPipeline(loadFixture(name), { visualRefinement: false });
-      expect(`${name}: ${r.diagnostics.issues.filter(i => i.severity === 'ERROR').length}`).toBe(`${name}: 0`);
+      for (const visualRefinement of [false, true]) {
+        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        expect(`${name} vr=${visualRefinement}: ${r.diagnostics.issues.filter(i => i.severity === 'ERROR').length}`)
+          .toBe(`${name} vr=${visualRefinement}: 0`);
+      }
     }
   });
 });
