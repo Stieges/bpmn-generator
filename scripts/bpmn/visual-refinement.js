@@ -12,6 +12,7 @@
 
 import { LANE_HEADER_W } from './constants.js';
 import { wrapTextByPx } from '../shared/utils.js';
+import { flattenProcessNodes, flattenProcessEdges } from './coordinates.js';
 
 // Average character-width factors for Arial at fontSize 1 (in px).
 // Calibrated against bpmn.io renderings; accurate to ~±15% which is
@@ -210,7 +211,63 @@ export function compactLanes(coordMap, process, opts = {}) {
   const pad  = opts.padding ?? LANE_COMPACT_PADDING;
 
   const pools = process.pools ?? [process];
-  const allNodes = pools.flatMap(p => p.nodes ?? []);
+  const poolById = new Map(pools.map(p => [p.id, p]));
+  // A single-pool model has no ownership ambiguity — every edgeCoords entry
+  // is that one pool's, including ones the synthetic coordMaps in
+  // visual-refinement.test.js never list under proc.edges. Only multi-pool
+  // models need explicit per-edge ownership.
+  const singlePool = pools.length === 1;
+
+  // Which pool owns an edge (and therefore its label): the shift below is
+  // scoped to a pool's own edges, never the whole collaboration's — that
+  // global scope was the bug. Sequence flows are claimed via proc.edges
+  // (including subprocess-nested ones); an association is claimed by
+  // whichever pool contains the node it anchors to, since Logic-Core
+  // associations live in one shared top-level array rather than per-pool.
+  const edgeOwner = new Map();
+  if (!singlePool) {
+    const nodePool = new Map();
+    for (const pool of pools) {
+      for (const n of flattenProcessNodes(pool.nodes)) nodePool.set(n.id, pool.id);
+    }
+    for (const pool of pools) {
+      for (const e of flattenProcessEdges(pool)) edgeOwner.set(e.id, pool.id);
+    }
+    for (const assoc of (process.associations || [])) {
+      const ownerId = nodePool.get(assoc.source) ?? nodePool.get(assoc.target);
+      if (ownerId) edgeOwner.set(assoc.id, ownerId);
+    }
+  }
+  const edgesOf = (poolId) => singlePool
+    ? Object.keys(coordMap.edgeCoords ?? {})
+    : [...edgeOwner.entries()].filter(([, owner]) => owner === poolId).map(([id]) => id);
+
+  // Rigidly shift a participant positioned entirely below the point that just
+  // moved: its box, its lanes, every one of its nodes (including subprocess
+  // children), and every one of its own edges' waypoints and label — all by
+  // the same delta, nothing re-derived. Mirrors coordinates.js's
+  // shiftParticipant (§5.0b2): the participant's internal layout doesn't
+  // change, only its position does.
+  function shiftParticipantsBelow(currentPoolId, thresholdY, delta) {
+    for (const [id, opc] of Object.entries(coordMap.poolCoords)) {
+      if (id === currentPoolId || id === '_singlePool') continue;
+      if (opc.y < thresholdY) continue;
+      opc.y -= delta;
+      const otherPool = poolById.get(id);
+      if (!otherPool) continue; // collapsed / black-box participant: box only
+      for (const lane of (otherPool.lanes || [])) {
+        if (coordMap.laneCoords[lane.id]) coordMap.laneCoords[lane.id].y -= delta;
+      }
+      for (const n of flattenProcessNodes(otherPool.nodes)) {
+        if (coordMap.coords[n.id]) coordMap.coords[n.id].y -= delta;
+      }
+      for (const eid of edgesOf(id)) {
+        for (const p of (coordMap.edgeCoords[eid] || [])) p.y -= delta;
+        const label = coordMap.edgeLabels?.[eid];
+        if (label) label.y -= delta;
+      }
+    }
+  }
 
   for (const pool of pools) {
     const pc = coordMap.poolCoords[pool.id] ?? coordMap.poolCoords['_singlePool'];
@@ -218,10 +275,17 @@ export function compactLanes(coordMap, process, opts = {}) {
     const lanes = (pool.lanes ?? []).map(l => l.id).filter(id => coordMap.laneCoords[id]);
     lanes.sort((a, b) => coordMap.laneCoords[a].y - coordMap.laneCoords[b].y);
 
+    // This pool's own top-level nodes only — a boundary event's host is
+    // always in the same pool as the event itself, so scoping laneIdOf's
+    // search to poolNodes (rather than every pool's nodes, as before) also
+    // removes the cross-pool lane-id-collision exposure that had.
+    const poolNodes = pool.nodes ?? [];
+    const poolEdgeIds = edgesOf(pool.id);
+
     for (const laneId of lanes) {
       const lc = coordMap.laneCoords[laneId];
 
-      const laneNodes = allNodes.filter(n => laneIdOf(n, allNodes) === laneId)
+      const laneNodes = poolNodes.filter(n => laneIdOf(n, poolNodes) === laneId)
                                 .map(n => coordMap.coords[n.id])
                                 .filter(Boolean);
 
@@ -249,29 +313,47 @@ export function compactLanes(coordMap, process, opts = {}) {
         lc.h = newH;
         const newEndY = lc.y + lc.h;
 
-        // Shift nodes in subsequent lanes
+        // Shift nodes in subsequent lanes of THIS pool, carrying subprocess
+        // children along — previously only the top-level node moved, leaving
+        // an expanded subprocess's children behind their own parent.
         for (const other of lanes) {
           if (other === laneId) continue;
           if (coordMap.laneCoords[other].y <= oldY) continue; // lanes above — already processed
-          const otherLane = coordMap.laneCoords[other];
-          otherLane.y -= delta;
-          const nodesInOther = allNodes.filter(n => laneIdOf(n, allNodes) === other);
+          coordMap.laneCoords[other].y -= delta;
+          const nodesInOther = poolNodes.filter(n => laneIdOf(n, poolNodes) === other);
           for (const n of nodesInOther) {
-            if (coordMap.coords[n.id]) coordMap.coords[n.id].y -= delta;
-          }
-        }
-
-        // Shift edge waypoints
-        for (const pts of Object.values(coordMap.edgeCoords)) {
-          for (const p of pts) {
-            if (p.y >= oldEndY) {
-              p.y -= delta;
-            } else if (p.y > newEndY && p.y < oldEndY) {
-              // Boundary edge case: clamp to newEndY - 1 (keeps waypoint inside shrunk lane)
-              p.y = newEndY - 1;
+            for (const inner of flattenProcessNodes([n])) {
+              if (coordMap.coords[inner.id]) coordMap.coords[inner.id].y -= delta;
             }
           }
         }
+
+        // Shift this pool's own edge waypoints and labels only — scoped,
+        // where the bug shifted every edge in the whole collaboration
+        // regardless of which pool it actually belonged to.
+        for (const eid of poolEdgeIds) {
+          const pts = coordMap.edgeCoords[eid];
+          if (pts) {
+            for (const p of pts) {
+              if (p.y >= oldEndY) {
+                p.y -= delta;
+              } else if (p.y > newEndY && p.y < oldEndY) {
+                // Boundary edge case: clamp to newEndY - 1 (keeps waypoint inside shrunk lane)
+                p.y = newEndY - 1;
+              }
+            }
+          }
+          const label = coordMap.edgeLabels?.[eid];
+          if (label) {
+            if (label.y >= oldEndY) label.y -= delta;
+            else if (label.y > newEndY && label.y < oldEndY) label.y = newEndY - 1;
+          }
+        }
+
+        // Every participant positioned below this pool needs to move by the
+        // same amount, or its content stays glued to a position this pool no
+        // longer occupies — see shiftParticipantsBelow's doc comment.
+        shiftParticipantsBelow(pool.id, oldEndY, delta);
       }
     }
 

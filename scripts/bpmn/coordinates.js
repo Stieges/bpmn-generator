@@ -1252,4 +1252,4 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel };
+export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessNodes, flattenProcessEdges };
