@@ -343,7 +343,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 1. **Never blind-regenerate.** First inspect the diff:
    - `diff -u tests/fixtures/<name>.expected.bpmn /tmp/output.bpmn`
 2. Decide: is the change intended (then the golden is stale and must be regenerated) or unintended (then the code is broken)?
-3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node bpmn/pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`).
+3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node bpmn/pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`). The `.refined.*` goldens (visual refinement) need the `--refine` flag: `node bpmn/pipeline.js <fixture> <out>.refined --refine`.
 4. Commit golden updates in their own commit, separate from code changes.
 
 ### Extend the rule engine
@@ -497,6 +497,9 @@ node bpmn/pipeline.js input.json output --strict
 
 # Enable the opt-in Optimization Advisory layer (soll/optimize mode):
 node bpmn/pipeline.js input.json output --optimize
+
+# Enable visual refinement (P1-P7.1 passes; off by default, see config.json):
+node bpmn/pipeline.js input.json output --refine
 
 # Start MCP server:
 node mcp-bpmn-server.js

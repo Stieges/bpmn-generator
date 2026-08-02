@@ -340,8 +340,9 @@ async function main() {
   const drillDown  = flags.includes('--drill-down');
   const strict     = flags.includes('--strict');
   const optimize   = flags.includes('--optimize') || flags.includes('--mode=soll') || flags.includes('--mode=optimize');
+  const refine     = flags.includes('--refine');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine]');
     process.exit(1);
   }
 
@@ -376,9 +377,16 @@ async function main() {
     process.exit(1);
   }
 
+  // --refine only ever turns visual refinement ON explicitly; omitting the flag
+  // leaves opts.visualRefinement undefined so runPipeline's own
+  // `opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false` fallback
+  // still decides — passing `false` here would pin today's default and quietly
+  // survive a future flip of that default in config.json.
+  const refineOpts = refine ? { visualRefinement: true } : {};
+
   // Drill-down mode: generate parent + per-subprocess diagrams
   if (drillDown) {
-    const diagramSet = await generateDiagramSet(parsedInput);
+    const diagramSet = await generateDiagramSet(parsedInput, refineOpts);
     if (!diagramSet.parent.bpmnXml) {
       console.error('\n✗ Errors (pipeline blocked):');
       diagramSet.parent.validation.errors.forEach(e => console.error('  · ' + e));
@@ -415,7 +423,7 @@ async function main() {
     return;
   }
 
-  const result = await runPipeline(parsedInput, { mode: optimize ? 'optimize' : 'document' });
+  const result = await runPipeline(parsedInput, { mode: optimize ? 'optimize' : 'document', ...refineOpts });
 
   if (result.validation.warnings.length) {
     console.warn('\n⚠ Warnings:');
