@@ -8,35 +8,46 @@
  * Not wired into `npm test` — same idiom as the other scripts/bench/*.mjs
  * comparison tools. Run: `node bench/layout-metrics.mjs` from `scripts/`.
  *
- * Measures, per fixture:
+ * Measures, per fixture. Each entry also states what the metric does NOT
+ * capture — the first version of this harness drew a wrong conclusion from a
+ * structurally blind alignment metric, so the blind spots are documented as
+ * carefully as the definitions.
+ *
  *   - crossings         pairwise segment intersections between non-adjacent
  *                        sequence-flow edges (edges sharing a source/target
- *                        node are considered adjacent and excluded)
+ *                        node are considered adjacent and excluded).
+ *                        Does NOT cover message flows or associations.
  *   - bends             direction changes per edge polyline (sum + count of
- *                        edges with <=1 bend)
+ *                        edges with <=1 bend). A bend is not automatically a
+ *                        defect: a fold-back in a wrapped layout needs one.
  *   - diagonals         segments with both dx>1 and dy>1 (should be 0 —
  *                        the pipeline promises strictly orthogonal routing)
- *   - area              bounding box over all pool/participant boxes, plus
- *                        px^2 per node
- *   - chainAlignment    simplified proxy: of all edges (u->v) where u has
- *                        out-degree 1 and v has in-degree 1 (a "plain link"),
- *                        what fraction keeps identical center-y (+-1px)?
- *                        NOT lane-aware and NOT the full Run-and-Anchor
- *                        definition — a cheap stand-in used only to gauge
- *                        whether chains visually snap into a straight row.
+ *   - area / aspect     bounding box over node boxes, px^2 per node, and w/h.
+ *                        Area is NOT comparable between raw ELK and the final
+ *                        pipeline: raw ELK has not placed lane bands yet, so
+ *                        the difference measures the existence of swimlanes,
+ *                        not bloat. For a wrapping layout, aspect ratio is the
+ *                        meaningful figure — trading width for height grows
+ *                        total area on purpose.
+ *   - chainAlignment    of all STRUCTURALLY ALIGNABLE chain links, how many
+ *                        share center-y (+-1px)? See `isAlignableLink` for the
+ *                        exclusions and why each one is not a defect. Counting
+ *                        the excluded links as misalignment is exactly the
+ *                        error the first version of this harness made.
  *   - edgeThroughNode   segments whose bounding box overlaps a node box that
- *                        is neither the edge's source nor its target
+ *                        is neither the edge's source nor its target.
+ *                        Does NOT test edge-vs-edge or lane/pool-band overlap.
  *
- * Also compares crossings on ELK's *raw* output (before coordinates.js
- * post-processing, i.e. before the lane-band shift deletes/rebuilds routes)
- * against crossings on the final pipeline output, to quantify how much the
- * lane-shift step (coordinates.js §5.0a) actually costs.
+ * Also measures ELK's *raw* output (before coordinates.js post-processing) so
+ * that crossings introduced by our own route rebuilding become visible: ELK
+ * routes around obstacles, our synthetic 4-point replacements do not.
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPipeline } from '../bpmn/pipeline.js';
 import { logicCoreToElk, runElkLayout } from '../bpmn/layout.js';
+import { resolveLaneId } from '../bpmn/topology.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
@@ -135,11 +146,83 @@ function collectAllEdges(lc) {
   return edges;
 }
 
+/**
+ * Build the context the alignment metric needs: lane membership, node type,
+ * which nodes host a boundary event, and in/out degrees.
+ *
+ * Lane membership goes through `resolveLaneId` and nothing else — reading
+ * `node.lane` directly would silently miss the `lane.nodeIds` input format.
+ */
+function buildAlignContext(lc) {
+  const procs = lc.pools ? lc.pools : [lc];
+  const laneOf = {};
+  const typeOf = {};
+  const hostsBoundary = new Set();
+  const walk = (nodes, proc) => {
+    for (const n of nodes || []) {
+      typeOf[n.id] = n.type;
+      laneOf[n.id] = resolveLaneId(proc, n);
+      if (n.attachedTo) hostsBoundary.add(n.attachedTo);
+      if (n.nodes) walk(n.nodes, proc);
+    }
+  };
+  for (const p of procs) walk(p.nodes, p);
+
+  const edges = collectAllEdges(lc);
+  const outDeg = {};
+  const inDeg = {};
+  for (const e of edges) {
+    outDeg[e.source] = (outDeg[e.source] || 0) + 1;
+    inDeg[e.target] = (inDeg[e.target] || 0) + 1;
+  }
+  return { laneOf, typeOf, hostsBoundary, outDeg, inDeg, edges };
+}
+
+/**
+ * Is this link one whose endpoints *could* legitimately share a center-y?
+ *
+ * Returns `null` when alignable, otherwise the reason it is not. Every
+ * exclusion below is a case where a vertical offset is correct behaviour, so
+ * counting it as misalignment would manufacture a defect that isn't there:
+ *
+ *   'not-a-chain'  the link is not a plain 1:1 chain hop to begin with.
+ *   'branch'       the target is a split (out-degree > 1) or the source is a
+ *                  join (in-degree > 1). ELK places such a node on the
+ *                  barycenter of its branches, which is what makes the
+ *                  branches straight; pulling it onto its single partner would
+ *                  just move the crookedness onto the other side.
+ *   'hosts-boundary' the source carries a boundary event. `buildElkEdges`
+ *                  re-anchors the boundary event's outgoing flow onto the
+ *                  host, so ELK sees a split even though Logic-Core shows
+ *                  out-degree 1 — same barycenter effect as 'branch'.
+ *   'boundary-src' the source IS a boundary event. It is pinned to its host's
+ *                  bottom edge by `placeBoundaryEvents`, so its y is dictated
+ *                  by the host, not by its successor.
+ *   'cross-lane'   source and target sit in different lanes. Lanes are
+ *                  horizontal bands by definition — a cross-lane link can
+ *                  never be straight, and demanding it would defeat lanes.
+ *   'fold-back'    the target lies to the left of the source: a loop or, in a
+ *                  wrapped layout, a row fold. Neither can be a straight line.
+ */
+function alignabilityOf(edge, coords, ctx) {
+  const { laneOf, typeOf, hostsBoundary, outDeg, inDeg } = ctx;
+  const s = coords[edge.source];
+  const t = coords[edge.target];
+  if (!s || !t) return 'no-coords';
+  if (outDeg[edge.source] !== 1 || inDeg[edge.target] !== 1) return 'not-a-chain';
+  if (typeOf[edge.source] === 'boundaryEvent') return 'boundary-src';
+  if (hostsBoundary.has(edge.source)) return 'hosts-boundary';
+  if ((outDeg[edge.target] || 0) > 1 || (inDeg[edge.source] || 0) > 1) return 'branch';
+  if (laneOf[edge.source] !== laneOf[edge.target]) return 'cross-lane';
+  if ((t.x + t.w / 2) <= (s.x + s.w / 2)) return 'fold-back';
+  return null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Metrics over a coordMap-shaped {coords, edgeCoords} plus an edge list
 // ─────────────────────────────────────────────────────────────────────────
 
-function computeMetrics(coords, edgeCoords, edgeList) {
+function computeMetrics(coords, edgeCoords, edgeList, alignCtx) {
   const edges = edgeList
     .filter((e) => edgeCoords[e.id] && edgeCoords[e.id].length >= 2)
     .map((e) => ({ id: e.id, source: e.source, target: e.target, points: edgeCoords[e.id] }));
@@ -189,23 +272,32 @@ function computeMetrics(coords, edgeCoords, edgeList) {
     minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
     maxX = Math.max(maxX, c.x + c.w); maxY = Math.max(maxY, c.y + c.h);
   }
-  const area = nodeIds.length ? (maxX - minX) * (maxY - minY) : 0;
+  const bboxW = nodeIds.length ? maxX - minX : 0;
+  const bboxH = nodeIds.length ? maxY - minY : 0;
+  const area = bboxW * bboxH;
   const areaPerNode = nodeIds.length ? area / nodeIds.length : 0;
+  const aspect = bboxH > 0 ? bboxW / bboxH : 0;
 
-  // chainAlignment (simplified — see module doc comment)
-  const outDeg = {}, inDeg = {};
-  for (const e of edgeList) {
-    outDeg[e.source] = (outDeg[e.source] || 0) + 1;
-    inDeg[e.target] = (inDeg[e.target] || 0) + 1;
-  }
-  let plainLinks = 0, alignedLinks = 0;
-  for (const e of edgeList) {
-    if (!coords[e.source] || !coords[e.target]) continue;
-    if (outDeg[e.source] !== 1 || inDeg[e.target] !== 1) continue;
+  // chainAlignment over structurally alignable links only — see alignabilityOf
+  // for why each excluded class is correct behaviour rather than a defect.
+  // Always driven by the Logic-Core edge list (alignCtx.edges), never by the
+  // route list, so raw-ELK and final numbers stay directly comparable.
+  let plainLinks = 0, alignedLinks = 0, worstGap = 0, worstLink = '';
+  const excluded = {};
+  for (const e of alignCtx.edges) {
+    const reason = alignabilityOf(e, coords, alignCtx);
+    if (reason) {
+      if (reason !== 'not-a-chain' && reason !== 'no-coords') {
+        excluded[reason] = (excluded[reason] || 0) + 1;
+      }
+      continue;
+    }
     plainLinks++;
     const cyA = coords[e.source].y + coords[e.source].h / 2;
     const cyB = coords[e.target].y + coords[e.target].h / 2;
-    if (Math.abs(cyA - cyB) <= 1) alignedLinks++;
+    const gap = Math.abs(cyA - cyB);
+    if (gap <= 1) alignedLinks++;
+    else if (gap > worstGap) { worstGap = gap; worstLink = `${e.id} ${e.source}->${e.target}`; }
   }
 
   // edgeThroughNode
@@ -229,9 +321,15 @@ function computeMetrics(coords, edgeCoords, edgeList) {
     diagonals,
     area: Math.round(area),
     areaPerNode: Math.round(areaPerNode),
+    bboxW: Math.round(bboxW),
+    bboxH: Math.round(bboxH),
+    aspect,
     nodeCount: nodeIds.length,
     plainLinks,
     alignedLinks,
+    worstGap,
+    worstLink,
+    excluded,
     edgeThroughNode,
   };
 }
@@ -277,14 +375,14 @@ function flattenElk(node, offX, offY, acc, containerIds) {
   }
 }
 
-async function measureRawElk(lc) {
+async function measureRawElk(lc, alignCtx) {
   const clone = JSON.parse(JSON.stringify(lc));
   const containerIds = collectContainerIds(clone);
   const elkGraph = logicCoreToElk(clone, { elkWrapping: false, poolOrder: 'auto' });
   const elkResult = await runElkLayout(elkGraph);
   const acc = { coords: {}, edgeCoords: {}, edgeList: [] };
   flattenElk(elkResult, 0, 0, acc, containerIds);
-  return computeMetrics(acc.coords, acc.edgeCoords, acc.edgeList);
+  return computeMetrics(acc.coords, acc.edgeCoords, acc.edgeList, alignCtx);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -295,25 +393,36 @@ async function measureFixture(name) {
   const raw = readFileSync(join(fixturesDir, name), 'utf8');
   const lc = JSON.parse(raw);
   const edgeList = collectAllEdges(lc);
+  const alignCtx = buildAlignContext(lc);
 
   const defaultResult = await runPipeline(lc, { visualRefinement: false });
   const refinedResult = await runPipeline(lc, { visualRefinement: true });
 
   const defaultMetrics = defaultResult.coordMap
-    ? computeMetrics(defaultResult.coordMap.coords, defaultResult.coordMap.edgeCoords, edgeList)
+    ? computeMetrics(defaultResult.coordMap.coords, defaultResult.coordMap.edgeCoords, edgeList, alignCtx)
     : null;
   const refinedMetrics = refinedResult.coordMap
-    ? computeMetrics(refinedResult.coordMap.coords, refinedResult.coordMap.edgeCoords, edgeList)
+    ? computeMetrics(refinedResult.coordMap.coords, refinedResult.coordMap.edgeCoords, edgeList, alignCtx)
     : null;
-  const rawElkMetrics = await measureRawElk(lc);
+  const rawElkMetrics = await measureRawElk(lc, alignCtx);
 
   return { name, defaultMetrics, refinedMetrics, rawElkMetrics };
 }
 
+const EXCLUSION_ORDER = ['cross-lane', 'fold-back', 'branch', 'hosts-boundary', 'boundary-src'];
+
+function fmtExcluded(excluded) {
+  const parts = EXCLUSION_ORDER
+    .filter((k) => excluded[k])
+    .map((k) => `${excluded[k]} ${k}`);
+  return parts.length ? parts.join(', ') : '—';
+}
+
 function fmtRow(label, m) {
-  if (!m) return `| ${label} | (pipeline errored) | | | | | | | |`;
+  if (!m) return `| ${label} | (pipeline errored) | | | | | | | | |`;
   const alignPct = m.plainLinks ? Math.round((100 * m.alignedLinks) / m.plainLinks) : 0;
-  return `| ${label} | ${m.crossings} | ${m.totalBends} | ${m.edgesWithLeq1Bend}/${m.edgeCount} | ${m.diagonals} | ${m.area} (${m.areaPerNode}/node) | ${m.alignedLinks}/${m.plainLinks} (${alignPct}%) | ${m.edgeThroughNode} |`;
+  const align = `${m.alignedLinks}/${m.plainLinks} (${alignPct}%)`;
+  return `| ${label} | ${m.crossings} | ${m.totalBends} | ${m.edgesWithLeq1Bend}/${m.edgeCount} | ${m.diagonals} | ${m.bboxW}×${m.bboxH} (${m.areaPerNode}/node) | ${m.aspect.toFixed(2)} | ${align} | ${fmtExcluded(m.excluded)} | ${m.edgeThroughNode} |`;
 }
 
 async function main() {
@@ -329,26 +438,54 @@ async function main() {
   lines.push('Generated by `scripts/bench/layout-metrics.mjs`. Not part of `npm test` — a snapshot for');
   lines.push('`docs/layout-quality-analysis.md`, re-run on demand, not enforced as a regression gate.');
   lines.push('');
-  lines.push('Columns: crossings (pairwise segment intersections between non-adjacent sequence-flow edges),');
-  lines.push('bends (total direction changes / edges with <=1 bend), diagonals (non-orthogonal segments —');
-  lines.push('should be 0), area (bbox px^2, and px^2 per node), chain alignment (plain in/out-degree-1 links');
-  lines.push('sharing center-y, a simplified proxy — see module doc comment), edge-through-node (segments');
-  lines.push('crossing a foreign node box).');
+  lines.push('**Columns.** *Crossings*: pairwise segment intersections between non-adjacent sequence-flow');
+  lines.push('edges. *Bends*: total direction changes, and how many edges need at most one. *Diagonals*:');
+  lines.push('non-orthogonal segments — always expected to be 0. *Area*: node-bbox width×height and px² per');
+  lines.push('node. *Aspect*: bbox w/h. *Chain alignment*: of the links that could structurally be straight,');
+  lines.push('how many share center-y within 1 px. *Excluded*: links left out of that quota because a');
+  lines.push('vertical offset is correct for them — see below. *Edge-through-node*: segments crossing a');
+  lines.push('foreign node box.');
+  lines.push('');
+  lines.push('**Reading the numbers.** Two comparisons are invalid and the table deliberately does not');
+  lines.push('invite them. Area must not be compared between "ELK raw" and the pipeline rows: raw ELK has');
+  lines.push('not placed lane bands yet, so the growth measures the existence of swimlanes, not bloat. And');
+  lines.push('area must not be read as a quality score for a wrapped layout: wrapping trades width for');
+  lines.push('height on purpose, which grows total area while improving aspect ratio, which is why aspect');
+  lines.push('has its own column.');
+  lines.push('');
+  lines.push('**Alignment exclusions.** A link is only counted when its two endpoints could legitimately');
+  lines.push('share a center-y. Excluded are: `cross-lane` (lanes are horizontal bands — such a link can');
+  lines.push('never be straight), `fold-back` (target left of source: a loop, or a row fold in a wrapped');
+  lines.push('layout), `branch` (target is a split or source is a join — ELK puts it on its branches\'');
+  lines.push('barycenter, which is what makes those branches straight), `hosts-boundary` (the source carries');
+  lines.push('a boundary event, whose flow ELK re-anchors onto the host, producing the same barycenter');
+  lines.push('effect), and `boundary-src` (the source is a boundary event, pinned to its host\'s edge).');
+  lines.push('Counting these as misalignment is exactly the error the first version of this harness made.');
   lines.push('');
 
   for (const r of results) {
     lines.push(`## ${r.name}`);
     lines.push('');
-    lines.push('| Variant | Crossings | Bends (total) | Edges <=1 bend | Diagonals | Area | Chain alignment | Edge-through-node |');
-    lines.push('|---|---|---|---|---|---|---|---|');
+    lines.push('| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|');
     lines.push(fmtRow('ELK raw (pre-postprocess)', r.rawElkMetrics));
     lines.push(fmtRow('default', r.defaultMetrics));
     lines.push(fmtRow('visualRefinement: true', r.refinedMetrics));
     lines.push('');
     if (r.defaultMetrics) {
       const delta = r.defaultMetrics.crossings - r.rawElkMetrics.crossings;
-      lines.push(`Lane-shift crossing delta (default − ELK raw): **${delta >= 0 ? '+' : ''}${delta}**`);
+      if (delta > 0) {
+        lines.push(`Crossings introduced by our own post-processing (default − ELK raw): **+${delta}** —`);
+        lines.push('ELK routed around these; the routes we delete and rebuild do not.');
+      } else {
+        lines.push('Our post-processing introduces no crossings beyond ELK\'s own result.');
+      }
       lines.push('');
+      const worst = r.defaultMetrics.worstGap;
+      if (worst > 1) {
+        lines.push(`Worst remaining alignable gap: ${worst.toFixed(1)} px (\`${r.defaultMetrics.worstLink}\`).`);
+        lines.push('');
+      }
     }
   }
 
