@@ -7,18 +7,50 @@ what combination? A secondary ask covers other coordinate-computation approaches
 
 Method, data, and conclusions below; recommendation in [§8](#8-recommendation).
 
+## 0. Correction note
+
+**The first version of this document reached the wrong conclusion, and the sections below have been
+rewritten.** It reported that our lane-band shift tears straight chains apart by up to 839 px and
+recommended adopting Petrov's Run-and-Anchor alignment and lane-constrained barycenter reordering to
+fix it. Checking those numbers before implementing anything showed the finding was an artifact of the
+measuring instrument: the alignment metric asked whether two nodes share a center-y without asking
+whether they structurally could. Cross-lane links can never be straight — lanes are horizontal bands
+by definition — and neither can row folds in a wrapped layout, nor a node ELK deliberately placed on
+its branches' barycenter. All three were being counted as defects.
+
+Measured correctly, **every structurally alignable link in all eight fixtures is already exactly
+aligned, in both refinement modes.** There was nothing to fix. The metric has been repaired
+(`alignabilityOf` in the harness now names why each excluded class is legitimate), and the two
+recommendations that rested on it are withdrawn. One genuine finding survived the re-examination and
+has been fixed — see §1.
+
+The lesson is recorded rather than quietly patched: a metric that cannot distinguish a defect from
+correct behaviour will manufacture work, and it did.
+
 ## 1. Executive summary
 
-Edge crossings are **not** our bottleneck — both ELK's raw layering and our final output are
-crossing-free or near-crossing-free on every fixture measured (§3–4). Tuning ELK's own layering
-options moves almost nothing (§7). The actual quality loss happens entirely in
-our own post-processing, in two concrete, measured ways: **straight chains that ELK aligned get pulled
-apart by up to 839 px** once lanes are stacked independently (§4), and **diagram area inflates by
-50–135%** from lane padding and pool/lane stacking that doesn't respond to content (§3, confirming the
-existing admission in `CLAUDE.md`). Of Petrov's six pipeline stages, two map directly onto these gaps:
-**lane-constrained barycenter reordering** and **Run-and-Anchor vertical alignment**. Adopting those two
-as new post-ELK passes — not a full alternative engine — is the one adoption worth pursuing. See §8 for
-the concrete combination and sequencing.
+Edge crossings and chain alignment were both examined; only one of them was ever broken.
+
+**Alignment: nothing was wrong.** All 59 structurally alignable chain links across the eight fixtures
+share their center-y exactly, before and after our post-processing (§4). Petrov's Run-and-Anchor step
+and his lane-constrained barycenter reordering therefore have nothing to improve here, and are not
+adopted.
+
+**Crossings: a real, narrow defect, now fixed.** ELK's raw output is crossing-free on every fixture,
+but our own route rebuilding introduced crossings ELK had routed around — 2 in
+`realistic-collaboration`, 3 in `bpmn-generator-pipeline`. `coordinates.js` discards a route whenever
+the lane-band shift moves its endpoints by different deltas, then rebuilds it as a fixed 4-point Z
+picked from `|dy| > |dx|` alone, with no obstacle or crossing test. This is Petrov's idea #6
+(obstacle-aware routing), which the first version of this document had deferred for lack of evidence.
+A bounded repair pass (`repairCrossings` in `scripts/bpmn/edge-simplify.js`) now clears one of them;
+the remainder sit in congested regions where every candidate corridor runs through a node and would
+need real pathfinding (§6, idea 6).
+
+**Everything else measured as adequate.** ELK option tuning moves almost nothing end-to-end (§7 A);
+`BRANDES_KOEPF` passes its gate but earns only an 8 % bend reduction for 28 golden-file
+regenerations, so it is measured, documented and deliberately not adopted. Area growth and the
+`wide-pipeline` wrapping figures, both flagged as problems in the first version, turned out to be
+correct behaviour misread through unsuitable metrics (§3).
 
 ## 2. Method
 
@@ -32,9 +64,22 @@ the concrete combination and sequencing.
   `bpmn-generator-pipeline` (22 nodes, the two largest fixtures in `tests/fixtures/`).
 - Metrics: crossings (pairwise segment intersections between non-adjacent sequence-flow edges),
   bends (direction changes per edge), diagonals (non-orthogonal segments — sanity check, should
-  always be 0), area (bbox px², and px² per node), chain alignment (a simplified proxy: of all
-  plain in-degree-1/out-degree-1 links, what fraction keeps identical center-y), edge-through-node.
-  Full definitions in the module doc comment.
+  always be 0), area and aspect ratio, chain alignment, edge-through-node. Full definitions in the
+  module doc comment.
+- **What the metrics deliberately do not claim**, learned the hard way (§0):
+  - *Chain alignment* counts only links whose endpoints could structurally share a center-y.
+    Excluded, each because a vertical offset is correct for it: `cross-lane` (lanes are horizontal
+    bands), `fold-back` (a loop, or a row fold in a wrapped layout), `branch` (target is a split or
+    source is a join — ELK places it on its branches' barycenter, which is what makes those
+    branches straight), `hosts-boundary` (the source carries a boundary event, whose outgoing flow
+    `buildElkEdges` re-anchors onto the host, so ELK sees a split where Logic-Core shows none), and
+    `boundary-src` (the source is a boundary event, pinned to its host's edge).
+  - *Area* is not comparable between the ELK-raw row and the pipeline rows: raw ELK has not placed
+    lane bands yet, so the difference measures the existence of swimlanes, not bloat. It is also
+    not a quality score for a wrapped layout, which trades width for height on purpose — hence the
+    separate aspect-ratio column.
+  - *Crossings* covers sequence flows only, not message flows or associations.
+  - *Edge-through-node* tests node boxes only — not edge-vs-edge, not lane or pool bands.
 - Three variants measured per fixture: **ELK raw** (straight out of `runElkLayout`, before any of
   `coordinates.js`'s post-processing runs), **default** (`visualRefinement: false`, the pipeline's
   default), **visualRefinement: true**.
@@ -42,65 +87,68 @@ the concrete combination and sequencing.
 
 ## 3. Baseline results
 
-Full table in `tests/bench/layout-metrics-baseline.md`. Headline numbers:
+Full table in `tests/bench/layout-metrics-baseline.md`. Headline numbers, `visualRefinement: false`,
+after the crossing-repair fix described in §1:
 
-| Fixture | Crossings (raw→default) | Area (raw→default) | Chain alignment (raw→default) |
+| Fixture | Crossings (raw→default) | Chain alignment | Not alignable |
 |---|---|---|---|
-| simple-approval | 0→0 | 154 440→154 440 | 50%→50% (unaffected — a single 2-node lane) |
-| multi-pool-collaboration | 0→0 | 485 760→725 604 (+49%) | 100%→100% |
-| realistic-collaboration | 0→2 | 1 265 656→1 965 588 (+55%) | 100%→71% |
-| all-element-classes | 0→0 | 116 530→289 428 (+148%) | 100%→60% |
-| expanded-subprocess | 0→0 | 134 960→134 960 (0%) | 100%→100% |
-| sparse-lanes | 0→0 | 566 000→1 330 100 (+135%) | 100%→40% |
-| wide-pipeline | 0→0 | 372 160→372 160 (0%) | 100%→100% |
-| bpmn-generator-pipeline | 0→3 | 1 893 790→3 641 415 (+92%) | 83%→67% |
+| simple-approval | 0→0 | 1/1 | 1 branch |
+| multi-pool-collaboration | 0→0 | 5/5 | 2 branch |
+| realistic-collaboration | 0→2 | 15/15 | 4 cross-lane, 1 hosts-boundary, 1 boundary-src |
+| all-element-classes | 0→0 | 3/3 | 1 hosts-boundary, 1 boundary-src |
+| expanded-subprocess | 0→0 | 6/6 | — |
+| sparse-lanes | 0→0 | 1/1 | 2 cross-lane, 2 branch |
+| wide-pipeline | 0→0 | 26/26 | — |
+| bpmn-generator-pipeline | 0→2 | 5/5 | 2 cross-lane, 5 branch |
 
-Two clear patterns: **crossings stay at or near zero** in every case (max delta +3), and **area and
-chain alignment move a lot** whenever a fixture has more than one lane band that grows independently
-(any single-lane or single-participant fixture — `simple-approval`, `expanded-subprocess`,
-`wide-pipeline` — shows 0% change in both, which is the control case confirming the effect is lane-band
-specific, not a general artifact of post-processing).
+**Alignment is at 100 % everywhere** — 59 of 59 alignable links, in both refinement modes. The only
+non-zero column is crossings, and only on the two most complex fixtures. That is the whole of what
+the measurements support.
 
-One anomaly outside this pattern, noted for the record but out of scope here: `visualRefinement: true`
-on `wide-pipeline` grows area from 372 160 to 3 161 328 px² (8.5×) and adds 4 bends where there were
-none — almost certainly the `elk.layered.wrapping.strategy: MULTI_EDGE` kicking in above the 20-node
-`elkWrappingNodeThreshold` (`scripts/config.json`), which folds a wide pipeline into multiple rows but,
-on this measurement, made the bounding box larger rather than smaller. That contradicts the feature's
-own purpose and is worth its own investigation — separate from this analysis, since it's a
-`visualRefinement` regression candidate, not a Petrov-idea question.
+**On area.** The first version of this document read a 50–135 % area increase from raw ELK to the
+final pipeline as bloat. It is not: raw ELK has not placed lane bands at the point that snapshot is
+taken, so the growth is the padding and stacking that swimlanes *are*. Comparing a layout that has
+lanes against one that does not yet have them measures the feature, not a regression. The area column
+is retained for tracking pipeline-to-pipeline changes and carries an explicit warning against the
+cross-row comparison.
 
-## 4. Where quality is lost: chain alignment, not crossings
+**On the `wide-pipeline` "anomaly".** The first version flagged `visualRefinement: true` growing that
+fixture's area 8.5× and adding 4 bends as a probable regression that "contradicts the feature's own
+purpose". It does not. Wrapping (`elk.layered.wrapping.strategy: MULTI_EDGE`, above the 20-node
+`elkWrappingNodeThreshold`) folds the 27 nodes into **5 rows** at center-y 120/301/482/663/844; the 4
+"new" bends are exactly the 4 row transitions, and the 4 alignment losses are exactly the 4 links
+spanning a fold. Width drops 4652→3932 and height rises 80→804, taking the aspect ratio from 58.15 to
+4.89 — which is precisely what the existing test at `scripts/bpmn/pipeline.test.js` (`Pass 5 metric
+assertions`, asserting `w/h <= 4.5` and `offRatio/onRatio > 2`) demands. Area was simply the wrong
+instrument for a feature whose entire job is to trade width for height.
 
-This is the load-bearing measurement for the whole analysis. Petrov's article treats crossing
-minimization as the central metric (§1 of the article: "min C(D)"), and our lane-blind ELK layering
-followed by an independent per-lane y-shift (`coordinates.js` §5.0a) is exactly the kind of step that
-*should*, per the article's own argument, reintroduce crossings a lane-aware algorithm would avoid. It
-mostly doesn't — the delta is +0 to +3 across all eight fixtures.
+## 4. Alignment: measured, and not broken
 
-What the lane-shift **does** break is straight-line alignment. Isolating every "plain link" (a
-single-successor node feeding a single-predecessor node) whose center-y moved after the lane-shift:
+This was the load-bearing claim of the first version, so it is worth stating precisely what replaced
+it.
 
-```
-sparse-lanes.json
-  f3: join -> b1   deltaY = 497.5 px
-  f4: b1 -> c1     deltaY = 225.0 px
-  f5: c1 -> d1     deltaY = 225.0 px
+Filtering the 71 plain 1:1 chain links down to those that could structurally be straight leaves 59,
+and **all 59 share their center-y to within 1 px** — in `visualRefinement: false` and `true` alike.
+The 12 excluded links are excluded for reasons that are each verifiable rather than assumed:
 
-bpmn-generator-pipeline.json
-  fu2:  t_describe -> t_receive    deltaY = 37.0 px
-  fo5:  t_validate -> gw_review    deltaY = 13.5 px
-  fo16: t_svg -> t_compliance      deltaY = 225.0 px
-  fo17: t_compliance -> t_assemble deltaY = 839.0 px
-```
+- **Cross-lane (9 links).** All three "breaks" originally cited from `sparse-lanes` are of this kind:
+  `join`@laneA → `b1`@laneB → `c1`@laneC → `d1`@laneD. A link between two lanes cannot be horizontal
+  without defeating the lanes. The 839 px figure quoted in the first version was one of these, in
+  `bpmn-generator-pipeline`.
+- **Branch (10 links).** The target is a split, or the source a join. ELK positions such a node on
+  the barycenter of its branches; aligning it to its single partner would straighten one edge by
+  bending two.
+- **Boundary-related (2 links).** Traced concretely in `all-element-classes`: task `t` shows
+  out-degree 1 in Logic-Core, but it hosts boundary event `b`, and `buildElkEdges` re-anchors `b`'s
+  outgoing flow onto `t`, so ELK sees a split. Its 13.5 px offset from gateway `g` is therefore
+  ELK's barycenter placement, not our post-processing: measured on **raw ELK output**, `t`'s bbox
+  center is y=131 and `g`'s is y=117.5 — the same 13.5 px, before `coordinates.js` runs at all. The
+  final shape centers are identical to those raw values, i.e. our pipeline preserved ELK's decision
+  exactly rather than corrupting it.
 
-ELK's own layering had these nodes flush. `coordinates.js` §5.0a (`coordinates.js:161-209`) derives
-each lane's band **independently** from its own content, then re-stacks bands top-down — a chain that
-spans two lanes gets each half moved by that lane's own delta, with no attempt to keep the chain
-straight afterward. An 839 px jump is not a subtle cosmetic issue; it turns what should read as a
-straight arrow into a route that visibly detours across the diagram. This is precisely the failure mode
-Petrov's **Run-and-Anchor** alignment step (§5) is designed to prevent, and precisely what our
-`§5.0c` happy-path leveling *would* address if it weren't `CFG.layout.happyPathLeveling: false` by
-default and limited to happy-path-flagged edges rather than every plain link.
+So `coordinates.js` §5.0a's per-lane shift, the mechanism the first version blamed, keeps every
+alignment that can be kept. Neither Petrov's Run-and-Anchor step nor his lane-constrained barycenter
+reordering has anything to correct here.
 
 ## 5. The Petrov/Flowable algorithm — summary
 
@@ -138,36 +186,43 @@ that this is heuristic, not optimal, throughout.
 |---|---|---|---|---|---|---|
 | 1 | DFS cycle removal | Yes — `elk.layered.cycleBreaking.strategy: GREEDY_MODEL_ORDER` (`scripts/config.json`), functionally the same job (identify back-edges, order the DAG). | No — happens entirely inside ELK, before our code sees the graph. | — | n/a | **Not worth revisiting.** Already covered. |
 | 2 | Network Simplex layering | Yes — `elk.layered.nodePlacement.strategy: NETWORK_SIMPLEX` is our exact default. | No. | — | n/a | **Not worth revisiting.** Already covered, and confirmed by the ELK-options experiment (§7) that `BRANDES_KOEPF` isn't clearly better on our fixture sizes. |
-| 3 | **Lane-constrained barycenter crossing minimization** | No. ELK's `LAYER_SWEEP` crossing minimization is lane-blind by design (`layout.js:107-120` explains why `elk.partitioning` can't be used for lanes) — it optimizes crossings in a graph that doesn't know lanes exist, and our lane-shift then moves nodes afterward with no re-check. | Yes — this is the mechanism, not a separate bug: §5.0a moves nodes into lane bands *after* ELK already decided on crossing-minimal positions, with no crossing-aware placement in the shifted result. | New post-ELK pass, between raw ELK output and §5.0a: run a lane-capped barycenter sweep on the ELK-produced order *before* deriving lane bands, so ordering-within-lane is chosen with lane membership already known, rather than fixed by ELK and then physically relocated. | Crossings are already near-zero (§3–4) — the measured payoff of proper lane-constrained minimization would be small on these fixtures. Larger, denser real-world diagrams are the case where this pays off; we don't have a fixture that size. | **Medium effort, low urgency.** Worth doing only paired with #4, and only if a future dense fixture shows crossings climbing. |
-| 4 | **Run-and-Anchor vertical alignment** | No direct equivalent. `favorStraightEdges: true` is ELK's own attempt at this, but it operates *before* our lane-shift, so any alignment it achieves is exactly what §5.0a then destroys. Our own `§5.0c` happy-path leveling is a partial, narrower version (median-snap, happy-path edges only, off by default). | Yes, directly measured: §4's 37–839 px chain-alignment breaks are exactly this failure mode. | New post-lane-shift pass: for every plain link (or every edge, weighted by "is this a straight two-node hop"), snap chains to a shared y within each lane the way §5.0c does, but unconditionally (not gated behind `happyPathLeveling`, not restricted to happy-path edges) and only after all lane bands are final. | **This is the best-evidenced adoption in this analysis.** Directly explains the chain-alignment drop in §3 (100%→40–71% on multi-lane fixtures) and the concrete 497–839 px jumps in §4. | **Small-to-medium effort, well-scoped.** The groundwork already exists in `coordinates.js` §5.0c/§5.0d — this is closer to "generalize an existing pass" than "add new machinery." |
-| 5 | Left-shift compressor | Partially — ELK's own `elk.layered.compaction.postCompaction.strategy: EDGE_LENGTH` plus our `compactLanes` (`visual-refinement.js`, opt-in) both compact, but neither is layer-aware left-shift with crossing-preservation guarantees; `compactLanes` compacts lane *height*, not layer *width*. | Not broken so much as **not attempted on the width axis** — CLAUDE.md's own admission (`visual-refinement.js:186-196`) is that lane-compaction saves a near-constant ~45 px/lane independent of content density. | Lower priority than #3/#4. If pursued, targets width (layer spacing), which is a different axis than what §3/§4 measured as broken. | Not measured in this analysis (area growth in §3 is dominated by lane-band stacking, not layer spacing — a different mechanism). | **Skip for now.** No measured evidence it's our bottleneck; revisit only after #3/#4 ship and area is re-measured. |
-| 6 | Orthogonal router with obstacle avoidance | Yes for the *initial* route — `elk.edgeRouting: ORTHOGONAL`. No for anything downstream — `edge-simplify.js` only tries 2 candidate 1-bend L-shapes (never 2-bend staircases), collision-checks against nodes only (never edge-vs-edge), and multiple synthetic-route sites (§5.0e, §5.2, §5.5) rebuild routes with a fixed 4-point construction regardless of whether fewer bends would do. | Yes, by construction — every route that survives the lane-shift and gets rebuilt loses whatever obstacle-awareness ELK's router had. | A genuinely bigger lift: proper obstacle-aware orthogonal routing (Petrov's own "computational cost of orthogonal pathfinding" complaint) touching `edge-simplify.js` and all three synthetic-route sites in `coordinates.js`. | `edgeThroughNode` in our metrics stays low (0–3) across fixtures — not presently a visible problem on these fixture sizes, though the mechanism (fixed 4-point routes) is clearly a simplification that could bite on denser real-world graphs. | **Defer.** No measured evidence of current harm; the existing L-shape simplification is "good enough" on this fixture set. Revisit if a real customer diagram shows edges cutting through nodes. |
+| 3 | Lane-constrained barycenter crossing minimization | No. ELK's `LAYER_SWEEP` is lane-blind by design (`layout.js` explains why `elk.partitioning` cannot be used for lanes). | **No.** This was the first version's claim and it does not survive measurement: raw ELK is crossing-free on all eight fixtures, and the crossings that do appear come from route *rebuilding*, not from node placement (idea 6). | Would be a lane-capped barycenter sweep before §5.0a derives bands. | **None measurable.** There are no placement-induced crossings on any fixture to remove. | **Not adopted.** No defect to fix. Revisit only if a future dense fixture shows placement-induced crossings — which would be visible as a non-zero crossing count in the ELK-raw row. |
+| 4 | Run-and-Anchor vertical alignment | Partly — `favorStraightEdges: true`. | **No.** All 59 structurally alignable links are already exactly aligned, in both refinement modes (§4). The 839 px and 497 px "breaks" the first version cited are cross-lane links, which cannot be straight by definition. | Would generalize `coordinates.js` §5.0c beyond happy-path edges. | **None measurable.** Alignment is at 100 %; a pass can only preserve it, not improve it — and would risk the barycenter placements that keep branch edges straight. | **Not adopted.** Nothing to fix, and a real risk of making split/join placement worse. |
+| 5 | Left-shift compressor | Partially — `elk.layered.compaction.postCompaction.strategy: EDGE_LENGTH` plus our opt-in `compactLanes`, which compacts lane *height*, not layer *width*. | Not broken; not attempted on the width axis. | Would target layer spacing. | Not measured. The area growth the first version pointed to turned out to be swimlane geometry, not bloat (§3), so the motivating evidence is gone. | **Defer.** No measured evidence it is a bottleneck. |
+| 6 | **Orthogonal router with obstacle avoidance** | Yes for the *initial* route (`elk.edgeRouting: ORTHOGONAL`) — and ELK's is good: 0 crossings everywhere. No for anything downstream. | **Yes, and this is the one real defect found.** Every route `coordinates.js` deletes and rebuilds (§5.0a → §5.2, plus §5.0e/§5.5) picks its axis from `\|dy\| > \|dx\|` with no obstacle or crossing test, discarding exactly the obstacle-awareness ELK had. Result: +2 crossings in `realistic-collaboration`, +3 in `bpmn-generator-pipeline`. | **Done, partially:** `repairCrossings` in `scripts/bpmn/edge-simplify.js` re-routes edges that cross, keeping the clipped endpoints and the shape side they attach to; a no-op when no crossing exists, so no golden fixture is touched. | `bpmn-generator-pipeline` 3 → 2 crossings. The remaining two, and the two in `realistic-collaboration`, sit where every candidate corridor runs through a node. | **Shipped for the tractable cases.** Full obstacle-aware pathfinding (A\* over a visibility graph) remains open and is the only Petrov idea with evidence behind it — see §8. |
 
 ## 7. Alternative coordinate-computation methods
 
 - **A — ELK option tuning.** Cheapest possible lever: change `scripts/config.json`'s `elk.layered`
   block, no code changes. Tested `BRANDES_KOEPF` node placement, `thoroughness: 50`,
-  `considerModelOrder.strategy: NONE`, `favorStraightEdges: false` against raw ELK output on the four
-  largest/densest fixtures. Result: **negligible effect.** `BRANDES_KOEPF` shaved a small number of
-  bends (realistic-collaboration 6→4, bpmn-generator-pipeline 18→16) with no change to crossings or
-  chain alignment; every other variant was bit-for-bit identical to baseline on these fixture sizes.
-  ELK's default layering is already doing its job well — **the bottleneck is downstream of ELK, not
-  inside it.** Verdict: not worth pursuing beyond possibly adopting `BRANDES_KOEPF` as a free minor bend
-  reduction; no combination tested moved the metrics that actually matter (§4).
-- **B — Petrov's ideas as post-ELK passes.** See §6 — the recommended path, ideas #3/#4 specifically.
+  `considerModelOrder.strategy: NONE`, `favorStraightEdges: false`. `thoroughness`,
+  `considerModelOrder` and `favorStraightEdges` were bit-for-bit identical to baseline on these
+  fixture sizes — ELK's defaults are already doing their job.
+  `BRANDES_KOEPF` was then measured **end-to-end through the full pipeline** (the first version only
+  measured it on raw ELK output, which says nothing about what reaches the diagram). Totalled over
+  all eight fixtures: **bends 38 → 35, crossings 4 → 4, alignment 59/59 → 59/59.** That passes the
+  adoption gate — bends improve, nothing regresses — but the prize is an 8 % bend reduction, and the
+  price is regenerating all 28 byte-exact golden files, 14 of which (`*.refined.*`) have no CLI path
+  to regenerate them at all: `scripts/bpmn/pipeline.js` has no `--refine` flag, so
+  `CONTRIBUTING.md`'s documented regeneration loop covers only half of them.
+  **Verdict: measured, gate passed, deliberately not adopted.** Recorded here with the numbers so the
+  decision can be revisited without re-measuring — most sensibly bundled with some other change that
+  already requires a golden regeneration, or after a `--refine` flag closes the tooling gap.
+- **B — Petrov's ideas as post-ELK passes.** See §6. Of the six, only idea 6 (obstacle-aware routing)
+  had evidence behind it, and the tractable part of it has shipped.
 - **C — ELK run per lane** (the `synergycodes/bpmn-editor` approach — Angular 19 + `ng-diagram`, ELK
   `layered` with `RIGHT` direction, one ELK invocation per swimlane, lanes stacked by hand afterward,
   auto-layout manually triggered rather than automatic). Simpler than our current two-stage approach
   (global ELK + lane-shift) in one sense — no shift-induced misalignment because ELK never had a
   cross-lane view to begin with — but trades that for being **structurally blind to cross-lane
   crossings and alignment**, which is the opposite failure mode: it can't optimize what it never sees.
-  Not an improvement over our current architecture, let alone over adopting #3/#4.
+  Not an improvement over our current architecture.
 - **D — Full grid-based engine, Petrov-style** (ELK for ranking only; our own grid, lane-constrained
   barycenter, Run-and-Anchor, left-shift compressor, and orthogonal router). This is what the article
-  itself built. Given the measured findings — crossings aren't broken, only alignment and area are —
-  building a second full engine to fix two specific, well-localized defects is disproportionate. The
-  targeted-pass approach (B) gets the same measured benefit at a fraction of the implementation and
-  maintenance cost, and keeps ELK's already-good layering and crossing minimization intact.
+  itself built. Given the measured findings — placement and alignment are both sound, and the single
+  defect was in route *rebuilding* — a second full engine would replace a great deal of working
+  machinery to fix something a bounded repair pass already addresses. What remains open (§8) is one
+  component of that engine, its router, not the engine.
 - **E — `bpmn-auto-layout` (bpmn.io).** Already benchmarked and rejected — renders zero pool/lane
   shapes and drops message flows and later participants in a collaboration (`EVALUATION.md`,
   `scripts/bench/compare-bpmn-auto-layout.mjs`). Not revisited here; no new information changes that
@@ -184,46 +239,60 @@ that this is heuristic, not optimal, throughout.
 
 ## 8. Recommendation
 
-| Idea | Benefit measured? | Effort | Risk | Priority |
-|---|---|---|---|---|
-| #4 Run-and-Anchor-style alignment (generalize §5.0c) | **Yes — the strongest finding in this analysis** (§4) | S–M | Low — extends an existing, already-shipped mechanism | **1** |
-| #3 Lane-constrained barycenter reorder | Not yet (crossings already near-zero on our fixtures) but theoretically sound and cheap to add alongside #4 | M | Low-Medium — touches ordering before §5.0a runs | **2, bundled with #1** |
-| A — `BRANDES_KOEPF` node placement | Small (bend count only) | Trivial (config change) | Very low | **3, opportunistic** |
-| #5 Left-shift width compaction | Not measured as broken | M | Medium | Defer |
-| #6 Full obstacle-aware routing | Not measured as broken | L | Medium-High | Defer |
-| D Full Petrov-style engine | Superseded by targeted passes | XL | High | Reject |
-| C ELK-per-lane | Trades one failure mode for another | M | Medium | Reject |
+| Idea | Benefit measured? | Status |
+|---|---|---|
+| #6 Crossing repair for rebuilt routes | **Yes — the only defect found.** 5 crossings across two fixtures, none of them in ELK's own output | **Done.** `repairCrossings`; clears 1 of 5 |
+| #6b Full obstacle-aware pathfinding | The 4 remaining crossings, in congested regions | **Open** — the only item with evidence behind it |
+| A — `BRANDES_KOEPF` node placement | Bends 38 → 35 end-to-end; gate passed | **Measured, not adopted** — 8 % for 28 golden regenerations (§7 A) |
+| #4 Run-and-Anchor alignment | **No** — alignment is already 100 % (§4) | Rejected; would risk branch placement |
+| #3 Lane-constrained barycenter reorder | **No** — no placement-induced crossings exist | Rejected |
+| #5 Left-shift width compaction | Not measured as broken; the area evidence dissolved (§3) | Defer |
+| C ELK-per-lane | Trades one failure mode for another | Reject |
+| D Full Petrov-style engine | Nothing left for it to fix | Reject |
 
-**Concrete combination, in order:**
+**What was done, and what remains.**
 
-1. Generalize `§5.0c` happy-path leveling into an always-on chain-alignment pass that runs *after*
-   §5.0a's lane-band stacking is final (not gated behind `CFG.layout.happyPathLeveling`, not restricted
-   to happy-path-flagged edges) — this directly targets the 497–839 px breaks measured in §4.
-   Abort criterion: re-run `layout-metrics.mjs`; if chain alignment on `sparse-lanes` and
-   `bpmn-generator-pipeline` doesn't recover to at least 90%, the snapping logic needs rework before
-   proceeding to step 2.
-2. Add a lane-capped barycenter sweep before §5.0a derives lane bands, so within-lane node order is
-   chosen with lane membership known rather than inherited from a lane-blind ELK ordering. Bundle with
-   step 1 since both touch the same lane-shift boundary; verify crossings don't regress (they're
-   already near-zero — any increase here is a bug, not a trade-off).
-3. Adopt `BRANDES_KOEPF` node placement in `scripts/config.json` as a low-risk, low-effort follow-on —
-   independent of steps 1–2, can ship any time.
-4. Re-run the full `layout-metrics.mjs` baseline after 1–3 and update
-   `tests/bench/layout-metrics-baseline.md`; if area is still inflating on multi-lane fixtures at that
-   point (separately from the `wide-pipeline` wrapping anomaly noted in §3), that's the trigger to
-   scope idea #5 (left-shift compaction) as a follow-up, not before.
+Done in this pass: the metric was repaired so it can tell a defect from correct behaviour (§0), and
+the one real defect — crossings introduced by our own route rebuilding — got a bounded repair pass
+that clears the tractable case. Both are covered by tests; no golden file changed, because the pass
+is a no-op on crossing-free diagrams.
 
-Everything above is scoping for a **separate implementation task** — this analysis makes no code
-changes to `layout.js`, `coordinates.js`, `edge-simplify.js`, or `visual-refinement.js`.
+Open, in the order the evidence supports:
 
-## 9. Appendix — raw experiment data
+1. **Obstacle-aware pathfinding for the four remaining crossings.** They sit where every candidate
+   corridor from the repair pass runs through a node — in `realistic-collaboration`, the boundary
+   event `in_timer` exits upward *through its own host* `in_check` and then along the column `inf2`
+   descends in; in `bpmn-generator-pipeline`, two edges in a rework loop are boxed in by `t_refine`.
+   A real router (A\* over a visibility graph, per Petrov's step 8) would resolve these. Worth doing
+   only if these crossings are judged visually harmful — four crossings across two of eight
+   fixtures, neither of which has a golden file.
+2. **The boundary-event exit direction, separately and more cheaply.** That `in_timer` case is not
+   really a routing problem: an edge leaving a boundary event should exit *away* from its host, and
+   §5.2 picks the exit side purely from where the target sits, which for a boundary event straddling
+   its host's bottom edge sends it back through the host. Fixing that is small, local, and would
+   likely take `realistic-collaboration` to zero crossings on its own. It also explains that
+   fixture's `edgeThroughNode: 1`.
+3. **A `--refine` CLI flag,** so all 28 goldens have a documented regeneration path rather than 14.
+   Not a layout improvement, but it is what currently makes any global layout change expensive —
+   including `BRANDES_KOEPF` above.
 
-- Full baseline table: [`tests/bench/layout-metrics-baseline.md`](../tests/bench/layout-metrics-baseline.md).
-- ELK-options experiment (BRANDES_KOEPF / thoroughness / considerModelOrder / favorStraightEdges) was
-  run as a scratch script against `logicCoreToElk`/`runElkLayout` directly (not committed — reproduce
-  by mutating `CFG.elk.layered` before calling `logicCoreToElk` on any fixture and re-measuring with
-  the same metric functions as `scripts/bench/layout-metrics.mjs`). Summary in §7.
-- Chain-misalignment pixel deltas (§4) were extracted by filtering `runPipeline`'s
-  `coordMap.coords` for plain links (`outDegree(source) === 1 && inDegree(target) === 1`) and comparing
-  center-y before/after the lane-shift; reproduce against `sparse-lanes.json` and
-  `bpmn-generator-pipeline.json`.
+The recommendations in the original version of this section are superseded in full.
+
+## 9. Appendix — reproducing the numbers
+
+- Full baseline table: [`tests/bench/layout-metrics-baseline.md`](../tests/bench/layout-metrics-baseline.md),
+  regenerated with `cd scripts && node bench/layout-metrics.mjs`.
+- **Alignment (§4).** The alignability rule lives in `alignabilityOf` in
+  `scripts/bench/layout-metrics.mjs`; the baseline table prints both the quota and the excluded
+  links by reason, so the 59/59 figure and its 12 exclusions are readable straight off it.
+- **The 13.5 px boundary-event case (§4).** Reproduce by calling `logicCoreToElk` + `runElkLayout`
+  on `tests/fixtures/all-element-classes.json` and comparing the raw bbox centers of `t` (131) and
+  `g` (117.5) against the final `coordMap.coords` shape centers — they are the same numbers, which
+  is what shows the offset is ELK's and not ours.
+- **ELK-option variants (§7 A).** Mutate `CFG.elk.layered` (from `scripts/shared/utils.js`) before
+  calling `runPipeline`, then re-measure. Measured end-to-end, not on raw ELK output — the
+  distinction matters, and getting it wrong is what made the first version's reading of
+  `BRANDES_KOEPF` unusable.
+- **Crossings (§1, §6).** `countCrossings` in the `repairCrossings` suite in
+  `scripts/bpmn/pipeline.test.js` restates the bench harness's definition, and the suite asserts the
+  3 → 2 result on `bpmn-generator-pipeline` by toggling `CFG.layout.crossingRepair`.

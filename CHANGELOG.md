@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A rebuilt edge route could cross where ELK's route did not.** `coordinates.js` discards a route
+  whenever the lane-band shift moves its endpoints by different deltas (§5.0a) or its source is a
+  boundary event (§5.0-), and rebuilds it as a fixed 4-point Z whose axis is picked from
+  `|dy| > |dx|` alone — no obstacle test, no crossing test. A new `repairCrossings` pass in
+  `scripts/bpmn/edge-simplify.js` looks for the crossings that produces and tries alternative
+  orthogonal routes for the edges involved, keeping the clipped endpoints and the side of the shape
+  they attach to. It is a no-op unless a crossing actually exists, so crossing-free diagrams —
+  every golden fixture among them — are untouched. Opt out with `layout.crossingRepair: false`.
+  Measured: the rework loop in `tests/fixtures/bpmn-generator-pipeline.json` goes from three
+  crossings to two. The remaining two, and the two in `realistic-collaboration.json`, sit where
+  every candidate corridor runs through a node; clearing those needs real pathfinding, which this
+  pass deliberately is not.
+- **The layout-quality metric counted correct behaviour as a defect.**
+  `scripts/bench/layout-metrics.mjs` asked whether a link's endpoints share a center-y without
+  asking whether they structurally could, so cross-lane links, row folds in a wrapped layout, and
+  nodes ELK had placed on their branches' barycenter all registered as misalignment. It reported
+  40% alignment on `sparse-lanes` where in truth every alignable link was already exact. Alignment
+  is now decided by an explicit alignability rule that names why each excluded class is not a
+  defect, and area gained an aspect-ratio column plus a note that it is not comparable between raw
+  ELK and the pipeline. `docs/layout-quality-analysis.md` is corrected accordingly.
+
 ## [3.6.0] - 2026-08-01
 
 ### Added
