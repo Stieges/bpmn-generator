@@ -145,7 +145,8 @@
     "happyPathLeveling": false,
     "crossLaneDeconflict": true,
     "crossingRepair": true,
-    "crossingRepairMaxPasses": 2
+    "crossingRepairMaxPasses": 2,
+    "boundaryExitClearance": 12
   },
   "elk": {
     "layered": {

@@ -3960,3 +3960,126 @@ describe('repairCrossings', () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// Boundary-event flows
+//
+// A boundary event straddles its host's outline, so half of it sits inside the
+// host. That makes two things easy to get wrong, and both were: leaving through
+// the host's body, and (for an event nested in a subprocess) never being
+// re-routed off the host at all.
+//
+// Scoped to visualRefinement: false. With refinement ON, compactLanes shifts
+// edge waypoints across the whole collaboration while shifting nodes only
+// within the pool it is compacting, so in a multi-participant model edges come
+// away from their shapes wholesale — 34 loose ends in realistic-collaboration,
+// 16 in multi-pool-collaboration, none in single-pool sparse-lanes. That is a
+// separate, pre-existing defect; asserting around it here would just encode it.
+// ═══════════════════════════════════════════════════════════════════════
+
+const BOUNDARY_FIXTURES = [
+  'all-element-classes.json',
+  'realistic-collaboration.json',
+  'subprocess-child-fidelity.json',
+];
+
+/** Every node, including subprocess children. */
+function allNodesDeep(lc) {
+  const out = {};
+  const walk = (ns) => {
+    for (const n of ns || []) { out[n.id] = n; if (n.nodes) walk(n.nodes); }
+  };
+  for (const p of (lc.pools ? lc.pools : [lc])) walk(p.nodes);
+  return out;
+}
+
+/** Every sequence flow, including those inside subprocesses. */
+function allEdgesDeep(lc) {
+  const out = [];
+  const walk = (ns) => {
+    for (const n of ns || []) { if (n.edges) out.push(...n.edges); if (n.nodes) walk(n.nodes); }
+  };
+  for (const p of (lc.pools ? lc.pools : [lc])) { out.push(...(p.edges || [])); walk(p.nodes); }
+  return out;
+}
+
+/**
+ * Does the polyline reach into the OPEN interior of the box? Strict, so that a
+ * segment lying exactly on the outline counts as touching, not entering — a
+ * boundary flow running along its host's edge is normal and must stay allowed.
+ */
+function routeEntersBox(pts, box) {
+  const EPS = 1e-9;
+  const openOverlap = (lo, hi, min, max) => (hi - lo < EPS)
+    ? (lo > min + EPS && lo < max - EPS)
+    : (Math.max(lo, min) < Math.min(hi, max) - EPS);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (openOverlap(Math.min(a.x, b.x), Math.max(a.x, b.x), box.x, box.x + box.w)
+     && openOverlap(Math.min(a.y, b.y), Math.max(a.y, b.y), box.y, box.y + box.h)) return true;
+  }
+  return false;
+}
+
+describe('boundary event flows', () => {
+  test('routeEntersBox tells entering from merely touching', () => {
+    const box = { x: 100, y: 100, w: 100, h: 100 };
+    expect(routeEntersBox([{ x: 150, y: 50 }, { x: 150, y: 250 }], box)).toBe(true);
+    expect(routeEntersBox([{ x: 100, y: 200 }, { x: 250, y: 200 }], box)).toBe(false); // along the bottom edge
+    expect(routeEntersBox([{ x: 50, y: 50 }, { x: 90, y: 50 }], box)).toBe(false);     // clear of it
+  });
+
+  test('no boundary flow cuts through its own host', async () => {
+    for (const name of BOUNDARY_FIXTURES) {
+      const lc = loadFixture(name);
+      const nodes = allNodesDeep(lc);
+      const r = await runPipeline(loadFixture(name), { visualRefinement: false });
+      for (const e of allEdgesDeep(lc)) {
+        const src = nodes[e.source];
+        if (src?.type !== 'boundaryEvent') continue;
+        const host = r.coordMap.coords[src.attachedTo];
+        const pts = r.coordMap.edgeCoords[e.id];
+        expect(pts).toBeDefined();
+        expect(`${name} ${e.id} enters host: ${routeEntersBox(pts, host)}`)
+          .toBe(`${name} ${e.id} enters host: false`);
+      }
+    }
+  });
+
+  test('a boundary flow starts at the event, including inside a subprocess', async () => {
+    // The nested case is the one that regressed: §5.0- and §5.2 used to walk
+    // only top-level proc.edges, so a boundary flow inside an expanded
+    // subprocess kept ELK's route, which starts at the HOST shape.
+    for (const name of BOUNDARY_FIXTURES) {
+      const lc = loadFixture(name);
+      const nodes = allNodesDeep(lc);
+      const r = await runPipeline(loadFixture(name), { visualRefinement: false });
+      for (const e of allEdgesDeep(lc)) {
+        const src = nodes[e.source];
+        if (src?.type !== 'boundaryEvent') continue;
+        const ev = r.coordMap.coords[e.source];
+        const start = r.coordMap.edgeCoords[e.id][0];
+        const onEvent = Math.abs(start.x - (ev.x + ev.w / 2)) <= ev.w / 2 + 1
+                     && Math.abs(start.y - (ev.y + ev.h / 2)) <= ev.h / 2 + 1;
+        expect(`${name} ${e.id} starts on event: ${onEvent}`)
+          .toBe(`${name} ${e.id} starts on event: true`);
+      }
+    }
+  });
+
+  test('routing the flow away from its host clears realistic-collaboration', async () => {
+    const lc = loadFixture('realistic-collaboration.json');
+    const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement: false });
+    // in_timer used to leave upward through in_check and along the column inf2
+    // descends in, which cost two crossings. Both are gone.
+    expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
+    expect(r.diagnostics.ok).toBe(true);
+  });
+
+  test('the diagram integrity check stays clean on every boundary fixture', async () => {
+    for (const name of BOUNDARY_FIXTURES) {
+      const r = await runPipeline(loadFixture(name), { visualRefinement: false });
+      expect(`${name}: ${r.diagnostics.issues.filter(i => i.severity === 'ERROR').length}`).toBe(`${name}: 0`);
+    }
+  });
+});
