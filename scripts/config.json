@@ -143,7 +143,9 @@
     "artifactGap": 30,
     "poolOrder": "auto",
     "happyPathLeveling": false,
-    "crossLaneDeconflict": true
+    "crossLaneDeconflict": true,
+    "crossingRepair": true,
+    "crossingRepairMaxPasses": 2
   },
   "elk": {
     "layered": {

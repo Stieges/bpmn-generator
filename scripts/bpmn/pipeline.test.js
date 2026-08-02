@@ -24,7 +24,8 @@ import {
   extractSubProcessAsLogicCore,
 } from './pipeline.js';
 import { normalizeLaneAssignments, orderParticipantsByMessageFlow } from './topology.js';
-import { wrapText, wrapTextByPx } from '../shared/utils.js';
+import { repairCrossings } from './edge-simplify.js';
+import { wrapText, wrapTextByPx, CFG } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
@@ -3780,5 +3781,182 @@ describe('lane label clearance', () => {
       ...['start1', 'task1'].map(id => r.coordMap.coords[id].x)
     );
     expect(firstLabelX - (lane.x + 30)).toBeGreaterThan(25);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Crossing repair (edge-simplify.js repairCrossings)
+//
+// The routes coordinates.js deletes and rebuilds choose their axis by
+// |dy| > |dx| alone, so they can cross an edge ELK had routed around.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Segment-pair intersections between non-adjacent routes — the same count
+ *  scripts/bench/layout-metrics.mjs reports, restated here so the test does
+ *  not depend on the bench harness. */
+function countCrossings(edgeCoords, edges) {
+  const seg = (pts) => {
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6) continue;
+      out.push([a, b]);
+    }
+    return out;
+  };
+  const orient = (a, b, c) => {
+    const v = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
+    return Math.abs(v) < 1e-9 ? 0 : (v > 0 ? 1 : 2);
+  };
+  const on = (a, b, c) =>
+    Math.min(a.x, b.x) - 1e-6 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-6 &&
+    Math.min(a.y, b.y) - 1e-6 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-6;
+  const hit = (p1, p2, p3, p4) => {
+    const o1 = orient(p1, p2, p3), o2 = orient(p1, p2, p4);
+    const o3 = orient(p3, p4, p1), o4 = orient(p3, p4, p2);
+    if (o1 !== o2 && o3 !== o4) return true;
+    return (o1 === 0 && on(p1, p2, p3)) || (o2 === 0 && on(p1, p2, p4))
+        || (o3 === 0 && on(p3, p4, p1)) || (o4 === 0 && on(p3, p4, p2));
+  };
+  const list = edges.filter(e => edgeCoords[e.id] && edgeCoords[e.id].length >= 2);
+  let n = 0;
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], b = list[j];
+      if (a.source === b.source || a.source === b.target
+       || a.target === b.source || a.target === b.target) continue;
+      for (const [p1, p2] of seg(edgeCoords[a.id])) {
+        for (const [p3, p4] of seg(edgeCoords[b.id])) if (hit(p1, p2, p3, p4)) n++;
+      }
+    }
+  }
+  return n;
+}
+
+function allSequenceEdges(lc) {
+  const edges = [...(lc.edges || [])];
+  for (const p of lc.pools || []) edges.push(...(p.edges || []));
+  return edges;
+}
+
+describe('repairCrossings', () => {
+  // Two boxes side by side plus two others, with routes deliberately laid so
+  // that one runs through the column the other descends in.
+  const coords = {
+    a: { x: 0, y: 0, w: 60, h: 40 },
+    b: { x: 300, y: 200, w: 60, h: 40 },
+    c: { x: 0, y: 300, w: 60, h: 40 },
+    d: { x: 300, y: 400, w: 60, h: 40 },
+  };
+  const edges = [
+    { id: 'e1', source: 'a', target: 'b' },
+    { id: 'e2', source: 'c', target: 'd' },
+  ];
+
+  test('leaves a crossing-free map completely untouched', () => {
+    const clean = {
+      e1: [{ x: 60, y: 20 }, { x: 300, y: 20 }, { x: 300, y: 200 }],
+      e2: [{ x: 60, y: 320 }, { x: 300, y: 320 }, { x: 300, y: 400 }],
+    };
+    expect(countCrossings(clean, edges)).toBe(0);
+    // Same object back, not just an equal one: that identity is what
+    // pipeline.js uses to decide no edge label needs refreshing.
+    expect(repairCrossings(clean, coords, edges)).toBe(clean);
+  });
+
+  test('removes a crossing between two rebuilt routes', () => {
+    const crossing = {
+      // e1 descends at x=200 after running right along y=20
+      e1: [{ x: 60, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 200 }, { x: 300, y: 200 }],
+      // e2 runs right along y=120, straight through e1's column
+      e2: [{ x: 60, y: 320 }, { x: 60, y: 120 }, { x: 330, y: 120 }, { x: 330, y: 400 }],
+    };
+    expect(countCrossings(crossing, edges)).toBeGreaterThan(0);
+    const repaired = repairCrossings(crossing, coords, edges);
+    expect(countCrossings(repaired, edges)).toBe(0);
+  });
+
+  test('never moves an endpoint', () => {
+    const crossing = {
+      e1: [{ x: 60, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 200 }, { x: 300, y: 200 }],
+      e2: [{ x: 60, y: 320 }, { x: 60, y: 120 }, { x: 330, y: 120 }, { x: 330, y: 400 }],
+    };
+    const repaired = repairCrossings(crossing, coords, edges);
+    for (const id of ['e1', 'e2']) {
+      const before = crossing[id], after = repaired[id];
+      expect(after[0]).toEqual(before[0]);
+      expect(after[after.length - 1]).toEqual(before[before.length - 1]);
+    }
+  });
+
+  test('is idempotent', () => {
+    const crossing = {
+      e1: [{ x: 60, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 200 }, { x: 300, y: 200 }],
+      e2: [{ x: 60, y: 320 }, { x: 60, y: 120 }, { x: 330, y: 120 }, { x: 330, y: 400 }],
+    };
+    const once = repairCrossings(crossing, coords, edges);
+    const twice = repairCrossings(once, coords, edges);
+    expect(twice).toEqual(once);
+  });
+
+  test('keeps every route orthogonal', () => {
+    const crossing = {
+      e1: [{ x: 60, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 200 }, { x: 300, y: 200 }],
+      e2: [{ x: 60, y: 320 }, { x: 60, y: 120 }, { x: 330, y: 120 }, { x: 330, y: 400 }],
+    };
+    const repaired = repairCrossings(crossing, coords, edges);
+    for (const pts of Object.values(repaired)) {
+      for (let i = 0; i < pts.length - 1; i++) {
+        const dx = Math.abs(pts[i + 1].x - pts[i].x);
+        const dy = Math.abs(pts[i + 1].y - pts[i].y);
+        expect(dx < 1e-6 || dy < 1e-6).toBe(true);
+      }
+    }
+  });
+
+  test('respects skipIds', () => {
+    const crossing = {
+      e1: [{ x: 60, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 200 }, { x: 300, y: 200 }],
+      e2: [{ x: 60, y: 320 }, { x: 60, y: 120 }, { x: 330, y: 120 }, { x: 330, y: 400 }],
+    };
+    const repaired = repairCrossings(crossing, coords, edges, new Set(['e1', 'e2']));
+    expect(repaired).toBe(crossing);
+  });
+
+  test('end to end: the pass never costs crossings, and wins one on the rework loop', async () => {
+    const original = CFG.layout.crossingRepair;
+    try {
+      const measure = async (name, visualRefinement) => {
+        const lc = loadFixture(name);
+        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        return {
+          crossings: countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc)),
+          ok: r.diagnostics.ok,
+        };
+      };
+      for (const name of ['realistic-collaboration.json', 'bpmn-generator-pipeline.json']) {
+        for (const visualRefinement of [false, true]) {
+          CFG.layout.crossingRepair = false;
+          const off = await measure(name, visualRefinement);
+          CFG.layout.crossingRepair = true;
+          const on = await measure(name, visualRefinement);
+          expect(on.crossings).toBeLessThanOrEqual(off.crossings);
+          expect(on.ok).toBe(true);
+          expect(off.ok).toBe(true);
+        }
+      }
+      // The concrete win this pass was written for: one of the three crossings
+      // in bpmn-generator-pipeline's rework loop. The other two sit where every
+      // candidate corridor runs through a node — clearing those needs real
+      // pathfinding, which this pass deliberately is not.
+      CFG.layout.crossingRepair = false;
+      const off = await measure('bpmn-generator-pipeline.json', false);
+      CFG.layout.crossingRepair = true;
+      const on = await measure('bpmn-generator-pipeline.json', false);
+      expect(off.crossings).toBe(3);
+      expect(on.crossings).toBe(2);
+    } finally {
+      CFG.layout.crossingRepair = original;
+    }
   });
 });

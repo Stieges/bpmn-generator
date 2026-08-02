@@ -103,9 +103,9 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node |
 |---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 18 | 15/24 | 0 | 2542×745 (86081/node) | 3.41 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 |
-| default | 3 | 13 | 24/24 | 0 | 2542×1433 (165519/node) | 1.77 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 |
+| default | 2 | 14 | 23/24 | 0 | 2542×1433 (165519/node) | 1.77 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 |
 | visualRefinement: true | 2 | 15 | 24/24 | 0 | 2302×2525 (264155/node) | 0.91 | 4/4 (100%) | 2 cross-lane, 1 fold-back, 5 branch | 1 |
 
-Crossings introduced by our own post-processing (default − ELK raw): **+3** —
+Crossings introduced by our own post-processing (default − ELK raw): **+2** —
 ELK routed around these; the routes we delete and rebuild do not.
 

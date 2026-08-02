@@ -624,39 +624,8 @@ function buildCoordinateMap(elkResult, lc) {
   // Sequence-flow labels
   for (const proc of allProcesses) {
     for (const e of (proc.edges || [])) {
-      if (!e.label) continue;
-      const eid = e.id;
-      const pts = edgeCoords[eid];
-      if (!pts || pts.length < 2) {
-        // Fallback: midpoint between source and target node centers
-        const s = coords[e.source], t = coords[e.target];
-        if (!s || !t) continue;
-        edgeLabels[eid] = {
-          text: e.label,
-          x: (s.x + s.w / 2 + t.x + t.w / 2) / 2,
-          y: (s.y + s.h / 2 + t.y + t.h / 2) / 2,
-        };
-        continue;
-      }
-      // Find first horizontal segment (dy < 1) — mirrors svg.js renderSequenceFlow
-      let labelX = null, labelY = null;
-      let placed = false;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const dy = Math.abs(pts[i + 1].y - pts[i].y);
-        if (dy < 1) {
-          labelX = (pts[i].x + pts[i + 1].x) / 2;
-          labelY = pts[i].y;
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        // No horizontal segment: 30% from source — mirrors svg.js fallback
-        const p0 = pts[0], p1 = pts[pts.length - 1];
-        labelX = p0.x + (p1.x - p0.x) * 0.3;
-        labelY = p0.y + (p1.y - p0.y) * 0.3;
-      }
-      edgeLabels[eid] = { text: e.label, x: labelX, y: labelY };
+      const label = computeSequenceFlowLabel(e, edgeCoords[e.id], coords);
+      if (label) edgeLabels[e.id] = label;
     }
   }
 
@@ -665,6 +634,44 @@ function buildCoordinateMap(elkResult, lc) {
   // geometry.
 
   return { coords, laneCoords, poolCoords, edgeCoords, edgeLabels };
+}
+
+/**
+ * Where a sequence flow's label sits, given its route. Returns null when the
+ * edge has no label (or the fallback has nothing to work with).
+ *
+ * Extracted from §5.6 so that a pass which re-routes an edge after
+ * buildCoordinateMap has returned can refresh that edge's label instead of
+ * leaving it stranded on a segment the route no longer has — see
+ * pipeline.js's crossing-repair step. Behaviour is unchanged; the algorithm
+ * still mirrors svg.js renderSequenceFlow exactly, which is what keeps the
+ * two renderers in agreement.
+ */
+function computeSequenceFlowLabel(edge, pts, coords) {
+  if (!edge.label) return null;
+  if (!pts || pts.length < 2) {
+    // Fallback: midpoint between source and target node centers
+    const s = coords[edge.source], t = coords[edge.target];
+    if (!s || !t) return null;
+    return {
+      text: edge.label,
+      x: (s.x + s.w / 2 + t.x + t.w / 2) / 2,
+      y: (s.y + s.h / 2 + t.y + t.h / 2) / 2,
+    };
+  }
+  // Find first horizontal segment (dy < 1) — mirrors svg.js renderSequenceFlow
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (Math.abs(pts[i + 1].y - pts[i].y) < 1) {
+      return { text: edge.label, x: (pts[i].x + pts[i + 1].x) / 2, y: pts[i].y };
+    }
+  }
+  // No horizontal segment: 30% from source — mirrors svg.js fallback
+  const p0 = pts[0], p1 = pts[pts.length - 1];
+  return {
+    text: edge.label,
+    x: p0.x + (p1.x - p0.x) * 0.3,
+    y: p0.y + (p1.y - p0.y) * 0.3,
+  };
 }
 
 /**
@@ -1135,4 +1142,4 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows };
+export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel };

@@ -32,9 +32,9 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows } from './coordinates.js';
+import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel } from './coordinates.js';
 import { checkDiagramIntegrity } from './di-check.js';
-import { simplifyAllEdges } from './edge-simplify.js';
+import { simplifyAllEdges, repairCrossings } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
@@ -88,6 +88,27 @@ async function runPipeline(logicCore, opts = {}) {
   // must not be simplified — clearance here is checked against nodes only.
   const skipSimplify = new Set((lc.associations || []).map(a => a.id));
   coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges, skipSimplify);
+
+  // Crossing repair: the routes coordinates.js deletes and rebuilds (§5.0a,
+  // §5.2, §5.0e, §5.5) pick their axis by |dy| > |dx| alone, so they can cross
+  // an edge that ELK had routed around. Runs after simplifyAllEdges because
+  // that pass rewrites routes too. A no-op unless a crossing actually exists.
+  if (CFG.layout?.crossingRepair !== false) {
+    const beforeRepair = coordMap.edgeCoords;
+    coordMap.edgeCoords = repairCrossings(beforeRepair, coordMap.coords, allEdges, skipSimplify, {
+      maxPasses: CFG.layout?.crossingRepairMaxPasses ?? 2,
+    });
+    // Labels were placed on the pre-repair geometry (coordinates.js §5.6).
+    // Refresh only the ones whose route actually moved — repairCrossings keeps
+    // the original array reference for everything it left alone.
+    if (coordMap.edgeCoords !== beforeRepair) {
+      for (const e of allEdges) {
+        if (beforeRepair[e.id] === coordMap.edgeCoords[e.id]) continue;
+        const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
+        if (label) coordMap.edgeLabels[e.id] = label;
+      }
+    }
+  }
 
   // Visual Refinement (post-layout coordinate transforms)
   if (refineOn) {
