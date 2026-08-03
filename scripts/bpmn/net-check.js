@@ -16,6 +16,13 @@
  * out of here clean; that is `checkSoundness` / WF01-WF03's job, not this pass's. See the
  * `deadlock-process.json` test in net-check.test.js for the fixture that pins this down.
  *
+ * The doctrine is not free, and NC02/NC02b are where it costs something: "this transition can
+ * never fire" is true both of a translation that dropped an arc and of a model that routes
+ * nothing into the node. Only the first is a finding here, and the two are told apart by asking
+ * the Logic-Core whether the flow exists at all — see the long note at NC02, and `inputSourceOf`
+ * for the sources that are not sequence flows (a start event's scope source, a boundary event's
+ * host) and must therefore never be excused.
+ *
  * Findings are diagnostics, in the same shape as di-check.js's: `{ ok, issues: [{ code,
  * severity, message, elements }] }`, `ok = !issues.some(i => i.severity === 'ERROR')`.
  */
@@ -24,6 +31,14 @@
 // types never get a transition on purpose, they don't participate in control flow. Duplicated
 // here (not imported) to keep this module dependency-free, matching di-check.js's shape.
 const ARTIFACT_TYPES = new Set(['dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group']);
+
+// `isBoundaryEvent` (types.js) restated, and duplicated for a stronger reason than the set above:
+// a checker that shares its predicates with the code it checks cannot see a bug in them. If the
+// two readings ever diverge, this one fails in the loud direction — a node workflow-net.js treats
+// as a boundary event and this file does not is simply not exempted below, so it gets reported
+// rather than waved through. The reverse (this file being WIDER) would exempt something
+// workflow-net.js wired from sequence flows, and that is why the copy is kept literal.
+const isBoundaryEventNode = (node) => node?.type === 'boundaryEvent' || !!node?.attachedTo;
 
 // One severity constant per code, so a later stage that fixes the underlying defect can flip a
 // code from WARNING to ERROR (or vice versa) by changing one line here — nothing else in this
@@ -34,6 +49,13 @@ const ARTIFACT_TYPES = new Set(['dataObjectReference', 'dataStoreReference', 'te
 // pair used to share a place BY DESIGN, because the place id was keyed on the pair. `namePlaces`
 // (workflow-net.js) gives each flow its own, so the only remaining way two edges can land on one
 // place is a defect in this translation.
+//
+// A severity is only as honest as the code's SCOPE, and NC02/NC02b's scope had to be narrowed
+// when they were promoted — see `inputSourceOf`/`outputSinkOf` below. At WARNING they could
+// afford to fire on a model defect; at ERROR they may not, or this pass judges the model, which
+// its own header forbids. Measured over 4000 random rule-engine-clean processes, the unnarrowed
+// codes produced 6601 NC02 + 6612 NC02b ERRORs across 3380 of 3983 nets, while NC01, NC03a,
+// NC03b, NC04 and NC06 never fired once — the whole of the model-judging was in these two.
 const SEVERITY = {
   NC01: 'ERROR',
   NC02: 'ERROR',
@@ -44,6 +66,52 @@ const SEVERITY = {
   NC05: 'INFO',
   NC06: 'ERROR',
 };
+
+/**
+ * Where the Logic-Core says this node's tokens come FROM — or `null` when it says nowhere.
+ *
+ * `null` is the whole point of the function: it is the one answer that makes a transition with
+ * no input arc a fact about the MODEL rather than about the translation, and therefore not
+ * NC02's to report. Three sources, and every one of them is load-bearing:
+ *   - an incoming sequence flow. The ordinary case; its place must exist and its arc must be
+ *     there, whatever branch of `buildScope`/`buildContainer` built the transition.
+ *   - a `startEvent`'s scope source place — `p_source`, or a container's own `p_C#source`. A
+ *     start event never has an incoming flow and must still always be fireable.
+ *   - a boundary event's HOST. Read the long note at NC02 before touching this line: dropping it
+ *     is how the narrowing would silently undo the stage that gave boundary events a translation
+ *     at all.
+ * An unknown node (`undefined`, e.g. a transition whose `bpmnNodeId` is in no flattened view)
+ * counts as "expected input" for the same reason `knowsTheModel` does — an unexplained
+ * transition is reported, never excused.
+ *
+ * @param {object|undefined} node - the Logic-Core node behind the transition
+ * @param {Set<string>} hasIncomingFlow - node ids that are the target of some flattened edge
+ * @param {boolean} knowsTheModel - false when the net carries no flattened views
+ * @returns {string|null} a phrase naming the source, for the message; `null` if there is none
+ */
+function inputSourceOf(node, hasIncomingFlow, knowsTheModel) {
+  if (!knowsTheModel || !node) return 'an input the net does not account for';
+  if (hasIncomingFlow.has(node.id)) return 'at least one incoming sequence flow';
+  if (node.type === 'startEvent') return "a start event's own scope source place";
+  if (isBoundaryEventNode(node)) {
+    return node.attachedTo ? `its host "${node.attachedTo}" as its trigger`
+      : 'a host attachment as its trigger';
+  }
+  return null;
+}
+
+/**
+ * The mirror of `inputSourceOf`: where the Logic-Core says this node's tokens GO — or `null`.
+ * Two sources, and no boundary-event clause: a boundary event's OUTPUT is its outgoing sequence
+ * flows like any other node's, so the asymmetry between the two functions is the asymmetry BPMN
+ * itself has.
+ */
+function outputSinkOf(node, hasOutgoingFlow, knowsTheModel) {
+  if (!knowsTheModel || !node) return 'an output the net does not account for';
+  if (hasOutgoingFlow.has(node.id)) return 'at least one outgoing sequence flow';
+  if (node.type === 'endEvent') return "an end event's own scope sink place";
+  return null;
+}
 
 /**
  * @param {object} pn   - a net from bpmnToPN(), or a composed net from composeCollaboration().
@@ -62,7 +130,8 @@ const SEVERITY = {
  *        this list — a message-receiving place that a gated clone consumes only in some
  *        branches is a legitimate design, not a translation defect, and the composing caller
  *        already knows which places those are. Passed IN rather than re-derived here, for the
- *        same reason flatNodes/flatEdges travel with the net itself (workflow-net.js:198-201):
+ *        same reason flatNodes/flatEdges travel with the net itself (see `bpmnToPN`'s return
+ *        comment, workflow-net.js):
  *        identity beats agreement.
  * @returns {{ ok: boolean, issues: Array<{code, severity, message, elements}> }}
  */
@@ -84,6 +153,20 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
   // This list only ever excuses a MISSING PRODUCER, so it is applied to NC03a alone. A place
   // that also loses its consumer is a different fact and still gets reported.
   const exemptUnproduced = new Set([...exempt, ...(pn.unproducedPlaces || [])]);
+
+  // The Logic-Core facts NC02/NC02b need in order to tell a translation defect from a model
+  // defect, read off the flattened views that travel with the net (identity, not a re-flatten —
+  // the same argument `workflow-net.js` makes for handing those arrays back at all).
+  //
+  // `knowsTheModel` is the honest-failure clause: a net that carries neither view — a composed
+  // collaboration net, or anything hand-built — gives this pass no way to check the claim "the
+  // model has no such flow", so nothing may be excused on it and both codes behave exactly as
+  // they did before the narrowing. Loud beats blind.
+  const knowsTheModel = Array.isArray(flatNodes) && Array.isArray(flatEdges);
+  const nodeById = new Map();
+  for (const n of (flatNodes || [])) if (!nodeById.has(n.id)) nodeById.set(n.id, n);
+  const hasIncomingFlow = new Set((flatEdges || []).map(e => e.target));
+  const hasOutgoingFlow = new Set((flatEdges || []).map(e => e.source));
 
   const skippedIds = new Set((skipped || []).map(s => s.id));
   const transitionsByBpmnNodeId = new Map();
@@ -112,35 +195,62 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
   // NC02 — a transition with no incoming P→T arc. getEnabledTransitions (workflow-net.js)
   // requires inputArcs.length > 0, so a transition in this state can never fire, in any
   // marking — a structural fact about the net, not a behavioural one that BFS would need to
-  // discover. ERROR: the one shape that used to make this legitimate — a boundary event, whose
-  // trigger is its host rather than a sequence flow — now consumes the host's own input places
-  // (`wireBoundaryEvents`, workflow-net.js). A boundary event whose host cannot be found gets
-  // no transition at all and is disclosed on `skipped` instead, so it does not land here.
+  // discover.
+  //
+  // ── What this code may and may not say, now that it is ERROR ────────────────────────────
+  // "This transition cannot fire" has two utterly different causes, and only one of them is
+  // this pass's business:
+  //   - the Logic-Core node HAS an incoming sequence flow (or another input source, below) and
+  //     the arc for it is missing from the net. The translation dropped something. NC02, ERROR.
+  //   - the Logic-Core node has no input at all — a `parallelGateway` nothing routes to, a
+  //     subprocess with no incoming flow. The TRANSLATION is faithful; the MODEL is defective,
+  //     and the layer that owns that is WF01 (`checkSoundness` — the transition is dead, which
+  //     is exactly what a node the flow never reaches means), plus S04 where the node has no
+  //     edges at all. Not a finding here.
+  // Unnarrowed, the second case dominated: it was the whole of the 6601 NC02 ERRORs measured
+  // over rule-engine-clean random processes (see the SEVERITY note), and it would have made
+  // wiring this pass into `runPipeline` reject models that generate today.
+  //
+  // ── The trap in the narrowing ───────────────────────────────────────────────────────────
+  // A boundary event has no incoming sequence flow BY DEFINITION (OMG §10.4.4) — its trigger is
+  // the host named by `attachedTo`. A naive "no incoming flow ⇒ exempt" would therefore exempt
+  // every boundary event, which is precisely the defect this code was promoted to ERROR for:
+  // before `wireBoundaryEvents` (workflow-net.js), `t_<b>` reached the net with no input arc,
+  // unfireable in every marking, silently deleting the whole escalation path. `inputSourceOf`
+  // must keep naming the attachment as an input source, and `net-check.test.js`'s
+  // "boundary-event wiring" regression test fails if it stops.
   for (const [tId, t] of transitions) {
     const hasIncoming = arcs.some(a => a.type === 'P→T' && a.to === tId);
-    if (!hasIncoming) {
-      issues.push({
-        code: 'NC02',
-        severity: SEVERITY.NC02,
-        message: `Transition "${tId}" (node "${t.bpmnNodeId}") has no incoming place — it can never fire.`,
-        elements: [t.bpmnNodeId, tId],
-      });
-    }
+    if (hasIncoming) continue;
+    const source = inputSourceOf(nodeById.get(t.bpmnNodeId), hasIncomingFlow, knowsTheModel);
+    if (!source) continue; // the model gives this node no input — S04/S07's finding, not ours
+    issues.push({
+      code: 'NC02',
+      severity: SEVERITY.NC02,
+      message: `Transition "${tId}" (node "${t.bpmnNodeId}") has no incoming place — it can never `
+        + `fire, although the Logic-Core gives the node ${source}.`,
+      elements: [t.bpmnNodeId, tId],
+    });
   }
 
-  // NC02b — a transition with no outgoing T→P arc: it consumes a token and destroys it. Unlike
-  // NC02, there is no legitimate reason for this outside an end event (which always produces
-  // into the sink place) — ERROR.
+  // NC02b — a transition with no outgoing T→P arc: it consumes a token and destroys it. Narrowed
+  // for exactly the reason NC02 is, mirrored onto the outgoing side: a node the model gives no
+  // outgoing sequence flow (and which is not an end event, whose output is its scope's sink
+  // place) produces nothing because the MODEL says so. S07 owns that one squarely — "no outgoing
+  // flow" is its literal wording. This pass reports only the case where an outgoing flow exists
+  // in the Logic-Core and its arc is missing from the net.
   for (const [tId, t] of transitions) {
     const hasOutgoing = arcs.some(a => a.type === 'T→P' && a.from === tId);
-    if (!hasOutgoing) {
-      issues.push({
-        code: 'NC02b',
-        severity: SEVERITY.NC02b,
-        message: `Transition "${tId}" (node "${t.bpmnNodeId}") has no outgoing place — it consumes a token and never produces one.`,
-        elements: [t.bpmnNodeId, tId],
-      });
-    }
+    if (hasOutgoing) continue;
+    const sink = outputSinkOf(nodeById.get(t.bpmnNodeId), hasOutgoingFlow, knowsTheModel);
+    if (!sink) continue;
+    issues.push({
+      code: 'NC02b',
+      severity: SEVERITY.NC02b,
+      message: `Transition "${tId}" (node "${t.bpmnNodeId}") has no outgoing place — it consumes a `
+        + `token and never produces one, although the Logic-Core gives the node ${sink}.`,
+      elements: [t.bpmnNodeId, tId],
+    });
   }
 
   // NC03a — a place no transition ever produces (other than the source place, whose initial
@@ -242,8 +352,9 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
 
   // NC06 — two distinct Logic-Core elements silently colliding on the same net id, so a
   // Map.set overwrote one with the other. Two shapes of this:
-  //  (a) two flatNodes sharing the same node id — both `nodeMap` (workflow-net.js:62) and
-  //      `transitions` (keyed `t_${node.id}`) can only keep one of them.
+  //  (a) two flatNodes sharing the same node id — every id-keyed structure the translation
+  //      builds (`transitions`, keyed `t_${node.id}`; `buildContainer`'s `p_<C>#source` /
+  //      `p_<C>#sink` pair; `namePlaces`' `p_<src>_<tgt>`) can only keep one of them.
   //  (b) an edge-derived place id landing on the reserved source/sink key — 'p_source' or
   //      'p_sink' collides with the synthesized boundary places bpmnToPN always creates first.
   //      Asked of `pn.placeOfEdge`, for the reason NC04 gives above: the naming rule lives in

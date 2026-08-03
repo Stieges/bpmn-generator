@@ -520,10 +520,17 @@ function buildContainer(node, ctx) {
   // With no incoming edge `t_C#enter` has no input place and can never fire; with no outgoing
   // edge `t_C#exit` consumes the scope's sink token and produces nothing. Both are exactly what
   // `connectTransition` does to a plain node in the same shape, and consistency with the atomic
-  // case is the right answer here rather than an oversight. Neither shape is silent: `net-check.js`
-  // reports the first as NC02 (transition with no incoming place) and the second as NC02b
-  // (token-destroying transition). And at the top level such a model is rejected by S02 before
-  // it reaches anything, since a process must have at least one end event. Do not add a guard.
+  // case is the right answer here rather than an oversight. Do not add a guard.
+  //
+  // Which layer says so: **the rule engine, not `net-check.js`**. A container nothing routes to
+  // is a defect in the MODEL — S04 (isolated node) / S07 (no outgoing flow) — and `net-check.js`
+  // judges the translation only, so its NC02/NC02b exempt a transition whose Logic-Core node
+  // genuinely has no incoming (resp. outgoing) sequence flow. This comment used to claim the
+  // opposite, and the two files documenting opposite doctrines about the same code is how the
+  // next reader gets it wrong. What NC02 still catches, at ERROR, is the case that matters here:
+  // an outer edge that EXISTS in the Logic-Core and whose place never reached `t_C#enter`.
+  // At the top level such a model is additionally rejected by S02 before it reaches anything,
+  // since a process must have at least one end event.
   if (inEdges.length > 1) {
     // One entry transition per incoming edge, each consuming ONLY its own place. A single
     // transition consuming all of them would demand a token on every incoming flow at once —

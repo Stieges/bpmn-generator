@@ -4,7 +4,8 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 import { checkNetIntegrity } from './net-check.js';
-import { bpmnToPN } from './workflow-net.js';
+import { bpmnToPN, checkWorkflowNetSoundness } from './workflow-net.js';
+import { runRules } from './rules.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, '..', '..', 'tests', 'fixtures');
@@ -90,16 +91,21 @@ describe('checkNetIntegrity — vacuity: the pass actually detects a broken net'
 });
 
 describe('NC02 is ERROR now that boundary events have a translation', () => {
-  test('an input-less transition fails the fence rather than warning past it', () => {
+  test('a dropped input arc fails the fence rather than warning past it', () => {
     // Stage 5 flipped NC02's severity. That flip is only meaningful if the code still fires —
     // a fence that passes because nothing detects anything is the failure mode this whole
-    // guard exists against. Hand-built so the ONE defect is the input-less transition:
-    // `t_orphan` is produced by nothing and consumes nothing, so it can never fire.
+    // guard exists against. Hand-built so the ONE defect is the translation defect NC02 is
+    // scoped to after the narrowing: `orphan` HAS an incoming sequence flow in the Logic-Core
+    // (`fx`), its place exists, and the P→T arc that should consume it is missing from the net.
+    // Nothing else about the model is wrong, so anything else reported here is a false alarm.
+    const fx = { id: 'fx', source: 'only', target: 'orphan' };
+    const fy = { id: 'fy', source: 'orphan', target: 'drain' };
     const pn = {
       places: new Map([
         ['p_source', { id: 'p_source' }],
+        ['p_only_orphan', { id: 'p_only_orphan' }],
+        ['p_orphan_drain', { id: 'p_orphan_drain' }],
         ['p_sink', { id: 'p_sink' }],
-        ['p_orphan_out', { id: 'p_orphan_out' }],
       ]),
       transitions: new Map([
         ['t_only', { id: 't_only', label: 'Only', bpmnNodeId: 'only' }],
@@ -108,21 +114,128 @@ describe('NC02 is ERROR now that boundary events have a translation', () => {
       ]),
       arcs: [
         { from: 'p_source', to: 't_only', type: 'P→T' },
-        { from: 't_only', to: 'p_sink', type: 'T→P' },
-        { from: 't_orphan', to: 'p_orphan_out', type: 'T→P' },
-        { from: 'p_orphan_out', to: 't_drain', type: 'P→T' },
+        { from: 't_only', to: 'p_only_orphan', type: 'T→P' },
+        // The dropped arc would be { from: 'p_only_orphan', to: 't_orphan', type: 'P→T' }.
+        { from: 't_orphan', to: 'p_orphan_drain', type: 'T→P' },
+        { from: 'p_orphan_drain', to: 't_drain', type: 'P→T' },
         { from: 't_drain', to: 'p_sink', type: 'T→P' },
       ],
       sourcePlace: 'p_source',
       sinkPlace: 'p_sink',
       skipped: [],
-      flatNodes: [{ id: 'only', type: 'task' }, { id: 'orphan', type: 'task' },
-        { id: 'drain', type: 'task' }],
-      flatEdges: [],
+      flatNodes: [{ id: 'only', type: 'startEvent' }, { id: 'orphan', type: 'task' },
+        { id: 'drain', type: 'endEvent' }],
+      flatEdges: [fx, fy],
     };
     const { ok, issues } = checkNetIntegrity(pn, { id: 'proc', nodes: pn.flatNodes });
-    expect(issues.map(i => `${i.code}/${i.severity}`)).toEqual(['NC02/ERROR']);
+    expect(issues.map(i => `${i.code}/${i.severity}`)).toEqual(['NC02/ERROR', 'NC03b/ERROR']);
+    expect(issues[0].elements).toEqual(['orphan', 't_orphan']);
     expect(ok).toBe(false);
+  });
+});
+
+describe('NC02/NC02b judge the translation, not the model', () => {
+  // The narrowing these two tests pin down. "This transition can never fire" is true both of a
+  // translation that dropped an arc and of a model that routes nothing into the node, and only
+  // the first is this pass's business. Unnarrowed, the second case dominated: measured over
+  // 4000 random rule-engine-clean processes, NC02/NC02b produced 6601 + 6612 ERRORs across 3380
+  // of 3983 nets while NC01, NC03a, NC03b, NC04 and NC06 never fired once.
+  const strandedNodes = () => ({
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 't', type: 'task' },
+      { id: 'e', type: 'endEvent' },
+      // Nothing routes to `fork`; `sink` routes nowhere. Both are MODEL defects, and both are
+      // translated entirely faithfully.
+      { id: 'fork', type: 'parallelGateway' },
+      { id: 'sink', type: 'task' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 't' },
+      { id: 'f2', source: 't', target: 'e' },
+      { id: 'f3', source: 'fork', target: 'sink' },
+    ],
+  });
+
+  test('a node with no incoming sequence flow is not an NC02 finding', () => {
+    const proc = strandedNodes();
+    const pn = bpmnToPN(proc);
+    // The translation really did leave `t_fork` unfireable and `t_sink` token-destroying …
+    expect(pn.arcs.some(a => a.type === 'P→T' && a.to === 't_fork')).toBe(false);
+    expect(pn.arcs.some(a => a.type === 'T→P' && a.from === 't_sink')).toBe(false);
+    // … and that is exactly what the model says, so neither is reported.
+    expect(checkNetIntegrity(pn, proc).issues.filter(i => i.severity === 'ERROR')).toEqual([]);
+  });
+
+  test('the layers that DO own those two nodes still report them', () => {
+    // The other half of the claim: the model defect is not being swept under the carpet, it is
+    // reported by the layers that own it. If either stops covering this shape, the exemption
+    // above turns into a blind spot, and this test is what says so.
+    //
+    // Note which layer covers which, because it is not symmetric. `sink` (no outgoing flow) is
+    // S07's literal wording. `fork` (no INCOMING flow, but an outgoing one) is covered by
+    // nothing in the always-on rule layers — S04 only fires on a node with no edges at all —
+    // and is WF01's: a node the flow never reaches is a dead transition, which is precisely what
+    // WF01 says about it. That WF01 is opt-in (the Workflow-Net layer) is a real gap in the
+    // always-on coverage, but it is a gap in the RULE ENGINE, and closing it by having a
+    // translation checker report it would put the finding in the one layer whose whole contract
+    // is not to.
+    expect(runRules(strandedNodes()).warnings.join(' ')).toContain('"sink" has no outgoing flow');
+    expect(checkWorkflowNetSoundness(strandedNodes()).issues
+      .filter(i => i.rule === 'WF01').map(i => i.message).join(' '))
+      .toContain('"fork"');
+  });
+});
+
+describe('the NC02 narrowing must not blind the boundary-event wiring', () => {
+  // The trap the narrowing had to avoid. A boundary event has NO incoming sequence flow by
+  // definition (OMG §10.4.4) — its trigger is `attachedTo` — so a naive "no incoming flow ⇒
+  // exempt" rule would exempt every boundary event and blind NC02 to precisely the defect that
+  // gave boundary events a Petri-net translation in the first place: before `wireBoundaryEvents`
+  // (workflow-net.js), `t_b` reached the net with no input arc at all, unfireable in every
+  // marking, silently deleting the whole escalation path from every analysis.
+  const withBoundary = () => ({
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 't', type: 'userTask' },
+      { id: 'b', type: 'boundaryEvent', attachedTo: 't' },
+      { id: 'esc', type: 'task' },
+      { id: 'e', type: 'endEvent' },
+      { id: 'e2', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 't' },
+      { id: 'f2', source: 't', target: 'e' },
+      { id: 'f3', source: 'b', target: 'esc' },
+      { id: 'f4', source: 'esc', target: 'e2' },
+    ],
+  });
+
+  test('the current wiring is clean', () => {
+    const proc = withBoundary();
+    const pn = bpmnToPN(proc);
+    expect(pn.arcs.filter(a => a.type === 'P→T' && a.to === 't_b').map(a => a.from))
+      .toEqual(['p_s_t']);
+    expect(checkNetIntegrity(pn, proc).issues).toEqual([]);
+  });
+
+  test('re-breaking the wiring is still an NC02 ERROR, exemption or no exemption', () => {
+    const proc = withBoundary();
+    const pn = bpmnToPN(proc);
+    // Reproduce the pre-Stage-5 net exactly: `connectTransition` wired a boundary event from
+    // its incoming sequence flows, of which it has none, so the transition existed with only
+    // outgoing arcs. Nothing else is touched.
+    pn.arcs = pn.arcs.filter(a => !(a.type === 'P→T' && a.to === 't_b'));
+
+    const nc02 = checkNetIntegrity(pn, proc).issues.filter(i => i.code === 'NC02');
+    expect(nc02).toHaveLength(1);
+    expect(nc02[0].severity).toBe('ERROR');
+    expect(nc02[0].elements).toEqual(['b', 't_b']);
+    // And the message names the attachment, so the reader is not sent looking for a missing
+    // sequence flow that the model never had.
+    expect(nc02[0].message).toContain('its host "t" as its trigger');
   });
 });
 

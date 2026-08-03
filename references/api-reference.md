@@ -136,8 +136,8 @@ lands without anyone having to remember to add it.
 | Code | Severity | Meaning |
 |------|----------|---------|
 | NC01 | ERROR | A control-flow node produced no transition in the net |
-| NC02 | ERROR | A transition has no incoming place — it can never fire |
-| NC02b | ERROR | A transition has no outgoing place — it consumes a token and never produces one |
+| NC02 | ERROR | A transition has no incoming place although the Logic-Core gives its node an input — the translation dropped an arc |
+| NC02b | ERROR | A transition has no outgoing place although the Logic-Core gives its node an output — the translation dropped an arc |
 | NC03a | ERROR | A place is never produced by any transition |
 | NC03b | ERROR | A place is never consumed by any transition |
 | NC04 | ERROR | Two distinct edges were assigned the same place — an invariant assertion on `namePlaces` |
@@ -160,6 +160,25 @@ silently deleting its whole escalation path from every analysis. `wireBoundaryEv
 consumes, and a boundary event whose host cannot be found gets no transition at all (it is
 disclosed on `skipped` instead). With the cause gone the code says what it always meant.
 
+**NC02 and NC02b are scoped to translation defects, and the promotion to ERROR is what forced the
+distinction.** "This transition can never fire" is true of two entirely different things: a
+translation that dropped an arc, and a model that routes nothing into the node — a
+`parallelGateway` nothing leads to, a subprocess with no incoming flow. The second is a faithful
+translation of a defective model, so reporting it here would be the category error this pass's
+whole contract forbids; the layer that owns it is WF01 (`checkSoundness` — a node the flow never
+reaches is a dead transition), plus S04/S07 in the rule engine. Both codes therefore fire only when
+the Logic-Core actually gives the node an input (resp. an output) that the net does not have.
+Measured over 4000 random rule-engine-clean processes, the unscoped codes produced 6601 NC02 and
+6612 NC02b ERRORs across 3380 of 3983 nets — while NC01, NC03a, NC03b, NC04 and NC06 never fired
+once, which is what identifies these two as the whole of the model-judging.
+
+Three input sources count, not one, and the third is the one worth stating: an incoming sequence
+flow; a start event's own scope source place (`p_source`, or a container's `p_C#source`); and **a
+boundary event's host**. A boundary event has no incoming sequence flow by definition (OMG
+§10.4.4), so a naive "no incoming flow ⇒ not a finding" rule would exempt every boundary event and
+blind NC02 to precisely the defect it was promoted to ERROR for. `net-check.test.js` carries the
+regression test that fails if that clause is ever dropped.
+
 NC04 became ERROR the same way, and for the same kind of reason. Its one legitimate cause was the
 place-id scheme itself: a place used to be keyed on the node pair (`p_<src>_<tgt>`), so two flows
 between the same two nodes — legal BPMN, and the everyday shape of a gateway with two conditions
@@ -178,7 +197,7 @@ are. Under
 the current naming rule it therefore cannot fire on a net `bpmnToPN` produced — by construction,
 which is the point. It is a regression fence on the invariant, kept at ERROR because any future
 naming rule that breaks the invariant must fail loudly rather than degrade a diagram quietly, and
-its value lives entirely in the vacuity test in `scripts/bpmn/pipeline.test.js` that forces a
+its value lives entirely in the vacuity test in `scripts/bpmn/net-check.test.js` that forces a
 collision into the map and requires the code to fire. NC06's edge-derived shape (b) is a fence of
 the same kind and was already one before this change.
 
