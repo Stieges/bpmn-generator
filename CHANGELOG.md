@@ -18,8 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **scoped to the translation**, and the scoping is part of the contract, not an implementation
   detail: "this transition can never fire" is equally true of a model that routes nothing into the
   node (a `parallelGateway` nothing leads to, a subprocess with no incoming flow), which is a
-  faithful translation of a defective model and therefore WF01's finding — plus S04/S07's — never
-  this pass's. Both codes now fire only where the Logic-Core gives the node an input (resp. an
+  faithful translation of a defective model and therefore WF01's finding — plus S04 where the node
+  has no edges at all and S07 for the missing-outgoing half — never this pass's. Both codes now
+  fire only where the Logic-Core gives the node an input (resp. an
   output) that the net does not have. Measured over 4000 random rule-engine-clean processes, the
   unscoped codes produced 6601 `NC02` + 6612 `NC02b` ERRORs across 3380 of 3983 nets, while
   `NC01`, `NC03a`, `NC03b`, `NC04` and `NC06` never fired once — so the model-judging was entirely
@@ -228,6 +229,11 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   examples; the exhaustive check is WF03 in the opt-in `workflow_net` layer.
 - **`net-check.js` is not wired into `runPipeline`.** It runs from tests and from a direct call
   (`checkNetIntegrity(bpmnToPN(proc), proc)`) only, and is reachable over neither HTTP nor MCP.
+- **A node with no incoming sequence flow but an outgoing one is reported by no always-on rule.**
+  S04 only fires on a node with no edges at all, so an outgoing flow is enough to pass it; S07
+  checks for a missing outgoing flow, the opposite half. The only rule that names the node is
+  WF01, and `workflow_net` is opt-in (`rules/default-profile.json`). A stranded `parallelGateway`
+  — an outgoing flow, no incoming one — therefore validates clean under the default profile.
 
 ## [3.6.0] - 2026-08-01
 
