@@ -130,6 +130,34 @@ function isContainer(node) {
 }
 
 /**
+ * Will this container actually be refined into a subnet, or fall back to the atomic treatment?
+ *
+ * A container needs both an inner `startEvent` and an inner `endEvent` to have a well-defined
+ * entry and exit marking; without either there is nothing to route a token through, and
+ * `buildContainer` degrades it to a single transition without descending.
+ *
+ * This predicate is deliberately shared with `flattenNodes`/`flattenEdges`, and that sharing is
+ * the load-bearing part. The place pass runs over the WHOLE of `flatEdges` up front, so if the
+ * flatten descended somewhere the translation does not, the subtree's nodes would appear in
+ * `flatNodes` with no transition and its inner edges would become places nothing produces and
+ * nothing consumes — precisely the disconnected-net defect this stage exists to remove, just
+ * relocated into the fallback path. One predicate makes the two passes agree by construction;
+ * two copies would only ever agree by coincidence.
+ *
+ * Dropping the subtree (rather than keeping it and pushing every descendant onto `skipped`) is
+ * the choice that keeps the `flatNodes`/`flatEdges` contract honest: `scripts/scenarios/` reads
+ * those arrays as "what this net is about", and a node that has no transition can never appear
+ * in a trace, be resolved to a pool, or be named in a scenario. Listing it would promise a
+ * resolution the net cannot deliver. The container itself stays — it does get a transition —
+ * and `skipped` names it, so the under-model is disclosed at exactly the boundary where it
+ * starts.
+ */
+function isRefinableContainer(node) {
+  if (!isContainer(node)) return false;
+  return node.nodes.some(n => n.type === 'startEvent') && node.nodes.some(n => n.type === 'endEvent');
+}
+
+/**
  * Build the transitions and arcs for one scope — the process itself, or one container's
  * interior — into the shared `ctx`.
  *
@@ -281,11 +309,25 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
  *   outer outgoing places ◄── t_C#exit  ◄── p_C#sink
  *
  * `#` is the reserved separator for synthesized container ids, and it is safe by construction
- * rather than by convention: `references/input-schema.json` constrains `Node.id` to
- * `^[a-zA-Z_][a-zA-Z0-9_-]*$`, so no node id can contain `#`. Every other net id
- * (`p_<src>_<tgt>`, `t_<id>`, `t_<id>_choice_<i>`, `t_<id>_merge_<i>`, and downstream
- * `pmsg_<mfId>`, `<poolId>::`, `<tId>__recv_<mfId>`) is assembled from node ids and ASCII-word
- * literals. The two id spaces therefore cannot intersect.
+ * rather than by convention — but the claim has to be stated precisely, because the schema is
+ * narrower than it first looks.
+ *
+ * `references/input-schema.json` puts the pattern `^[a-zA-Z_][a-zA-Z0-9_-]*$` on **`Node.id`
+ * only**. Process, Pool, Participant, Edge and Lane ids carry no pattern at all, so no argument
+ * may lean on them. It does not need to: every id THIS file mints is built from node ids and
+ * ASCII-word literals — `t_<id>`, `t_<id>_choice_<i>`, `t_<id>_merge_<i>` from `node.id`, and
+ * `p_<src>_<tgt>` from `edge.source`/`edge.target`, which are node ids by reference even though
+ * `Edge.id` itself is unconstrained. So no id minted here can contain `#`, and the container
+ * ids below cannot collide with any of them.
+ *
+ * Second leg, which the schema alone does not give us: `schema-gate.js` runs only at the HTTP
+ * entry, so on the CLI and library paths — and on anything arriving through `import.js` /
+ * `moddle-import.js` — nothing has enforced that pattern. There the invariant rests on BPMN's
+ * own XSD typing ids as `NCName`, which likewise excludes `#`.
+ *
+ * Downstream consumers mint further ids (`pmsg_<mfId>`, `<poolId>::`, `<tId>__recv_<mfId>`);
+ * those are `scripts/scenarios/`'s namespace to keep disjoint, not this file's, and the pool
+ * component in particular is NOT schema-constrained.
  *
  * Only the container's OWN two transitions carry `#`. Ordinary transitions inside a container
  * keep their plain names, because `scripts/scenarios/format.js`'s `CHOICE_TRANSITION_RE`
@@ -296,9 +338,6 @@ function buildContainer(node, ctx) {
   const { places, transitions, arcs, skipped, flatEdges } = ctx;
 
   const label = node.name || node.id;
-  const children = node.nodes || [];
-  const hasStart = children.some(n => n.type === 'startEvent');
-  const hasEnd = children.some(n => n.type === 'endEvent');
 
   // A container without an inner start or an inner end has no well-defined entry or exit
   // marking, so there is nothing to route a token through. Fall back to the atomic treatment
@@ -306,7 +345,12 @@ function buildContainer(node, ctx) {
   // pass as a faithful translation — `scripts/scenarios/format.js` renders a non-artifact skip
   // reason as an explicit "not modelled at all" note. Rejecting such input in S11 instead would
   // be a new input restriction, which is a separate decision from this translation fix.
-  if (!hasStart || !hasEnd) {
+  //
+  // The same `isRefinableContainer` already stopped `flattenNodes`/`flattenEdges` from
+  // descending here, so the subtree is absent from both flattened views and there are no
+  // orphaned inner places for this branch to leave behind. Testing the condition separately in
+  // the two places is what would reintroduce them.
+  if (!isRefinableContainer(node)) {
     const tId = `t_${node.id}`;
     transitions.set(tId, { id: tId, label, bpmnNodeId: node.id });
     connectTransition(tId, node.id, flatEdges, places, arcs);
@@ -327,6 +371,14 @@ function buildContainer(node, ctx) {
   const inEdges = flatEdges.filter(e => e.target === node.id);
   const outEdges = flatEdges.filter(e => e.source === node.id);
 
+  // A container with ZERO outer edges on either side gets no special case, deliberately.
+  // With no incoming edge `t_C#enter` has no input place and can never fire; with no outgoing
+  // edge `t_C#exit` consumes the scope's sink token and produces nothing. Both are exactly what
+  // `connectTransition` does to a plain node in the same shape, and consistency with the atomic
+  // case is the right answer here rather than an oversight. Neither shape is silent: `net-check.js`
+  // reports the first as NC02 (transition with no incoming place) and the second as NC02b
+  // (token-destroying transition). And at the top level such a model is rejected by S02 before
+  // it reaches anything, since a process must have at least one end event. Do not add a guard.
   if (inEdges.length > 1) {
     // One entry transition per incoming edge, each consuming ONLY its own place. A single
     // transition consuming all of them would demand a token on every incoming flow at once —
@@ -395,18 +447,22 @@ function flattenNodes(nodes) {
   const out = [];
   for (const n of nodes || []) {
     out.push(n);
-    if (n.nodes?.length) out.push(...flattenNodes(n.nodes));
+    // Descend only where `buildContainer` will — see `isRefinableContainer` for why the two
+    // passes must share one predicate rather than each testing for themselves.
+    if (isRefinableContainer(n)) out.push(...flattenNodes(n.nodes));
   }
   return out;
 }
 
 /**
- * Flatten edges: include container-internal edges at every nesting level.
+ * Flatten edges: include container-internal edges at every nesting level that is actually
+ * refined into a subnet. A container that falls back to the atomic treatment contributes none
+ * of its inner edges, because no transition would ever produce or consume the resulting places.
  */
 function flattenEdges(nodes, edges) {
   const result = [...edges];
   for (const n of nodes || []) {
-    if (n.nodes?.length) {
+    if (isRefinableContainer(n)) {
       result.push(...flattenEdges(n.nodes, n.edges || []));
     }
   }

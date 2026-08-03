@@ -34,6 +34,7 @@ import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from '../http-server.js';
 import { checkDiagramIntegrity } from './di-check.js';
+import { checkNetIntegrity } from './net-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -851,10 +852,25 @@ describe('Workflow-Net Soundness', () => {
     // No inner endEvent: there is no well-defined exit marking, so the container falls back to
     // the atomic single-transition treatment — and says so via `skipped`, which
     // scripts/scenarios/format.js renders as an explicit "not modelled at all" note.
+    //
+    // The container carries a child EDGE on purpose. The place pass runs over the whole of
+    // `flatEdges` up front, so if the flatten descended into a container the translation then
+    // refuses to descend into, `p_i_s_i_t` would exist with nothing producing or consuming it
+    // and `i_s`/`i_t` would sit in `flatNodes` with no transition — the same disconnected-net
+    // defect this stage removes, relocated into the fallback path. A container with a single
+    // childless child cannot express that, which is why this fixture has two children and a
+    // flow between them.
     const proc = {
       id: 'P1', nodes: [
         { id: 's', type: 'startEvent' },
-        { id: 'sp', type: 'subProcess', name: 'Half-built', nodes: [{ id: 'i_s', type: 'startEvent' }], edges: [] },
+        {
+          id: 'sp', type: 'subProcess', name: 'Half-built',
+          nodes: [
+            { id: 'i_s', type: 'startEvent' },
+            { id: 'i_t', type: 'task', name: 'Inner' },
+          ],
+          edges: [{ id: 'i_f1', source: 'i_s', target: 'i_t' }],
+        },
         { id: 'e', type: 'endEvent' },
       ], edges: [
         { id: 'f1', source: 's', target: 'sp' },
@@ -865,7 +881,59 @@ describe('Workflow-Net Soundness', () => {
     expect(pn.transitions.has('t_sp')).toBe(true);
     expect(pn.transitions.has('t_sp#enter')).toBe(false);
     expect(pn.skipped).toContainEqual({ id: 'sp', reason: 'subProcessWithoutStartOrEnd' });
+
+    // The undescended subtree is absent from BOTH flattened views, so nothing downstream can
+    // name a node the net has no transition for.
+    expect(pn.flatNodes.map(n => n.id)).toEqual(['s', 'sp', 'e']);
+    expect(pn.flatEdges.map(n => n.id)).toEqual(['f1', 'f2']);
+    expect(pn.places.has('p_i_s_i_t')).toBe(false);
+
+    // The net is structurally intact — no orphaned places, no untranslated nodes.
+    expect(checkNetIntegrity(pn, proc).ok).toBe(true);
     // The fallback keeps the net connected, so the process still completes.
+    expect(checkSoundness(pn).stats.sinkReached).toBe(true);
+  });
+
+  test('a malformed container nested inside a well-formed one leaves no orphans', () => {
+    // The outer container refines normally; the inner one has no endEvent and falls back. The
+    // fallback must not orphan the grandchildren's places just because the level above it was
+    // descended into.
+    const proc = {
+      id: 'P2', nodes: [
+        { id: 's', type: 'startEvent' },
+        {
+          id: 'outer', type: 'subProcess', name: 'Outer',
+          nodes: [
+            { id: 'o_s', type: 'startEvent' },
+            {
+              id: 'bad', type: 'subProcess', name: 'Half-built',
+              nodes: [
+                { id: 'g_s', type: 'startEvent' },
+                { id: 'g_t', type: 'task', name: 'Grandchild' },
+              ],
+              edges: [{ id: 'g_f1', source: 'g_s', target: 'g_t' }],
+            },
+            { id: 'o_e', type: 'endEvent' },
+          ],
+          edges: [
+            { id: 'o_f1', source: 'o_s', target: 'bad' },
+            { id: 'o_f2', source: 'bad', target: 'o_e' },
+          ],
+        },
+        { id: 'e', type: 'endEvent' },
+      ], edges: [
+        { id: 'f1', source: 's', target: 'outer' },
+        { id: 'f2', source: 'outer', target: 'e' },
+      ],
+    };
+    const pn = bpmnToPN(proc);
+    expect(pn.transitions.has('t_outer#enter')).toBe(true);
+    expect(pn.transitions.has('t_bad')).toBe(true);
+    expect(pn.transitions.has('t_bad#enter')).toBe(false);
+    expect(pn.skipped).toContainEqual({ id: 'bad', reason: 'subProcessWithoutStartOrEnd' });
+    expect(pn.flatNodes.map(n => n.id)).toEqual(['s', 'outer', 'o_s', 'bad', 'o_e', 'e']);
+    expect(pn.places.has('p_g_s_g_t')).toBe(false);
+    expect(checkNetIntegrity(pn, proc).ok).toBe(true);
     expect(checkSoundness(pn).stats.sinkReached).toBe(true);
   });
 
