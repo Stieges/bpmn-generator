@@ -203,6 +203,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is valid — something the author wrote was ignored, which is worth saying and not worth refusing
   to build over — matching `S14`'s reasoning and the layer's existing WARNING rules. The rule count
   is now **36**. No golden moves; no fixture carries any of these fields out of scope.
+- **`isCollection` was written onto the wrong element, and a nested data object had no element to
+  write to at all.** OMG puts `isCollection` on `DataObject`; bpmn-moddle's metamodel grants
+  `DataObjectReference` only `dataObjectRef`. The serialiser wrote it on the reference, so every
+  model carrying it emitted `<bpmn:dataObjectReference isCollection="true">` and got
+  `unknown attribute <isCollection>` back on the round trip — a live instance of the defect class
+  `S15` exists to prevent, sitting inside `S15`'s own table. The scope table now records *which
+  element* each attribute is written to (`on`), and the attribute lands on the generated
+  `<bpmn:dataObject>`. `allowed` still names `dataObjectReference`, and correctly: Logic-Core
+  models the pair as one node, so the field is authored on the reference and only its emission
+  target differs. Fixing it exposed a second gap — the `DataObject` was only ever created for
+  *top-level* references, so a `dataObjectReference` inside a subprocess had a reference and no
+  object, and moving the write without closing that hole would have silently dropped the field one
+  nesting level down. Both build paths now create it. No golden moved: only
+  `all-element-classes.json` carries a data reference, it is top-level, and it does not set
+  `isCollection`.
 - **A wrongly-*typed* value no longer reaches the XML either.** The table carries each field's
   expected type, rather than the serialiser inferring it from the value it was handed. Inferring it
   was a real defect: `typeof value === 'boolean' ? true : value` passed any truthy non-boolean

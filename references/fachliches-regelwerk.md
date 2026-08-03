@@ -563,7 +563,19 @@ place. It now does: `OMG_NODE_FIELD_SCOPE` in `scripts/bpmn/types.js` is read by
 | `isEventSubProcess` | `triggeredByEvent` | boolean | `subProcess` |
 | `calledElement` | `calledElement` | string | `callActivity` |
 | `scriptFormat` | `scriptFormat` | string | `scriptTask` |
-| `isCollection` | `isCollection` | boolean | `dataObjectReference` |
+| `isCollection` | `isCollection` | boolean | `dataObjectReference` — but the attribute is written onto the companion `<bpmn:dataObject>`, see below |
+
+**One field is authored in one place and written in another.** Logic-Core models a data object and
+the reference to it as a single node, while BPMN splits them into a `DataObject` (the thing) and a
+`DataObjectReference` (a use of it) — and the properties split with them. `isCollection` belongs to
+the `DataObject`; bpmn-moddle's metamodel grants `DataObjectReference` only `dataObjectRef`. So the
+author writes `isCollection` on the `dataObjectReference` node, which is what S15's `allowed` set
+records, and the serialiser writes it onto the generated `<bpmn:dataObject>`. The table's `on`
+column carries that distinction.
+
+Until this was corrected the attribute went onto the reference, producing
+`<bpmn:dataObjectReference isCollection="true">` and an `unknown attribute <isCollection>` on every
+round trip — a live instance, inside S15's own table, of the defect class S15 exists to prevent.
 
 **The rule checks two things, and says only one of them at a time.** A field can be on the wrong
 *class* or carry a value of the wrong *type*. These are different mistakes with different remedies
