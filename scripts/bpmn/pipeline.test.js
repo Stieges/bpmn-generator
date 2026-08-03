@@ -1699,6 +1699,38 @@ describe('OMG Compliance — Execution Attributes', () => {
     expect(result.bpmnXml).toContain('isForCompensation="true"');
   });
 
+  test('isForCompensation is NOT emitted on a non-Activity — it is an Activity attribute', async () => {
+    // `references/input-schema.json` declares `isCompensation` as a generic property of `Node`,
+    // valid on any `NodeType`; OMG scopes `isForCompensation` to `Activity`. Unguarded, the
+    // serialiser wrote `<bpmn:parallelGateway isForCompensation="true">` — not merely unusual
+    // but outside the gateway's content model, i.e. XSD-invalid output produced from
+    // schema-valid input. `types.js`'s `isSequenceFlowExempt` was narrowed the same way in an
+    // earlier stage; this pins the serialisation half, next to `triggeredByEvent`, whose
+    // identical `node.type === 'subProcess'` guard one line down is where the pattern came from.
+    const build = (node) => ({
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', name: 'Start' },
+        node,
+        { id: 'e', type: 'endEvent', name: 'End' },
+      ],
+      edges: [{ id: 'f1', source: 's', target: 'n' }, { id: 'f2', source: 'n', target: 'e' }],
+    });
+    for (const type of ['parallelGateway', 'exclusiveGateway', 'intermediateThrowEvent']) {
+      const result = await runPipeline(build({ id: 'n', type, name: 'Bogus', isCompensation: true }));
+      expect(result.bpmnXml).not.toContain('isForCompensation');
+      // …and the drop leaves the round trip clean, which is the point: the previous behaviour
+      // was reported by bpmn-moddle as "unknown attribute <isForCompensation>" on every such
+      // model, i.e. we were knowingly emitting a file we could not parse back.
+      expect(result.validation.xmlWarnings.join(' ')).not.toContain('isForCompensation');
+    }
+    // Every Activity subclass still gets it — the guard narrows, it does not remove the feature.
+    for (const type of ['task', 'serviceTask', 'subProcess', 'callActivity', 'transaction']) {
+      const result = await runPipeline(build({ id: 'n', type, name: 'Storno', isCompensation: true }));
+      expect(result.bpmnXml).toContain('isForCompensation="true"');
+    }
+  });
+
   test('implementation attribute on serviceTask', async () => {
     const lc = {
       pools: [{

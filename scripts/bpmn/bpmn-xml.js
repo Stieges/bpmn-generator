@@ -7,7 +7,7 @@
  */
 
 import { BpmnModdle } from 'bpmn-moddle';
-import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, bpmnXmlTag } from './types.js';
+import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, isActivity, bpmnXmlTag } from './types.js';
 import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { inferGatewayDirections } from './topology.js';
@@ -228,7 +228,23 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   }
 
   // Special attributes
-  if (node.isCompensation) attrs.isForCompensation = true;
+  //
+  // `isForCompensation` is guarded on the node's class for the same reason `triggeredByEvent`
+  // one line down is: `references/input-schema.json` declares `isCompensation` as a generic
+  // property of `Node`, valid on any `NodeType`, while OMG scopes `isForCompensation` to
+  // `Activity` (and `triggeredByEvent` to `SubProcess`). Unguarded, a
+  // `{ type: 'parallelGateway', isCompensation: true }` emitted `<bpmn:parallelGateway
+  // isForCompensation="true">`, which is XSD-invalid — the attribute is not on the gateway's
+  // content model at all. `types.js`'s `isSequenceFlowExempt` was narrowed to `isActivity` for
+  // the same reason; this is the serialisation half of that same narrowing.
+  //
+  // The flag is dropped, not reported, and that is a layering decision rather than an oversight:
+  // this function's contract is "emit valid BPMN for the model it was handed", not "diagnose the
+  // model" — the same separation that keeps `net-check.js` out of judging XML. A node carrying
+  // the flag on the wrong class is a MODEL defect and the rule engine owns it: because the
+  // exemption above is type-guarded, such a node is no longer silently excused from S04/S07 and
+  // is reported there ("appears isolated" / "has no outgoing flow").
+  if (node.isCompensation && isActivity(node.type)) attrs.isForCompensation = true;
   if (node.isCollection && node.type === 'dataObjectReference') attrs.isCollection = true;
   if (node.isEventSubProcess && node.type === 'subProcess') attrs.triggeredByEvent = true;
   if (node.calledElement && node.type === 'callActivity') attrs.calledElement = node.calledElement;
