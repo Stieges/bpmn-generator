@@ -17,25 +17,6 @@
 
   "exceptions": [
     {
-      "id": "dev-brace-expansion-redos-2026-07",
-      "packages": ["brace-expansion"],
-      "maxSeverity": "high",
-      "scope": "dev",
-      "advisories": [
-        "GHSA-mh99-v99m-4gvg",
-        "GHSA-3jxr-9vmj-r5cp",
-        "GHSA-f886-m6hf-6m8v"
-      ],
-      "acceptNewAdvisories": false,
-      "reason": "DoS via brace expansion (unbounded expansion length, exponential-time expansion of consecutive non-expanding {} groups, zero-step sequence hang). Dev-tree only, mechanically provable: brace-expansion does not appear in `npm audit --omit=dev`. It is reached through jest only — glob/minimatch@9 in @jest/reporters, and test-exclude/minimatch@3 in babel-plugin-istanbul. The patterns expanded originate from jest's config and this repo's file names, never from untrusted input, and no shipped artifact contains it (build-skill.mjs bundles no node_modules).",
-      "whyNotFixed": "GHSA-mh99 covers <=5.0.7, i.e. every published version except 5.0.8. Forcing `overrides: {\"brace-expansion\": \"^5.0.8\"}` breaks the tree: brace-expansion@5 is type:module and exports `expand` as a named export only, while both consumers take the default — minimatch@9.0.9 via `__importDefault(require(...)).default` and test-exclude's minimatch@3.1.5 via `var expand = require('brace-expansion')` called as a function. Measured 2026-07-25 with the override applied: `typeof require('brace-expansion')` returned `object` (namespace, no callable default); minimatch@9 threw `TypeError: (0 , brace_expansion_1.default) is not a function`; minimatch@3 threw `TypeError: expand is not a function`. Notably `npm test` and `npm test -- --coverage` both stayed green — this repo's patterns contain no braces — so the break is real at the API level but unexercised. Shipping a knowingly broken dependency tree to silence a dev-only advisory is the worse trade. Reverted.",
-      "reviewTrigger": "jest's transitive tree reaches minimatch>=10 (which imports the named export): `cd scripts && npm ls brace-expansion --all`. Or a 1.x/2.x backport of the fix is published.",
-      "voidIf": { "importsFound": [] },
-      "owner": "Stieges",
-      "opened": "2026-07-25",
-      "expires": "2026-10-23"
-    },
-    {
       "id": "mcp-sdk-http-transport-dead-code-2026-07",
       "packages": ["@hono/node-server", "@modelcontextprotocol/sdk"],
       "maxSeverity": "moderate",
