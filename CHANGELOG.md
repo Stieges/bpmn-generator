@@ -83,6 +83,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **`S04`/`S07` no longer warn about three shapes a sequence flow legitimately never touches.** An
+  event subprocess (`isEventSubProcess`, OMG `triggeredByEvent`) is entered by its own start event;
+  a compensation activity (`isCompensation`, OMG `isForCompensation`) is reached by a compensation
+  association; a `group` is an artifact, connected by associations. Each tripped one or both
+  warnings, because each rule approximated the exemption by hand and differently — S04 via
+  `isArtifact` plus a startEvent/boundary test, S07 via three literal type names that forgot
+  `group`. Two of the three are shapes `references/prompt-template.md` actively recommends to the
+  model, so the pipeline was asking for them and then warning about them. Both rules now ask
+  `isSequenceFlowExempt` (`scripts/bpmn/types.js`), which carries the exemptions with their
+  reasons in one place. Nothing is newly rejected; this is signal quality.
+- **`S04` now names a node with an outgoing flow and no incoming one.** Its "connected" set was
+  *sources ∪ targets*, so a single outgoing flow was enough to pass — and S07 checks the opposite
+  half, so a stranded `parallelGateway` (unreachable itself, every node behind it dead) validated
+  clean under the default profile and was named only by the opt-in WF01. The set is now *targets
+  only*: strictly a superset of the old predicate, **0 nodes newly flagged** across the 21 fixture
+  files. The message splits in two, because the mistakes differ — a node with no edge at all still
+  "appears isolated", one with an outgoing flow "has no incoming flow", since calling the latter
+  isolated is simply false. The rule stays **non-recursive** (`scope: 'process'`, dispatched per
+  pool over top-level nodes); making it descend is a separate change with a separate blast radius.
+  Its citation changed with it: `7PMG G2` is *"minimize the routing paths per element"*, a
+  complexity guideline about how many arcs touch an element, which never supported this rule even
+  in its narrow reading. What supports it is the connectedness a workflow net is defined by (van
+  der Aalst 1997, *Verification of Workflow Nets*) — every node lies on a directed path from source
+  to sink — of which S04 is the always-on local approximation and WF01 the exhaustive check.
+- **`S13` now checks that a boundary event's host really is an Activity.**
+  `BoundaryEvent.attachedToRef` is typed `Activity [1..1]` (OMG §10.4.3 Table 10.86); the rule's
+  own `ref` said so and its messages said *Aktivität*, but the check only asked whether the id
+  resolved in the same container, so a gateway, an event, another boundary event or a
+  `textAnnotation` could be the host. The translation layer already refused those shapes —
+  `wireBoundaryEvents` (`scripts/bpmn/workflow-net.js`) gives such an event no transition,
+  discloses it on `pn.skipped` as `boundaryEventWithoutHost` and declares the orphaned place on
+  `pn.unproducedPlaces` — so the shape was caught and disclosed by everything except the layer that
+  talks to the author. It asks `isActivity`, not a task list: a subprocess, a transaction and a
+  callActivity are all legal hosts. Measured: **0 of 6** boundary events in the fixtures newly fail.
+- **`S10` now rejects an artifact as a message flow endpoint.** `MessageFlow.sourceRef`/`targetRef`
+  are typed `InteractionNode`, which `BPMN20.cmof` grants per class — never by inheritance — to
+  `Task`, `Event`, `Participant` and `ConversationNode` alone. `TextAnnotation` and `Group` are
+  `superClass="Artifact"`, not even FlowNodes, and the data references are FlowElements; none is an
+  InteractionNode. A `textAnnotation` endpoint nevertheless passed S09, S10, S12 **and** S14. The
+  check applies only where the endpoint resolved to a *node*: a pool id names a Participant, which
+  is an InteractionNode and lives in `lc.pools`, not in the NodeType enum. Gateways (S12, ERROR)
+  and containers (S14, WARNING) keep their own rules rather than being reported twice at a second
+  severity.
+- **`redesign.js`'s `isolateException` no longer refuses a boundary event on a subprocess.** It
+  read a private `TASK_TYPES` list without the container classes and answered *"Boundary-Ereignisse
+  hängen nur an Aufgaben"* to legal BPMN — an error boundary on a subprocess being the everyday
+  case for the transform. Verified rather than assumed: `applyIsolateException` attaches the event,
+  copies the host's lane and re-points the existing exception edge, and none of that — nor any of
+  its three guards — reads the host's type, so the restriction had no reason of its own. It now
+  asks `isActivity`. Both private `TASK_TYPES` copies (`optimize.js`, `redesign.js`) are gone; the
+  call sites that genuinely mean *leaf work step* — `previewParallelize`, `previewMergeTasks`,
+  and `optimize.js`'s O01/O02/O04 heuristics, which must not nominate a candidate the transform
+  would refuse — now share the exported `TASK_TYPES` from `types.js` with that reason written down.
+- **`S12` asks `isGateway` instead of `type.toLowerCase().includes('gateway')`.** Same
+  substring-versus-explicit-set question `types.js` settled: the local form classifies by spelling
+  and is fenced by nothing, while `GATEWAY_TYPES` is checked against `references/input-schema.json`'s
+  NodeType enum in both directions. No verdict changes for any current type.
 - **`S05`/`S06` no longer reject a re-converged XOR at ERROR severity.** Both rules asked *"do two
   branches of this split reach the AND-join?"* — a reachability question standing in for a token
   question, the same defect family as the rest of this release. Two branches that re-converge at a
@@ -215,25 +272,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
 
-- **`S13` still does not check that `attachedTo` names an *Activity*.** `BoundaryEvent.attachedToRef`
-  is typed `Activity [1..1]` (OMG §10.4.3 Table 10.86), but the rule only checks that the id exists
-  and that the host sits in the same container. A boundary event attached to a gateway, an event, an
-  artifact — or to another boundary event — passes S13. The translation is what refuses those shapes
-  rather than the rule engine: `wireBoundaryEvents` (`scripts/bpmn/workflow-net.js`) gives such an
-  event no transition and discloses it on `pn.skipped` as `boundaryEventWithoutHost`, and the place
-  for its outgoing flow is declared on `pn.unproducedPlaces` so `net-check.js` does not report a
-  translation defect for a model defect. So the shape is caught and disclosed, but by the wrong
-  layer: `runRules` calls such a model clean.
 - **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
   under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
   examples; the exhaustive check is WF03 in the opt-in `workflow_net` layer.
 - **`net-check.js` is not wired into `runPipeline`.** It runs from tests and from a direct call
   (`checkNetIntegrity(bpmnToPN(proc), proc)`) only, and is reachable over neither HTTP nor MCP.
-- **A node with no incoming sequence flow but an outgoing one is reported by no always-on rule.**
-  S04 only fires on a node with no edges at all, so an outgoing flow is enough to pass it; S07
-  checks for a missing outgoing flow, the opposite half. The only rule that names the node is
-  WF01, and `workflow_net` is opt-in (`rules/default-profile.json`). A stranded `parallelGateway`
-  — an outgoing flow, no incoming one — therefore validates clean under the default profile.
+- **`S04` is not recursive, so an unreachable node *inside* a container is still reported by no
+  always-on rule.** The rule is `scope: 'process'` and `runRules` dispatches it per pool over
+  top-level nodes only, so the widening above does not reach a candidate one level down —
+  `tests/fixtures/subprocess-collapsed-children.json` has exactly such a node. WF01
+  (`workflow_net`, opt-in) is still the only layer that names it. Making S04 descend is a separate
+  change with a separate blast radius and was deliberately not made here.
 
 ## [3.6.0] - 2026-08-01
 

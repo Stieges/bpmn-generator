@@ -37,23 +37,70 @@ ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 | S01 | Jeder Prozess hat mindestens ein Start-Event | OMG §10.4.2, 7PMG G3 | implementiert |
 | S02 | Jeder Prozess hat mindestens ein End-Event | OMG §10.4.2, 7PMG G3 | implementiert |
 | S03 | Kanten referenzieren nur existierende Nodes (source/target) | OMG §10.3.1 | implementiert |
-| S04 | Keine isolierten Nodes (ohne ein-/ausgehende Kante) (Severity WARNING) | 7PMG G2 | implementiert |
+| S04 | Jeder Node wird von einer eingehenden Sequenzkante erreicht — keine isolierten und keine unerreichbaren Nodes (Severity WARNING) | OMG §7.3.1, van der Aalst (1997) WF-Net-Zusammenhang (erschoepfend: WF01) | implementiert |
 | S05 | Kein Deadlock: XOR-Split darf keinen AND-Join auf exklusiven Pfaden speisen | OMG §10.5, Silver Ch.5, 7PMG G4, CMOF: ExclusiveGateway/ParallelGateway superClass="Gateway"; Gateway.gatewayDirection : GatewayDirection {Unspecified, Converging, Diverging, Mixed} | implementiert |
 | S06 | Kein Deadlock: Inclusive-Split darf keinen AND-Join auf exklusiven Pfaden speisen | OMG §10.5, CMOF: InclusiveGateway superClass="Gateway" mit default : SequenceFlow | implementiert |
-| S07 | Jeder Pfad vom Start muss ein End-Event erreichen koennen (Severity WARNING) | 7PMG G1 | implementiert |
+| S07 | Jeder Pfad vom Start muss ein End-Event erreichen koennen — Nodes ohne ausgehende Kante (Severity WARNING) | 7PMG G1 | implementiert |
 | S08 | Boundary-Event-Pfade muessen in End-Event terminieren (Severity WARNING) | OMG §10.4.4, BEF4LLM | implementiert |
 | S09 | Message Flows nur zwischen verschiedenen Pools | OMG §9.4 | implementiert |
-| S10 | Message Flows: Quell- und Ziel-Nodes muessen existieren | OMG §9.4 | implementiert |
+| S10 | Message Flows: Quell- und Ziel-Endpunkte muessen existieren, und wo sie einen Knoten benennen, muss dieser ein InteractionNode sein | OMG §9.4, §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; TextAnnotation/Group superClass="Artifact" (kein FlowNode), DataObject-/DataStoreReference sind FlowElements | implementiert |
 | S11 | SubProcess-Kinder: Start-Event + End-Event vorhanden | OMG §10.2.1 | implementiert |
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
-| S13 | Boundary Event muss an einer existierenden Aktivität hängen | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
+| S13 | Boundary Event muss an einer existierenden Aktivität im selben Container hängen — und der Host muss wirklich eine Aktivität sein | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
 | S14 | Message Flow source/target darf kein Container sein — der Klasse nach (SubProcess/Transaction/AdHocSubProcess/CallActivity) oder der Struktur nach (eigenes `nodes`-Array) (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
 
-**Zu S04:** "isoliert" heißt hier ganz konkret ohne jede Kante, weder ein- noch ausgehend — ein
-Node mit genau einer ausgehenden (aber keiner eingehenden) Kante besteht S04, ebenso S07 (das nur
-die fehlende ausgehende Kante prüft). Ein solcher Node, etwa ein `parallelGateway`, das nichts
-erreicht, validiert unter dem Default-Profil sauber; nur WF01 (`workflow_net`, opt-in) benennt ihn
-als toten Transition. Siehe CHANGELOG's "Known limitations" für [Unreleased].
+**Zu S04:** Die Regel fragt nach **eingehenden** Kanten, nicht nach Kanten überhaupt — und das ist
+eine Korrektur, keine Formulierungsfrage.
+
+Bis einschließlich v3.6 bildete S04 die Menge der „verbundenen" Knoten als *Quellen ∪ Ziele*. Ein
+Knoten mit genau einer **ausgehenden** und keiner eingehenden Kante galt damit als verbunden und
+bestand S04; S07 prüft die spiegelbildliche Hälfte (fehlende ausgehende Kante) und schwieg
+ebenfalls. Ein gestrandetes `parallelGateway` — nichts führt hinein, alles dahinter ist tot —
+validierte unter dem Default-Profil vollständig sauber. Benannt hat es nur WF01, und die
+`workflow_net`-Schicht ist opt-in. Das war keine bewusste Engfassung, sondern ein blinder Fleck:
+„isoliert" ist eine *Beschreibung* des auffälligsten Falls, nicht die Eigenschaft, um die es geht.
+Die Eigenschaft ist Erreichbarkeit.
+
+Seit dieser Fassung ist die Menge *nur die Ziele*. Das ist strikt eine Obermenge des alten
+Verhaltens — alles, was vorher gemeldet wurde, wird weiterhin gemeldet — und über alle 21
+Fixture-Dateien meldet sie **null zusätzliche Knoten**, weil kein Fixture diese Form enthält.
+Zwei Meldungstexte statt einem: hat der Knoten gar keine Kante, heißt es weiterhin *appears
+isolated*; hat er eine ausgehende, heißt es *has no incoming flow*, denn „isoliert" wäre über
+einen verdrahteten Knoten schlicht falsch und würde den Leser an die falsche Stelle schicken.
+
+**Zur Quellenangabe.** S04 zitierte bis hierher `7PMG G2`. Das trug die Regel nicht: 7PMG G2 ist
+*„minimize the routing paths per element"* (Mendling/Reijers/van der Aalst 2010) — eine
+Komplexitäts-Leitlinie über die *Anzahl* der Kanten an einem Element, die über ein Element ohne
+Kanten nichts aussagt. Die Quelle stützte also nicht einmal die alte, enge Lesart. Was die Regel
+trägt, ist die Zusammenhangs-Eigenschaft, über die ein Workflow-Netz definiert ist (van der Aalst
+1997, *Verification of Workflow Nets*): jeder Knoten liegt auf einem gerichteten Pfad von der
+Quelle zur Senke. Ein Knoten, in den keine Sequenzkante führt, liegt auf keinem solchen Pfad. Genau
+diese Eigenschaft prüft WF01 erschöpfend; S04 ist ihre immer aktive, rein lokale Näherung (keine
+eingehende Kante, statt: kein Pfad vom Start-Event).
+
+**Nicht rekursiv.** S04 hat `scope: 'process'`, `runRules` ruft sie pro Pool über die Knoten der
+obersten Ebene auf. Ein Kandidat *innerhalb* eines Containers (z. B. in
+`tests/fixtures/subprocess-collapsed-children.json`) wird von S04 also nicht gesehen — das ist
+mit ein Grund für die gemessene Null. Sie absteigen zu lassen ist eine eigene Änderung mit eigener
+Reichweite, bewusst nicht Teil dieser.
+
+**Zu S04 und S07 gemeinsam — was eine Sequenzkante gar nicht erreichen kann.** Beide Regeln
+hatten eine eigene, handgeschriebene Ausnahmeliste, und beide waren unvollständig — auf
+unterschiedliche Weise, was dazu führte, dass dieselben drei Modellformen mal die eine, mal beide
+Warnungen auslösten:
+
+| Form | vorher S04 | vorher S07 | Grund für die Ausnahme |
+|------|-----------|-----------|------------------------|
+| Ereignis-Subprozess (`isEventSubProcess`) | „appears isolated" | „no outgoing flow" | OMG `triggeredByEvent`: wird durch sein eigenes Start-Event betreten, keine Sequenzkante führt hinein oder heraus |
+| Kompensations-Aktivität (`isCompensation`) | „appears isolated" | „no outgoing flow" | OMG `isForCompensation`: wird über eine Kompensations-Assoziation ausgelöst, nicht über eine Sequenzkante |
+| `group` (Artefakt) | ausgenommen (`isArtifact`) | „no outgoing flow" | Artefakt — Assoziationen verbinden es, keine Sequenzkanten; S07s Literalliste kannte nur die anderen drei Artefakt-Typen |
+
+Beide Regeln fragen jetzt dieselbe Funktion, `isSequenceFlowExempt` (`scripts/bpmn/types.js`), die
+die Ausnahmen mitsamt ihrer jeweiligen Begründung an einer Stelle führt (`startEvent`, Boundary
+Event, Artefakt, `isCompensation`, `subProcess` mit `isEventSubProcess`). Das ist reine
+Signalqualität: **keine** Form wird dadurch neu beanstandet. Der Anlass ist, dass zwei der drei
+Formen in `references/prompt-template.md` ausdrücklich empfohlen werden — die Pipeline forderte
+das Modell also auf, sie zu erzeugen, und warnte anschließend davor.
 
 **Zu S13:** `attachedToRef` ist im OMG-Schema Pflicht (1..1). Ohne diese Prüfung lief ein
 ins Leere zeigendes `attachedTo` bis in die Ausgabe durch und erzeugte ein `boundaryEvent`
@@ -67,14 +114,19 @@ Fehler durch: ein Boundary Event *innerhalb* eines Subprozesses ohne `attachedTo
 BPMN, grüne Validierung) und den Gegenfall, ein Boundary Event der obersten Ebene, das auf
 einen Knoten *innerhalb* eines Subprozesses zeigt (auflösbar, aber laut BPMN unzulässig).
 
-**Offen bei S13:** Die Regel prüft *nicht*, dass `attachedTo` eine **Activity** benennt.
-`BoundaryEvent.attachedToRef` ist im CMOF auf `Activity [1..1]` typisiert; S13 prüft nur, dass die
-Id existiert und im selben Container liegt. Ein Boundary Event an einem Gateway, an einem Event, an
-einem Artefakt oder an einem anderen Boundary Event kommt hier also durch. Aufgefangen wird die
-Form erst in der Übersetzung: `wireBoundaryEvents` (`scripts/bpmn/workflow-net.js`) gibt so einem
-Ereignis gar keine Transition und legt es als `boundaryEventWithoutHost` auf `pn.skipped` offen.
-Damit ist die Form erkannt und offengelegt — aber von der falschen Schicht, denn `runRules` nennt
-ein solches Modell sauber.
+Seit dieser Fassung prüft S13 zusätzlich die **Klasse des Hosts**: `BoundaryEvent.attachedToRef`
+ist im CMOF auf `Activity [1..1]` typisiert, und die Regel fragt das jetzt auch (`isActivity`,
+`scripts/bpmn/types.js`) statt nur, ob die Id existiert und im selben Container liegt. Vorher kam
+ein Boundary Event an einem Gateway, an einem Event, an einem Artefakt oder an einem anderen
+Boundary Event durch; aufgefangen wurde die Form erst in der Übersetzung — `wireBoundaryEvents`
+(`scripts/bpmn/workflow-net.js`) gibt so einem Ereignis gar keine Transition und legt es als
+`boundaryEventWithoutHost` auf `pn.skipped` offen. Die Form war also erkannt, aber von der falschen
+Schicht: `runRules` nannte ein solches Modell sauber. Beide Schichten sagen jetzt dasselbe.
+
+`isActivity` und ausdrücklich **nicht** eine Aufgaben-Liste: `SubProcess`, `Transaction` und
+`CallActivity` sind Activity-Unterklassen, ein Boundary Event hängt an ihnen genauso zulässig wie
+an einer Aufgabe (Error-Boundary an einem Sub-Prozess ist der Regelfall überhaupt). Über die
+Fixtures gemessen: **0 von 6** Boundary Events fallen neu durch.
 
 **On S05/S06:** both rules used to ask *"do two branches of this split reach the AND-join?"*.
 That is a reachability question, not a token question, and it rejected sound models at ERROR
