@@ -142,8 +142,18 @@ It is a **separate key** from `diagnostics` rather than merged into it: `Diagnos
 `references/api-schema.json` is a closed `DI01`–`DI06` enum with `additionalProperties: false`.
 For the same reason `netDiagnostics` is **not surfaced over HTTP or MCP** — `/generate`,
 `/orchestrate` and `generate_bpmn` assemble their payloads key by key and none of them carries it.
-The CLI does gate on it, exactly as it gates on DI: an NC ERROR is fatal with no files written, an
-NC WARNING/INFO is printed and fatal only under `--strict`.
+The CLI gates on it much as it gates on DI: an NC ERROR is fatal with no files written, an NC
+WARNING is printed and fatal only under `--strict`. **INFO is printed and never fatal** — one
+deliberate difference from the DI block, which has no INFO codes so the question never arose
+there. NC05 is the case: its own message says multiple start events sharing one source place are
+standard WF-net/OMG normalisation and *not* a defect (OMG §10.4.2 treats them as alternative
+instantiations), and a gate that refuses to write files while quoting that sentence would be
+telling the caller something false.
+
+Both CLI gates — DI and NC — are on the ordinary generate path only. `--drill-down` takes an
+earlier branch (`generateDiagramSet`) that checks `validation.errors` and writes its diagrams, so
+it bypasses the NC gate exactly as it already bypasses the DI one. That is pre-existing behaviour
+and unchanged; it does mean `--drill-down` will still write a file the ordinary path refuses.
 
 It is additionally fenced over every Logic-Core fixture at the top level of `tests/fixtures/` by
 `scripts/bpmn/net-check.test.js`, so a new fixture is covered the day it lands without anyone
@@ -160,7 +170,7 @@ having to remember to add it. `tests/fixtures/negative/` is exempt from that sca
 | NC03b | ERROR | A place is never consumed by any transition |
 | NC04 | ERROR | Two distinct edges were assigned the same place — an invariant assertion on `namePlaces` |
 | NC05 | INFO | The source place has more than one consuming transition |
-| NC06 | ERROR | Two distinct Logic-Core elements collide on the same net id |
+| NC06 | ERROR | Two distinct Logic-Core **nodes** share an id, or an edge-derived place id collides with the reserved source/sink place. Duplicate **edge** ids are out of scope — see below |
 
 NC01 is the exact shape of the container-blindness defect this guard exists for: a translation
 step silently drops a node instead of translating it, and the resulting net is still well-formed —
@@ -223,6 +233,23 @@ naming rule that breaks the invariant must fail loudly rather than degrade a dia
 its value lives entirely in the vacuity test in `scripts/bpmn/net-check.test.js` that forces a
 collision into the map and requires the code to fire. NC06's edge-derived shape (b) is a fence of
 the same kind and was already one before this change.
+
+**NC06 covers duplicate NODE ids, not duplicate edge ids, and that boundary is deliberate.** A
+duplicate node id really is a translation defect: `transitions` is keyed `t_<node.id>` and
+`buildContainer` mints one `p_<C>#source`/`p_<C>#sink` pair per container id, so the second node
+overwrites the first and the net ends up with one transition where the model has two nodes —
+NC06's message, "the net can only represent one of them", is literally true. A duplicate *edge* id
+is a different thing: `namePlaces` keys places `p_<src>_<tgt>[#k]` and `pn.placeOfEdge` is keyed by
+edge **object identity**, so two edges sharing an id get two places and two sets of arcs. Nothing
+is overwritten, the net is a correct model of the Logic-Core, and NC06's message would be false.
+Reporting it here would be exactly the category error the NC02/NC02b scoping above was performed
+to remove — a Petri-net guard making a claim about XML serialisation.
+
+Duplicate edge ids are nonetheless invalid BPMN (`xsd:ID` is document-wide unique), and the layer
+that owns them already detects them precisely: re-parsing the generated XML through bpmn-moddle
+reports `duplicate ID <…>` in `validation.xmlWarnings`. That channel is fatal only under
+`--strict`, so by default such a file is still written. See *Known limitations* in `CHANGELOG.md`
+for the gap and the remedy.
 
 NC05 is disclosure, not a defect: van der Aalst's WF-nets require a single source, and OMG BPMN
 2.0.2 §10.4.2 treats multiple start events as alternative instantiations of the same process, so
