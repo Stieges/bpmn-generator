@@ -5,8 +5,19 @@ node_modules/
 !tests/**
 !docs/**
 
-# OMG spec files (keep locally, download links in omg-compliance.md)
-references/omg-spec/
+# OMG spec files (keep locally, download links in omg-compliance.md).
+# The four DMN 1.3 XSD schemas are tracked (39,237 B total, needed by the XSD
+# validation test in scripts/dmn/dmn-xml.test.js) — everything else (PDFs,
+# CMOF, informative examples, ~136 MB) stays out.
+references/omg-spec/*
+!references/omg-spec/normative
+references/omg-spec/normative/*
+!references/omg-spec/normative/dmn
+references/omg-spec/normative/dmn/*
+!references/omg-spec/normative/dmn/DMN13.xsd
+!references/omg-spec/normative/dmn/DMNDI13.xsd
+!references/omg-spec/normative/dmn/DC.xsd
+!references/omg-spec/normative/dmn/DI.xsd
 
 # OS
 .DS_Store
