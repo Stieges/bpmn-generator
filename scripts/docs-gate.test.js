@@ -3,12 +3,15 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import {
   checkResponseContract,
   checkNumbers,
   checkDocPaths,
   checkPackageIntegrity,
   evaluateChangelogNudge,
+  extractActualCodes,
+  CODE_FAMILIES,
   ToolingError,
 } from '../.github/scripts/docs-gate.mjs';
 
@@ -235,13 +238,16 @@ describe('docs-gate — checkNumbers', () => {
   });
 
   test('an NC code documented but not emitted is a finding', () => {
-    // Only a code within the family's real shape (NC0[1-6][ab]?) is something the doc-side
-    // regex recognises as a code token at all — same as DI09 being a plain "DI0<digit>" above.
-    // Here the doc still mentions NC06 but the module no longer emits it.
-    const findings = checkNumbers(base({ actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05'] }));
+    // The NC digit is open (NC0\d[ab]?), same as DI's NC0\d — so, like DI09 above, a genuinely
+    // fictitious code (NC09, which net-check.js has never emitted) is enough on its own; this
+    // no longer needs to reuse an in-shape real code the way it did when the pattern was closed
+    // to NC0[1-6].
+    const findings = checkNumbers(base({
+      apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06. NC codes: NC01, NC02, NC02b, NC03a, NC03b, NC04, NC05, NC06, NC09.',
+    }));
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ check: 'nc-codes' });
-    expect(findings[0].detail).toContain('NC06');
+    expect(findings[0].detail).toContain('NC09');
     expect(findings[0].detail).toContain('does not emit');
   });
 
@@ -266,6 +272,44 @@ describe('docs-gate — checkNumbers', () => {
     expect(findings).toHaveLength(2);
     expect(findings.find((f) => f.check === 'di-codes').detail).toContain('DI07');
     expect(findings.find((f) => f.check === 'nc-codes').detail).toContain('NC06');
+  });
+});
+
+describe('docs-gate — extractActualCodes (the module-source side of a code family)', () => {
+  // Regression pin for a real defect: the NC family's sourcePattern was originally hard-coded to
+  // NC0[1-6][ab]?, so a wholly new code like NC07 was invisible to actualNcCodes — checkNumbers
+  // never even saw it, so `npm run docs-gate` stayed green with NC07 both unemitted-by-the-check
+  // AND undocumented. This exercises the CODE_FAMILIES table's real sourcePattern directly
+  // (rather than injecting a hand-picked actualNcCodes array, as the checkNumbers tests above
+  // do), so a future narrowing of the pattern fails here first.
+  test('the NC sourcePattern captures a code outside the original NC01-NC06 range', () => {
+    const family = CODE_FAMILIES.find((f) => f.check === 'nc-codes');
+    const syntheticSrc = `
+      const SEVERITY = { NC01: 'ERROR', NC07: 'ERROR' };
+      issues.push({ code: 'NC01', severity: SEVERITY.NC01, message: 'x' });
+      issues.push({ code: 'NC07', severity: SEVERITY.NC07, message: 'y' });
+    `;
+    expect(extractActualCodes(syntheticSrc, family.sourcePattern)).toEqual(
+      expect.arrayContaining(['NC01', 'NC07']),
+    );
+  });
+
+  test('the DI sourcePattern is exercised the same way, for parity', () => {
+    const family = CODE_FAMILIES.find((f) => f.check === 'di-codes');
+    const syntheticSrc = `issues.push({ code: 'DI01', severity: 'ERROR' });`;
+    expect(extractActualCodes(syntheticSrc, family.sourcePattern)).toEqual(['DI01']);
+  });
+
+  test('a real net-check.js source read from disk is captured in full by its own sourcePattern', () => {
+    // Closes the loop end-to-end: not a synthetic snippet, the actual file this stage's
+    // (module, prefix, doc) table is pinned against, read the same way gatherNumberInputs()
+    // reads it in production.
+    const family = CODE_FAMILIES.find((f) => f.check === 'nc-codes');
+    const netCheckSrc = readFileSync(join(__dirname, 'bpmn', 'net-check.js'), 'utf8');
+    const codes = extractActualCodes(netCheckSrc, family.sourcePattern);
+    expect(codes.sort()).toEqual(
+      ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05', 'NC06'].sort(),
+    );
   });
 });
 

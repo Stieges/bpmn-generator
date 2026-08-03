@@ -206,23 +206,45 @@ const DMN_CLAIM_RE = /\bdmn\b/i;
 //  - the `prefix` regex is anchored with `\b` on both ends, so a code appearing inside running
 //    prose (not as a standalone token) never accidentally satisfies the check.
 // NC02b/NC03a/NC03b are not the same shape as DI01…DI06 — `prefix` has to match the optional
-// trailing letter, or NC02b would be misread as a mention of NC02.
-const CODE_FAMILIES = [
+// trailing letter, or NC02b would be misread as a mention of NC02. That is the only way NC's
+// shape differs from DI's: `\bNC0\d[ab]?\b` stays as open-ended in the digit as DI0\d is, on
+// purpose — a family that is hard-coded to the codes that exist today (`NC0[1-6]`) would go
+// blind to NC07 the day it ships, which is exactly the drift this check exists to catch, one
+// level up. Two later stages of this plan touch net-check.js and are expected to add codes.
+// `sourcePattern` extracts the codes a module actually emits from its own source text (the
+// `code: '...'` object-literal idiom both di-check.js and net-check.js use), one capture group
+// per code. It is deliberately as open in the digit as `prefix` — a family whose sourcePattern is
+// narrower than its prefix (or vice versa) can go blind on one side of the drift check without
+// either side's test noticing, which is exactly the bug this table shape exists to make
+// impossible: see extractActualCodes()'s own regression test in docs-gate.test.js.
+export const CODE_FAMILIES = [
   {
     check: 'di-codes',
     module: 'scripts/bpmn/di-check.js',
     doc: 'references/api-reference.md',
     prefix: /\bDI0\d\b/g,
+    sourcePattern: /code: '(DI0\d)'/g,
     actualCodesKey: 'actualDiCodes',
   },
   {
     check: 'nc-codes',
     module: 'scripts/bpmn/net-check.js',
     doc: 'references/api-reference.md',
-    prefix: /\bNC0[1-6][ab]?\b/g,
+    prefix: /\bNC0\d[ab]?\b/g,
+    sourcePattern: /code: '(NC0\d[ab]?)'/g,
     actualCodesKey: 'actualNcCodes',
   },
 ];
+
+/**
+ * Pure: the codes a module's own source actually declares, via `family.sourcePattern`. Exported
+ * so a test can feed it a synthetic source snippet (e.g. one containing `code: 'NC07'`) without
+ * needing a real file on disk — the regression pin for "a code outside the range that existed
+ * when the pattern was written must still be caught" lives on this function.
+ */
+export function extractActualCodes(moduleSrc, sourcePattern) {
+  return [...new Set([...moduleSrc.matchAll(sourcePattern)].map((m) => m[1]))];
+}
 
 /**
  * One family's drift check, both directions. Pure: takes the doc text it is pinned against and
@@ -323,8 +345,6 @@ function gatherNumberInputs() {
   const evaluationText = readFileSync(join(REPO_ROOT, 'EVALUATION.md'), 'utf8');
   const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
   const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'rules.js'), 'utf8');
-  const diCheckSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'di-check.js'), 'utf8');
-  const netCheckSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'net-check.js'), 'utf8');
 
   const actualRuleCount = [...rulesSrc.matchAll(/^\s*id: '/gm)].length;
   // Each rule declares a `layer:`; the distinct values are the layer count — this
@@ -335,9 +355,16 @@ function gatherNumberInputs() {
   const dmnRulesSrc = readFileSync(join(SCRIPTS_DIR, 'dmn', 'rules.js'), 'utf8');
   const actualDmnRuleCount = [...dmnRulesSrc.matchAll(/^\s*id: '/gm)].length;
   const actualDmnLayerCount = new Set([...dmnRulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
-  const actualDiCodes = [...new Set([...diCheckSrc.matchAll(/code: '(DI0\d)'/g)].map((m) => m[1]))];
-  // NC02b/NC03a/NC03b carry a trailing letter DI's codes never do — see CODE_FAMILIES' comment.
-  const actualNcCodes = [...new Set([...netCheckSrc.matchAll(/code: '(NC0[1-6][ab]?)'/g)].map((m) => m[1]))];
+
+  // Driven by the same CODE_FAMILIES table checkNumbers() checks against, so a family's actual
+  // codes are always extracted with the exact `sourcePattern` that table declares for it — no
+  // second, hand-written extraction line per family to drift out of step with the table.
+  const actualCodesByKey = {};
+  for (const family of CODE_FAMILIES) {
+    const moduleSrc = readFileSync(join(REPO_ROOT, family.module), 'utf8');
+    actualCodesByKey[family.actualCodesKey] = extractActualCodes(moduleSrc, family.sourcePattern);
+  }
+  const { actualDiCodes, actualNcCodes } = actualCodesByKey;
 
   let topLevelStdout;
   try {
