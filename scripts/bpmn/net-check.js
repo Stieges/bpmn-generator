@@ -27,13 +27,14 @@ const ARTIFACT_TYPES = new Set(['dataObjectReference', 'dataStoreReference', 'te
 
 // One severity constant per code, so a later stage that fixes the underlying defect can flip a
 // code from WARNING to ERROR (or vice versa) by changing one line here — nothing else in this
-// file encodes severity. NC02 and NC04 are WARNING **on purpose** at this stage: the defects
-// they detect (a transition with no way to fire; two edges silently sharing one place) are real,
-// but promoting them to ERROR before Stage 1 fixes them would fail fixtures that are otherwise
-// fine today. See the brief for the exact flip conditions.
+// file encodes severity. NC02 was WARNING until boundary events got a translation
+// (`wireBoundaryEvents`, workflow-net.js): a transition with no way to fire had exactly one
+// legitimate cause, and that cause is gone, so the code now says what it always meant. NC04 is
+// still WARNING on purpose — two edges silently sharing one place is real, but the place-id
+// scheme that causes it has not been changed yet.
 const SEVERITY = {
   NC01: 'ERROR',
-  NC02: 'WARNING',
+  NC02: 'ERROR',
   NC02b: 'ERROR',
   NC03a: 'ERROR',
   NC03b: 'ERROR',
@@ -86,11 +87,13 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
     }
   }
 
-  // NC02 — a transition with no incoming P→T arc. getEnabledTransitions (workflow-net.js:277)
+  // NC02 — a transition with no incoming P→T arc. getEnabledTransitions (workflow-net.js)
   // requires inputArcs.length > 0, so a transition in this state can never fire, in any
   // marking — a structural fact about the net, not a behavioural one that BFS would need to
-  // discover. WARNING at this stage (see SEVERITY comment above): legitimate today for e.g. a
-  // boundary event, whose incoming trigger is the host it attaches to, not a sequence flow.
+  // discover. ERROR: the one shape that used to make this legitimate — a boundary event, whose
+  // trigger is its host rather than a sequence flow — now consumes the host's own input places
+  // (`wireBoundaryEvents`, workflow-net.js). A boundary event whose host cannot be found gets
+  // no transition at all and is disclosed on `skipped` instead, so it does not land here.
   for (const [tId, t] of transitions) {
     const hasIncoming = arcs.some(a => a.type === 'P→T' && a.to === tId);
     if (!hasIncoming) {

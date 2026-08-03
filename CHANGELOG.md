@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   produces (every node has a transition, every place is produced and consumed, every id is
   unique), never the model — a legitimately unsound process (a real deadlock, a real dead end)
   must still come out clean, `checkSoundness`/WF01–WF03's job. `NC02` (a transition that can
-  never fire) and `NC04` (two edges silently sharing one place) are WARNING today and become
-  ERROR once the defects behind them are fixed in a later stage; `NC05` (multiple start events
+  never fire) is **ERROR**, its one legitimate cause — an untranslated boundary event — having
+  been removed in the same release; `NC04` (two edges silently sharing one place) is WARNING today
+  and becomes ERROR once the place-id scheme behind it is fixed; `NC05` (multiple start events
   sharing one source place) is INFO — disclosure, not a defect. Fenced directory-wide over every
   Logic-Core fixture under `tests/fixtures/` by `net-check.test.js`, so a new fixture is covered
   the day it lands. Documented in `references/api-reference.md`; the check is now also pinned
@@ -32,8 +33,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generating; `rules/strict-profile.json` escalates it to ERROR.
 - `references/prompt-template.md` now states the negative explicitly, upstream of every future
   generated model, and records that a node nested inside a subprocess *is* a valid endpoint.
+- **`pn.approximations` — a disclosure channel for what the translation under-models rather than
+  skips.** `pn.skipped` says "this node has no control-flow model at all"; the new list says "this
+  node fires, but not in every way BPMN allows", which is a different thing to tell a reader.
+  Today it carries `nonInterruptingBoundaryEvent` (a `cancelActivity: false` event is translated
+  exactly like an interrupting one — the faithful encodings each invent something the model does
+  not say: a forced AND adds a path, a silent skip transition adds a step to the trace, and
+  under-modelling *and saying so* is the only option that invents nothing) and
+  `boundaryEventOnContainer` (competing with the subprocess's entry means "ran partway, then was
+  cancelled" is not enumerated; cancelling mid-flight needs a cancel region, which no fixed set of
+  Petri-net arcs expresses). Passed through `stats` by `scripts/scenarios/enumerate.js` and
+  `collaboration.js` and rendered as a note — never a warning, the enumeration did finish — by
+  `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
+  disclosed.
 
 ### Fixed
+- **Boundary events now have a Petri-net translation; before, they had none, silently.**
+  `connectTransition` wired a `boundaryEvent` from its incoming sequence flows — of which a
+  boundary event has none, its trigger being the host it attaches to — so its transition reached
+  the net with no input arc at all and `getEnabledTransitions` (which requires
+  `inputArcs.length > 0`) could never fire it, in any marking. Nothing reported it: the transition
+  existed, the net looked populated, and the entire escalation path downstream of the event was
+  simply absent from every enumerated scenario and every soundness verdict. Measured, this had
+  been deleting `in_timer`/`in_remind`/`in_end_rem` from `realistic-collaboration.json`,
+  `b`/`esc`/`e2` from `all-element-classes.json` and `c_bnd`/`c_end2` from
+  `subprocess-child-fidelity.json` — each reported as a WF01 *dead transition*, i.e. as a finding
+  about the model rather than about the translation. `wireBoundaryEvents`
+  (`scripts/bpmn/workflow-net.js`) now makes a boundary event an XOR alternative to its host: it
+  consumes exactly the places the host consumes, and produces on its own outgoing places. It reads
+  the host's actual arcs rather than re-deriving which branch built them, so a host that is a
+  container (one boundary transition per `t_C#enter#i`, never the exit — that marking is the
+  subprocess having already finished) and a host built through the implicit-merge branch (one per
+  `t_<h>_merge_<i>`) both fall out without a special case. A boundary event whose host cannot be
+  found gets no transition at all and is disclosed on `pn.skipped`, rather than recreating the
+  unfireable transition.
 - **`bpmnToPN` no longer drops an expanded subprocess container while flattening, silently
   disconnecting the net.** `flattenNodes` replaced a container with its children — the container
   itself got no transition, and the outer edges naming it became places nothing produced and
