@@ -14,7 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unique), never the model — a legitimately unsound process (a real deadlock, a real dead end)
   must still come out clean, `checkSoundness`/WF01–WF03's job. `NC02` (a transition that can
   never fire) is **ERROR**, its one legitimate cause — an untranslated boundary event — having
-  been removed in the same release; `NC04` (two distinct edges assigned the same place) is
+  been removed in the same release. That promotion is also what forced `NC02`/`NC02b` to be
+  **scoped to the translation**, and the scoping is part of the contract, not an implementation
+  detail: "this transition can never fire" is equally true of a model that routes nothing into the
+  node (a `parallelGateway` nothing leads to, a subprocess with no incoming flow), which is a
+  faithful translation of a defective model and therefore WF01's finding — plus S04/S07's — never
+  this pass's. Both codes now fire only where the Logic-Core gives the node an input (resp. an
+  output) that the net does not have. Measured over 4000 random rule-engine-clean processes, the
+  unscoped codes produced 6601 `NC02` + 6612 `NC02b` ERRORs across 3380 of 3983 nets, while
+  `NC01`, `NC03a`, `NC03b`, `NC04` and `NC06` never fired once — so the model-judging was entirely
+  in those two, and wiring this pass into `runPipeline` (a documented next step) would have
+  rejected models that generate today. Three input sources count, and the third is the one that
+  makes the scoping safe: an incoming sequence flow, a start event's own scope source place, and
+  **a boundary event's `attachedTo` host** — a boundary event has no incoming sequence flow by
+  definition (OMG §10.4.4), so a naive "no flow ⇒ not a finding" rule would have exempted every
+  one of them and blinded `NC02` to the exact defect its promotion was for. A regression test in
+  `net-check.test.js` re-breaks the wiring and requires the ERROR. `NC04` (two distinct edges
+  assigned the same place) is
   **ERROR**, its own one legitimate cause — the pair-keyed place-id scheme — having been removed
   in the same release too, though note what that leaves it checking: it reads `pn.placeOfEdge`
   rather than re-deriving the id (re-deriving would ERROR on every legal parallel pair), so it
@@ -26,16 +42,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the day it lands. Documented in `references/api-reference.md`; the check is now also pinned
   against `references/api-reference.md` by `.github/scripts/docs-gate.mjs`'s generalised
   `(module, prefix, doc)` diagnostic-code table, alongside `di-check.js`'s `DI` family.
-- **`S14` — a MessageFlow endpoint may not name a subprocess container.** `MessageFlow.sourceRef`
+- **`S14` — a MessageFlow endpoint may not name a container.** `MessageFlow.sourceRef`
   and `targetRef` are typed `InteractionNode` (`BPMN20.cmof:851-852`). `Task` (`:1191`) and `Event`
   (`:287`) are InteractionNodes by an explicit second superclass and `Participant` (`:863`)
   likewise, but `Activity` is `superClass="FlowNode"` alone (`:1095`), so `SubProcess` (`:1147`),
   `CallActivity` (`:1188`), `AdHocSubProcess` (`:1222`) and `Transaction` (`:1233`) are not. The
   message names the remedy — a black-box participant, or a send/receive task or message event
-  *inside* the subprocess — and states that collapsing does not help, `isExpanded` being a
+  *inside* the container — and states that collapsing does not help, `isExpanded` being a
   `BPMNShape` attribute (`BPMNDI.xsd:55`) with no semantic counterpart. Severity is **WARNING**,
   consistent with the soundness layer's existing S04/S07/S08, so models that generate today keep
   generating; `rules/strict-profile.json` escalates it to ERROR.
+  The rule asks `isContainerNode` (`scripts/bpmn/types.js`), i.e. **by class or by structure**, and
+  both legs matter. The class leg is why it is not `n.nodes?.length` (a `callActivity` never
+  carries children, a collapsed `subProcess` need not). The structural leg is why it is not
+  `CONTAINER_TYPES.has(type)`, which is what it asked in its first cut: `references/input-schema.json`
+  declares `nodes` on every `Node`, so a `userTask` with children is schema-valid input and
+  `bpmnToPN`'s own `isContainer` — purely structural — gives it an entry/exit pair. On exactly that
+  model, `composeCollaboration` (`scripts/scenarios/collaboration.js`) refused the endpoint and
+  dropped the synchronisation while S14 emitted nothing, and `scripts/scenarios/format.js` then told
+  the reader the endpoint "names a subProcess (S14)" about a node that is neither — the same
+  two-layer disagreement the shared `CONTAINER_TYPES` closed in the other direction, reached through
+  the leg that was not shared. Both layers now read one predicate, and neither the rule message nor
+  the scenario note says "subProcess" any more: each names the node's actual type, and gives the
+  CMOF argument only where the node really is in the `Activity` class.
 - `references/prompt-template.md` now states the negative explicitly, upstream of every future
   generated model, and records that a node nested inside a subprocess *is* a valid endpoint.
 - **`pn.approximations` — a disclosure channel for what the translation under-models rather than
@@ -74,6 +103,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   — `bpmnToPN` + `checkSoundness` — over every fixture and eight hand-built shapes; note that no
   fixture contains a split flowing straight into a parallel join, so that shape is covered by
   dedicated tests rather than by the fixture corpus.
+  **What this release does not do is make S05/S06 complete, and the remaining gaps are disclosed
+  rather than closed.** Both rules stay cheap syntactic heuristics: a flow counts as suppliable by
+  a branch as soon as its source node is *reachable*, which over-approximates the supplying sets
+  and therefore makes them agree more often than they should, and neither rule sees a branch that
+  escapes an enclosing parallel block entirely. The residual error is always a **missed** deadlock,
+  never a fabricated one. `references/fachliches-regelwerk.md` names these two cases, and names
+  them as *examples*: they are what has been identified, not a closed list. The exhaustive check is
+  WF03 in the opt-in `workflow_net` layer — turn it on if a missed deadlock is not acceptable.
 - **A Mixed gateway is now recognised as a split.** `S05`/`S06` skipped every gateway carrying
   `has_join`, which `references/input-schema.json` documents as a direction *hint*; a gateway with
   more than one outgoing flow diverges regardless (`gatewayDirection` = Mixed). A model whose XOR
@@ -172,6 +209,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Unresolved endpoints now carry their `reason` into the prose. And the skipped-nodes note is
   rendered per reason, so Stage 1's `subProcessWithoutStartOrEnd` is no longer explained by a
   sentence about `eventBasedGateway` race semantics.
+
+### Known limitations
+Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
+release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
+
+- **`S13` still does not check that `attachedTo` names an *Activity*.** `BoundaryEvent.attachedToRef`
+  is typed `Activity [1..1]` (OMG §10.4.3 Table 10.86), but the rule only checks that the id exists
+  and that the host sits in the same container. A boundary event attached to a gateway, an event, an
+  artifact — or to another boundary event — passes S13. The translation is what refuses those shapes
+  rather than the rule engine: `wireBoundaryEvents` (`scripts/bpmn/workflow-net.js`) gives such an
+  event no transition and discloses it on `pn.skipped` as `boundaryEventWithoutHost`, and the place
+  for its outgoing flow is declared on `pn.unproducedPlaces` so `net-check.js` does not report a
+  translation defect for a model defect. So the shape is caught and disclosed, but by the wrong
+  layer: `runRules` calls such a model clean.
+- **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
+  under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
+  examples; the exhaustive check is WF03 in the opt-in `workflow_net` layer.
+- **`net-check.js` is not wired into `runPipeline`.** It runs from tests and from a direct call
+  (`checkNetIntegrity(bpmnToPN(proc), proc)`) only, and is reachable over neither HTTP nor MCP.
 
 ## [3.6.0] - 2026-08-01
 
