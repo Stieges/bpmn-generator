@@ -2026,6 +2026,204 @@ describe('Rule Engine — individual rules', () => {
     expect(result.errors.some(e => e.includes('Deadlock') && e.includes('Inclusive'))).toBe(true);
   });
 
+  // ── S05/S06 — the branches must still be mutually exclusive AT THE JOIN ──
+  // S05 used to ask "do two branches of this XOR reach the AND-join?", which is
+  // a reachability question and not a token question. The four tests below pin
+  // the difference in both directions.
+
+  test('S05: XOR branches re-converging before the parallel block → no error', () => {
+    //  s → gx ─→ a ─→ gm → gp ─→ p1 ─→ gj → e
+    //       └──→ b ──┘      └──→ p2 ──┘
+    // Both branches reach gj, but only after the choice is resolved at gm, so
+    // exactly one token reaches gp and forks into two. No deadlock.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'gx', type: 'exclusiveGateway', name: 'Which way?' },
+      { id: 'a', type: 'task', name: 'Do A' },
+      { id: 'b', type: 'task', name: 'Do B' },
+      { id: 'gm', type: 'exclusiveGateway', name: '', has_join: true },
+      { id: 'gp', type: 'parallelGateway', name: '' },
+      { id: 'p1', type: 'task', name: 'Do P1' },
+      { id: 'p2', type: 'task', name: 'Do P2' },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'gx' },
+      { id: 'f2', source: 'gx', target: 'a', label: 'A' },
+      { id: 'f3', source: 'gx', target: 'b', label: 'B' },
+      { id: 'f4', source: 'a', target: 'gm' },
+      { id: 'f5', source: 'b', target: 'gm' },
+      { id: 'f6', source: 'gm', target: 'gp' },
+      { id: 'f7', source: 'gp', target: 'p1' },
+      { id: 'f8', source: 'gp', target: 'p2' },
+      { id: 'f9', source: 'p1', target: 'gj' },
+      { id: 'f10', source: 'p2', target: 'gj' },
+      { id: 'f11', source: 'gj', target: 'e' },
+    ]);
+    expect(runRules(lc).errors).toEqual([]);
+    // Second, independent opinion on the same model: the Petri net agrees.
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf).toEqual([]);
+  });
+
+  test('S05: a branch feeding only one arm of the AND-join → ERROR even when no two arms are exclusive', () => {
+    //  gx ─→ a ────────────→ m1 → gj      gx ─→ b → gf ─→ x → m1
+    //  gx ─→ c ────────────→ m2 → gj                └──→ y → m2
+    // Every incoming flow of gj can be supplied by branch b, so no PAIR of
+    // incoming flows has disjoint supplying branches — yet choosing a starves
+    // m2 → gj. A pairwise-disjointness test would miss this; the per-branch
+    // test does not.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'gx', type: 'exclusiveGateway', name: 'Which intake?' },
+      { id: 'a', type: 'task', name: 'Intake A' },
+      { id: 'b', type: 'task', name: 'Intake B' },
+      { id: 'c', type: 'task', name: 'Intake C' },
+      { id: 'gf', type: 'parallelGateway', name: '' },
+      { id: 'x', type: 'task', name: 'Do X' },
+      { id: 'y', type: 'task', name: 'Do Y' },
+      { id: 'm1', type: 'exclusiveGateway', name: '', has_join: true },
+      { id: 'm2', type: 'exclusiveGateway', name: '', has_join: true },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'gx' },
+      { id: 'f2', source: 'gx', target: 'a', label: 'A' },
+      { id: 'f3', source: 'gx', target: 'b', label: 'B' },
+      { id: 'f4', source: 'gx', target: 'c', label: 'C' },
+      { id: 'f5', source: 'b', target: 'gf' },
+      { id: 'f6', source: 'gf', target: 'x' },
+      { id: 'f7', source: 'gf', target: 'y' },
+      { id: 'f8', source: 'a', target: 'm1' },
+      { id: 'f9', source: 'x', target: 'm1' },
+      { id: 'f10', source: 'c', target: 'm2' },
+      { id: 'f11', source: 'y', target: 'm2' },
+      { id: 'f12', source: 'm1', target: 'gj' },
+      { id: 'f13', source: 'm2', target: 'gj' },
+      { id: 'f14', source: 'gj', target: 'e' },
+    ]);
+    expect(runRules(lc).errors.some(e => e.includes('Deadlock') && e.includes('XOR'))).toBe(true);
+    // The Petri net finds the same deadlock.
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf.length).toBeGreaterThan(0);
+  });
+
+  test('S05: XOR entirely inside one arm of a parallel block → no error', () => {
+    //  gp ─→ u → gx ─→ u1 ─→ m → gj      gp ─→ v ──────────→ gj
+    //                  └─→ u2 ─┘
+    // Both XOR branches reach gj, and only one of gj's two incoming flows is
+    // influenced by the split at all — the other arm is fed by the enclosing
+    // AND fork, which the choice at gx cannot starve.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'gp', type: 'parallelGateway', name: '' },
+      { id: 'u', type: 'task', name: 'Do U' },
+      { id: 'v', type: 'task', name: 'Do V' },
+      { id: 'gx', type: 'exclusiveGateway', name: 'Which variant?' },
+      { id: 'u1', type: 'task', name: 'Variant 1' },
+      { id: 'u2', type: 'task', name: 'Variant 2' },
+      { id: 'm', type: 'exclusiveGateway', name: '', has_join: true },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'gp' },
+      { id: 'f2', source: 'gp', target: 'u' },
+      { id: 'f3', source: 'gp', target: 'v' },
+      { id: 'f4', source: 'u', target: 'gx' },
+      { id: 'f5', source: 'gx', target: 'u1', label: '1' },
+      { id: 'f6', source: 'gx', target: 'u2', label: '2' },
+      { id: 'f7', source: 'u1', target: 'm' },
+      { id: 'f8', source: 'u2', target: 'm' },
+      { id: 'f9', source: 'm', target: 'gj' },
+      { id: 'f10', source: 'v', target: 'gj' },
+      { id: 'f11', source: 'gj', target: 'e' },
+    ]);
+    expect(runRules(lc).errors).toEqual([]);
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf).toEqual([]);
+  });
+
+  test('S05: a Mixed gateway (has_join plus two outgoing flows) is still a split → ERROR', () => {
+    // gx merges the rework loop AND chooses between a and b — gatewayDirection
+    // "Mixed" in BPMN terms. The old rule skipped every gateway carrying
+    // has_join, so this deadlock (WF03 confirms it) went unreported.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'pre', type: 'task', name: 'Prepare' },
+      { id: 'gx', type: 'exclusiveGateway', name: 'Which way?', has_join: true },
+      { id: 'a', type: 'task', name: 'Do A' },
+      { id: 'b', type: 'task', name: 'Do B' },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'chk', type: 'task', name: 'Check' },
+      { id: 'gd', type: 'exclusiveGateway', name: 'Accepted?' },
+      { id: 'rework', type: 'task', name: 'Rework' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'pre' },
+      { id: 'f2', source: 'pre', target: 'gx' },
+      { id: 'f3', source: 'rework', target: 'gx' },
+      { id: 'f4', source: 'gx', target: 'a', label: 'A' },
+      { id: 'f5', source: 'gx', target: 'b', label: 'B' },
+      { id: 'f6', source: 'a', target: 'gj' },
+      { id: 'f7', source: 'b', target: 'gj' },
+      { id: 'f8', source: 'gj', target: 'chk' },
+      { id: 'f9', source: 'chk', target: 'gd' },
+      { id: 'f10', source: 'gd', target: 'rework', label: 'no' },
+      { id: 'f11', source: 'gd', target: 'e', label: 'yes' },
+    ]);
+    expect(runRules(lc).errors.some(e => e.includes('Deadlock') && e.includes('"gx"'))).toBe(true);
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf.length).toBeGreaterThan(0);
+    // The rework loop's own split (gd) reaches both arms of gj through gx, so it
+    // must stay quiet — only gx is reported.
+    expect(runRules(lc).errors.filter(e => e.includes('Deadlock'))).toHaveLength(1);
+  });
+
+  test('S06: inclusive branches re-converging at an inclusive merge → no error', () => {
+    // The OR-merge synchronises whatever the OR-split activated, so a single
+    // token reaches the parallel block. Same shape as the S05 case above.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'go', type: 'inclusiveGateway', name: 'Which channels?' },
+      { id: 'a', type: 'task', name: 'Notify by mail' },
+      { id: 'b', type: 'task', name: 'Notify by post' },
+      { id: 'gom', type: 'inclusiveGateway', name: '', has_join: true },
+      { id: 'gp', type: 'parallelGateway', name: '' },
+      { id: 'p1', type: 'task', name: 'Archive' },
+      { id: 'p2', type: 'task', name: 'Bill' },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'go' },
+      { id: 'f2', source: 'go', target: 'a' },
+      { id: 'f3', source: 'go', target: 'b' },
+      { id: 'f4', source: 'a', target: 'gom' },
+      { id: 'f5', source: 'b', target: 'gom' },
+      { id: 'f6', source: 'gom', target: 'gp' },
+      { id: 'f7', source: 'gp', target: 'p1' },
+      { id: 'f8', source: 'gp', target: 'p2' },
+      { id: 'f9', source: 'p1', target: 'gj' },
+      { id: 'f10', source: 'p2', target: 'gj' },
+      { id: 'f11', source: 'gj', target: 'e' },
+    ]);
+    expect(runRules(lc).errors).toEqual([]);
+  });
+
+  test('S05: subprocess-merge-fanout fixture validates clean', () => {
+    // The two XOR branches re-converge inside the subprocess and fan out again
+    // afterwards; both of gw_join's incoming flows are reachable from both
+    // branches, so nothing is starved. checkSoundness agrees.
+    const lc = loadFixture('subprocess-merge-fanout.json');
+    expect(runRules(lc).errors).toEqual([]);
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf).toEqual([]);
+  });
+
   test('S07: node without outgoing flow → WARNING', () => {
     const lc = proc([
       { id: 's', type: 'startEvent' },

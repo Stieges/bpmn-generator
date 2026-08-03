@@ -69,6 +69,129 @@ function isReachableWithout(from, to, outgoing, exclude, nodeMap, maxDepth = 50)
   return false;
 }
 
+/**
+ * Every node reachable from one branch of a split gateway, the branch's own
+ * first node included.
+ *
+ * The split itself is never expanded: a loop running back to it would otherwise
+ * make one branch look as if it could reach the other, which is exactly how a
+ * real deadlock would disappear from view.
+ */
+function reachFromBranch(branchStart, splitId, outgoing) {
+  const visited = new Set();
+  const queue = [branchStart];
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (visited.has(cur) || cur === splitId) continue;
+    visited.add(cur);
+    for (const edge of (outgoing[cur] || [])) {
+      if (!visited.has(edge.target)) queue.push(edge.target);
+    }
+  }
+  return visited;
+}
+
+/** Human-readable handle for a sequence flow — its id, or its endpoints. */
+function flowRef(edge) {
+  return edge.id || `${edge.source}→${edge.target}`;
+}
+
+/**
+ * S05/S06 — parallel joins that a mutually exclusive split can starve.
+ *
+ * Both rules used to ask *"do two branches of this split reach the AND-join?"*.
+ * That is a reachability question, not a token question, and it rejects sound
+ * models: two branches that re-converge at a merge **before** the parallel block
+ * both reach the join, yet by then the choice is resolved, a single token enters
+ * the AND-fork and forks into exactly the tokens the join waits for. There is no
+ * deadlock, and S05 blocked generation entirely (severity ERROR ⇒ no output).
+ *
+ * The question that actually identifies a deadlock is asked per **incoming flow**
+ * of the join, because a parallel join fires only once every incoming flow
+ * carries a token:
+ *
+ *   1. for each incoming flow, collect which branches of the split can supply it;
+ *   2. ignore the flows no branch can supply (`influenced` below) — those are fed
+ *      from outside this split's subgraph, typically by a concurrent thread of an
+ *      enclosing AND block, and no choice at the split can starve them;
+ *   3. if all remaining flows agree on their supplying-branch set, then every
+ *      choice either feeds all of them or none of them — no starvation;
+ *   4. if two of them disagree, some branch supplies one but never the other, and
+ *      the join waits for a token this run can no longer produce.
+ *
+ * Step 4 is strictly stronger than "two incoming flows have *disjoint* supplying
+ * branches": with three branches A/B/C where A feeds only flow 1, C only flow 2
+ * and B both, no pair of flows is disjoint, yet choosing A still deadlocks. See
+ * the "no two arms are exclusive" test in pipeline.test.js.
+ *
+ * Deliberately conservative in one place: a flow counts as suppliable by a branch
+ * as soon as its SOURCE node is reachable from that branch, without proving the
+ * flow itself can still fire. That over-approximates the supplying sets, which
+ * makes them more likely to agree — so the residual error is a missed deadlock,
+ * never a fabricated one. The exhaustive check is WF03 (opt-in, workflow_net
+ * layer); this rule is the cheap always-on guard and must not cry wolf.
+ *
+ * @param {object} proc - one process (pool) of a Logic-Core document
+ * @param {string} splitType - 'exclusiveGateway' or 'inclusiveGateway'
+ * @param {string} label - how the split is named in the message ('XOR'/'Inclusive')
+ * @returns {string[]} one message per (split, join) pair that can starve
+ */
+function starvedParallelJoins(proc, splitType, label) {
+  const nodes = proc.nodes || [], edges = proc.edges || [];
+  const outgoing = buildAdjacency(edges, 'source', 'target');
+  const incoming = buildAdjacency(edges, 'target', 'source');
+  const msgs = [];
+
+  for (const split of nodes) {
+    if (split.type !== splitType) continue;
+    // A gateway diverges when it has more than one outgoing flow. `has_join` is
+    // only a direction *hint* (input-schema.json) and says nothing about the
+    // outgoing side — a Mixed gateway (BPMN 2.0.2, Gateway::gatewayDirection)
+    // merges and splits at once and is still a split.
+    const branchEdges = outgoing[split.id] || [];
+    if (branchEdges.length < 2) continue;
+
+    const branchReach = branchEdges.map(be => reachFromBranch(be.target, split.id, outgoing));
+
+    for (const join of nodes) {
+      if (join.type !== 'parallelGateway') continue;
+      const joinIn = incoming[join.id] || [];
+      if (joinIn.length < 2) continue;
+
+      const suppliers = joinIn.map(e => {
+        const set = new Set();
+        for (let i = 0; i < branchReach.length; i++) {
+          if (branchReach[i].has(e.source)) set.add(i);
+        }
+        return set;
+      });
+      const influenced = joinIn.map((_, i) => i).filter(i => suppliers[i].size > 0);
+      if (influenced.length < 2) continue;
+
+      // A witness: one branch, one flow it supplies, one flow it never supplies.
+      let witness = null;
+      for (let a = 0; a < influenced.length && !witness; a++) {
+        for (let b = a + 1; b < influenced.length && !witness; b++) {
+          const [ia, ib] = [influenced[a], influenced[b]];
+          const onlyA = [...suppliers[ia]].find(x => !suppliers[ib].has(x));
+          if (onlyA !== undefined) { witness = { branch: onlyA, fed: ia, starved: ib }; break; }
+          const onlyB = [...suppliers[ib]].find(x => !suppliers[ia].has(x));
+          if (onlyB !== undefined) witness = { branch: onlyB, fed: ib, starved: ia };
+        }
+      }
+      if (!witness) continue;
+
+      msgs.push(
+        `Deadlock: ${label}-split "${split.id}" feeds AND-join "${join.id}" on mutually exclusive paths — ` +
+        `its branch via "${branchEdges[witness.branch].target}" supplies incoming flow ` +
+        `"${flowRef(joinIn[witness.fed])}" but never "${flowRef(joinIn[witness.starved])}", ` +
+        `so the join never receives all its tokens.`
+      );
+    }
+  }
+  return msgs;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Schicht 1 — Strukturelle Soundness (ERROR)
 // ═══════════════════════════════════════════════════════════════════════
@@ -135,80 +258,45 @@ const SOUNDNESS_RULES = [
   },
   {
     id: 'S05', layer: 'soundness', defaultSeverity: 'ERROR',
-    description: 'Deadlock: XOR-Split darf nicht in AND-Join münden',
-    ref: { omg: '§10.5', pmg: 'G4' },
+    description: 'Deadlock: XOR-Split darf keinen AND-Join auf exklusiven Pfaden speisen',
+    ref: {
+      omg: '§10.5 Gateways',
+      // Cited by class rather than by page: an ExclusiveGateway activates exactly
+      // one of its outgoing flows, a ParallelGateway join consumes one token from
+      // every incoming flow. Combining the two on paths that are still mutually
+      // exclusive at the join is the deadlock 7PMG G4 warns about.
+      cmof: 'ExclusiveGateway superClass="Gateway", ParallelGateway superClass="Gateway", '
+        + 'Gateway isAbstract superClass="FlowNode" with gatewayDirection : GatewayDirection '
+        + '{Unspecified, Converging, Diverging, Mixed} — "Mixed" is why this rule tests the '
+        + 'outgoing degree instead of trusting the has_join hint.',
+      pmg: 'G4',
+    },
     scope: 'process',
+    // See starvedParallelJoins() above for why this is asked per incoming flow
+    // and not per join node.
     check: (proc) => {
-      const nodes = proc.nodes || [], edges = proc.edges || [];
-      const outgoing = buildAdjacency(edges, 'source', 'target');
-      const incoming = buildAdjacency(edges, 'target', 'source');
-      const msgs = [];
-
-      for (const n of nodes) {
-        if (n.type === 'exclusiveGateway' && !n.has_join) {
-          const xorBranches = (outgoing[n.id] || []).map(e => e.target);
-          if (xorBranches.length < 2) continue;
-
-          const branchReachSets = xorBranches.map(branchStart => {
-            const visited = new Set();
-            const queue = [branchStart];
-            while (queue.length > 0) {
-              const cur = queue.shift();
-              if (visited.has(cur) || cur === n.id) continue;
-              visited.add(cur);
-              for (const edge of (outgoing[cur] || [])) {
-                if (!visited.has(edge.target)) queue.push(edge.target);
-              }
-            }
-            return visited;
-          });
-
-          for (const candidate of nodes) {
-            if (candidate.type !== 'parallelGateway') continue;
-            const cid = candidate.id;
-            let branchesReachingAnd = 0;
-            for (const reachSet of branchReachSets) {
-              if (reachSet.has(cid)) branchesReachingAnd++;
-            }
-            const andIncoming = (incoming[cid] || []).length;
-            if (branchesReachingAnd > 1 && andIncoming > 1) {
-              msgs.push(`Deadlock: XOR-split "${n.id}" feeds AND-join "${cid}" via ${branchesReachingAnd} branches — only one XOR branch fires, AND waits forever.`);
-            }
-          }
-        }
-      }
+      const msgs = starvedParallelJoins(proc, 'exclusiveGateway', 'XOR');
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },
   {
     id: 'S06', layer: 'soundness', defaultSeverity: 'ERROR',
-    description: 'Deadlock: Inclusive-Split darf nicht in AND-Join münden',
-    ref: { omg: '§10.5' },
+    description: 'Deadlock: Inclusive-Split darf keinen AND-Join auf exklusiven Pfaden speisen',
+    // Same shape as S05: an InclusiveGateway may activate a single outgoing
+    // flow, so any branch that can fire alone can starve the join exactly as an
+    // exclusive branch does. What S06 does NOT cover is the opposite inclusive
+    // hazard — several branches firing and re-converging at an XOR merge, which
+    // puts several tokens into the parallel block. That is a boundedness /
+    // proper-completion defect (WF02/WF03), not a deadlock.
+    ref: {
+      omg: '§10.5 Gateways',
+      cmof: 'InclusiveGateway superClass="Gateway" with default : SequenceFlow — an inclusive '
+        + 'split may activate a single outgoing flow, so one branch alone can starve a '
+        + 'ParallelGateway superClass="Gateway" join downstream.',
+    },
     scope: 'process',
     check: (proc) => {
-      const nodes = proc.nodes || [], edges = proc.edges || [];
-      const outgoing = buildAdjacency(edges, 'source', 'target');
-      const incoming = buildAdjacency(edges, 'target', 'source');
-      const msgs = [];
-
-      for (const n of nodes) {
-        if (n.type === 'inclusiveGateway' && !n.has_join) {
-          const branches = (outgoing[n.id] || []).map(e => e.target);
-          if (branches.length < 2) continue;
-          const branchSets = branches.map(start => {
-            const vis = new Set(); const q = [start];
-            while (q.length) { const c = q.shift(); if (vis.has(c) || c === n.id) continue; vis.add(c); for (const e of (outgoing[c] || [])) q.push(e.target); }
-            return vis;
-          });
-          for (const cand of nodes) {
-            if (cand.type !== 'parallelGateway') continue;
-            let ct = 0;
-            for (const s of branchSets) if (s.has(cand.id)) ct++;
-            if (ct > 1 && (incoming[cand.id] || []).length > 1)
-              msgs.push(`Deadlock: Inclusive-split "${n.id}" feeds AND-join "${cand.id}" via ${ct} branches.`);
-          }
-        }
-      }
+      const msgs = starvedParallelJoins(proc, 'inclusiveGateway', 'Inclusive');
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },
@@ -435,8 +523,11 @@ const SOUNDNESS_RULES = [
         + 'InteractionNode" (:287) get it by an explicit second superclass; Participant is '
         + 'superClass="InteractionNode BaseElement" (:863). Activity is superClass="FlowNode" '
         + 'only (:1095), and SubProcess (:1147, superClass="Activity FlowElementsContainer"), '
-        + 'CallActivity (:1188, superClass="Activity"), AdHocSubProcess (:1222) and Transaction '
-        + '(:1233) inherit from it — none of them is an InteractionNode.',
+        + 'CallActivity (:1188, superClass="Activity"), AdHocSubProcess (:1222, '
+        + 'superClass="SubProcess") and Transaction (:1233, superClass="SubProcess") inherit '
+        + 'from it — none of them is an InteractionNode. The line numbers are a convenience '
+        + 'for a local copy of BPMN20.cmof (references/omg-spec/ is not tracked); the class '
+        + 'and superclass names are the reference, and hold in any copy of the file.',
     },
     scope: 'global',
     // Why WARNING and not ERROR: the soundness layer already carries WARNING-severity rules
