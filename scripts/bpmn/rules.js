@@ -110,7 +110,9 @@ function flowRef(edge) {
  * of the join, because a parallel join fires only once every incoming flow
  * carries a token:
  *
- *   1. for each incoming flow, collect which branches of the split can supply it;
+ *   1. for each incoming flow, collect which branches of the split can supply it
+ *      — either by reaching its source, or by BEING that branch's own edge (the
+ *      split may flow straight into the join; see the `suppliers` comment);
  *   2. ignore the flows no branch can supply (`influenced` below) — those are fed
  *      from outside this split's subgraph, typically by a concurrent thread of an
  *      enclosing AND block, and no choice at the split can starve them;
@@ -161,7 +163,20 @@ function starvedParallelJoins(proc, splitType, label) {
       const suppliers = joinIn.map(e => {
         const set = new Set();
         for (let i = 0; i < branchReach.length; i++) {
-          if (branchReach[i].has(e.source)) set.add(i);
+          // Two ways a branch supplies an incoming flow. Reaching its source is
+          // the ordinary one. The second is easy to lose: when the split's own
+          // branch edge IS the incoming flow (`gx --no--> gj`, the everyday skip
+          // path), its source is the split, and `reachFromBranch` deliberately
+          // never puts the split in any reach set — so without this the flow
+          // would look unsupplied, be discarded as "fed from outside" and take a
+          // real deadlock with it.
+          //
+          // Matched by object identity, not by endpoints: a split may carry two
+          // separate flows to the same join (`gx --yes--> gj`, `gx --no--> gj`),
+          // and those are two different branches. Comparing `e.source`/`e.target`
+          // would credit both branches with both flows, make the supplying sets
+          // agree, and lose that deadlock too.
+          if (branchReach[i].has(e.source) || branchEdges[i] === e) set.add(i);
         }
         return set;
       });
@@ -181,9 +196,14 @@ function starvedParallelJoins(proc, splitType, label) {
       }
       if (!witness) continue;
 
+      // The branch is named by its own outgoing flow AND its target: naming only
+      // the target reads as nonsense when that target IS the join (the skip-path
+      // shape `gx --no--> gj`), and naming only the flow is unhelpful for the
+      // ordinary case where the reader is looking for a node.
+      const branchEdge = branchEdges[witness.branch];
       msgs.push(
         `Deadlock: ${label}-split "${split.id}" feeds AND-join "${join.id}" on mutually exclusive paths — ` +
-        `its branch via "${branchEdges[witness.branch].target}" supplies incoming flow ` +
+        `its branch "${flowRef(branchEdge)}" → "${branchEdge.target}" supplies incoming flow ` +
         `"${flowRef(joinIn[witness.fed])}" but never "${flowRef(joinIn[witness.starved])}", ` +
         `so the join never receives all its tokens.`
       );

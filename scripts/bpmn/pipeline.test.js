@@ -2213,6 +2213,112 @@ describe('Rule Engine — individual rules', () => {
     expect(runRules(lc).errors).toEqual([]);
   });
 
+  // ── The split's OWN edge landing on the join ──
+  // `reachFromBranch` deliberately never puts the split into any branch's reach
+  // set, so an incoming flow whose source IS the split matches no branch unless
+  // the branch edge is credited by identity. Without that, the flow looks
+  // unsupplied, gets discarded as "fed from outside the split" and takes a real
+  // deadlock with it. Neither the fixture corpus nor the S05-vs-WF03 table
+  // contains this shape, which is why it needs its own tests.
+
+  test('S05: a skip path flowing straight into the AND-join → ERROR', () => {
+    //  s → gx --yes--> review ──→ gj → archive → e
+    //         └--no----------------┘
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'gx', type: 'exclusiveGateway', name: 'Review needed?' },
+      { id: 'review', type: 'task', name: 'Review claim' },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'archive', type: 'task', name: 'Archive claim' },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'gx' },
+      { id: 'f2', source: 'gx', target: 'review', label: 'yes' },
+      { id: 'f3', source: 'gx', target: 'gj', label: 'no' },
+      { id: 'f4', source: 'review', target: 'gj' },
+      { id: 'f5', source: 'gj', target: 'archive' },
+      { id: 'f6', source: 'archive', target: 'e' },
+    ]);
+    expect(runRules(lc).errors.some(e => e.includes('Deadlock') && e.includes('XOR'))).toBe(true);
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf.length).toBeGreaterThan(0);
+  });
+
+  test('S05: two flows from one split into the same AND-join → ERROR', () => {
+    // Both incoming flows of gj are branch edges of gx. They must be told apart
+    // by object identity — comparing source/target would credit both branches
+    // with both flows, make the supplying sets agree and lose the deadlock.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'gx', type: 'exclusiveGateway', name: 'Which way?' },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'gx' },
+      { id: 'f2', source: 'gx', target: 'gj', label: 'yes' },
+      { id: 'f3', source: 'gx', target: 'gj', label: 'no' },
+      { id: 'f4', source: 'gj', target: 'e' },
+    ]);
+    expect(runRules(lc).errors.some(e => e.includes('Deadlock') && e.includes('XOR'))).toBe(true);
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf.length).toBeGreaterThan(0);
+  });
+
+  test('S05: a nested split whose branch edge lands on the join → ERROR, reported at that split', () => {
+    // The outer split gx reaches both incoming flows of gj through its "p"
+    // branch, so it agrees with itself and must stay quiet; the inner split gi
+    // is the one that starves the join. Exactly one finding, naming gi.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'gx', type: 'exclusiveGateway', name: 'Which product?' },
+      { id: 'p', type: 'task', name: 'Handle product P' },
+      { id: 'q', type: 'task', name: 'Handle product Q' },
+      { id: 'gi', type: 'exclusiveGateway', name: 'Extra check?' },
+      { id: 'u', type: 'task', name: 'Run extra check' },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'e', type: 'endEvent' },
+      { id: 'e2', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'gx' },
+      { id: 'f2', source: 'gx', target: 'p', label: 'P' },
+      { id: 'f3', source: 'gx', target: 'q', label: 'Q' },
+      { id: 'f4', source: 'p', target: 'gi' },
+      { id: 'f5', source: 'gi', target: 'u', label: 'yes' },
+      { id: 'f6', source: 'gi', target: 'gj', label: 'no' },
+      { id: 'f7', source: 'u', target: 'gj' },
+      { id: 'f8', source: 'gj', target: 'e' },
+      { id: 'f9', source: 'q', target: 'e2' },
+    ]);
+    const errors = runRules(lc).errors.filter(e => e.includes('Deadlock'));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('"gi"');
+    const wf = checkWorkflowNetSoundness(lc).issues
+      .filter(i => i.rule === 'WF03' && i.severity === 'ERROR');
+    expect(wf.length).toBeGreaterThan(0);
+  });
+
+  test('S06: an inclusive branch flowing straight into the AND-join → ERROR', () => {
+    // Same shape for S06, and it matters more here: bpmnToPN gives an OR-split
+    // AND semantics and only emits the WF_OR INFO, so WF03 cannot catch this
+    // one at all — S06 is the only check covering it.
+    const lc = proc([
+      { id: 's', type: 'startEvent' },
+      { id: 'go', type: 'inclusiveGateway', name: 'Which channels?' },
+      { id: 'a', type: 'task', name: 'Notify by mail' },
+      { id: 'gj', type: 'parallelGateway', name: '', has_join: true },
+      { id: 'e', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'go' },
+      { id: 'f2', source: 'go', target: 'a' },
+      { id: 'f3', source: 'go', target: 'gj' },
+      { id: 'f4', source: 'a', target: 'gj' },
+      { id: 'f5', source: 'gj', target: 'e' },
+    ]);
+    expect(runRules(lc).errors.some(e => e.includes('Deadlock') && e.includes('Inclusive'))).toBe(true);
+  });
+
   test('S05: subprocess-merge-fanout fixture validates clean', () => {
     // The two XOR branches re-converge inside the subprocess and fan out again
     // afterwards; both of gw_join's incoming flows are reachable from both
