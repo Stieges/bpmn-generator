@@ -214,12 +214,33 @@ export const IMPLEMENTATION_TYPES = new Set([
  *
  * Each `allowed` set reproduces the guard that was already in `buildFlowNode`, except
  * `isCompensation` and `implementation` — so no field's serialisation behaviour changes as a side
- * effect of centralising them.
+ * effect of centralising them. `isEventSubProcess` has since been widened to `transaction` as
+ * well; see its own comment below for why that was a correction and not a change of policy.
+ *
+ * Every `allowed` set is fenced in BOTH directions against `bpmn-moddle`'s own metamodel by
+ * `types.test.js`'s "the OMG-metamodel fence" — too wide AND too narrow. Do not narrow one by hand
+ * to silence a finding: the fence reads which classes actually declare or inherit the attribute and
+ * will name the entry you touched.
  */
 export const OMG_NODE_FIELD_SCOPE = [
   { field: 'isCompensation', attr: 'isForCompensation', type: 'boolean', on: 'self', allowed: ACTIVITY_TYPES, scope: 'an Activity' },
   { field: 'implementation', attr: 'implementation', type: 'string', on: 'self', allowed: IMPLEMENTATION_TYPES, scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask' },
-  { field: 'isEventSubProcess', attr: 'triggeredByEvent', type: 'boolean', on: 'self', allowed: new Set(['subProcess']), scope: 'a subProcess' },
+  // `triggeredByEvent` is declared on `SubProcess` and INHERITED by `Transaction` (BPMN20.cmof:1233,
+  // `superClass="SubProcess"`) and `AdHocSubProcess` (:1222, likewise) — verified against the
+  // installed bpmn-moddle metamodel, which is what `types.test.js`'s reverse-direction fence now
+  // reads. The set said `subProcess` alone, so a `transaction` carrying the field was silently
+  // dropped by `buildFlowNode` while S15 told the author "OMG defines triggeredByEvent only on a
+  // subProcess" — a claim that is simply untrue.
+  //
+  // `adHocSubProcess` is deliberately NOT granted it, and this is the one place the fence's
+  // enum-scoped policy has teeth: that class is outside `references/input-schema.json`'s `NodeType`
+  // enum (see CONTAINER_TYPES's comment), and `bpmnXmlTag` consequently falls back to `'task'` for
+  // it. Granting the field would therefore emit `<bpmn:task triggeredByEvent="true">` — and
+  // `triggeredByEvent` is NOT a Task attribute, so that is XSD-invalid output. Reconciling the
+  // schema, the importers and `bpmnXmlTag` with this class is the separate decision CONTAINER_TYPES
+  // already defers; until it is taken, the narrow set is the correct one and the fence says nothing
+  // about types the schema does not expose.
+  { field: 'isEventSubProcess', attr: 'triggeredByEvent', type: 'boolean', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction' },
   { field: 'calledElement', attr: 'calledElement', type: 'string', on: 'self', allowed: new Set(['callActivity']), scope: 'a callActivity' },
   { field: 'scriptFormat', attr: 'scriptFormat', type: 'string', on: 'self', allowed: new Set(['scriptTask']), scope: 'a scriptTask' },
   { field: 'isCollection', attr: 'isCollection', type: 'boolean', on: 'dataObject', allowed: new Set(['dataObjectReference']), scope: 'a dataObjectReference' },

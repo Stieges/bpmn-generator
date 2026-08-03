@@ -71,7 +71,7 @@ Wer eine Regel ändert, aktualisiert `description` und passt diese Zeile sinngem
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
 | S13 | Boundary Event muss an einer existierenden Aktivität im selben Container hängen — und der Host muss wirklich eine Aktivität sein | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
 | S14 | Message Flow source/target darf kein Container sein — der Klasse nach (SubProcess/Transaction/AdHocSubProcess/CallActivity) oder der Struktur nach (eigenes `nodes`-Array) (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
-| S15 | Ein Knotenfeld muss auf einer Klasse sitzen, für die OMG das Attribut definiert — `isForCompensation` nur auf Activity, `implementation` nur auf den fünf aufrufenden Task-Typen, `triggeredByEvent` nur auf SubProcess, `calledElement` nur auf CallActivity, `scriptFormat` nur auf ScriptTask, `isCollection` nur auf DataObjectReference (Severity WARNING) | OMG §10.2, §10.2.2/§10.2.3, §10.2.5, §10.2.6; CMOF: Activity.isForCompensation (BPMN20.cmof:1095), `implementation` per Klasse an UserTask (:1263)/ServiceTask (:1240)/SendTask (:1229)/ReceiveTask (:1214)/BusinessRuleTask (:1177) | implementiert |
+| S15 | Ein Knotenfeld muss auf einer Klasse sitzen, für die OMG das Attribut definiert — `isForCompensation` nur auf Activity, `implementation` nur auf den fünf aufrufenden Task-Typen, `triggeredByEvent` nur auf SubProcess und dessen Spezialisierung Transaction, `calledElement` nur auf CallActivity, `scriptFormat` nur auf ScriptTask, `isCollection` nur auf DataObjectReference (Severity WARNING) | OMG §10.2, §10.2.2/§10.2.3, §10.2.5, §10.2.6; CMOF: Activity.isForCompensation (BPMN20.cmof:1095), `implementation` per Klasse an UserTask (:1263)/ServiceTask (:1240)/SendTask (:1229)/ReceiveTask (:1214)/BusinessRuleTask (:1177) | implementiert |
 
 **Zu S04:** Die Regel fragt nach **eingehenden** Kanten, nicht nach Kanten überhaupt — und das
 ist eine Korrektur, keine Umformulierung.
@@ -560,7 +560,7 @@ place. It now does: `OMG_NODE_FIELD_SCOPE` in `scripts/bpmn/types.js` is read by
 |-------|---------------|------|------------|
 | `isCompensation` | `isForCompensation` | boolean | any `Activity` (every Task type, `subProcess`, `transaction`, `adHocSubProcess`, `callActivity`) |
 | `implementation` | `implementation` | string | `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `businessRuleTask` — **not** every Activity |
-| `isEventSubProcess` | `triggeredByEvent` | boolean | `subProcess` |
+| `isEventSubProcess` | `triggeredByEvent` | boolean | `subProcess`, `transaction` — Transaction specialises SubProcess and inherits the attribute (`adHocSubProcess` inherits it too, but is outside the `NodeType` enum and `bpmnXmlTag` cannot emit it, so it is deliberately not granted; see `types.js`) |
 | `calledElement` | `calledElement` | string | `callActivity` |
 | `scriptFormat` | `scriptFormat` | string | `scriptTask` |
 | `isCollection` | `isCollection` | boolean | `dataObjectReference` — but the attribute is written onto the companion `<bpmn:dataObject>`, see below |

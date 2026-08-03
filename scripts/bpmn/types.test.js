@@ -1,5 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'fs';
+import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -73,6 +74,110 @@ describe('the scoped-field fence — the table and input-schema.json agree on ev
       expect(spec.type).toBe(nodeProps[spec.field]?.type);
     });
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// The OMG-metamodel fence: `OMG_NODE_FIELD_SCOPE`'s `allowed` sets vs. bpmn-moddle's own metamodel.
+//
+// Every other fence in this file checks the table against ITSELF or against our own schema, so all
+// of them only ever catch an `allowed` set that is too WIDE. The round-trip oracle in
+// pipeline.test.js catches the same direction from the other side (bpmn-moddle answers
+// `unknown attribute <…>` for an attribute a class may not carry). Nothing caught the opposite
+// mistake — a class OMG genuinely grants the field to that `allowed` omits — because bpmn-moddle is
+// necessarily silent about an attribute we never emit. That gap was live: `isEventSubProcess`
+// allowed `subProcess` alone, so a `transaction` had the field dropped by `buildFlowNode` while S15
+// asserted "OMG defines triggeredByEvent only on a subProcess", which is false — Transaction
+// specialises SubProcess and inherits it.
+//
+// The oracle is `bpmn-moddle`'s shipped metamodel, already a runtime dependency, read here rather
+// than restated: the same read-do-not-restate move the schema fences above make.
+//
+// **Inheritance is resolved, not just declaration.** `triggeredByEvent` is DECLARED only on
+// `SubProcess`; `Transaction` and `AdHocSubProcess` carry it by `superClass`. Comparing against
+// declaration sites alone would have reproduced exactly the bug this fence exists to catch.
+//
+// **The class-name gap, and the policy for it.** OMG spells classes `SubProcess`/`UserTask`;
+// Logic-Core spells types `subProcess`/`userTask`. The mapping is initial-lowercase, and it is
+// lossy in both directions:
+//   - OMG has classes Logic-Core has no type for at all (`GlobalUserTask`, `DataObject`,
+//     `ItemDefinition`, the abstract `Activity`);
+//   - `CONTAINER_TYPES` has `adHocSubProcess`, which `references/input-schema.json`'s `NodeType`
+//     enum does not expose — the pre-existing allowlisted exception, see CONTAINER_TYPES's comment.
+//
+// Policy, decided here and applied uniformly: **the comparison universe is the `NodeType` enum, and
+// both sides are intersected with it before comparing.** Rationale — `allowed` is consumed by
+// exactly two callers (`buildFlowNode`, S15) that only ever see Logic-Core nodes, so a class the
+// schema cannot express and `bpmnXmlTag` cannot emit is a type about which neither caller can be
+// right or wrong. Making a claim about it would be untestable through this project's own surface.
+// The consequence is explicit and worth stating rather than hiding: `adHocSubProcess` is invisible
+// to this fence on BOTH sides, so `isCompensation`'s `allowed` (= ACTIVITY_TYPES, which contains
+// it) passes and `isEventSubProcess`'s (which deliberately does not) passes too. The existing
+// `ALLOWLISTED_NON_ENUM_TYPES` fence below is what keeps that exception from silently growing, and
+// `types.js`'s comment on the `isEventSubProcess` entry records why granting it there would emit
+// invalid XML today.
+//
+// **`on: 'dataObject'` is checked differently, not skipped.** `isCollection`'s `allowed` names the
+// Logic-Core AUTHORING node (`dataObjectReference` — in Logic-Core the reference and its object are
+// one node), while the attribute is emitted onto the companion `<bpmn:dataObject>`. So for a
+// non-`self` entry the fence checks the OMG side of that indirection instead: that the class named
+// by `on` really does carry `attr`. The authoring-side claim has no metamodel counterpart to check
+// it against and is fenced by the schema tests above.
+describe('the OMG-metamodel fence — no `allowed` set is too wide OR too narrow', () => {
+  const require = createRequire(import.meta.url);
+  const METAMODEL = require('bpmn-moddle/resources/bpmn/json/bpmn.json');
+
+  const byName = new Map(METAMODEL.types.map((t) => [t.name, t]));
+
+  test('the metamodel fixture itself is non-trivial — a silent empty read must not pass this fence', () => {
+    expect(METAMODEL.types.length).toBeGreaterThan(100);
+    expect(byName.has('SubProcess')).toBe(true);
+    expect(byName.has('Transaction')).toBe(true);
+  });
+
+  // Declared on the class, or inherited from any superclass. `superClass` entries may be prefixed
+  // (`bpmn:Activity`); the prefix is stripped. `seen` guards against a malformed cyclic hierarchy
+  // rather than any real one — an infinite loop here would hang CI instead of failing it.
+  function carries(className, attr, seen = new Set()) {
+    if (seen.has(className)) return false;
+    seen.add(className);
+    const type = byName.get(className);
+    if (!type) return false;
+    if ((type.properties || []).some((p) => p.name === attr)) return true;
+    return (type.superClass || []).some((s) => carries(s.replace(/^[^:]+:/, ''), attr, seen));
+  }
+
+  const toLogicCoreType = (className) => className.charAt(0).toLowerCase() + className.slice(1);
+
+  const universe = new Set(loadNodeTypeEnum());
+  const inUniverse = (types) => [...types].filter((t) => universe.has(t)).sort();
+
+  for (const spec of OMG_NODE_FIELD_SCOPE.filter((s) => s.on === 'self')) {
+    test(`${spec.field}: allowed matches every NodeType bpmn-moddle grants ${spec.attr} to`, () => {
+      const fromMetamodel = METAMODEL.types
+        .filter((t) => carries(t.name, spec.attr))
+        .map((t) => toLogicCoreType(t.name));
+      // Sanity: the attribute must exist somewhere in the metamodel at all. Without this, a typo in
+      // `attr` would make both sides empty on the metamodel side and the fence would pass by
+      // comparing nothing — the exact failure shape a fence must not have.
+      expect(fromMetamodel.length).toBeGreaterThan(0);
+      expect(inUniverse(spec.allowed)).toEqual(inUniverse(fromMetamodel));
+    });
+  }
+
+  for (const spec of OMG_NODE_FIELD_SCOPE.filter((s) => s.on !== 'self')) {
+    test(`${spec.field}: the emission target "${spec.on}" is an OMG class that carries ${spec.attr}`, () => {
+      const className = spec.on.charAt(0).toUpperCase() + spec.on.slice(1);
+      expect(byName.has(className)).toBe(true);
+      expect(carries(className, spec.attr)).toBe(true);
+    });
+  }
+
+  test('every `on` value is either "self" or names a real OMG class', () => {
+    const bad = OMG_NODE_FIELD_SCOPE
+      .filter((s) => s.on !== 'self' && !byName.has(s.on.charAt(0).toUpperCase() + s.on.slice(1)))
+      .map((s) => `${s.field}: on=${s.on}`);
+    expect(bad).toEqual([]);
+  });
 });
 
 describe('the NodeType fence — every enum member is classified, and exactly once', () => {
