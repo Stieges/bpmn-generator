@@ -2532,13 +2532,25 @@ describe('Rule Engine — individual rules', () => {
     };
     const result = runRules(lc);
     expect(result.errors.some(e => e.includes('"note"') && e.includes('InteractionNode'))).toBe(true);
-    // ONE finding, not two. `classifyResult` splits a rule's message on '; ' — the separator the
-    // rules use to join several findings into one `message` string — so a semicolon inside a
-    // single message silently becomes a second, id-less, unactionable entry, doubles the error
-    // count for this endpoint, and propagates into validation.errors, the HTTP response and
-    // --strict. S12/S13/S14 all avoid '; ' in their prose for this reason; S10 now does too.
+    // ONE finding, not two. This used to depend on S10's prose avoiding '; ', because
+    // `classifyResult` split a rule's `message` on that separator; it now depends on nothing,
+    // because S10 returns `messages: string[]` and no splitting happens at all. Kept as a
+    // regression test for the outcome either way.
     const s10 = result.errors.filter(e => /InteractionNode|Artifact|Point the flow/.test(e));
     expect(s10).toHaveLength(1);
+    // The trap itself, pinned at its root rather than per rule: a finding is one finding even
+    // when the DATA it quotes contains the old separator. This is the case no lint over the rule
+    // sources could ever catch — the semicolon arrives from a node name at runtime.
+    const withSemicolon = runRules({
+      pools: [
+        { id: 'P1', name: 'P1', nodes: [{ id: 'a', type: 'sendTask' }], edges: [] },
+        { id: 'P2', name: 'P2', nodes: [{ id: 'Prüfen; freigeben', type: 'textAnnotation', text: 'FYI' }], edges: [] },
+      ],
+      messageFlows: [{ id: 'mf', source: 'a', target: 'Prüfen; freigeben' }],
+    });
+    const split = withSemicolon.errors.filter(e => /InteractionNode|Artifact|Point the flow/.test(e));
+    expect(split).toHaveLength(1);
+    expect(split[0]).toContain('Prüfen; freigeben');
     // …and the one entry carries the id and the endpoint, which is what makes it actionable.
     expect(s10[0]).toContain('"mf"');
     expect(s10[0]).toContain('"note"');

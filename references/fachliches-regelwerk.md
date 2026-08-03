@@ -660,7 +660,20 @@ and `itemDefinition`.
 ## Erweiterung
 
 1. Neues Regel-Objekt in `RULES`-Array in `rules.js` einfuegen
-2. `check`-Funktion implementieren (Platzhalter: `() => ({ pass: true })`)
+2. `check`-Funktion implementieren (Platzhalter: `() => ({ pass: true })`). Rueckgabe ist
+   entweder `{ pass: true }` oder — bei einem Befund — `{ pass: false, message }` fuer **genau
+   einen** Befund bzw. `{ pass: false, messages: [...] }` fuer **mehrere**. `message` wird
+   woertlich als ein einziger Befund uebernommen, auch wenn `'; '` darin vorkommt.
+
+   Mehrere Befunde gehoeren in `messages`, niemals in einen mit `'; '` zusammengefuegten String.
+   Frueher war genau das der stillschweigende Vertrag: die Regeln fuegten mit `'; '` zusammen und
+   `classifyResult` trennte an derselben Stelle wieder auf. Eine Regel, deren *einzelne* Meldung
+   ein `'; '` enthielt, wurde dadurch als zwei Befunde ausgegeben — der zweite ein Fragment ohne
+   Id und ohne Element, das bis in `validation.errors`, die HTTP-Antwort und `--strict`
+   durchschlug und die Fehlerzahl fuer einen Defekt verdoppelte (S10 hat das real getroffen).
+   `classifyResult` trennt seit dieser Aenderung nicht mehr auf. Ein Test ueber den Quelltext
+   haette die Falle nie schliessen koennen: Meldungen entstehen zur Laufzeit aus Knoten- und
+   Lane-Namen, eine Aufgabe namens „Pruefen; freigeben" loest sie also aus den *Daten* aus.
 3. Tests schreiben
 4. OMG-Compliance-Mapping in `references/omg-compliance.md` aktualisieren
 5. Dieses Dokument nachziehen — Zeile in der Layer-Tabelle, bei Bedarf ein Langtext-Abschnitt.
