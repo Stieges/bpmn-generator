@@ -3703,6 +3703,100 @@ describe('CLI enforcement (schema-gate + --strict)', () => {
   });
 });
 
+describe('net-check wired into runPipeline (netDiagnostics)', () => {
+  // The guard existed and ran only from tests, so the defect class it was built for was invisible
+  // to every real generate. These cases pin down the contract the wiring gives it: always
+  // produced, shaped like `diagnostics`, attributed per pool, and fatal at the CLI.
+
+  test('a clean model gets an ok, empty netDiagnostics alongside diagnostics', async () => {
+    const r = await runPipeline(loadFixture('realistic-collaboration.json'));
+    expect(r.netDiagnostics.issues.filter(i => i.severity === 'ERROR')).toEqual([]);
+    expect(r.netDiagnostics.ok).toBe(true);
+  });
+
+  test('the early-return path sets netDiagnostics to null, the way diagnostics already is', async () => {
+    // No layout runs and no net is built when validation blocks, so the honest answer is "no
+    // artefact", not "clean". A caller reading `.ok` on a missing check would read a green light.
+    const r = await runPipeline({ id: 'P', nodes: [{ id: 's', type: 'startEvent' }], edges: [] });
+    expect(r.validation.errors.length).toBeGreaterThan(0);
+    expect(r.diagnostics).toBeNull();
+    expect(r.netDiagnostics).toBeNull();
+  });
+
+  test('a collaboration finding names the pool it came from, not just the node id', async () => {
+    // The reason attribution is not optional: NC messages carry a node id and nothing else, and
+    // two participants may legally reuse one. Here both pools own a node called "check"; only
+    // Pool A's is duplicated. Without the prefix the finding would be unattributable — the reader
+    // would have two candidate pools and no way to choose.
+    //
+    // This case doubles as the fence on WHERE the check runs. The duplicate is at pool top level,
+    // and `sortNodesTopologically` (via `preprocessLogicCore`, inside `logicCoreToElk`) rebuilds
+    // `proc.nodes` from an id-keyed map in place — so moving `checkNetTranslation` after layout
+    // hands it a Logic-Core the duplicate has already been silently dropped from, and this test
+    // goes green-for-nothing with zero findings.
+    const pool = (id, name, dupe) => ({
+      id,
+      name,
+      nodes: [
+        { id: `${id}_s`, type: 'startEvent', name: 'Start' },
+        { id: 'check', type: 'userTask', name: 'Antrag prüfen' },
+        ...(dupe ? [{ id: 'check', type: 'userTask', name: 'Antrag erneut prüfen' }] : []),
+        { id: `${id}_e`, type: 'endEvent', name: 'Ende' },
+      ],
+      edges: [
+        { id: `${id}_f1`, source: `${id}_s`, target: 'check' },
+        { id: `${id}_f2`, source: 'check', target: `${id}_e` },
+      ],
+    });
+    const lc = {
+      pools: [pool('Pool_A', 'Antragstelle', true), pool('Pool_B', 'Prüfstelle', false)],
+      messageFlows: [{ id: 'mf1', source: 'Pool_A_s', target: 'Pool_B_s' }],
+    };
+    const r = await runPipeline(lc);
+    const nc06 = r.netDiagnostics.issues.filter(i => i.code === 'NC06');
+    expect(nc06).toHaveLength(1);
+    expect(nc06[0].message).toBe(
+      '[Antragstelle] 2 distinct nodes all use id "check" — the net can only represent one of them.'
+    );
+    expect(nc06[0].process).toBe('Pool_A');
+    // And the same node id in the other pool is untouched: nothing here points at Prüfstelle.
+    expect(r.netDiagnostics.issues.some(i => i.process === 'Pool_B')).toBe(false);
+    expect(r.netDiagnostics.ok).toBe(false);
+  });
+
+  test('duplicate ids across sibling containers are an NC06 ERROR', async () => {
+    // The one behaviour change the wiring produces. This model used to generate with a
+    // serialisation warning and exit 0; the file it wrote carried the same `id=` twice, which
+    // xsd:ID forbids document-wide.
+    const r = await runPipeline(loadFixture('negative/duplicate-ids-across-containers.json'));
+    expect(r.validation.errors).toEqual([]);          // the rule engine sees nothing wrong …
+    expect(r.diagnostics.ok).toBe(true);              // … and neither does the geometry …
+    const nc06 = r.netDiagnostics.issues.filter(i => i.code === 'NC06');
+    expect(nc06.map(i => i.elements)).toEqual([['check']]);
+    expect(nc06[0].severity).toBe('ERROR');
+    expect(r.netDiagnostics.ok).toBe(false);          // … only this pass does.
+    // A single-process Logic-Core gets no prefix, for the reason runRules gives: there is only
+    // one process to attribute to.
+    expect(nc06[0].message.startsWith('2 distinct nodes')).toBe(true);
+  });
+
+  test('CLI: the NC gate exits 1 and writes no files', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bpmn-nc-'));
+    const outBase = path.join(dir, 'out');
+    const inPath = resolve(fixturesDir, 'negative/duplicate-ids-across-containers.json');
+    const res = spawnSync('node', ['pipeline.js', inPath, outBase], { cwd: __dirname, encoding: 'utf8' });
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/Net integrity \(NC\)/);
+    expect(res.stderr).toMatch(/NC06/);
+    expect(fs.existsSync(`${outBase}.bpmn`)).toBe(false);
+    expect(fs.existsSync(`${outBase}.svg`)).toBe(false);
+  });
+});
+
 describe('Optimization Advisory (optimize mode)', () => {
   const runOpt = (lc, mode) => runRules(lc, profileForMode(null, mode));
 
