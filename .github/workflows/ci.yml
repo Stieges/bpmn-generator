@@ -30,6 +30,15 @@ jobs:
         working-directory: scripts
         run: npm ci
 
+      # xmllint (libxml2-utils) is what scripts/dmn/dmn-xml.test.js needs to
+      # validate generated DMN XML against the normative DMN13.xsd — without
+      # it that describe block self-skips. Each matrix entry is its own
+      # runner, so the install has to happen once per entry, not once per
+      # workflow. No caching: a single small apt package, not worth the
+      # actions/cache overhead at this size.
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
       - name: Run tests
         working-directory: scripts
         run: npm test
