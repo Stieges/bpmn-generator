@@ -264,6 +264,23 @@ describe('docs-gate — checkNumbers', () => {
     expect(findings[0].detail).toContain('NC02b');
   });
 
+  test('a tenth-range code (no leading zero) is caught by both drift directions', () => {
+    // Regression pin for the finding this stage fixes: CODE_FAMILIES used to hard-code the `0`
+    // in `DI0\d`/`NC0\d`, so a tenth code (DI10, NC10 — two digits, no leading zero) was
+    // invisible on BOTH sides of the check at once: `prefix` never counted it as documented,
+    // and `sourcePattern` never counted it as emitted. checkNumbers would have stayed green
+    // with a real DI10/NC10 both unemitted-by-the-check and undocumented — the same failure
+    // mode the NC07 regression pin above exercises for the digit count, one order of magnitude
+    // up.
+    const findings = checkNumbers(base({
+      actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06', 'DI10'],
+      actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05', 'NC06', 'NC10'],
+    }));
+    expect(findings).toHaveLength(2);
+    expect(findings.find((f) => f.check === 'di-codes').detail).toContain('DI10');
+    expect(findings.find((f) => f.check === 'nc-codes').detail).toContain('NC10');
+  });
+
   test('both families are checked independently in the same doc text', () => {
     const findings = checkNumbers(base({
       actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06', 'DI07'],
@@ -298,6 +315,19 @@ describe('docs-gate — extractActualCodes (the module-source side of a code fam
     const family = CODE_FAMILIES.find((f) => f.check === 'di-codes');
     const syntheticSrc = `issues.push({ code: 'DI01', severity: 'ERROR' });`;
     expect(extractActualCodes(syntheticSrc, family.sourcePattern)).toEqual(['DI01']);
+  });
+
+  test('both sourcePatterns capture a tenth-range code (two digits, no leading zero)', () => {
+    // The `\d` in the pre-fix patterns (DI0\d, NC0\d) matched exactly one digit after the
+    // hard-coded `0`, so it topped out at DI09/NC09. A code named without that leading zero —
+    // DI10, NC10 — never matched at all, on the module-source side just as much as on the
+    // doc-prose side tested above.
+    const diFamily = CODE_FAMILIES.find((f) => f.check === 'di-codes');
+    const ncFamily = CODE_FAMILIES.find((f) => f.check === 'nc-codes');
+    expect(extractActualCodes(`issues.push({ code: 'DI10', severity: 'ERROR' });`, diFamily.sourcePattern))
+      .toEqual(['DI10']);
+    expect(extractActualCodes(`issues.push({ code: 'NC10', severity: 'ERROR' });`, ncFamily.sourcePattern))
+      .toEqual(['NC10']);
   });
 
   test('a real net-check.js source read from disk is captured in full by its own sourcePattern', () => {
