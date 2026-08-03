@@ -416,4 +416,27 @@ describe('completeness notes attribute each finding to its actual reason', () =>
     expect(note).not.toMatch(/race semantics/);
     expect(note).toMatch(/no well-defined entry or exit marking/);
   });
+
+  test('an approximation is disclosed on its own channel, not as a skip', () => {
+    // Stage 5. The distinction is the point: a skipped node never appears in any scenario, an
+    // approximated one does — just not in every scenario the semantics allow. Reporting the
+    // second as the first tells the reader the node is missing when it is present.
+    const notes = notesFor(fixture('boundary-event-shapes'));
+    const note = notes.find(n => n.includes('nonInterruptingBoundaryEvent'));
+    expect(note).toBeDefined();
+    expect(note).toMatch(/modelled by approximation/);
+    expect(note).toMatch(/P_Boundary::bnd_n/);
+    expect(note).not.toMatch(/not modelled at all/);
+    // Each approximation reason gets its own explanation, for the same reason skip reasons do.
+    const containerNote = notes.find(n => n.includes('boundaryEventOnContainer'));
+    expect(containerNote).toBeDefined();
+    expect(containerNote).toMatch(/competes with the subprocess's ENTRY/);
+    expect(containerNote).not.toMatch(/non-interrupting/);
+  });
+
+  test('an approximation is a note, never a warning — the enumeration finished', () => {
+    const { warnings } = describeEnumerationCompleteness(
+      enumerateCollaboration(fixture('boundary-event-shapes')));
+    expect(warnings).toEqual([]);
+  });
 });

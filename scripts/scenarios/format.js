@@ -456,7 +456,8 @@ function idList(ids, limit = 8) {
 }
 
 /** `stats.orGateways` is `string[]` single-process, `{poolId, nodeId}[]` for a collaboration;
- *  `stats.skipped` is `{id, reason}[]` / `{poolId, id, reason}[]`. One id shape out of both. */
+ *  `stats.skipped` and `stats.approximations` are `{id, reason}[]` / `{poolId, id, reason}[]`.
+ *  One id shape out of all three. */
 function scopedIds(entries, idKey) {
   return (entries || []).map((e) =>
     (typeof e === 'string' ? e : (e.poolId ? `${e.poolId}::${e[idKey]}` : e[idKey])));
@@ -545,6 +546,10 @@ export function describeEnumerationCompleteness(enumerationResult) {
     subProcessWithoutStartOrEnd: 'A container without an inner startEvent or endEvent has no '
       + 'well-defined entry or exit marking, so it is translated as a single atomic transition '
       + 'and its children do not appear in any scenario.',
+    boundaryEventWithoutHost: 'A boundary event is triggered by its host, so with no host that '
+      + 'can be found — or a host nothing can enable — there is nothing to trigger it from. '
+      + 'Giving it a transition anyway would only recreate the unfireable transition this '
+      + 'translation exists to remove; its whole path is missing from the list.',
   };
   const skipReasons = [...new Set(skippedOther.map((s) => s.reason))].sort();
   for (const reason of skipReasons) {
@@ -555,6 +560,36 @@ export function describeEnumerationCompleteness(enumerationResult) {
       // honest shape for whatever the next translation gap turns out to be.
       + (skipExplanation[reason] || 'Their scenarios are missing from the list entirely.'));
   }
+  // Approximated, not skipped: these nodes DO fire and DO appear in traces — the scenario set
+  // is simply narrower than the semantics allow around them. Reported on its own channel for
+  // that reason: folding them into the `skipped` notes would tell the reader the node is
+  // missing from the list entirely, which is the opposite of what happened. Grouped by reason,
+  // for the same argument the skip notes make above — the explanation has to follow the reason,
+  // or the next approximation to be added gets described as the previous one.
+  const approxExplanation = {
+    nonInterruptingBoundaryEvent:
+      'A non-interrupting boundary event is translated exactly like an interrupting one — an '
+      + 'XOR alternative to its host — so every scenario in which the host AND the event path '
+      + 'both run is missing. The faithful alternatives each invent something the model does '
+      + 'not say (a forced AND adds a path; a silent skip transition adds a step to the trace), '
+      + 'so this one under-models and says so. See `wireBoundaryEvents` in '
+      + '`scripts/bpmn/workflow-net.js`.',
+    boundaryEventOnContainer:
+      'A boundary event on a subprocess competes with the subprocess\'s ENTRY, so the scenarios '
+      + 'in which the subprocess ran partway and was then interrupted are missing — only "ran '
+      + 'to completion" and "the boundary event fired instead" appear. Cancelling a subprocess '
+      + 'mid-flight needs a cancel region, which no fixed set of Petri-net arcs expresses.',
+  };
+  const approximations = stats.approximations || [];
+  const approxReasons = [...new Set(approximations.map((a) => a.reason))].sort();
+  for (const reason of approxReasons) {
+    const ofReason = approximations.filter((a) => a.reason === reason);
+    notes.push(`${ofReason.length} node(s) are modelled by approximation: `
+      + `${idList(scopedIds(ofReason, 'id'))} (${reason}). `
+      + (approxExplanation[reason]
+        || 'The scenario set is an under-enumeration around them.'));
+  }
+
   const ungated = stats.ungatedMessageFlows || [];
   if (ungated.length > 0) {
     // `gates: false` covers three cases and this note used to name only one of them, so a
@@ -801,7 +836,7 @@ function assemble(enumerationResult, decisionsFor, happyPath, options, nameById)
  * @property {object} json.stats - the source `EnumerationResult.stats` /
  *   `CollaborationEnumerationResult.stats`, **passed through whole and unchanged** —
  *   `deadEndPaths`, `cappedPaths`, `lengthTruncatedPaths`, `backwardEdges`, `orGateways`,
- *   `skipped`, `statesExplored`, and, on the collaboration path, `messageFlows`,
+ *   `skipped`, `approximations`, `statesExplored`, and, on the collaboration path, `messageFlows`,
  *   `ungatedMessageFlows`, `unconsumedMessagePlaces`, `unresolvedEndpoints`. A consumer that
  *   reads `json.scenarios` without reading this is reading an answer without its error bars;
  *   `describeEnumerationCompleteness` turns the same data into prose for a human.

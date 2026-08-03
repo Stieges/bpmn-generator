@@ -1,0 +1,58 @@
+{
+  "pools": [
+    {
+      "id": "P_Boundary",
+      "name": "Boundary shapes",
+      "nodes": [
+        { "id": "s", "type": "startEvent", "name": "Case opened" },
+        { "id": "gw", "type": "exclusiveGateway", "name": "Which route?" },
+        { "id": "b1", "type": "userTask", "name": "Prepare via A" },
+        { "id": "b2", "type": "userTask", "name": "Prepare via B" },
+
+        { "id": "bnd_n", "type": "boundaryEvent", "marker": "timer", "attachedTo": "b1",
+          "cancelActivity": false, "name": "Nudge after 2 days" },
+        { "id": "n_task", "type": "sendTask", "name": "Send nudge" },
+        { "id": "e_n", "type": "endEvent", "name": "Nudged" },
+
+        { "id": "bnd_c", "type": "boundaryEvent", "marker": "timer", "attachedTo": "C",
+          "cancelActivity": true, "name": "Handling took too long" },
+        {
+          "id": "C", "type": "subProcess", "name": "Handle case", "isExpanded": true,
+          "nodes": [
+            { "id": "c_s", "type": "startEvent", "name": "Handling starts" },
+            { "id": "c_t", "type": "userTask", "name": "Do the work" },
+            { "id": "c_e", "type": "endEvent", "name": "Handling done" }
+          ],
+          "edges": [
+            { "id": "c_f1", "source": "c_s", "target": "c_t" },
+            { "id": "c_f2", "source": "c_t", "target": "c_e" }
+          ]
+        },
+        { "id": "esc_c", "type": "userTask", "name": "Handle by exception" },
+
+        { "id": "j", "type": "userTask", "name": "Close case" },
+        { "id": "bnd_j", "type": "boundaryEvent", "marker": "error", "attachedTo": "j",
+          "cancelActivity": true, "name": "Closing failed" },
+        { "id": "esc_j", "type": "userTask", "name": "Repair and report" },
+        { "id": "e_esc", "type": "endEvent", "name": "Closed with incident" },
+
+        { "id": "e", "type": "endEvent", "name": "Closed" }
+      ],
+      "edges": [
+        { "id": "f1", "source": "s", "target": "gw" },
+        { "id": "f2", "source": "gw", "target": "b1", "label": "Route A", "isDefault": true },
+        { "id": "f3", "source": "gw", "target": "b2", "label": "Route B" },
+        { "id": "f4", "source": "b1", "target": "C" },
+        { "id": "f5", "source": "b2", "target": "C" },
+        { "id": "f6", "source": "C", "target": "j" },
+        { "id": "f7", "source": "j", "target": "e" },
+        { "id": "f8", "source": "bnd_c", "target": "esc_c" },
+        { "id": "f9", "source": "esc_c", "target": "j" },
+        { "id": "f10", "source": "bnd_j", "target": "esc_j" },
+        { "id": "f11", "source": "esc_j", "target": "e_esc" },
+        { "id": "f12", "source": "bnd_n", "target": "n_task" },
+        { "id": "f13", "source": "n_task", "target": "e_n" }
+      ]
+    }
+  ]
+}

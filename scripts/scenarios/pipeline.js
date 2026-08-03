@@ -16,8 +16,8 @@
  * `<basename>.scenarios.json` — every field of `FormattedView.json` (`format.js`), i.e.
  * `happyPath`, `scenarios`, `groupCount`, **`truncated` and `stats`** (the enumeration's own
  * incompleteness bookkeeping: `deadEndPaths`, `cappedPaths`, `lengthTruncatedPaths`,
- * `orGateways`, `skipped`, and the collaboration's message-flow fields), plus `issues` and
- * `skippedTableAnalyses`, which `FormattedView` has no slot for.
+ * `orGateways`, `skipped`, `approximations`, and the collaboration's message-flow fields),
+ * plus `issues` and `skippedTableAnalyses`, which `FormattedView` has no slot for.
  * `<basename>.scenarios.md` — the human view, which now opens with an
  * `## Enumeration summary` section carrying the same completeness information in prose.
  *

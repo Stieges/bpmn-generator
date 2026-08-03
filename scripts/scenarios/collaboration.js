@@ -217,6 +217,7 @@ export function composeCollaboration(lc) {
       })),
       orGateways: [...pn.orGateways],
       skipped: pn.skipped.map(s => ({ ...s })),
+      approximations: pn.approximations.map(a => ({ ...a })),
     });
   }
 
@@ -424,6 +425,8 @@ export function composeCollaboration(lc) {
  *   because two pools can both have one. Same warning as in the single-process contract:
  *   an OR split is fired as an AND, so the list is an under-enumeration marker.
  * @property {Array<object>} stats.skipped - `{poolId, id, reason}`.
+ * @property {Array<object>} stats.approximations - `{poolId, id, reason}`, same reason as
+ *   `orGateways` carries one: two pools can each have one.
  * @property {Array<object>} stats.messageFlows - one per flow: `{id, placeId, gates,
  *   senderIsBlackBox, receiverIsBlackBox, ungatedReason, senderTransitions,
  *   receiverTransitions}`. `ungatedReason` is `null` when the flow gates, and otherwise
@@ -530,6 +533,8 @@ export function enumerateCollaboration(lc, options = {}) {
       orGateways: net.pools.flatMap(p =>
         p.orGateways.map(nodeId => ({ poolId: p.poolId, nodeId }))),
       skipped: net.pools.flatMap(p => p.skipped.map(s => ({ poolId: p.poolId, ...s }))),
+      approximations: net.pools.flatMap(p =>
+        p.approximations.map(a => ({ poolId: p.poolId, ...a }))),
       messageFlows: net.messagePlaces.map(mp => ({
         id: mp.messageFlowId,
         placeId: mp.placeId,
