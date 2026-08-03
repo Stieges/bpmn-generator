@@ -33,7 +33,8 @@ import { isGateway, isBoundaryEvent } from './types.js';
  *
  * Model:
  *   - Each BPMN node → a Transition
- *   - Each SequenceFlow → a Place (between source-transition and target-transition)
+ *   - Each SequenceFlow → a Place of its own (between source-transition and target-transition);
+ *     `namePlaces` names them and publishes the edge→place map as `pn.placeOfEdge`
  *   - Source place (before startEvent) gets initial token
  *   - Sink place (after endEvent) is the target marking
  *
@@ -58,7 +59,7 @@ import { isGateway, isBoundaryEvent } from './types.js';
  *
  * @param {object} proc - Process with nodes and edges
  * @returns {{ places, transitions, arcs, initialMarking, sinkPlace, orGateways, skipped,
- *   approximations, unproducedPlaces }}
+ *   approximations, unproducedPlaces, flatNodes, flatEdges, placeOfEdge }}
  */
 function bpmnToPN(proc) {
   const nodes = proc.nodes || [];
@@ -98,10 +99,7 @@ function bpmnToPN(proc) {
   // arcs rather than fail. Creating them all up front is what keeps the guards honest. The only
   // places minted later are a container's own two (`buildContainer`), and those are created
   // before the arcs that reference them.
-  for (const edge of flatEdges) {
-    const placeId = `p_${edge.source}_${edge.target}`;
-    places.set(placeId, { id: placeId, label: edge.label || '' });
-  }
+  const placeOfEdge = namePlaces(flatEdges, places);
 
   // The process-level source and sink place.
   const sourcePlace = 'p_source';
@@ -113,7 +111,7 @@ function bpmnToPN(proc) {
   // its end events produce on `p_sink`, exactly as a subprocess's do from its own pair.
   const ctx = {
     places, transitions, arcs, orGateways, skipped, approximations, boundaryEvents,
-    unproducedPlaces, flatNodes, flatEdges,
+    unproducedPlaces, flatNodes, flatEdges, placeOfEdge,
   };
   buildScope(proc, sourcePlace, sinkPlace, ctx);
 
@@ -132,6 +130,18 @@ function bpmnToPN(proc) {
   // does — and handing back the actual arrays guarantees identity, where re-running the
   // flatten outside would only ever guarantee agreement.
   //
+  // `placeOfEdge` travels for exactly that reason, one level down: it is the edge→place
+  // mapping itself rather than the graph it was computed from. The place id used to be a
+  // formula every caller re-derived — three branches in this file, `connectTransition`,
+  // `wireBoundaryEvents`, `backwardEdgePlaceId` in `scripts/scenarios/enumerate.js`, and two
+  // checks in `net-check.js`. Eight copies of one rule agree only until someone edits one of
+  // them, which is precisely what happened: `p_<src>_<tgt>` cannot name two flows between the
+  // same node pair, and every copy had to learn the fix separately or silently disagree.
+  // Keyed on the edge OBJECT, not on `edge.id`: `references/input-schema.json` leaves `Edge.id`
+  // optional and unconstrained (only `Node.id` carries `^[a-zA-Z_][a-zA-Z0-9_-]*$`), so an
+  // edge id is not a key at all. Object identity always is, and the objects are the very ones
+  // in `flatEdges`.
+  //
   // `flatNodes` lists a container BEFORE its children, and the container IS in the list — the
   // same parent-then-children shape `di-check.js` and `coordinates.js` already use. It used to
   // be replaced by its children, which meant `scripts/scenarios/` could not name the container
@@ -140,8 +150,96 @@ function bpmnToPN(proc) {
   // scenario step naming a subprocess had nothing to resolve against.
   return {
     places, transitions, arcs, initialMarking, sinkPlace, sourcePlace, orGateways, skipped,
-    approximations, unproducedPlaces, flatNodes, flatEdges,
+    approximations, unproducedPlaces, flatNodes, flatEdges, placeOfEdge,
   };
+}
+
+/**
+ * Mint one place per sequence flow and return the edge→place map.
+ *
+ * ── The naming rule ───────────────────────────────────────────────────────────────────────
+ * The counter is keyed on the **concatenation** `<src>_<tgt>`, i.e. on the place id the old
+ * scheme would have produced, not on the (source, target) pair:
+ *   - `p_<src>_<tgt>` when that concatenation occurs exactly once across `flatEdges`;
+ *   - `p_<src>_<tgt>#<k>`, `k = 0…n-1` in `flatEdges` order, when it occurs n > 1 times.
+ *
+ * Keying on the concatenation rather than on the pair is deliberate, and it closes a second
+ * collision the old scheme had. Node ids may contain `_` (`Node.id` is
+ * `^[a-zA-Z_][a-zA-Z0-9_-]*$`), so two DIFFERENT pairs can concatenate to the same string:
+ * `a → b_c` and `a_b → c` both give `a_b_c`. Under the old formula those two unrelated flows
+ * silently shared `p_a_b_c` — the same overwrite as a repeated pair, arrived at by a different
+ * route. Here they simply count as two occurrences of one key and become `p_a_b_c#0` and
+ * `p_a_b_c#1`: two places, both labels intact, each edge wired to its own. So the invariant
+ * this function actually guarantees is the stronger and simpler one — **distinct edges never
+ * share a place id** — rather than anything about pairs. Note the consequence a reader
+ * debugging an id should know: a `#<k>` does NOT prove the node pair repeats, only that the
+ * concatenation does.
+ *
+ * The unsuffixed form is kept for the overwhelmingly common single case on purpose: every
+ * place id in every existing model is unchanged by this, so the suffix appears only where the
+ * old scheme was actually wrong. Two flows between one node pair is legal BPMN — a gateway
+ * with two conditions leading to the same consequence is the everyday shape — and under the
+ * pair-only formula they collapsed onto one place. The second flow's label overwrote the
+ * first's, and the net offered one token where the model offers two alternatives, so a
+ * reader was shown a decision the trace did not support.
+ *
+ * ── Why not `p_<edgeId>` ──────────────────────────────────────────────────────────────────
+ * `references/input-schema.json` makes `Edge.id` neither required nor pattern-constrained,
+ * unlike `Node.id` (`^[a-zA-Z_][a-zA-Z0-9_-]*$`). An edge id may therefore be absent, or
+ * contain `#`, or collide with another edge's — none of which a place id may do.
+ *
+ * ── Why `#<k>` cannot collide ─────────────────────────────────────────────────────────────
+ * `#` is this file's reserved separator, and `buildContainer`'s doc carries the proof that no
+ * node id can contain it (schema pattern at the HTTP gate; XSD `NCName` everywhere else). So
+ * `p_<src>_<tgt>#<k>` holds exactly one `#`, and so does a container's `p_<C>#source` /
+ * `p_<C>#sink`. Comparing the two ids therefore reduces to comparing what follows that one
+ * `#`: a decimal integer here, the literals `source` / `sink` there. Disjoint, whatever the
+ * ids on either side of the separator are — which is what makes the argument robust to the
+ * concatenation keying above. The case worth spelling out because it looks alarming: a
+ * container `C = "a_b"` mints `p_a_b#source` / `p_a_b#sink`, and a recurring key `a_b` mints
+ * `p_a_b#0` / `p_a_b#1`. Identical to the left of the `#`, still disjoint to the right of it.
+ *
+ * ── The same edge object listed twice ─────────────────────────────────────────────────────
+ * Skipped rather than counted twice. An identity-keyed map cannot represent one object as two
+ * places, so counting it twice would mint a place nothing ever references (NC03a/NC03b, an
+ * invented defect). One object is one edge is one place — the only self-consistent reading,
+ * and `net-check.js`'s NC04 dedupes by identity for the same reason.
+ *
+ * @param {Array<object>} flatEdges - every sequence flow, at every nesting level
+ * @param {Map<string, object>} places - written into
+ * @returns {Map<object, string>} edge object → place id
+ */
+function namePlaces(flatEdges, places) {
+  // The base id the unsuffixed scheme would have produced. Named once so the counting pass and
+  // the minting pass cannot drift, and so it is visible that the key is a STRING, not a pair —
+  // see the naming-rule section above for why that is the stronger invariant.
+  const baseKey = (edge) => `${edge.source}_${edge.target}`;
+
+  // Two passes so the mint order is exactly `flatEdges` order: a running index alone cannot
+  // know whether a key will recur later, and grouping first would move a recurring key's
+  // second place next to its first.
+  const keyCount = new Map();
+  const distinct = [];
+  const seen = new Set();
+  for (const edge of flatEdges) {
+    if (seen.has(edge)) continue;
+    seen.add(edge);
+    distinct.push(edge);
+    const key = baseKey(edge);
+    keyCount.set(key, (keyCount.get(key) || 0) + 1);
+  }
+
+  const placeOfEdge = new Map();
+  const nextIndex = new Map();
+  for (const edge of distinct) {
+    const key = baseKey(edge);
+    const k = nextIndex.get(key) || 0;
+    nextIndex.set(key, k + 1);
+    const placeId = keyCount.get(key) === 1 ? `p_${key}` : `p_${key}#${k}`;
+    placeOfEdge.set(edge, placeId);
+    places.set(placeId, { id: placeId, label: edge.label || '' });
+  }
+  return placeOfEdge;
 }
 
 /**
@@ -210,7 +308,8 @@ function isRefinableContainer(node) {
  *   flatEdges}} ctx
  */
 function buildScope(container, scopeSource, scopeSink, ctx) {
-  const { places, transitions, arcs, orGateways, skipped, boundaryEvents, flatEdges } = ctx;
+  const { places, transitions, arcs, orGateways, skipped, boundaryEvents, flatEdges,
+    placeOfEdge } = ctx;
 
   for (const node of container.nodes || []) {
     // Skip elements that don't participate in control flow
@@ -247,7 +346,7 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
       // Still create a transition so the net is connected
       const tId = `t_${node.id}`;
       transitions.set(tId, { id: tId, label: node.name || node.id, bpmnNodeId: node.id });
-      connectTransition(tId, node.id, flatEdges, places, arcs);
+      connectTransition(tId, node.id, ctx);
       continue;
     }
 
@@ -264,12 +363,11 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
 
           // All incoming places → this transition
           for (const ie of inEdges) {
-            const inPlace = `p_${ie.source}_${ie.target}`;
-            arcs.push({ from: inPlace, to: tId, type: 'P→T' });
+            arcs.push({ from: placeOfEdge.get(ie), to: tId, type: 'P→T' });
           }
-          // This transition → the specific outgoing place
-          const outPlace = `p_${outEdges[i].source}_${outEdges[i].target}`;
-          arcs.push({ from: tId, to: outPlace, type: 'T→P' });
+          // This transition → the specific outgoing place. One place per outgoing EDGE, which
+          // is what makes the branch observable when two of them run to the same target.
+          arcs.push({ from: tId, to: placeOfEdge.get(outEdges[i]), type: 'T→P' });
         }
         continue; // Don't create the default transition
       }
@@ -295,14 +393,14 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
         transitions.set(tId, { id: tId, label: `${node.name || node.id}[m${i}]`, bpmnNodeId: node.id });
 
         // Only this specific incoming place → transition
-        const inPlace = `p_${inEdges[i].source}_${inEdges[i].target}`;
+        const inPlace = placeOfEdge.get(inEdges[i]);
         if (places.has(inPlace)) {
           arcs.push({ from: inPlace, to: tId, type: 'P→T' });
         }
 
         // All outgoing places
         for (const oe of outEdges) {
-          const outPlace = `p_${oe.source}_${oe.target}`;
+          const outPlace = placeOfEdge.get(oe);
           if (places.has(outPlace)) {
             arcs.push({ from: tId, to: outPlace, type: 'T→P' });
           }
@@ -325,7 +423,7 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
     transitions.set(tId, { id: tId, label: node.name || node.id, bpmnNodeId: node.id });
 
     // Connect: incoming places → transition → outgoing places
-    connectTransition(tId, node.id, flatEdges, places, arcs);
+    connectTransition(tId, node.id, ctx);
 
     // Start event: this scope's source place → transition. Several start events in one scope
     // are XOR alternatives over that scope's single entry token — OMG §10.4.2's reading, and
@@ -361,8 +459,11 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
  * may lean on them. It does not need to: every id THIS file mints is built from node ids and
  * ASCII-word literals — `t_<id>`, `t_<id>_choice_<i>`, `t_<id>_merge_<i>` from `node.id`, and
  * `p_<src>_<tgt>` from `edge.source`/`edge.target`, which are node ids by reference even though
- * `Edge.id` itself is unconstrained. So no id minted here can contain `#`, and the container
- * ids below cannot collide with any of them.
+ * `Edge.id` itself is unconstrained. So no id minted here can contain a `#` it did not put
+ * there itself, and the container ids below cannot collide with any of them. The one id
+ * minted here that DOES carry a `#` is a recurring key's `p_<src>_<tgt>#<k>` (`namePlaces`),
+ * and its own doc carries the one-line argument for why a decimal `<k>` can never be read as
+ * `source` or `sink`.
  *
  * Second leg, which the schema alone does not give us: `schema-gate.js` runs only at the HTTP
  * entry, so on the CLI and library paths — and on anything arriving through `import.js` /
@@ -379,7 +480,7 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
  * subprocess — every decision-label recovery path depends on it.
  */
 function buildContainer(node, ctx) {
-  const { places, transitions, arcs, skipped, flatEdges } = ctx;
+  const { places, transitions, arcs, skipped, flatEdges, placeOfEdge } = ctx;
 
   const label = node.name || node.id;
 
@@ -397,7 +498,7 @@ function buildContainer(node, ctx) {
   if (!isRefinableContainer(node)) {
     const tId = `t_${node.id}`;
     transitions.set(tId, { id: tId, label, bpmnNodeId: node.id });
-    connectTransition(tId, node.id, flatEdges, places, arcs);
+    connectTransition(tId, node.id, ctx);
     skipped.push({ id: node.id, reason: 'subProcessWithoutStartOrEnd' });
     return;
   }
@@ -431,7 +532,7 @@ function buildContainer(node, ctx) {
     for (let i = 0; i < inEdges.length; i++) {
       const tId = `t_${node.id}#enter#${i}`;
       transitions.set(tId, { id: tId, label: `${label}[enter${i}]`, bpmnNodeId: node.id, role: 'enter' });
-      const inPlace = `p_${inEdges[i].source}_${inEdges[i].target}`;
+      const inPlace = placeOfEdge.get(inEdges[i]);
       if (places.has(inPlace)) {
         arcs.push({ from: inPlace, to: tId, type: 'P→T' });
       }
@@ -441,7 +542,7 @@ function buildContainer(node, ctx) {
     const tId = `t_${node.id}#enter`;
     transitions.set(tId, { id: tId, label: `${label}[enter]`, bpmnNodeId: node.id, role: 'enter' });
     for (const ie of inEdges) {
-      const inPlace = `p_${ie.source}_${ie.target}`;
+      const inPlace = placeOfEdge.get(ie);
       if (places.has(inPlace)) {
         arcs.push({ from: inPlace, to: tId, type: 'P→T' });
       }
@@ -455,7 +556,7 @@ function buildContainer(node, ctx) {
   transitions.set(exitId, { id: exitId, label: `${label}[exit]`, bpmnNodeId: node.id, role: 'exit' });
   arcs.push({ from: scopeSink, to: exitId, type: 'P→T' });
   for (const oe of outEdges) {
-    const outPlace = `p_${oe.source}_${oe.target}`;
+    const outPlace = placeOfEdge.get(oe);
     if (places.has(outPlace)) {
       arcs.push({ from: exitId, to: outPlace, type: 'T→P' });
     }
@@ -534,7 +635,7 @@ function buildContainer(node, ctx) {
  */
 function wireBoundaryEvents(ctx) {
   const { places, transitions, arcs, skipped, approximations, boundaryEvents,
-    unproducedPlaces, flatNodes, flatEdges } = ctx;
+    unproducedPlaces, flatNodes, flatEdges, placeOfEdge } = ctx;
 
   for (const node of boundaryEvents) {
     const hostId = node.attachedTo;
@@ -573,7 +674,7 @@ function wireBoundaryEvents(ctx) {
     // one more alternative trigger keeps the net well-formed and stays XOR — the one thing
     // that must not happen is an AND across it and the host's places.
     for (const ie of flatEdges.filter(e => e.target === node.id)) {
-      const pid = `p_${ie.source}_${ie.target}`;
+      const pid = placeOfEdge.get(ie);
       if (places.has(pid)) groups.push([pid]);
     }
 
@@ -607,7 +708,7 @@ function wireBoundaryEvents(ctx) {
       // Passed IN on the net rather than re-derived inside `net-check.js`, for the reason that
       // module already gives for `exemptUnconsumedPlaces`: identity beats agreement.
       for (const oe of flatEdges.filter(e => e.source === node.id)) {
-        const pid = `p_${oe.source}_${oe.target}`;
+        const pid = placeOfEdge.get(oe);
         if (places.has(pid)) unproducedPlaces.push(pid);
       }
       continue;
@@ -622,7 +723,7 @@ function wireBoundaryEvents(ctx) {
 
     const outPlaces = flatEdges
       .filter(e => e.source === node.id)
-      .map(e => `p_${e.source}_${e.target}`)
+      .map(e => placeOfEdge.get(e))
       .filter(p => places.has(p));
 
     const label = node.name || node.id;
@@ -646,18 +747,26 @@ function wireBoundaryEvents(ctx) {
   }
 }
 
-function connectTransition(tId, nodeId, edges, places, arcs) {
-  const inEdges = edges.filter(e => e.target === nodeId);
-  const outEdges = edges.filter(e => e.source === nodeId);
+/**
+ * Wire one transition to the places of every edge touching its node.
+ *
+ * Takes the whole `ctx` rather than the four pieces it uses, because `placeOfEdge` and
+ * `flatEdges` must be the ones the places were minted from — passing them separately is how a
+ * caller ends up handing over a filtered edge list and an unrelated map.
+ */
+function connectTransition(tId, nodeId, ctx) {
+  const { places, arcs, flatEdges, placeOfEdge } = ctx;
+  const inEdges = flatEdges.filter(e => e.target === nodeId);
+  const outEdges = flatEdges.filter(e => e.source === nodeId);
 
   for (const ie of inEdges) {
-    const placeId = `p_${ie.source}_${ie.target}`;
+    const placeId = placeOfEdge.get(ie);
     if (places.has(placeId)) {
       arcs.push({ from: placeId, to: tId, type: 'P→T' });
     }
   }
   for (const oe of outEdges) {
-    const placeId = `p_${oe.source}_${oe.target}`;
+    const placeId = placeOfEdge.get(oe);
     if (places.has(placeId)) {
       arcs.push({ from: tId, to: placeId, type: 'T→P' });
     }

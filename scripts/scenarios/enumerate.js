@@ -93,22 +93,17 @@ export function findBackwardEdges(nodes, edges) {
   return back;
 }
 
-/**
- * The Petri-net place a sequence-flow edge becomes.
- *
- * `bpmnToPN` names one place per flattened edge, `p_${source}_${target}`
- * (workflow-net.js:66), and every later arc-building branch re-derives the id from the
- * same two fields — the XOR-split branch (workflow-net.js:117/121), the implicit-merge
- * branch (workflow-net.js:142/149) and `connectTransition` (workflow-net.js:200/207).
- * So the formula survives every transformation `bpmnToPN` applies; what changes is which
- * transition the place is wired to, never the place's name.
- *
- * @param {object} edge - {source, target}
- * @returns {string} place id
- */
-export function backwardEdgePlaceId(edge) {
-  return `p_${edge.source}_${edge.target}`;
-}
+// The place a sequence-flow edge becomes is `pn.placeOfEdge.get(edge)` — `bpmnToPN` publishes
+// the map on the net, identity-keyed on the very edge objects in `pn.flatEdges`.
+//
+// This module used to carry its own `backwardEdgePlaceId(edge)` returning
+// `p_${edge.source}_${edge.target}`, a second copy of a formula that lived in eight places.
+// It agreed with `bpmnToPN` right up until the formula changed: a node pair joined by two
+// flows now yields `p_<src>_<tgt>#0` and `p_<src>_<tgt>#1`, and a re-derivation would have
+// pointed the cycle bound at a place id that does not exist — the bound would have silently
+// stopped applying. Same argument the module already makes for `flatNodes`/`flatEdges`
+// travelling with the net: identity guarantees agreement, re-deriving a formula only
+// guarantees it until someone edits one copy.
 
 // ═══════════════════════════════════════════════════════════════════════
 // Net indices
@@ -510,8 +505,11 @@ export function resolveLimits(options = {}) {
  *   multi-pool document call this once per entry of `lc.pools`.
  * @param {object} [options]
  * @param {number} [options.cycleBound] - how often a single backward edge may be
- *   traversed within one path. Counted per backward edge, not globally. A path that
- *   would exceed it is discarded whole — not shortened, not reported. Default:
+ *   traversed within one path. Counted per backward edge, not globally — and since every
+ *   edge now has a place of its own, that holds for two backward edges between the SAME
+ *   node pair too. Those used to share one capped place, so the bound applied to their
+ *   sum: a model with two distinct rework flows could rework only once in total. A path
+ *   that would exceed the bound is discarded whole — not shortened, not reported. Default:
  *   `config.json → scenarios.defaultCycleBound`.
  * @param {number} [options.maxScenarios] - global cap; on reaching it the result is
  *   flagged `truncated`.
@@ -533,7 +531,7 @@ export function enumerateScenarios(proc, options = {}) {
   const backEdges = findBackwardEdges(pn.flatNodes, pn.flatEdges);
 
   const cappedPlaces = new Map(); // place id → the backward edge it came from
-  for (const e of backEdges) cappedPlaces.set(backwardEdgePlaceId(e), e);
+  for (const e of backEdges) cappedPlaces.set(pn.placeOfEdge.get(e), e);
 
   const run = enumerateNet({
     transitions,
@@ -552,7 +550,7 @@ export function enumerateScenarios(proc, options = {}) {
         id: e.id,
         source: e.source,
         target: e.target,
-        placeId: backwardEdgePlaceId(e),
+        placeId: pn.placeOfEdge.get(e),
       })),
       cycleBound: limits.cycleBound,
       scenarioCount: run.scenarios.length,

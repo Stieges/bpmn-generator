@@ -30,8 +30,9 @@ const ARTIFACT_TYPES = new Set(['dataObjectReference', 'dataStoreReference', 'te
 // file encodes severity. NC02 was WARNING until boundary events got a translation
 // (`wireBoundaryEvents`, workflow-net.js): a transition with no way to fire had exactly one
 // legitimate cause, and that cause is gone, so the code now says what it always meant. NC04 is
-// still WARNING on purpose — two edges silently sharing one place is real, but the place-id
-// scheme that causes it has not been changed yet.
+// still WARNING here, and its own cause has just gone the same way — `namePlaces`
+// (workflow-net.js) now gives every flow a place of its own — so the flip is the next commit's,
+// kept separate so this one can be read as the translation fix it is.
 const SEVERITY = {
   NC01: 'ERROR',
   NC02: 'ERROR',
@@ -49,6 +50,9 @@ const SEVERITY = {
  *        without a producer on purpose (see below, at the NC03a loop). A composed net has no
  *        such field today; if one ever needs it, the per-pool lists have to be prefixed the way
  *        every other place id is.
+ *        `pn.placeOfEdge` (edge object → place id) is what NC04 and NC06(b) consult instead of
+ *        re-deriving the place-id formula; it travels with `pn.flatEdges`, so a net that has one
+ *        has the other, and a composed net has neither.
  * @param {object} proc - the Logic-Core process/pool the net came from (for NC01's node list
  *                        and for the element ids in the messages)
  * @param {object} [opts]
@@ -171,15 +175,34 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
     }
   }
 
-  // NC04 — two distinct entries of flatEdges computing the same place id
-  // (today: `p_${e.source}_${e.target}`). A silent Map.set overwrite: the second edge's place
-  // replaces the first's in `places`, but both edges still exist in the Logic-Core, so the
-  // rendered/analyzed net has fewer places than the model has flows. WARNING at this stage —
-  // see SEVERITY comment.
+  // NC04 — two distinct edges assigned the same place. Historically a silent Map.set overwrite:
+  // the second edge's place replaced the first's in `places`, but both edges still existed in the
+  // Logic-Core, so the analyzed net had fewer places than the model has flows and the choice
+  // between the two was unobservable in every trace.
+  //
+  // Read off `pn.placeOfEdge` rather than re-derived from `e.source`/`e.target`, and that is the
+  // difference between a fence and a false alarm: two flows between one node pair are legal BPMN
+  // and are now translated to two places, so a check re-deriving the old pair formula would call
+  // every such model an ERROR.
+  //
+  // Note what that leaves the code checking: `namePlaces`' own invariant (distinct edges never
+  // share a place id) against `namePlaces`' own output, rather than the net against the
+  // Logic-Core the way NC01 and the NC03 pair do. WARNING at this stage — see the SEVERITY
+  // comment for why the promotion is the next commit's.
+  //
+  // Distinct EDGES, by object identity: the same edge object appearing twice in `flatEdges` is
+  // one edge listed twice, and `namePlaces` (workflow-net.js) mints one place for it on the same
+  // reading. Counting it as a collision here would contradict the translation.
   {
     const bySource = new Map();
+    const seen = new Set();
     for (const e of (flatEdges || [])) {
-      const pid = `p_${e.source}_${e.target}`;
+      if (seen.has(e)) continue;
+      seen.add(e);
+      // A net not built by bpmnToPN carries no map; `flatEdges` and `placeOfEdge` always
+      // travel together, so an edge with no entry means there is nothing to check against.
+      const pid = pn.placeOfEdge?.get(e);
+      if (pid === undefined) continue;
       if (!bySource.has(pid)) bySource.set(pid, []);
       bySource.get(pid).push(e);
     }
@@ -217,6 +240,8 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
   //      `transitions` (keyed `t_${node.id}`) can only keep one of them.
   //  (b) an edge-derived place id landing on the reserved source/sink key — 'p_source' or
   //      'p_sink' collides with the synthesized boundary places bpmnToPN always creates first.
+  //      Asked of `pn.placeOfEdge`, for the reason NC04 gives above: the naming rule lives in
+  //      one place, and this check has to follow it rather than restate it.
   {
     const nodesById = new Map();
     for (const n of (flatNodes || [])) {
@@ -234,7 +259,7 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
       }
     }
     for (const e of (flatEdges || [])) {
-      const pid = `p_${e.source}_${e.target}`;
+      const pid = pn.placeOfEdge?.get(e);
       if (pid === sourcePlace || pid === sinkPlace) {
         issues.push({
           code: 'NC06',

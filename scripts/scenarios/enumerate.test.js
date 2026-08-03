@@ -11,7 +11,7 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-import { enumerateScenarios, findBackwardEdges, backwardEdgePlaceId } from './enumerate.js';
+import { enumerateScenarios, findBackwardEdges } from './enumerate.js';
 import { bpmnToPN } from '../bpmn/workflow-net.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -78,11 +78,27 @@ describe('scenario enumeration — cycles', () => {
       for (const pool of fixture(name).pools) {
         const pn = bpmnToPN(pool);
         const result = enumerateScenarios(pool);
-        expect(result.stats.backwardEdges.length).toBeGreaterThan(0);
-        for (const e of result.stats.backwardEdges) {
-          expect(e.placeId).toBe(backwardEdgePlaceId(e));
-          expect(pn.places.has(e.placeId)).toBe(true);
-        }
+        // Against the net's own `placeOfEdge`, not against a second copy of the naming
+        // formula: the exported helper this used to compare with WAS that second copy, and
+        // agreeing with it proved only that the two copies had not drifted yet. Looking the
+        // edge object up in the map the net published is the same assertion made against the
+        // one authority there now is.
+        //
+        // The edge objects are recovered by re-running `findBackwardEdges` on the very arrays
+        // `enumerateScenarios` ran it on and zipping POSITIONALLY, never by matching `e.id`.
+        // Reaching for an id would be odd in the one place whose premise is that `Edge.id` is
+        // neither required, unique nor patterned — with two backward edges sharing or omitting
+        // an id, `find` returns the wrong object. `findBackwardEdges` is a pure function of
+        // (flatNodes, flatEdges) and emits in DFS discovery order, which is the order
+        // `stats.backwardEdges` is built in, so position IS identity here.
+        const back = findBackwardEdges(pn.flatNodes, pn.flatEdges);
+        expect(back.length).toBeGreaterThan(0);
+        expect(result.stats.backwardEdges).toHaveLength(back.length);
+        back.forEach((edge, i) => {
+          const reported = result.stats.backwardEdges[i];
+          expect(reported.placeId).toBe(pn.placeOfEdge.get(edge));
+          expect(pn.places.has(reported.placeId)).toBe(true);
+        });
       }
     }
   });
@@ -108,6 +124,98 @@ describe('scenario enumeration — cycles', () => {
     const proc = fixture('simple-approval').pools[0];
     const back = findBackwardEdges(proc.nodes, proc.edges);
     expect(back.map(e => e.id)).toEqual(['f5']);
+  });
+});
+
+describe('scenario enumeration — parallel flows between one node pair', () => {
+  // Stage 6. `bpmnToPN` used to key a place on the node pair alone, so two flows between the
+  // same two nodes shared one token slot. The two symptoms below are what the reader saw.
+
+  test('two parallel flows are two scenarios, not four', () => {
+    // gw ⟨Yes → t | No → t⟩ → e. Two branches, so two scenarios — and each scenario's
+    // `t_gw_choice_i` must be the branch whose token `t` actually consumed.
+    //
+    // With one shared place, the split's two transitions produced onto it and the merge's two
+    // consumed from it, so every combination was a distinct trace: choice_0/merge_0,
+    // choice_0/merge_1, choice_1/merge_0, choice_1/merge_1 — four scenarios of which two are
+    // pure duplicates. Worse for a reader: `format.js` recovers the branch LABEL by index from
+    // the outgoing edges, so choice_0/merge_1 was reported as "Yes" while the token had in
+    // fact travelled the flow the model calls "No". The trace did not support the decision the
+    // reader was told about.
+    const proc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'gw', type: 'exclusiveGateway', name: 'Pick?' },
+        { id: 't', type: 'task', name: 'Do' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 'gw' },
+        { id: 'f2', source: 'gw', target: 't', label: 'Yes' },
+        { id: 'f3', source: 'gw', target: 't', label: 'No' },
+        { id: 'f4', source: 't', target: 'e' },
+      ],
+    };
+    const result = enumerateScenarios(proc);
+
+    expect(result.scenarios.map(s => s.transitions)).toEqual([
+      ['t_s', 't_gw_choice_0', 't_t_merge_0', 't_e'],
+      ['t_s', 't_gw_choice_1', 't_t_merge_1', 't_e'],
+    ]);
+  });
+
+  test('two parallel BACKWARD flows each get their own cycle budget', () => {
+    // t1 → gw ⟨ok → e | rework A → t1 | rework B → t1⟩. Two distinct rework flows.
+    //
+    // This is the one behaviour change of Stage 6 that is not just a rename. Sharing a place
+    // meant sharing a capped place, so at bound 1 the two flows had ONE traversal between
+    // them: every scenario reworked at most once in total, and the five scenarios were 1 with
+    // no rework plus 4 indistinguishable one-rework traces (2 splits × 2 merges over the
+    // shared place). The bound is documented as per backward edge, and it was being applied to
+    // their sum.
+    //
+    // Now each flow carries its own budget, so a path may take A once AND B once. Hand-traced:
+    // the rework sequences that use each flow at most once are ⟨⟩, ⟨A⟩, ⟨B⟩, ⟨A,B⟩, ⟨B,A⟩ —
+    // still five scenarios, but five DIFFERENT ones, and every one of them is a path the model
+    // really has.
+    const proc = {
+      id: 'L',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 't1', type: 'task', name: 'Work' },
+        { id: 'gw', type: 'exclusiveGateway', name: 'Ok?' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 't1' },
+        { id: 'f2', source: 't1', target: 'gw' },
+        { id: 'f3', source: 'gw', target: 'e', label: 'ok' },
+        { id: 'fa', source: 'gw', target: 't1', label: 'rework A' },
+        { id: 'fb', source: 'gw', target: 't1', label: 'rework B' },
+      ],
+    };
+    const result = enumerateScenarios(proc, { cycleBound: 1 });
+
+    // Two backward edges, two places — the pair repeats, so both carry the `#<k>` suffix.
+    expect(result.stats.backwardEdges).toEqual([
+      { id: 'fa', source: 'gw', target: 't1', placeId: 'p_gw_t1#0' },
+      { id: 'fb', source: 'gw', target: 't1', placeId: 'p_gw_t1#1' },
+    ]);
+    // One key per backward edge, per the `cycleUseCounts` contract — it used to be one key
+    // for both.
+    // In DFS order: ⟨⟩, ⟨A⟩, ⟨A,B⟩, ⟨B⟩, ⟨B,A⟩.
+    expect(result.scenarios.map(s => s.cycleUseCounts)).toEqual([
+      { 'p_gw_t1#0': 0, 'p_gw_t1#1': 0 },
+      { 'p_gw_t1#0': 1, 'p_gw_t1#1': 0 },
+      { 'p_gw_t1#0': 1, 'p_gw_t1#1': 1 },
+      { 'p_gw_t1#0': 0, 'p_gw_t1#1': 1 },
+      { 'p_gw_t1#0': 1, 'p_gw_t1#1': 1 },
+    ]);
+    // …and the two-rework paths really do execute t1 three times, which no scenario could do
+    // before: one shared budget capped every path at a single rework.
+    expect(result.scenarios.map(s => s.nodes.filter(n => n === 't1').length))
+      .toEqual([1, 2, 3, 2, 3]);
   });
 });
 

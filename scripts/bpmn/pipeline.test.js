@@ -1217,6 +1217,121 @@ describe('Workflow-Net Soundness', () => {
     expect(codes).toEqual(['NC03a/ERROR']);
   });
 
+  // ── Stage 6: one place per sequence flow ──
+  // `bpmnToPN` used to key a place on the node PAIR alone, so two parallel flows between the
+  // same two nodes collapsed onto one place: the second edge's label silently overwrote the
+  // first's, and the net offered one token where the model offers two alternatives.
+
+  // A gateway with two distinct flows to the same task — legal BPMN (two conditions, one
+  // consequence) and the minimal shape of the defect.
+  const parallelEdges = () => ({
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 'gw', type: 'exclusiveGateway', name: 'Pick?' },
+      { id: 't', type: 'task', name: 'Do' },
+      { id: 'e', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 'gw' },
+      { id: 'f2', source: 'gw', target: 't', label: 'Yes' },
+      { id: 'f3', source: 'gw', target: 't', label: 'No' },
+      { id: 'f4', source: 't', target: 'e' },
+    ],
+  });
+
+  test('two parallel sequence flows get two places, and neither label is overwritten', () => {
+    const pn = bpmnToPN(parallelEdges());
+
+    // `#<k>` in `flatEdges` order, and ONLY for the pair that actually repeats: `f1`/`f4` are
+    // the sole occurrence of their pair and keep the unsuffixed id they have always had, which
+    // is what stops every existing fixture's place ids from moving.
+    expect([...pn.places.keys()]).toEqual(
+      ['p_s_gw', 'p_gw_t#0', 'p_gw_t#1', 'p_t_e', 'p_source', 'p_sink']);
+    // The label of each flow survives on its own place. One place meant one `places.set`
+    // overwrite, so "No" used to be the only condition text the net remembered.
+    expect(pn.places.get('p_gw_t#0').label).toBe('Yes');
+    expect(pn.places.get('p_gw_t#1').label).toBe('No');
+  });
+
+  test('the two XOR branches produce onto different places', () => {
+    const pn = bpmnToPN(parallelEdges());
+    const outOf = (t) => pn.arcs.filter(a => a.type === 'T→P' && a.from === t).map(a => a.to);
+
+    // The XOR split still gets one transition per outgoing edge — what changes is that the two
+    // no longer produce onto the same token slot, which is what made the choice unobservable.
+    expect(outOf('t_gw_choice_0')).toEqual(['p_gw_t#0']);
+    expect(outOf('t_gw_choice_1')).toEqual(['p_gw_t#1']);
+    // And the target is now an implicit merge over the two: one transition per incoming edge,
+    // so either arrival — and only one of them — executes it.
+    expect(pn.arcs.filter(a => a.type === 'P→T' && a.to === 't_t_merge_0').map(a => a.from))
+      .toEqual(['p_gw_t#0']);
+    expect(pn.arcs.filter(a => a.type === 'P→T' && a.to === 't_t_merge_1').map(a => a.from))
+      .toEqual(['p_gw_t#1']);
+  });
+
+  test('pn.placeOfEdge is identity-keyed on the edge objects the net was built from', () => {
+    const proc = parallelEdges();
+    const pn = bpmnToPN(proc);
+
+    // Identity, not a re-derivation: a caller holding an edge object gets the place that edge
+    // actually became. An equal-but-distinct object is deliberately NOT a hit — that is the
+    // property that makes the map the single source of the formula rather than a cache of it.
+    for (const e of pn.flatEdges) expect(pn.placeOfEdge.get(e)).toBe(pn.places.get(pn.placeOfEdge.get(e)).id);
+    expect(pn.placeOfEdge.get(proc.edges[1])).toBe('p_gw_t#0');
+    expect(pn.placeOfEdge.get(proc.edges[2])).toBe('p_gw_t#1');
+    expect(pn.placeOfEdge.get({ ...proc.edges[1] })).toBeUndefined();
+  });
+
+  test('a correctly translated parallel pair trips no net-integrity finding', () => {
+    const proc = parallelEdges();
+    // The model that used to be NC04's whole reason to exist is now translated faithfully, so
+    // the fence must stay clean on it. NC04 reads `pn.placeOfEdge` rather than re-deriving the
+    // old pair formula — re-deriving it would make every legal parallel pair a finding.
+    expect(checkNetIntegrity(bpmnToPN(proc), proc).issues).toEqual([]);
+  });
+
+  test('two DIFFERENT node pairs whose ids concatenate alike also get their own places', () => {
+    // The second collision the old scheme had, and the reason `namePlaces` counts the base id
+    // string rather than the (source, target) pair. `Node.id` permits `_`, so `a → b_c` and
+    // `a_b → c` both used to compute `p_a_b_c` — two unrelated flows silently sharing a place,
+    // reached by a different route than a repeated pair but with the same consequence.
+    const proc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'fork', type: 'parallelGateway' },
+        { id: 'a', type: 'task' }, { id: 'a_b', type: 'task' },
+        { id: 'b_c', type: 'task' }, { id: 'c', type: 'task' },
+        { id: 'join', type: 'parallelGateway' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 'fork' },
+        { id: 'f2', source: 'fork', target: 'a' },
+        { id: 'f3', source: 'fork', target: 'a_b' },
+        { id: 'f4', source: 'a', target: 'b_c', label: 'left' },
+        { id: 'f5', source: 'a_b', target: 'c', label: 'right' },
+        { id: 'f6', source: 'b_c', target: 'join' },
+        { id: 'f7', source: 'c', target: 'join' },
+        { id: 'f8', source: 'join', target: 'e' },
+      ],
+    };
+    const pn = bpmnToPN(proc);
+
+    expect(pn.places.has('p_a_b_c')).toBe(false);
+    expect(pn.placeOfEdge.get(proc.edges[3])).toBe('p_a_b_c#0');
+    expect(pn.placeOfEdge.get(proc.edges[4])).toBe('p_a_b_c#1');
+    expect(pn.places.get('p_a_b_c#0').label).toBe('left');
+    expect(pn.places.get('p_a_b_c#1').label).toBe('right');
+    // And the two branches stay separate all the way through: `a` feeds `b_c`, `a_b` feeds `c`,
+    // with no arc crossing between them. Sharing the place used to put two tokens on it and
+    // let either successor consume either branch's token.
+    expect(pn.arcs.filter(a => a.from === 'p_a_b_c#0').map(a => a.to)).toEqual(['t_b_c']);
+    expect(pn.arcs.filter(a => a.from === 'p_a_b_c#1').map(a => a.to)).toEqual(['t_c']);
+    expect(checkNetIntegrity(pn, proc).issues).toEqual([]);
+  });
+
   test('runRules with strict profile includes WF checks', () => {
     const lc = loadFixture('simple-approval.json');
     const profile = loadRuleProfile(resolve(fixturesDir, '../../rules/strict-profile.json'));
