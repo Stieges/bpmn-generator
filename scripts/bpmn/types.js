@@ -3,12 +3,25 @@
  * Pure functions, no dependencies.
  */
 
+// The five OMG Event subclasses this project's NodeType enum carries (references/input-schema.json).
+// Backs isEvent below. Kept explicit rather than a substring test so a future NodeType addition
+// that happens to contain the word "Event" without being one (or the reverse) cannot silently
+// change classification — see the fence in types.test.js, which checks this set against the enum.
+const EVENT_TYPES = new Set([
+  'startEvent', 'endEvent', 'intermediateCatchEvent', 'intermediateThrowEvent', 'boundaryEvent',
+]);
+
+// The five OMG Gateway subclasses in the NodeType enum. Same rationale as EVENT_TYPES.
+const GATEWAY_TYPES = new Set([
+  'exclusiveGateway', 'parallelGateway', 'inclusiveGateway', 'eventBasedGateway', 'complexGateway',
+]);
+
 export function isEvent(type) {
-  return type?.includes('Event') || false;
+  return EVENT_TYPES.has(type);
 }
 
 export function isGateway(type) {
-  return type?.includes('Gateway') || false;
+  return GATEWAY_TYPES.has(type);
 }
 
 export function isBoundaryEvent(node) {
@@ -78,6 +91,97 @@ export const CONTAINER_TYPES = new Set(['subProcess', 'transaction', 'adHocSubPr
 export function isContainerNode(node) {
   return CONTAINER_TYPES.has(node?.type)
     || (Array.isArray(node?.nodes) && node.nodes.length > 0);
+}
+
+// The eight OMG Task subclasses in the NodeType enum — `Task` itself plus its seven named
+// specializations (UserTask, ServiceTask, ScriptTask, SendTask, ReceiveTask, ManualTask,
+// BusinessRuleTask), all `superClass="Task"` in BPMN20.cmof. This is the "leaf activity" half of
+// `isActivity` below, and also half of `isInteractionNode` — see its doc comment for why the two
+// need different unions of the same eight types.
+const TASK_TYPES = new Set([
+  'task', 'userTask', 'serviceTask', 'scriptTask', 'sendTask', 'receiveTask',
+  'manualTask', 'businessRuleTask',
+]);
+
+/**
+ * The OMG `Activity` subclasses in the NodeType enum: every task type plus every container type.
+ * `CallActivity` (BPMN20.cmof:1188), `SubProcess` (:1147, and its `Transaction`/`AdHocSubProcess`
+ * specializations) and every `Task` subclass all descend from `Activity` — nothing else in the
+ * enum does.
+ *
+ * Derived from CONTAINER_TYPES rather than restated, so the two lists cannot drift — the failure
+ * this stage exists to close. This is what S13 (`BoundaryEvent.attachedToRef : Activity [1..1]`),
+ * `redesign.js:703`'s "boundary events attach only to activities" refusal, and
+ * `optimize.js:42`'s task-type check all actually need: a boundary event legally attaches to a
+ * subprocess, not only to a task, and the refusal at redesign.js:703 was wrong for exactly that
+ * reason — the previous `TASK_TYPES` (there, private) omitted the container classes.
+ */
+export const ACTIVITY_TYPES = new Set([...TASK_TYPES, ...CONTAINER_TYPES]);
+
+export function isActivity(type) {
+  return ACTIVITY_TYPES.has(type);
+}
+
+/**
+ * Is this node type an OMG `InteractionNode` — legal at a MessageFlow's `sourceRef`/`targetRef`?
+ *
+ * Per BPMN20.cmof, `InteractionNode` (:859) is granted per class, never inherited, to exactly
+ * four classes: `Event` (:287, `superClass="FlowNode InteractionNode"`), `Task` (:1191,
+ * `superClass="Activity InteractionNode"`), `Participant` (:863) and `ConversationNode` (:626 —
+ * conversation-diagram only, outside this project's NodeType and irrelevant here). `Activity` on
+ * its own is not one (`superClass="FlowNode"` alone, :1095), which is why `SubProcess` (:1147),
+ * `CallActivity` (:1188), `AdHocSubProcess` (:1222) and `Transaction` (:1233) — all container
+ * types, see CONTAINER_TYPES — do NOT qualify, even though they are Activities. This is the
+ * asymmetry `isActivity` above must not collapse: an activity is not automatically an
+ * interaction node, and a message flow naming a container is illegal even though the same
+ * container legally hosts a boundary event.
+ *
+ * Takes a node **type**, not a node, and therefore only ever answers the Task/Event half of the
+ * union. The Participant half is deliberately left to the caller: a MessageFlow endpoint naming a
+ * pool refers to a Participant, which lives in `lc.pools`/`Pool`, not in the NodeType enum this
+ * function (and its fence) are defined over — there is no node with `type: 'participant'` to
+ * classify. Folding that case in here would mean silently accepting a node vs. a pool id as the
+ * same shape of argument, which the two call sites (a flow endpoint resolved against `nodes`,
+ * one resolved against `pools`) do not actually share. A caller checking a MessageFlow endpoint
+ * must therefore ask "is this id a node, and if so isInteractionNode(node.type) — or is this id a
+ * pool" as two separate questions, not one.
+ */
+export function isInteractionNode(type) {
+  return TASK_TYPES.has(type) || EVENT_TYPES.has(type);
+}
+
+/**
+ * Is this node exempt from "must be reached by an incoming sequence flow" — the check S04/S07
+ * each approximate today, differently, which is why both misfire on the same inputs (see
+ * types.test.js's reproduction and CLAUDE.md's Known Limitations for the shared root cause).
+ *
+ * The membership, each with its own reason a sequence flow cannot be the thing that reaches it:
+ *   - `startEvent`     — by definition the entry point; nothing precedes it in its own scope.
+ *   - a boundary event  — attached to its host (`attachedToRef`), triggered by the host's
+ *                         execution, never targeted by a SequenceFlow.
+ *   - an artifact       — not a FlowNode's target at all; associations, not sequence flows,
+ *                         connect to it (`isArtifact`, the layout-sense predicate, on purpose —
+ *                         a dataObjectReference is exempt here for the same reason a
+ *                         textAnnotation is, regardless of the FlowElement/Artifact split that
+ *                         matters to `isBpmnArtifact`).
+ *   - `isCompensation`  — OMG `isForCompensation` (serialised at bpmn-xml.js's `buildFlowNode`,
+ *                         `attrs.isForCompensation`), reached by a compensation association when
+ *                         the compensation fires, not by a SequenceFlow.
+ *   - `isEventSubProcess` on a subProcess — OMG `triggeredByEvent` (serialised the same way,
+ *                         `attrs.triggeredByEvent`), entered by its own start event when the
+ *                         triggering event occurs, never by a SequenceFlow crossing into it.
+ *
+ * Takes a **node**, not a type: `isCompensation`/`isEventSubProcess` are instance fields
+ * (references/input-schema.json), not a function of the type string alone — two `subProcess`
+ * nodes can differ only in `isEventSubProcess` and need different verdicts here.
+ */
+export function isSequenceFlowExempt(node) {
+  if (!node) return false;
+  return node.type === 'startEvent'
+    || isBoundaryEvent(node)
+    || isArtifact(node.type)
+    || !!node.isCompensation
+    || (node.type === 'subProcess' && !!node.isEventSubProcess);
 }
 
 export function isDataArtifact(type) {
