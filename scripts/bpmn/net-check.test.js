@@ -126,6 +126,49 @@ describe('NC02 is ERROR now that boundary events have a translation', () => {
   });
 });
 
+describe('NC04 is ERROR now that every sequence flow has a place of its own', () => {
+  // The model NC04 used to exist for — two flows between one node pair — is now translated
+  // faithfully, and `net-check.test.js`'s directory-wide fence plus
+  // `pipeline.test.js`'s parallel-pair cases cover that it comes out clean.
+  //
+  // What is left for NC04 to say is narrower than the other codes, and this test is where that
+  // narrowness is made legible rather than left to be rediscovered. NC04 reads `pn.placeOfEdge`
+  // — it may NOT re-derive `p_<src>_<tgt>`, which would report every legal parallel pair as a
+  // collision — so it asserts `namePlaces`' own invariant (distinct edges never share a place
+  // id) against `namePlaces`' own output. Under the current naming rule it therefore cannot
+  // fire on a real net, by construction. That is the intended end state for a regression
+  // fence, and it is exactly why the assertion below has to exist: the fence's entire value is
+  // that a future naming rule breaking the invariant fails loudly. Delete this test and the
+  // ERROR severity protects nothing.
+  test('two edges assigned one place fail the fence rather than warning past it', () => {
+    const f2 = { id: 'f2', source: 'gw', target: 't', label: 'Yes' };
+    const f3 = { id: 'f3', source: 'gw', target: 't', label: 'No' };
+    const proc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'gw', type: 'exclusiveGateway' },
+        { id: 't', type: 'task' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [{ id: 'f1', source: 's', target: 'gw' }, f2, f3,
+        { id: 'f4', source: 't', target: 'e' }],
+    };
+    const pn = bpmnToPN(proc);
+    // Sanity first: the real translation gives them two places, so the collision below is
+    // genuinely injected and not something the fixture arrived with.
+    expect(pn.placeOfEdge.get(f2)).not.toBe(pn.placeOfEdge.get(f3));
+
+    pn.placeOfEdge.set(f3, pn.placeOfEdge.get(f2));
+    const { ok, issues } = checkNetIntegrity(pn, proc);
+    const nc04 = issues.filter(i => i.code === 'NC04');
+    expect(nc04).toHaveLength(1);
+    expect(nc04[0].severity).toBe('ERROR');
+    expect(nc04[0].elements).toEqual(['p_gw_t#0', 'f2', 'f3']);
+    expect(ok).toBe(false);
+  });
+});
+
 describe('checkNetIntegrity — judges the translation, never the model', () => {
   test('deadlock-process.json is deliberately unsound (S05/WF03 catch it) but must be a clean translation', () => {
     const lc = JSON.parse(

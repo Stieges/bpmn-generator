@@ -29,17 +29,18 @@ const ARTIFACT_TYPES = new Set(['dataObjectReference', 'dataStoreReference', 'te
 // code from WARNING to ERROR (or vice versa) by changing one line here — nothing else in this
 // file encodes severity. NC02 was WARNING until boundary events got a translation
 // (`wireBoundaryEvents`, workflow-net.js): a transition with no way to fire had exactly one
-// legitimate cause, and that cause is gone, so the code now says what it always meant. NC04 is
-// still WARNING here, and its own cause has just gone the same way — `namePlaces`
-// (workflow-net.js) now gives every flow a place of its own — so the flip is the next commit's,
-// kept separate so this one can be read as the translation fix it is.
+// legitimate cause, and that cause is gone, so the code now says what it always meant. NC04 was
+// WARNING for the same kind of reason and became ERROR the same way: two flows between one node
+// pair used to share a place BY DESIGN, because the place id was keyed on the pair. `namePlaces`
+// (workflow-net.js) gives each flow its own, so the only remaining way two edges can land on one
+// place is a defect in this translation.
 const SEVERITY = {
   NC01: 'ERROR',
   NC02: 'ERROR',
   NC02b: 'ERROR',
   NC03a: 'ERROR',
   NC03b: 'ERROR',
-  NC04: 'WARNING',
+  NC04: 'ERROR',
   NC05: 'INFO',
   NC06: 'ERROR',
 };
@@ -185,10 +186,15 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
   // and are now translated to two places, so a check re-deriving the old pair formula would call
   // every such model an ERROR.
   //
-  // Note what that leaves the code checking: `namePlaces`' own invariant (distinct edges never
-  // share a place id) against `namePlaces`' own output, rather than the net against the
-  // Logic-Core the way NC01 and the NC03 pair do. WARNING at this stage — see the SEVERITY
-  // comment for why the promotion is the next commit's.
+  // Be clear about what that makes this code, because it is narrower than its neighbours. NC01
+  // and the NC03 pair compare the net against the Logic-Core; NC04 asks `namePlaces`' output
+  // whether `namePlaces` upheld its own invariant — distinct edges never share a place id.
+  // Under the current naming rule it therefore cannot fire on a net `bpmnToPN` produced, by
+  // construction. That is the intended end state, not a gap: it is a regression fence, ERROR
+  // because a future naming rule that breaks the invariant must fail loudly rather than quietly
+  // hand back a net with fewer places than the model has flows. Its whole value is in the
+  // vacuity test that forces a collision into the map — do not delete that test as "testing
+  // nothing"; deleting it is what would make this fence blind.
   //
   // Distinct EDGES, by object identity: the same edge object appearing twice in `flatEdges` is
   // one edge listed twice, and `namePlaces` (workflow-net.js) mints one place for it on the same

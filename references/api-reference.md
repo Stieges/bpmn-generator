@@ -140,7 +140,7 @@ lands without anyone having to remember to add it.
 | NC02b | ERROR | A transition has no outgoing place — it consumes a token and never produces one |
 | NC03a | ERROR | A place is never produced by any transition |
 | NC03b | ERROR | A place is never consumed by any transition |
-| NC04 | WARNING → ERROR (scheduled) | Two distinct edges compute the same place id — one silently overwrote the other |
+| NC04 | ERROR | Two distinct edges were assigned the same place — an invariant assertion on `namePlaces` |
 | NC05 | INFO | The source place has more than one consuming transition |
 | NC06 | ERROR | Two distinct Logic-Core elements collide on the same net id |
 
@@ -160,11 +160,27 @@ silently deleting its whole escalation path from every analysis. `wireBoundaryEv
 consumes, and a boundary event whose host cannot be found gets no transition at all (it is
 disclosed on `skipped` instead). With the cause gone the code says what it always meant.
 
-NC04 is still **WARNING today, and becomes ERROR once the defect it detects is fixed in a later
-stage of this work**: two edges silently sharing one place is legitimate wherever the place-id
-scheme collides for a case not yet given its own key, and promoting it before that fix ships would
-fail fixtures that are otherwise fine today. The docs gate pins the codes so the schedule cannot
-go stale silently once the promotion happens.
+NC04 became ERROR the same way, and for the same kind of reason. Its one legitimate cause was the
+place-id scheme itself: a place used to be keyed on the node pair (`p_<src>_<tgt>`), so two flows
+between the same two nodes — legal BPMN, and the everyday shape of a gateway with two conditions
+leading to one consequence — collapsed onto a single place. The second flow's label overwrote the
+first's, and the enumerated scenarios reported a decision the trace did not support. `namePlaces`
+(`scripts/bpmn/workflow-net.js`) now gives each flow a place of its own, suffixing `#<k>` only
+where the base id would otherwise recur, and publishes the edge→place map as `pn.placeOfEdge`.
+
+**What NC04 checks after that change is narrower than the other codes, and worth being precise
+about.** It reads `pn.placeOfEdge` and asks whether two distinct edges were assigned the same
+place — it does not, and must not, re-derive the id from `source`/`target`, because re-deriving
+would report every legal parallel pair as a collision. But that makes it an assertion of
+`namePlaces`' own invariant ("distinct edges never share a place id") against `namePlaces`' own
+output, rather than a comparison of the net against the Logic-Core the way NC01, NC03a and NC03b
+are. Under
+the current naming rule it therefore cannot fire on a net `bpmnToPN` produced — by construction,
+which is the point. It is a regression fence on the invariant, kept at ERROR because any future
+naming rule that breaks the invariant must fail loudly rather than degrade a diagram quietly, and
+its value lives entirely in the vacuity test in `scripts/bpmn/pipeline.test.js` that forces a
+collision into the map and requires the code to fire. NC06's edge-derived shape (b) is a fence of
+the same kind and was already one before this change.
 
 NC05 is disclosure, not a defect: van der Aalst's WF-nets require a single source, and OMG BPMN
 2.0.2 §10.4.2 treats multiple start events as alternative instantiations of the same process, so
