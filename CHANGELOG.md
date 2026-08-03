@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`S14` — a MessageFlow endpoint may not name a subprocess container.** `MessageFlow.sourceRef`
+  and `targetRef` are typed `InteractionNode` (`BPMN20.cmof:851-852`). `Task` (`:1191`) and `Event`
+  (`:287`) are InteractionNodes by an explicit second superclass and `Participant` (`:863`)
+  likewise, but `Activity` is `superClass="FlowNode"` alone (`:1095`), so `SubProcess` (`:1147`),
+  `CallActivity` (`:1188`), `AdHocSubProcess` (`:1222`) and `Transaction` (`:1233`) are not. The
+  message names the remedy — a black-box participant, or a send/receive task or message event
+  *inside* the subprocess — and states that collapsing does not help, `isExpanded` being a
+  `BPMNShape` attribute (`BPMNDI.xsd:55`) with no semantic counterpart. Severity is **WARNING**,
+  consistent with the soundness layer's existing S04/S07/S08, so models that generate today keep
+  generating; `rules/strict-profile.json` escalates it to ERROR.
+- `references/prompt-template.md` now states the negative explicitly, upstream of every future
+  generated model, and records that a node nested inside a subprocess *is* a valid endpoint.
+
+### Fixed
+- **`S10` no longer reports a false `unknown source`/`unknown target` ERROR** for a message flow
+  naming a node inside a subprocess. It collected node ids one level deep per pool, which rejected
+  exactly the endpoint shape S14 recommends.
+- **`S12` now sees a gateway inside a container that is not marked `isExpanded`.** Its recursive
+  walk was gated on that flag — a rendering attribute — so a collapsed container hid its children
+  from the rule for purely graphical reasons.
+- **A message flow naming a subprocess no longer makes the composed Petri net invent a
+  synchronisation.** Stage 1 put the container into `pn.flatNodes` with an entry/exit transition
+  pair, so `scripts/scenarios/collaboration.js`'s `resolve()` began returning both: a container as
+  a message source would have sent its message twice, and a container as a target would have hung
+  consuming arcs on both ends of its subnet. `resolve()` now has an explicit `'container'` branch
+  that wires nothing and reports the endpoint on `unresolvedEndpoints` with `reason: 'container'`.
+- **`scripts/scenarios/format.js` no longer misattributes three notes.** An ungated message flow
+  was reported as "(a black-box endpoint)" even when the real cause was an endpoint that could not
+  be mapped — a defect presented to the reader as a deliberate modelling choice; the new
+  `stats.messageFlows[].ungatedReason` (`'blackBox'` vs `'unmappedEndpoint'`) splits the note.
+  Unresolved endpoints now carry their `reason` into the prose. And the skipped-nodes note is
+  rendered per reason, so Stage 1's `subProcessWithoutStartOrEnd` is no longer explained by a
+  sentence about `eventBasedGateway` race semantics.
+
 ## [3.6.0] - 2026-08-01
 
 ### Added

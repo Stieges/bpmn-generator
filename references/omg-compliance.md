@@ -77,6 +77,9 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 | §9.2 | Collaboration element | Implemented | bpmn-xml.js:generateBpmnXml |
 | §9.3 | Participant (expanded + collapsed/black-box) | Implemented | bpmn-xml.js:generateBpmnXml |
 | §9.4 | Message Flow (cross-pool only) | Implemented | bpmn-xml.js:generateBpmnXml, rules.js:S09 |
+| §9.4 | Message Flow endpoints exist (at every nesting level) | Implemented | rules.js:S10 |
+| §7.6.2 Table 7.4 | `MessageFlow.sourceRef`/`targetRef` typed `InteractionNode` — not a Gateway | Implemented | rules.js:S12 |
+| §7.6.2 Table 7.4 | `MessageFlow.sourceRef`/`targetRef` typed `InteractionNode` — not a SubProcess/Transaction/AdHocSubProcess/CallActivity (`Activity superClass="FlowNode"` only, BPMN20.cmof:1095) | Implemented | rules.js:S14, scenarios/collaboration.js:resolve |
 
 ## Chapter 10 — Process
 

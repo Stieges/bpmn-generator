@@ -1,6 +1,6 @@
 # BPMN Fachliches Regelwerk
 
-Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **32 registrierte Regeln**, davon 30 aktiv (M05/M06 stehen auf `severity: OFF`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
+Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **35 registrierte Regeln**, davon 33 aktiv (M05/M06 stehen auf `severity: OFF`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
 
 ## Architektur
 
@@ -44,6 +44,7 @@ Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung.
 | S11 | SubProcess-Kinder: Start-Event + End-Event vorhanden | OMG §10.2.1 | implementiert |
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
 | S13 | Boundary Event muss an einer existierenden Aktivität hängen | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
+| S14 | Message Flow source/target darf kein SubProcess/CallActivity sein (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
 
 **Zu S13:** `attachedToRef` ist im OMG-Schema Pflicht (1..1). Ohne diese Prüfung lief ein
 ins Leere zeigendes `attachedTo` bis in die Ausgabe durch und erzeugte ein `boundaryEvent`
@@ -266,6 +267,67 @@ standardised reverse link.
 
 ---
 
+## Rule S14: MessageFlow endpoints are InteractionNodes, and a SubProcess is not one
+
+**Layer:** Soundness | **Default Severity:** WARNING | **Scope:** global
+
+> Written in English, like M11 above.
+
+A message flow whose `source` or `target` names a `subProcess`, `transaction`, `adHocSubProcess`
+or `callActivity` is not an under-modelled but legal shape. It is a schema violation, and the CMOF
+says so without room for interpretation
+(`references/omg-spec/normative/BPMN20.cmof`, line numbers verified against the file in this repo):
+
+| Element | Declaration | Line | InteractionNode? |
+|---------|-------------|------|------------------|
+| `MessageFlow.sourceRef` / `targetRef` | `type="InteractionNode"` | 851–852 | — (this is the constraint) |
+| `Task` | `superClass="Activity InteractionNode"` | 1191 | yes, by an explicit second superclass |
+| `Event` | `superClass="FlowNode InteractionNode"` | 287 | yes, likewise |
+| `Participant` | `superClass="InteractionNode BaseElement"` | 863 | yes |
+| `Activity` | `superClass="FlowNode"` | 1095 | **no** |
+| `SubProcess` | `superClass="Activity FlowElementsContainer"` | 1147 | no — inherits `Activity` |
+| `CallActivity` | `superClass="Activity"` | 1188 | no |
+| `AdHocSubProcess` | `superClass="SubProcess"` | 1222 | no |
+| `Transaction` | `superClass="SubProcess"` | 1233 | no |
+
+`Task` and `Event` are InteractionNodes because each names it as a *second* superclass. `Activity`
+does not, so nothing that inherits from `Activity` alone is one — which is every container class.
+
+**Collapsing the subprocess does not help.** `isExpanded` exists only as a `BPMNShape` attribute
+(`BPMNDI.xsd:55`, `BPMNDI.cmof:34`) and has no semantic counterpart anywhere in `BPMN20.cmof`. It
+says how the shape is drawn, not what the element is. Switching the container to a `callActivity`
+does not help either — see the table.
+
+**The remedy is always one level down**: point the flow at a black-box participant, at a
+send/receive task inside the subprocess, or at a message start/end event inside it. S10 was fixed
+in the same change to collect node ids recursively, so an endpoint naming a node inside a
+subprocess no longer reports as a dangling reference — otherwise this rule's advice would have led
+straight into a different false ERROR.
+
+**Why WARNING and not ERROR.** The soundness layer already carries WARNING-severity rules (S04,
+S07, S08), so this is consistent with the layer rather than an exception to it, and every model
+that generates today keeps generating. `rules/strict-profile.json` carries the
+`"S14": { "severity": "ERROR" }` override for anyone who wants the build to stop.
+
+**Why it also matters to the Petri-net translation.** `scripts/scenarios/collaboration.js` composes
+message flows into synchronisation places. A container owns an entry/exit transition PAIR
+(`t_C#enter`/`t_C#exit`), so wiring both would make a container-as-source send its message twice,
+and picking one would invent a reading the standard does not offer. `resolve()` therefore refuses a
+container endpoint outright and records it on `unresolvedEndpoints` with `reason: 'container'`.
+
+**Beispiele:**
+
+| Bewertung | messageFlow | Grund |
+|-----------|-------------|-------|
+| gut | `target: "receive_order"` (a receiveTask inside the subprocess) | a `Task` is an InteractionNode |
+| gut | `target: "Pool_Supplier"` (a black-box participant) | a `Participant` is an InteractionNode |
+| schlecht | `target: "fulfil"` (a `subProcess`) | inherits `Activity`, which is `FlowNode` only |
+| schlecht | `source: "check_credit"` (a `callActivity`) | same, and no `isExpanded` setting changes it |
+
+**Referenz:** OMG BPMN 2.0.2 §7.6.2 Table 7.4; `BPMN20.cmof` lines as tabulated above.
+
+---
+
 ## DMN Rules — a separate engine, three layers, two modes
 
 > Written in English, like M11 above. These rules live in `scripts/dmn/rules.js` and run against
@@ -274,7 +336,7 @@ standardised reverse link.
 > engine only when its line says "DMN".
 
 A decision model is not "sound" in the workflow sense — it has no start, no end and no token, so
-S01–S13 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the
+S01–S14 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the
 shape of its tables, and whether the two agree with the specification.
 
 ### Layers and modes

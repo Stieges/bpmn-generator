@@ -174,7 +174,7 @@ membership instead of coordinates.
 | File | Purpose |
 |------|---------|
 | `scripts/bpmn/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/bpmn/rules.js` | Rule Engine: 34 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/bpmn/rules.js` |
+| `scripts/bpmn/rules.js` | Rule Engine: 35 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/bpmn/rules.js` |
 | `scripts/bpmn/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
 | `scripts/bpmn/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
 | `scripts/bpmn/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
@@ -403,7 +403,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
-| Soundness | ERROR | S01-S13 | Structural correctness (OMG compliance) |
+| Soundness | ERROR | S01-S14 | Structural correctness (OMG compliance) |
 | Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |

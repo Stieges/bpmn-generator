@@ -5,7 +5,7 @@ Created by: Daniel Stiegler + Claude
 
 ## 1 Current State (v3.6.0)
 
-The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (34 rules, 5 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
+The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (35 rules, 5 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
 
 ### 1.1 Implemented Features
 
@@ -13,7 +13,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 |---------|---------|--------|
 | Pipeline Architecture | 4 phases: LLM→JSON→ELK→XML/SVG | Done |
 | Modular Architecture | 13 ES modules, acyclic dependency graph | Done |
-| Rule Engine | 34 rules in 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization), configurable JSON profiles | Done |
+| Rule Engine | 35 rules in 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization), configurable JSON profiles | Done |
 | Flat Layout + Partitioning | Global Sugiyama layout, lanes as constraints | Done |
 | Topological Sorting | Nodes in happy-path order, ELK Model Order | Done |
 | Lane Ordering by Flow | Start lane on top, end lane at bottom | Done |
@@ -49,7 +49,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 scripts/
 ├── pipeline.js        Orchestrator + CLI
 │   ├── validate.js    Validation Wrapper → rules.js
-│   ├── rules.js       Rule Engine (34 rules, 5 layers, profiles)
+│   ├── rules.js       Rule Engine (35 rules, 5 layers, profiles)
 │   ├── topology.js    Gateway directions, topological sorting, lane ordering
 │   ├── layout.js      ELK graph construction + layout execution
 │   ├── coordinates.js Coordinate maps, edge clipping, pool equalization
