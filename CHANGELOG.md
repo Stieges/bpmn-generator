@@ -53,7 +53,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
-- **Two parallel sequence flows between one node pair no longer collapse onto one Petri-net
+- **`S05`/`S06` no longer reject a re-converged XOR at ERROR severity.** Both rules asked *"do two
+  branches of this split reach the AND-join?"* — a reachability question standing in for a token
+  question, the same defect family as the rest of this release. Two branches that re-converge at a
+  merge **before** the parallel block do both reach the join, but the choice is resolved by then: a
+  single token enters the AND-fork and forks into exactly the tokens the join waits for. Since S05
+  is ERROR, `runPipeline` returned `bpmnXml: null` and such a model produced no output at all;
+  `tests/fixtures/subprocess-merge-fanout.json` was a live instance, provably sound
+  (`checkSoundness` reports nothing, `checkNetIntegrity` returns `ok`) and rejected regardless. Both
+  rules now work per **incoming flow** of the join — a parallel join fires only once every incoming
+  flow carries a token — and report only when two incoming flows *disagree* about which branches can
+  supply them, ignoring the flows no branch of the split can supply at all (those are fed by a
+  concurrent thread of an enclosing AND block, which no choice at the split can starve). That is
+  deliberately stronger than testing for a *disjoint pair* of incoming flows: with three branches
+  A/B/C where A feeds only the first flow, C only the second and B both, no pair is disjoint and
+  choosing A still deadlocks. Verified against the second, independent implementation this release
+  makes possible — `bpmnToPN` + `checkSoundness` — over every fixture and eight hand-built shapes.
+- **A Mixed gateway is now recognised as a split.** `S05`/`S06` skipped every gateway carrying
+  `has_join`, which `references/input-schema.json` documents as a direction *hint*; a gateway with
+  more than one outgoing flow diverges regardless (`gatewayDirection` = Mixed). A model whose XOR
+  merged a rework loop and chose between two exclusive paths into an AND-join was therefore a
+  deadlock that WF03 flagged and S05 did not.
   place.** `bpmnToPN` keyed a place on the node pair alone (`p_<src>_<tgt>`), so a `gw --yes--> t`
   / `gw --no--> t` pair — legal BPMN, and the everyday shape of two conditions with one
   consequence — produced a single place. Three consequences, all reproduced: the later flow's

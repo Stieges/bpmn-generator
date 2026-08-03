@@ -38,8 +38,8 @@ ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 | S02 | Jeder Prozess hat mindestens ein End-Event | OMG §10.4.2, 7PMG G3 | implementiert |
 | S03 | Kanten referenzieren nur existierende Nodes (source/target) | OMG §10.3.1 | implementiert |
 | S04 | Keine isolierten Nodes (ohne ein-/ausgehende Kante) (Severity WARNING) | 7PMG G2 | implementiert |
-| S05 | Kein Deadlock: XOR-Split darf nicht direkt/indirekt in AND-Join muenden | OMG §10.5.1, Silver Ch.5 | implementiert |
-| S06 | Kein Deadlock: Inclusive-Split darf nicht direkt/indirekt in AND-Join muenden | OMG §10.5.1 | implementiert |
+| S05 | Kein Deadlock: XOR-Split darf keinen AND-Join auf exklusiven Pfaden speisen | OMG §10.5, Silver Ch.5, 7PMG G4, CMOF: ExclusiveGateway/ParallelGateway superClass="Gateway"; Gateway.gatewayDirection : GatewayDirection {Unspecified, Converging, Diverging, Mixed} | implementiert |
+| S06 | Kein Deadlock: Inclusive-Split darf keinen AND-Join auf exklusiven Pfaden speisen | OMG §10.5, CMOF: InclusiveGateway superClass="Gateway" mit default : SequenceFlow | implementiert |
 | S07 | Jeder Pfad vom Start muss ein End-Event erreichen koennen (Severity WARNING) | 7PMG G1 | implementiert |
 | S08 | Boundary-Event-Pfade muessen in End-Event terminieren (Severity WARNING) | OMG §10.4.4, BEF4LLM | implementiert |
 | S09 | Message Flows nur zwischen verschiedenen Pools | OMG §9.4 | implementiert |
@@ -60,6 +60,47 @@ Aktivitäten rekursiv, prüfte aber nur die oberste Ebene — genau verkehrt. Da
 Fehler durch: ein Boundary Event *innerhalb* eines Subprozesses ohne `attachedTo` (ungültiges
 BPMN, grüne Validierung) und den Gegenfall, ein Boundary Event der obersten Ebene, das auf
 einen Knoten *innerhalb* eines Subprozesses zeigt (auflösbar, aber laut BPMN unzulässig).
+
+**On S05/S06:** both rules used to ask *"do two branches of this split reach the AND-join?"*.
+That is a reachability question, not a token question, and it rejected sound models at ERROR
+severity — meaning no output at all. Two branches that re-converge at a merge **before** the
+parallel block do both reach the join, but by then the choice is resolved: a single token enters
+the AND-fork and forks into exactly the tokens the join waits for. `tests/fixtures/subprocess-merge-fanout.json`
+is such a model — provably sound (`checkSoundness` reports nothing) and rejected regardless.
+
+Both rules now ask the token question, and they ask it **per incoming flow** of the join, because
+a parallel join fires only once every incoming flow carries a token:
+
+1. for each incoming flow, collect which branches of the split can supply it;
+2. ignore flows no branch can supply — those are fed from outside the split's subgraph (typically
+   a concurrent thread of an enclosing AND block) and no choice at the split can starve them;
+3. if all remaining flows agree on their supplying-branch set, every choice feeds either all of
+   them or none — no starvation, no finding;
+4. if two of them disagree, some branch supplies one but never the other, and the join waits for
+   a token that run can no longer produce. That is the deadlock.
+
+Step 4 is deliberately stronger than *"two incoming flows have disjoint supplying branches"*: with
+three branches A/B/C where A feeds only the first flow, C only the second and B both, no **pair**
+of flows is disjoint, yet choosing A still deadlocks. Both readings are pinned by tests in
+`scripts/bpmn/pipeline.test.js`.
+
+Two consequences worth knowing:
+
+- A gateway counts as a split when it has more than one outgoing flow. `has_join` is only a
+  direction *hint* in `references/input-schema.json`, and a **Mixed** gateway (`gatewayDirection`)
+  merges and splits at once. The old code skipped every gateway carrying `has_join`, so a merge of
+  a rework loop that also chose between two exclusive paths into an AND-join was never reported —
+  WF03 flagged that model as a deadlock while S05 stayed silent.
+- The rule stays a cheap syntactic heuristic and remains **incomplete**: a flow counts as
+  suppliable by a branch as soon as its source node is reachable, which over-approximates the
+  supplying sets and therefore makes them agree more often than they should. The residual error is
+  a missed deadlock, never a fabricated one. It also does not see a branch that *escapes* an
+  enclosing parallel block entirely (the sibling arm's token is then stranded). Both belong to the
+  exhaustive check: WF03 in the opt-in `workflow_net` layer.
+
+Not covered by S06, and not a deadlock: an inclusive split that activates several branches which
+re-converge at an **exclusive** merge puts several tokens into the parallel block. That is a
+boundedness / proper-completion defect — WF02 and WF03's business.
 
 ## Schicht 2: Style (WARNING)
 
