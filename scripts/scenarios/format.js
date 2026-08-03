@@ -329,8 +329,8 @@ export function deriveHappyPathEdges(flatNodes, flatEdges) {
  * restriction `resolveGatewayChoice` applies to a transition id, and for the same reason:
  * `bpmnToPN` only ever emits a `_choice_` transition (a real decision point in the net) for
  * `exclusiveGateway`; an `inclusiveGateway` split falls through to the forced-AND default
- * handling and produces no `_choice_` transition at all (workflow-net.js ~89-92, 105-122,
- * 168). Counting an inclusive split here would put a decision point into the happy path's
+ * handling and produces no `_choice_` transition at all (`buildScope`, workflow-net.js).
+ * Counting an inclusive split here would put a decision point into the happy path's
  * key that no scenario's own `extractScenarioDecisions` can ever match — every scenario
  * would silently carry a constant +1 `happyPathDistance` penalty for it, including the
  * scenario that IS the happy path.
@@ -864,7 +864,7 @@ function assemble(enumerationResult, decisionsFor, happyPath, options, nameById)
  *
  * **Prefer `formatCollaborationResult`** (with `enumerateCollaboration`): that pair is a
  * strict superset for single-process input and the only one that yields `SC06` coverage.
- * `pipeline.js` routes every document, pooled or not, through it. This function is kept for
+ * `../scenarios/pipeline.js` routes every document, pooled or not, through it. This function is kept for
  * direct single-process library use, where the plain `Scenario` shape is what the caller
  * wants.
  *
@@ -905,7 +905,7 @@ export function formatCollaborationResult(collabResult, lc, options = {}) {
   // is one unnamed pool, not zero pools. Getting this wrong used to mean a fully flat `lc`
   // silently produced NO per-pool context at all (the loop below never ran), which in turn
   // made every scenario's `decisions` come out empty — not a rendering quirk, a correctness
-  // bug that `rules.js`'s SC01 surfaced downstream as false positives on every branch.
+  // bug that `../scenarios/rules.js`'s SC01 surfaced downstream as false positives on every branch.
   const pools = lc.pools ? lc.pools : [lc];
   const flatContextByPool = new Map();
   const nameById = new Map();
