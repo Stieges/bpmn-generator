@@ -1221,6 +1221,22 @@ function runRules(lc, profile = null) {
  */
 function classifyResult(result, severity, errors, warnings, infos, prefix) {
   const msgs = Array.isArray(result.messages) ? result.messages : [result.message];
+  // Fail loudly on a rule that reports a failure without saying what it is. The old `.split('; ')`
+  // provided this by accident — it threw a TypeError on `undefined`, so a `{ pass: false }` with a
+  // typo'd key ("mesage", "messages" on a rule that meant "message") blew up in the first test
+  // that ran it. Removing the split removed that accident too, and without this check the typo
+  // would instead push the literal string "undefined" into `validation.errors`, the HTTP response
+  // and `--strict` — a finding that names no element and cannot be acted on, in the one channel
+  // whose whole job is to be trustworthy. Deleting the split was right; inheriting its silence
+  // was not. Checked explicitly rather than left to a downstream crash, so the message names the
+  // rule's own mistake instead of surfacing somewhere unrelated.
+  for (const msg of msgs) {
+    if (typeof msg !== 'string') {
+      throw new TypeError(
+        'a failing rule must report at least one message: expected `message: string` or '
+        + `\`messages: string[]\`, got ${JSON.stringify(result)}`);
+    }
+  }
   for (const msg of msgs) {
     const fullMsg = prefix + msg;
     if (severity === 'ERROR') errors.push(fullMsg);
