@@ -65,7 +65,13 @@ In `optimize` mode, an advisory's `transform` field names a concrete, mechanical
 interventions live in `scripts/bpmn/redesign.js`; each has a `preview*` function (what would be feasible, and why
 not) and an `apply*` function that performs it:
 
-- `parallelize` — puts a linear, same-lane task chain into a parallel-gateway split/join
+- `parallelize` — puts a linear, same-lane task chain into a parallel-gateway split/join. **Tasks
+  only:** a chain containing a subprocess, a call activity, an intermediate event or a gateway is
+  refused, because parallelising a scope or a branch changes the process logic rather than the order
+  of its steps. This is also why **O04 never nominates a subprocess chain** — the detector
+  (`optimize.js`) is scoped to the same leaf-task set as the transform, so it cannot advise
+  something the toolbox is guaranteed to refuse. If you want such a chain parallelised, that starts
+  with a decision about the transform, not with the advisory
 - `mergeTasks` — folds a linear task chain into one task; **requires an explicit `name`** — naming the
   result is a judgment call the toolbox refuses to make for you
 - `relane` — moves one node to a different lane
