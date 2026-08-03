@@ -486,6 +486,13 @@ export function resolveLimits(options = {}) {
  * @property {Array<{id, reason}>} stats.skipped - passed through from `pn.skipped`:
  *   artifacts (no control-flow role, harmless here) and `eventBasedGateway`, whose race
  *   semantics are not modelled at all (workflow-net.js:95-101). Same warning as above.
+ * @property {Array<{id, reason}>} stats.approximations - passed through from
+ *   `pn.approximations`: nodes the translation models by something other than what BPMN says
+ *   they mean, rather than not at all. Distinct from `skipped` for the reader's sake — an
+ *   approximated node DOES appear in traces, just not in every trace the semantics allow, so
+ *   the scenario set is an under-enumeration around it rather than blind to it. Today:
+ *   `nonInterruptingBoundaryEvent` and `boundaryEventOnContainer` (`wireBoundaryEvents`,
+ *   workflow-net.js, argues both).
  */
 
 /**
@@ -555,6 +562,7 @@ export function enumerateScenarios(proc, options = {}) {
       statesExplored: run.statesExplored,
       orGateways: [...pn.orGateways],
       skipped: pn.skipped.map(s => ({ ...s })),
+      approximations: pn.approximations.map(a => ({ ...a })),
     },
   };
 }

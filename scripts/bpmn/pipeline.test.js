@@ -1037,6 +1037,115 @@ describe('Workflow-Net Soundness', () => {
     expect(result.errors).toEqual([]);
   });
 
+  // ── Stage 5: boundary events get a Petri-net translation ──
+  // Before this, `connectTransition` gave a boundary event a transition with no incoming arc
+  // at all — `getEnabledTransitions` requires `inputArcs.length > 0`, so it was unfireable in
+  // every marking, and the whole escalation path downstream of it was silently absent from
+  // every scenario, every WF01 verdict and every enumerated trace.
+
+  test('an interrupting boundary event consumes exactly its host\'s input places', () => {
+    const proc = loadFixture('all-element-classes.json').pools[0];
+    const pn = bpmnToPN(proc);
+
+    const inOf = (t) => pn.arcs.filter(a => a.type === 'P→T' && a.to === t).map(a => a.from).sort();
+    // The host is a plain task with one incoming edge, so both it and its boundary event get
+    // exactly one transition, over exactly the same place — an XOR alternative, which is the
+    // whole model.
+    expect(inOf('t_b')).toEqual(['p_s_t']);
+    expect(inOf('t_b')).toEqual(inOf('t_t'));
+    expect(pn.arcs.filter(a => a.type === 'T→P' && a.from === 't_b').map(a => a.to)).toEqual(['p_b_esc']);
+    expect(checkNetIntegrity(pn, proc).issues).toEqual([]);
+  });
+
+  test('all-element-classes: the escalation path stops being dead', () => {
+    // Baseline before Stage 5 (measured): WF01 "Dead transition(s) never fire: 7d (b),
+    // Escalate (esc), Escalated (e2)". None of the three was reachable, because the only way
+    // into that branch was through an unfireable transition.
+    const lc = loadFixture('all-element-classes.json');
+    const wf = checkWorkflowNetSoundness(lc);
+    expect(wf.issues.filter(i => i.rule === 'WF01')).toEqual([]);
+  });
+
+  test('boundary-event-shapes: a boundary event on a CONTAINER competes with the entry, never the exit', () => {
+    // The container has two incoming edges, so it has one `#enter#i` per edge, each consuming
+    // only its own place (buildContainer's own argument against AND semantics). The boundary
+    // event inherits that argument: one transition per entry transition, over that entry
+    // transition's own place. `t_C#exit` consumes `p_C#sink` — the marking in which the
+    // subprocess has ALREADY finished — so drawing from there would fire the escalation after
+    // the execution it exists to cut short.
+    const proc = loadFixture('boundary-event-shapes.json').pools[0];
+    const pn = bpmnToPN(proc);
+    const inOf = (t) => pn.arcs.filter(a => a.type === 'P→T' && a.to === t).map(a => a.from).sort();
+
+    expect(inOf('t_bnd_c#alt#0')).toEqual(inOf('t_C#enter#0'));
+    expect(inOf('t_bnd_c#alt#1')).toEqual(inOf('t_C#enter#1'));
+    expect(inOf('t_bnd_c#alt#0')).toEqual(['p_b1_C']);
+    expect(inOf('t_bnd_c#alt#1')).toEqual(['p_b2_C']);
+    // Disjoint, i.e. XOR and not AND: neither transition needs a token on the other branch.
+    expect(inOf('t_bnd_c#alt#0')).not.toEqual(inOf('t_bnd_c#alt#1'));
+    // Never the sink of the subprocess's own scope.
+    for (const t of ['t_bnd_c#alt#0', 't_bnd_c#alt#1']) {
+      expect(inOf(t)).not.toContain('p_C#sink');
+    }
+    // The fixture declares `bnd_c` BEFORE the container it attaches to — the wiring must not
+    // depend on declaration order, which is why it runs after the whole net is built.
+    const ids = proc.nodes.map(n => n.id);
+    expect(ids.indexOf('bnd_c')).toBeLessThan(ids.indexOf('C'));
+  });
+
+  test('boundary-event-shapes: a boundary event on an implicit-merge host mirrors the merge split', () => {
+    // `j` has two incoming edges and no gateway, so it went through the isImplicitMerge branch
+    // and has one transition per incoming edge. One boundary transition consuming BOTH places
+    // would be the AND that branch exists to prevent; one consuming a single arbitrarily chosen
+    // place would leave `j` reachable on a route where its boundary event can never fire —
+    // the original bug, just narrower.
+    const proc = loadFixture('boundary-event-shapes.json').pools[0];
+    const pn = bpmnToPN(proc);
+    const inOf = (t) => pn.arcs.filter(a => a.type === 'P→T' && a.to === t).map(a => a.from).sort();
+
+    expect(inOf('t_bnd_j#alt#0')).toEqual(inOf('t_j_merge_0'));
+    expect(inOf('t_bnd_j#alt#1')).toEqual(inOf('t_j_merge_1'));
+    expect(inOf('t_bnd_j#alt#0')).toEqual(['p_C_j']);
+    expect(inOf('t_bnd_j#alt#1')).toEqual(['p_esc_c_j']);
+    expect(pn.transitions.has('t_bnd_j')).toBe(false);
+  });
+
+  test('boundary-event-shapes: a non-interrupting boundary event is translated identically and DISCLOSED', () => {
+    const proc = loadFixture('boundary-event-shapes.json').pools[0];
+    const pn = bpmnToPN(proc);
+    const inOf = (t) => pn.arcs.filter(a => a.type === 'P→T' && a.to === t).map(a => a.from).sort();
+
+    // Identical translation: `bnd_n` carries cancelActivity:false and still consumes its host's
+    // place, exactly as an interrupting one would.
+    expect(inOf('t_bnd_n')).toEqual(inOf('t_b1'));
+    // …and the under-model is stated rather than left for the reader to discover.
+    expect(pn.approximations).toContainEqual({ id: 'bnd_n', reason: 'nonInterruptingBoundaryEvent' });
+    expect(pn.approximations).toContainEqual({ id: 'bnd_c', reason: 'boundaryEventOnContainer' });
+    // The interrupting boundary on a plain task is exact under this encoding — nothing to say.
+    expect(pn.approximations.some(a => a.id === 'bnd_j')).toBe(false);
+  });
+
+  test('a boundary event whose host cannot be found gets NO transition, and says so', () => {
+    // The one thing that must not happen is the old behaviour: a transition minted anyway,
+    // with no way to fire, which NC02 is now ERROR about.
+    const proc = {
+      id: 'P', nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 't', type: 'userTask' },
+        { id: 'ghost', type: 'boundaryEvent', attachedTo: 'nowhere' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f1', source: 's', target: 't' },
+        { id: 'f2', source: 't', target: 'e' },
+      ],
+    };
+    const pn = bpmnToPN(proc);
+    expect([...pn.transitions.keys()].some(t => t.startsWith('t_ghost'))).toBe(false);
+    expect(pn.skipped).toContainEqual({ id: 'ghost', reason: 'boundaryEventWithoutHost' });
+    expect(checkNetIntegrity(pn, proc).issues.filter(i => i.severity === 'ERROR')).toEqual([]);
+  });
+
   test('runRules with strict profile includes WF checks', () => {
     const lc = loadFixture('simple-approval.json');
     const profile = loadRuleProfile(resolve(fixturesDir, '../../rules/strict-profile.json'));

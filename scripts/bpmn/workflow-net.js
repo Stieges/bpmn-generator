@@ -13,6 +13,8 @@
  *   ✅ XOR gateways (exclusive choice)
  *   ✅ AND gateways (parallel fork/join)
  *   ✅ SubProcesses (own subnet, entered and left through synthesized transitions)
+ *   ✅ Boundary events (XOR alternative to their host — see `wireBoundaryEvents`)
+ *   ⚠️  Non-interrupting boundary events → modelled as interrupting, listed in `approximations`
  *   ⚠️  OR gateways → warning only (not formally verifiable in classical WF-nets)
  *   ❌ Event-Based Gateways → skipped (race conditions)
  *   ❌ Timer/Signal Events → skipped (external triggers)
@@ -20,7 +22,7 @@
  * Reference: van der Aalst, "Workflow Nets" (1998), "Soundness of WF-Nets" (2011)
  */
 
-import { isGateway } from './types.js';
+import { isGateway, isBoundaryEvent } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // BPMN → Petri-Net Conversion
@@ -48,8 +50,15 @@ import { isGateway } from './types.js';
  *     left through a synthesized `exit` transition. See `buildContainer` for why dissolving
  *     the container into its children instead is wrong.
  *
+ * Boundary event:
+ *   - An XOR alternative to its host: it consumes exactly the places the host consumes.
+ *     See `wireBoundaryEvents` for the full argument, including the two shapes (a host that
+ *     is a container, a host built through the implicit-merge branch) where "exactly the
+ *     places the host consumes" needs more than one transition.
+ *
  * @param {object} proc - Process with nodes and edges
- * @returns {{ places, transitions, arcs, initialMarking, sinkPlace, orGateways, skipped }}
+ * @returns {{ places, transitions, arcs, initialMarking, sinkPlace, orGateways, skipped,
+ *   approximations }}
  */
 function bpmnToPN(proc) {
   const nodes = proc.nodes || [];
@@ -60,6 +69,17 @@ function bpmnToPN(proc) {
   const arcs = [];               // { from, to, type: 'P→T' | 'T→P' }
   const orGateways = [];
   const skipped = [];
+  // Nodes this translation models by something OTHER than what BPMN says they mean — as
+  // opposed to `skipped`, which is "not modelled at all". Both are disclosure channels; the
+  // difference matters to a reader, because an approximated node DOES appear in traces (just
+  // not in every trace the semantics allow) while a skipped one never appears at all.
+  const approximations = [];
+  // Boundary events are collected here and wired AFTER the whole net is built, because a
+  // boundary event's input places are its HOST's input places and the host may be declared
+  // after it, or (legally) be a container whose entry transitions only exist once
+  // `buildContainer` has run. Deferring is what makes the translation order-independent
+  // instead of order-dependent-and-usually-lucky.
+  const boundaryEvents = [];
 
   // The flattened views: every node at every nesting level, every edge at every nesting level.
   const flatNodes = flattenNodes(nodes);
@@ -84,8 +104,14 @@ function bpmnToPN(proc) {
 
   // The process itself is just the outermost scope: its start events draw from `p_source` and
   // its end events produce on `p_sink`, exactly as a subprocess's do from its own pair.
-  buildScope(proc, sourcePlace, sinkPlace, { places, transitions, arcs, orGateways, skipped, flatEdges });
+  const ctx = {
+    places, transitions, arcs, orGateways, skipped, approximations, boundaryEvents,
+    flatNodes, flatEdges,
+  };
+  buildScope(proc, sourcePlace, sinkPlace, ctx);
 
+  // After every scope, at every nesting level, has its transitions and arcs.
+  wireBoundaryEvents(ctx);
 
   // Initial marking: 1 token on source place
   const initialMarking = new Map();
@@ -107,7 +133,7 @@ function bpmnToPN(proc) {
   // scenario step naming a subprocess had nothing to resolve against.
   return {
     places, transitions, arcs, initialMarking, sinkPlace, sourcePlace, orGateways, skipped,
-    flatNodes, flatEdges,
+    approximations, flatNodes, flatEdges,
   };
 }
 
@@ -173,16 +199,27 @@ function isRefinableContainer(node) {
  * @param {object} container - the process or container node whose `nodes` define this scope
  * @param {string} scopeSource - place a `startEvent` in this scope draws its token from
  * @param {string} scopeSink - place an `endEvent` in this scope produces its token on
- * @param {{places, transitions, arcs, orGateways, skipped, flatEdges}} ctx
+ * @param {{places, transitions, arcs, orGateways, skipped, approximations, boundaryEvents,
+ *   flatEdges}} ctx
  */
 function buildScope(container, scopeSource, scopeSink, ctx) {
-  const { places, transitions, arcs, orGateways, skipped, flatEdges } = ctx;
+  const { places, transitions, arcs, orGateways, skipped, boundaryEvents, flatEdges } = ctx;
 
   for (const node of container.nodes || []) {
     // Skip elements that don't participate in control flow
     if (node.type === 'dataObjectReference' || node.type === 'dataStoreReference' ||
         node.type === 'textAnnotation' || node.type === 'group') {
       skipped.push({ id: node.id, reason: 'artifact' });
+      continue;
+    }
+
+    // A boundary event is not enabled by a sequence flow, so none of the branches below can
+    // wire it: they all read `flatEdges` for incoming edges and a boundary event has none.
+    // That is exactly how it used to end up with a transition and no input arc — unfireable
+    // in every marking, deleting its whole escalation path from every analysis, silently.
+    // Deferred to `wireBoundaryEvents`, which needs the host's transitions to exist first.
+    if (isBoundaryEvent(node)) {
+      boundaryEvents.push(node);
       continue;
     }
 
@@ -418,6 +455,154 @@ function buildContainer(node, ctx) {
   }
 
   buildScope(node, scopeSource, scopeSink, ctx);
+}
+
+/**
+ * Give every boundary event a translation.
+ *
+ * ── The rule ──────────────────────────────────────────────────────────────────────────────
+ * An interrupting boundary event `b` on host `h` is an **XOR alternative to the host**: the
+ * token that would have enabled `h` enables `b` instead. So `t_b` consumes exactly the places
+ * `t_h` consumes, and produces on `p_<b>_<y>` for every outgoing edge of `b`.
+ *
+ * Implemented by reading the arcs the host's transitions ACTUALLY got, not by re-deriving
+ * which branch of `buildScope`/`buildContainer` built them. That is the load-bearing choice
+ * here, for the same reason `flatNodes`/`flatEdges` travel with the net: a second copy of the
+ * branch logic would agree with the first only by coincidence, and every future branch would
+ * have to remember to update both. Reading the arcs makes "exactly the places the host
+ * consumes" true by construction, whatever produced them.
+ *
+ * ── Shape 1: the host is a container ──────────────────────────────────────────────────────
+ * Then the host has an entry/exit PAIR, and only the entry side is a competitor. `t_C#exit`
+ * consumes `p_C#sink`, i.e. the marking in which the subprocess has already finished;
+ * a boundary transition drawing from there would fire the escalation path AFTER the very
+ * execution it is supposed to cut short. Hence the `role === 'exit'` exclusion below.
+ *
+ * With several incoming edges the container has one `t_C#enter#<i>` per edge, each consuming
+ * ONLY its own place — `buildContainer` argues why (a single transition consuming all of them
+ * is AND semantics). The boundary event inherits that argument unchanged: one boundary
+ * transition per entry transition, each consuming that entry transition's own place. One
+ * boundary transition consuming the union would demand a token on every incoming flow at once,
+ * and picking a single incoming edge would leave the container enterable-but-not-interruptible
+ * on all the others.
+ *
+ * The under-model this leaves is real and is disclosed as `boundaryEventOnContainer`: the net
+ * says "either the subprocess runs to completion, or the boundary event fires instead", where
+ * BPMN says the subprocess may run partway and then be cancelled. Modelling that faithfully
+ * needs a cancel region — removing tokens from a set of places not known until run time —
+ * which no fixed set of P/T arcs expresses. The alternative encodings all invent something
+ * (see the non-interrupting argument below); under-modelling and saying so does not.
+ *
+ * ── Shape 2: the host went through the implicit-merge branch ──────────────────────────────
+ * A host with several incoming edges has one `t_<h>_merge_<i>` per edge, each consuming one
+ * place, because any single arrival executes the host. Same answer, same reason: one boundary
+ * transition per merge transition. One transition consuming all incoming places would be the
+ * AND the merge branch exists to avoid — a token invented on every other incoming flow —
+ * and one transition consuming a single arbitrarily chosen place would reproduce the original
+ * bug for the other arrivals: the host is reachable by a route on which its boundary event can
+ * never fire.
+ *
+ * Both shapes fall out of the one rule without a special case, which is the point.
+ *
+ * ── Non-interrupting (`cancelActivity === false`) ─────────────────────────────────────────
+ * Translated IDENTICALLY, and recorded in `approximations`. This is a deliberate under-model,
+ * not an oversight — do not "fix" it without reading this:
+ *   - a faithful encoding needs the host's input token to enable BOTH the host and the event,
+ *     which in a P/T net means either a second token (a forced AND: the model is then claimed
+ *     to always do both, a path the BPMN model does not have), or
+ *   - a silent skip transition so the event path can be bypassed — which puts a transition
+ *     that stands for nothing into `Scenario.nodes`, i.e. tells the reader a step happened
+ *     that did not.
+ * Under-modelling AND SAYING SO is the only one of the three that never invents a path.
+ * `scripts/scenarios/format.js` renders `approximations` next to `orGateways`, which is the
+ * same kind of statement about the same kind of gap.
+ *
+ * ── A host that cannot be found ───────────────────────────────────────────────────────────
+ * No transition, and disclosed on `skipped`. Minting an input-less transition instead is
+ * precisely the defect this function removes, and NC02 (`net-check.js`) is ERROR from here on.
+ * The same branch also catches a boundary event chained onto another boundary event declared
+ * after it — illegal BPMN (`BoundaryEvent.attachedToRef` is typed `Activity`), and worth
+ * naming here because the outcome is deliberately the safe one rather than the clever one: it
+ * is disclosed and left out, never given a transition on a guess.
+ */
+function wireBoundaryEvents(ctx) {
+  const { places, transitions, arcs, skipped, approximations, boundaryEvents,
+    flatNodes, flatEdges } = ctx;
+
+  for (const node of boundaryEvents) {
+    const hostId = node.attachedTo;
+    const host = (flatNodes || []).find(n => n.id === hostId);
+
+    // Every input-place set that enables the host, one per host transition. `role === 'exit'`
+    // is the container's far end, never a competitor (see above). Collected before anything is
+    // added to `transitions`, so a second boundary event on the same host cannot see the
+    // first one's transitions.
+    const groups = [];
+    for (const [tId, t] of transitions) {
+      if (t.bpmnNodeId !== hostId || t.role === 'exit') continue;
+      const inPlaces = arcs.filter(a => a.type === 'P→T' && a.to === tId).map(a => a.from);
+      if (inPlaces.length > 0) groups.push(inPlaces);
+    }
+
+    // A boundary event carries no incoming sequence flow in BPMN (OMG §10.4.4) — but nothing
+    // upstream of this file enforces that, and dropping such an edge here would leave its
+    // place produced and never consumed, which `net-check.js` would then report as a
+    // TRANSLATION defect (NC03b, ERROR) for what is really a malformed model. Counting it as
+    // one more alternative trigger keeps the net well-formed and stays XOR — the one thing
+    // that must not happen is an AND across it and the host's places.
+    for (const ie of flatEdges.filter(e => e.target === node.id)) {
+      const pid = `p_${ie.source}_${ie.target}`;
+      if (places.has(pid)) groups.push([pid]);
+    }
+
+    // Two host transitions with identical input sets (an XOR split's branches, say) are one
+    // trigger condition, not two — collapsing them keeps the boundary event from being
+    // duplicated into transitions that are literally interchangeable.
+    const seen = new Set();
+    const distinct = [];
+    for (const g of groups) {
+      const key = [...g].sort().join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      distinct.push(g);
+    }
+
+    if (distinct.length === 0) {
+      skipped.push({ id: node.id, reason: 'boundaryEventWithoutHost' });
+      continue;
+    }
+
+    if (node.cancelActivity === false) {
+      approximations.push({ id: node.id, reason: 'nonInterruptingBoundaryEvent' });
+    }
+    if (host && isRefinableContainer(host)) {
+      approximations.push({ id: node.id, reason: 'boundaryEventOnContainer' });
+    }
+
+    const outPlaces = flatEdges
+      .filter(e => e.source === node.id)
+      .map(e => `p_${e.source}_${e.target}`)
+      .filter(p => places.has(p));
+
+    const label = node.name || node.id;
+    const single = distinct.length === 1;
+    for (let i = 0; i < distinct.length; i++) {
+      // `#` is the separator reserved for synthesized ids and provably absent from every node
+      // id — `buildContainer`'s doc carries the argument. `_alt_` would have been a collision
+      // risk against a real node called `<b>_alt_0`, and `_choice_` would additionally be
+      // misread by `scripts/scenarios/format.js`'s `CHOICE_TRANSITION_RE` as a gateway
+      // decision. The single-group case keeps the plain `t_<b>` id it has always had.
+      const tId = single ? `t_${node.id}` : `t_${node.id}#alt#${i}`;
+      transitions.set(tId, {
+        id: tId,
+        label: single ? label : `${label}[alt${i}]`,
+        bpmnNodeId: node.id,
+        role: 'boundary',
+      });
+      for (const p of distinct[i]) arcs.push({ from: p, to: tId, type: 'P→T' });
+      for (const p of outPlaces) arcs.push({ from: tId, to: p, type: 'T→P' });
+    }
+  }
 }
 
 function connectTransition(tId, nodeId, edges, places, arcs) {
@@ -682,6 +867,7 @@ function checkSoundness(pn, options = {}) {
       sinkReached,
       orGateways: orGateways.length,
       skipped: pn.skipped.length,
+      approximations: (pn.approximations || []).length,
     },
   };
 }
