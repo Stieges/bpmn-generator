@@ -160,9 +160,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   response and `--strict`, inflating the error count for one defect. `S10` hit it for real and was
   fixed by rewording, which fixed the instance and left the trap armed. A rule's `check` may now
   return `messages: string[]`, one entry per finding, and `classifyResult` no longer splits
-  anything: `message` is taken verbatim as exactly one finding. Of the 26 rules that report a
-  failing `message`, the **20** that built lists were converted to `messages`; the remaining **6**
-  keep `message` and are correct by construction. Converting exactly those let the split be
+  anything: `message` is taken verbatim as exactly one finding. **Every rule that built a list was
+  converted** to `messages` — 20 of the 26 rules reporting a failing `message` at the time of this
+  change; the rest keep `message` and are correct by construction. (Rules added later use
+  `messages` too, so today's counts are higher — the invariant, not the tally, is the claim.)
+  Converting exactly those let the split be
   *deleted* rather than worked around, so the trap is closed for every rule, existing and future,
   not only for the converted ones. Note that no lint over the rule sources could have closed it:
   messages are built at runtime from node and lane names, so a task named `"Prüfen; freigeben"`
@@ -201,6 +203,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is valid — something the author wrote was ignored, which is worth saying and not worth refusing
   to build over — matching `S14`'s reasoning and the layer's existing WARNING rules. The rule count
   is now **36**. No golden moves; no fixture carries any of these fields out of scope.
+- **A wrongly-*typed* value no longer reaches the XML either.** The table carries each field's
+  expected type, rather than the serialiser inferring it from the value it was handed. Inferring it
+  was a real defect: `typeof value === 'boolean' ? true : value` passed any truthy non-boolean
+  straight through, so `{ type: 'task', isCompensation: 'yes' }` emitted
+  `<bpmn:task isForCompensation="yes">` — not a boolean, invalid against the XSD, and *silent*,
+  because bpmn-moddle reports attributes it does not know, never values of the wrong shape.
+  `references/input-schema.json` does type these fields, so the HTTP path rejected such input at the
+  schema gate; `runPipeline` and the CLI do not run that gate, and a public API must not depend on
+  the caller having come through the HTTP server to be safe. The value is **dropped and reported by
+  `S15`, never coerced** — `isCompensation: 'no'` is the case that decides it, since `!!'no'` is
+  `true` and coercion would emit the exact opposite of what the author wrote with nothing saying
+  so. `S15` reports wrong class or wrong type, never both for one field: they are different
+  mistakes with different remedies.
 - **`S04`/`S07` no longer warn about three shapes a sequence flow legitimately never touches.** An
   event subprocess (`isEventSubProcess`, OMG `triggeredByEvent`) is entered by its own start event;
   a compensation activity (`isCompensation`, OMG `isForCompensation`) is reached by a compensation

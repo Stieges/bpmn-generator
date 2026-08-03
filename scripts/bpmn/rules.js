@@ -16,7 +16,7 @@ import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/
 import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES,
   isActivity, isInteractionNode, isSequenceFlowExempt,
-  OMG_NODE_FIELD_SCOPE, isFieldOutOfScope,
+  OMG_NODE_FIELD_SCOPE, isFieldOutOfScope, isFieldWrongType,
 } from './types.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
@@ -788,11 +788,30 @@ const SOUNDNESS_RULES = [
       const walk = (nodes) => {
         for (const node of (nodes || [])) {
           for (const spec of OMG_NODE_FIELD_SCOPE) {
-            if (!isFieldOutOfScope(node, spec)) continue;
-            msgs.push(`Node "${node.id}" (${node.name || ''}) is a ${node.type} and carries `
-              + `"${spec.field}", but OMG defines ${spec.attr} only on ${spec.scope}. The field is `
-              + 'dropped when the BPMN is written, so it has no effect — remove it, or move it to '
-              + 'a node whose class carries it.');
+            // Wrong class and wrong type are different mistakes with different remedies, so the
+            // rule says one thing about a field, not two. Class first: if the node may not carry
+            // the field at all, its value's type is beside the point.
+            if (isFieldOutOfScope(node, spec)) {
+              msgs.push(`Node "${node.id}" (${node.name || ''}) is a ${node.type} and carries `
+                + `"${spec.field}", but OMG defines ${spec.attr} only on ${spec.scope}. The field is `
+                + 'dropped when the BPMN is written, so it has no effect — remove it, or move it to '
+                + 'a node whose class carries it.');
+            } else if (isFieldWrongType(node, spec)) {
+              // The serialiser drops a wrongly-typed value rather than coercing it — `!!'no'` is
+              // `true`, so coercion would emit the opposite of what was written. Dropping without
+              // saying so would recreate, for the value, exactly the silence S15 was added to
+              // close for the class.
+              // The "why not coerced" clause only earns its place on a boolean, where truthiness
+              // would actively invert the meaning. On a string field it would be noise.
+              const whyNotCoerced = spec.type === 'boolean'
+                ? ' It is NOT coerced: "no" and "false" are both truthy, so guessing would risk '
+                  + 'emitting the opposite of what was meant.'
+                : '';
+              msgs.push(`Node "${node.id}" (${node.name || ''}) carries "${spec.field}" as `
+                + `${typeof node[spec.field]} (${JSON.stringify(node[spec.field])}), but OMG types `
+                + `${spec.attr} as ${spec.type}. The value is dropped when the BPMN is written, so `
+                + `it has no effect — write a real ${spec.type}.${whyNotCoerced}`);
+            }
           }
           if (node.nodes) walk(node.nodes);
         }
@@ -1293,8 +1312,11 @@ function classifyResult(result, severity, errors, warnings, infos, prefix) {
   // rule's own mistake instead of surfacing somewhere unrelated.
   for (const msg of msgs) {
     if (typeof msg !== 'string') {
+      // "every message" rather than "at least one": an explicitly empty `messages: []` is a rule
+      // saying it found nothing to report, which is odd but not malformed, and is accepted
+      // silently. What is malformed is a message that is not a string.
       throw new TypeError(
-        'a failing rule must report at least one message: expected `message: string` or '
+        'every message a failing rule reports must be a string: expected `message: string` or '
         + `\`messages: string[]\`, got ${JSON.stringify(result)}`);
     }
   }

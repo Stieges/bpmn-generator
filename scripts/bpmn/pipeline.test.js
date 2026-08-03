@@ -1413,7 +1413,9 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       ],
       edges: [{ id: 'f1', source: 's', target: 'n' }, { id: 'f2', source: 'n', target: 'e' }],
     });
-    const s15 = (result) => result.warnings.filter(w => /OMG defines/.test(w));
+    // Both of S15's messages: "OMG defines <attr> only on …" (wrong class) and "OMG types <attr>
+    // as …" (wrong value type).
+    const s15 = (result) => result.warnings.filter(w => /OMG (defines|types)/.test(w));
 
     test('the flag on a WIRED non-Activity is reported — the case that produced nothing at all', () => {
       // The regression this rule exists for. Guarding the serialiser made the emitted XML valid
@@ -1497,6 +1499,54 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       const found = s15(runRules(lc));
       expect(found).toHaveLength(1);
       expect(found[0]).toContain('"ig"');
+    });
+
+    test('a wrongly-typed value is dropped, never coerced, and never reaches the XML', async () => {
+      // The serialiser used to infer the intended type from the data — `typeof value === 'boolean'
+      // ? true : value` — so any truthy non-boolean went straight through and
+      // `{ type: 'task', isCompensation: 'yes' }` emitted `isForCompensation="yes"`: not a
+      // boolean, invalid against the XSD, and silent, because bpmn-moddle reports attributes it
+      // does not KNOW, never values of the wrong shape. The expected type now comes from the
+      // table. Note the node class is CORRECT in every case here — this is purely about the value.
+      for (const value of ['yes', 'no', 'false', 1, 0.5, {}, []]) {
+        const result = await runPipeline(wire({ id: 'n', type: 'task', name: 'T', isCompensation: value }));
+        expect(result.bpmnXml).not.toContain('isForCompensation');
+        expect(result.validation.xmlWarnings).toEqual([]);
+      }
+      for (const value of [42, true, {}]) {
+        const result = await runPipeline(wire({ id: 'n', type: 'userTask', name: 'Antrag prüfen', implementation: value }));
+        expect(result.bpmnXml).not.toContain('implementation=');
+      }
+      // A correctly typed value is untouched — the guard narrows, it does not remove the feature.
+      const ok = await runPipeline(wire({ id: 'n', type: 'task', name: 'T', isCompensation: true }));
+      expect(ok.bpmnXml).toContain('isForCompensation="true"');
+    });
+
+    test('a wrongly-typed value is REPORTED, not dropped in silence', () => {
+      // Dropping it quietly would recreate, for the value, exactly the gap S15 was added to close
+      // for the class: the author writes something, it is ignored, nothing says so.
+      const found = s15(runRules(wire({ id: 'n', type: 'task', name: 'T', isCompensation: 'yes' })));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain('"n"');
+      expect(found[0]).toContain('string');
+      expect(found[0]).toContain('boolean');
+    });
+
+    test('"no" is reported rather than coerced — coercion would invert the author\'s meaning', () => {
+      // `!!'no'` is `true`. A serialiser that coerced would emit `isForCompensation="true"` for a
+      // node whose author wrote "no", with nothing anywhere saying it had done so. This is the
+      // single case that decides drop-and-report over coerce.
+      const found = s15(runRules(wire({ id: 'n', type: 'task', name: 'T', isCompensation: 'no' })));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain('NOT coerced');
+    });
+
+    test('wrong class wins over wrong type — one field, one message', () => {
+      // Both are wrong here (a gateway may not carry it at all, and 'yes' is not a boolean). The
+      // rule says the thing the author has to fix first rather than two overlapping sentences.
+      const found = s15(runRules(wire({ id: 'n', type: 'exclusiveGateway', name: 'W', isCompensation: 'yes' })));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain('OMG defines isForCompensation only on');
     });
 
     test('the serialiser and the rule agree — every scoped field, both directions', async () => {
