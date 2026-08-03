@@ -937,6 +937,106 @@ describe('Workflow-Net Soundness', () => {
     expect(checkSoundness(pn).stats.sinkReached).toBe(true);
   });
 
+  // ── Fixture coverage for the Stage 1 paths nothing exercised ──
+  // Stage 1 wrote three code paths with no fixture behind them: the ≥2-incoming-edge entry
+  // split (only inline fixtures above exercise it), multiple inner start/end events inside one
+  // container, and a container carrying `nodes` without `isExpanded` (the dropped guard). These
+  // two fixtures give each a permanent home under tests/fixtures/, so net-check.test.js's
+  // directory-driven fence picks them up automatically.
+
+  test('subprocess-merge-fanout: two incoming outer edges split into disjoint #enter transitions', () => {
+    const proc = loadFixture('subprocess-merge-fanout.json').pools[0];
+    const pn = bpmnToPN(proc);
+
+    expect(pn.transitions.has('t_batch#enter#0')).toBe(true);
+    expect(pn.transitions.has('t_batch#enter#1')).toBe(true);
+    // Never a bare `#enter` once there are ≥2 incoming edges.
+    expect(pn.transitions.has('t_batch#enter')).toBe(false);
+
+    const enter0In = pn.arcs.filter(a => a.type === 'P→T' && a.to === 't_batch#enter#0').map(a => a.from);
+    const enter1In = pn.arcs.filter(a => a.type === 'P→T' && a.to === 't_batch#enter#1').map(a => a.from);
+    expect(enter0In).toEqual(['p_branch_a_batch']);
+    expect(enter1In).toEqual(['p_branch_b_batch']);
+    // Disjoint input places — the property that distinguishes this from AND semantics, where a
+    // single transition consuming both incoming places would demand a token on both branches of
+    // the upstream XOR split at once, which it can never deliver.
+    expect(enter0In.some(p => enter1In.includes(p))).toBe(false);
+
+    // Both inner start events draw from p_batch#source, both inner end events produce onto
+    // p_batch#sink — the multi-start/multi-end shape Stage 1 built but never exercised.
+    const scopeSourceOut = pn.arcs.filter(a => a.type === 'P→T' && a.from === 'p_batch#source').map(a => a.to).sort();
+    expect(scopeSourceOut).toEqual(['t_c_start_x', 't_c_start_y']);
+    const scopeSinkIn = pn.arcs.filter(a => a.type === 'T→P' && a.to === 'p_batch#sink').map(a => a.from).sort();
+    expect(scopeSinkIn).toEqual(['t_c_end_x', 't_c_end_y']);
+
+    expect(checkSoundness(pn).issues.filter(i => i.severity === 'ERROR')).toEqual([]);
+  });
+
+  test('subprocess-merge-fanout: enumerateScenarios finds all 4 hand-derived paths', () => {
+    // Derivation (see stage-2-report.md for the full write-up): the net has exactly two
+    // independent binary choices, and every other step is forced or a matched AND split/join —
+    //   1. gw_split (XOR): branch_a vs branch_b — 2 alternatives, both converge on the SAME
+    //      container "batch", so this choice does not yet multiply anything downstream of it.
+    //   2. Inside "batch", p_batch#source has exactly one token (from whichever #enter fired)
+    //      and two competing start events, c_start_x / c_start_y — a second independent
+    //      2-way choice.
+    // The container's exit (t_batch#exit) always fires once it has a token, unconditionally
+    // producing on BOTH outer outgoing places (post_a AND post_b) in the same firing — a genuine
+    // AND split, matched by the explicit parallelGateway AND-join (gw_join) downstream, which
+    // waits for both. Neither the AND split nor the AND join is a choice: the traversal advances
+    // one concurrency group at a time but records only ONE canonical order per scenario, so this
+    // parallel block contributes interleavingCount, not additional scenarios.
+    // Total: 2 (gw_split) × 2 (inner start) = 4 distinct scenarios, none of them a dead end.
+    const proc = loadFixture('subprocess-merge-fanout.json').pools[0];
+    const result = enumerateScenarios(proc);
+
+    expect(result.scenarios).toHaveLength(4);
+    expect(result.stats.deadEndPaths).toBe(0);
+    expect(result.truncated).toBe(false);
+  });
+
+  test('subprocess-collapsed-children: container A is descended into despite carrying no isExpanded field', () => {
+    // This is the assertion that pins the dropped isExpanded guard: A has `nodes`/`edges` and a
+    // well-formed inner start/end, but the field itself is absent — legal BPMN (isExpanded is a
+    // BPMNShape rendering attribute, not a semantic one), and exactly the shape Stage 1 argued
+    // for when it dropped the guard from `isContainer`/`isRefinableContainer`.
+    const proc = loadFixture('subprocess-collapsed-children.json').pools[0];
+    const containerA = proc.nodes.find(n => n.id === 'A');
+    expect(containerA.isExpanded).toBeUndefined();
+
+    const pn = bpmnToPN(proc);
+    expect(pn.transitions.has('t_A#enter')).toBe(true);
+    expect(pn.transitions.has('t_A#exit')).toBe(true);
+    expect(pn.transitions.has('t_a_start')).toBe(true);
+    expect(pn.transitions.has('t_a_task')).toBe(true);
+    expect(pn.transitions.has('t_a_end')).toBe(true);
+  });
+
+  test('subprocess-collapsed-children: container B without an inner start falls back cleanly', () => {
+    // B carries children but no inner startEvent — the subProcessWithoutStartOrEnd fallback.
+    // Container A refining normally right next to it is the regression guard for Finding 1 of
+    // Stage 1's fix round: the fallback must not leave orphaned places or transition-less nodes
+    // behind just because a sibling container was refined.
+    const proc = loadFixture('subprocess-collapsed-children.json').pools[0];
+    const pn = bpmnToPN(proc);
+
+    expect(pn.transitions.has('t_B')).toBe(true);
+    expect(pn.transitions.has('t_B#enter')).toBe(false);
+    expect(pn.transitions.has('t_B#exit')).toBe(false);
+    expect(pn.skipped).toContainEqual({ id: 'B', reason: 'subProcessWithoutStartOrEnd' });
+
+    expect(checkNetIntegrity(pn, proc).ok).toBe(true);
+  });
+
+  test('subprocess-collapsed-children: S11 does not gate container B — the fallback is a translation decision, not a validation failure', () => {
+    // S11 only demands a start/end event for `isExpanded` containers (rules.js). B carries
+    // neither `isExpanded` nor an inner startEvent, so S11 has nothing to say about it — the
+    // under-modelling is bpmnToPN's own choice, not something the rule engine already rejected.
+    const lc = loadFixture('subprocess-collapsed-children.json');
+    const result = runRules(lc);
+    expect(result.errors).toEqual([]);
+  });
+
   test('runRules with strict profile includes WF checks', () => {
     const lc = loadFixture('simple-approval.json');
     const profile = loadRuleProfile(resolve(fixturesDir, '../../rules/strict-profile.json'));

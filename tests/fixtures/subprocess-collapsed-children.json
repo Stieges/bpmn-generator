@@ -1,0 +1,39 @@
+{
+  "pools": [{
+    "id": "Pool_Collapsed",
+    "name": "Collapsed Containers",
+    "nodes": [
+      { "id": "start", "type": "startEvent", "name": "Request received" },
+      {
+        "id": "A", "type": "subProcess", "name": "Validate",
+        "nodes": [
+          { "id": "a_start", "type": "startEvent", "name": "Validation start" },
+          { "id": "a_task", "type": "userTask", "name": "Check request" },
+          { "id": "a_end", "type": "endEvent", "name": "Validation done" }
+        ],
+        "edges": [
+          { "id": "af1", "source": "a_start", "target": "a_task" },
+          { "id": "af2", "source": "a_task", "target": "a_end" }
+        ]
+      },
+      { "id": "mid", "type": "task", "name": "Route request" },
+      {
+        "id": "B", "type": "subProcess", "name": "Archive",
+        "nodes": [
+          { "id": "b_task1", "type": "task", "name": "Collect record" },
+          { "id": "b_task2", "type": "task", "name": "Store record" }
+        ],
+        "edges": [
+          { "id": "bf1", "source": "b_task1", "target": "b_task2" }
+        ]
+      },
+      { "id": "end", "type": "endEvent", "name": "Request closed" }
+    ],
+    "edges": [
+      { "id": "f1", "source": "start", "target": "A" },
+      { "id": "f2", "source": "A", "target": "mid" },
+      { "id": "f3", "source": "mid", "target": "B" },
+      { "id": "f4", "source": "B", "target": "end" }
+    ]
+  }]
+}
