@@ -153,6 +153,70 @@ export function isActivity(type) {
 }
 
 /**
+ * The node types that may carry OMG's `implementation` attribute.
+ *
+ * Narrower than `ACTIVITY_TYPES` and deliberately not derived from it: BPMN20.cmof grants
+ * `implementation` per class to `UserTask` (:1263), `ServiceTask` (:1240), `SendTask` (:1229),
+ * `ReceiveTask` (:1214) and `BusinessRuleTask` (:1177) — the task types that invoke something —
+ * and to nothing else. A plain `Task`, a `scriptTask`, a `manualTask` and every container are all
+ * Activities that may NOT carry it. Anyone tempted to "simplify" this to `isActivity` should
+ * re-read that sentence; the set was verified against the installed bpmn-moddle by feeding the
+ * attribute to every node type and recording which ones round-tripped without an
+ * `unknown attribute <implementation>` warning.
+ */
+export const IMPLEMENTATION_TYPES = new Set([
+  'userTask', 'serviceTask', 'sendTask', 'receiveTask', 'businessRuleTask',
+]);
+
+/**
+ * Which node classes may carry each OMG-scoped per-node field — the single source of truth for a
+ * question that had been answered separately in two places, and answered wrong in one of them.
+ *
+ * `references/input-schema.json` declares every one of these as a generic property of `Node`,
+ * valid on any `NodeType`, because JSON Schema's `properties` has no notion of "only when `type`
+ * is one of …" without a conditional block per field. That is why they reach the serialiser at
+ * all. OMG scopes each one far more narrowly, so the narrowing has to happen after the schema —
+ * and it has to happen in exactly one place, or the two copies drift. They did: `bpmn-xml.js`'s
+ * `buildFlowNode` guarded four of these inline and left `isForCompensation` and `implementation`
+ * unguarded, emitting `<bpmn:parallelGateway isForCompensation="true">` and
+ * `<bpmn:startEvent implementation="…">` — attributes outside those classes' content models, i.e.
+ * XSD-invalid output produced from schema-valid input.
+ *
+ * Two consumers, one table, which is the point:
+ *   - `bpmn-xml.js` `buildFlowNode` — drops a field the node's class may not carry, so the
+ *     emitted XML is valid.
+ *   - `rules.js` S15 — reports it, so the drop is not silent.
+ * A rule that disagreed with the serialiser about which fields are legal where would be worse
+ * than no rule at all; sharing the table makes disagreeing impossible.
+ *
+ * `field` is the Logic-Core name, `attr` the OMG attribute it serialises to (they differ for the
+ * boolean pair), `allowed` the node types that may carry it, `scope` prose for the message.
+ * Each `allowed` set reproduces the guard that was already in `buildFlowNode`, except
+ * `isCompensation` (added this phase) and `implementation` (added here) — so no field's
+ * serialisation behaviour changes as a side effect of centralising them.
+ */
+export const OMG_NODE_FIELD_SCOPE = [
+  { field: 'isCompensation', attr: 'isForCompensation', allowed: ACTIVITY_TYPES, scope: 'an Activity' },
+  { field: 'implementation', attr: 'implementation', allowed: IMPLEMENTATION_TYPES, scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask' },
+  { field: 'isEventSubProcess', attr: 'triggeredByEvent', allowed: new Set(['subProcess']), scope: 'a subProcess' },
+  { field: 'calledElement', attr: 'calledElement', allowed: new Set(['callActivity']), scope: 'a callActivity' },
+  { field: 'scriptFormat', attr: 'scriptFormat', allowed: new Set(['scriptTask']), scope: 'a scriptTask' },
+  { field: 'isCollection', attr: 'isCollection', allowed: new Set(['dataObjectReference']), scope: 'a dataObjectReference' },
+];
+
+/**
+ * Does `node` carry `field`, and is its type one the OMG attribute is not defined on?
+ *
+ * "Carries" is `!= null` rather than truthiness on purpose: `isCompensation: false` and
+ * `implementation: ''` are still the author saying something about a class that has no such
+ * attribute, and reporting them is honest. The serialiser's own guards remain truthiness-based,
+ * so a `false` is dropped either way — this predicate only decides what S15 talks about.
+ */
+export function isFieldOutOfScope(node, { field, allowed }) {
+  return node?.[field] != null && !allowed.has(node.type);
+}
+
+/**
  * Is this node type an OMG `InteractionNode` — legal at a MessageFlow's `sourceRef`/`targetRef`?
  *
  * Per BPMN20.cmof, `InteractionNode` (:859) is granted per class, never inherited, to exactly

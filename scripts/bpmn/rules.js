@@ -16,6 +16,7 @@ import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/
 import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES,
   isActivity, isInteractionNode, isSequenceFlowExempt,
+  OMG_NODE_FIELD_SCOPE, isFieldOutOfScope,
 } from './types.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
@@ -737,6 +738,66 @@ const SOUNDNESS_RULES = [
         if (src && isContainerNode(src)) complain(mf, 'source', src);
         if (tgt && isContainerNode(tgt)) complain(mf, 'target', tgt);
       }
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
+    }
+  },
+  {
+    id: 'S15', layer: 'soundness', defaultSeverity: 'WARNING',
+    description: 'A per-node field must sit on a node class OMG defines it on — isForCompensation '
+      + 'is an Activity attribute, implementation belongs to the five invoking Task types, '
+      + 'triggeredByEvent to SubProcess, calledElement to CallActivity, scriptFormat to '
+      + 'ScriptTask, isCollection to DataObjectReference',
+    ref: {
+      omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity)',
+      cmof: 'Activity.isForCompensation (BPMN20.cmof:1095), SubProcess.triggeredByEvent (:1147), '
+        + 'CallActivity.calledElement (:1188), ScriptTask.scriptFormat (:1251), '
+        + 'DataObjectReference.isCollection (:641), and `implementation` granted per class to '
+        + 'UserTask (:1263), ServiceTask (:1240), SendTask (:1229), ReceiveTask (:1214) and '
+        + 'BusinessRuleTask (:1177) — never inherited from Activity, which is why a plain Task, '
+        + 'a scriptTask, a manualTask and every container may not carry it. The scopes live once '
+        + 'in `OMG_NODE_FIELD_SCOPE` (types.js) and are shared with the serialiser.',
+    },
+    scope: 'process',
+    // Why this rule exists at all, given that the serialiser now drops these fields: because the
+    // serialiser now drops these fields. Before the guards, an out-of-scope field reached the XML
+    // and bpmn-moddle's round trip reported it as `unknown attribute <…>` in `xmlWarnings` — ugly,
+    // indirect, but present. Guarding made the output valid and the signal vanish with it: a
+    // `{ type: 'startEvent', isCompensation: true }` wired normally into a flow produced NOTHING —
+    // no rule finding, no serialisation warning, exit 0 — and the author never learned that what
+    // they wrote was ignored. Dropping silently is precisely the failure mode CLAUDE.md's "Adding
+    // a per-node field" section warns about. The serialiser is still right not to diagnose; that
+    // makes the reporting this layer's job, and this rule is it.
+    //
+    // Not one rule per field, and not phrased as "an Activity attribute on a non-Activity" either:
+    // `implementation`'s scope is NARROWER than Activity (five Task types, not every Activity), so
+    // a single `isActivity` test would wrongly clear it on a subProcess. The per-field scopes are
+    // the shared table's job; this rule only walks nodes past it.
+    //
+    // Why WARNING and not ERROR, in a layer whose default is ERROR: the emitted XML is valid — the
+    // serialiser drops the field — so nothing downstream breaks. What happened is that something
+    // the author wrote was ignored, which is worth saying and not worth refusing to build over.
+    // It also keeps every model that generates today generating, the same reasoning S14 records
+    // one rule up, and the soundness layer already carries WARNING rules (S04, S07, S08, S14) so
+    // this is consistent with the layer rather than an exception to it. `strict-profile.json`
+    // escalates it for anyone who wants the build to stop.
+    check: (proc) => {
+      const msgs = [];
+      // Recursive, because `buildFlowNode` is: a subprocess child reaches the serialiser through
+      // the same function and is dropped by the same guard, so a rule that only walked the top
+      // level would be silent about exactly the nesting level CLAUDE.md says gets forgotten.
+      const walk = (nodes) => {
+        for (const node of (nodes || [])) {
+          for (const spec of OMG_NODE_FIELD_SCOPE) {
+            if (!isFieldOutOfScope(node, spec)) continue;
+            msgs.push(`Node "${node.id}" (${node.name || ''}) is a ${node.type} and carries `
+              + `"${spec.field}", but OMG defines ${spec.attr} only on ${spec.scope}. The field is `
+              + 'dropped when the BPMN is written, so it has no effect — remove it, or move it to '
+              + 'a node whose class carries it.');
+          }
+          if (node.nodes) walk(node.nodes);
+        }
+      };
+      walk(proc.nodes);
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },

@@ -1403,6 +1403,124 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
     }
   });
 
+  describe('Rule S15 — a per-node field on a class OMG does not define it on', () => {
+    const wire = (node) => ({
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent', name: 'Antrag eingegangen' },
+        node,
+        { id: 'e', type: 'endEvent', name: 'Antrag bearbeitet' },
+      ],
+      edges: [{ id: 'f1', source: 's', target: 'n' }, { id: 'f2', source: 'n', target: 'e' }],
+    });
+    const s15 = (result) => result.warnings.filter(w => /OMG defines/.test(w));
+
+    test('the flag on a WIRED non-Activity is reported — the case that produced nothing at all', () => {
+      // The regression this rule exists for. Guarding the serialiser made the emitted XML valid
+      // and removed bpmn-moddle's `unknown attribute <isForCompensation>` along with it, while
+      // S04/S07 stay silent because the node is perfectly well connected. Before S15 this model
+      // ran to exit 0 with zero output of any kind: no error, no warning, no xmlWarning.
+      const result = runRules(wire({ id: 'n', type: 'startEvent', name: 'A', isCompensation: true }));
+      const found = s15(result);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain('"n"');
+      expect(found[0]).toContain('startEvent');
+      expect(found[0]).toContain('isForCompensation');
+    });
+
+    test('the flag on a DISCONNECTED non-Activity is reported too, and not only by S04/S07', () => {
+      // The shape the original ruling leaned on. S04/S07 do fire here, but they talk about
+      // connectivity — "appears isolated" — which is a true sentence about the wrong problem.
+      // S15 must name the field regardless of how the node is wired.
+      const lc = {
+        id: 'P',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'n', type: 'parallelGateway', name: 'Bogus', isCompensation: true },
+          { id: 'e', type: 'endEvent', name: 'Ende' },
+        ],
+        edges: [{ id: 'f1', source: 's', target: 'e' }],
+      };
+      const result = runRules(lc);
+      expect(s15(result)).toHaveLength(1);
+      expect(s15(result)[0]).toContain('parallelGateway');
+      // The connectivity rules still speak, and still about connectivity — the two are additive.
+      expect(result.warnings.some(w => /isolated|no outgoing flow/.test(w))).toBe(true);
+    });
+
+    test('a legitimate Activity carrying the flag stays silent', () => {
+      for (const type of ['task', 'userTask', 'serviceTask', 'subProcess', 'transaction',
+        'adHocSubProcess', 'callActivity', 'scriptTask', 'manualTask']) {
+        const result = runRules(wire({ id: 'n', type, name: 'Storno buchen', isCompensation: true }));
+        expect(s15(result)).toHaveLength(0);
+      }
+    });
+
+    test('`implementation` is scoped to the five invoking Task types, not to Activity', () => {
+      // The second half of the class, and the reason this rule is not phrased as "an Activity
+      // attribute on a non-Activity": `implementation`'s scope is NARROWER than Activity. A
+      // subProcess is an Activity and still may not carry it, so an `isActivity` test would have
+      // cleared exactly the case that emits invalid XML.
+      for (const type of ['userTask', 'serviceTask', 'sendTask', 'receiveTask', 'businessRuleTask']) {
+        const result = runRules(wire({ id: 'n', type, name: 'Antrag prüfen', implementation: '##WebService' }));
+        expect(s15(result)).toHaveLength(0);
+      }
+      for (const type of ['task', 'scriptTask', 'manualTask', 'subProcess', 'callActivity',
+        'startEvent', 'exclusiveGateway']) {
+        const result = runRules(wire({ id: 'n', type, name: 'X', implementation: '##WebService' }));
+        expect(s15(result)).toHaveLength(1);
+        expect(s15(result)[0]).toContain('implementation');
+      }
+    });
+
+    test('the rule reaches subprocess children, because the serialiser does', () => {
+      // `buildFlowNode` is recursive and drops the field at any depth; a rule that only walked
+      // the top level would be silent about precisely the nesting level CLAUDE.md says gets
+      // forgotten when a per-node field is added.
+      const lc = {
+        id: 'P',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          {
+            id: 'sub', type: 'subProcess', name: 'Prüfung', isExpanded: true,
+            nodes: [
+              { id: 'is', type: 'startEvent', name: 'Beginn' },
+              { id: 'ig', type: 'exclusiveGateway', name: 'Weiche', implementation: '##WebService' },
+              { id: 'ie', type: 'endEvent', name: 'Ende' },
+            ],
+            edges: [{ id: 'if1', source: 'is', target: 'ig' }, { id: 'if2', source: 'ig', target: 'ie' }],
+          },
+          { id: 'e', type: 'endEvent', name: 'Ende' },
+        ],
+        edges: [{ id: 'f1', source: 's', target: 'sub' }, { id: 'f2', source: 'sub', target: 'e' }],
+      };
+      const found = s15(runRules(lc));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain('"ig"');
+    });
+
+    test('the serialiser and the rule agree — every scoped field, both directions', async () => {
+      // The invariant that makes sharing `OMG_NODE_FIELD_SCOPE` worth doing: a rule that
+      // disagreed with the serialiser about which fields are legal where would be worse than no
+      // rule. Asserted over the table itself rather than over a hand-copied list, so adding a
+      // field to the table cannot leave this test behind.
+      const { OMG_NODE_FIELD_SCOPE } = await import('./types.js');
+      for (const spec of OMG_NODE_FIELD_SCOPE) {
+        const value = spec.field.startsWith('is') ? true : 'x';
+        for (const type of ['startEvent', 'exclusiveGateway', 'userTask', 'subProcess']) {
+          const node = { id: 'n', type, name: 'X', [spec.field]: value };
+          const complained = s15(runRules(wire(node))).length > 0;
+          const emitted = (await runPipeline(wire(node))).bpmnXml.includes(`${spec.attr}=`);
+          // Exactly one of the two happens: either the class may carry it (serialised, silent)
+          // or it may not (dropped, reported). Never both, never neither.
+          expect(complained).toBe(!spec.allowed.has(type));
+          if (spec.allowed.has(type)) expect(emitted).toBe(true);
+          else expect(emitted).toBe(false);
+        }
+      }
+    });
+  });
+
   test('S12 sees a gateway inside a container that is not marked isExpanded', () => {
     // Same one-word fix as Stage 1's: `isExpanded` is a BPMNShape attribute (BPMNDI.xsd:55,
     // BPMNDI.cmof:34) with no semantic counterpart, so gating a semantic walk on it hid every
@@ -3938,14 +4056,17 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
   });
 
   test('CLI: an ordinary serialisation warning stays non-fatal without --strict', async () => {
-    // The predicate has to be narrow. `xmlWarnings` carries other classes — "unknown attribute
-    // <…>" is the common one — and those were non-fatal by default before this change and must
-    // stay so; a gate that swallowed the whole channel would turn every such warning into a
-    // build break. `implementation` is serialised unguarded for every node type but is an
-    // attribute of `Activity`-ish classes only, so on a gateway bpmn-moddle reports exactly one
-    // "unknown attribute <implementation>" and nothing else — precisely the shape that must stay
-    // a warning. (It is the same class-guard gap as `isForCompensation`, still open for this
-    // attribute; used here as a fixture rather than fixed, which is a separate change.)
+    // The predicate has to be narrow. `xmlWarnings` carries other classes, and those were
+    // non-fatal by default before this change and must stay so; a gate that swallowed the whole
+    // channel would turn every serialisation warning into a build break.
+    //
+    // The fixture is the single-process-without-`id` case tracked in #37 and named in CLAUDE.md's
+    // Known Limitations: `bpmn-xml.js` has no fallback for it, so the DI ends up referencing
+    // `undefined` and the round trip reports "unresolved reference <undefined>". Chosen precisely
+    // because it is a *documented, tracked, still-open* limitation rather than a gap that might
+    // be closed later — an earlier draft of this test used an unguarded `implementation` on a
+    // gateway, and the S15 work in this same stage closed that gap and broke the test. A
+    // narrowness test needs a warning source with a long life.
     const { spawnSync } = await import('node:child_process');
     const os = await import('node:os');
     const fs = await import('node:fs');
@@ -3954,20 +4075,22 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
     const inPath = path.join(dir, 'in.json');
     const outBase = path.join(dir, 'out');
     fs.writeFileSync(inPath, JSON.stringify({
-      id: 'P',
+      // No `id` — legal per input-schema.json's SingleProcess branch, see #37.
       nodes: [
         { id: 'start', type: 'startEvent', name: 'Antrag eingegangen' },
-        { id: 't', type: 'exclusiveGateway', name: 'Weiche', implementation: '##unspecified' },
+        { id: 't', type: 'userTask', name: 'Antrag prüfen' },
         { id: 'end', type: 'endEvent', name: 'Antrag bearbeitet' },
       ],
       edges: [
         { id: 'f1', source: 'start', target: 't' },
         { id: 'f2', source: 't', target: 'end' },
       ],
+      lanes: [{ id: 'l1', name: 'Sachbearbeitung', nodeIds: ['start', 't', 'end'] }],
     }), 'utf8');
     const res = spawnSync('node', ['pipeline.js', inPath, outBase], { cwd: __dirname, encoding: 'utf8' });
     expect(res.stdout + res.stderr).toMatch(/BPMN serialisation/);
-    expect(res.stderr).not.toMatch(/Duplicate id in the emitted XML/);
+    expect(res.stdout + res.stderr).toMatch(/unresolved reference/);   // a real warning fired …
+    expect(res.stderr).not.toMatch(/Duplicate id in the emitted XML/); // … and did not trip the gate
     expect(res.status).toBe(0);
     expect(fs.existsSync(`${outBase}.bpmn`)).toBe(true);
   });

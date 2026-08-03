@@ -42,10 +42,10 @@ Notiz über der Regel-Tabelle unten).
 
 ---
 
-## Schicht 1: Soundness (ERROR, vier Regeln WARNING)
+## Schicht 1: Soundness (ERROR, fuenf Regeln WARNING)
 
-Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung — mit Ausnahme von S04, S07, S08
-und S14, die per Default `WARNING` sind und daher melden, ohne die Generierung zu stoppen. Die
+Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung — mit Ausnahme von S04, S07, S08,
+S14 und S15, die per Default `WARNING` sind und daher melden, ohne die Generierung zu stoppen. Die
 Severity steht pro Regel in `defaultSeverity` (`scripts/bpmn/rules.js`) und ist ueber Profile
 ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 
@@ -71,6 +71,7 @@ Wer eine Regel ändert, aktualisiert `description` und passt diese Zeile sinngem
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
 | S13 | Boundary Event muss an einer existierenden Aktivität im selben Container hängen — und der Host muss wirklich eine Aktivität sein | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
 | S14 | Message Flow source/target darf kein Container sein — der Klasse nach (SubProcess/Transaction/AdHocSubProcess/CallActivity) oder der Struktur nach (eigenes `nodes`-Array) (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
+| S15 | Ein Knotenfeld muss auf einer Klasse sitzen, für die OMG das Attribut definiert — `isForCompensation` nur auf Activity, `implementation` nur auf den fünf aufrufenden Task-Typen, `triggeredByEvent` nur auf SubProcess, `calledElement` nur auf CallActivity, `scriptFormat` nur auf ScriptTask, `isCollection` nur auf DataObjectReference (Severity WARNING) | OMG §10.2, §10.2.2/§10.2.3, §10.2.5, §10.2.6; CMOF: Activity.isForCompensation (BPMN20.cmof:1095), `implementation` per Klasse an UserTask (:1263)/ServiceTask (:1240)/SendTask (:1229)/ReceiveTask (:1214)/BusinessRuleTask (:1177) | implementiert |
 
 **Zu S04:** Die Regel fragt nach **eingehenden** Kanten, nicht nach Kanten überhaupt — und das
 ist eine Korrektur, keine Umformulierung.
@@ -536,6 +537,94 @@ container endpoint outright and records it on `unresolvedEndpoints` with `reason
 | schlecht | `target: "handle"` (a `userTask` with a `nodes` array) | carries a scope, so it is translated into an entry/exit pair — the structural leg |
 
 **Referenz:** OMG BPMN 2.0.2 §7.6.2 Table 7.4; `BPMN20.cmof` lines as tabulated above.
+
+---
+
+## Rule S15: a per-node field must sit on a class OMG defines it on
+
+**Layer:** Soundness | **Default Severity:** WARNING | **Scope:** process (recursive)
+
+> Written in English, like M11 and S14 above.
+
+`references/input-schema.json` declares `isCompensation`, `implementation`, `isEventSubProcess`,
+`calledElement`, `scriptFormat` and `isCollection` as generic properties of `Node`, valid on any
+`NodeType`. JSON Schema's `properties` has no way to say "only when `type` is one of …" without a
+conditional block per field, so all six are schema-valid anywhere. OMG scopes each one far more
+narrowly, and an attribute outside a class's content model is not merely unusual — it is
+XSD-invalid.
+
+The narrowing therefore has to happen after the schema gate, and it has to happen in exactly one
+place. It now does: `OMG_NODE_FIELD_SCOPE` in `scripts/bpmn/types.js` is read by both consumers.
+
+| Field | OMG attribute | May sit on |
+|-------|---------------|------------|
+| `isCompensation` | `isForCompensation` | any `Activity` (every Task type, `subProcess`, `transaction`, `adHocSubProcess`, `callActivity`) |
+| `implementation` | `implementation` | `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `businessRuleTask` — **not** every Activity |
+| `isEventSubProcess` | `triggeredByEvent` | `subProcess` |
+| `calledElement` | `calledElement` | `callActivity` |
+| `scriptFormat` | `scriptFormat` | `scriptTask` |
+| `isCollection` | `isCollection` | `dataObjectReference` |
+
+**Why the rule is not phrased as "an Activity attribute on a non-Activity".** `implementation`'s
+scope is *narrower* than `Activity`: `BPMN20.cmof` grants it per class to the five invoking Task
+types and never inherits it from `Activity`, so a plain `task`, a `scriptTask`, a `manualTask` and
+every container are Activities that may not carry it. A single `isActivity` test would have cleared
+`implementation` on a `subProcess` — one of the cases that actually emits invalid XML. Per-field
+scopes are the point, not a complication of it.
+
+**Why the rule exists, given that the serialiser already drops these fields.** Because the
+serialiser drops them. Before the class guards, an out-of-scope field reached the XML and
+bpmn-moddle's round trip reported it as `unknown attribute <…>` in `validation.xmlWarnings` —
+indirect and ugly, but present. Guarding the serialiser made the output valid and took that signal
+away with it. A `{ type: 'startEvent', isCompensation: true }` wired normally into a flow then
+produced *nothing at all*: no error, no warning, no serialisation warning, exit 0, and the author
+never learned that what they wrote had been ignored. That is exactly the silent-drop failure mode
+CLAUDE.md's "Adding a per-node field" section warns about.
+
+The serialiser is still right not to diagnose — its contract is to emit valid BPMN for the model it
+was handed, the same separation that keeps `net-check.js` out of judging XML. That makes the
+reporting the rule engine's job, and S15 is it. The two share one table precisely so they cannot
+disagree; a rule that contradicted the serialiser about which fields are legal where would be worse
+than no rule at all.
+
+**Why it does not lean on S04/S07.** Those fire only where the node is *disconnected*, and they
+talk about connectivity ("appears isolated"), which is a true sentence about a different problem. A
+correctly wired node carrying an out-of-scope field is invisible to them.
+
+**Recursive, because `buildFlowNode` is.** A subprocess child reaches the serialiser through the
+same function and is dropped by the same guard at any nesting depth, so a rule that walked only the
+top level would be silent about precisely the nesting level that gets forgotten.
+
+**Why WARNING and not ERROR.** The emitted XML is valid — the field is dropped — so nothing
+downstream breaks; what happened is that something the author wrote was ignored, which is worth
+saying and not worth refusing to build over. It keeps every model that generates today generating,
+the same reasoning S14 records, and the soundness layer already carries WARNING rules (S04, S07,
+S08, S14). A profile override escalates it.
+
+**Should the schema constrain this instead?** It *could*: JSON Schema can express it with an
+`allOf` of `if`/`then` blocks, one per field. It should not be the only place, and was not chosen
+as the first place, for three reasons. A schema violation is binary and blocking, so expressing it
+there would reject models that generate today — the opposite of the WARNING decision above. The
+schema gate runs at the HTTP entry (`scripts/bpmn/schema-gate.js`) and its ajv output names a
+failed keyword and a JSON pointer, not a sentence an author can act on. And the schema is the
+contract shown to the LLM, where six conditional blocks buy far less than one clear rule message.
+Constraining it in the schema *as well*, once the WARNING has been in the field long enough to show
+that nothing legitimate trips it, is a reasonable later step.
+
+**Beispiele:**
+
+| Bewertung | Node | Grund |
+|-----------|------|-------|
+| gut | `{ type: "serviceTask", isCompensation: true }` | a Task is an Activity |
+| gut | `{ type: "subProcess", isCompensation: true }` | a container is an Activity too |
+| gut | `{ type: "userTask", implementation: "##WebService" }` | one of the five invoking Task types |
+| schlecht | `{ type: "parallelGateway", isCompensation: true }` | a Gateway is not an Activity |
+| schlecht | `{ type: "startEvent", isCompensation: true }` | an Event is not an Activity |
+| schlecht | `{ type: "subProcess", implementation: "##WebService" }` | an Activity, but not one of the five |
+| schlecht | `{ type: "exclusiveGateway", implementation: "##WebService" }` | not a Task at all |
+
+**Referenz:** OMG BPMN 2.0.2 §10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5
+(SubProcess), §10.2.6 (CallActivity); `BPMN20.cmof` lines as tabulated in the rule's `ref`.
 
 ---
 
