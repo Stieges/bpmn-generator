@@ -246,10 +246,16 @@ Reporting it here would be exactly the category error the NC02/NC02b scoping abo
 to remove — a Petri-net guard making a claim about XML serialisation.
 
 Duplicate edge ids are nonetheless invalid BPMN (`xsd:ID` is document-wide unique), and the layer
-that owns them already detects them precisely: re-parsing the generated XML through bpmn-moddle
-reports `duplicate ID <…>` in `validation.xmlWarnings`. That channel is fatal only under
-`--strict`, so by default such a file is still written. See *Known limitations* in `CHANGELOG.md`
-for the gap and the remedy.
+that owns them detects them precisely: re-parsing the generated XML through bpmn-moddle reports
+`duplicate ID <…>` in `validation.xmlWarnings`. **That one class of serialisation warning is
+unconditionally fatal on the CLI's generate path** — no files written, exit 1, `--strict` or not —
+because a document-wide-unique violation does not degrade the file, it makes it unloadable. The
+rest of the `xmlWarnings` channel (`unknown attribute <…>` and friends) stays non-fatal outside
+`--strict`. So both halves of the class block: node ids via NC06, flow ids via this gate, each in
+the layer that can actually make a true statement about them.
+
+`runPipeline` itself is unaffected — it is a library function and still returns the XML plus the
+warning. The gate is the CLI's.
 
 NC05 is disclosure, not a defect: van der Aalst's WF-nets require a single source, and OMG BPMN
 2.0.2 §10.4.2 treats multiple start events as alternative instantiations of the same process, so

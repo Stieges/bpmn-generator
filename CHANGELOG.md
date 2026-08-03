@@ -135,6 +135,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **A duplicate id in the emitted XML is now fatal on the ordinary generate path.** `xsd:ID` is
+  document-wide unique, so a duplicate does not degrade the file — it makes it unloadable, and
+  which of the two elements a reader binds a reference to is arbitrary. `NC06` already blocked
+  duplicate **node** ids; duplicate **flow** ids were detected (bpmn-moddle's round trip reports
+  `duplicate ID <…>` in `validation.xmlWarnings`) but fatal only under `--strict`, so half the
+  decision was implemented. The gate now sits where the defect actually shows: that one class of
+  serialisation warning aborts with exit 1 and writes nothing, `--strict` or not, in the same
+  shape as the DI and NC gates. The rest of the `xmlWarnings` channel is unchanged and stays
+  non-fatal outside `--strict` — pinned by a test that drives a plain `unknown attribute <…>`
+  through the CLI and requires exit 0. `runPipeline` is untouched: it is a library function, it
+  reports and does not refuse. Measured over the whole fixture corpus first — 18 fixtures, one
+  hit, `tests/fixtures/negative/duplicate-ids-across-containers.json`, which lives under
+  `negative/` precisely to be dirty and already aborted one gate earlier at `NC06`. No fixture
+  changes behaviour. Note the fragility this buys, stated rather than hidden: the predicate
+  matches moddle-xml's English prose (`error('duplicate ID <' + id + '>')`, moddle-xml 12.0.0),
+  which a dependency reword would silently defeat — the guard is a CLI test that produces a real
+  duplicate through the real dependency instead of asserting on the string.
+- **A rule finding that contains `'; '` is no longer torn into two findings.** `classifyResult`
+  split a rule's `message` on `'; '` because that was the separator rules used to join several
+  findings into one string — an implicit, undeclared contract. A rule whose *single* message
+  happened to contain the separator was therefore emitted as two findings, the second an
+  unattributed fragment with no id in it, and that fragment reached `validation.errors`, the HTTP
+  response and `--strict`, inflating the error count for one defect. `S10` hit it for real and was
+  fixed by rewording, which fixed the instance and left the trap armed. A rule's `check` may now
+  return `messages: string[]`, one entry per finding, and `classifyResult` no longer splits
+  anything: `message` is taken verbatim as exactly one finding. The 19 rules that built lists were
+  converted; the rest keep `message` and are correct by construction. `M10` gains from it twice —
+  it embedded `'; '` as a list separator *inside* a declared-single message, so every offender
+  after the first was rendered as a bare contextless fragment (`lane "…" (31 chars)`); each
+  offender is now its own complete sentence. Note that no lint over the rule sources could have
+  closed this: messages are built at runtime from node and lane names, so a task named
+  `"Prüfen; freigeben"` trips it from *data*. That is the case now pinned by test.
+- **`bpmn-xml.js` no longer emits `isForCompensation` on a non-Activity.** OMG scopes
+  `isForCompensation` to `Activity`, but `references/input-schema.json` declares `isCompensation`
+  as a generic property of `Node`, valid on any `NodeType` — so schema-valid input produced
+  XSD-invalid output: `<bpmn:parallelGateway isForCompensation="true">`, an attribute outside the
+  gateway's content model, which bpmn-moddle duly reported back as `unknown attribute
+  <isForCompensation>`. `buildFlowNode` now guards it on `isActivity` exactly as its neighbour
+  guards `triggeredByEvent` on `subProcess`. The flag is dropped, not reported, and that is a
+  layering decision: the serialiser's contract is to emit valid BPMN for the model it was handed,
+  not to diagnose it — and because `isSequenceFlowExempt` was narrowed the same way earlier in
+  this release, such a node is no longer excused from `S04`/`S07` and is reported there. No golden
+  moves; no fixture carries the flag on a non-Activity.
 - **`S04`/`S07` no longer warn about three shapes a sequence flow legitimately never touches.** An
   event subprocess (`isEventSubProcess`, OMG `triggeredByEvent`) is entered by its own start event;
   a compensation activity (`isCompensation`, OMG `isForCompensation`) is reached by a compensation
@@ -350,20 +393,6 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 - **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
   under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
   examples; the exhaustive check is WF03 in the opt-in `workflow_net` layer.
-- **Duplicate *edge* ids across sibling containers are still written, at exit 0.** `NC06` covers
-  duplicate **node** ids, where the net genuinely loses one of the two (`transitions` is keyed
-  `t_<node.id>`). Two edges sharing an id are translated *faithfully* — `namePlaces` keys places
-  `p_<src>_<tgt>[#k]` and `pn.placeOfEdge` is keyed by edge object identity, so both get their own
-  place and arcs — so `NC06` does not and must not fire on them; doing so would make a Petri-net
-  guard assert something about XML serialisation, the category error the `NC02`/`NC02b` scoping
-  was performed to remove. The emitted file is nonetheless invalid (`xsd:ID` is document-wide
-  unique), and the layer that owns it already names it exactly: bpmn-moddle's round trip reports
-  `duplicate ID <…>` in `validation.xmlWarnings`. **The remedy is therefore in that gate, not in
-  `net-check.js`** — making a `duplicate ID` serialisation warning unconditionally fatal, rather
-  than fatal only under `--strict`. That is a change to a different gate's contract with its own
-  corpus measurement to run, and was deliberately not folded into this stage. Pinned by the test
-  "duplicate FLOW ids are NOT an NC finding" in `scripts/bpmn/pipeline.test.js`, which asserts both
-  halves: no NC finding, and the `xmlWarnings` entry that does exist.
 - **`sortNodesTopologically` silently drops a node whose id duplicates an earlier one at process
   top level.** Its last two lines rebuild `proc.nodes` from an id-keyed map, in place, on the
   object `runPipeline` hands to every later stage — so the diagram omits an activity and nothing
