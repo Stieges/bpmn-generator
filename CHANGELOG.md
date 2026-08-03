@@ -349,8 +349,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than closed.** Both rules stay cheap syntactic heuristics: a flow counts as suppliable by
   a branch as soon as its source node is *reachable*, which over-approximates the supplying sets
   and therefore makes them agree more often than they should, and neither rule sees a branch that
-  escapes an enclosing parallel block entirely. The residual error is always a **missed** deadlock,
-  never a fabricated one. `references/fachliches-regelwerk.md` names these two cases, and names
+  escapes an enclosing parallel block entirely. For **`S05`** the residual error is always a
+  **missed** deadlock, never a fabricated one. That is *not* true of `S06`, which has a one-sided
+  false positive of its own — see *Known limitations* below; the claim is scoped to `S05` here
+  because it was stated absolutely and is not.
+  `references/fachliches-regelwerk.md` names these two cases, and names
   them as *examples*: they are what has been identified, not a closed list. The exhaustive check is
   WF03 in the opt-in `workflow_net` layer — turn it on if a missed deadlock is not acceptable.
 - **A Mixed gateway is now recognised as a split.** `S05`/`S06` skipped every gateway carrying
@@ -459,6 +462,27 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 - **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
   under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
   examples; the exhaustive check is WF03 in the opt-in `workflow_net` layer.
+- **`S06` rejects a sound inclusive split whose branches converge on a parallel join — a false
+  positive, at ERROR, so the model produces no output at all.** `start → gx(inclusive)`,
+  `gx → t1`, `gx → gj(parallel)`, `t1 → gj`, `gj → end` is reported as a deadlock. It is not one:
+  an OR-split may activate *both* of its branches, and when it does, both incoming flows of the
+  join receive a token and the join fires. `S06` reasons per branch, and a single branch chosen
+  alone would indeed starve the join — which is a correct statement about XOR semantics and the
+  wrong one about OR. Because `S06` is ERROR, `runPipeline` returns `bpmnXml: null` and nothing is
+  generated. This is **pre-existing, not a regression of this release** — reproduced identically
+  against `master` (the message differs, the verdict and the `null` do not) — and it is the reason
+  the absolute "never a fabricated one" claim above is now scoped to `S05`.
+  **WF03 cannot arbitrate it.** The opt-in exhaustive check is the escape hatch offered for every
+  other `S05`/`S06` gap, but not for this one. `bpmnToPN` gives an inclusive gateway a single
+  transition that consumes and produces on *all* of its arcs — AND semantics — and records the
+  gateway in `orGateways`, which surfaces as the `WF_OR` **INFO** finding *"OR-Gateway(s) … not
+  formally verifiable in WF-Net analysis. Results may be incomplete."* So on this model
+  `checkSoundness` reports no deadlock, but that silence is explicitly disclaimed: it is a verdict
+  about an AND-substituted net, not about the model as written. Neither layer is analysing OR
+  semantics, so neither can overrule the other. Giving OR its own semantics in the net (or teaching
+  `S06` that an OR-split's branch sets are not mutually exclusive) is the real fix and was
+  deliberately not attempted here. Workaround until then: model the intent with an explicit
+  parallel split, or set `S06` to `OFF` via a rule profile.
 - **`sortNodesTopologically` silently drops a node whose id duplicates an earlier one at process
   top level.** Its last two lines rebuild `proc.nodes` from an id-keyed map, in place, on the
   object `runPipeline` hands to every later stage — so the diagram omits an activity and nothing
