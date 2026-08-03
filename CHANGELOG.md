@@ -67,12 +67,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     0.29 %, largest single model 0.0823 ms. Deliberately **not** conditional on the opt-in
     `workflow_net` layer — gating it there would make the always-off default the always-unchecked
     default.
-  - **CLI**: `node bpmn/pipeline.js` gates on it exactly as it gates on DI — an NC ERROR is fatal
-    and writes no files, an NC WARNING/INFO is printed and fatal only under `--strict`.
-  - **One behaviour change, taken deliberately.** A Logic-Core with **duplicate ids across sibling
-    containers** used to generate with a serialisation warning and exit 0. The file it wrote
-    carried the same `id=` twice, which `xsd:ID` forbids document-wide, so no tool loaded it
-    correctly. `NC06` names it structurally and it is now blocking. New fixture:
+  - **CLI**: `node bpmn/pipeline.js` gates on it much as it gates on DI — an NC ERROR is fatal and
+    writes no files, an NC WARNING is printed and fatal only under `--strict`. **INFO is printed
+    and never fatal**, which is the one deliberate difference: the DI block has no INFO codes, so
+    the question never arose there, and NC05's own message says multiple start events sharing one
+    source place are standard WF-net/OMG normalisation and *not* a defect. A `--strict` run that
+    refuses to write files while quoting that sentence tells the caller something false; multiple
+    start events are OMG-legal (§10.4.2) and common, and no fixture in the corpus has two, so
+    nothing would have caught it.
+  - **Both CLI gates are on the ordinary generate path only.** `--drill-down` branches earlier,
+    into `generateDiagramSet`, which checks `validation.errors` and writes its diagrams — so it
+    bypasses the NC gate exactly as it already bypasses the DI one. Pre-existing behaviour, left
+    unchanged, stated here because it means `--drill-down` will still write a file the ordinary
+    path refuses.
+  - **Two behaviour changes, both deliberate.** The blocking one: a Logic-Core with **duplicate
+    node ids across sibling containers** used to generate with a serialisation warning and exit 0.
+    The file it wrote carried the same `id=` twice, which `xsd:ID` forbids document-wide, so no
+    tool loaded it correctly. `NC06` names it structurally and it is now blocking. The quiet one:
+    every run may now print a `⚠ Petri-net diagnostics:` block it never printed before — NC05 on
+    any model with more than one start event, for instance — which changes stdout for anyone
+    parsing it. New fixture:
     `tests/fixtures/negative/duplicate-ids-across-containers.json` — under `negative/` because
     `net-check.test.js`'s fence scans the top level of `tests/fixtures/` and requires every
     fixture there to be a clean translation, which is not a contract a deliberately dirty fixture
@@ -336,6 +350,29 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 - **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
   under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
   examples; the exhaustive check is WF03 in the opt-in `workflow_net` layer.
+- **Duplicate *edge* ids across sibling containers are still written, at exit 0.** `NC06` covers
+  duplicate **node** ids, where the net genuinely loses one of the two (`transitions` is keyed
+  `t_<node.id>`). Two edges sharing an id are translated *faithfully* — `namePlaces` keys places
+  `p_<src>_<tgt>[#k]` and `pn.placeOfEdge` is keyed by edge object identity, so both get their own
+  place and arcs — so `NC06` does not and must not fire on them; doing so would make a Petri-net
+  guard assert something about XML serialisation, the category error the `NC02`/`NC02b` scoping
+  was performed to remove. The emitted file is nonetheless invalid (`xsd:ID` is document-wide
+  unique), and the layer that owns it already names it exactly: bpmn-moddle's round trip reports
+  `duplicate ID <…>` in `validation.xmlWarnings`. **The remedy is therefore in that gate, not in
+  `net-check.js`** — making a `duplicate ID` serialisation warning unconditionally fatal, rather
+  than fatal only under `--strict`. That is a change to a different gate's contract with its own
+  corpus measurement to run, and was deliberately not folded into this stage. Pinned by the test
+  "duplicate FLOW ids are NOT an NC finding" in `scripts/bpmn/pipeline.test.js`, which asserts both
+  halves: no NC finding, and the `xmlWarnings` entry that does exist.
+- **`sortNodesTopologically` silently drops a node whose id duplicates an earlier one at process
+  top level.** Its last two lines rebuild `proc.nodes` from an id-keyed map, in place, on the
+  object `runPipeline` hands to every later stage — so the diagram omits an activity and nothing
+  says so. `netDiagnostics` now reports it (`NC06`) and the CLI blocks on it, because the check
+  runs before `logicCoreToElk`; but the mutation itself is still there, and any code reading `lc`
+  after layout is reading a Logic-Core that differs from its input. Whoever repairs this: the test
+  "a collaboration finding names the pool it came from" in `scripts/bpmn/pipeline.test.js` doubles
+  as the fence on *where* net-check runs, and that second job depends on this bug. It keeps
+  passing afterwards, in both placements, and silently stops discriminating between them.
 - **`netDiagnostics` is reachable over neither HTTP nor MCP.** `runPipeline` produces it on every
   call and the CLI gates on it, but `/api/v1/generate`, `/orchestrate` and the `generate_bpmn` MCP
   tool all assemble their payloads key by key and do not carry it. Surfacing it means widening
