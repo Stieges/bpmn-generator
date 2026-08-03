@@ -203,6 +203,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is valid — something the author wrote was ignored, which is worth saying and not worth refusing
   to build over — matching `S14`'s reasoning and the layer's existing WARNING rules. The rule count
   is now **36**. No golden moves; no fixture carries any of these fields out of scope.
+- **`isCollection` now round-trips, on both importer paths and at every nesting depth.** Moving the
+  write onto the `<bpmn:dataObject>` (below) moved it away from where both importers read it:
+  `import.js` and `moddle-import.js` each took it off the *reference* element. The moddle path was
+  already lossy for its own reasons, so after the move the field survived on **neither** path —
+  precisely the four-places failure CLAUDE.md's "Adding a per-node field" section describes, where
+  the write moves and the two reads do not. Both importers now resolve the companion object via
+  `dataObjectRef`, falling back to the `<id>_do` naming convention for files written before that
+  link was emitted. The serialiser emits `dataObjectRef` too — without it the split is unreadable
+  by anyone else, since our naming convention means nothing to another tool.
+  `tests/fixtures/subprocess-child-fidelity.json`, the fixture CLAUDE.md names as the guard for
+  this class, gained a data reference at **both** nesting depths, and `isCollection` joined the
+  field-set round-trip comparison; a second test drives both importers explicitly, since the
+  field-set test uses only the primary one.
 - **`isCollection` was written onto the wrong element, and a nested data object had no element to
   write to at all.** OMG puts `isCollection` on `DataObject`; bpmn-moddle's metamodel grants
   `DataObjectReference` only `dataObjectRef`. The serialiser wrote it on the reference, so every

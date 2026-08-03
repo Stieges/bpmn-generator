@@ -194,6 +194,16 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
     'dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group',
   ]);
 
+  // Every DataObject in this process, at any depth, keyed by id — the fallback path for a file
+  // that carries no `dataObjectRef`. See the twin index in import.js.
+  const dataObjectsById = {};
+  (function indexDataObjects(container) {
+    for (const el of (container.flowElements || [])) {
+      if (shortType(el.$type) === 'dataObject' && el.id) dataObjectsById[el.id] = el;
+      indexDataObjects(el);
+    }
+  })(proc);
+
   /**
    * One moddle flow element → one Logic-Core node, recursively.
    *
@@ -233,8 +243,17 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
     // isForCompensation
     if (el.isForCompensation === true) node.isCompensation = true;
 
-    // isCollection on dataObjectReference
-    if (el.isCollection === true) node.isCollection = true;
+    // isCollection is read off the companion DataObject, NOT off the reference — OMG puts the
+    // attribute there, and the serialiser writes it there. See the twin comment in import.js for
+    // why the read had to move when the write did.
+    //
+    // bpmn-moddle RESOLVES `dataObjectRef` into the DataObject object itself rather than leaving
+    // an id string, so the first branch reads the element directly. The `<id>_do` fallback goes
+    // through the id index for files written before the link was emitted.
+    if (type === 'dataObjectReference') {
+      const companion = el.dataObjectRef ?? dataObjectsById[`${node.id}_do`];
+      if (companion?.isCollection === true) node.isCollection = true;
+    }
 
     // CallActivity: calledElement
     if (type === 'callActivity' && el.calledElement) node.calledElement = el.calledElement;

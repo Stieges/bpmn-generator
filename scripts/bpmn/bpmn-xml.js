@@ -229,8 +229,14 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
  * `dataObjectReference` nested inside a subprocess got a reference and no object at all. Moving
  * `isCollection` onto the object without also closing that hole would have silently dropped the
  * field for nested references — the same defect, one nesting level down.
+ *
+ * `refEl` is the reference element the object belongs to, and it gets `dataObjectRef` pointing at
+ * the object. That link is what makes the split survive a round trip: once a property lives on the
+ * object rather than on the reference, an importer has to be able to get from one to the other,
+ * and `dataObjectRef` is the standard way — the only one that also works for a file some other
+ * tool wrote, where our `<id>_do` naming convention means nothing.
  */
-function buildDataObject(node) {
+function buildDataObject(node, refEl) {
   if (node.type !== 'dataObjectReference') return null;
   const attrs = { id: `${node.id}_do` };
   for (const spec of OMG_NODE_FIELD_SCOPE) {
@@ -244,7 +250,9 @@ function buildDataObject(node) {
     if (typeof value !== spec.type) continue;
     attrs[spec.attr] = value;
   }
-  return create('bpmn:DataObject', attrs);
+  const dataObject = create('bpmn:DataObject', attrs);
+  if (refEl) refEl.dataObjectRef = dataObject;
+  return dataObject;
 }
 
 function buildFlowNode(node, topLevelDefsMap, registerNode) {
@@ -376,7 +384,7 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
       // SubProcess is a FlowElementsContainer, so that is where it belongs. Without this the
       // reference existed with nothing to reference, and (since the move above) `isCollection`
       // on a nested reference would have gone nowhere at all.
-      const childDataObject = buildDataObject(child);
+      const childDataObject = buildDataObject(child, childEl);
       if (childDataObject) el.get('flowElements').push(childDataObject);
     }
     for (const subEdge of (node.edges || [])) {
@@ -504,7 +512,7 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
   // Data objects. The nested case is handled in `buildFlowNode`'s child loop, so that every
   // dataObjectReference has a DataObject at whatever depth it sits — see `buildDataObject`.
   for (const node of nodes) {
-    const dataObject = buildDataObject(node);
+    const dataObject = buildDataObject(node, flowNodeMap.get(node.id));
     if (dataObject) flowElements.push(dataObject);
   }
 

@@ -272,6 +272,20 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     'dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group',
   ]);
 
+  // Every <bpmn:dataObject> in this process, at any depth, keyed by id.
+  //
+  // Document-wide rather than per-container because `xsd:ID` is document-unique, so an id resolves
+  // the same wherever it is looked up — and because a nested data object lives in its subprocess's
+  // flowElements while the reference to it may be read from any level. Built once instead of
+  // rescanning per reference.
+  const dataObjectsById = {};
+  (function indexDataObjects(element) {
+    for (const c of (element.children || [])) {
+      if (stripNs(c.tag) === 'dataObject' && c.attrs.id) dataObjectsById[c.attrs.id] = c;
+      indexDataObjects(c);
+    }
+  })(proc);
+
   // One raw element → one Logic-Core node, recursively. Mirrors nodeFromElement
   // in moddle-import.js and buildFlowNode in bpmn-xml.js: subprocess children
   // must be read with the same field set as top-level nodes, or the round trip
@@ -320,8 +334,24 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     // isForCompensation (OMG spec §10.2.1)
     if (child.attrs.isForCompensation === 'true') node.isCompensation = true;
 
-    // isCollection on dataObjectReference (OMG spec §10.3.1)
-    if (child.attrs.isCollection === 'true') node.isCollection = true;
+    // isCollection is read off the companion <bpmn:dataObject>, NOT off the reference.
+    //
+    // OMG puts `isCollection` on DataObject; DataObjectReference has only `dataObjectRef`. This
+    // used to read `child.attrs.isCollection`, which matched what the serialiser wrote at the
+    // time — and both were wrong, so the round trip "worked" while every file we produced carried
+    // an attribute bpmn-moddle rejected. When the write was corrected to target the DataObject,
+    // this read had to move with it or the field would round-trip on no path at all. That is the
+    // four-places problem CLAUDE.md's "Adding a per-node field" section describes: the write and
+    // the two reads have to move together.
+    //
+    // `dataObjectRef` first, `<id>_do` second: the reference is the standard link and the only one
+    // that works for a file another tool wrote, while the naming convention is the fallback for
+    // files this project emitted before it started writing the link.
+    if (tag === 'dataObjectReference') {
+      const companion = dataObjectsById[child.attrs.dataObjectRef]
+        ?? dataObjectsById[`${node.id}_do`];
+      if (companion?.attrs.isCollection === 'true') node.isCollection = true;
+    }
 
     // CallActivity: calledElement (OMG spec §10.2.3)
     if (tag === 'callActivity' && child.attrs.calledElement) node.calledElement = child.attrs.calledElement;
