@@ -1,0 +1,42 @@
+{
+  "id": "Process_DuplicateIds",
+  "name": "Duplicate child ids",
+  "documentation": "NEGATIVE fixture. Two sibling collapsed subprocesses each declare a child with id \"check\" and a child flow with id \"f_in\". Every rule in rules.js walks one container at a time and sees nothing wrong, and the geometry never notices either because a collapsed subprocess draws no children -- but the emitted BPMN carries the same xsd:ID twice, which is document-wide unique by definition, so no tool loads the file correctly. NC06 is the code that names it. Kept under tests/fixtures/negative/ so net-check.test.js's directory-wide fence -- which scans the top level of tests/fixtures/ only and requires every fixture there to be a clean translation -- is never asked to hold a fixture that exists to be dirty.",
+  "nodes": [
+    { "id": "start", "type": "startEvent", "name": "Request received" },
+    {
+      "id": "sub_a",
+      "type": "subProcess",
+      "name": "Screen applicant",
+      "nodes": [
+        { "id": "sub_a_start", "type": "startEvent", "name": "Begin" },
+        { "id": "check", "type": "userTask", "name": "Check identity" },
+        { "id": "sub_a_end", "type": "endEvent", "name": "Screened" }
+      ],
+      "edges": [
+        { "id": "f_in", "source": "sub_a_start", "target": "check" },
+        { "id": "f_a2", "source": "check", "target": "sub_a_end" }
+      ]
+    },
+    {
+      "id": "sub_b",
+      "type": "subProcess",
+      "name": "Screen guarantor",
+      "nodes": [
+        { "id": "sub_b_start", "type": "startEvent", "name": "Begin" },
+        { "id": "check", "type": "userTask", "name": "Check identity" },
+        { "id": "sub_b_end", "type": "endEvent", "name": "Screened" }
+      ],
+      "edges": [
+        { "id": "f_in", "source": "sub_b_start", "target": "check" },
+        { "id": "f_b2", "source": "check", "target": "sub_b_end" }
+      ]
+    },
+    { "id": "end", "type": "endEvent", "name": "Done" }
+  ],
+  "edges": [
+    { "id": "f1", "source": "start", "target": "sub_a" },
+    { "id": "f2", "source": "sub_a", "target": "sub_b" },
+    { "id": "f3", "source": "sub_b", "target": "end" }
+  ]
+}

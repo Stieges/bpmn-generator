@@ -34,6 +34,8 @@ import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, prepr
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows } from './coordinates.js';
 import { checkDiagramIntegrity } from './di-check.js';
+import { checkNetIntegrity } from './net-check.js';
+import { bpmnToPN } from './workflow-net.js';
 import { simplifyAllEdges } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
@@ -43,6 +45,40 @@ import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels } from './vis
 // ═══════════════════════════════════════════════════════════════════════
 // PUBLIC API — programmatic usage via import
 // ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Petri-net translation integrity over a whole Logic-Core — one net per process.
+ *
+ * `checkNetIntegrity` (net-check.js) is per-process, and `bpmnToPN` flattens containers itself,
+ * so a nested subprocess needs no extra call: N pools, N calls, exactly the shape
+ * `checkWorkflowNetSoundness` (workflow-net.js) already has.
+ *
+ * The `[pool] ` prefix is not cosmetic. NC messages name a node id and nothing else, and two
+ * participants may legally reuse one id, so an unprefixed collaboration finding would be
+ * unattributable — the reader cannot tell which pool's translation broke. `runRules` and
+ * `checkWorkflowNetSoundness` both solve this the same way; this is that form, not a third one.
+ * `process` carries the same attribution machine-readably, for a caller that would otherwise
+ * have to parse the prefix back out of the message.
+ *
+ * Deliberately NOT conditional on the opt-in `workflow_net` rule layer. When that layer is on,
+ * `checkWorkflowNetSoundness` builds its own net per pool and this one is redundant — measured at
+ * 0.028–0.037 ms per model, which is not worth a branch. Gating on it would make the always-off
+ * default the always-unchecked default, i.e. exactly the state this wiring exists to end.
+ *
+ * @param {object} lc - Logic-Core (already validated; pools or a single process)
+ * @returns {{ ok: boolean, issues: Array<{code, severity, message, elements, process}> }}
+ */
+function checkNetTranslation(lc) {
+  const processes = lc.pools ? lc.pools : [lc];
+  const issues = [];
+  for (const proc of processes) {
+    const prefix = lc.pools ? `[${proc.name || proc.id}] ` : '';
+    for (const issue of checkNetIntegrity(bpmnToPN(proc), proc).issues) {
+      issues.push({ ...issue, message: prefix + issue.message, process: proc.id });
+    }
+  }
+  return { ok: !issues.some(i => i.severity === 'ERROR'), issues };
+}
 
 /**
  * Run the full BPMN pipeline programmatically.
@@ -60,13 +96,35 @@ async function runPipeline(logicCore, opts = {}) {
   const profile = profileForMode(baseProfile, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
-    return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, validation: { errors, warnings, advisories, metrics } };
+    return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null, validation: { errors, warnings, advisories, metrics } };
   }
 
   const allProcesses = lc.pools ? lc.pools : [lc];
   for (const proc of allProcesses) {
     inferGatewayDirections(proc.nodes || [], proc.edges || []);
   }
+
+  // Net integrity: the same statement one layer over from the DI check below. A green validation
+  // says nothing about the Petri net the analysis layers reason on — `checkSoundness` never sees
+  // the Logic-Core its net came from, so a translation defect yields a well-formed verdict about
+  // the wrong graph.
+  //
+  // Computed HERE, before `logicCoreToElk`, and that is a correctness constraint rather than a
+  // preference: `logicCoreToElk` calls `preprocessLogicCore`, whose `sortNodesTopologically`
+  // rebuilds `proc.nodes` from an id-keyed map — in place, on this very object. Two nodes sharing
+  // an id therefore collapse into one before layout, and a check running after it would be
+  // handed a Logic-Core the defect has already been erased from. Which is exactly the mistake
+  // this pass exists to prevent, one level up: judging a graph that is not the model's.
+  // `bpmnToPN` does not read the gateway direction the loop above writes, so the position within
+  // this block is free; the position relative to `logicCoreToElk` is not.
+  //
+  // Computed, never acted on. `runPipeline` produces a diagnostic and the caller decides what it
+  // means — which is what lets `main()` gate on it, the HTTP layer turn it into a status and
+  // `agents/layout.js` pass it through without retrying. Returning early here instead would make
+  // one key a gate in the library and a report over HTTP. Kept as its own key rather than merged
+  // into `diagnostics` because that one's `code` is a closed DI01…DI06 enum in
+  // references/api-schema.json, which the docs gate validates a real response against.
+  const netDiagnostics = checkNetTranslation(lc);
 
   // Visual Refinement (opt-in, computed early for layout options)
   const refineOn = opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false;
@@ -124,7 +182,7 @@ async function runPipeline(logicCore, opts = {}) {
   const diagnostics = checkDiagramIntegrity(coordMap, lc);
 
   return {
-    bpmnXml, svg, coordMap, diagnostics,
+    bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
     validation: { errors: [], warnings, advisories, metrics, xmlWarnings: roundTrip.warnings },
   };
 }
@@ -435,6 +493,28 @@ async function main() {
   }
   if (strict && diWarnings.length) {
     console.error(`\n✗ --strict: ${diWarnings.length} diagram diagnostic(s). No files written.`);
+    process.exit(1);
+  }
+
+  // Petri-net translation diagnostics, gated exactly like the DI block above and for the same
+  // reason: an unfaithful net makes every soundness verdict a statement about a different
+  // process, and a green one is worse than none. The one model class this newly blocks is
+  // duplicate ids across sibling containers — see tests/fixtures/negative/. That used to leave
+  // here with a serialisation warning and exit 0, and the file it wrote carried the same `id=`
+  // twice, which xsd:ID forbids document-wide; no tool loads it correctly.
+  const netErrors = (result.netDiagnostics?.issues ?? []).filter(i => i.severity === 'ERROR');
+  const netWarnings = (result.netDiagnostics?.issues ?? []).filter(i => i.severity !== 'ERROR');
+  if (netWarnings.length) {
+    console.warn('\n⚠ Petri-net diagnostics:');
+    netWarnings.forEach(i => console.warn(`  · ${i.code} ${i.message}`));
+  }
+  if (netErrors.length) {
+    console.error('\n✗ Net integrity (NC) — the Petri-net translation is not faithful to the model, no files written:');
+    netErrors.forEach(i => console.error(`  · ${i.code} ${i.message}`));
+    process.exit(1);
+  }
+  if (strict && netWarnings.length) {
+    console.error(`\n✗ --strict: ${netWarnings.length} Petri-net diagnostic(s). No files written.`);
     process.exit(1);
   }
 
