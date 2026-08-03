@@ -89,6 +89,43 @@ describe('checkNetIntegrity — vacuity: the pass actually detects a broken net'
   });
 });
 
+describe('NC02 is ERROR now that boundary events have a translation', () => {
+  test('an input-less transition fails the fence rather than warning past it', () => {
+    // Stage 5 flipped NC02's severity. That flip is only meaningful if the code still fires —
+    // a fence that passes because nothing detects anything is the failure mode this whole
+    // guard exists against. Hand-built so the ONE defect is the input-less transition:
+    // `t_orphan` is produced by nothing and consumes nothing, so it can never fire.
+    const pn = {
+      places: new Map([
+        ['p_source', { id: 'p_source' }],
+        ['p_sink', { id: 'p_sink' }],
+        ['p_orphan_out', { id: 'p_orphan_out' }],
+      ]),
+      transitions: new Map([
+        ['t_only', { id: 't_only', label: 'Only', bpmnNodeId: 'only' }],
+        ['t_orphan', { id: 't_orphan', label: 'Orphan', bpmnNodeId: 'orphan' }],
+        ['t_drain', { id: 't_drain', label: 'Drain', bpmnNodeId: 'drain' }],
+      ]),
+      arcs: [
+        { from: 'p_source', to: 't_only', type: 'P→T' },
+        { from: 't_only', to: 'p_sink', type: 'T→P' },
+        { from: 't_orphan', to: 'p_orphan_out', type: 'T→P' },
+        { from: 'p_orphan_out', to: 't_drain', type: 'P→T' },
+        { from: 't_drain', to: 'p_sink', type: 'T→P' },
+      ],
+      sourcePlace: 'p_source',
+      sinkPlace: 'p_sink',
+      skipped: [],
+      flatNodes: [{ id: 'only', type: 'task' }, { id: 'orphan', type: 'task' },
+        { id: 'drain', type: 'task' }],
+      flatEdges: [],
+    };
+    const { ok, issues } = checkNetIntegrity(pn, { id: 'proc', nodes: pn.flatNodes });
+    expect(issues.map(i => `${i.code}/${i.severity}`)).toEqual(['NC02/ERROR']);
+    expect(ok).toBe(false);
+  });
+});
+
 describe('checkNetIntegrity — judges the translation, never the model', () => {
   test('deadlock-process.json is deliberately unsound (S05/WF03 catch it) but must be a clean translation', () => {
     const lc = JSON.parse(

@@ -136,7 +136,7 @@ lands without anyone having to remember to add it.
 | Code | Severity | Meaning |
 |------|----------|---------|
 | NC01 | ERROR | A control-flow node produced no transition in the net |
-| NC02 | WARNING → ERROR (scheduled) | A transition has no incoming place — it can never fire |
+| NC02 | ERROR | A transition has no incoming place — it can never fire |
 | NC02b | ERROR | A transition has no outgoing place — it consumes a token and never produces one |
 | NC03a | ERROR | A place is never produced by any transition |
 | NC03b | ERROR | A place is never consumed by any transition |
@@ -152,13 +152,19 @@ destroys a token without producing one, a place nothing ever fills or drains, tw
 one id) that no reachability search would ever flag as broken, because the search only sees the net
 it was handed.
 
-NC02 and NC04 are **WARNING today, and become ERROR once the defects they detect are fixed in a
-later stage of this work.** NC02 (a transition with no way to fire) is currently legitimate for a
-boundary event, whose incoming trigger is the host it attaches to rather than a sequence flow;
-NC04 (two edges silently sharing one place) is currently legitimate wherever the place-id scheme
-collides for a case not yet given its own key. Promoting either to ERROR before that fix ships
-would fail fixtures that are otherwise fine today — the docs gate pins both codes so this schedule
-cannot go stale silently once the promotion happens.
+NC02 became ERROR once boundary events got a Petri-net translation. It had exactly one legitimate
+cause — a boundary event, whose trigger is the host it attaches to rather than a sequence flow, so
+it used to reach the net with a transition and no incoming arc, unfireable in every marking and
+silently deleting its whole escalation path from every analysis. `wireBoundaryEvents`
+(`scripts/bpmn/workflow-net.js`) now gives such an event exactly the input places its host
+consumes, and a boundary event whose host cannot be found gets no transition at all (it is
+disclosed on `skipped` instead). With the cause gone the code says what it always meant.
+
+NC04 is still **WARNING today, and becomes ERROR once the defect it detects is fixed in a later
+stage of this work**: two edges silently sharing one place is legitimate wherever the place-id
+scheme collides for a case not yet given its own key, and promoting it before that fix ships would
+fail fixtures that are otherwise fine today. The docs gate pins the codes so the schedule cannot
+go stale silently once the promotion happens.
 
 NC05 is disclosure, not a defect: van der Aalst's WF-nets require a single source, and OMG BPMN
 2.0.2 §10.4.2 treats multiple start events as alternative instantiations of the same process, so
