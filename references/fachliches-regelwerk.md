@@ -71,7 +71,9 @@ is such a model — provably sound (`checkSoundness` reports nothing) and reject
 Both rules now ask the token question, and they ask it **per incoming flow** of the join, because
 a parallel join fires only once every incoming flow carries a token:
 
-1. for each incoming flow, collect which branches of the split can supply it;
+1. for each incoming flow, collect which branches of the split can supply it. A branch supplies a
+   flow either by **reaching its source**, or by **being that flow** — the split's own edge may
+   land straight on the join (`gx --no--> gj`, the everyday skip path around a parallel block);
 2. ignore flows no branch can supply — those are fed from outside the split's subgraph (typically
    a concurrent thread of an enclosing AND block) and no choice at the split can starve them;
 3. if all remaining flows agree on their supplying-branch set, every choice feeds either all of
@@ -83,6 +85,14 @@ Step 4 is deliberately stronger than *"two incoming flows have disjoint supplyin
 three branches A/B/C where A feeds only the first flow, C only the second and B both, no **pair**
 of flows is disjoint, yet choosing A still deadlocks. Both readings are pinned by tests in
 `scripts/bpmn/pipeline.test.js`.
+
+Step 1's second clause is not a detail. Every branch's reach set deliberately excludes the split
+itself, so that a loop running back to the split cannot make one branch look as though it could
+reach another. Crediting a branch only by reachability therefore leaves an incoming flow *whose
+source is the split* matching no branch at all — step 2 would then discard it as "fed from outside
+the split", drop the count of relevant flows below two, and accept the deadlock in silence. The
+branch edge is matched by identity rather than by its endpoints, because a split may carry two
+separate flows into the same join, and those are two different branches.
 
 Two consequences worth knowing:
 

@@ -67,13 +67,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   concurrent thread of an enclosing AND block, which no choice at the split can starve). That is
   deliberately stronger than testing for a *disjoint pair* of incoming flows: with three branches
   A/B/C where A feeds only the first flow, C only the second and B both, no pair is disjoint and
-  choosing A still deadlocks. Verified against the second, independent implementation this release
-  makes possible — `bpmnToPN` + `checkSoundness` — over every fixture and eight hand-built shapes.
+  choosing A still deadlocks. A branch supplies an incoming flow either by reaching its source or by
+  **being** that flow — the split's own edge may land on the join (`gx --no--> gj`, the everyday
+  skip path), and crediting only reachability would discard exactly that flow and with it a real
+  deadlock. Cross-checked against the second, independent implementation this release makes possible
+  — `bpmnToPN` + `checkSoundness` — over every fixture and eight hand-built shapes; note that no
+  fixture contains a split flowing straight into a parallel join, so that shape is covered by
+  dedicated tests rather than by the fixture corpus.
 - **A Mixed gateway is now recognised as a split.** `S05`/`S06` skipped every gateway carrying
   `has_join`, which `references/input-schema.json` documents as a direction *hint*; a gateway with
   more than one outgoing flow diverges regardless (`gatewayDirection` = Mixed). A model whose XOR
   merged a rework loop and chose between two exclusive paths into an AND-join was therefore a
   deadlock that WF03 flagged and S05 did not.
+- **Two parallel sequence flows between one node pair no longer collapse onto one Petri-net
   place.** `bpmnToPN` keyed a place on the node pair alone (`p_<src>_<tgt>`), so a `gw --yes--> t`
   / `gw --no--> t` pair — legal BPMN, and the everyday shape of two conditions with one
   consequence — produced a single place. Three consequences, all reproduced: the later flow's
