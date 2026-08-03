@@ -19,6 +19,8 @@ import {
   bpmnToPN, checkWorkflowNetSoundness, getEnabledTransitions, fireTransition,
 } from '../bpmn/workflow-net.js';
 import { checkNetIntegrity } from '../bpmn/net-check.js';
+import { runRules } from '../bpmn/rules.js';
+import { CONTAINER_TYPES, isContainerNode } from '../bpmn/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) =>
@@ -786,5 +788,89 @@ describe('B10 — a container is refused as a message-flow endpoint', () => {
     for (const pool of lc().pools) {
       expect(checkNetIntegrity(bpmnToPN(pool), pool).ok).toBe(true);
     }
+  });
+});
+
+describe('B10 — the container guard is class-based, not "has children"', () => {
+  // Both shapes below carry no `nodes` array at all, so the first cut of the guard — a bare
+  // `Array.isArray(n.nodes) && n.nodes.length > 0` — let them through to `nodeOwners` and wired
+  // them as ordinary nodes. That is not a double send (one transition), but the composed net
+  // still synchronised on an endpoint the standard forbids, `unresolvedEndpoints` stayed empty
+  // so `format.js` told the reader nothing, and S14 warned about the same model: two layers of
+  // one stage disagreeing about one document.
+  const withTarget = (node) => ({
+    pools: [
+      {
+        id: 'P1',
+        nodes: [
+          { id: 'a_s', type: 'startEvent' },
+          { id: 'a_send', type: 'sendTask', name: 'Send' },
+          { id: 'a_e', type: 'endEvent' },
+        ],
+        edges: [
+          { id: 'e1', source: 'a_s', target: 'a_send' },
+          { id: 'e2', source: 'a_send', target: 'a_e' },
+        ],
+      },
+      {
+        id: 'P2',
+        nodes: [{ id: 'b_s', type: 'startEvent' }, node, { id: 'b_e', type: 'endEvent' }],
+        edges: [
+          { id: 'e3', source: 'b_s', target: node.id },
+          { id: 'e4', source: node.id, target: 'b_e' },
+        ],
+      },
+    ],
+    messageFlows: [{ id: 'mfC', source: 'a_send', target: node.id }],
+  });
+
+  test.each([
+    ['a callActivity, which by its nature never carries children', { id: 'ca', type: 'callActivity', name: 'Call out' }],
+    ['a collapsed subProcess written with no nodes array', { id: 'sp', type: 'subProcess', name: 'Collapsed' }],
+  ])('%s is refused as an endpoint', (_label, node) => {
+    const net = composeCollaboration(withTarget(node));
+    const placeId = messagePlaceId('mfC');
+
+    // No CONSUMING arc: nothing in P2 waits on this place. The producing arc from the real
+    // sender does survive and should — `a_send` did send, exactly as for a black-box target
+    // (module header), and the token simply stays put. So the place is unconsumable, not absent.
+    expect(net.arcs.filter(a => a.from === placeId)).toEqual([]);
+    expect(net.arcs.filter(a => a.to === placeId)).toEqual([
+      { from: scopedId('P1', 't_a_send'), to: placeId, type: 'T→P' },
+    ]);
+    expect(net.unconsumablePlaces).toContain(placeId);
+    const mp = net.messagePlaces.find(m => m.messageFlowId === 'mfC');
+    expect(mp.gates).toBe(false);
+    expect(mp.receiverKind).toBe('container');
+    expect(mp.receiverTransitions).toEqual([]);
+    expect(net.unresolved).toEqual([
+      { messageFlowId: 'mfC', endpoint: 'target', id: node.id, reason: 'container' },
+    ]);
+
+    // Only the MESSAGE arc goes away. The node keeps its ordinary transition and its place in
+    // the control flow — refusing the endpoint must not amputate the process.
+    expect(net.transitions.has(scopedId('P2', `t_${node.id}`))).toBe(true);
+    expect(net.arcs.some(a => a.to === scopedId('P2', `t_${node.id}`) && a.type === 'P→T')).toBe(true);
+    expect(net.arcs.some(a => a.from === scopedId('P2', `t_${node.id}`) && a.type === 'T→P')).toBe(true);
+  });
+
+  test('the two layers now agree: S14 warns about exactly what the net refuses to wire', () => {
+    for (const node of [{ id: 'ca', type: 'callActivity' }, { id: 'sp', type: 'subProcess' }]) {
+      const lc = withTarget(node);
+      const warned = runRules(lc).warnings.some(w => w.includes('mfC') && w.includes(node.type));
+      const refused = composeCollaboration(lc).unresolved.some(u => u.reason === 'container');
+      expect([warned, refused]).toEqual([true, true]);
+    }
+  });
+
+  test('S14 and the guard read one list, so they cannot drift apart', () => {
+    // The structural guarantee behind the test above: one `CONTAINER_TYPES`, imported by both.
+    for (const type of CONTAINER_TYPES) {
+      expect(isContainerNode({ id: 'x', type })).toBe(true);
+    }
+    // The structural leg still stands on its own — an unrecognised container type that carries a
+    // scope fails safe rather than being silently wired.
+    expect(isContainerNode({ id: 'x', type: 'someFutureSubProcess', nodes: [{ id: 'y' }] })).toBe(true);
+    expect(isContainerNode({ id: 'x', type: 'task' })).toBe(false);
   });
 });

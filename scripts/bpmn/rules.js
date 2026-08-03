@@ -13,7 +13,7 @@
  */
 
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
-import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
+import { isEvent, isGateway, isBoundaryEvent, isArtifact, CONTAINER_TYPES } from './types.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
@@ -445,11 +445,14 @@ const SOUNDNESS_RULES = [
     // existing, documented way to escalate it for anyone who wants the build to stop.
     check: (proc, lc) => {
       if (!lc.messageFlows) return { pass: true };
-      // The container classes, by TYPE rather than by "has children". A collapsed subProcess
-      // carrying no `nodes` array is the same schema violation as an expanded one — the CMOF
-      // argument is about the class, not about how much of it is written down. `isExpanded`
-      // says nothing here either (BPMNDI.xsd:55 / BPMNDI.cmof:34, a BPMNShape attribute).
-      const CONTAINER_TYPES = new Set(['subProcess', 'transaction', 'adHocSubProcess', 'callActivity']);
+      // Matched by TYPE rather than by "has children". A collapsed subProcess carrying no
+      // `nodes` array is the same schema violation as an expanded one — the CMOF argument is
+      // about the class, not about how much of it is written down. `isExpanded` says nothing
+      // here either (BPMNDI.xsd:55 / BPMNDI.cmof:34, a BPMNShape attribute).
+      //
+      // `CONTAINER_TYPES` is imported, not declared here: `scripts/scenarios/collaboration.js`
+      // must refuse to wire exactly the endpoints this rule warns about, and a second copy of
+      // the list is how the two layers come to disagree about one model.
       const nodeTypeMap = {};
       const collectFrom = (container) => {
         for (const n of (container.nodes || [])) {
