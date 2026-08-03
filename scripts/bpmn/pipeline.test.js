@@ -28,7 +28,8 @@ import { wrapText, wrapTextByPx } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
-import { checkWorkflowNetSoundness, bpmnToPN } from './workflow-net.js';
+import { checkWorkflowNetSoundness, bpmnToPN, checkSoundness } from './workflow-net.js';
+import { enumerateScenarios } from '../scenarios/enumerate.js';
 import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from '../http-server.js';
@@ -793,6 +794,79 @@ describe('Workflow-Net Soundness', () => {
     // XOR with 2 outgoing → 2 choice transitions
     const choiceTs = [...pn.transitions.keys()].filter(k => k.includes('choice'));
     expect(choiceTs).toHaveLength(2);
+  });
+
+  // ── Container-aware translation ──
+  // `bpmnToPN` used to REPLACE a subprocess with its children: the container got no transition
+  // and vanished from `flatNodes`, while the outer edges naming it still became places that
+  // nothing produced and nothing consumed — a disconnected net. Worse, an inner `startEvent`
+  // drew from the GLOBAL `p_source` and an inner `endEvent` produced on the GLOBAL `p_sink`, so
+  // the inner start competed with the real start for the single initial token and the inner end
+  // marked the whole process complete. Every WF finding on a model with a subprocess was
+  // therefore confident nonsense. A container now gets its own source/sink pair, reached through
+  // synthesized `#enter`/`#exit` transitions.
+
+  test('subprocess becomes its own subnet, not a dissolved one', () => {
+    const proc = loadFixture('expanded-subprocess.json').pools[0];
+    const pn = bpmnToPN(proc);
+
+    expect([...pn.transitions.keys()]).toEqual(expect.arrayContaining(['t_sub1#enter', 't_sub1#exit']));
+    // Both synthesized transitions still point back at the container's own BPMN id, so nothing
+    // downstream (scenarios/enumerate.js) leaks a raw net id into a human-facing trace.
+    expect(pn.transitions.get('t_sub1#enter').bpmnNodeId).toBe('sub1');
+    expect(pn.transitions.get('t_sub1#exit').role).toBe('exit');
+    // The container is present in the flattened node list, before its children.
+    expect(pn.flatNodes.map(n => n.id)).toEqual(
+      ['start1', 'task1', 'sub1', 'sub1_start', 'sub1_task1', 'sub1_task2', 'sub1_end', 'end1']);
+
+    // The false WF01 dead(end1) and the false WF03 deadlock {p_task1_sub1=1} are both gone.
+    expect(checkSoundness(pn).issues).toEqual([]);
+  });
+
+  test('nested subprocesses each get their own scope', () => {
+    const proc = loadFixture('subprocess-child-fidelity.json').pools[0];
+    const pn = bpmnToPN(proc);
+
+    expect([...pn.transitions.keys()]).toEqual(expect.arrayContaining(
+      ['t_outer#enter', 't_outer#exit', 't_inner#enter', 't_inner#exit']));
+    // Two levels deep, the token still reaches the process sink — it did not before, because
+    // the grandchild's end event was producing on `p_sink` directly.
+    expect(checkSoundness(pn).stats.sinkReached).toBe(true);
+  });
+
+  test('enumerateScenarios walks into and out of a subprocess', () => {
+    const proc = loadFixture('expanded-subprocess.json').pools[0];
+    const result = enumerateScenarios(proc);
+
+    expect(result.scenarios).toHaveLength(1);
+    // `sub1` appears twice on purpose — once entering the container, once leaving it.
+    expect(result.scenarios[0].nodes).toEqual(
+      ['start1', 'task1', 'sub1', 'sub1_start', 'sub1_task1', 'sub1_task2', 'sub1_end', 'sub1', 'end1']);
+    // The genuine path used to be called a dead end, because only the subprocess-internal path
+    // was reachable from the global source place.
+    expect(result.stats.deadEndPaths).toBe(0);
+  });
+
+  test('a container without an inner start or end is disclosed, not silently under-modelled', () => {
+    // No inner endEvent: there is no well-defined exit marking, so the container falls back to
+    // the atomic single-transition treatment — and says so via `skipped`, which
+    // scripts/scenarios/format.js renders as an explicit "not modelled at all" note.
+    const proc = {
+      id: 'P1', nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'sp', type: 'subProcess', name: 'Half-built', nodes: [{ id: 'i_s', type: 'startEvent' }], edges: [] },
+        { id: 'e', type: 'endEvent' },
+      ], edges: [
+        { id: 'f1', source: 's', target: 'sp' },
+        { id: 'f2', source: 'sp', target: 'e' },
+      ],
+    };
+    const pn = bpmnToPN(proc);
+    expect(pn.transitions.has('t_sp')).toBe(true);
+    expect(pn.transitions.has('t_sp#enter')).toBe(false);
+    expect(pn.skipped).toContainEqual({ id: 'sp', reason: 'subProcessWithoutStartOrEnd' });
+    // The fallback keeps the net connected, so the process still completes.
+    expect(checkSoundness(pn).stats.sinkReached).toBe(true);
   });
 
   test('runRules with strict profile includes WF checks', () => {

@@ -12,7 +12,7 @@
  * Scope:
  *   ✅ XOR gateways (exclusive choice)
  *   ✅ AND gateways (parallel fork/join)
- *   ✅ SubProcesses (flattened)
+ *   ✅ SubProcesses (own subnet, entered and left through synthesized transitions)
  *   ⚠️  OR gateways → warning only (not formally verifiable in classical WF-nets)
  *   ❌ Event-Based Gateways → skipped (race conditions)
  *   ❌ Timer/Signal Events → skipped (external triggers)
@@ -43,6 +43,11 @@ import { isGateway } from './types.js';
  *   - Split: 1 input place → transition → N output places, but only one fires
  *   - Modeled as N separate transitions (one per outgoing edge)
  *
+ * SubProcess (any node carrying children):
+ *   - Its own source/sink place pair, entered through a synthesized `enter` transition and
+ *     left through a synthesized `exit` transition. See `buildContainer` for why dissolving
+ *     the container into its children instead is wrong.
+ *
  * @param {object} proc - Process with nodes and edges
  * @returns {{ places, transitions, arcs, initialMarking, sinkPlace, orGateways, skipped }}
  */
@@ -51,38 +56,111 @@ function bpmnToPN(proc) {
   const edges = proc.edges || [];
 
   const places = new Map();     // placeId → { id, label }
-  const transitions = new Map(); // transId → { id, label, bpmnNodeId }
+  const transitions = new Map(); // transId → { id, label, bpmnNodeId, role? }
   const arcs = [];               // { from, to, type: 'P→T' | 'T→P' }
   const orGateways = [];
   const skipped = [];
 
-  // Flatten expanded subprocesses
+  // The flattened views: every node at every nesting level, every edge at every nesting level.
   const flatNodes = flattenNodes(nodes);
   const flatEdges = flattenEdges(nodes, edges);
-  const nodeMap = new Map(flatNodes.map(n => [n.id, n]));
 
-  // Create places for each edge (flow)
+  // Create places for EVERY sequence flow, at every nesting level, in one pass before any
+  // scope is built. Every arc-building branch below guards with `places.has(...)`, so a place
+  // minted lazily — only once its own scope is entered — would make those guards silently drop
+  // arcs rather than fail. Creating them all up front is what keeps the guards honest. The only
+  // places minted later are a container's own two (`buildContainer`), and those are created
+  // before the arcs that reference them.
   for (const edge of flatEdges) {
     const placeId = `p_${edge.source}_${edge.target}`;
     places.set(placeId, { id: placeId, label: edge.label || '' });
   }
 
-  // Source place (before start event)
-  const startNodes = flatNodes.filter(n => n.type === 'startEvent');
-  const endNodes = flatNodes.filter(n => n.type === 'endEvent');
-
-  // Create a global source place and sink place
+  // The process-level source and sink place.
   const sourcePlace = 'p_source';
   const sinkPlace = 'p_sink';
   places.set(sourcePlace, { id: sourcePlace, label: 'source' });
   places.set(sinkPlace, { id: sinkPlace, label: 'sink' });
 
-  // Process each node
-  for (const node of flatNodes) {
+  // The process itself is just the outermost scope: its start events draw from `p_source` and
+  // its end events produce on `p_sink`, exactly as a subprocess's do from its own pair.
+  buildScope(proc, sourcePlace, sinkPlace, { places, transitions, arcs, orGateways, skipped, flatEdges });
+
+
+  // Initial marking: 1 token on source place
+  const initialMarking = new Map();
+  for (const [pid] of places) {
+    initialMarking.set(pid, 0);
+  }
+  initialMarking.set(sourcePlace, 1);
+
+  // flatNodes/flatEdges travel with the net on purpose. Anything reasoning about cycles
+  // has to use the *same* graph the places were named from — `scripts/scenarios/`
+  // does — and handing back the actual arrays guarantees identity, where re-running the
+  // flatten outside would only ever guarantee agreement.
+  //
+  // `flatNodes` lists a container BEFORE its children, and the container IS in the list — the
+  // same parent-then-children shape `di-check.js` and `coordinates.js` already use. It used to
+  // be replaced by its children, which meant `scripts/scenarios/` could not name the container
+  // at all: it walks `flatNodes` to decide which pool owns a node (`collaboration.js`) and to
+  // build the id→name index behind every human-facing trace (`format.js`). A message flow or a
+  // scenario step naming a subprocess had nothing to resolve against.
+  return {
+    places, transitions, arcs, initialMarking, sinkPlace, sourcePlace, orGateways, skipped,
+    flatNodes, flatEdges,
+  };
+}
+
+/**
+ * Does this node carry a subnet of its own?
+ *
+ * Type-agnostic on purpose, matching every other descent in the repo — `di-check.js`'s
+ * `flattenNodes`, `coordinates.js`'s `flattenProcessNodes` and S13's `collect`
+ * (`rules.js`) all recurse on `n.nodes` without asking what `type` says. That also picks up
+ * `transaction`, which `NodeType` allows and which is a subprocess in every semantic respect.
+ *
+ * Note what is deliberately NOT consulted: `isExpanded`. It exists only as a `BPMNShape`
+ * attribute (`references/omg-spec/normative/BPMNDI.xsd`, `BPMNDI.cmof`) and has no semantic
+ * counterpart — it says how the shape is drawn, nothing about how tokens move. `bpmn-xml.js`
+ * makes the same argument for serialisation. Gating *semantic* recursion on a *rendering* flag
+ * meant a collapsed subprocess carrying children was silently modelled as an atomic task.
+ */
+function isContainer(node) {
+  return Array.isArray(node.nodes) && node.nodes.length > 0;
+}
+
+/**
+ * Build the transitions and arcs for one scope — the process itself, or one container's
+ * interior — into the shared `ctx`.
+ *
+ * The scope's own source/sink pair is passed in rather than read from module scope, which is
+ * the whole point: a `startEvent` inside a subprocess must draw from THAT subprocess's source
+ * place, not from the global `p_source`. Binding it globally let the inner start compete with
+ * the real start for the single initial token, and let an inner `endEvent` mark the entire
+ * process complete.
+ *
+ * `orGateways` and `skipped` live on `ctx` and accumulate across every scope, so an OR gateway
+ * or an event-based gateway nested three levels deep is still disclosed to the caller.
+ *
+ * @param {object} container - the process or container node whose `nodes` define this scope
+ * @param {string} scopeSource - place a `startEvent` in this scope draws its token from
+ * @param {string} scopeSink - place an `endEvent` in this scope produces its token on
+ * @param {{places, transitions, arcs, orGateways, skipped, flatEdges}} ctx
+ */
+function buildScope(container, scopeSource, scopeSink, ctx) {
+  const { places, transitions, arcs, orGateways, skipped, flatEdges } = ctx;
+
+  for (const node of container.nodes || []) {
     // Skip elements that don't participate in control flow
     if (node.type === 'dataObjectReference' || node.type === 'dataStoreReference' ||
         node.type === 'textAnnotation' || node.type === 'group') {
       skipped.push({ id: node.id, reason: 'artifact' });
+      continue;
+    }
+
+    // A node with children is a subnet, not a transition.
+    if (isContainer(node)) {
+      buildContainer(node, ctx);
       continue;
     }
 
@@ -158,13 +236,13 @@ function bpmnToPN(proc) {
           }
         }
 
-        // Start event: source place → transition
+        // Start event: this scope's source place → transition
         if (node.type === 'startEvent') {
-          arcs.push({ from: sourcePlace, to: tId, type: 'P→T' });
+          arcs.push({ from: scopeSource, to: tId, type: 'P→T' });
         }
-        // End event: transition → sink place
+        // End event: transition → this scope's sink place
         if (node.type === 'endEvent') {
-          arcs.push({ from: tId, to: sinkPlace, type: 'T→P' });
+          arcs.push({ from: tId, to: scopeSink, type: 'T→P' });
         }
       }
       continue;
@@ -177,32 +255,117 @@ function bpmnToPN(proc) {
     // Connect: incoming places → transition → outgoing places
     connectTransition(tId, node.id, flatEdges, places, arcs);
 
-    // Start event: source place → transition
+    // Start event: this scope's source place → transition. Several start events in one scope
+    // are XOR alternatives over that scope's single entry token — OMG §10.4.2's reading, and
+    // what the process level has always done.
     if (node.type === 'startEvent') {
-      arcs.push({ from: sourcePlace, to: tId, type: 'P→T' });
+      arcs.push({ from: scopeSource, to: tId, type: 'P→T' });
     }
 
-    // End event: transition → sink place
+    // End event: transition → this scope's sink place. Several end events in one scope can put
+    // more than one token on it; WF02 then reports the accumulation, exactly as it already does
+    // for the process-level `p_sink`.
     if (node.type === 'endEvent') {
-      arcs.push({ from: tId, to: sinkPlace, type: 'T→P' });
+      arcs.push({ from: tId, to: scopeSink, type: 'T→P' });
+    }
+  }
+}
+
+/**
+ * Translate a container node into a proper subnet:
+ *
+ *   outer incoming places ──► t_C#enter ──► p_C#source
+ *                                              │
+ *                          children, built with scope (p_C#source, p_C#sink)
+ *                                              │
+ *   outer outgoing places ◄── t_C#exit  ◄── p_C#sink
+ *
+ * `#` is the reserved separator for synthesized container ids, and it is safe by construction
+ * rather than by convention: `references/input-schema.json` constrains `Node.id` to
+ * `^[a-zA-Z_][a-zA-Z0-9_-]*$`, so no node id can contain `#`. Every other net id
+ * (`p_<src>_<tgt>`, `t_<id>`, `t_<id>_choice_<i>`, `t_<id>_merge_<i>`, and downstream
+ * `pmsg_<mfId>`, `<poolId>::`, `<tId>__recv_<mfId>`) is assembled from node ids and ASCII-word
+ * literals. The two id spaces therefore cannot intersect.
+ *
+ * Only the container's OWN two transitions carry `#`. Ordinary transitions inside a container
+ * keep their plain names, because `scripts/scenarios/format.js`'s `CHOICE_TRANSITION_RE`
+ * (`/^t_(.+)_choice_(\d+)$/`) has to keep matching a gateway that happens to live inside a
+ * subprocess — every decision-label recovery path depends on it.
+ */
+function buildContainer(node, ctx) {
+  const { places, transitions, arcs, skipped, flatEdges } = ctx;
+
+  const label = node.name || node.id;
+  const children = node.nodes || [];
+  const hasStart = children.some(n => n.type === 'startEvent');
+  const hasEnd = children.some(n => n.type === 'endEvent');
+
+  // A container without an inner start or an inner end has no well-defined entry or exit
+  // marking, so there is nothing to route a token through. Fall back to the atomic treatment
+  // (one transition, wired to the outer edges) and DISCLOSE the under-model rather than let it
+  // pass as a faithful translation — `scripts/scenarios/format.js` renders a non-artifact skip
+  // reason as an explicit "not modelled at all" note. Rejecting such input in S11 instead would
+  // be a new input restriction, which is a separate decision from this translation fix.
+  if (!hasStart || !hasEnd) {
+    const tId = `t_${node.id}`;
+    transitions.set(tId, { id: tId, label, bpmnNodeId: node.id });
+    connectTransition(tId, node.id, flatEdges, places, arcs);
+    skipped.push({ id: node.id, reason: 'subProcessWithoutStartOrEnd' });
+    return;
+  }
+
+  const scopeSource = `p_${node.id}#source`;
+  const scopeSink = `p_${node.id}#sink`;
+  places.set(scopeSource, { id: scopeSource, label: `${label} source` });
+  places.set(scopeSink, { id: scopeSink, label: `${label} sink` });
+
+  // `inEdges`/`outEdges` filter the FLATTENED edge list, not `node.edges`: an outer edge into
+  // the container lives in the parent's edge list while an inner edge lives in the child's, and
+  // filtering the flattened list by node id gets both right. This relies on node ids being
+  // unique across nesting levels — an assumption the repo already makes (`redesign-core.js`'s
+  // `collectIds` flattens every level into one `Set`) and which `net-check.js`'s NC06 checks.
+  const inEdges = flatEdges.filter(e => e.target === node.id);
+  const outEdges = flatEdges.filter(e => e.source === node.id);
+
+  if (inEdges.length > 1) {
+    // One entry transition per incoming edge, each consuming ONLY its own place. A single
+    // transition consuming all of them would demand a token on every incoming flow at once —
+    // AND semantics, the exact defect the implicit-merge branch in `buildScope` exists to fix
+    // for plain nodes.
+    for (let i = 0; i < inEdges.length; i++) {
+      const tId = `t_${node.id}#enter#${i}`;
+      transitions.set(tId, { id: tId, label: `${label}[enter${i}]`, bpmnNodeId: node.id, role: 'enter' });
+      const inPlace = `p_${inEdges[i].source}_${inEdges[i].target}`;
+      if (places.has(inPlace)) {
+        arcs.push({ from: inPlace, to: tId, type: 'P→T' });
+      }
+      arcs.push({ from: tId, to: scopeSource, type: 'T→P' });
+    }
+  } else {
+    const tId = `t_${node.id}#enter`;
+    transitions.set(tId, { id: tId, label: `${label}[enter]`, bpmnNodeId: node.id, role: 'enter' });
+    for (const ie of inEdges) {
+      const inPlace = `p_${ie.source}_${ie.target}`;
+      if (places.has(inPlace)) {
+        arcs.push({ from: inPlace, to: tId, type: 'P→T' });
+      }
+    }
+    arcs.push({ from: tId, to: scopeSource, type: 'T→P' });
+  }
+
+  // The exit side needs no such split: it has exactly one input place (`p_C#sink`), and its
+  // multi-output case is the implicit parallel split `connectTransition` already produces.
+  const exitId = `t_${node.id}#exit`;
+  transitions.set(exitId, { id: exitId, label: `${label}[exit]`, bpmnNodeId: node.id, role: 'exit' });
+  arcs.push({ from: scopeSink, to: exitId, type: 'P→T' });
+  for (const oe of outEdges) {
+    const outPlace = `p_${oe.source}_${oe.target}`;
+    if (places.has(outPlace)) {
+      arcs.push({ from: exitId, to: outPlace, type: 'T→P' });
     }
   }
 
-  // Initial marking: 1 token on source place
-  const initialMarking = new Map();
-  for (const [pid] of places) {
-    initialMarking.set(pid, 0);
-  }
-  initialMarking.set(sourcePlace, 1);
-
-  // flatNodes/flatEdges travel with the net on purpose. Anything reasoning about cycles
-  // has to use the *same* graph the places were named from — `scripts/scenarios/`
-  // does — and handing back the actual arrays guarantees identity, where re-running the
-  // flatten outside would only ever guarantee agreement.
-  return {
-    places, transitions, arcs, initialMarking, sinkPlace, sourcePlace, orGateways, skipped,
-    flatNodes, flatEdges,
-  };
+  buildScope(node, scopeSource, scopeSink, ctx);
 }
 
 function connectTransition(tId, nodeId, edges, places, arcs) {
@@ -224,27 +387,26 @@ function connectTransition(tId, nodeId, edges, places, arcs) {
 }
 
 /**
- * Flatten expanded subprocesses into a flat node list.
+ * Every node at every nesting level, parent BEFORE its children — the same shape
+ * `di-check.js` and `coordinates.js`'s `flattenProcessNodes` produce. A container used to be
+ * REPLACED by its children here, which is what made it invisible to everything downstream.
  */
 function flattenNodes(nodes) {
-  const result = [];
-  for (const n of nodes) {
-    if (n.type === 'subProcess' && n.isExpanded && n.nodes?.length) {
-      result.push(...flattenNodes(n.nodes));
-    } else {
-      result.push(n);
-    }
+  const out = [];
+  for (const n of nodes || []) {
+    out.push(n);
+    if (n.nodes?.length) out.push(...flattenNodes(n.nodes));
   }
-  return result;
+  return out;
 }
 
 /**
- * Flatten edges: include subprocess-internal edges.
+ * Flatten edges: include container-internal edges at every nesting level.
  */
 function flattenEdges(nodes, edges) {
   const result = [...edges];
-  for (const n of nodes) {
-    if (n.type === 'subProcess' && n.isExpanded && n.nodes?.length) {
+  for (const n of nodes || []) {
+    if (n.nodes?.length) {
       result.push(...flattenEdges(n.nodes, n.edges || []));
     }
   }
