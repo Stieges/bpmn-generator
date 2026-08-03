@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -471,13 +471,20 @@ function xmllintAvailable() {
   }
 }
 
-const describeIfXmllint = xmllintAvailable() ? describe : describe.skip;
+const xsdPath = resolve(__dirname, '../../references/omg-spec/normative/dmn/DMN13.xsd');
+
+// Two independent dependencies: the xmllint binary and the schema file. Guard
+// on both — a worktree or fresh clone can have xmllint installed but not yet
+// carry the (tracked, but not necessarily checked out in every worktree)
+// schema files, and the reverse (schema present, no xmllint) is the common
+// dev-machine-without-libxml2 case. Mirrors the existsSync-return pattern
+// scripts/bpmn/pipeline.test.js already uses twice for the OMG spec directory.
+const describeIfXmllint = (xmllintAvailable() && existsSync(xsdPath)) ? describe : describe.skip;
 
 describeIfXmllint('generateDmnXml — validates against the normative XSD', () => {
   test('discount-decision.json produces XSD-valid DMN 1.3', async () => {
     const dc = good();
     const xml = await generateDmnXml(dc, oneNodeDiagram('dec_discountLevel'));
-    const xsdPath = resolve(__dirname, '../../references/omg-spec/normative/dmn/DMN13.xsd');
     expect(() => execFileSync('xmllint', ['--noout', '--schema', xsdPath, '-'], {
       input: xml, stdio: ['pipe', 'pipe', 'pipe'],
     })).not.toThrow();
