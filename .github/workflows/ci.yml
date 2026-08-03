@@ -26,6 +26,9 @@ jobs:
           cache: npm
           cache-dependency-path: scripts/package-lock.json
 
+      - name: DEBUG xmllint probe (temporary, reverted after this commit)
+        run: which xmllint && xmllint --version || echo "xmllint NOT FOUND"
+
       - name: Install dependencies
         working-directory: scripts
         run: npm ci
