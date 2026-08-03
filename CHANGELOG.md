@@ -66,7 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   subprocess having already finished) and a host built through the implicit-merge branch (one per
   `t_<h>_merge_<i>`) both fall out without a special case. A boundary event whose host cannot be
   found gets no transition at all and is disclosed on `pn.skipped`, rather than recreating the
-  unfireable transition.
+  unfireable transition — and the place for its outgoing flow, minted before the skip was known,
+  is declared on the new `pn.unproducedPlaces` so `net-check.js`'s NC03a exempts it. Without that
+  the guard reported a *translation* defect (ERROR) for what is a malformed *model*, the category
+  error its own header forbids; the list is applied to NC03a alone, never NC03b, so a genuinely
+  unproduced place is still caught. A boundary event attached to another boundary event
+  (`attachedToRef` is typed `Activity`, so this is illegal, and S13 does not reject it) is now
+  refused outright rather than resolving or not by declaration order.
 - **`bpmnToPN` no longer drops an expanded subprocess container while flattening, silently
   disconnecting the net.** `flattenNodes` replaced a container with its children — the container
   itself got no transition, and the outer edges naming it became places nothing produced and
