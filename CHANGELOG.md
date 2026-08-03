@@ -504,15 +504,15 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   `tests/fixtures/subprocess-collapsed-children.json` has exactly such a node. WF01
   (`workflow_net`, opt-in) is still the only layer that names it. Making S04 descend is a separate
   change with a separate blast radius and was deliberately not made here.
-- **`OMG_NODE_FIELD_SCOPE`'s `allowed` sets are fenced against being *too wide*, not against being
-  *too narrow*.** `scripts/bpmn/types.test.js` proves each set only ever names real `NodeType`
-  enum members and round-trips a correctly- and an incorrectly-typed value through `bpmn-moddle`
-  for every entry — both directions catch a class the table wrongly *grants* a field to. Neither
-  catches the opposite mistake: a class OMG genuinely grants a field to that the table's `allowed`
-  set omits. In that shape `isFieldOutOfScope` would report a false S15 drop and `buildFlowNode`
-  would silently discard a value the author was entitled to write, for a field/class pair no
-  current fixture exercises. Closing it means reading `bpmn-moddle`'s own metamodel for each of
-  the six fields and comparing both directions, not just the one the current tests take.
+- **`isSequenceFlowExempt` carries the same narrowness `OMG_NODE_FIELD_SCOPE` was just fenced
+  against, in a separate hard-coded guard.** The table's `allowed` sets now *are* checked in both
+  directions against `bpmn-moddle`'s metamodel (`scripts/bpmn/types.test.js`, "no `allowed` set is
+  too wide OR too narrow") — that gap is closed. But `isSequenceFlowExempt`'s own clause is
+  literally `type === 'subProcess' && isEventSubProcess`, so an event **`transaction`** still trips
+  S04 and S07: two always-on rules reporting a node that is legitimately entered by its own start
+  event rather than by a sequence flow. Same root cause as the entry that closed, different guard,
+  and the fence cannot see it because it only covers the table. The natural closure is deriving
+  that clause from `OMG_NODE_FIELD_SCOPE` instead of restating it.
 - **The `S15`/`buildFlowNode` round trip proves *acceptance*, not *meaning*.** The oracle added
   while fixing `isCollection` (see *Fixed* above) asks whether `bpmn-moddle` re-parses the emitted
   attribute without an `unknown attribute` warning — a real, external check, but one that can only
