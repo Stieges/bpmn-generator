@@ -13,6 +13,23 @@ rules/*.json        → Profile (Severity-Overrides, Layer-Deaktivierung)
 **Erweiterbar:** Neue Regeln = neues Objekt im `RULES`-Array in `rules.js`.
 **Konfigurierbar:** Profile ueberschreiben Severities oder deaktivieren ganze Layer.
 
+**Sprache in diesem Dokument** — die Regel steht hier einmal vollständig, weil ihre kurze Fassung
+(„neuer Inhalt ist Englisch") schon zweimal falsch verstanden worden ist:
+
+- Ein **neuer Abschnitt** — eine Regel, eine Schicht, ein Kapitel, das es vorher nicht gab — wird
+  **englisch** geschrieben. So entstanden M11, S14 und der DMN-Teil, jeder mit einer eigenen
+  Notiz.
+- Eine **Änderung an einem vorhandenen deutschen Abschnitt** bleibt **deutsch**, egal wie groß
+  sie ist. Auch eine vollständige inhaltliche Neufassung ist eine Änderung, keine Neuanlage. Der
+  Bestand wird **nicht** als Nebenwirkung einer Regeländerung übersetzt — das ist der ganze Sinn
+  der Konvention, denn eine Übersetzung im selben Commit macht die eigentliche inhaltliche
+  Änderung im Diff unsichtbar.
+- Im Zweifel entscheidet die Sprache des Abschnitts, den man anfasst, nicht die des Commits.
+
+Für Code gilt das nicht: `description`-Felder und Kommentare in `scripts/` sind für neuen Inhalt
+englisch, unabhängig davon, in welcher Sprache dieses Dokument die Regel zusammenfasst (siehe die
+Notiz über der Regel-Tabelle unten).
+
 ## Quellen
 
 | Kuerzel | Quelle |
@@ -32,105 +49,116 @@ und S14, die per Default `WARNING` sind und daher melden, ohne die Generierung z
 Severity steht pro Regel in `defaultSeverity` (`scripts/bpmn/rules.js`) und ist ueber Profile
 ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 
+Die Spalte „Regel" ist eine **deutsche Zusammenfassung**, nicht der Wortlaut. Maßgeblich ist
+immer das Feld `description` der jeweiligen Regel in `scripts/bpmn/rules.js` — dort steht bei
+neueren Regeln englischer Text. Das ist Absicht: eine zweite, unabhängig gepflegte Formulierung
+wäre genau das, was auseinanderlaufen kann, eine als solche gekennzeichnete Zusammenfassung nicht.
+Wer eine Regel ändert, aktualisiert `description` und passt diese Zeile sinngemäß an.
+
 | ID | Regel | Referenz | Status |
 |----|-------|----------|--------|
 | S01 | Jeder Prozess hat mindestens ein Start-Event | OMG §10.4.2, 7PMG G3 | implementiert |
 | S02 | Jeder Prozess hat mindestens ein End-Event | OMG §10.4.2, 7PMG G3 | implementiert |
 | S03 | Kanten referenzieren nur existierende Nodes (source/target) | OMG §10.3.1 | implementiert |
-| S04 | Every node is reached by an incoming sequence flow — no isolated and no unreachable nodes (Severity WARNING) | van der Aalst (1997), WF-net connectedness (exhaustively: WF01) — deliberately no OMG clause, see below | implementiert |
+| S04 | Jeder Node wird von einer eingehenden Sequenzkante erreicht — keine isolierten und keine unerreichbaren Nodes (Severity WARNING) | van der Aalst (1997), WF-Netz-Zusammenhang (erschoepfend: WF01) — bewusst keine OMG-Stelle, siehe unten | implementiert |
 | S05 | Kein Deadlock: XOR-Split darf keinen AND-Join auf exklusiven Pfaden speisen | OMG §10.5, Silver Ch.5, 7PMG G4, CMOF: ExclusiveGateway/ParallelGateway superClass="Gateway"; Gateway.gatewayDirection : GatewayDirection {Unspecified, Converging, Diverging, Mixed} | implementiert |
 | S06 | Kein Deadlock: Inclusive-Split darf keinen AND-Join auf exklusiven Pfaden speisen | OMG §10.5, CMOF: InclusiveGateway superClass="Gateway" mit default : SequenceFlow | implementiert |
 | S07 | Jeder Pfad vom Start muss ein End-Event erreichen koennen — Nodes ohne ausgehende Kante (Severity WARNING) | 7PMG G1 | implementiert |
 | S08 | Boundary-Event-Pfade muessen in End-Event terminieren (Severity WARNING) | OMG §10.4.4, BEF4LLM | implementiert |
 | S09 | Message Flows nur zwischen verschiedenen Pools | OMG §9.4 | implementiert |
-| S10 | Message Flow referential integrity — the endpoint exists, and where it names a node that node is an InteractionNode | OMG §9.4, §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; TextAnnotation/Group are superClass="Artifact" (not even FlowNodes), DataObject-/DataStoreReference are FlowElements | implementiert |
+| S10 | Message Flows: Endpunkte muessen existieren, und wo sie einen Knoten benennen, muss dieser ein InteractionNode sein | OMG §9.4, §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; TextAnnotation/Group sind superClass="Artifact" (nicht einmal FlowNodes), DataObject-/DataStoreReference sind FlowElements | implementiert |
 | S11 | SubProcess-Kinder: Start-Event + End-Event vorhanden | OMG §10.2.1 | implementiert |
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
 | S13 | Boundary Event muss an einer existierenden Aktivität im selben Container hängen — und der Host muss wirklich eine Aktivität sein | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
 | S14 | Message Flow source/target darf kein Container sein — der Klasse nach (SubProcess/Transaction/AdHocSubProcess/CallActivity) oder der Struktur nach (eigenes `nodes`-Array) (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
 
-**On S04:** the rule asks about **incoming** edges, not about edges at all — and that is a
-correction, not a rewording.
+**Zu S04:** Die Regel fragt nach **eingehenden** Kanten, nicht nach Kanten überhaupt — und das
+ist eine Korrektur, keine Umformulierung.
 
-Up to and including v3.6, S04 built its set of "connected" nodes as *sources ∪ targets*. A node
-with exactly one **outgoing** edge and no incoming one therefore counted as connected and passed;
-S07 checks the mirror half (a missing outgoing edge) and was silent too. A stranded
-`parallelGateway` — nothing leads into it, everything behind it is dead — validated completely
-clean under the default profile. The only layer that named it was WF01, and `workflow_net` is
-opt-in. That was not a deliberate narrowing but a blind spot: "isolated" *describes* the loudest
-case, it is not the property at stake. The property is reachability.
+Bis einschließlich v3.6 bildete S04 die Menge der „verbundenen" Knoten als *Quellen ∪ Ziele*.
+Ein Knoten mit genau einer **ausgehenden** und keiner eingehenden Kante galt damit als verbunden
+und bestand die Regel; S07 prüft die spiegelbildliche Hälfte (fehlende ausgehende Kante) und
+schwieg ebenfalls. Ein gestrandetes `parallelGateway` — nichts führt hinein, alles dahinter ist
+tot — validierte unter dem Default-Profil vollständig sauber. Benannt hat es nur WF01, und die
+`workflow_net`-Schicht ist opt-in. Das war keine bewusste Engfassung, sondern ein blinder Fleck:
+„isoliert" *beschreibt* den auffälligsten Fall, es ist nicht die Eigenschaft, um die es geht. Die
+Eigenschaft ist Erreichbarkeit.
 
-The set is now *targets only*.
+Die Menge ist jetzt *nur die Ziele*.
 
-**Two changes shipped together here, and they do not both point the same way — do not read the
-one as covering the other.** Anyone auditing a warning that appeared or disappeared needs them
-separated:
+**Hier sind zwei Änderungen zusammen ausgeliefert worden, und sie zeigen nicht in dieselbe
+Richtung — die eine deckt die andere nicht ab.** Wer eine neu aufgetauchte oder verschwundene
+Warnung prüft, braucht sie getrennt:
 
-1. The **predicate** change (union → targets) is strictly a superset. Every node the old
-   predicate flagged, the new one flags too, and it additionally flags nodes with an outgoing
-   edge and no incoming one. Measured over all 21 fixture files: **zero additional nodes**, since
-   no fixture at the top level has that shape.
-2. The **exemption set** change (a hand-rolled list → `isSequenceFlowExempt`) deliberately
-   *removes* findings, and that is its purpose. A fully isolated compensation activity, for
-   instance, was flagged by the old S04 and is silent now — correctly, because a compensation
-   association, not a sequence flow, is what reaches it. The three shapes affected are named in
-   the table below; nothing beyond them is silenced.
+1. Die Änderung am **Prädikat** (Vereinigung → Ziele) ist strikt eine Obermenge. Jeder Knoten,
+   den das alte Prädikat meldete, wird weiterhin gemeldet, und zusätzlich Knoten mit ausgehender
+   und ohne eingehende Kante. Über alle 21 Fixture-Dateien gemessen: **null zusätzliche Knoten**,
+   weil kein Fixture diese Form auf oberster Ebene enthält.
+2. Die Änderung an der **Ausnahmemenge** (handgeschriebene Liste → `isSequenceFlowExempt`)
+   entfernt bewusst Befunde — das ist ihr Zweck. Eine vollständig isolierte
+   Kompensations-Aktivität etwa meldete die alte S04 und die neue schweigt dazu, und zwar
+   richtigerweise: erreicht wird sie durch eine Kompensations-Assoziation, nicht durch eine
+   Sequenzkante. Die drei betroffenen Formen stehen in der Tabelle weiter unten; darüber hinaus
+   wird nichts stillgelegt.
 
-So: the rule now flags a strictly larger set of *unreachable* nodes and a strictly smaller set of
-*exempt* ones. It is not true that everything previously reported is still reported.
+Also: Die Regel meldet jetzt eine strikt größere Menge *unerreichbarer* Knoten und eine strikt
+kleinere Menge *ausgenommener*. Es stimmt **nicht**, dass alles bisher Gemeldete weiterhin gemeldet
+wird.
 
-Two message texts instead of one: a node with no edge at all still reads *appears isolated*; one
-with an outgoing edge reads *has no incoming flow*, because "isolated" is simply false about a
-wired-up node and would send the reader to the wrong place.
+Zwei Meldungstexte statt einem: Hat der Knoten gar keine Kante, heißt es weiterhin *appears
+isolated*; hat er eine ausgehende, heißt es *has no incoming flow* — „isoliert" wäre über einen
+verdrahteten Knoten schlicht falsch und würde den Leser an die falsche Stelle schicken.
 
-**On the citation.** S04 cited `7PMG G2` until now. That did not carry the rule: 7PMG G2 is
-*"minimize the routing paths per element"* (Mendling/Reijers/van der Aalst 2010) — a complexity
-guideline about *how many* edges touch an element, which says nothing about an element having
-none. The citation did not support even the old, narrow reading. What does support the rule is the
-connectedness property a workflow net is *defined* by (van der Aalst 1997, *Verification of
-Workflow Nets*): every node lies on a directed path from source to sink, so a node no sequence
-flow reaches lies on none. WF01 checks that property exhaustively; S04 is its always-on, purely
-local approximation (no incoming edge, rather than no path from the start event).
+**Zur Quellenangabe.** S04 zitierte bis hierher `7PMG G2`. Das trug die Regel nicht: 7PMG G2 ist
+*„minimize the routing paths per element"* (Mendling/Reijers/van der Aalst 2010) — eine
+Komplexitäts-Leitlinie über die *Anzahl* der Kanten an einem Element, die über ein Element ohne
+Kanten nichts aussagt. Die Quelle stützte also nicht einmal die alte, enge Lesart. Was die Regel
+trägt, ist die Zusammenhangs-Eigenschaft, über die ein Workflow-Netz definiert ist (van der Aalst
+1997, *Verification of Workflow Nets*): Jeder Knoten liegt auf einem gerichteten Pfad von der
+Quelle zur Senke, ein Knoten, den keine Sequenzkante erreicht, liegt auf keinem. Genau diese
+Eigenschaft prüft WF01 erschöpfend; S04 ist ihre immer aktive, rein lokale Näherung (keine
+eingehende Kante, statt: kein Pfad vom Start-Event).
 
-**No OMG clause is cited, deliberately.** Checked against
-`references/omg-spec/normative/BPMN-2.0.2-spec.pdf`: §7.3.1 is *"Basic BPMN Modeling Elements"*, a
-shape catalogue. The Sequence Flow Connection Rules are **§7.6.1 / Table 7.3**, and that clause
-governs which *pairs* may be connected while saying in its own words that "the quantity of
-connections into and out of an object is subject to various configuration dependencies [and] are
-not specified here" — the spec expressly declines to require an incoming flow. There is no clause
-to cite, and citing one anyway is how S04 acquired a wrong reference twice already.
+**Es wird bewusst keine OMG-Stelle zitiert.** Geprüft gegen
+`references/omg-spec/normative/BPMN-2.0.2-spec.pdf`: §7.3.1 ist *„Basic BPMN Modeling Elements"*,
+ein Formen-Katalog. Die Sequence Flow Connection Rules sind **§7.6.1 / Table 7.3**, und diese
+Stelle regelt, welche *Paare* verbunden werden dürfen, während sie im eigenen Wortlaut sagt: „the
+quantity of connections into and out of an object is subject to various configuration dependencies
+[and] are not specified here" — die Spezifikation verzichtet also ausdrücklich darauf, eine
+eingehende Kante zu fordern. Es gibt keine Stelle, die man zitieren könnte, und genau das
+trotzdem zu tun ist der Weg, auf dem S04 bereits zweimal zu einer falschen Referenz gekommen ist.
 
-**Not recursive.** S04 is `scope: 'process'`; `runRules` dispatches it per pool over top-level
-nodes only. A candidate *inside* a container is therefore never seen — `b_task1` in
-`tests/fixtures/subprocess-collapsed-children.json` has an outgoing edge and no incoming one and
-is a live instance — which is part of why the measured impact is zero. Making it descend is a
-separate change with a separate blast radius, deliberately not made here.
+**Nicht rekursiv.** S04 hat `scope: 'process'`, `runRules` ruft sie pro Pool über die Knoten der
+obersten Ebene auf. Ein Kandidat *innerhalb* eines Containers wird deshalb nie gesehen — `b_task1`
+in `tests/fixtures/subprocess-collapsed-children.json` hat eine ausgehende und keine eingehende
+Kante und ist ein lebendes Beispiel — was mit ein Grund für die gemessene Null ist. Sie absteigen
+zu lassen ist eine eigene Änderung mit eigener Reichweite, hier bewusst nicht gemacht.
 
-**On S04 and S07 together — what a sequence flow cannot reach in the first place.** Each rule had
-its own hand-written exemption list and each was incomplete, in different ways, which is why the
-same three model shapes tripped sometimes one warning and sometimes both:
+**Zu S04 und S07 gemeinsam — was eine Sequenzkante gar nicht erreichen kann.** Beide Regeln hatten
+eine eigene, handgeschriebene Ausnahmeliste, und beide waren unvollständig, auf je andere Weise —
+weshalb dieselben drei Modellformen mal die eine, mal beide Warnungen auslösten:
 
-| Shape | old S04 | old S07 | why it is exempt |
-|-------|---------|---------|------------------|
-| event subprocess (`isEventSubProcess`) | "appears isolated" | "no outgoing flow" | OMG `triggeredByEvent` — entered by its own start event; no sequence flow crosses into or out of it |
-| compensation activity (`isCompensation`) | "appears isolated" | "no outgoing flow" | OMG `isForCompensation` — triggered by a compensation association, not by a sequence flow |
-| `group` (artifact) | already exempt (`isArtifact`) | "no outgoing flow" | an artifact — associations connect it, not sequence flows. §7.6.1's own note on Table 7.3 is explicit: "Pool, Lane, Data Object, Group, and Text Annotation are not listed in the table", i.e. they are not objects that have sequence flows at all. S07's literal list knew only the other three artifact types |
+| Form | vorher S04 | vorher S07 | Grund für die Ausnahme |
+|------|-----------|-----------|-------------------------|
+| Ereignis-Subprozess (`isEventSubProcess`) | „appears isolated" | „no outgoing flow" | OMG `triggeredByEvent` — wird durch sein eigenes Start-Event betreten, keine Sequenzkante führt hinein oder heraus |
+| Kompensations-Aktivität (`isCompensation`) | „appears isolated" | „no outgoing flow" | OMG `isForCompensation` — ausgelöst durch eine Kompensations-Assoziation, nicht durch eine Sequenzkante |
+| `group` (Artefakt) | schon ausgenommen (`isArtifact`) | „no outgoing flow" | Artefakt — Assoziationen verbinden es, keine Sequenzkanten. §7.6.1s eigene Anmerkung zu Table 7.3 ist ausdrücklich: „Pool, Lane, Data Object, Group, and Text Annotation are not listed in the table", sie sind also gar keine Objekte mit Sequenzkanten. S07s Literalliste kannte nur die anderen drei Artefakt-Typen |
 
-Both rules now call one function, `isSequenceFlowExempt` (`scripts/bpmn/types.js`), which holds
-the exemptions together with their individual reasons (`startEvent`, boundary event, artifact,
-`isCompensation`, `subProcess` with `isEventSubProcess`). Nothing is newly rejected by this half;
-it is signal quality. The occasion for it is that two of the three shapes are actively recommended
-in `references/prompt-template.md` — the pipeline was asking the model to produce them and then
-warning about them.
+Beide Regeln rufen jetzt eine Funktion, `isSequenceFlowExempt` (`scripts/bpmn/types.js`), die die
+Ausnahmen samt ihrer jeweiligen Begründung an einer Stelle führt (`startEvent`, Boundary Event,
+Artefakt, `isCompensation`, `subProcess` mit `isEventSubProcess`). Diese Hälfte beanstandet nichts
+neu, sie ist reine Signalqualität. Anlass ist, dass zwei der drei Formen in
+`references/prompt-template.md` ausdrücklich empfohlen werden — die Pipeline forderte das Modell
+also auf, sie zu erzeugen, und warnte anschließend davor.
 
-**Both instance flags are guarded on the node's class, and the guard matters.**
-`references/input-schema.json` declares `isCompensation` and `isEventSubProcess` as generic `Node`
-properties, valid on any `NodeType`; OMG scopes them far more tightly (`isForCompensation` is an
-`Activity` attribute, `triggeredByEvent` a `SubProcess` one). Unguarded, either flag would be a
-universal opt-out of both always-on rules: `{ type: 'parallelGateway', isCompensation: true }`
-with no edges at all would be silent in S04 *and* S07, so a genuinely isolated gateway would be
-reported by nothing. The exemption is therefore as narrow as the OMG attribute, not as wide as the
-schema field.
+**Beide Instanz-Flags sind auf die Klasse des Knotens eingeschränkt, und das ist tragend.**
+`references/input-schema.json` deklariert `isCompensation` und `isEventSubProcess` als generische
+Eigenschaften von `Node`, gültig auf jedem `NodeType`; OMG fasst sie deutlich enger
+(`isForCompensation` ist ein Attribut von `Activity`, `triggeredByEvent` eines von `SubProcess`).
+Ohne diese Einschränkung wäre jedes der beiden Flags ein universeller Ausstieg aus beiden immer
+aktiven Regeln: `{ type: 'parallelGateway', isCompensation: true }` ganz ohne Kanten wäre in S04
+*und* S07 stumm, ein wirklich isoliertes Gateway also von nichts mehr gemeldet. Die Ausnahme ist
+deshalb so eng wie das OMG-Attribut, für das sie steht, und nicht so weit wie das Schema-Feld.
 
 **Zu S13:** `attachedToRef` ist im OMG-Schema Pflicht (1..1). Ohne diese Prüfung lief ein
 ins Leere zeigendes `attachedTo` bis in die Ausgabe durch und erzeugte ein `boundaryEvent`
@@ -144,19 +172,20 @@ Fehler durch: ein Boundary Event *innerhalb* eines Subprozesses ohne `attachedTo
 BPMN, grüne Validierung) und den Gegenfall, ein Boundary Event der obersten Ebene, das auf
 einen Knoten *innerhalb* eines Subprozesses zeigt (auflösbar, aber laut BPMN unzulässig).
 
-**On S13's host check.** S13 now also checks the host's **class**. `BoundaryEvent.attachedToRef` is
-typed `Activity [1..1]` in the CMOF, and the rule finally asks that (`isActivity`,
-`scripts/bpmn/types.js`) instead of only whether the id exists in the same container. Before, a
-boundary event on a gateway, on an event, on an artifact or on another boundary event passed. The
-shape was caught only in the translation — `wireBoundaryEvents` (`scripts/bpmn/workflow-net.js`)
-gives such an event no transition and discloses it on `pn.skipped` as `boundaryEventWithoutHost` —
-so it was detected and disclosed by everything except the layer that talks to the author, which
-called such a model clean. Both layers now say the same thing.
+**Zur Host-Prüfung von S13.** S13 prüft jetzt zusätzlich die **Klasse** des Hosts.
+`BoundaryEvent.attachedToRef` ist im CMOF auf `Activity [1..1]` typisiert, und die Regel fragt das
+endlich auch (`isActivity`, `scripts/bpmn/types.js`), statt nur, ob die Id existiert und im selben
+Container liegt. Vorher kam ein Boundary Event an einem Gateway, an einem Event, an einem Artefakt
+oder an einem anderen Boundary Event durch. Aufgefangen wurde die Form nur in der Übersetzung —
+`wireBoundaryEvents` (`scripts/bpmn/workflow-net.js`) gibt so einem Ereignis gar keine Transition
+und legt es als `boundaryEventWithoutHost` auf `pn.skipped` offen — sie war also von allem erkannt
+und offengelegt ausser von der Schicht, die mit dem Autor spricht, und die nannte ein solches
+Modell sauber. Beide Schichten sagen jetzt dasselbe.
 
-`isActivity` and expressly **not** a task list: `SubProcess`, `Transaction` and `CallActivity` are
-Activity subclasses, and a boundary event attaches to them exactly as legally as to a task (an
-error boundary on a subprocess is the everyday case). Measured over the fixtures: **0 of 6**
-boundary events newly fail.
+`isActivity` und ausdrücklich **keine** Aufgaben-Liste: `SubProcess`, `Transaction` und
+`CallActivity` sind Activity-Unterklassen, ein Boundary Event hängt an ihnen genauso zulässig wie
+an einer Aufgabe (Error-Boundary an einem Sub-Prozess ist der Regelfall). Über die Fixtures
+gemessen: **0 von 6** Boundary Events fallen neu durch.
 
 **On S05/S06:** both rules used to ask *"do two branches of this split reach the AND-join?"*.
 That is a reachability question, not a token question, and it rejected sound models at ERROR
@@ -634,3 +663,9 @@ and `itemDefinition`.
 2. `check`-Funktion implementieren (Platzhalter: `() => ({ pass: true })`)
 3. Tests schreiben
 4. OMG-Compliance-Mapping in `references/omg-compliance.md` aktualisieren
+5. Dieses Dokument nachziehen — Zeile in der Layer-Tabelle, bei Bedarf ein Langtext-Abschnitt.
+   **Sprache:** ein *neuer* Abschnitt ist englisch, eine *Änderung* an einem vorhandenen
+   deutschen Abschnitt bleibt deutsch (Volltext der Konvention oben unter „Architektur"). Auch
+   eine vollständige Neufassung eines Bestandsabschnitts ist eine Änderung, keine Neuanlage.
+   Die Tabellenzeile ist eine deutsche Zusammenfassung; maßgeblich ist `description` in
+   `rules.js`.
