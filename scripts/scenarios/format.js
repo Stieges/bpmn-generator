@@ -620,11 +620,18 @@ export function describeEnumerationCompleteness(enumerationResult) {
   }
   const unresolved = stats.unresolvedEndpoints || [];
   if (unresolved.length > 0) {
-    // The `reason` is carried through rather than flattened: "names a subProcess" points the
+    // The `reason` is carried through rather than flattened: naming the container points the
     // reader at a real element and at the rule that explains it, where the bare "could not be
     // mapped" would send them looking for a node that is not missing at all.
+    //
+    // Phrased for ANY container-shaped node, not for `subProcess`. `isContainerNode`
+    // (`scripts/bpmn/types.js`) — the one predicate both this reason and S14 come from — has a
+    // structural leg as well as a class leg, so the offender may be a `callActivity`, a
+    // `transaction`, or a node of any type at all that carries its own `nodes` array. Saying
+    // "names a subProcess" told the reader about an element class the model need not contain.
     const why = {
-      container: 'names a subProcess, which is not a valid MessageFlow endpoint (S14)',
+      container: 'names a container (a subprocess-like node with a scope of its own), which is '
+        + 'not a valid MessageFlow endpoint (S14)',
       unknownId: 'matches no node and no black-box participant',
     };
     notes.push(`${unresolved.length} message flow endpoint(s) could not be mapped to a node: `

@@ -70,7 +70,7 @@ describe('collaboration composition — bpmnToPN keeps its behaviour', () => {
 
 describe('collaboration composition — mechanics', () => {
   test('each pool keeps its own source and sink, despite identical local ids', () => {
-    // bpmnToPN calls them p_source/p_sink in every pool (workflow-net.js:75-78). Without
+    // bpmnToPN calls them p_source/p_sink in every pool (`bpmnToPN`, workflow-net.js). Without
     // the pool prefix the five pools would share one source token and four of them could
     // never start — the defect this test exists to keep out.
     const lc = fixture('realistic-collaboration');
@@ -100,8 +100,8 @@ describe('collaboration composition — mechanics', () => {
 
   test('a node backed by several transitions gets the message arc on all of them', () => {
     // An XOR split as the sender: bpmnToPN makes one transition per outgoing edge
-    // (workflow-net.js:111-122), and any one of them firing IS that node executing, so
-    // every one must produce the message token.
+    // (`buildScope`'s XOR-split branch, workflow-net.js), and any one of them firing IS that
+    // node executing, so every one must produce the message token.
     const lc = {
       pools: [
         {
@@ -439,7 +439,7 @@ describe('collaboration enumeration — joint termination', () => {
   });
 
   test('improper completion at the shared sink is visible, not filtered away', () => {
-    // bpmnToPN wires every end event to ONE sink (workflow-net.js:161/181), so an AND
+    // bpmnToPN wires every end event to ONE sink (`buildScope`, workflow-net.js), so an AND
     // fork ending at two end events lands two tokens there. residualPlaces excludes the
     // sinks — a token there is the point — which used to make this read as a clean
     // finish. sinkTokens is where it shows.
@@ -861,6 +861,28 @@ describe('B10 — the container guard is class-based, not "has children"', () =>
       const refused = composeCollaboration(lc).unresolved.some(u => u.reason === 'container');
       expect([warned, refused]).toEqual([true, true]);
     }
+  });
+
+  test('…including the structural leg: a non-container TYPE carrying its own nodes', () => {
+    // The direction the shared `CONTAINER_TYPES` did NOT close, and the mirror image of the
+    // defect above. `references/input-schema.json` declares `nodes` on every `Node`, so a
+    // `userTask` with children is schema-valid; `bpmnToPN`'s `isContainer` is purely structural
+    // and gives it an entry/exit pair, so this guard refused it — while S14, asking only about
+    // the CLASS, emitted nothing and the synchronisation was dropped in silence. Worse, the
+    // reader was then told the endpoint "names a subProcess (S14)" about a node that is neither.
+    const node = { id: 'ut', type: 'userTask', name: 'Handle', nodes: [{ id: 'inner', type: 'task' }] };
+    const lc = withTarget(node);
+
+    const warnings = runRules(lc).warnings.filter(w => w.includes('mfC'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/is a userTask that carries its own `nodes`/);
+    // …and the CMOF argument about the Activity class is NOT made about a userTask, which is an
+    // InteractionNode. The reason this endpoint is refused is the scope, not the class.
+    expect(warnings[0]).not.toMatch(/is a userTask — not an InteractionNode/);
+
+    expect(composeCollaboration(lc).unresolved).toEqual([
+      { messageFlowId: 'mfC', endpoint: 'target', id: 'ut', reason: 'container' },
+    ]);
   });
 
   test('S14 and the guard read one list, so they cannot drift apart', () => {
