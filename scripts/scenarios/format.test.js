@@ -397,7 +397,13 @@ describe('completeness notes attribute each finding to its actual reason', () =>
     const note = notesFor(fixture('messageflow-to-subprocess'))
       .find(n => n.includes('message flow endpoint(s) could not be mapped to a node'));
     expect(note).toMatch(/mf_container\/source=fulfil/);
-    expect(note).toMatch(/names a subProcess, which is not a valid MessageFlow endpoint \(S14\)/);
+    expect(note).toMatch(/names a container/);
+    expect(note).toMatch(/not a valid MessageFlow endpoint \(S14\)/);
+    // Deliberately NOT the word "subProcess": `isContainerNode` (bpmn/types.js), which both this
+    // wording and S14 read, has a structural leg as well as a class leg, so the offender may be a
+    // callActivity, a transaction, or a node of any type carrying its own `nodes` array. The
+    // fixture happens to use a subProcess; the sentence must be true when it does not.
+    expect(note).not.toMatch(/names a subProcess/);
   });
 
   test('a genuine black-box endpoint keeps today\'s wording', () => {

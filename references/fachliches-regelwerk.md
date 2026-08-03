@@ -47,7 +47,7 @@ ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 | S11 | SubProcess-Kinder: Start-Event + End-Event vorhanden | OMG §10.2.1 | implementiert |
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
 | S13 | Boundary Event muss an einer existierenden Aktivität hängen | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
-| S14 | Message Flow source/target darf kein SubProcess/CallActivity sein (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
+| S14 | Message Flow source/target darf kein Container sein — der Klasse nach (SubProcess/Transaction/AdHocSubProcess/CallActivity) oder der Struktur nach (eigenes `nodes`-Array) (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
 
 **Zu S13:** `attachedToRef` ist im OMG-Schema Pflicht (1..1). Ohne diese Prüfung lief ein
 ins Leere zeigendes `attachedTo` bis in die Ausgabe durch und erzeugte ein `boundaryEvent`
@@ -60,6 +60,15 @@ Aktivitäten rekursiv, prüfte aber nur die oberste Ebene — genau verkehrt. Da
 Fehler durch: ein Boundary Event *innerhalb* eines Subprozesses ohne `attachedTo` (ungültiges
 BPMN, grüne Validierung) und den Gegenfall, ein Boundary Event der obersten Ebene, das auf
 einen Knoten *innerhalb* eines Subprozesses zeigt (auflösbar, aber laut BPMN unzulässig).
+
+**Offen bei S13:** Die Regel prüft *nicht*, dass `attachedTo` eine **Activity** benennt.
+`BoundaryEvent.attachedToRef` ist im CMOF auf `Activity [1..1]` typisiert; S13 prüft nur, dass die
+Id existiert und im selben Container liegt. Ein Boundary Event an einem Gateway, an einem Event, an
+einem Artefakt oder an einem anderen Boundary Event kommt hier also durch. Aufgefangen wird die
+Form erst in der Übersetzung: `wireBoundaryEvents` (`scripts/bpmn/workflow-net.js`) gibt so einem
+Ereignis gar keine Transition und legt es als `boundaryEventWithoutHost` auf `pn.skipped` offen.
+Damit ist die Form erkannt und offengelegt — aber von der falschen Schicht, denn `runRules` nennt
+ein solches Modell sauber.
 
 **On S05/S06:** both rules used to ask *"do two branches of this split reach the AND-join?"*.
 That is a reachability question, not a token question, and it rejected sound models at ERROR
@@ -321,15 +330,35 @@ standardised reverse link.
 
 ---
 
-## Rule S14: MessageFlow endpoints are InteractionNodes, and a SubProcess is not one
+## Rule S14: MessageFlow endpoints are InteractionNodes, and a container is not one
 
 **Layer:** Soundness | **Default Severity:** WARNING | **Scope:** global
 
 > Written in English, like M11 above.
 
-A message flow whose `source` or `target` names a `subProcess`, `transaction`, `adHocSubProcess`
-or `callActivity` is not an under-modelled but legal shape. It is a schema violation, and the CMOF
-says so without room for interpretation
+A message flow whose `source` or `target` names a container is not an under-modelled but legal
+shape, it is a schema violation. The rule asks `isContainerNode` (`scripts/bpmn/types.js`), which
+recognises a container **two** ways, and both legs are load-bearing:
+
+1. **by class** — `subProcess`, `transaction`, `adHocSubProcess`, `callActivity`. This leg is why
+   the rule is not `n.nodes?.length`: a `callActivity` never carries children and a collapsed
+   `subProcess` need not, and legality must not depend on how much of the container the author
+   wrote down.
+2. **by structure** — any node, of any type, carrying its own `nodes` array.
+   `references/input-schema.json` declares `nodes` on every `Node`, so a `userTask` with children
+   is schema-valid input, and `bpmnToPN`'s own `isContainer` is purely structural: such a node is
+   translated into an entry/exit transition pair like any other container. This leg is why the
+   rule is not `CONTAINER_TYPES.has(type)`, which is what it asked in its first cut — the
+   Petri-net composition (`scripts/scenarios/collaboration.js`) refused such an endpoint and
+   dropped the synchronisation while this rule said nothing about the same model. One predicate,
+   read by both layers, is what keeps them from disagreeing again.
+
+The message names the actual node type and states the right reason for it: the CMOF argument below
+for a container **class**, and "carries its own `nodes` — a container in everything but its
+declared type" for the structural case, where the class argument would be about a class the node is
+not in.
+
+For the class leg, the CMOF says so without room for interpretation
 (`references/omg-spec/normative/BPMN20.cmof`, line numbers verified against the file in this repo):
 
 | Element | Declaration | Line | InteractionNode? |
@@ -377,6 +406,7 @@ container endpoint outright and records it on `unresolvedEndpoints` with `reason
 | gut | `target: "Pool_Supplier"` (a black-box participant) | a `Participant` is an InteractionNode |
 | schlecht | `target: "fulfil"` (a `subProcess`) | inherits `Activity`, which is `FlowNode` only |
 | schlecht | `source: "check_credit"` (a `callActivity`) | same, and no `isExpanded` setting changes it |
+| schlecht | `target: "handle"` (a `userTask` with a `nodes` array) | carries a scope, so it is translated into an entry/exit pair — the structural leg |
 
 **Referenz:** OMG BPMN 2.0.2 §7.6.2 Table 7.4; `BPMN20.cmof` lines as tabulated above.
 
