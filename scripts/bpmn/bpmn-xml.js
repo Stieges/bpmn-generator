@@ -246,10 +246,19 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   // reporting is S15's job, in the layer that owns model defects and can say so in prose.
   for (const spec of OMG_NODE_FIELD_SCOPE) {
     const value = node[spec.field];
-    if (!value) continue;              // falsy: nothing to serialise, same as before
-    if (!spec.allowed.has(node.type)) continue;
-    // The booleans serialise as `true`; the strings carry their own value.
-    attrs[spec.attr] = typeof value === 'boolean' ? true : value;
+    if (!value) continue;                        // falsy: nothing to serialise, same as before
+    if (!spec.allowed.has(node.type)) continue;  // wrong class for this attribute
+    // Wrong TYPE is dropped too, and the expected type comes from the table rather than from
+    // `typeof value`. Inferring it from the data was a real defect: a `typeof value === 'boolean'
+    // ? true : value` passed any truthy non-boolean straight through, so `isCompensation: 'yes'`
+    // emitted `isForCompensation="yes"` — invalid against the XSD and silent, since bpmn-moddle
+    // reports attributes it does not KNOW, never values of the wrong shape.
+    //
+    // Dropped rather than coerced, and `isCompensation: 'no'` is why: `!!'no'` is `true`, so
+    // coercion would emit the exact opposite of what the author wrote, with no way to tell. A
+    // serialiser guessing at intent is worse than one that declines. S15 reports the drop.
+    if (typeof value !== spec.type) continue;
+    attrs[spec.attr] = value;
   }
   if (node.type === 'eventBasedGateway') {
     if (node.eventGatewayType) attrs.eventGatewayType = node.eventGatewayType;

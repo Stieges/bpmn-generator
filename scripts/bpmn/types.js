@@ -190,18 +190,29 @@ export const IMPLEMENTATION_TYPES = new Set([
  * than no rule at all; sharing the table makes disagreeing impossible.
  *
  * `field` is the Logic-Core name, `attr` the OMG attribute it serialises to (they differ for the
- * boolean pair), `allowed` the node types that may carry it, `scope` prose for the message.
+ * boolean pair), `allowed` the node types that may carry it, `scope` prose for the message, and
+ * `type` the JavaScript typeof the field's value must have.
+ *
+ * `type` is carried here rather than inferred from the value at serialisation time, and that is
+ * the second defect this table was extended to fix. A `typeof value === 'boolean' ? true : value`
+ * in the serialiser passes any truthy non-boolean straight through, so
+ * `{ type: 'task', isCompensation: 'yes' }` emitted `isForCompensation="yes"` — not a boolean, not
+ * valid against the XSD, and silent, because bpmn-moddle reports attributes it does not KNOW, not
+ * values of the wrong shape. The serialiser was guessing the intended type from the data it was
+ * handed; the table already knows which class each field belongs on, so knowing its type belongs
+ * here too, where it is declared once instead of inferred per call.
+ *
  * Each `allowed` set reproduces the guard that was already in `buildFlowNode`, except
- * `isCompensation` (added this phase) and `implementation` (added here) — so no field's
- * serialisation behaviour changes as a side effect of centralising them.
+ * `isCompensation` and `implementation` — so no field's serialisation behaviour changes as a side
+ * effect of centralising them.
  */
 export const OMG_NODE_FIELD_SCOPE = [
-  { field: 'isCompensation', attr: 'isForCompensation', allowed: ACTIVITY_TYPES, scope: 'an Activity' },
-  { field: 'implementation', attr: 'implementation', allowed: IMPLEMENTATION_TYPES, scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask' },
-  { field: 'isEventSubProcess', attr: 'triggeredByEvent', allowed: new Set(['subProcess']), scope: 'a subProcess' },
-  { field: 'calledElement', attr: 'calledElement', allowed: new Set(['callActivity']), scope: 'a callActivity' },
-  { field: 'scriptFormat', attr: 'scriptFormat', allowed: new Set(['scriptTask']), scope: 'a scriptTask' },
-  { field: 'isCollection', attr: 'isCollection', allowed: new Set(['dataObjectReference']), scope: 'a dataObjectReference' },
+  { field: 'isCompensation', attr: 'isForCompensation', type: 'boolean', allowed: ACTIVITY_TYPES, scope: 'an Activity' },
+  { field: 'implementation', attr: 'implementation', type: 'string', allowed: IMPLEMENTATION_TYPES, scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask' },
+  { field: 'isEventSubProcess', attr: 'triggeredByEvent', type: 'boolean', allowed: new Set(['subProcess']), scope: 'a subProcess' },
+  { field: 'calledElement', attr: 'calledElement', type: 'string', allowed: new Set(['callActivity']), scope: 'a callActivity' },
+  { field: 'scriptFormat', attr: 'scriptFormat', type: 'string', allowed: new Set(['scriptTask']), scope: 'a scriptTask' },
+  { field: 'isCollection', attr: 'isCollection', type: 'boolean', allowed: new Set(['dataObjectReference']), scope: 'a dataObjectReference' },
 ];
 
 /**
@@ -214,6 +225,24 @@ export const OMG_NODE_FIELD_SCOPE = [
  */
 export function isFieldOutOfScope(node, { field, allowed }) {
   return node?.[field] != null && !allowed.has(node.type);
+}
+
+/**
+ * Does `node` carry `field` with a value of the wrong JavaScript type?
+ *
+ * Separate from `isFieldOutOfScope` because they are different mistakes with different remedies —
+ * the field on the wrong class is "you meant a different node", the wrong type is "you meant a
+ * different value" — and a caller reporting both at once would say two confusing things about one
+ * field. `rules.js` asks the scope question first and only asks this one if the class is right.
+ *
+ * `references/input-schema.json` already declares each field's type, so the HTTP path rejects a
+ * wrong one at the schema gate. The library and CLI paths do not run that gate, which is exactly
+ * why this exists: `runPipeline` is a public API and must not depend on a caller having gone
+ * through the HTTP server to be safe.
+ */
+export function isFieldWrongType(node, { field, type }) {
+  const value = node?.[field];
+  return value != null && typeof value !== type;
 }
 
 /**

@@ -556,14 +556,29 @@ XSD-invalid.
 The narrowing therefore has to happen after the schema gate, and it has to happen in exactly one
 place. It now does: `OMG_NODE_FIELD_SCOPE` in `scripts/bpmn/types.js` is read by both consumers.
 
-| Field | OMG attribute | May sit on |
-|-------|---------------|------------|
-| `isCompensation` | `isForCompensation` | any `Activity` (every Task type, `subProcess`, `transaction`, `adHocSubProcess`, `callActivity`) |
-| `implementation` | `implementation` | `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `businessRuleTask` — **not** every Activity |
-| `isEventSubProcess` | `triggeredByEvent` | `subProcess` |
-| `calledElement` | `calledElement` | `callActivity` |
-| `scriptFormat` | `scriptFormat` | `scriptTask` |
-| `isCollection` | `isCollection` | `dataObjectReference` |
+| Field | OMG attribute | Type | May sit on |
+|-------|---------------|------|------------|
+| `isCompensation` | `isForCompensation` | boolean | any `Activity` (every Task type, `subProcess`, `transaction`, `adHocSubProcess`, `callActivity`) |
+| `implementation` | `implementation` | string | `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `businessRuleTask` — **not** every Activity |
+| `isEventSubProcess` | `triggeredByEvent` | boolean | `subProcess` |
+| `calledElement` | `calledElement` | string | `callActivity` |
+| `scriptFormat` | `scriptFormat` | string | `scriptTask` |
+| `isCollection` | `isCollection` | boolean | `dataObjectReference` |
+
+**The rule checks two things, and says only one of them at a time.** A field can be on the wrong
+*class* or carry a value of the wrong *type*. These are different mistakes with different remedies
+— "you meant a different node" versus "you meant a different value" — so the rule asks the class
+question first and only asks about the type if the class is right. One field never produces two
+overlapping sentences.
+
+**Why a wrongly-typed value is dropped and reported rather than coerced.** `isCompensation: 'no'`
+is the case that decides it: `!!'no'` is `true`, so coercing would emit
+`isForCompensation="true"` for an author who wrote `"no"` — the exact opposite of the stated
+intent, with nothing anywhere saying so. A serialiser guessing at intent is worse than one that
+declines. And dropping *without* reporting would recreate, for the value, precisely the silence S15
+exists to close for the class: `references/input-schema.json` does type these fields, so the HTTP
+path rejects a wrong one at the schema gate, but `runPipeline` and the CLI do not run that gate —
+and a public API must not depend on the caller having come through the HTTP server to be safe.
 
 **Why the rule is not phrased as "an Activity attribute on a non-Activity".** `implementation`'s
 scope is *narrower* than `Activity`: `BPMN20.cmof` grants it per class to the five invoking Task
@@ -622,6 +637,9 @@ that nothing legitimate trips it, is a reasonable later step.
 | schlecht | `{ type: "startEvent", isCompensation: true }` | an Event is not an Activity |
 | schlecht | `{ type: "subProcess", implementation: "##WebService" }` | an Activity, but not one of the five |
 | schlecht | `{ type: "exclusiveGateway", implementation: "##WebService" }` | not a Task at all |
+| schlecht | `{ type: "task", isCompensation: "yes" }` | right class, wrong type — a string, not a boolean |
+| schlecht | `{ type: "task", isCompensation: "no" }` | same, and the case that rules out coercion: `!!"no"` is `true` |
+| schlecht | `{ type: "userTask", implementation: 42 }` | right class, wrong type — a number, not a string |
 
 **Referenz:** OMG BPMN 2.0.2 §10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5
 (SubProcess), §10.2.6 (CallActivity); `BPMN20.cmof` lines as tabulated in the rule's `ref`.
