@@ -298,7 +298,7 @@ const SOUNDNESS_RULES = [
       }
       return msgs.length === 0
         ? { pass: true }
-        : { pass: false, message: msgs.join('; ') };
+        : { pass: false, messages: msgs };
     }
   },
   {
@@ -359,7 +359,7 @@ const SOUNDNESS_RULES = [
       }
       return msgs.length === 0
         ? { pass: true }
-        : { pass: false, message: msgs.join('; ') };
+        : { pass: false, messages: msgs };
     }
   },
   {
@@ -382,7 +382,7 @@ const SOUNDNESS_RULES = [
     // and not per join node.
     check: (proc) => {
       const msgs = starvedParallelJoins(proc, 'exclusiveGateway', 'XOR');
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -403,7 +403,7 @@ const SOUNDNESS_RULES = [
     scope: 'process',
     check: (proc) => {
       const msgs = starvedParallelJoins(proc, 'inclusiveGateway', 'Inclusive');
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -433,7 +433,7 @@ const SOUNDNESS_RULES = [
         if (isSequenceFlowExempt(n)) continue;
         msgs.push(`Node "${n.id}" has no outgoing flow — path may not terminate.`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -460,7 +460,7 @@ const SOUNDNESS_RULES = [
         }
         if (!reachesEnd) msgs.push(`Boundary event "${n.id}" path does not reach an endEvent.`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -481,7 +481,7 @@ const SOUNDNESS_RULES = [
         if (srcPool === tgtPool)
           msgs.push(`MessageFlow "${mf.id || ''}" is within pool "${srcPool}" — message flows must cross pool boundaries.`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -538,14 +538,13 @@ const SOUNDNESS_RULES = [
           // S09, S10, S12 and S14 alike. Written as "not an InteractionNode, minus what others
           // own" rather than as `isArtifact`, so a future NodeType that is neither fails safe.
           if (isGateway(node.type) || isContainerNode(node)) continue;
-          // No '; ' anywhere in this string, and that is a hard constraint rather than a style
-          // choice: `classifyResult` (below) splits a rule's `message` on exactly that separator,
-          // because it is what the rules use to join several findings into one message. A
-          // semicolon inside a SINGLE finding therefore silently becomes a second entry — here it
-          // was the fragment "an Artifact is not even a FlowNode. Point the flow at …", with no
-          // flow id and no endpoint in it, doubling the reported error count for one bad endpoint
-          // and carrying that into `validation.errors`, the HTTP response and `--strict`. S12,
-          // S13 and S14 all keep their prose free of '; ' for the same reason.
+          // This string once had to avoid '; ' as a hard constraint, because `classifyResult`
+          // split a rule's `message` on that separator: the semicolon that used to sit in this
+          // very sentence became a second, id-less finding ("an Artifact is not even a FlowNode.
+          // Point the flow at …"), doubling the error count for one bad endpoint. That is no
+          // longer a constraint on the prose — this rule returns `messages: string[]` and
+          // `classifyResult` no longer splits anything — but the wording is left as it is,
+          // because one self-contained sentence per finding is the right shape regardless.
           msgs.push(`MessageFlow "${mf.id || ''}" ${role} "${id}" is a ${node.type} — not an `
             + 'InteractionNode. MessageFlow.sourceRef/targetRef are typed InteractionNode, which '
             + 'BPMN20.cmof grants per class to Task, Event, Participant and ConversationNode '
@@ -553,7 +552,7 @@ const SOUNDNESS_RULES = [
             + 'event, or at a participant.');
         }
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -579,7 +578,7 @@ const SOUNDNESS_RULES = [
           }
         }
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -610,7 +609,7 @@ const SOUNDNESS_RULES = [
         if (tgtType && isGateway(tgtType))
           msgs.push(`MessageFlow "${mf.id || ''}" target "${mf.target}" is a ${tgtType} — Gateways cannot be MessageFlow targets (use a Task or Event instead).`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -667,7 +666,7 @@ const SOUNDNESS_RULES = [
       };
       check(proc, proc.id ?? '(process)');
 
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -738,7 +737,7 @@ const SOUNDNESS_RULES = [
         if (src && isContainerNode(src)) complain(mf, 'source', src);
         if (tgt && isContainerNode(tgt)) complain(mf, 'target', tgt);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
 ];
@@ -792,7 +791,7 @@ const STYLE_RULES = [
         if (taskTypes.includes(n.type) && n.name && violatesVerbObject(n.name))
           msgs.push(`Task "${n.name}" folgt nicht der Objekt+Verb-Konvention (z.B. "Antrag prüfen"). Heuristik — exakte Wortartprüfung: M05/M06.`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -810,7 +809,7 @@ const STYLE_RULES = [
         if (!(n.name || '').replace(/\n/g, ' ').includes('?'))
           msgs.push(`XOR gateway "${n.id}" should be a question (e.g. "Antrag gültig?").`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -829,7 +828,7 @@ const STYLE_RULES = [
           }
         }
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -850,7 +849,7 @@ const STYLE_RULES = [
           }
         }
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -871,7 +870,7 @@ const STYLE_RULES = [
         if (missingFormatA.length > 0)
           msgs.push(`Lane "${lane.id}" uses nodeIds (Format B) but ${missingFormatA.length} node(s) lack node.lane (Format A): ${missingFormatA.slice(0, 3).join(', ')}${missingFormatA.length > 3 ? '...' : ''}`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   // Platzhalter für zukünftige Style-Regeln
@@ -898,7 +897,7 @@ const STYLE_RULES = [
       const orGateways = (proc.nodes || []).filter(n => n.type === 'inclusiveGateway');
       return orGateways.length === 0
         ? { pass: true }
-        : { pass: false, message: orGateways.map(n => `Inclusive (OR) gateway "${n.id}" (${n.name || ''}) — OR-Gateways are error-prone, prefer XOR or AND.`).join('; ') };
+        : { pass: false, messages: orGateways.map(n => `Inclusive (OR) gateway "${n.id}" (${n.name || ''}) — OR-Gateways are error-prone, prefer XOR or AND.`) };
     }
   },
   {
@@ -918,7 +917,7 @@ const STYLE_RULES = [
         if (!hasDefault)
           msgs.push(`XOR gateway "${n.id}" (${n.name || ''}) has ${outs.length} outgoing flows but no default flow.`);
       }
-      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
   {
@@ -940,9 +939,14 @@ const STYLE_RULES = [
           }
         }
       }
+      // One finding per offender. This rule was the clearest case of the join-then-split trap:
+      // it embedded '; ' as a LIST separator inside what it declared to be a single `message`,
+      // so `classifyResult` tore it into an intelligible first entry and one bare, contextless
+      // fragment per further offender ('lane "…" (31 chars)' with no verb and no threshold in
+      // it). Naming each offender in its own complete sentence is what the rule meant all along.
       return offenders.length === 0
         ? { pass: true }
-        : { pass: false, message: `Names exceed ${LIMIT} chars — shorten for readability: ${offenders.join('; ')}` };
+        : { pass: false, messages: offenders.map(o => `Name exceeds ${LIMIT} chars — shorten for readability: ${o}`) };
     }
   },
   {
@@ -1153,7 +1157,7 @@ function runRules(lc, profile = null) {
       // Run once for the whole model
       const result = rule.check(null, lc, profile);
       if (!result.pass) {
-        classifyResult(result.message, severity, errors, warnings, infos, '');
+        classifyResult(result, severity, errors, warnings, infos, '');
       }
     } else {
       // Run per process
@@ -1161,7 +1165,7 @@ function runRules(lc, profile = null) {
         const prefix = lc.pools ? `[${proc.name || proc.id}] ` : '';
         const result = rule.check(proc, lc, profile);
         if (!result.pass) {
-          classifyResult(result.message, severity, errors, warnings, infos, prefix);
+          classifyResult(result, severity, errors, warnings, infos, prefix);
         }
       }
     }
@@ -1194,8 +1198,29 @@ function runRules(lc, profile = null) {
   return { errors, warnings, infos, advisories, metrics };
 }
 
-function classifyResult(message, severity, errors, warnings, infos, prefix) {
-  const msgs = message.split('; ');
+/**
+ * Route one failing rule result onto the right severity channel, as 0..n findings.
+ *
+ * A rule that has several findings returns `messages: string[]` — one entry per finding. A rule
+ * with one finding returns `message: string`, and that string is taken VERBATIM: it is one
+ * finding even when it contains '; '.
+ *
+ * It did not used to be. The contract was implicit and unwritten: rules joined their findings
+ * with '; ' and this function split on the same separator. A rule whose SINGLE message happened
+ * to contain '; ' was therefore emitted as two findings — the second an unattributed fragment
+ * with no id and no element in it — and that fragment propagated into `validation.errors`, the
+ * HTTP response and `--strict`, inflating the error count for one defect. S10's message hit this
+ * for real; rewording S10 fixed the instance and left the trap armed for the other 34 rules.
+ *
+ * A lint-style "no '; ' in a rule message" test cannot close it either: messages are built at
+ * runtime from node and lane names, so a task named "Prüfen; freigeben" trips it from *data*,
+ * where no test over the source can see it. Making the list explicit is the only fix that
+ * actually closes it — with `messages`, a separator inside a finding is just a character.
+ *
+ * Purely additive at the rule level: `message` still works, it simply no longer splits.
+ */
+function classifyResult(result, severity, errors, warnings, infos, prefix) {
+  const msgs = Array.isArray(result.messages) ? result.messages : [result.message];
   for (const msg of msgs) {
     const fullMsg = prefix + msg;
     if (severity === 'ERROR') errors.push(fullMsg);
