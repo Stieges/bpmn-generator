@@ -13,7 +13,10 @@
  */
 
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
-import { isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES } from './types.js';
+import {
+  isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES,
+  isActivity, isInteractionNode, isSequenceFlowExempt,
+} from './types.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
@@ -300,16 +303,48 @@ const SOUNDNESS_RULES = [
   },
   {
     id: 'S04', layer: 'soundness', defaultSeverity: 'WARNING',
-    description: 'Isolierte Nodes erkennen (keine Kanten)',
-    ref: { pmg: 'G2' },
+    description: 'Every node is reached by an incoming sequence flow — no isolated and no '
+      + 'unreachable nodes (Severity WARNING)',
+    // The old citation was `{ pmg: 'G2' }`, and it did not survive scrutiny. 7PMG G2 is
+    // "minimize the routing paths per element" — a complexity guideline about how many arcs are
+    // incident on an element, which says nothing about an element having none, and therefore did
+    // not support even the narrow reading of this rule. What does support it is the
+    // connectedness requirement a workflow net is defined by: every node lies on a directed path
+    // from the source to the sink, so a node nothing routes into lies on no such path and is
+    // dead by construction. That is the same property WF01 checks exhaustively in the opt-in
+    // workflow_net layer; S04 is its always-on, purely local approximation (no incoming flow at
+    // all, rather than no path from the start event).
+    ref: {
+      omg: '§7.3.1 Sequence Flow Connection Rules',
+      wfnet: 'van der Aalst (1997), "Verification of Workflow Nets" — a WF-net requires every '
+        + 'node to lie on a directed path from source to sink; a node no sequence flow reaches '
+        + 'lies on none. Exhaustively checked by WF01 (opt-in); S04 is the always-on local case.',
+    },
     scope: 'process',
     check: (proc) => {
       const edges = proc.edges || [];
-      const connected = new Set([...edges.map(e => e.source), ...edges.map(e => e.target)]);
+      // TARGETS only, not sources ∪ targets. The old set was the union, so a single OUTGOING
+      // flow made a node count as "connected" — and S07 checks the opposite half — which left a
+      // node with an outgoing flow and no incoming one named by no always-on rule at all. A
+      // stranded `parallelGateway` is the everyday shape of it: unreachable itself, and every
+      // node behind it dead. Strictly a superset of the old predicate, so nothing that was
+      // flagged stops being flagged.
+      const reached = new Set(edges.map(e => e.target));
+      const hasOutgoing = new Set(edges.map(e => e.source));
       const msgs = [];
       for (const n of (proc.nodes || [])) {
-        if (!connected.has(n.id) && n.type !== 'startEvent' && !isBoundaryEvent(n) && !isArtifact(n.type))
-          msgs.push(`Node "${n.id}" (${n.name || ''}) appears isolated.`);
+        // `isSequenceFlowExempt` (types.js) instead of the hand-rolled startEvent/boundary/
+        // artifact triple this rule used to carry: a compensation activity and an event
+        // subprocess are reached by a compensation association resp. their own start event, so
+        // "no incoming sequence flow" is their normal, correct shape — and both are shapes
+        // `references/prompt-template.md` actively recommends to the model.
+        if (reached.has(n.id) || isSequenceFlowExempt(n)) continue;
+        // Two messages, because the two cases are different mistakes. "Isolated" is simply
+        // false about a node that has an outgoing flow — there the author wired the node up and
+        // forgot only the way in, which is a different thing to go and look at.
+        msgs.push(hasOutgoing.has(n.id)
+          ? `Node "${n.id}" (${n.name || ''}) has no incoming flow — nothing reaches it, so it and everything downstream of it is dead.`
+          : `Node "${n.id}" (${n.name || ''}) appears isolated.`);
       }
       return msgs.length === 0
         ? { pass: true }
@@ -370,12 +405,22 @@ const SOUNDNESS_RULES = [
       const outgoing = buildAdjacency(edges, 'source', 'target');
       const msgs = [];
       for (const n of nodes) {
-        if (n.type !== 'endEvent' && (outgoing[n.id] || []).length === 0 &&
-            !isBoundaryEvent(n) && n.type !== 'dataObjectReference' &&
-            n.type !== 'dataStoreReference' && n.type !== 'textAnnotation') {
-          if (n.type !== 'startEvent')
-            msgs.push(`Node "${n.id}" has no outgoing flow — path may not terminate.`);
-        }
+        if (n.type === 'endEvent') continue;
+        if ((outgoing[n.id] || []).length > 0) continue;
+        // `isSequenceFlowExempt` (types.js) replaces the literal list this rule carried
+        // (boundary event, dataObjectReference, dataStoreReference, textAnnotation, startEvent).
+        // The list forgot `group` — an artifact like the other three — and knew nothing of a
+        // compensation activity or an event subprocess, both of which are entered and left
+        // without any sequence flow and both of which `references/prompt-template.md` recommends
+        // to the model, so the pipeline warned about shapes it had asked for.
+        //
+        // The predicate is phrased around the INCOMING direction (S04's question), and it is the
+        // right set here too: every member is a node no sequence flow leads out of either. The
+        // one that needs saying is `startEvent`, which of course should have an outgoing flow —
+        // but S07 has always exempted it (a start event with no outgoing flow is S01/WF01's
+        // finding about the process, not a per-node dead end), so nothing changes there.
+        if (isSequenceFlowExempt(n)) continue;
+        msgs.push(`Node "${n.id}" has no outgoing flow — path may not terminate.`);
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
@@ -430,8 +475,20 @@ const SOUNDNESS_RULES = [
   },
   {
     id: 'S10', layer: 'soundness', defaultSeverity: 'ERROR',
-    description: 'Message Flow referential integrity',
-    ref: { omg: '§7.6.2' },
+    description: 'Message Flow referential integrity — the endpoint exists, and (where it is a '
+      + 'node) it is an InteractionNode',
+    ref: {
+      omg: '§7.6.2',
+      cmof: 'MessageFlow.sourceRef/targetRef type=InteractionNode. Per BPMN20.cmof the property '
+        + 'is granted per class and never inherited: Task superClass="Activity InteractionNode", '
+        + 'Event superClass="FlowNode InteractionNode", Participant superClass="InteractionNode '
+        + 'BaseElement", ConversationNode likewise — and nothing else. TextAnnotation and Group '
+        + 'are superClass="Artifact" (Artifact superClass="BaseElement"), i.e. not even '
+        + 'FlowNodes, and DataObjectReference/DataStoreReference are FlowElements, not '
+        + 'InteractionNodes. Same argument S14 makes for the Activity container classes; the '
+        + 'class and superclass names are the reference, not line numbers into the untracked '
+        + 'references/omg-spec/.',
+    },
     scope: 'global',
     check: (proc, lc) => {
       if (!lc.messageFlows) return { pass: true };
@@ -448,10 +505,34 @@ const SOUNDNESS_RULES = [
       ]);
       const msgs = [];
       for (const mf of lc.messageFlows) {
-        if (!allNodeIds.has(mf.source) && !allPoolIds.has(mf.source))
-          msgs.push(`MessageFlow "${mf.id || ''}" unknown source: "${mf.source}"`);
-        if (!allNodeIds.has(mf.target) && !allPoolIds.has(mf.target))
-          msgs.push(`MessageFlow "${mf.id || ''}" unknown target: "${mf.target}"`);
+        for (const [role, id] of [['source', mf.source], ['target', mf.target]]) {
+          const node = allNodeIds.get(id);
+          if (!node) {
+            // A pool id is legal here and is not a node at all — a Participant IS an
+            // InteractionNode, but it lives in `lc.pools`/`lc.collapsedPools`, not in the
+            // NodeType enum, which is exactly why `isInteractionNode` takes a type and leaves
+            // this half to the caller (see its doc comment in types.js). This is the caller
+            // doing it: resolve against nodes first, fall back to pools, and only classify
+            // where the endpoint really did resolve to a node.
+            if (!allPoolIds.has(id)) msgs.push(`MessageFlow "${mf.id || ''}" unknown ${role}: "${id}"`);
+            continue;
+          }
+          if (isInteractionNode(node.type)) continue;
+          // Two classes are deliberately NOT reported here, because another rule already owns
+          // them and reporting twice would say the same thing at two severities: a Gateway is
+          // S12's (ERROR), and a container — every non-Task Activity subclass — is S14's
+          // (WARNING, so that models generating today keep generating; escalating containers to
+          // ERROR here would silently overrule that decision). What is left over is the
+          // artifact family, which no rule named at all: a `textAnnotation` endpoint passed
+          // S09, S10, S12 and S14 alike. Written as "not an InteractionNode, minus what others
+          // own" rather than as `isArtifact`, so a future NodeType that is neither fails safe.
+          if (isGateway(node.type) || isContainerNode(node)) continue;
+          msgs.push(`MessageFlow "${mf.id || ''}" ${role} "${id}" is a ${node.type} — not an `
+            + 'InteractionNode. MessageFlow.sourceRef/targetRef are typed InteractionNode, which '
+            + 'BPMN20.cmof grants per class to Task, Event, Participant and ConversationNode '
+            + 'only; an Artifact is not even a FlowNode. Point the flow at a task, at a message '
+            + 'event, or at a participant.');
+        }
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
@@ -493,15 +574,21 @@ const SOUNDNESS_RULES = [
       // a BPMNShape attribute with no semantic counterpart, so a gateway one level down inside a
       // collapsed container can no longer be a message-flow endpoint and go unreported.
       const byId = nodesById(lc);
-      const isGatewayType = (t) => typeof t === 'string' && t.toLowerCase().includes('gateway');
+      // `isGateway` (types.js) rather than the local `type.toLowerCase().includes('gateway')`
+      // this rule used to carry. Folded in because it is the same substring-vs-explicit-set
+      // question Stage 1 settled inside types.js: the local form classifies by spelling, so any
+      // future NodeType whose name happens to contain "gateway" without being one — or a
+      // Gateway subclass named without it — silently gets the wrong verdict, with nothing to
+      // catch it. `GATEWAY_TYPES` is fenced against `references/input-schema.json`'s NodeType
+      // enum in types.test.js; a private predicate here is not, and the call site reads no worse.
       const msgs = [];
       for (const mf of lc.messageFlows) {
         const srcType = byId.get(mf.source)?.type;
         const tgtType = byId.get(mf.target)?.type;
         // mf.source may be a Pool id (Participant); only flag if it's a known Gateway node
-        if (srcType && isGatewayType(srcType))
+        if (srcType && isGateway(srcType))
           msgs.push(`MessageFlow "${mf.id || ''}" source "${mf.source}" is a ${srcType} — Gateways cannot be MessageFlow sources (use a Task or Event instead).`);
-        if (tgtType && isGatewayType(tgtType))
+        if (tgtType && isGateway(tgtType))
           msgs.push(`MessageFlow "${mf.id || ''}" target "${mf.target}" is a ${tgtType} — Gateways cannot be MessageFlow targets (use a Task or Event instead).`);
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
@@ -524,9 +611,11 @@ const SOUNDNESS_RULES = [
       // exactly backwards: it let a dangling boundary event one level down pass,
       // and accepted a top-level one reaching into a subprocess.
       const containerOf = new Map();
+      const nodeOf = new Map();
       const collect = (container, containerId) => {
         for (const n of (container.nodes || [])) {
           containerOf.set(n.id, containerId);
+          nodeOf.set(n.id, n);
           if (n.nodes) collect(n, n.id);
         }
       };
@@ -543,6 +632,17 @@ const SOUNDNESS_RULES = [
             msgs.push(`Boundary Event "${n.id}" verweist mit attachedTo auf "${n.attachedTo}" — dieser Knoten existiert nicht.`);
           } else if (containerOf.get(n.attachedTo) !== containerId) {
             msgs.push(`Boundary Event "${n.id}" liegt in "${containerId}", seine Aktivität "${n.attachedTo}" aber in "${containerOf.get(n.attachedTo)}" — beide müssen im selben Container liegen.`);
+          } else if (!isActivity(nodeOf.get(n.attachedTo).type)) {
+            // The class check the rule's own `ref` (BoundaryEvent.attachedToRef : Activity
+            // [1..1]) and its own messages ("Aktivität") always claimed, and never made: until
+            // now a gateway, an event, another boundary event or a textAnnotation could be the
+            // host and S13 passed. `isActivity` and not a task list — a boundary event legally
+            // attaches to a subprocess, a transaction or a callActivity, all Activity subclasses.
+            // The translation layer already refused these shapes (`wireBoundaryEvents` in
+            // workflow-net.js gives such an event no transition, discloses it on `pn.skipped` as
+            // `boundaryEventWithoutHost`, and declares the orphaned place on
+            // `pn.unproducedPlaces`); the rule layer was the one calling the model clean.
+            msgs.push(`Boundary Event "${n.id}" hängt an "${n.attachedTo}" (${nodeOf.get(n.attachedTo).type}) — attachedToRef ist im OMG-Schema auf Aktivität typisiert (Aufgabe, Sub-Prozess, Transaktion, Call-Activity), ein anderer Knotentyp kann kein Host sein.`);
           }
         }
       };

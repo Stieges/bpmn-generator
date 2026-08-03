@@ -1986,6 +1986,70 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.some(w => w.includes('isolated'))).toBe(true);
   });
 
+  // ── S04/S07 and the shapes a sequence flow legitimately never reaches ──────────────────
+  //
+  // Three shapes that BPMN reaches by something other than a SequenceFlow. Both rules used to
+  // approximate the exemption by hand — S04 via `isArtifact` + a startEvent/boundary check, S07
+  // via three literal type names — so each of these tripped one or both warnings. Both now ask
+  // `isSequenceFlowExempt` (types.js), which is the single place that lists the exemptions and
+  // their reasons. Two of the three shapes are actively recommended to the model by
+  // `references/prompt-template.md`, so the pipeline was telling the LLM to produce them and then
+  // warning about them.
+  test('S04/S07 stay silent on an event subprocess — it is entered by its own start event', () => {
+    const lc = proc([
+      { id: 's1', type: 'startEvent' },
+      { id: 'e1', type: 'endEvent' },
+      // triggeredByEvent in the OMG schema: no SequenceFlow may cross into it, and none leaves it.
+      { id: 'esp', type: 'subProcess', name: 'Error Handler', isEventSubProcess: true },
+    ], [{ id: 'f1', source: 's1', target: 'e1' }]);
+    const result = runRules(lc);
+    expect(result.warnings.filter(w => w.includes('"esp"'))).toEqual([]);
+  });
+
+  test('S04/S07 stay silent on a compensation activity — it is reached by a compensation association', () => {
+    const lc = proc([
+      { id: 's1', type: 'startEvent' },
+      { id: 'e1', type: 'endEvent' },
+      // isForCompensation in the OMG schema: triggered by a compensation association, never by a
+      // SequenceFlow, and it hands control straight back rather than continuing the flow.
+      { id: 'storno', type: 'task', name: 'Buchung stornieren', isCompensation: true },
+    ], [{ id: 'f1', source: 's1', target: 'e1' }]);
+    const result = runRules(lc);
+    expect(result.warnings.filter(w => w.includes('"storno"'))).toEqual([]);
+  });
+
+  test('S07 stays silent on a group artifact — S04 already excluded it, S07 forgot it', () => {
+    const lc = proc([
+      { id: 's1', type: 'startEvent' },
+      { id: 'e1', type: 'endEvent' },
+      { id: 'grp', type: 'group', name: 'Phase 1' },
+    ], [{ id: 'f1', source: 's1', target: 'e1' }]);
+    const result = runRules(lc);
+    expect(result.warnings.filter(w => w.includes('"grp"'))).toEqual([]);
+  });
+
+  test('S04 names a stranded gateway — an outgoing flow, no incoming one', () => {
+    // The half neither rule used to cover: S04's `connected` set was sources ∪ targets, so one
+    // outgoing flow was enough to pass it, and S07 checks the opposite half. `gw` is unreachable
+    // and `t1` behind it is therefore dead, yet the model validated clean under the default
+    // profile — only the opt-in WF01 named it.
+    const lc = proc([
+      { id: 's1', type: 'startEvent' },
+      { id: 'gw', type: 'parallelGateway', name: 'Stranded' },
+      { id: 't1', type: 'task', name: 'Dead Work' },
+      { id: 'e1', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's1', target: 'e1' },
+      { id: 'f2', source: 'gw', target: 't1' },
+      { id: 'f3', source: 't1', target: 'e1' },
+    ]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('"gw"') && w.includes('no incoming flow'))).toBe(true);
+    // …and it says something different from "isolated", because the mistake is a different one:
+    // this node HAS an outgoing flow, so calling it isolated would be false.
+    expect(result.warnings.some(w => w.includes('"gw"') && w.includes('isolated'))).toBe(false);
+  });
+
   test('S05: XOR-split → AND-join deadlock → ERROR', () => {
     const lc = proc([
       { id: 's', type: 'startEvent' },
@@ -2396,6 +2460,33 @@ describe('Rule Engine — individual rules', () => {
     };
     const result = runRules(lc);
     expect(result.errors.some(e => e.includes('unknown'))).toBe(true);
+  });
+
+  test('S10: an artifact is not a legal messageFlow endpoint', () => {
+    // `MessageFlow.sourceRef`/`targetRef` are typed `InteractionNode`, granted per class to
+    // `Task`, `Event`, `Participant` and `ConversationNode` only. An Artifact is none of those —
+    // it is not even a FlowNode. A `textAnnotation` endpoint passed S09, S10, S12 *and* S14.
+    const lc = {
+      pools: [
+        { id: 'P1', name: 'P1', nodes: [{ id: 'a', type: 'sendTask' }], edges: [] },
+        { id: 'P2', name: 'P2', nodes: [{ id: 'note', type: 'textAnnotation', text: 'FYI' }], edges: [] },
+      ],
+      messageFlows: [{ id: 'mf', source: 'a', target: 'note' }],
+    };
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('"note"') && e.includes('InteractionNode'))).toBe(true);
+  });
+
+  test('S10 still admits a pool id as a messageFlow endpoint', () => {
+    // The caller's half of `isInteractionNode`'s contract: an endpoint may legally name a
+    // Participant, which is not a node at all and therefore has no `type` to classify. The new
+    // check must apply only where the endpoint resolved to a node.
+    const lc = {
+      pools: [{ id: 'P1', name: 'P1', nodes: [{ id: 'a', type: 'sendTask' }], edges: [] }],
+      collapsedPools: [{ id: 'ext', name: 'External' }],
+      messageFlows: [{ id: 'mf', source: 'a', target: 'ext' }],
+    };
+    expect(runRules(lc).errors.filter(e => e.includes('"mf"'))).toEqual([]);
   });
 
   test('S11: expanded subProcess without start/end → ERROR', () => {
@@ -4386,6 +4477,49 @@ describe('rule S13 — boundary events, at every nesting level', () => {
     const r = await runPipeline(loadFixture('subprocess-child-fidelity.json'));
     expect(r.validation.errors).toEqual([]);
   });
+
+  // `BoundaryEvent.attachedToRef` is typed `Activity [1..1]` (OMG §10.4.3 Table 10.86). S13's
+  // `ref` said so and its messages said *Aktivität*, but the check only asked whether the id
+  // resolved in the same container — so a host of any class at all passed. `wireBoundaryEvents`
+  // (workflow-net.js) already refused these shapes (`pn.skipped`, `boundaryEventWithoutHost`);
+  // the rule layer was the one staying silent.
+  test.each([
+    ['a gateway', 'exclusiveGateway'],
+    ['an event', 'intermediateCatchEvent'],
+    ['a text annotation', 'textAnnotation'],
+  ])('a boundary event attached to %s is an ERROR — attachedToRef is typed Activity', (_label, hostType) => {
+    const lc = wrap([
+      { id: 's', type: 'startEvent' },
+      { id: 'host', type: hostType, name: 'Not an activity' },
+      { id: 'b', type: 'boundaryEvent', marker: 'timer', attachedTo: 'host' },
+      { id: 'e', type: 'endEvent' },
+      { id: 'e2', type: 'endEvent' },
+    ], [
+      { id: 'f1', source: 's', target: 'host' }, { id: 'f2', source: 'host', target: 'e' },
+      { id: 'f3', source: 'b', target: 'e2' },
+    ]);
+    const { errors } = validateLogicCore(lc);
+    expect(errors.some(e => /"b"/.test(e) && /Aktivität/.test(e))).toBe(true);
+  });
+
+  test.each(['subProcess', 'transaction', 'callActivity', 'userTask'])(
+    'a boundary event on a %s still passes — every Activity subclass is a legal host', (hostType) => {
+      // The other half of the same check, and the reason it asks `isActivity` rather than a task
+      // list: a container is an Activity. `redesign.js`'s isolateException refused exactly this
+      // shape for exactly that reason, and that refusal was a bug.
+      const lc = wrap([
+        { id: 's', type: 'startEvent' },
+        { id: 'host', type: hostType, name: 'Host' },
+        { id: 'b', type: 'boundaryEvent', marker: 'timer', attachedTo: 'host' },
+        { id: 'e', type: 'endEvent' },
+        { id: 'e2', type: 'endEvent' },
+      ], [
+        { id: 'f1', source: 's', target: 'host' }, { id: 'f2', source: 'host', target: 'e' },
+        { id: 'f3', source: 'b', target: 'e2' },
+      ]);
+      const { errors } = validateLogicCore(lc);
+      expect(errors.filter(e => /"b"/.test(e))).toEqual([]);
+    });
 });
 
 describe('the bridge — which decision a Business Rule Task invokes', () => {

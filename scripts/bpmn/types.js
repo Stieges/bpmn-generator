@@ -120,7 +120,15 @@ export function isContainerNode(node) {
 // BusinessRuleTask), all `superClass="Task"` in BPMN20.cmof. This is the "leaf activity" half of
 // `isActivity` below, and also half of `isInteractionNode` — see its doc comment for why the two
 // need different unions of the same eight types.
-const TASK_TYPES = new Set([
+// Exported, because "a leaf activity, not a container" is a question two callers outside this
+// module genuinely ask and used to answer with their own private copy of this list
+// (`optimize.js`, `redesign.js`). It is deliberately NOT the same question as `isActivity`:
+// those callers restrict themselves to leaf work steps for reasons of their own, written down at
+// each call site, whereas a rule quoting the OMG `Activity` type — S13's `attachedToRef`, for
+// instance — must use `isActivity` and include the containers. Keeping both available and named
+// for what they mean is what stops the next caller from picking a list by copying whichever one
+// happened to be nearest.
+export const TASK_TYPES = new Set([
   'task', 'userTask', 'serviceTask', 'scriptTask', 'sendTask', 'receiveTask',
   'manualTask', 'businessRuleTask',
 ]);

@@ -173,15 +173,16 @@ describe('NC02/NC02b judge the translation, not the model', () => {
     // reported by the layers that own it. If either stops covering this shape, the exemption
     // above turns into a blind spot, and this test is what says so.
     //
-    // Note which layer covers which, because it is not symmetric. `sink` (no outgoing flow) is
-    // S07's literal wording. `fork` (no INCOMING flow, but an outgoing one) is covered by
-    // nothing in the always-on rule layers — S04 only fires on a node with no edges at all —
-    // and is WF01's: a node the flow never reaches is a dead transition, which is precisely what
-    // WF01 says about it. That WF01 is opt-in (the Workflow-Net layer) is a real gap in the
-    // always-on coverage, but it is a gap in the RULE ENGINE, and closing it by having a
-    // translation checker report it would put the finding in the one layer whose whole contract
-    // is not to.
+    // Note which layer covers which. `sink` (no outgoing flow) is S07's literal wording.
+    // `fork` (no INCOMING flow, but an outgoing one) used to be covered by nothing in the
+    // always-on rule layers — S04's `connected` set was sources ∪ targets, so one outgoing flow
+    // was enough to pass it — and was WF01's alone, in the opt-in Workflow-Net layer. S04 now
+    // asks about incoming flows only and names it too, so the always-on gap is closed; WF01 is
+    // still asserted here because it is the exhaustive check (a node no PATH from the start
+    // reaches, not merely one with no incoming edge), and the exemption above must stay backed
+    // by both.
     expect(runRules(strandedNodes()).warnings.join(' ')).toContain('"sink" has no outgoing flow');
+    expect(runRules(strandedNodes()).warnings.join(' ')).toContain('"fork" () has no incoming flow');
     expect(checkWorkflowNetSoundness(strandedNodes()).issues
       .filter(i => i.rule === 'WF01').map(i => i.message).join(' '))
       .toContain('"fork"');
