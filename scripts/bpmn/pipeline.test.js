@@ -3875,9 +3875,101 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
     // … and the layer that DOES own it still reports it, so the exemption is not a blind spot:
     // bpmn-moddle re-parsing our own output names the duplicate exactly.
     expect(r.validation.xmlWarnings.join(' ')).toContain('duplicate ID <f_in>');
-    // The gap this leaves is stated in CHANGELOG's Known limitations: that channel is fatal only
-    // under `--strict`, so the invalid file is still written by default.
+    // `runPipeline` is a library function and stays one: it reports, it does not refuse. So the
+    // returned XML still carries the duplicate, and that is not the gap — the gap was that the
+    // CLI *wrote* that XML and exited 0. It no longer does; see the CLI test below. This
+    // assertion is kept because it is what makes the one below meaningful: the duplicate is real
+    // in the serialised output, not an artefact of the round-trip parser.
     expect(r.bpmnXml.match(/id="f_in"/g)).toHaveLength(2);
+  });
+
+  test('CLI: a duplicate FLOW id is fatal on the ordinary generate path, without --strict', async () => {
+    // The other half of the repo owner's "duplicate ids block" decision. NC06 makes duplicate
+    // NODE ids blocking and correctly declines to judge duplicate FLOW ids, since the net
+    // translates those faithfully — so until now half the decision was implemented and the
+    // remaining half was `--strict`-only, i.e. off by default. `xsd:ID` is document-wide unique;
+    // the file does not load either way, so it must not be written either way.
+    //
+    // Deliberately driven end-to-end through the real moddle-xml rather than by asserting on its
+    // warning string: the gate's predicate matches a dependency's English prose, and this test is
+    // the only thing that would notice a reword.
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const container = (suffix) => ({
+      id: `sub_${suffix}`,
+      type: 'subProcess',
+      nodes: [
+        { id: `s_${suffix}`, type: 'startEvent', name: 'Beginn' },
+        { id: `t_${suffix}`, type: 'userTask', name: 'Antrag prüfen' },
+        { id: `e_${suffix}`, type: 'endEvent', name: 'Ende' },
+      ],
+      edges: [
+        { id: 'f_in', source: `s_${suffix}`, target: `t_${suffix}` },
+        { id: `f_out_${suffix}`, source: `t_${suffix}`, target: `e_${suffix}` },
+      ],
+    });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bpmn-dupid-'));
+    const inPath = path.join(dir, 'in.json');
+    const outBase = path.join(dir, 'out');
+    fs.writeFileSync(inPath, JSON.stringify({
+      id: 'P',
+      nodes: [
+        { id: 'start', type: 'startEvent', name: 'Antrag eingegangen' },
+        container('a'), container('b'),
+        { id: 'end', type: 'endEvent', name: 'Antrag bearbeitet' },
+      ],
+      edges: [
+        { id: 'g1', source: 'start', target: 'sub_a' },
+        { id: 'g2', source: 'sub_a', target: 'sub_b' },
+        { id: 'g3', source: 'sub_b', target: 'end' },
+      ],
+    }), 'utf8');
+    // No --strict: that is the whole point.
+    const res = spawnSync('node', ['pipeline.js', inPath, outBase], { cwd: __dirname, encoding: 'utf8' });
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/Duplicate id in the emitted XML/);
+    expect(res.stderr).toMatch(/duplicate ID <f_in>/);
+    // NC06 stays out of it — the net is faithful, so the NC gate must not be what stopped this.
+    expect(res.stderr).not.toMatch(/NC06/);
+    expect(fs.existsSync(`${outBase}.bpmn`)).toBe(false);
+    expect(fs.existsSync(`${outBase}.svg`)).toBe(false);
+  });
+
+  test('CLI: an ordinary serialisation warning stays non-fatal without --strict', async () => {
+    // The predicate has to be narrow. `xmlWarnings` carries other classes — "unknown attribute
+    // <…>" is the common one — and those were non-fatal by default before this change and must
+    // stay so; a gate that swallowed the whole channel would turn every such warning into a
+    // build break. `implementation` is serialised unguarded for every node type but is an
+    // attribute of `Activity`-ish classes only, so on a gateway bpmn-moddle reports exactly one
+    // "unknown attribute <implementation>" and nothing else — precisely the shape that must stay
+    // a warning. (It is the same class-guard gap as `isForCompensation`, still open for this
+    // attribute; used here as a fixture rather than fixed, which is a separate change.)
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bpmn-nondup-'));
+    const inPath = path.join(dir, 'in.json');
+    const outBase = path.join(dir, 'out');
+    fs.writeFileSync(inPath, JSON.stringify({
+      id: 'P',
+      nodes: [
+        { id: 'start', type: 'startEvent', name: 'Antrag eingegangen' },
+        { id: 't', type: 'exclusiveGateway', name: 'Weiche', implementation: '##unspecified' },
+        { id: 'end', type: 'endEvent', name: 'Antrag bearbeitet' },
+      ],
+      edges: [
+        { id: 'f1', source: 'start', target: 't' },
+        { id: 'f2', source: 't', target: 'end' },
+      ],
+    }), 'utf8');
+    const res = spawnSync('node', ['pipeline.js', inPath, outBase], { cwd: __dirname, encoding: 'utf8' });
+    expect(res.stdout + res.stderr).toMatch(/BPMN serialisation/);
+    expect(res.stderr).not.toMatch(/Duplicate id in the emitted XML/);
+    expect(res.status).toBe(0);
+    expect(fs.existsSync(`${outBase}.bpmn`)).toBe(true);
   });
 
   test('CLI: an NC05 INFO is printed but never fatal, not even under --strict', async () => {

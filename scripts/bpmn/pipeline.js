@@ -553,6 +553,37 @@ async function main() {
     console.warn('\n⚠ BPMN serialisation (round-trip through bpmn-moddle):');
     xmlWarnings.forEach(w => console.warn('  · ' + w));
   }
+  // One class within that channel is unconditionally fatal, not merely `--strict` fatal.
+  // `xsd:ID` is document-wide unique by definition, so a duplicate id does not degrade the file,
+  // it makes it unloadable — no tool can resolve a reference to the id, and which of the two
+  // elements a reader binds is arbitrary. Writing such a file and exiting 0 is the CLI claiming
+  // a success it did not have, which is the same defect NC and DI are gated on.
+  //
+  // NC06 covers only half of the class and deliberately so: it catches duplicate NODE ids,
+  // because there the Petri net is genuinely wrong too (transitions are keyed `t_<node.id>`, so
+  // one node overwrites the other). Two edges sharing an id translate FAITHFULLY — `placeOfEdge`
+  // is keyed by edge object identity — so NC06 does not fire and must not, its message would be
+  // false about them. A Petri-net guard has no business judging XML serialisation. This gate is
+  // that other half, placed in the layer that actually owns it.
+  //
+  // The predicate matches prose emitted by a dependency, which is a real fragility and is called
+  // out rather than hidden: the string is moddle-xml's, thrown at `addElement` as
+  // `error('duplicate ID <' + id + '>')` (moddle-xml 12.0.0, dist/index.esm.js) and surfaced by
+  // bpmn-moddle as an import warning. It reaches us either verbatim or nested inside an
+  // `unparsable content <…> detected … nested error: duplicate ID <x>` wrapper, so the match has
+  // to be on a substring rather than on a prefix. A moddle-xml release that rewords it would
+  // make this gate silently stop firing; the guard against that is the test below, which drives
+  // a genuinely duplicated id through the real dependency rather than asserting on a fixed
+  // string. Not in config.json on purpose — this is a fact about an installed dependency, not a
+  // tunable of ours, and it belongs next to the comment that explains it.
+  const DUPLICATE_ID_WARNING = /duplicate ID </;
+  const duplicateIdWarnings = xmlWarnings.filter(w => DUPLICATE_ID_WARNING.test(w));
+  if (duplicateIdWarnings.length) {
+    console.error('\n✗ Duplicate id in the emitted XML — xsd:ID is document-wide unique, so the file would not load. No files written:');
+    duplicateIdWarnings.forEach(w => console.error('  · ' + w));
+    process.exit(1);
+  }
+
   if (strict && xmlWarnings.length) {
     console.error(`\n✗ --strict: ${xmlWarnings.length} serialisation warning(s). No files written.`);
     process.exit(1);
