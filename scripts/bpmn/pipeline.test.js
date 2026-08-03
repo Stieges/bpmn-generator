@@ -2018,6 +2018,31 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.filter(w => w.includes('"storno"'))).toEqual([]);
   });
 
+  test('isCompensation exempts only an Activity — a gateway carrying the flag is still flagged', () => {
+    // The exemption must be type-guarded the way its `isEventSubProcess` neighbour is. OMG's
+    // `isForCompensation` is an **Activity** attribute, but `references/input-schema.json`
+    // declares `isCompensation` as a generic Node property valid on any NodeType — so without
+    // the guard the flag becomes a universal opt-out of both S04 and S07, and a genuinely
+    // isolated gateway carrying it goes unreported by every always-on rule.
+    const lc = proc([
+      { id: 's1', type: 'startEvent' },
+      { id: 'e1', type: 'endEvent' },
+      { id: 'gw', type: 'parallelGateway', name: 'Bogus', isCompensation: true },
+    ], [{ id: 'f1', source: 's1', target: 'e1' }]);
+    const result = runRules(lc);
+    expect(result.warnings.some(w => w.includes('"gw"') && w.includes('isolated'))).toBe(true);
+    expect(result.warnings.some(w => w.includes('"gw"') && w.includes('no outgoing flow'))).toBe(true);
+  });
+
+  test('isCompensation exempts a compensation subprocess too — a container is an Activity', () => {
+    const lc = proc([
+      { id: 's1', type: 'startEvent' },
+      { id: 'e1', type: 'endEvent' },
+      { id: 'csub', type: 'subProcess', name: 'Buchung zurückrollen', isCompensation: true },
+    ], [{ id: 'f1', source: 's1', target: 'e1' }]);
+    expect(runRules(lc).warnings.filter(w => w.includes('"csub"'))).toEqual([]);
+  });
+
   test('S07 stays silent on a group artifact — S04 already excluded it, S07 forgot it', () => {
     const lc = proc([
       { id: 's1', type: 'startEvent' },
@@ -2475,6 +2500,16 @@ describe('Rule Engine — individual rules', () => {
     };
     const result = runRules(lc);
     expect(result.errors.some(e => e.includes('"note"') && e.includes('InteractionNode'))).toBe(true);
+    // ONE finding, not two. `classifyResult` splits a rule's message on '; ' — the separator the
+    // rules use to join several findings into one `message` string — so a semicolon inside a
+    // single message silently becomes a second, id-less, unactionable entry, doubles the error
+    // count for this endpoint, and propagates into validation.errors, the HTTP response and
+    // --strict. S12/S13/S14 all avoid '; ' in their prose for this reason; S10 now does too.
+    const s10 = result.errors.filter(e => /InteractionNode|Artifact|Point the flow/.test(e));
+    expect(s10).toHaveLength(1);
+    // …and the one entry carries the id and the endpoint, which is what makes it actionable.
+    expect(s10[0]).toContain('"mf"');
+    expect(s10[0]).toContain('"note"');
   });
 
   test('S10 still admits a pool id as a messageFlow endpoint', () => {
