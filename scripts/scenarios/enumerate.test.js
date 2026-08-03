@@ -289,7 +289,7 @@ describe('scenario enumeration — capping is not a verdict', () => {
 });
 
 describe('scenario enumeration — completeness of a recorded scenario', () => {
-  // Every end event shares one p_sink (workflow-net.js:161/181), so "a token reached the
+  // Every end event shares one p_sink (`buildScope`, workflow-net.js), so "a token reached the
   // sink" is not the same question as "the process finished".
   const twoEnds = () => ({
     id: 'P_TwoEnds',

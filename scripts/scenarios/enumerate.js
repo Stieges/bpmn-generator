@@ -8,10 +8,10 @@
  * wrong scenario in a list, where it is findable, instead of in a diagram, where it is
  * invisible.
  *
- * It reuses the existing Petri-net translation (`bpmnToPN`, workflow-net.js:49) and the
- * existing firing semantics (`getEnabledTransitions` / `fireTransition`,
- * workflow-net.js:260/273), but NOT `checkSoundness`'s traversal: that one deduplicates
- * markings (`visitedEncodings`, workflow-net.js:298/376), which is correct for "is the
+ * It reuses the existing Petri-net translation (`bpmnToPN` (workflow-net.js)) and the
+ * existing firing semantics (`getEnabledTransitions` / `fireTransition` (workflow-net.js)),
+ * but NOT `checkSoundness`'s traversal: that one deduplicates
+ * markings (`checkSoundness`'s `visitedEncodings`, workflow-net.js), which is correct for "is the
  * sink reachable?" and wrong for "which distinct paths reach it?". Two things replace
  * the dedup as the termination argument:
  *
@@ -135,8 +135,8 @@ export function indexArcs(transitions, arcs) {
  *
  * PARTIAL OVERLAP — the warning this comment used to carry, now measured (Task 2).
  * Under `bpmnToPN` alone, two transitions share either ALL their input places or none:
- * an XOR split's branch transitions consume the same set (workflow-net.js:116-119), a
- * merge transition consumes exactly one (workflow-net.js:142). Composing pools over
+ * an XOR split's branch transitions consume the same set, a
+ * merge transition consumes exactly one (both `buildScope`, workflow-net.js). Composing pools over
  * message flows **does** break that, as predicted — a receive consumes a sequence-flow
  * place AND a message place, and `collaboration.test.js`'s "an implicit merge that is
  * also a message target" reproduces both halves: input sets that overlap partially
@@ -381,7 +381,7 @@ export function enumerateNet(net, limits) {
     // Nothing left to fire: this is where the path ends, and only here.
     //
     // Reaching the sink is deliberately NOT the stop condition. `bpmnToPN` wires every
-    // end event to one shared `p_sink` (workflow-net.js:161/181), so with an AND split
+    // end event to one shared `p_sink` (`buildScope`, workflow-net.js), so with an AND split
     // whose branches finish at different end events, the first branch to arrive would end
     // the trace and the second would never be recorded — a wrong enumeration handed over
     // as a complete one, in a subsystem whose entire purpose is that the reviewer can see
@@ -429,8 +429,8 @@ export function resolveLimits(options = {}) {
  *   deterministic for a given input and set of options.
  * @property {string[]} transitions - Petri-net transition ids in canonical firing order.
  *   Note these are net ids, not BPMN ids: an XOR split contributes `t_<gw>_choice_<i>`
- *   (workflow-net.js:112) and a node with several incoming flows `t_<node>_merge_<i>`
- *   (workflow-net.js:138), so the id says which branch was taken.
+ *   and a node with several incoming flows `t_<node>_merge_<i>`
+ *   (both `buildScope`, workflow-net.js), so the id says which branch was taken.
  * @property {string[]} nodes - the BPMN node id behind each entry of `transitions`, same
  *   length and order. Consecutive duplicates are possible (a node can fire more than
  *   once across a loop).
@@ -472,7 +472,7 @@ export function resolveLimits(options = {}) {
  * @property {number} stats.statesExplored
  * @property {string[]} stats.orGateways - inclusive gateways in this process, passed
  *   through from `pn.orGateways`. **Read this before treating the scenario list as
- *   complete.** `bpmnToPN` models an OR split as a forced AND (workflow-net.js:90-92 —
+ *   complete.** `bpmnToPN` models an OR split as a forced AND (`buildScope`, workflow-net.js —
  *   it records the id and then builds the ordinary transition, which fires every
  *   branch), so an OR split with two branches yields one scenario where the semantics
  *   allow three: x only, y only, both. That is a limitation of the existing translation,
@@ -480,7 +480,7 @@ export function resolveLimits(options = {}) {
  *   under-enumeration for the whole truth.
  * @property {Array<{id, reason}>} stats.skipped - passed through from `pn.skipped`:
  *   artifacts (no control-flow role, harmless here) and `eventBasedGateway`, whose race
- *   semantics are not modelled at all (workflow-net.js:95-101). Same warning as above.
+ *   semantics are not modelled at all (`buildScope`, workflow-net.js). Same warning as above.
  * @property {Array<{id, reason}>} stats.approximations - passed through from
  *   `pn.approximations`: nodes the translation models by something other than what BPMN says
  *   they mean, rather than not at all. Distinct from `skipped` for the reader's sake — an
@@ -496,7 +496,7 @@ export function resolveLimits(options = {}) {
  * **Prefer `enumerateCollaboration` (`./collaboration.js`)**: it accepts a pool-less document
  * as one pool, so it is a strict superset of this function for single-process input, and it
  * is the only path that produces `CompositeScenario.sinkTokens` — the field `SC06`
- * (`./rules.js`) reads, which a plain `Scenario` does not carry at all. `pipeline.js`
+ * (`./rules.js`) reads, which a plain `Scenario` does not carry at all. `./pipeline.js`
  * therefore routes every document through the collaboration pair and never calls this one.
  * Kept for direct single-process library use, where the plain `Scenario` shape (no pool
  * prefixes on transition ids, no message-flow bookkeeping) is what the caller wants.

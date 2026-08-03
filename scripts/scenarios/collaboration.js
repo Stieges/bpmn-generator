@@ -8,14 +8,14 @@
  * steps of all pools in an order that respects send-before-receive.
  *
  * ── What is deliberately NOT done here ────────────────────────────────────────────────
- * `bpmnToPN` (workflow-net.js:49) is called once per pool and is **not modified**. It is
- * also what `checkWorkflowNetSoundness` (workflow-net.js:477-495) calls per pool for
+ * `bpmnToPN` (workflow-net.js) is called once per pool and is **not modified**. It is
+ * also what `checkWorkflowNetSoundness` (workflow-net.js) calls per pool for
  * WF01-WF03; teaching it about `messageFlows` would change every collaboration's
  * soundness verdict as a side effect of a feature that is not about soundness. Everything
  * below therefore operates on `bpmnToPN`'s OUTPUT.
  *
  * ── Namespacing: why every place and transition gets a pool prefix ────────────────────
- * `bpmnToPN` names its source and sink `p_source` / `p_sink` (workflow-net.js:75-78) —
+ * `bpmnToPN` names its source and sink `p_source` / `p_sink` (`bpmnToPN`, workflow-net.js) —
  * the same two ids in every pool's net. Merging the nets as they come would silently fuse
  * five pools' sources into one place holding one token, i.e. only one pool could ever
  * start. So every place and transition id is prefixed with `${pool.id}::` on the way in.
@@ -44,7 +44,7 @@
  * message — and it would deadlock this fixture outright, because `mf8`'s sender hangs off
  * a boundary timer that `bpmnToPN` leaves unfireable. So a node gated by k > 1 message
  * flows is split into one transition per gating flow, the same device `bpmnToPN` itself
- * uses for an implicit merge (workflow-net.js:136-165): id `${tId}__recv_${mfId}`, same
+ * uses for an implicit merge (`buildScope`, workflow-net.js): id `${tId}__recv_${mfId}`, same
  * `bpmnNodeId`, same sequence-flow inputs and outputs, one message place each. Which
  * message a scenario arrived on is then readable off the trace.
  */
@@ -69,13 +69,13 @@ export function messagePlaceId(messageFlowId) {
  * Every transition of `pn` that stands for `nodeId`.
  *
  * Not 1:1 on purpose: an XOR split contributes one transition per outgoing edge
- * (workflow-net.js:111-122) and an implicit merge one per incoming edge
- * (workflow-net.js:136-165). A message arc has to apply to ALL of them — any one of them
+ * and an implicit merge one per incoming edge
+ * (both `buildScope`, workflow-net.js). A message arc has to apply to ALL of them — any one of them
  * firing IS that node executing.
  *
  * Since Stage 1 a CONTAINER also has more than one, and for a different reason: `bpmnToPN`
  * refines a subprocess into a subnet whose boundary is an entry/exit pair
- * (workflow-net.js:382-418) — `t_C#enter` (or one `t_C#enter#i` per incoming edge) and
+ * (`buildContainer`, workflow-net.js) — `t_C#enter` (or one `t_C#enter#i` per incoming edge) and
  * `t_C#exit`, all carrying the container's `bpmnNodeId`. Those two are not alternatives, they
  * are the two ENDS of one execution, so the "any one of them firing IS that node executing"
  * reading above does not hold for them. That is why `composeCollaboration` never routes a
@@ -397,7 +397,7 @@ export function composeCollaboration(lc) {
  *   deadlock, not this module's.
  * @property {Object<string, number>} sinkTokens - tokens on each real pool's sink at the
  *   end, one entry per pool, normally all 1. **More than 1 is improper completion**:
- *   `bpmnToPN` wires every end event to the same sink (workflow-net.js:161/181), so an AND
+ *   `bpmnToPN` wires every end event to the same sink (`buildScope`, workflow-net.js), so an AND
  *   fork ending at two end events leaves 2 there. Reported because `residualPlaces` skips
  *   the sinks and would otherwise make that case read as a clean finish. Still no verdict
  *   — WF03 is where improper completion gets named.
@@ -512,7 +512,7 @@ export function enumerateCollaboration(lc, options = {}) {
       residualPlaces,
       // The sinks are excluded from `residualPlaces` (a token there is the point), which
       // used to hide the one thing that place can still say: `bpmnToPN` wires every end
-      // event to the SAME sink (workflow-net.js:161/181), so an AND fork to two end
+      // event to the SAME sink (`buildScope`, workflow-net.js), so an AND fork to two end
       // events lands two tokens on it. That is the WF03 improper-completion shape, and
       // with the sink filtered out unconditionally the result read as a clean finish.
       sinkTokens: Object.fromEntries(net.pools.map(p => [p.poolId, marking.get(p.sinkPlace) || 0])),
