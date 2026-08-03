@@ -14,8 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unique), never the model — a legitimately unsound process (a real deadlock, a real dead end)
   must still come out clean, `checkSoundness`/WF01–WF03's job. `NC02` (a transition that can
   never fire) is **ERROR**, its one legitimate cause — an untranslated boundary event — having
-  been removed in the same release; `NC04` (two edges silently sharing one place) is WARNING today
-  and becomes ERROR once the place-id scheme behind it is fixed; `NC05` (multiple start events
+  been removed in the same release; `NC04` (two distinct edges assigned the same place) is
+  **ERROR**, its own one legitimate cause — the pair-keyed place-id scheme — having been removed
+  in the same release too, though note what that leaves it checking: it reads `pn.placeOfEdge`
+  rather than re-deriving the id (re-deriving would ERROR on every legal parallel pair), so it
+  asserts `namePlaces`' invariant against `namePlaces`' output and cannot fire under the current
+  naming rule — a regression fence, not a check of the net against the Logic-Core; `NC05`
+  (multiple start events
   sharing one source place) is INFO — disclosure, not a defect. Fenced directory-wide over every
   Logic-Core fixture under `tests/fixtures/` by `net-check.test.js`, so a new fixture is covered
   the day it lands. Documented in `references/api-reference.md`; the check is now also pinned
@@ -48,6 +53,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **Two parallel sequence flows between one node pair no longer collapse onto one Petri-net
+  place.** `bpmnToPN` keyed a place on the node pair alone (`p_<src>_<tgt>`), so a `gw --yes--> t`
+  / `gw --no--> t` pair — legal BPMN, and the everyday shape of two conditions with one
+  consequence — produced a single place. Three consequences, all reproduced: the later flow's
+  label silently overwrote the earlier one's (`places.set` is a plain overwrite); the split's two
+  transitions produced onto the same token slot and the merge's two consumed from it, yielding
+  four enumerated scenarios where the model has two, of which two were pure duplicates — and
+  because `scripts/scenarios/format.js` recovers the branch *label* by index from the outgoing
+  edges, a reader was told a decision the trace does not support; and two distinct **backward**
+  edges between one pair shared one capped place, so the per-backward-edge cycle bound was applied
+  to their sum (a model with two rework flows could rework once in total, at bound 1). The new
+  `namePlaces` (`scripts/bpmn/workflow-net.js`) keeps `p_<src>_<tgt>` where the base id occurs
+  once — so no existing model's place ids move — and suffixes `#<k>` in `flatEdges` order where
+  it recurs. `#` is the file's reserved separator and no node id can contain one, so `#<k>` (a
+  decimal) cannot be confused with a container's `p_<C>#source`/`p_<C>#sink`. Deliberately not
+  `p_<edgeId>`: `references/input-schema.json` makes `Edge.id` neither required nor
+  pattern-constrained, unlike `Node.id`.
+  **A second, quieter collision of the same scheme closes with it:** the counter is keyed on the
+  concatenation `<src>_<tgt>`, not on the (source, target) pair, and `Node.id` permits `_`, so
+  `a → b_c` and `a_b → c` — different pairs entirely — both used to compute `p_a_b_c` and share
+  a place. They now become `p_a_b_c#0` / `p_a_b_c#1`. The invariant `namePlaces` guarantees is
+  therefore the stronger and simpler one, **distinct edges never share a place id**, rather than
+  anything about pairs; a `#<k>` in an id does not prove the node pair repeats, only that the
+  concatenation does.
+- **The place-id formula now exists in exactly one place.** It had been re-derived in eight:
+  three arc-building branches and `connectTransition` and `wireBoundaryEvents` in
+  `workflow-net.js`, `backwardEdgePlaceId` in `scripts/scenarios/enumerate.js` (used from
+  `collaboration.js` too), and NC04 and NC06 in `net-check.js` — which is why one defect had three
+  symptoms. `bpmnToPN` now publishes `pn.placeOfEdge: Map<edgeObject, placeId>`, identity-keyed on
+  the objects in `pn.flatEdges` and travelling with the net for the reason those arrays already
+  do: identity guarantees agreement, where re-deriving a formula only guarantees it until someone
+  edits one copy. `backwardEdgePlaceId` is gone. NC04 in particular *had* to stop re-deriving —
+  against the new scheme the old formula would have called every legal parallel pair an ERROR.
 - **Boundary events now have a Petri-net translation; before, they had none, silently.**
   `connectTransition` wired a `boundaryEvent` from its incoming sequence flows — of which a
   boundary event has none, its trigger being the host it attaches to — so its transition reached
