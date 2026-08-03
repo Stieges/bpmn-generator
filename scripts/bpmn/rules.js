@@ -745,11 +745,13 @@ const SOUNDNESS_RULES = [
     id: 'S15', layer: 'soundness', defaultSeverity: 'WARNING',
     description: 'A per-node field must sit on a node class OMG defines it on — isForCompensation '
       + 'is an Activity attribute, implementation belongs to the five invoking Task types, '
-      + 'triggeredByEvent to SubProcess, calledElement to CallActivity, scriptFormat to '
+      + 'triggeredByEvent to SubProcess and its Transaction specialization, calledElement to '
+      + 'CallActivity, scriptFormat to '
       + 'ScriptTask, isCollection to DataObjectReference',
     ref: {
       omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity)',
-      cmof: 'Activity.isForCompensation (BPMN20.cmof:1095), SubProcess.triggeredByEvent (:1147), '
+      cmof: 'Activity.isForCompensation (BPMN20.cmof:1095), SubProcess.triggeredByEvent (:1147, '
+        + 'inherited by Transaction :1233), '
         + 'CallActivity.calledElement (:1188), ScriptTask.scriptFormat (:1251), '
         + 'DataObjectReference.isCollection (:641), and `implementation` granted per class to '
         + 'UserTask (:1263), ServiceTask (:1240), SendTask (:1229), ReceiveTask (:1214) and '
