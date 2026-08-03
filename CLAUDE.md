@@ -424,7 +424,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
-| Soundness | ERROR | S01-S14 | Structural correctness (OMG compliance) |
+| Soundness | ERROR | S01-S15 | Structural correctness (OMG compliance) |
 | Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |

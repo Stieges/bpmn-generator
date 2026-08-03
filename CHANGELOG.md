@@ -480,6 +480,39 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   `tests/fixtures/subprocess-collapsed-children.json` has exactly such a node. WF01
   (`workflow_net`, opt-in) is still the only layer that names it. Making S04 descend is a separate
   change with a separate blast radius and was deliberately not made here.
+- **`OMG_NODE_FIELD_SCOPE`'s `allowed` sets are fenced against being *too wide*, not against being
+  *too narrow*.** `scripts/bpmn/types.test.js` proves each set only ever names real `NodeType`
+  enum members and round-trips a correctly- and an incorrectly-typed value through `bpmn-moddle`
+  for every entry — both directions catch a class the table wrongly *grants* a field to. Neither
+  catches the opposite mistake: a class OMG genuinely grants a field to that the table's `allowed`
+  set omits. In that shape `isFieldOutOfScope` would report a false S15 drop and `buildFlowNode`
+  would silently discard a value the author was entitled to write, for a field/class pair no
+  current fixture exercises. Closing it means reading `bpmn-moddle`'s own metamodel for each of
+  the six fields and comparing both directions, not just the one the current tests take.
+- **The `S15`/`buildFlowNode` round trip proves *acceptance*, not *meaning*.** The oracle added
+  while fixing `isCollection` (see *Fixed* above) asks whether `bpmn-moddle` re-parses the emitted
+  attribute without an `unknown attribute` warning — a real, external check, but one that can only
+  say "this element is willing to carry this attribute", not "this is the element OMG means by
+  it". A field placed on a class that is wrong per the CMOF but happens to be one `bpmn-moddle`'s
+  metamodel also grants the attribute to would still pass every fence `OMG_NODE_FIELD_SCOPE`
+  currently has.
+- **`dataStoreReference` has no companion root element, and whether that is correct was never
+  investigated in this release.** `isCollection`'s fix gave `dataObjectReference` a matching
+  `<bpmn:dataObject>`, built and read back via `dataObjectRef`; `dataStoreReference` gets no
+  equivalent `<bpmn:dataStore>` anywhere in `bpmn-xml.js`, and neither importer looks for one.
+  `DataStore` is a `rootElement` rather than a `flowElement` in the CMOF, which is consistent with
+  there being nothing to emit — but nobody has checked whether that appearance is the reason or a
+  coincidence, and no field on `dataStoreReference` currently needs a companion object to round-trip.
+- **`isAdHoc` is declared in `references/input-schema.json` but has no effect on the emitted XML.**
+  `svg.js` reads `node.isAdHoc` to draw the ad-hoc tilde marker in the preview, but `bpmn-xml.js`
+  never writes it to an attribute and neither `import.js` nor `moddle-import.js` reads one back —
+  a `subProcess` with `isAdHoc: true` renders with the marker in the SVG and serialises as a plain
+  `<bpmn:subProcess>`, indistinguishable from one without the flag, on both the write and the read
+  side. `CONTAINER_TYPES`/`ACTIVITY_TYPES` separately carry `adHocSubProcess` as a type string that
+  neither importer ever produces and the schema's `NodeType` enum does not expose (kept only
+  because a hand-written test fixture depends on it — see the allowlist comment in
+  `scripts/bpmn/types.test.js`), which is a second, adjacent way this release's ad-hoc support is
+  thinner than either the schema or the type vocabulary implies on their own.
 
 ## [3.6.0] - 2026-08-01
 
