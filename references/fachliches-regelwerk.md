@@ -49,6 +49,12 @@ ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 | S13 | Boundary Event muss an einer existierenden Aktivität hängen | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
 | S14 | Message Flow source/target darf kein Container sein — der Klasse nach (SubProcess/Transaction/AdHocSubProcess/CallActivity) oder der Struktur nach (eigenes `nodes`-Array) (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
 
+**Zu S04:** "isoliert" heißt hier ganz konkret ohne jede Kante, weder ein- noch ausgehend — ein
+Node mit genau einer ausgehenden (aber keiner eingehenden) Kante besteht S04, ebenso S07 (das nur
+die fehlende ausgehende Kante prüft). Ein solcher Node, etwa ein `parallelGateway`, das nichts
+erreicht, validiert unter dem Default-Profil sauber; nur WF01 (`workflow_net`, opt-in) benennt ihn
+als toten Transition. Siehe CHANGELOG's "Known limitations" für [Unreleased].
+
 **Zu S13:** `attachedToRef` ist im OMG-Schema Pflicht (1..1). Ohne diese Prüfung lief ein
 ins Leere zeigendes `attachedTo` bis in die Ausgabe durch und erzeugte ein `boundaryEvent`
 ohne `attachedToRef`, ohne DI-Shape und mit einer ausgehenden Kante ohne Wegpunkte — also

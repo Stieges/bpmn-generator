@@ -166,7 +166,10 @@ translation that dropped an arc, and a model that routes nothing into the node �
 `parallelGateway` nothing leads to, a subprocess with no incoming flow. The second is a faithful
 translation of a defective model, so reporting it here would be the category error this pass's
 whole contract forbids; the layer that owns it is WF01 (`checkSoundness` — a node the flow never
-reaches is a dead transition), plus S04/S07 in the rule engine. Both codes therefore fire only when
+reaches is a dead transition), plus S04 in the rule engine where the node has no edges at all and
+S07 for the missing-outgoing half — a node with an outgoing flow but no incoming one, such as a
+stranded `parallelGateway`, is caught by neither S04 nor S07 and is reported only by the opt-in
+WF01 (see the CHANGELOG's Known limitations for [Unreleased]). Both codes therefore fire only when
 the Logic-Core actually gives the node an input (resp. an output) that the net does not have.
 Measured over 4000 random rule-engine-clean processes, the unscoped codes produced 6601 NC02 and
 6612 NC02b ERRORs across 3380 of 3983 nets — while NC01, NC03a, NC03b, NC04 and NC06 never fired
