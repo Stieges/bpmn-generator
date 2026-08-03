@@ -50,6 +50,7 @@
  */
 
 import { bpmnToPN, fireTransition } from '../bpmn/workflow-net.js';
+import { isContainerNode } from '../bpmn/types.js';
 import {
   enumerateNet, resolveLimits, findBackwardEdges, backwardEdgePlaceId,
 } from './enumerate.js';
@@ -184,12 +185,22 @@ export function composeCollaboration(lc) {
     }
 
     for (const n of pn.flatNodes) {
-      // `bpmnToPN`'s own container predicate, by the same criterion (workflow-net.js:128) —
-      // a node with children is a subnet, not a transition. Recorded whether or not the
-      // container was actually refined: the fallback path (no inner start/end) gives it a
-      // single transition and so would wire cleanly, but the reason to refuse is the class,
-      // not the translation. See `resolve()`.
-      if (Array.isArray(n.nodes) && n.nodes.length > 0) containerIds.add(n.id);
+      // By CLASS first, structure second — `isContainerNode` (bpmn/types.js), sharing S14's
+      // `CONTAINER_TYPES` rather than re-deriving it. Asking only "does it have children?"
+      // under-applies the very argument this guard cites: a `callActivity` never carries
+      // children and a collapsed `subProcess` need not, so both fell through to `nodeOwners`
+      // and were wired as ordinary nodes — no double send, one transition, but the composed net
+      // still synchronising on an endpoint the standard forbids while S14 warned about the same
+      // model. Same defect class, different door.
+      //
+      // Recorded whether or not `bpmnToPN` actually refined the container: the fallback path
+      // (no inner start/end) gives it a single transition and would wire cleanly, but the
+      // reason to refuse is the class, not the translation — legality must not depend on
+      // whether the author happened to draw an inner start event. See `resolve()`.
+      //
+      // Only the message arc goes away. Such a node keeps its ordinary transition and its
+      // place in the control flow.
+      if (isContainerNode(n)) containerIds.add(n.id);
       const tIds = transitionsForNode(pn, n.id).map(t => scopedId(poolId, t));
       if (!tIds.length) continue;
       if (!nodeOwners.has(n.id)) nodeOwners.set(n.id, []);

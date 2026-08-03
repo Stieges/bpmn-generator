@@ -25,20 +25,23 @@ rules/*.json        → Profile (Severity-Overrides, Layer-Deaktivierung)
 
 ---
 
-## Schicht 1: Soundness (ERROR)
+## Schicht 1: Soundness (ERROR, vier Regeln WARNING)
 
-Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung.
+Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung — mit Ausnahme von S04, S07, S08
+und S14, die per Default `WARNING` sind und daher melden, ohne die Generierung zu stoppen. Die
+Severity steht pro Regel in `defaultSeverity` (`scripts/bpmn/rules.js`) und ist ueber Profile
+ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 
 | ID | Regel | Referenz | Status |
 |----|-------|----------|--------|
 | S01 | Jeder Prozess hat mindestens ein Start-Event | OMG §10.4.2, 7PMG G3 | implementiert |
 | S02 | Jeder Prozess hat mindestens ein End-Event | OMG §10.4.2, 7PMG G3 | implementiert |
 | S03 | Kanten referenzieren nur existierende Nodes (source/target) | OMG §10.3.1 | implementiert |
-| S04 | Keine isolierten Nodes (ohne ein-/ausgehende Kante) | 7PMG G2 | implementiert |
+| S04 | Keine isolierten Nodes (ohne ein-/ausgehende Kante) (Severity WARNING) | 7PMG G2 | implementiert |
 | S05 | Kein Deadlock: XOR-Split darf nicht direkt/indirekt in AND-Join muenden | OMG §10.5.1, Silver Ch.5 | implementiert |
 | S06 | Kein Deadlock: Inclusive-Split darf nicht direkt/indirekt in AND-Join muenden | OMG §10.5.1 | implementiert |
-| S07 | Jeder Pfad vom Start muss ein End-Event erreichen koennen | 7PMG G1 | implementiert |
-| S08 | Boundary-Event-Pfade muessen in End-Event terminieren | OMG §10.4.4, BEF4LLM | implementiert |
+| S07 | Jeder Pfad vom Start muss ein End-Event erreichen koennen (Severity WARNING) | 7PMG G1 | implementiert |
+| S08 | Boundary-Event-Pfade muessen in End-Event terminieren (Severity WARNING) | OMG §10.4.4, BEF4LLM | implementiert |
 | S09 | Message Flows nur zwischen verschiedenen Pools | OMG §9.4 | implementiert |
 | S10 | Message Flows: Quell- und Ziel-Nodes muessen existieren | OMG §9.4 | implementiert |
 | S11 | SubProcess-Kinder: Start-Event + End-Event vorhanden | OMG §10.2.1 | implementiert |
