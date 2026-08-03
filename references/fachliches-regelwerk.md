@@ -230,10 +230,22 @@ Two consequences worth knowing:
   WF03 flagged that model as a deadlock while S05 stayed silent.
 - The rule stays a cheap syntactic heuristic and remains **incomplete**: a flow counts as
   suppliable by a branch as soon as its source node is reachable, which over-approximates the
-  supplying sets and therefore makes them agree more often than they should. The residual error is
-  a missed deadlock, never a fabricated one. It also does not see a branch that *escapes* an
-  enclosing parallel block entirely (the sibling arm's token is then stranded). Both belong to the
-  exhaustive check: WF03 in the opt-in `workflow_net` layer.
+  supplying sets and therefore makes them agree more often than they should. For **S05** the
+  residual error is a missed deadlock, never a fabricated one — see the next bullet for why that
+  does not extend to S06. It also does not see a branch that *escapes* an enclosing parallel block
+  entirely (the sibling arm's token is then stranded). Both belong to the exhaustive check: WF03 in
+  the opt-in `workflow_net` layer.
+- **S06 additionally has a one-sided false positive, and it is not covered by that escape hatch.**
+  `start → gx(inclusive)`, `gx → t1`, `gx → gj(parallel)`, `t1 → gj`, `gj → end` is reported as a
+  deadlock at ERROR, so `runPipeline` returns `bpmnXml: null` and the model produces no output.
+  It is not a deadlock: an OR-split may activate **both** branches, and then both incoming flows of
+  the join carry a token. S06 reasons per branch — correct for XOR, wrong for OR. WF03 cannot
+  arbitrate: `bpmnToPN` gives an inclusive gateway a single transition over all of its arcs (AND
+  semantics) and reports the gateway as `WF_OR` INFO, *"not formally verifiable … results may be
+  incomplete"*, so its silence on this model is a disclaimed silence about an AND-substituted net,
+  not an acquittal of the model as written. Pre-existing, not introduced by the container-aware
+  net work. Workaround: model the intent with an explicit parallel split, or set S06 to `OFF` via a
+  rule profile.
 
 Not covered by S06, and not a deadlock: an inclusive split that activates several branches which
 re-converge at an **exclusive** merge puts several tokens into the parallel block. That is a
