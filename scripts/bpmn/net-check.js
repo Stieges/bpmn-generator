@@ -44,7 +44,11 @@ const SEVERITY = {
 };
 
 /**
- * @param {object} pn   - a net from bpmnToPN(), or a composed net from composeCollaboration()
+ * @param {object} pn   - a net from bpmnToPN(), or a composed net from composeCollaboration().
+ *        `pn.unproducedPlaces`, when present, is the translation's own list of places it left
+ *        without a producer on purpose (see below, at the NC03a loop). A composed net has no
+ *        such field today; if one ever needs it, the per-pool lists have to be prefixed the way
+ *        every other place id is.
  * @param {object} proc - the Logic-Core process/pool the net came from (for NC01's node list
  *                        and for the element ids in the messages)
  * @param {object} [opts]
@@ -62,6 +66,19 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
   const issues = [];
 
   const { places, transitions, arcs, sourcePlace, sinkPlace, skipped, flatNodes, flatEdges } = pn;
+
+  // `pn.unproducedPlaces` — the translation's own declaration that it left these places with no
+  // producer because it skipped (and disclosed) the node that would have produced them. Today
+  // that is a boundary event whose host is not an Activity, or names nothing at all: the
+  // escalation path downstream of it really is unreachable, which is a fact about the MODEL and
+  // is what WF01 reports. Reporting it here as NC03a would be the category error this module's
+  // own header forbids — judging the model instead of the translation.
+  //
+  // Deliberately narrower than `opts.exemptUnconsumedPlaces`, which exempts both directions
+  // because a message place from a black box is legitimately neither produced nor consumed.
+  // This list only ever excuses a MISSING PRODUCER, so it is applied to NC03a alone. A place
+  // that also loses its consumer is a different fact and still gets reported.
+  const exemptUnproduced = new Set([...exempt, ...(pn.unproducedPlaces || [])]);
 
   const skippedIds = new Set((skipped || []).map(s => s.id));
   const transitionsByBpmnNodeId = new Map();
@@ -122,13 +139,15 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
   }
 
   // NC03a — a place no transition ever produces (other than the source place, whose initial
-  // token is placed directly, and any place the caller already accounts for).
+  // token is placed directly, any place the caller already accounts for, and any place the
+  // TRANSLATION declared on `pn.unproducedPlaces` — see the note at the top of this function
+  // for why that list excuses a missing producer and nothing else).
   // NC03b — a place no transition ever consumes (other than the sink place, and the same
   // exemptions). Together these are the "dropped container" signature: a subprocess boundary
   // vanishing from bpmnToPN's flatten leaves exactly one produced-never-consumed place on the
   // way in and one consumed-never-produced place on the way out.
   for (const [pid] of places) {
-    if (pid === sourcePlace || exempt.has(pid)) continue;
+    if (pid === sourcePlace || exemptUnproduced.has(pid)) continue;
     const isProduced = arcs.some(a => a.type === 'T→P' && a.to === pid);
     if (!isProduced) {
       issues.push({

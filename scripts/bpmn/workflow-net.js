@@ -58,7 +58,7 @@ import { isGateway, isBoundaryEvent } from './types.js';
  *
  * @param {object} proc - Process with nodes and edges
  * @returns {{ places, transitions, arcs, initialMarking, sinkPlace, orGateways, skipped,
- *   approximations }}
+ *   approximations, unproducedPlaces }}
  */
 function bpmnToPN(proc) {
   const nodes = proc.nodes || [];
@@ -80,6 +80,13 @@ function bpmnToPN(proc) {
   // `buildContainer` has run. Deferring is what makes the translation order-independent
   // instead of order-dependent-and-usually-lucky.
   const boundaryEvents = [];
+  // Places this translation deliberately leaves with no producing transition, because the node
+  // that would have produced them was skipped and disclosed on `skipped`. `net-check.js`'s
+  // NC03a exempts them: a place nothing produces is a translation defect when the translation
+  // lost the producer, and a fact about the model when the translation says out loud that it
+  // did not model it. Narrow on purpose — only NC03a, never NC03b, and only from a disclosed
+  // skip — so a genuinely unproduced place is still caught.
+  const unproducedPlaces = [];
 
   // The flattened views: every node at every nesting level, every edge at every nesting level.
   const flatNodes = flattenNodes(nodes);
@@ -106,7 +113,7 @@ function bpmnToPN(proc) {
   // its end events produce on `p_sink`, exactly as a subprocess's do from its own pair.
   const ctx = {
     places, transitions, arcs, orGateways, skipped, approximations, boundaryEvents,
-    flatNodes, flatEdges,
+    unproducedPlaces, flatNodes, flatEdges,
   };
   buildScope(proc, sourcePlace, sinkPlace, ctx);
 
@@ -133,7 +140,7 @@ function bpmnToPN(proc) {
   // scenario step naming a subprocess had nothing to resolve against.
   return {
     places, transitions, arcs, initialMarking, sinkPlace, sourcePlace, orGateways, skipped,
-    approximations, flatNodes, flatEdges,
+    approximations, unproducedPlaces, flatNodes, flatEdges,
   };
 }
 
@@ -527,19 +534,34 @@ function buildContainer(node, ctx) {
  */
 function wireBoundaryEvents(ctx) {
   const { places, transitions, arcs, skipped, approximations, boundaryEvents,
-    flatNodes, flatEdges } = ctx;
+    unproducedPlaces, flatNodes, flatEdges } = ctx;
 
   for (const node of boundaryEvents) {
     const hostId = node.attachedTo;
     const host = (flatNodes || []).find(n => n.id === hostId);
 
-    // Every input-place set that enables the host, one per host transition. `role === 'exit'`
-    // is the container's far end, never a competitor (see above). Collected before anything is
-    // added to `transitions`, so a second boundary event on the same host cannot see the
-    // first one's transitions.
+    // Every input-place set that enables the host, one per host transition.
+    //
+    // Two exclusions, and the reason they are `role` tests rather than anything cleverer is
+    // that `role` is the only thing that distinguishes these transitions from the host's own:
+    //   - `role === 'exit'` is the container's far end, never a competitor (see above);
+    //   - `role === 'boundary'` keeps a boundary event attached to ANOTHER boundary event out.
+    //     `BoundaryEvent.attachedToRef` is typed `Activity`, so that shape is illegal BPMN, and
+    //     nothing upstream of this file rejects it (S13 only checks that `attachedTo` names a
+    //     node in the same container). Without the test it resolved or did not depending purely
+    //     on declaration order — chained if its host happened to be wired first, disclosed on
+    //     `skipped` if not. Refusing it outright makes the outcome the same either way, which
+    //     is worth more than accidentally supporting a shape the standard forbids.
+    //
+    // Note what does NOT protect this loop: it reads a `transitions` map that earlier
+    // iterations have already written to. An earlier comment here claimed the collection ran
+    // before anything was added, and that was simply false. The protection is the
+    // `t.bpmnNodeId !== hostId` filter — a boundary event's own transitions carry ITS node id,
+    // not its host's — plus the `role` exclusion above for the one case where that filter
+    // would otherwise match.
     const groups = [];
     for (const [tId, t] of transitions) {
-      if (t.bpmnNodeId !== hostId || t.role === 'exit') continue;
+      if (t.bpmnNodeId !== hostId || t.role === 'exit' || t.role === 'boundary') continue;
       const inPlaces = arcs.filter(a => a.type === 'P→T' && a.to === tId).map(a => a.from);
       if (inPlaces.length > 0) groups.push(inPlaces);
     }
@@ -569,6 +591,25 @@ function wireBoundaryEvents(ctx) {
 
     if (distinct.length === 0) {
       skipped.push({ id: node.id, reason: 'boundaryEventWithoutHost' });
+      // The event gets no transition — but the places for its OUTGOING edges were already
+      // minted by `bpmnToPN`'s up-front pass, and nothing produces them now. That is the exact
+      // mirror of the incoming-edge argument above, and it needs the same care: leaving it
+      // unaccounted made `net-check.js` report NC03a (ERROR) — a TRANSLATION defect — for what
+      // is a malformed MODEL, the category error net-check's own doc comment forbids.
+      //
+      // Recorded rather than repaired, and the two repairs are worth naming so nobody tries
+      // them: deleting the place leaves the downstream node's consuming arc dangling, and
+      // deleting the arc too leaves that node with no input place at all — NC02, ERROR, a
+      // fresh defect invented to hide this one. The place SHOULD be there and SHOULD have no
+      // producer: the escalation path really is unreachable in this model, which is a
+      // model-level fact and is what WF01 reports about it.
+      //
+      // Passed IN on the net rather than re-derived inside `net-check.js`, for the reason that
+      // module already gives for `exemptUnconsumedPlaces`: identity beats agreement.
+      for (const oe of flatEdges.filter(e => e.source === node.id)) {
+        const pid = `p_${oe.source}_${oe.target}`;
+        if (places.has(pid)) unproducedPlaces.push(pid);
+      }
       continue;
     }
 

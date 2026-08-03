@@ -1125,25 +1125,96 @@ describe('Workflow-Net Soundness', () => {
     expect(pn.approximations.some(a => a.id === 'bnd_j')).toBe(false);
   });
 
-  test('a boundary event whose host cannot be found gets NO transition, and says so', () => {
+  // ── The un-hostable boundary event, in all three shapes it comes in ──
+  // Every one of these carries an OUTGOING edge, which is the variant that can actually fail:
+  // the place for that edge is minted by bpmnToPN's up-front pass and, with the event skipped,
+  // has no producer. The first cut of this stage tested the one variant (no outgoing edge)
+  // that structurally could not fail, and NC03a/ERROR went unnoticed in the other three.
+  // `pn.unproducedPlaces` is how the translation declares it — the mirror of the incoming-edge
+  // argument in `wireBoundaryEvents`, and net-check's own contract (judge the translation, not
+  // the model) is what makes declaring it right and reporting it wrong.
+  const hostlessBoundary = (nodes) => ({
+    id: 'P',
+    nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 't', type: 'userTask' },
+      ...nodes,
+      { id: 'esc', type: 'userTask' },
+      { id: 'e', type: 'endEvent' },
+      { id: 'e2', type: 'endEvent' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 't' },
+      { id: 'f2', source: 't', target: 'e' },
+      { id: 'f3', source: 'ghost', target: 'esc' },
+      { id: 'f4', source: 'esc', target: 'e2' },
+    ],
+  });
+
+  test.each([
+    ['attachedTo names nothing at all', [{ id: 'ghost', type: 'boundaryEvent', attachedTo: 'nowhere' }]],
+    ['attachedTo names an artifact', [
+      { id: 'note', type: 'textAnnotation', name: 'n' },
+      { id: 'ghost', type: 'boundaryEvent', attachedTo: 'note' },
+    ]],
+  ])('a boundary event that cannot be hosted (%s) gets NO transition, and its dangling place is declared', (_label, nodes) => {
+    const proc = hostlessBoundary(nodes);
+    const pn = bpmnToPN(proc);
+
     // The one thing that must not happen is the old behaviour: a transition minted anyway,
     // with no way to fire, which NC02 is now ERROR about.
-    const proc = {
-      id: 'P', nodes: [
-        { id: 's', type: 'startEvent' },
-        { id: 't', type: 'userTask' },
-        { id: 'ghost', type: 'boundaryEvent', attachedTo: 'nowhere' },
-        { id: 'e', type: 'endEvent' },
-      ],
-      edges: [
-        { id: 'f1', source: 's', target: 't' },
-        { id: 'f2', source: 't', target: 'e' },
-      ],
-    };
-    const pn = bpmnToPN(proc);
     expect([...pn.transitions.keys()].some(t => t.startsWith('t_ghost'))).toBe(false);
     expect(pn.skipped).toContainEqual({ id: 'ghost', reason: 'boundaryEventWithoutHost' });
-    expect(checkNetIntegrity(pn, proc).issues.filter(i => i.severity === 'ERROR')).toEqual([]);
+    // Declared, not repaired: the place SHOULD exist and SHOULD have no producer — the
+    // escalation path really is unreachable in this model, which is WF01's finding, not NC03a's.
+    expect(pn.unproducedPlaces).toEqual(['p_ghost_esc']);
+    expect(checkNetIntegrity(pn, proc).issues).toEqual([]);
+  });
+
+  test.each([['first', true], ['second', false]])(
+    'a boundary event chained onto another boundary event is refused the same way whether declared %s',
+    (_label, chainedFirst) => {
+      // BoundaryEvent.attachedToRef is typed Activity, so this is illegal BPMN — and S13 does
+      // not reject it (it only checks that attachedTo names a node in the same container). It
+      // used to resolve or not purely by declaration order, which made the net order-dependent
+      // AND left an unproduced place on one of the two orderings. Refusing it outright by the
+      // `role === 'boundary'` exclusion makes both orderings produce the identical net.
+      const b1 = { id: 'b1', type: 'boundaryEvent', attachedTo: 't' };
+      const b2 = { id: 'b2', type: 'boundaryEvent', attachedTo: 'b1' };
+      const proc = {
+        id: 'P',
+        nodes: [
+          { id: 's', type: 'startEvent' }, { id: 't', type: 'userTask' },
+          ...(chainedFirst ? [b2, b1] : [b1, b2]),
+          { id: 'x1', type: 'userTask' }, { id: 'x2', type: 'userTask' },
+          { id: 'e', type: 'endEvent' }, { id: 'e1', type: 'endEvent' }, { id: 'e2', type: 'endEvent' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' }, { id: 'f2', source: 't', target: 'e' },
+          { id: 'f3', source: 'b1', target: 'x1' }, { id: 'f4', source: 'x1', target: 'e1' },
+          { id: 'f5', source: 'b2', target: 'x2' }, { id: 'f6', source: 'x2', target: 'e2' },
+        ],
+      };
+      const pn = bpmnToPN(proc);
+
+      expect(pn.transitions.has('t_b1')).toBe(true);
+      expect([...pn.transitions.keys()].some(t => t.startsWith('t_b2'))).toBe(false);
+      expect(pn.skipped).toEqual([{ id: 'b2', reason: 'boundaryEventWithoutHost' }]);
+      expect(pn.unproducedPlaces).toEqual(['p_b2_x2']);
+      expect(checkNetIntegrity(pn, proc).issues).toEqual([]);
+    });
+
+  test('the unproduced-place exemption is narrow: a real unproduced place is still an ERROR', () => {
+    // The guard has to stay honest, or it becomes a way of silencing NC03a. `p_orphan_in` here
+    // has nothing to do with any skip — the translation genuinely never produces it — so it
+    // must still be reported even though the same net legitimately exempts `p_ghost_esc`.
+    const proc = hostlessBoundary([{ id: 'ghost', type: 'boundaryEvent', attachedTo: 'nowhere' }]);
+    const pn = bpmnToPN(proc);
+    pn.places.set('p_orphan_in', { id: 'p_orphan_in' });
+    pn.arcs.push({ from: 'p_orphan_in', to: 't_esc', type: 'P→T' });
+
+    const codes = checkNetIntegrity(pn, proc).issues.map(i => `${i.code}/${i.severity}`);
+    expect(codes).toEqual(['NC03a/ERROR']);
   });
 
   test('runRules with strict profile includes WF checks', () => {

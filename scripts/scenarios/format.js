@@ -546,10 +546,12 @@ export function describeEnumerationCompleteness(enumerationResult) {
     subProcessWithoutStartOrEnd: 'A container without an inner startEvent or endEvent has no '
       + 'well-defined entry or exit marking, so it is translated as a single atomic transition '
       + 'and its children do not appear in any scenario.',
-    boundaryEventWithoutHost: 'A boundary event is triggered by its host, so with no host that '
-      + 'can be found — or a host nothing can enable — there is nothing to trigger it from. '
-      + 'Giving it a transition anyway would only recreate the unfireable transition this '
-      + 'translation exists to remove; its whole path is missing from the list.',
+    boundaryEventWithoutHost: 'A boundary event is triggered by its host, so there is nothing '
+      + 'to trigger it from when `attachedTo` names nothing, names something nothing can enable '
+      + '(an artifact, say), or names something that is not an Activity — another boundary '
+      + 'event, which BPMN does not allow. Giving it a transition anyway would only recreate '
+      + 'the unfireable transition this translation exists to remove; its whole path is missing '
+      + 'from the list, and the places on that path have no producer as a result.',
   };
   const skipReasons = [...new Set(skippedOther.map((s) => s.reason))].sort();
   for (const reason of skipReasons) {
