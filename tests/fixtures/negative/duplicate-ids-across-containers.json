@@ -1,7 +1,7 @@
 {
   "id": "Process_DuplicateIds",
   "name": "Duplicate child ids",
-  "documentation": "NEGATIVE fixture. Two sibling collapsed subprocesses each declare a child with id \"check\" and a child flow with id \"f_in\". Every rule in rules.js walks one container at a time and sees nothing wrong, and the geometry never notices either because a collapsed subprocess draws no children -- but the emitted BPMN carries the same xsd:ID twice, which is document-wide unique by definition, so no tool loads the file correctly. NC06 is the code that names it. Kept under tests/fixtures/negative/ so net-check.test.js's directory-wide fence -- which scans the top level of tests/fixtures/ only and requires every fixture there to be a clean translation -- is never asked to hold a fixture that exists to be dirty.",
+  "documentation": "NEGATIVE fixture. Two sibling collapsed subprocesses each declare a child NODE with id \"check\". Every rule in rules.js walks one container at a time and sees nothing wrong, and the geometry never notices either because a collapsed subprocess draws no children -- but the emitted BPMN carries the same xsd:ID twice, which is document-wide unique by definition, so no tool loads the file correctly. NC06 is the code that names it, and it names it because the NET is wrong too: transitions are keyed t_<node.id>, so the second node overwrites the first and the net has one transition where the model has two nodes. Deliberately NOT also duplicating a flow id -- two edges sharing an id are translated FAITHFULLY (places are keyed p_<src>_<tgt>[#k] and placeOfEdge is keyed by edge object identity), so NC06 does not and must not fire on them; that half of the class is caught by the bpmn-moddle round-trip in validation.xmlWarnings and is fatal only under --strict. See CHANGELOG's Known limitations. Kept under tests/fixtures/negative/ so net-check.test.js's directory-wide fence -- which scans the top level of tests/fixtures/ only and requires every fixture there to be a clean translation -- is never asked to hold a fixture that exists to be dirty.",
   "nodes": [
     { "id": "start", "type": "startEvent", "name": "Request received" },
     {
@@ -14,7 +14,7 @@
         { "id": "sub_a_end", "type": "endEvent", "name": "Screened" }
       ],
       "edges": [
-        { "id": "f_in", "source": "sub_a_start", "target": "check" },
+        { "id": "f_a1", "source": "sub_a_start", "target": "check" },
         { "id": "f_a2", "source": "check", "target": "sub_a_end" }
       ]
     },
@@ -28,7 +28,7 @@
         { "id": "sub_b_end", "type": "endEvent", "name": "Screened" }
       ],
       "edges": [
-        { "id": "f_in", "source": "sub_b_start", "target": "check" },
+        { "id": "f_b1", "source": "sub_b_start", "target": "check" },
         { "id": "f_b2", "source": "check", "target": "sub_b_end" }
       ]
     },

@@ -87,7 +87,21 @@ function checkNetTranslation(lc) {
  * @param {boolean} [opts.visualRefinement] - Enable visual refinement passes (overrides CFG.visualRefinement.enabled)
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
- * @returns {Promise<{bpmnXml: string, svg: string, coordMap: object, validation: {errors: string[], warnings: string[], advisories: object[], metrics: object}}>}
+ * @returns {Promise<{
+ *   bpmnXml: string|null,
+ *   svg: string|null,
+ *   coordMap: object|null,
+ *   diagnostics: {ok: boolean, issues: object[]}|null,
+ *     post-layout geometry findings (di-check.js, DI01-DI07); `null` when validation blocked and
+ *     no layout ran — "no artefact", which is not the same claim as "clean"
+ *   netDiagnostics: {ok: boolean, issues: object[]}|null,
+ *     Petri-net translation findings (net-check.js, NC01-NC06), one call per pool, messages
+ *     prefixed `[pool] ` and carrying `process`; `null` on the same early-return path. A separate
+ *     key from `diagnostics` because that one's `code` is a closed DI enum in
+ *     references/api-schema.json
+ *   validation: {errors: string[], warnings: string[], advisories: object[], metrics: object,
+ *                xmlWarnings?: string[]}
+ * }>}
  */
 async function runPipeline(logicCore, opts = {}) {
   const lc = JSON.parse(JSON.stringify(logicCore)); // deep clone to avoid mutation
@@ -502,11 +516,21 @@ async function main() {
   // duplicate ids across sibling containers — see tests/fixtures/negative/. That used to leave
   // here with a serialisation warning and exit 0, and the file it wrote carried the same `id=`
   // twice, which xsd:ID forbids document-wide; no tool loads it correctly.
-  const netErrors = (result.netDiagnostics?.issues ?? []).filter(i => i.severity === 'ERROR');
-  const netWarnings = (result.netDiagnostics?.issues ?? []).filter(i => i.severity !== 'ERROR');
-  if (netWarnings.length) {
+  //
+  // One deliberate difference from the DI block: `--strict` gates on WARNING only, not on
+  // "anything that is not an ERROR". DI has no INFO codes, so the distinction never arose there;
+  // NC does, and NC05 is the case — its own message says multiple start events sharing one source
+  // place are "standard WF-net/OMG normalisation, not a defect". A gate that refuses to write
+  // files while quoting a message that says nothing is wrong is telling the user something false,
+  // and multiple start events are OMG-legal (§10.4.2) and common. INFO is disclosure: printed,
+  // never fatal.
+  const netIssues = result.netDiagnostics?.issues ?? [];
+  const netErrors = netIssues.filter(i => i.severity === 'ERROR');
+  const netWarnings = netIssues.filter(i => i.severity === 'WARNING');
+  const netInfos = netIssues.filter(i => i.severity !== 'ERROR' && i.severity !== 'WARNING');
+  if (netWarnings.length || netInfos.length) {
     console.warn('\n⚠ Petri-net diagnostics:');
-    netWarnings.forEach(i => console.warn(`  · ${i.code} ${i.message}`));
+    [...netWarnings, ...netInfos].forEach(i => console.warn(`  · ${i.code} ${i.message}`));
   }
   if (netErrors.length) {
     console.error('\n✗ Net integrity (NC) — the Petri-net translation is not faithful to the model, no files written:');
