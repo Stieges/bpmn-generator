@@ -214,6 +214,39 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
  * second pass — currently boundary-event attachedToRef, which can only be
  * resolved once every element exists.
  */
+/**
+ * The `<bpmn:dataObject>` that belongs to a `dataObjectReference` node, or `null` for any other
+ * node type.
+ *
+ * Logic-Core models a data object and the reference to it as ONE node; BPMN splits them into a
+ * `DataObject` (the thing) and a `DataObjectReference` (a use of it). The properties split too,
+ * and `isCollection` belongs to the DataObject — bpmn-moddle's metamodel grants
+ * DataObjectReference only `dataObjectRef`. Writing it on the reference is what produced
+ * `unknown attribute <isCollection>` on every round trip.
+ *
+ * Called from BOTH build paths, and that is the point rather than an incidental tidy-up: the
+ * top-level loop in `buildProcess` used to be the only place a DataObject was created, so a
+ * `dataObjectReference` nested inside a subprocess got a reference and no object at all. Moving
+ * `isCollection` onto the object without also closing that hole would have silently dropped the
+ * field for nested references — the same defect, one nesting level down.
+ */
+function buildDataObject(node) {
+  if (node.type !== 'dataObjectReference') return null;
+  const attrs = { id: `${node.id}_do` };
+  for (const spec of OMG_NODE_FIELD_SCOPE) {
+    if (spec.on !== 'dataObject') continue;
+    const value = node[spec.field];
+    // Same three guards as the `on: 'self'` loop, for the same reasons: falsy is nothing to
+    // write, a class that may not carry the field is dropped (S15 reports it), and a wrongly
+    // typed value is dropped rather than coerced.
+    if (!value) continue;
+    if (!spec.allowed.has(node.type)) continue;
+    if (typeof value !== spec.type) continue;
+    attrs[spec.attr] = value;
+  }
+  return create('bpmn:DataObject', attrs);
+}
+
 function buildFlowNode(node, topLevelDefsMap, registerNode) {
   const attrs = buildNodeAttrs(node);
 
@@ -245,6 +278,11 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   // "diagnose the model" — the same separation that keeps `net-check.js` out of judging XML. The
   // reporting is S15's job, in the layer that owns model defects and can say so in prose.
   for (const spec of OMG_NODE_FIELD_SCOPE) {
+    // `on: 'self'` only. `isCollection` is written onto the companion `<bpmn:dataObject>` by
+    // `buildDataObject` below, because OMG puts the attribute on DataObject and not on
+    // DataObjectReference — writing it here produced `<bpmn:dataObjectReference
+    // isCollection="true">` and an `unknown attribute <isCollection>` on every round trip.
+    if (spec.on !== 'self') continue;
     const value = node[spec.field];
     if (!value) continue;                        // falsy: nothing to serialise, same as before
     if (!spec.allowed.has(node.type)) continue;  // wrong class for this attribute
@@ -334,6 +372,12 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
       const childEl = buildFlowNode(child, topLevelDefsMap, registerNode);
       childMap.set(child.id, childEl);
       el.get('flowElements').push(childEl);
+      // A nested data object needs its DataObject in the subprocess's own flowElements — a
+      // SubProcess is a FlowElementsContainer, so that is where it belongs. Without this the
+      // reference existed with nothing to reference, and (since the move above) `isCollection`
+      // on a nested reference would have gone nowhere at all.
+      const childDataObject = buildDataObject(child);
+      if (childDataObject) el.get('flowElements').push(childDataObject);
     }
     for (const subEdge of (node.edges || [])) {
       const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
@@ -457,11 +501,11 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     if (gwEl && dfEl) gwEl.default = dfEl;
   }
 
-  // Data objects
+  // Data objects. The nested case is handled in `buildFlowNode`'s child loop, so that every
+  // dataObjectReference has a DataObject at whatever depth it sits — see `buildDataObject`.
   for (const node of nodes) {
-    if (node.type === 'dataObjectReference') {
-      flowElements.push(create('bpmn:DataObject', { id: `${node.id}_do` }));
-    }
+    const dataObject = buildDataObject(node);
+    if (dataObject) flowElements.push(dataObject);
   }
 
   // Associations

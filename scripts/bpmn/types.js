@@ -190,8 +190,18 @@ export const IMPLEMENTATION_TYPES = new Set([
  * than no rule at all; sharing the table makes disagreeing impossible.
  *
  * `field` is the Logic-Core name, `attr` the OMG attribute it serialises to (they differ for the
- * boolean pair), `allowed` the node types that may carry it, `scope` prose for the message, and
- * `type` the JavaScript typeof the field's value must have.
+ * boolean pair), `allowed` the node types that may carry it, `scope` prose for the message,
+ * `type` the JavaScript typeof the field's value must have, and `on` which ELEMENT the attribute
+ * is written to.
+ *
+ * `on` is `'self'` for five of the six — the attribute lands on the node's own element. It is
+ * `'dataObject'` for `isCollection`, and that is not a refinement but a correction of a live
+ * defect: OMG puts `isCollection` on **DataObject**, not on DataObjectReference (bpmn-moddle's
+ * metamodel grants DataObjectReference only `dataObjectRef`), so writing it on the reference
+ * produced `<bpmn:dataObjectReference isCollection="true">` and `unknown attribute <isCollection>`
+ * on every round trip. Note that `allowed` still says `dataObjectReference`, and correctly: in
+ * Logic-Core the reference and its object are ONE node, so `isCollection` is authored on the
+ * reference — only the emission target differs. The distinction is exactly what `on` records.
  *
  * `type` is carried here rather than inferred from the value at serialisation time, and that is
  * the second defect this table was extended to fix. A `typeof value === 'boolean' ? true : value`
@@ -207,12 +217,12 @@ export const IMPLEMENTATION_TYPES = new Set([
  * effect of centralising them.
  */
 export const OMG_NODE_FIELD_SCOPE = [
-  { field: 'isCompensation', attr: 'isForCompensation', type: 'boolean', allowed: ACTIVITY_TYPES, scope: 'an Activity' },
-  { field: 'implementation', attr: 'implementation', type: 'string', allowed: IMPLEMENTATION_TYPES, scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask' },
-  { field: 'isEventSubProcess', attr: 'triggeredByEvent', type: 'boolean', allowed: new Set(['subProcess']), scope: 'a subProcess' },
-  { field: 'calledElement', attr: 'calledElement', type: 'string', allowed: new Set(['callActivity']), scope: 'a callActivity' },
-  { field: 'scriptFormat', attr: 'scriptFormat', type: 'string', allowed: new Set(['scriptTask']), scope: 'a scriptTask' },
-  { field: 'isCollection', attr: 'isCollection', type: 'boolean', allowed: new Set(['dataObjectReference']), scope: 'a dataObjectReference' },
+  { field: 'isCompensation', attr: 'isForCompensation', type: 'boolean', on: 'self', allowed: ACTIVITY_TYPES, scope: 'an Activity' },
+  { field: 'implementation', attr: 'implementation', type: 'string', on: 'self', allowed: IMPLEMENTATION_TYPES, scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask' },
+  { field: 'isEventSubProcess', attr: 'triggeredByEvent', type: 'boolean', on: 'self', allowed: new Set(['subProcess']), scope: 'a subProcess' },
+  { field: 'calledElement', attr: 'calledElement', type: 'string', on: 'self', allowed: new Set(['callActivity']), scope: 'a callActivity' },
+  { field: 'scriptFormat', attr: 'scriptFormat', type: 'string', on: 'self', allowed: new Set(['scriptTask']), scope: 'a scriptTask' },
+  { field: 'isCollection', attr: 'isCollection', type: 'boolean', on: 'dataObject', allowed: new Set(['dataObjectReference']), scope: 'a dataObjectReference' },
 ];
 
 /**

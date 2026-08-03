@@ -36,6 +36,9 @@ import { parseBody, validateCallbackUrl } from '../http-server.js';
 import { checkDiagramIntegrity } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
+// Statically imported (not `await import` inside a test) so `describe` bodies can enumerate the
+// table and generate one case per entry — a dynamic import cannot be awaited during collection.
+import { OMG_NODE_FIELD_SCOPE as OMG_FIELD_SPECS, ARTIFACT_TYPES as ARTIFACT_TYPE_SET } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = resolve(__dirname, '../../tests/fixtures');
@@ -1549,6 +1552,48 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       expect(found[0]).toContain('OMG defines isForCompensation only on');
     });
 
+    describe('the round-trip fence — bpmn-moddle accepts every entry where the table says it may', () => {
+      // The only fence here with an EXTERNAL oracle, and the reason it exists: every other test
+      // around this table checks the table against itself (does the rule agree with the
+      // serialiser?) or against `references/input-schema.json` (do the types match?). Both pass
+      // happily when the table is internally consistent and wrong — which is exactly what happened
+      // with `isCollection`, scoped to `dataObjectReference` where OMG puts the attribute on
+      // DataObject. Three fences were green while every round trip reported
+      // `unknown attribute <isCollection>`.
+      //
+      // This one asks the library that will actually re-parse our output. For each entry, put the
+      // field on a class the table says may carry it, serialise, and require bpmn-moddle to report
+      // nothing about that attribute. A scope naming a class the metamodel does not grant the
+      // field to fails here and nowhere else.
+      //
+      // It also covers all six fields by construction, which the fixture fence below cannot: only
+      // `calledElement` and `scriptFormat` appear in any committed fixture.
+      const place = (node, isArtifactType) => (isArtifactType
+        ? {
+          id: 'P',
+          nodes: [{ id: 's', type: 'startEvent', name: 'A' }, { id: 'e', type: 'endEvent', name: 'E' }, node],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+        }
+        : wire(node));
+
+      for (const spec of OMG_FIELD_SPECS) {
+        for (const type of spec.allowed) {
+          test(`${spec.field} on ${type} round-trips without an unknown-attribute warning`, async () => {
+            const value = spec.type === 'boolean' ? true : 'x';
+            const node = { id: 'n', type, name: 'X', [spec.field]: value };
+            const result = await runPipeline(place(node, ARTIFACT_TYPE_SET.has(type)));
+            // The attribute must actually have been written — otherwise this passes vacuously for
+            // a field the serialiser silently drops.
+            expect(result.bpmnXml).toContain(`${spec.attr}=`);
+            // …and bpmn-moddle must not object to it.
+            const offending = result.validation.xmlWarnings
+              .filter(w => w.includes(spec.attr));
+            expect(offending).toEqual([]);
+          });
+        }
+      }
+    });
+
     describe('the fixture fence — S15 is silent across the whole corpus', () => {
       // Committed rather than run once by hand during review. Two things would otherwise reach
       // master unnoticed: a scope or type in `OMG_NODE_FIELD_SCOPE` that is simply wrong (S15
@@ -1611,17 +1656,6 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       // one into the chain crashes the serialiser rather than testing it. `isCollection`'s
       // `allowed` set is `dataObjectReference`, so the artifact case has to be covered here or
       // that entry is never positively exercised.
-      //
-      // KNOWN-WRONG ENTRY, pinned deliberately: OMG puts `isCollection` on **DataObject**, not on
-      // DataObjectReference (bpmn-moddle's metamodel gives DataObjectReference only
-      // `dataObjectRef`), so today's serialisation emits `<bpmn:dataObjectReference
-      // isCollection="true">` and bpmn-moddle reports `unknown attribute <isCollection>` on the
-      // round trip. Pre-existing, predates this table, and out of scope for the stage that
-      // centralised the scopes — but it means this test currently asserts the *wrong* expectation
-      // for that one entry (that it should be emitted where it should not). Whoever corrects the
-      // table will have to flip this case; a green test here is not evidence that the entry is
-      // right. The fix is to write `isCollection` onto the generated `<bpmn:dataObject>` element
-      // instead. Recorded in the stage report for the final review.
       const place = (node) => (isArtifact(node.type)
         ? {
           id: 'P',
@@ -1640,9 +1674,20 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
           {
             const node = { id: 'n', type, name: 'X', [spec.field]: rightValue(spec.type) };
             const complained = s15(runRules(place(node))).length > 0;
-            const emitted = (await runPipeline(place(node))).bpmnXml.includes(`${spec.attr}=`);
+            const xml = (await runPipeline(place(node))).bpmnXml;
+            const emitted = xml.includes(`${spec.attr}=`);
             expect(complained).toBe(!mayCarry);
             expect(emitted).toBe(mayCarry);
+            // …and on the element the table says, not merely somewhere in the document. This is
+            // what `on` records: five fields land on the node's own element, `isCollection` on
+            // the companion `<bpmn:dataObject>`, because OMG puts it on DataObject rather than on
+            // DataObjectReference. Asserting only "appears in the XML" would pass either way and
+            // is exactly how the misplacement survived three fences.
+            if (mayCarry) {
+              const owner = spec.on === 'dataObject' ? 'bpmn:dataObject' : `bpmn:${type}`;
+              const ownerTag = new RegExp(`<${owner}\\b[^>]*${spec.attr}=`);
+              expect(xml).toMatch(ownerTag);
+            }
           }
 
           // 2. Wrong type. Never emitted, whatever the class — and always reported, either for
