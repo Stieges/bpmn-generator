@@ -1,0 +1,53 @@
+{
+  "name": "Message flow endpoints and subprocess containers",
+  "pools": [
+    {
+      "id": "Pool_Customer",
+      "name": "Customer",
+      "nodes": [
+        { "id": "c_start", "type": "startEvent", "name": "Need raised" },
+        { "id": "cust_order", "type": "sendTask", "name": "Send order" },
+        { "id": "cust_recv", "type": "receiveTask", "name": "Receive confirmation" },
+        { "id": "c_end", "type": "endEvent", "name": "Order placed" }
+      ],
+      "edges": [
+        { "id": "cf1", "source": "c_start", "target": "cust_order" },
+        { "id": "cf2", "source": "cust_order", "target": "cust_recv" },
+        { "id": "cf3", "source": "cust_recv", "target": "c_end" }
+      ]
+    },
+    {
+      "id": "Pool_Vendor",
+      "name": "Vendor",
+      "nodes": [
+        { "id": "v_start", "type": "startEvent", "name": "Order channel open" },
+        {
+          "id": "fulfil",
+          "type": "subProcess",
+          "name": "Fulfil order",
+          "isExpanded": true,
+          "nodes": [
+            { "id": "f_start", "type": "startEvent", "name": "Fulfilment started" },
+            { "id": "inner_recv", "type": "receiveTask", "name": "Receive order" },
+            { "id": "f_end", "type": "endEvent", "name": "Fulfilment done" }
+          ],
+          "edges": [
+            { "id": "ff1", "source": "f_start", "target": "inner_recv" },
+            { "id": "ff2", "source": "inner_recv", "target": "f_end" }
+          ]
+        },
+        { "id": "v_confirm", "type": "task", "name": "Archive order" },
+        { "id": "v_end", "type": "endEvent", "name": "Order fulfilled" }
+      ],
+      "edges": [
+        { "id": "vf1", "source": "v_start", "target": "fulfil" },
+        { "id": "vf2", "source": "fulfil", "target": "v_confirm" },
+        { "id": "vf3", "source": "v_confirm", "target": "v_end" }
+      ]
+    }
+  ],
+  "messageFlows": [
+    { "id": "mf_inner", "name": "Order", "source": "cust_order", "target": "inner_recv" },
+    { "id": "mf_container", "name": "Confirmation", "source": "fulfil", "target": "cust_recv" }
+  ]
+}

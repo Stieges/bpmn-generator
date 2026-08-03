@@ -534,16 +534,48 @@ export function describeEnumerationCompleteness(enumerationResult) {
     notes.push(`${skippedArtifacts.length} artifact(s) carry no control-flow model: `
       + `${idList(skippedArtifacts)}. Harmless here — an artifact has no control-flow role to lose.`);
   }
-  if (skippedOther.length > 0) {
-    notes.push(`${skippedOther.length} node(s) are not modelled at all: `
-      + `${idList(scopedIds(skippedOther, 'id'))} (${[...new Set(skippedOther.map((s) => s.reason))].join(', ')}). `
-      + 'An eventBasedGateway\'s race semantics have no Petri-net translation here, so its '
-      + 'scenarios are missing from the list entirely.');
+  // One note PER reason, not one note with a hardcoded explanation. The count here was always
+  // reason-agnostic while the sentence explaining it named only `eventBasedGateway`, so when
+  // Stage 1 added `subProcessWithoutStartOrEnd` the new reason was disclosed with an
+  // explanation about race semantics that has nothing to do with it — the reader is told the
+  // wrong thing about the right node. Grouping makes the explanation follow the reason.
+  const skipExplanation = {
+    eventBasedGateway: 'An eventBasedGateway\'s race semantics have no Petri-net translation '
+      + 'here, so its scenarios are missing from the list entirely.',
+    subProcessWithoutStartOrEnd: 'A container without an inner startEvent or endEvent has no '
+      + 'well-defined entry or exit marking, so it is translated as a single atomic transition '
+      + 'and its children do not appear in any scenario.',
+  };
+  const skipReasons = [...new Set(skippedOther.map((s) => s.reason))].sort();
+  for (const reason of skipReasons) {
+    const ofReason = skippedOther.filter((s) => s.reason === reason);
+    notes.push(`${ofReason.length} node(s) are not modelled at all: `
+      + `${idList(scopedIds(ofReason, 'id'))} (${reason}). `
+      // An unknown reason gets the count and the ids and no invented explanation, which is the
+      // honest shape for whatever the next translation gap turns out to be.
+      + (skipExplanation[reason] || 'Their scenarios are missing from the list entirely.'));
   }
-  if ((stats.ungatedMessageFlows || []).length > 0) {
-    notes.push(`${stats.ungatedMessageFlows.length} message flow(s) enforce no ordering at all `
-      + `(a black-box endpoint): ${idList(stats.ungatedMessageFlows)}. The joint order across `
-      + 'pools is not synchronised for these.');
+  const ungated = stats.ungatedMessageFlows || [];
+  if (ungated.length > 0) {
+    // `gates: false` covers three cases and this note used to name only one of them, so a
+    // failure to MAP an endpoint was reported to the reader as a deliberate modelling CHOICE —
+    // in a view whose own header says the reader has no other source. The distinction is
+    // already made upstream (`ungatedReason`, collaboration.js); it is only rendered here.
+    const reasonOf = new Map((stats.messageFlows || []).map((mf) => [mf.id, mf.ungatedReason]));
+    const blackBox = ungated.filter((id) => reasonOf.get(id) === 'blackBox');
+    const unmapped = ungated.filter((id) => reasonOf.get(id) !== 'blackBox');
+    if (blackBox.length > 0) {
+      notes.push(`${blackBox.length} message flow(s) enforce no ordering at all `
+        + `(a black-box endpoint): ${idList(blackBox)}. The joint order across `
+        + 'pools is not synchronised for these.');
+    }
+    if (unmapped.length > 0) {
+      notes.push(`${unmapped.length} message flow(s) enforce no ordering because an endpoint `
+        + `could not be mapped to a node: ${idList(unmapped)}. See unresolvedEndpoints below for `
+        + 'which end and why. Unlike a black-box endpoint this is not a modelling choice — it is '
+        + 'a defect in the model or in the translation, and the joint order is unsynchronised as '
+        + 'a consequence of that defect rather than by design.');
+    }
   }
   if ((stats.unconsumedMessagePlaces || []).length > 0) {
     notes.push(`${stats.unconsumedMessagePlaces.length} message place(s) are never consumed by `
@@ -551,8 +583,16 @@ export function describeEnumerationCompleteness(enumerationResult) {
   }
   const unresolved = stats.unresolvedEndpoints || [];
   if (unresolved.length > 0) {
+    // The `reason` is carried through rather than flattened: "names a subProcess" points the
+    // reader at a real element and at the rule that explains it, where the bare "could not be
+    // mapped" would send them looking for a node that is not missing at all.
+    const why = {
+      container: 'names a subProcess, which is not a valid MessageFlow endpoint (S14)',
+      unknownId: 'matches no node and no black-box participant',
+    };
     notes.push(`${unresolved.length} message flow endpoint(s) could not be mapped to a node: `
-      + `${idList(unresolved.map((u) => `${u.messageFlowId}/${u.endpoint}=${u.id}`))}. Those flows `
+      + `${idList(unresolved.map((u) => `${u.messageFlowId}/${u.endpoint}=${u.id} `
+        + `(${why[u.reason] || u.reason || 'reason not recorded'})`))}. Those flows `
       + 'synchronise nothing.');
   }
 

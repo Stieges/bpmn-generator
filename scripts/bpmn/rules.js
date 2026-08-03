@@ -287,10 +287,24 @@ const SOUNDNESS_RULES = [
     scope: 'global',
     check: (proc, lc) => {
       if (!lc.messageFlows) return { pass: true };
+      // Recursive on purpose. A message flow may legally name a node one or more levels down —
+      // a send/receive task or a message event inside a subprocess — and that is precisely the
+      // endpoint S14 recommends when an author has aimed a flow at the container instead.
+      // Collecting one level per pool reported such an endpoint as a dangling reference, so the
+      // advice S14 gives would have walked the reader straight into a different false ERROR.
+      //
+      // Not `redesign-core.js`'s `collectIds`: that one also returns pool, lane and edge ids.
+      // Pool ids are admitted below, deliberately and separately (a Participant IS an
+      // InteractionNode, BPMN20.cmof:863); a lane or an edge id is an endpoint no reading of the
+      // standard allows, and folding them into the same set would silently accept both.
       const allNodeIds = new Set();
-      for (const p of (lc.pools || [lc])) {
-        for (const n of (p.nodes || [])) allNodeIds.add(n.id);
-      }
+      const collectFrom = (container) => {
+        for (const n of (container.nodes || [])) {
+          allNodeIds.add(n.id);
+          if (n.nodes) collectFrom(n);
+        }
+      };
+      for (const p of (lc.pools || [lc])) collectFrom(p);
       const allPoolIds = new Set([
         ...(lc.pools || []).map(p => p.id),
         ...(lc.collapsedPools || []).map(cp => cp.id),
@@ -343,7 +357,12 @@ const SOUNDNESS_RULES = [
       const collectFrom = (container) => {
         for (const n of (container.nodes || [])) {
           nodeTypeMap[n.id] = n.type;
-          if (n.isExpanded && n.nodes) collectFrom(n);
+          // Not gated on `isExpanded`: that flag exists only as a BPMNShape attribute
+          // (BPMNDI.xsd:55, BPMNDI.cmof:34) and has no semantic counterpart, so a collapsed
+          // container's children were invisible to this rule for purely graphical reasons — a
+          // gateway one level down could be a message-flow endpoint and go unreported. Same
+          // one-word fix, same argument, as the one Stage 1 made in `workflow-net.js`.
+          if (n.nodes) collectFrom(n);
         }
       };
       if (lc.pools) for (const p of lc.pools) collectFrom(p);
@@ -403,6 +422,58 @@ const SOUNDNESS_RULES = [
       };
       check(proc, proc.id ?? '(process)');
 
+      return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
+    }
+  },
+  {
+    id: 'S14', layer: 'soundness', defaultSeverity: 'WARNING',
+    description: 'Message Flow source/target darf kein SubProcess/CallActivity sein (OMG §7.6.2 Table 7.4)',
+    ref: {
+      omg: '§7.6.2 Table 7.4',
+      cmof: 'MessageFlow.sourceRef/targetRef type=InteractionNode (BPMN20.cmof:851-852). '
+        + 'Task superClass="Activity InteractionNode" (:1191) and Event superClass="FlowNode '
+        + 'InteractionNode" (:287) get it by an explicit second superclass; Participant is '
+        + 'superClass="InteractionNode BaseElement" (:863). Activity is superClass="FlowNode" '
+        + 'only (:1095), and SubProcess (:1147, superClass="Activity FlowElementsContainer"), '
+        + 'CallActivity (:1188, superClass="Activity"), AdHocSubProcess (:1222) and Transaction '
+        + '(:1233) inherit from it — none of them is an InteractionNode.',
+    },
+    scope: 'global',
+    // Why WARNING and not ERROR: the soundness layer already carries WARNING-severity rules
+    // (S04, S07, S08), so this is consistent with the layer rather than an exception to it; it
+    // keeps every model that validates today generating; and `rules/strict-profile.json` is the
+    // existing, documented way to escalate it for anyone who wants the build to stop.
+    check: (proc, lc) => {
+      if (!lc.messageFlows) return { pass: true };
+      // The container classes, by TYPE rather than by "has children". A collapsed subProcess
+      // carrying no `nodes` array is the same schema violation as an expanded one — the CMOF
+      // argument is about the class, not about how much of it is written down. `isExpanded`
+      // says nothing here either (BPMNDI.xsd:55 / BPMNDI.cmof:34, a BPMNShape attribute).
+      const CONTAINER_TYPES = new Set(['subProcess', 'transaction', 'adHocSubProcess', 'callActivity']);
+      const nodeTypeMap = {};
+      const collectFrom = (container) => {
+        for (const n of (container.nodes || [])) {
+          nodeTypeMap[n.id] = n.type;
+          if (n.nodes) collectFrom(n);
+        }
+      };
+      if (lc.pools) for (const p of lc.pools) collectFrom(p);
+      else collectFrom(lc);
+
+      const msgs = [];
+      const complain = (mf, endpoint, id, type) => {
+        msgs.push(`MessageFlow "${mf.id || ''}" ${endpoint} "${id}" is a ${type} — not an `
+          + 'InteractionNode (BPMN20.cmof: Activity extends FlowNode only, unlike Task and Event). '
+          + 'Point the flow at a black-box participant, at a send/receive task inside the '
+          + `${type}, or at a message start/end event inside it. Collapsing the ${type} does not `
+          + 'help — isExpanded is a BPMNShape attribute.');
+      };
+      for (const mf of lc.messageFlows) {
+        const srcType = nodeTypeMap[mf.source];
+        const tgtType = nodeTypeMap[mf.target];
+        if (srcType && CONTAINER_TYPES.has(srcType)) complain(mf, 'source', mf.source, srcType);
+        if (tgtType && CONTAINER_TYPES.has(tgtType)) complain(mf, 'target', mf.target, tgtType);
+      }
       return msgs.length === 0 ? { pass: true } : { pass: false, message: msgs.join('; ') };
     }
   },

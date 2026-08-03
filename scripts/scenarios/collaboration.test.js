@@ -18,6 +18,7 @@ import { enumerateScenarios, groupBySharedInput, indexArcs } from './enumerate.j
 import {
   bpmnToPN, checkWorkflowNetSoundness, getEnabledTransitions, fireTransition,
 } from '../bpmn/workflow-net.js';
+import { checkNetIntegrity } from '../bpmn/net-check.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) =>
@@ -702,5 +703,88 @@ describe('collaboration enumeration — the composed scenario shape', () => {
     const capped = enumerateCollaboration(fixture('realistic-collaboration'), { maxScenarios: 0 });
     expect(capped.scenarios).toHaveLength(0);
     expect(capped.truncated).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// B10 — a message flow naming a subprocess container
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('B10 — a container is refused as a message-flow endpoint', () => {
+  const lc = () => fixture('messageflow-to-subprocess');
+
+  test('the container has an entry/exit PAIR, which is what makes the naive wiring a double send', () => {
+    // The premise of the guard, stated as a fact about the net rather than assumed: since
+    // Stage 1, `fulfil` owns two transitions, both carrying its `bpmnNodeId`.
+    const pn = bpmnToPN(lc().pools[1]);
+    expect(transitionsForNode(pn, 'fulfil').sort()).toEqual(['t_fulfil#enter', 't_fulfil#exit']);
+  });
+
+  test('no arc runs from either container transition into the message place', () => {
+    const net = composeCollaboration(lc());
+    const placeId = messagePlaceId('mf_container');
+    const touching = net.arcs.filter(a => a.from === placeId || a.to === placeId);
+    // Zero, not one: this is the evidence the double send cannot happen. Without the guard
+    // `resolve()` would return both transitions and pass 1 would push a `T→P` arc from each.
+    expect(touching).toEqual([]);
+    expect(net.arcs.some(a => a.from === scopedId('Pool_Vendor', 't_fulfil#exit'))).toBe(true);
+    expect(net.arcs.some(a => a.from === scopedId('Pool_Vendor', 't_fulfil#exit') && a.to === placeId)).toBe(false);
+    expect(net.arcs.some(a => a.from === scopedId('Pool_Vendor', 't_fulfil#enter') && a.to === placeId)).toBe(false);
+  });
+
+  test('the container flow does not gate, and says why', () => {
+    const net = composeCollaboration(lc());
+    const mp = net.messagePlaces.find(m => m.messageFlowId === 'mf_container');
+    // `gates` needs no change for this to hold — `'container' !== 'node'` — but the brief asks
+    // for it to be confirmed rather than assumed, so it is asserted here.
+    expect(mp.gates).toBe(false);
+    expect(mp.senderKind).toBe('container');
+    expect(mp.senderTransitions).toEqual([]);
+    expect(mp.senderIsBlackBox).toBe(false);
+    expect(net.unresolved).toEqual([
+      { messageFlowId: 'mf_container', endpoint: 'source', id: 'fulfil', reason: 'container' },
+    ]);
+  });
+
+  test('a flow naming a node INSIDE the container still gates normally', () => {
+    const net = composeCollaboration(lc());
+    const mp = net.messagePlaces.find(m => m.messageFlowId === 'mf_inner');
+    expect(mp.gates).toBe(true);
+    expect(mp.senderKind).toBe('node');
+    expect(mp.receiverKind).toBe('node');
+    expect(net.arcs).toContainEqual({
+      from: messagePlaceId('mf_inner'), to: scopedId('Pool_Vendor', 't_inner_recv'), type: 'P→T',
+    });
+  });
+
+  test('stats distinguish an unmapped endpoint from a black box', () => {
+    const stats = enumerateCollaboration(lc()).stats;
+    const byId = new Map(stats.messageFlows.map(m => [m.id, m]));
+    expect(byId.get('mf_container').ungatedReason).toBe('unmappedEndpoint');
+    expect(byId.get('mf_inner').ungatedReason).toBeNull();
+    expect(stats.ungatedMessageFlows).toEqual(['mf_container']);
+    expect(stats.unresolvedEndpoints[0].reason).toBe('container');
+  });
+
+  test('a black-box endpoint is still reported as a choice, not as a defect', () => {
+    const stats = enumerateCollaboration(fixture('realistic-collaboration')).stats;
+    const ungated = stats.messageFlows.filter(m => !m.gates);
+    expect(ungated.length).toBeGreaterThan(0);
+    for (const mf of ungated) expect(mf.ungatedReason).toBe('blackBox');
+  });
+
+  test('the collaboration still enumerates to completion', () => {
+    const run = enumerateCollaboration(lc());
+    expect(run.scenarios.length).toBeGreaterThan(0);
+    expect(run.stats.deadEndPaths).toBe(0);
+    // The ungated message place keeps its token — nothing consumes it. That is a residual, not
+    // an unfinished process (module header), and both pools' sinks hold exactly one token.
+    expect(run.scenarios[0].sinkTokens).toEqual({ Pool_Customer: 1, Pool_Vendor: 1 });
+  });
+
+  test('checkNetIntegrity still passes on both pools of the fixture', () => {
+    for (const pool of lc().pools) {
+      expect(checkNetIntegrity(bpmnToPN(pool), pool).ok).toBe(true);
+    }
   });
 });

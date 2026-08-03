@@ -15,6 +15,7 @@ import {
   formatScenarioResult, formatCollaborationResult,
   parseDecisionTransition, extractScenarioDecisions, computeHappyPath,
   deriveHappyPathEdges, distanceFromHappyPath, happyPathDecisionMap,
+  describeEnumerationCompleteness,
 } from './format.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -368,5 +369,51 @@ describe('Regression — reviewer findings', () => {
     expect(distances).toEqual([0, 1]); // NOT both 0
     // The two scenarios differ by edgeId, not by (the identical) label.
     expect(json.scenarios[0].decisions[0].edgeId).not.toBe(json.scenarios[1].decisions[0].edgeId);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// B10 — the three misattributed notes
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('completeness notes attribute each finding to its actual reason', () => {
+  const notesFor = (lc) => describeEnumerationCompleteness(enumerateCollaboration(lc)).notes;
+
+  test('an unmapped endpoint is not reported as a black-box choice', () => {
+    const notes = notesFor(fixture('messageflow-to-subprocess'));
+    const ungatedNote = notes.find(n => n.includes('mf_container') && n.includes('enforce no ordering'));
+    expect(ungatedNote).toBeDefined();
+    // The whole point: `gates: false` here is a defect, not a modelling decision, and the note
+    // must not describe it as the latter.
+    // The old wording attributed every ungated flow to "(a black-box endpoint)". The new note
+    // may still mention black boxes — it contrasts itself against them — but must not claim to
+    // be one.
+    expect(ungatedNote).not.toMatch(/\(a black-box endpoint\)/);
+    expect(ungatedNote).toMatch(/could not be mapped/);
+    expect(ungatedNote).toMatch(/not a modelling choice/);
+  });
+
+  test('a container endpoint is named as such, with the rule that explains it', () => {
+    const note = notesFor(fixture('messageflow-to-subprocess'))
+      .find(n => n.includes('message flow endpoint(s) could not be mapped to a node'));
+    expect(note).toMatch(/mf_container\/source=fulfil/);
+    expect(note).toMatch(/names a subProcess, which is not a valid MessageFlow endpoint \(S14\)/);
+  });
+
+  test('a genuine black-box endpoint keeps today\'s wording', () => {
+    const note = notesFor(fixture('realistic-collaboration'))
+      .find(n => n.includes('enforce no ordering'));
+    expect(note).toMatch(/a black-box endpoint/);
+    expect(note).not.toMatch(/could not be mapped/);
+  });
+
+  test('a skip reason is explained by its own reason, not by eventBasedGateway\'s', () => {
+    // Stage 1 added `subProcessWithoutStartOrEnd`; the old single note appended the
+    // eventBasedGateway race-semantics sentence to whatever the reason happened to be.
+    const notes = notesFor(fixture('subprocess-collapsed-children'));
+    const note = notes.find(n => n.includes('subProcessWithoutStartOrEnd'));
+    expect(note).toBeDefined();
+    expect(note).not.toMatch(/race semantics/);
+    expect(note).toMatch(/no well-defined entry or exit marking/);
   });
 });
