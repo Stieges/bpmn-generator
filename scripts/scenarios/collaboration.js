@@ -51,9 +51,7 @@
 
 import { bpmnToPN, fireTransition } from '../bpmn/workflow-net.js';
 import { isContainerNode } from '../bpmn/types.js';
-import {
-  enumerateNet, resolveLimits, findBackwardEdges, backwardEdgePlaceId,
-} from './enumerate.js';
+import { enumerateNet, resolveLimits, findBackwardEdges } from './enumerate.js';
 
 const SEP = '::';
 
@@ -179,9 +177,14 @@ export function composeCollaboration(lc) {
     // Cycle bounds stay per pool: message flows are in neither `flatNodes` nor
     // `flatEdges`, so they cannot participate in a pool's own graph cycles, and they
     // cannot create new ones either (see the module-level note in the report).
+    //
+    // The unprefixed place id comes from `pn.placeOfEdge`, this pool's own net, rather than
+    // from a formula applied to the edge — see the note in `enumerate.js` where the second
+    // copy of that formula used to live. The `${poolId}::` prefix is still added here,
+    // because scoping is this module's job and no per-pool net knows it is one of several.
     const backEdges = findBackwardEdges(pn.flatNodes, pn.flatEdges);
     for (const e of backEdges) {
-      cappedPlaces.set(scopedId(poolId, backwardEdgePlaceId(e)), { poolId, edge: e });
+      cappedPlaces.set(scopedId(poolId, pn.placeOfEdge.get(e)), { poolId, edge: e });
     }
 
     for (const n of pn.flatNodes) {
@@ -213,7 +216,7 @@ export function composeCollaboration(lc) {
       sinkPlace: scopedId(poolId, pn.sinkPlace),
       backwardEdges: backEdges.map(e => ({
         id: e.id, source: e.source, target: e.target,
-        placeId: scopedId(poolId, backwardEdgePlaceId(e)),
+        placeId: scopedId(poolId, pn.placeOfEdge.get(e)),
       })),
       orGateways: [...pn.orGateways],
       skipped: pn.skipped.map(s => ({ ...s })),
