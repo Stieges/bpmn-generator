@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect } from '@jest/globals';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -1549,23 +1549,116 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       expect(found[0]).toContain('OMG defines isForCompensation only on');
     });
 
-    test('the serialiser and the rule agree — every scoped field, both directions', async () => {
+    describe('the fixture fence — S15 is silent across the whole corpus', () => {
+      // Committed rather than run once by hand during review. Two things would otherwise reach
+      // master unnoticed: a scope or type in `OMG_NODE_FIELD_SCOPE` that is simply wrong (S15
+      // would start firing on fixtures that are fine, and nothing in CI would say so), and a
+      // seventh field added to the table but not to `references/input-schema.json` or vice versa.
+      // The schema/table *type* drift has its own fence in `types.test.js`; this one covers the
+      // part no schema can express — that the scopes match how real models are actually written.
+      //
+      // Directory-driven, like `net-check.test.js`'s fence: a new fixture is covered the day it
+      // lands, without anyone remembering to add it here. `negative/` is deliberately included —
+      // those fixtures are wrong about other things (duplicate ids, unsound flow), not about
+      // field scoping, so S15 must be silent on them too.
+      const FIXTURES = resolve(__dirname, '../../tests/fixtures');
+      const collect = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const p = resolve(dir, e.name);
+        // `dmn/` holds Decision-Core documents, which are not Logic-Core at all.
+        if (e.isDirectory()) return e.name === 'dmn' ? [] : collect(p);
+        if (!e.name.endsWith('.json') || e.name.includes('.expected.')) return [];
+        let lc;
+        try { lc = JSON.parse(readFileSync(p, 'utf8')); } catch { return []; }
+        // Non-Logic-Core side-cars (robustness config, seed catalogs) live here too.
+        if (!Array.isArray(lc.pools) && !Array.isArray(lc.nodes)) return [];
+        return [{ name: p.slice(FIXTURES.length + 1), lc }];
+      });
+      const fixtures = collect(FIXTURES);
+
+      // Without this, an empty or mis-resolved scan makes every case below pass for the wrong
+      // reason — there would be nothing to iterate.
+      test('the directory scan found Logic-Core fixtures', () => {
+        expect(fixtures.length).toBeGreaterThan(0);
+      });
+
+      for (const { name, lc } of fixtures) {
+        test(`${name} — no S15 finding`, () => {
+          // toEqual([]) rather than toHaveLength(0): on failure Jest prints the actual findings,
+          // which is the whole diagnostic.
+          expect(s15(runRules(lc))).toEqual([]);
+        });
+      }
+    });
+
+    test('the serialiser and the rule agree — every scoped field, class AND type', async () => {
       // The invariant that makes sharing `OMG_NODE_FIELD_SCOPE` worth doing: a rule that
       // disagreed with the serialiser about which fields are legal where would be worse than no
       // rule. Asserted over the table itself rather than over a hand-copied list, so adding a
       // field to the table cannot leave this test behind.
-      const { OMG_NODE_FIELD_SCOPE } = await import('./types.js');
+      //
+      // BOTH dimensions, which the earlier version of this test did not do despite its name: it
+      // only ever built a correctly-typed value, so it checked class agreement for six fields and
+      // type agreement for none, while hand-written tests covered the type case for two of the
+      // six. Both values are now derived from `spec.type` — the table states the expected type, so
+      // a wrong one is derivable from it and cannot fall out of step with a hand-kept list. The
+      // same applies to the right value: this used to guess it from `field.startsWith('is')`,
+      // which is the inference-instead-of-lookup habit that produced the defect this table's
+      // `type` column was added to fix.
+      const { OMG_NODE_FIELD_SCOPE, isArtifact } = await import('./types.js');
+      const rightValue = (t) => (t === 'boolean' ? true : 'x');
+      const wrongValue = (t) => (t === 'boolean' ? 'yes' : 42);
+      // An artifact is not a sequence-flow endpoint (that is S09/S10's whole subject), so wiring
+      // one into the chain crashes the serialiser rather than testing it. `isCollection`'s
+      // `allowed` set is `dataObjectReference`, so the artifact case has to be covered here or
+      // that entry is never positively exercised.
+      //
+      // KNOWN-WRONG ENTRY, pinned deliberately: OMG puts `isCollection` on **DataObject**, not on
+      // DataObjectReference (bpmn-moddle's metamodel gives DataObjectReference only
+      // `dataObjectRef`), so today's serialisation emits `<bpmn:dataObjectReference
+      // isCollection="true">` and bpmn-moddle reports `unknown attribute <isCollection>` on the
+      // round trip. Pre-existing, predates this table, and out of scope for the stage that
+      // centralised the scopes — but it means this test currently asserts the *wrong* expectation
+      // for that one entry (that it should be emitted where it should not). Whoever corrects the
+      // table will have to flip this case; a green test here is not evidence that the entry is
+      // right. The fix is to write `isCollection` onto the generated `<bpmn:dataObject>` element
+      // instead. Recorded in the stage report for the final review.
+      const place = (node) => (isArtifact(node.type)
+        ? {
+          id: 'P',
+          nodes: [{ id: 's', type: 'startEvent', name: 'A' }, { id: 'e', type: 'endEvent', name: 'E' }, node],
+          edges: [{ id: 'f1', source: 's', target: 'e' }],
+        }
+        : wire(node));
+
       for (const spec of OMG_NODE_FIELD_SCOPE) {
-        const value = spec.field.startsWith('is') ? true : 'x';
-        for (const type of ['startEvent', 'exclusiveGateway', 'userTask', 'subProcess']) {
-          const node = { id: 'n', type, name: 'X', [spec.field]: value };
-          const complained = s15(runRules(wire(node))).length > 0;
-          const emitted = (await runPipeline(wire(node))).bpmnXml.includes(`${spec.attr}=`);
-          // Exactly one of the two happens: either the class may carry it (serialised, silent)
-          // or it may not (dropped, reported). Never both, never neither.
-          expect(complained).toBe(!spec.allowed.has(type));
-          if (spec.allowed.has(type)) expect(emitted).toBe(true);
-          else expect(emitted).toBe(false);
+        for (const type of ['startEvent', 'exclusiveGateway', 'userTask', 'subProcess',
+          'callActivity', 'scriptTask', 'dataObjectReference']) {
+          const mayCarry = spec.allowed.has(type);
+
+          // 1. Correct type. Emitted exactly where the class allows it, reported exactly where it
+          //    does not. Never both, never neither.
+          {
+            const node = { id: 'n', type, name: 'X', [spec.field]: rightValue(spec.type) };
+            const complained = s15(runRules(place(node))).length > 0;
+            const emitted = (await runPipeline(place(node))).bpmnXml.includes(`${spec.attr}=`);
+            expect(complained).toBe(!mayCarry);
+            expect(emitted).toBe(mayCarry);
+          }
+
+          // 2. Wrong type. Never emitted, whatever the class — and always reported, either for
+          //    the class (which wins) or for the type.
+          {
+            const node = { id: 'n', type, name: 'X', [spec.field]: wrongValue(spec.type) };
+            const found = s15(runRules(place(node)));
+            const emitted = (await runPipeline(place(node))).bpmnXml.includes(`${spec.attr}=`);
+            expect(emitted).toBe(false);
+            expect(found).toHaveLength(1);
+            // …and it is the right one of the two messages: class if the class is wrong, type if
+            // the class is right. This is what stops the two checks quietly covering for each
+            // other — a class check that also fired on every wrong type would make the type check
+            // untestable, and vice versa.
+            expect(found[0]).toMatch(mayCarry ? /OMG types/ : /OMG defines/);
+          }
         }
       }
     });

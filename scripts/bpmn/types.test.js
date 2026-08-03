@@ -8,6 +8,7 @@ import {
   isContainerNode, CONTAINER_TYPES, ACTIVITY_TYPES, isActivity,
   isInteractionNode, isSequenceFlowExempt,
   EVENT_TYPES, GATEWAY_TYPES, ARTIFACT_TYPES,
+  OMG_NODE_FIELD_SCOPE,
 } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,55 @@ function loadNodeTypeEnum() {
   }
   return enumValues;
 }
+
+// The same read-do-not-restate move for per-node field types. `OMG_NODE_FIELD_SCOPE.type` and
+// `references/input-schema.json` both state what shape each scoped field's value must have, and
+// two statements of one fact is the duplication this table was built to remove — just moved up a
+// level. The schema is the authority (it is the published contract, and the HTTP gate enforces
+// it), so the table is checked against it rather than the other way round.
+//
+// Why the table carries `type` at all instead of deriving it from the schema at runtime:
+// `scripts/bpmn/types.js` is a no-dependency module — CLAUDE.md's architecture map says so — and
+// making it read and parse a JSON file at import time to answer a question it can state in one
+// word would be a real cost (file I/O, a path resolution, a parse failure mode) for no behavioural
+// gain. Declared in the table, fenced here: the drift cannot survive CI, and the runtime module
+// stays pure.
+function loadNodeFieldTypes() {
+  const schema = JSON.parse(readFileSync(SCHEMA_PATH, 'utf8'));
+  const props = schema.$defs?.Node?.properties;
+  if (!props || typeof props !== 'object') {
+    throw new Error('references/input-schema.json: $defs.Node.properties not found — fence cannot run');
+  }
+  return props;
+}
+
+describe('the scoped-field fence — the table and input-schema.json agree on every type', () => {
+  const nodeProps = loadNodeFieldTypes();
+
+  test('the table itself is non-empty and well-formed', () => {
+    expect(OMG_NODE_FIELD_SCOPE.length).toBeGreaterThan(0);
+    for (const spec of OMG_NODE_FIELD_SCOPE) {
+      expect(typeof spec.field).toBe('string');
+      expect(typeof spec.attr).toBe('string');
+      expect(['boolean', 'string']).toContain(spec.type);
+      expect(spec.allowed instanceof Set && spec.allowed.size > 0).toBe(true);
+      expect(typeof spec.scope).toBe('string');
+    }
+  });
+
+  for (const spec of OMG_NODE_FIELD_SCOPE) {
+    test(`${spec.field} is declared on Node in input-schema.json`, () => {
+      // A field the serialiser scopes but the schema never declares would be unreachable from any
+      // valid input — either the table names something that no longer exists, or the schema
+      // dropped a field the serialiser still writes.
+      expect(nodeProps[spec.field]).toBeDefined();
+    });
+
+    test(`${spec.field}: the table's type matches the schema's`, () => {
+      expect(spec.type).toBe(nodeProps[spec.field]?.type);
+    });
+  }
+});
 
 describe('the NodeType fence — every enum member is classified, and exactly once', () => {
   const nodeTypes = loadNodeTypeEnum();
