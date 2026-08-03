@@ -68,7 +68,8 @@ Extract a structured Logic-Core JSON from the process description below.
   - Add "messageFlows" for cross-pool communication
   - Message flows connect sendTask/intermediateThrowEvent → receiveTask/intermediateCatchEvent
   - **Never** use a gateway (exclusiveGateway, parallelGateway, etc.) as `source` or `target` of a messageFlow — per OMG §7.6.2 Table 7.4, gateways are not InteractionNodes. If a flow needs to message-out after merging branches, insert a sendTask (or intermediateThrowEvent) AFTER the gateway and use that as the message-flow source.
-  - Valid messageFlow source/target types: `sendTask`, `receiveTask`, `userTask`, `serviceTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `intermediateThrowEvent`, `intermediateCatchEvent`, `startEvent` (catch), `endEvent` (throw), or a Pool/Participant ID directly.
+  - **Never** use a `subProcess`, `transaction`, `adHocSubProcess` or `callActivity` as `source` or `target` of a messageFlow — per OMG §7.6.2 Table 7.4 these are not InteractionNodes either (`Activity` extends `FlowNode` only, unlike `Task` and `Event`). Point the flow at a node **inside** the subprocess (a sendTask/receiveTask, or a message start/end event), or at a black-box Pool. Collapsing the subprocess does not make it legal — `isExpanded` is a rendering attribute, not a semantic one.
+  - Valid messageFlow source/target types: `sendTask`, `receiveTask`, `userTask`, `serviceTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `intermediateThrowEvent`, `intermediateCatchEvent`, `startEvent` (catch), `endEvent` (throw), or a Pool/Participant ID directly. A node nested inside a subprocess is a valid endpoint and is addressed by its own id.
 
 ### Boundary Events
 - If a task has a deadline/timer → add boundaryEvent with "attachedTo": "<task_id>", "marker": "timer"
