@@ -116,6 +116,60 @@ adds the tool surface); today it is `runDmnPipeline(dc).diagnostics`, called dir
 
 ---
 
+## Petri-net integrity diagnostics (NC01–NC06)
+
+`scripts/bpmn/net-check.js`'s `checkNetIntegrity` plays the same role for the Petri net
+`bpmnToPN` (`scripts/bpmn/workflow-net.js`) produces that `di-check.js` plays for layout geometry:
+it checks the *translation*, not the *model*. `checkSoundness` (used by rules WF01–WF03) reasons
+about markings in whatever net it is handed and never sees the Logic-Core the net came from — a
+translation defect (a dropped container, an edge that silently failed to produce a place) yields a
+well-formed verdict about the wrong graph. `checkNetIntegrity` closes that gap by checking the net
+itself: does every Logic-Core node have a transition, does every place get produced and consumed,
+are ids unique. A process that is legitimately unsound (a real deadlock, a real dead end) is
+expected to come out of this check clean — that judgment stays `checkSoundness`/WF01–WF03's job.
+
+Not yet wired into `runPipeline` or reachable over HTTP or MCP; today it runs directly
+(`checkNetIntegrity(bpmnToPN(proc), proc)`) and is fenced over every Logic-Core fixture under
+`tests/fixtures/` by `scripts/bpmn/net-check.test.js`, so a new fixture is covered the day it
+lands without anyone having to remember to add it.
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| NC01 | ERROR | A control-flow node produced no transition in the net |
+| NC02 | WARNING → ERROR (scheduled) | A transition has no incoming place — it can never fire |
+| NC02b | ERROR | A transition has no outgoing place — it consumes a token and never produces one |
+| NC03a | ERROR | A place is never produced by any transition |
+| NC03b | ERROR | A place is never consumed by any transition |
+| NC04 | WARNING → ERROR (scheduled) | Two distinct edges compute the same place id — one silently overwrote the other |
+| NC05 | INFO | The source place has more than one consuming transition |
+| NC06 | ERROR | Two distinct Logic-Core elements collide on the same net id |
+
+NC01 is the exact shape of the container-blindness defect this guard exists for: a translation
+step silently drops a node instead of translating it, and the resulting net is still well-formed —
+just not the model's net. NC02b, NC03a, NC03b and NC06 are the same class of drop applied to
+places, arcs and ids respectively: each leaves a structurally impossible net (a transition that
+destroys a token without producing one, a place nothing ever fills or drains, two elements sharing
+one id) that no reachability search would ever flag as broken, because the search only sees the net
+it was handed.
+
+NC02 and NC04 are **WARNING today, and become ERROR once the defects they detect are fixed in a
+later stage of this work.** NC02 (a transition with no way to fire) is currently legitimate for a
+boundary event, whose incoming trigger is the host it attaches to rather than a sequence flow;
+NC04 (two edges silently sharing one place) is currently legitimate wherever the place-id scheme
+collides for a case not yet given its own key. Promoting either to ERROR before that fix ships
+would fail fixtures that are otherwise fine today — the docs gate pins both codes so this schedule
+cannot go stale silently once the promotion happens.
+
+NC05 is disclosure, not a defect: van der Aalst's WF-nets require a single source, and OMG BPMN
+2.0.2 §10.4.2 treats multiple start events as alternative instantiations of the same process, so
+normalising them onto one source place with several consumers is standard, not a translation bug.
+It stays INFO on purpose — a reader should be told, not warned.
+
+`ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI06 and DMN's
+DD01–DD03 above.
+
+---
+
 ## POST /api/v1/validate
 
 Validate Logic-Core against the rule engine without generating output.

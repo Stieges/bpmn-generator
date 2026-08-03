@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 23 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
+7 top-level scripts (standalone tooling) + 24 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
 9 robustness + 7 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -51,6 +51,15 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     │                          lane/label/gap/padding sizes — derived from CFG, never touched by dmn/)
     ├── import.js             BPMN XML → Logic-Core (DOM parser)
     └── moddle-import.js      BPMN XML → Logic-Core (bpmn-moddle path)
+
+scripts/bpmn/ — Petri-net integrity guard (test-only; not invoked by runPipeline)
+  net-check.js               (no deps — post-translation sanity pass on the net bpmnToPN
+                               produces: does every node get a transition, every place get
+                               produced and consumed, every id stay unique — never the model
+                               itself, that stays checkSoundness/WF01–WF03's job. NC01–NC06,
+                               see below. Fenced directory-wide over every Logic-Core fixture
+                               under tests/fixtures/ by net-check.test.js, so a new fixture is
+                               covered the day it lands)
 
 scripts/bpmn/ — Redesign toolbox (opt-in; CLI-driven, not invoked by runPipeline)
   redesign-cli.js            ← redesign.js (CLI entry; preview is the default, --apply writes)
@@ -193,6 +202,7 @@ membership instead of coordinates.
 | `scripts/bpmn/icons.js` | Event markers, task icons, bottom markers (Loop, MI, Ad-Hoc) |
 | `scripts/bpmn/dot.js` | `logicCoreToDot` / `dotToLogicCore` — Graphviz DOT support |
 | `scripts/bpmn/workflow-net.js` | WF-Net soundness checks (used by WF01–WF03 rules) |
+| `scripts/bpmn/net-check.js` | `checkNetIntegrity` — post-translation sanity pass on the net `bpmnToPN` produces, the same role `di-check.js` plays for geometry: checks whether the *translation* is faithful (every node has a transition, every place is produced and consumed, every id is unique), never whether the *model* is sound — a legitimately unsound process must come out clean, `checkSoundness`/WF01–WF03's job. NC01 node with no transition, NC02b/NC03a/NC03b/NC06 the same class of drop applied to arcs/places/ids (all ERROR); NC02 transition that can never fire and NC04 two edges silently sharing one place are WARNING today, scheduled to ERROR once the defects they detect are fixed; NC05 (multiple start events sharing one source place) is INFO — disclosure, not a defect. `ok` means "no ERROR". Not wired into `runPipeline`; called directly and fenced over every fixture in `tests/fixtures/` by `net-check.test.js` |
 | `scripts/bpmn/visual-refinement.js` | Optional compaction/refinement passes P1–P7.1 (off by default) |
 | `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends |
 | `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API |

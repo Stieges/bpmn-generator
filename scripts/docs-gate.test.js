@@ -79,7 +79,7 @@ describe('docs-gate — checkNumbers', () => {
   const base = (overrides = {}) => ({
     readmeText: 'The rule engine has 33 rules, 5 layers, covering soundness and style.',
     claudeMdText: '29 top-level scripts live under scripts/. The rule engine has 33 rules, 5 layers.',
-    apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06.',
+    apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06. NC codes: NC01, NC02, NC02b, NC03a, NC03b, NC04, NC05, NC06.',
     roadmapText: 'Validation (33 rules, 5 layers) via ElkJS.',
     skillText: 'No rule/layer count claim in this fixture — SKILL.md does not currently make one.',
     evaluationText: 'Configurable rule engine | Yes (33 rules, 5 layers, JSON profiles).',
@@ -90,6 +90,7 @@ describe('docs-gate — checkNumbers', () => {
     actualDmnLayerCount: 2,
     actualTopLevelScriptCount: 29,
     actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06'],
+    actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05', 'NC06'],
     ...overrides,
   });
 
@@ -211,11 +212,60 @@ describe('docs-gate — checkNumbers', () => {
   });
 
   test('a DI code documented but not emitted is a finding', () => {
-    const findings = checkNumbers(base({ apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06, DI09.' }));
+    const findings = checkNumbers(base({
+      apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06, DI09. NC codes: NC01, NC02, NC02b, NC03a, NC03b, NC04, NC05, NC06.',
+    }));
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ check: 'di-codes' });
     expect(findings[0].detail).toContain('DI09');
     expect(findings[0].detail).toContain('does not emit');
+  });
+
+  // The NC family (scripts/bpmn/net-check.js) is checked the same way, over the same doc file,
+  // via the generalised CODE_FAMILIES table — both drift directions, same as DI above.
+  test('an NC code emitted by net-check.js but undocumented is a finding', () => {
+    const findings = checkNumbers(base({
+      actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05', 'NC06', 'NC07'],
+    }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'nc-codes' });
+    expect(findings[0].detail).toContain('scripts/bpmn/net-check.js');
+    expect(findings[0].detail).toContain('NC07');
+    expect(findings[0].detail).toContain('not documented');
+  });
+
+  test('an NC code documented but not emitted is a finding', () => {
+    // Only a code within the family's real shape (NC0[1-6][ab]?) is something the doc-side
+    // regex recognises as a code token at all — same as DI09 being a plain "DI0<digit>" above.
+    // Here the doc still mentions NC06 but the module no longer emits it.
+    const findings = checkNumbers(base({ actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05'] }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'nc-codes' });
+    expect(findings[0].detail).toContain('NC06');
+    expect(findings[0].detail).toContain('does not emit');
+  });
+
+  test('NC02b is matched as its own code, not as a mention of NC02', () => {
+    // The trap the brief calls out: NC02b is not the same shape as DI01…DI06. If the NC
+    // pattern only matched two digits, "NC02b" in prose would satisfy NC02's row and leave
+    // NC02b itself permanently undocumented without the gate ever noticing.
+    const findings = checkNumbers(base({
+      actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05', 'NC06'],
+      apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06. NC codes: NC01, NC02, NC03a, NC03b, NC04, NC05, NC06.',
+    }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ check: 'nc-codes' });
+    expect(findings[0].detail).toContain('NC02b');
+  });
+
+  test('both families are checked independently in the same doc text', () => {
+    const findings = checkNumbers(base({
+      actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06', 'DI07'],
+      actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05'],
+    }));
+    expect(findings).toHaveLength(2);
+    expect(findings.find((f) => f.check === 'di-codes').detail).toContain('DI07');
+    expect(findings.find((f) => f.check === 'nc-codes').detail).toContain('NC06');
   });
 });
 

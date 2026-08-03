@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`net-check.js` — a Petri-net translation integrity guard, `NC01`–`NC06`.** Mirrors
+  `di-check.js`'s shape for geometry: `checkNetIntegrity` judges the *translation* `bpmnToPN`
+  produces (every node has a transition, every place is produced and consumed, every id is
+  unique), never the model — a legitimately unsound process (a real deadlock, a real dead end)
+  must still come out clean, `checkSoundness`/WF01–WF03's job. `NC02` (a transition that can
+  never fire) and `NC04` (two edges silently sharing one place) are WARNING today and become
+  ERROR once the defects behind them are fixed in a later stage; `NC05` (multiple start events
+  sharing one source place) is INFO — disclosure, not a defect. Fenced directory-wide over every
+  Logic-Core fixture under `tests/fixtures/` by `net-check.test.js`, so a new fixture is covered
+  the day it lands. Documented in `references/api-reference.md`; the check is now also pinned
+  against `references/api-reference.md` by `.github/scripts/docs-gate.mjs`'s generalised
+  `(module, prefix, doc)` diagnostic-code table, alongside `di-check.js`'s `DI` family.
 - **`S14` — a MessageFlow endpoint may not name a subprocess container.** `MessageFlow.sourceRef`
   and `targetRef` are typed `InteractionNode` (`BPMN20.cmof:851-852`). `Task` (`:1191`) and `Event`
   (`:287`) are InteractionNodes by an explicit second superclass and `Participant` (`:863`)
@@ -22,6 +34,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generated model, and records that a node nested inside a subprocess *is* a valid endpoint.
 
 ### Fixed
+- **`bpmnToPN` no longer drops an expanded subprocess container while flattening, silently
+  disconnecting the net.** `flattenNodes` replaced a container with its children — the container
+  itself got no transition, and the outer edges naming it became places nothing produced and
+  nothing consumed. Inner start/end events also drew from and produced into the global
+  `p_source`/`p_sink`, so an inner start competed with the real start for the single initial
+  token and an inner end marked the whole process complete. A container now gets its own
+  `p_C#source`/`p_C#sink` pair, entered through `t_C#enter` and left through `t_C#exit`, via a
+  scope-parameterised `buildScope`; recursion is type-agnostic (`n.nodes?.length`) rather than
+  gated on `isExpanded`, a rendering attribute with no semantic counterpart. This is what had
+  spent several releases reporting an expanded subprocess as a deadlocked main process (`WF03`)
+  with a dead end event (`WF01`) — `checkSoundness` was correctly analyzing the wrong, broken
+  net. The malformed-container fallback path had the same disconnection defect under a different
+  name (children left in `flatNodes` with no transitions); both now share one
+  `isRefinableContainer` predicate across `flattenNodes`, `flattenEdges` and `buildContainer`, so
+  the flatten descends exactly where the translation does, and drops the subtree outright rather
+  than half-translating it.
 - **`S10` no longer reports a false `unknown source`/`unknown target` ERROR** for a message flow
   naming a node inside a subprocess. It collected node ids one level deep per pool, which rejected
   exactly the endpoint shape S14 recommends.
