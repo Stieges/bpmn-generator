@@ -92,13 +92,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `group`. Two of the three are shapes `references/prompt-template.md` actively recommends to the
   model, so the pipeline was asking for them and then warning about them. Both rules now ask
   `isSequenceFlowExempt` (`scripts/bpmn/types.js`), which carries the exemptions with their
-  reasons in one place. Nothing is newly rejected; this is signal quality.
+  reasons in one place. Nothing is newly rejected; this is signal quality. Both instance flags are
+  guarded on the node's **class**, and the guard is what keeps the exemption honest:
+  `references/input-schema.json` declares `isCompensation` and `isEventSubProcess` as generic
+  `Node` properties valid on any `NodeType`, while OMG scopes them to `Activity` resp. `SubProcess`
+  — unguarded, either would be a universal opt-out of both always-on rules, and a
+  `{ type: 'parallelGateway', isCompensation: true }` with no edges at all would be reported by
+  nothing.
 - **`S04` now names a node with an outgoing flow and no incoming one.** Its "connected" set was
   *sources ∪ targets*, so a single outgoing flow was enough to pass — and S07 checks the opposite
   half, so a stranded `parallelGateway` (unreachable itself, every node behind it dead) validated
   clean under the default profile and was named only by the opt-in WF01. The set is now *targets
-  only*: strictly a superset of the old predicate, **0 nodes newly flagged** across the 21 fixture
-  files. The message splits in two, because the mistakes differ — a node with no edge at all still
+  only*, and **0 nodes are newly flagged** across the 21 fixture files. Note what is and is not a
+  superset here, because two changes ship together and they point opposite ways: the *predicate*
+  change (union → targets) is strictly a superset — every node it used to flag it still flags —
+  while the *exemption* change in the entry above deliberately removes findings, so a fully
+  isolated compensation activity was flagged before and is silent now. The combined behaviour is
+  therefore not "everything previously reported is still reported": S04 flags a strictly larger
+  set of unreachable nodes and a strictly smaller set of exempt ones, and the three silenced
+  shapes are exactly the three named above.
+  The message splits in two, because the mistakes differ — a node with no edge at all still
   "appears isolated", one with an outgoing flow "has no incoming flow", since calling the latter
   isolated is simply false. The rule stays **non-recursive** (`scope: 'process'`, dispatched per
   pool over top-level nodes); making it descend is a separate change with a separate blast radius.
@@ -106,7 +119,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   complexity guideline about how many arcs touch an element, which never supported this rule even
   in its narrow reading. What supports it is the connectedness a workflow net is defined by (van
   der Aalst 1997, *Verification of Workflow Nets*) — every node lies on a directed path from source
-  to sink — of which S04 is the always-on local approximation and WF01 the exhaustive check.
+  to sink — of which S04 is the always-on local approximation and WF01 the exhaustive check. **No
+  OMG clause is cited, deliberately.** Checked against the spec PDF in
+  `references/omg-spec/normative/`: §7.3.1 is *"Basic BPMN Modeling Elements"*, a shape catalogue,
+  and the Sequence Flow Connection Rules (§7.6.1, Table 7.3) govern which *pairs* may be connected
+  while stating that "the quantity of connections into and out of an object … are not specified
+  here". There is no clause that requires an incoming flow, so citing one would repeat the mistake
+  being fixed.
 - **`S13` now checks that a boundary event's host really is an Activity.**
   `BoundaryEvent.attachedToRef` is typed `Activity [1..1]` (OMG §10.4.3 Table 10.86); the rule's
   own `ref` said so and its messages said *Aktivität*, but the check only asked whether the id
@@ -125,7 +144,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check applies only where the endpoint resolved to a *node*: a pool id names a Participant, which
   is an InteractionNode and lives in `lc.pools`, not in the NodeType enum. Gateways (S12, ERROR)
   and containers (S14, WARNING) keep their own rules rather than being reported twice at a second
-  severity.
+  severity. The message deliberately contains no `"; "`: `classifyResult` splits a rule's `message`
+  on that separator — it is what the rules use to join several findings into one string — so a
+  semicolon inside a *single* finding silently becomes a second, id-less entry, doubling the
+  reported error count for one bad endpoint and carrying that into `validation.errors`, the HTTP
+  response and `--strict`. S12, S13 and S14 keep their prose free of it for the same reason.
 - **`redesign.js`'s `isolateException` no longer refuses a boundary event on a subprocess.** It
   read a private `TASK_TYPES` list without the container classes and answered *"Boundary-Ereignisse
   hängen nur an Aufgaben"* to legal BPMN — an error boundary on a subprocess being the everyday
