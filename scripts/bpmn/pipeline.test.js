@@ -3734,6 +3734,15 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
     // `proc.nodes` from an id-keyed map in place — so moving `checkNetTranslation` after layout
     // hands it a Logic-Core the duplicate has already been silently dropped from, and this test
     // goes green-for-nothing with zero findings.
+    //
+    // ⚠ That second job rests on a bug, and will expire with it. The silent drop is recorded
+    // under CHANGELOG's Known limitations ("sortNodesTopologically silently drops a node whose id
+    // duplicates an earlier one"). Whoever repairs it: this test still passes afterwards, in BOTH
+    // placements, and at that moment it stops discriminating between them — it goes back to being
+    // an attribution test only. There is no bug-independent discriminator, because the mutation is
+    // the only thing that makes the two placements observably different; so the placement argument
+    // will then have to be carried by the code comment in pipeline.js and by the fact that the
+    // clean-corpus measurement was taken on the as-given Logic-Core.
     const pool = (id, name, dupe) => ({
       id,
       name,
@@ -3764,8 +3773,8 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
     expect(r.netDiagnostics.ok).toBe(false);
   });
 
-  test('duplicate ids across sibling containers are an NC06 ERROR', async () => {
-    // The one behaviour change the wiring produces. This model used to generate with a
+  test('duplicate NODE ids across sibling containers are an NC06 ERROR', async () => {
+    // The blocking behaviour change the wiring produces. This model used to generate with a
     // serialisation warning and exit 0; the file it wrote carried the same `id=` twice, which
     // xsd:ID forbids document-wide.
     const r = await runPipeline(loadFixture('negative/duplicate-ids-across-containers.json'));
@@ -3778,6 +3787,90 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
     // A single-process Logic-Core gets no prefix, for the reason runRules gives: there is only
     // one process to attribute to.
     expect(nc06[0].message.startsWith('2 distinct nodes')).toBe(true);
+  });
+
+  test('duplicate FLOW ids are NOT an NC finding — the net translates them faithfully', async () => {
+    // The boundary of what NC06 claims, pinned so the prose and the code cannot drift apart
+    // again. Two edges sharing an id are a real defect in the emitted XML (xsd:ID is
+    // document-wide unique) but NOT a translation defect: `namePlaces` keys places
+    // `p_<src>_<tgt>[#k]` and `placeOfEdge` is keyed by edge OBJECT IDENTITY, so both edges get
+    // their own place and their own arcs. Nothing is overwritten and the net is a correct model
+    // of the Logic-Core — NC06's message ("the net can only represent one of them") would simply
+    // be false here. Reporting it anyway is the category error net-check.js's header forbids and
+    // that the NC02/NC02b narrowing was performed to undo.
+    const container = (suffix) => ({
+      id: `sub_${suffix}`,
+      type: 'subProcess',
+      nodes: [
+        { id: `s_${suffix}`, type: 'startEvent', name: 'Beginn' },
+        { id: `t_${suffix}`, type: 'userTask', name: 'Antrag prüfen' },
+        { id: `e_${suffix}`, type: 'endEvent', name: 'Ende' },
+      ],
+      // The SAME flow id in both containers. Node ids stay distinct, so NC06 has nothing to say.
+      edges: [
+        { id: 'f_in', source: `s_${suffix}`, target: `t_${suffix}` },
+        { id: `f_out_${suffix}`, source: `t_${suffix}`, target: `e_${suffix}` },
+      ],
+    });
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'start', type: 'startEvent', name: 'Antrag eingegangen' },
+        container('a'), container('b'),
+        { id: 'end', type: 'endEvent', name: 'Antrag bearbeitet' },
+      ],
+      edges: [
+        { id: 'g1', source: 'start', target: 'sub_a' },
+        { id: 'g2', source: 'sub_a', target: 'sub_b' },
+        { id: 'g3', source: 'sub_b', target: 'end' },
+      ],
+    };
+    const r = await runPipeline(lc);
+    expect(r.netDiagnostics.issues).toEqual([]);
+    expect(r.netDiagnostics.ok).toBe(true);
+    // … and the layer that DOES own it still reports it, so the exemption is not a blind spot:
+    // bpmn-moddle re-parsing our own output names the duplicate exactly.
+    expect(r.validation.xmlWarnings.join(' ')).toContain('duplicate ID <f_in>');
+    // The gap this leaves is stated in CHANGELOG's Known limitations: that channel is fatal only
+    // under `--strict`, so the invalid file is still written by default.
+    expect(r.bpmnXml.match(/id="f_in"/g)).toHaveLength(2);
+  });
+
+  test('CLI: an NC05 INFO is printed but never fatal, not even under --strict', async () => {
+    // NC05's own message says multiple start events sharing one source place are "standard
+    // WF-net/OMG normalisation, not a defect" (OMG §10.4.2 treats them as alternative
+    // instantiations). A gate that refuses to write files while quoting that sentence is telling
+    // the user something false. The DI block `--strict` mirrors has no INFO codes, so the
+    // distinction never came up there; copying its `severity !== 'ERROR'` shape blocked this.
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bpmn-nc05-'));
+    const inPath = path.join(dir, 'in.json');
+    const outBase = path.join(dir, 'out');
+    fs.writeFileSync(inPath, JSON.stringify({
+      id: 'P',
+      nodes: [
+        { id: 's1', type: 'startEvent', name: 'Post eingegangen' },
+        { id: 's2', type: 'startEvent', name: 'Portal genutzt' },
+        { id: 'g', type: 'exclusiveGateway', name: 'Eingang' },
+        { id: 't', type: 'userTask', name: 'Antrag prüfen' },
+        { id: 'e', type: 'endEvent', name: 'Antrag bearbeitet' },
+      ],
+      edges: [
+        { id: 'f1', source: 's1', target: 'g' },
+        { id: 'f2', source: 's2', target: 'g' },
+        { id: 'f3', source: 'g', target: 't' },
+        { id: 'f4', source: 't', target: 'e' },
+      ],
+    }), 'utf8');
+    const res = spawnSync('node', ['pipeline.js', inPath, outBase, '--strict'],
+      { cwd: __dirname, encoding: 'utf8' });
+    expect(res.stdout + res.stderr).toMatch(/NC05/);          // disclosed …
+    expect(res.stderr).not.toMatch(/Petri-net diagnostic\(s\)/); // … never gated on
+    expect(res.status).toBe(0);
+    expect(fs.existsSync(`${outBase}.bpmn`)).toBe(true);
   });
 
   test('CLI: the NC gate exits 1 and writes no files', async () => {
