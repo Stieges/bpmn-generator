@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   output) that the net does not have. Measured over 4000 random rule-engine-clean processes, the
   unscoped codes produced 6601 `NC02` + 6612 `NC02b` ERRORs across 3380 of 3983 nets, while
   `NC01`, `NC03a`, `NC03b`, `NC04` and `NC06` never fired once — so the model-judging was entirely
-  in those two, and wiring this pass into `runPipeline` (a documented next step) would have
+  in those two, and wiring this pass into `runPipeline` (done — see the next entry) would have
   rejected models that generate today. Three input sources count, and the third is the one that
   makes the scoping safe: an incoming sequence flow, a start event's own scope source place, and
   **a boundary event's `attachedTo` host** — a boundary event has no incoming sequence flow by
@@ -43,6 +43,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the day it lands. Documented in `references/api-reference.md`; the check is now also pinned
   against `references/api-reference.md` by `.github/scripts/docs-gate.mjs`'s generalised
   `(module, prefix, doc)` diagnostic-code table, alongside `di-check.js`'s `DI` family.
+- **`net-check.js` is now wired into `runPipeline`, as `result.netDiagnostics`.** The guard ran
+  from tests and from a direct call only, so the defect class it exists to catch was invisible to
+  every real generate. It now runs on every one: one `checkNetIntegrity(bpmnToPN(proc), proc)` per
+  process — `bpmnToPN` flattens containers itself, so a nested subprocess needs no extra call —
+  with findings prefixed `` `[pool] ` `` and carrying `process`, the form `runRules` and
+  `checkWorkflowNetSoundness` already use. Without it a collaboration finding would be
+  unattributable: NC messages name a node id and nothing else, and two participants may legally
+  reuse one. `netDiagnostics` mirrors `diagnostics`' shape (`{ ok, issues }`, `ok` meaning no
+  ERROR) and is `null` on the early-return path, for the same reason: no net was built, and "no
+  artefact" is not "clean". It is a **separate key** rather than merged into `diagnostics`,
+  because that one's `code` is a closed `DI01`–`DI06` enum in `references/api-schema.json` that
+  the docs gate validates a real response against.
+  - **It runs before layout, and that is a correctness constraint.** `logicCoreToElk` calls
+    `preprocessLogicCore`, whose `sortNodesTopologically` rebuilds `proc.nodes` from an id-keyed
+    map **in place**. Two nodes sharing an id therefore collapse into one before ELK sees them, so
+    a check placed next to `checkDiagramIntegrity` would be handed a Logic-Core the defect had
+    already been erased from — the same mistake this pass exists to prevent one level up. It is
+    computed there and acted on nowhere: `runPipeline` produces the diagnostic and the caller
+    decides, which is what lets the CLI gate on it and `agents/layout.js` pass it through.
+  - **Cost**: `checkNetIntegrity` never calls `checkSoundness`, the expensive half, which stays
+    opt-in. Measured across the whole fixture corpus: 0.611 ms against `runPipeline`'s 208.4 ms,
+    0.29 %, largest single model 0.0823 ms. Deliberately **not** conditional on the opt-in
+    `workflow_net` layer — gating it there would make the always-off default the always-unchecked
+    default.
+  - **CLI**: `node bpmn/pipeline.js` gates on it exactly as it gates on DI — an NC ERROR is fatal
+    and writes no files, an NC WARNING/INFO is printed and fatal only under `--strict`.
+  - **One behaviour change, taken deliberately.** A Logic-Core with **duplicate ids across sibling
+    containers** used to generate with a serialisation warning and exit 0. The file it wrote
+    carried the same `id=` twice, which `xsd:ID` forbids document-wide, so no tool loaded it
+    correctly. `NC06` names it structurally and it is now blocking. New fixture:
+    `tests/fixtures/negative/duplicate-ids-across-containers.json` — under `negative/` because
+    `net-check.test.js`'s fence scans the top level of `tests/fixtures/` and requires every
+    fixture there to be a clean translation, which is not a contract a deliberately dirty fixture
+    can be held to. Nothing else in the corpus moved: 0 NC ERRORs across all 24 fixture×pool
+    units and 0 of 3983 rule-engine-clean random nets.
+  - Not surfaced over HTTP or MCP. Both build their payloads key by key, so neither changed;
+    doing so would pull in the schema enum, the docs-gate response contract and
+    `mcp-bpmn-server.js`'s `include` set, and is a separate decision.
 - **`S14` — a MessageFlow endpoint may not name a container.** `MessageFlow.sourceRef`
   and `targetRef` are typed `InteractionNode` (`BPMN20.cmof:851-852`). `Task` (`:1191`) and `Event`
   (`:287`) are InteractionNodes by an explicit second superclass and `Participant` (`:863`)
@@ -298,8 +336,12 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 - **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
   under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
   examples; the exhaustive check is WF03 in the opt-in `workflow_net` layer.
-- **`net-check.js` is not wired into `runPipeline`.** It runs from tests and from a direct call
-  (`checkNetIntegrity(bpmnToPN(proc), proc)`) only, and is reachable over neither HTTP nor MCP.
+- **`netDiagnostics` is reachable over neither HTTP nor MCP.** `runPipeline` produces it on every
+  call and the CLI gates on it, but `/api/v1/generate`, `/orchestrate` and the `generate_bpmn` MCP
+  tool all assemble their payloads key by key and do not carry it. Surfacing it means widening
+  `references/api-schema.json`'s closed `DiagnosticIssue.code` enum, the docs gate's response
+  contract and `mcp-bpmn-server.js`'s `include` set — a separate decision with its own blast
+  radius, deliberately not taken here.
 - **`S04` is not recursive, so an unreachable node *inside* a container is still reported by no
   always-on rule.** The rule is `scope: 'process'` and `runRules` dispatches it per pool over
   top-level nodes only, so the widening above does not reach a candidate one level down —
