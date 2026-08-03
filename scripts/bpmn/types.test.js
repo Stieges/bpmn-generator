@@ -7,6 +7,7 @@ import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isBpmnArtifact,
   isContainerNode, CONTAINER_TYPES, ACTIVITY_TYPES, isActivity,
   isInteractionNode, isSequenceFlowExempt,
+  EVENT_TYPES, GATEWAY_TYPES, ARTIFACT_TYPES,
 } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +61,41 @@ describe('the NodeType fence — every enum member is classified, and exactly on
       })
       .map(({ type, ...c }) => `${type}: ${JSON.stringify(c)}`);
     expect(overlapping).toEqual([]);
+  });
+});
+
+describe('the NodeType fence, reverse direction — every classification-set member is a real enum type', () => {
+  const nodeTypeSet = new Set(loadNodeTypeEnum());
+
+  // `adHocSubProcess` is the one documented exception: a real OMG class (`AdHocSubProcess`,
+  // BPMN20.cmof:1222) that `CONTAINER_TYPES` (and therefore `ACTIVITY_TYPES`) has carried since
+  // before this stage, but that references/input-schema.json's NodeType enum does not expose —
+  // the schema instead spells ad-hoc as `isAdHoc: true` on a plain `subProcess`. Neither importer
+  // ever produces the string, but `pipeline.test.js`'s S14 test builds a hand-written Logic-Core
+  // node with this exact type (bypassing the schema gate, which only runs at the HTTP boundary)
+  // and depends on CONTAINER_TYPES classifying it as a container. So this is not a stray entry to
+  // delete — see the long comment on CONTAINER_TYPES in types.js for the full argument — and this
+  // allowlist is what keeps the fence honest about that rather than either silently passing over
+  // it or wrongly failing on a type the codebase deliberately still supports.
+  const ALLOWLISTED_NON_ENUM_TYPES = new Set(['adHocSubProcess']);
+
+  // Named per set, not merged into one flat list, so a failure's message says which
+  // classification acquired the stray member — that is the whole point of this direction.
+  const classificationSets = { ACTIVITY_TYPES, EVENT_TYPES, GATEWAY_TYPES, ARTIFACT_TYPES };
+
+  for (const [setName, set] of Object.entries(classificationSets)) {
+    test(`every member of ${setName} is a NodeType enum member (or the documented allowlist)`, () => {
+      const strays = [...set].filter((type) => !nodeTypeSet.has(type) && !ALLOWLISTED_NON_ENUM_TYPES.has(type));
+      expect(strays).toEqual([]);
+    });
+  }
+
+  test('the allowlist itself does not silently grow — every allowlisted type is still absent from the enum', () => {
+    // If a schema change ever adds 'adHocSubProcess' to NodeType, this fails loudly so the
+    // allowlist (and CONTAINER_TYPES's comment explaining it) gets cleaned up rather than
+    // silently going stale.
+    const noLongerNeeded = [...ALLOWLISTED_NON_ENUM_TYPES].filter((type) => nodeTypeSet.has(type));
+    expect(noLongerNeeded).toEqual([]);
   });
 });
 

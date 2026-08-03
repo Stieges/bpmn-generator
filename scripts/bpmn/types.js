@@ -7,12 +7,16 @@
 // Backs isEvent below. Kept explicit rather than a substring test so a future NodeType addition
 // that happens to contain the word "Event" without being one (or the reverse) cannot silently
 // change classification — see the fence in types.test.js, which checks this set against the enum.
-const EVENT_TYPES = new Set([
+// Exported (not just used locally) so the fence in types.test.js can check the reverse direction
+// too: not only "does every enum member land in some class" but "does every class member
+// actually exist in the enum". A set kept private could accumulate a stray entry with nothing
+// to catch it — see CONTAINER_TYPES's `adHocSubProcess`, below, for exactly that case.
+export const EVENT_TYPES = new Set([
   'startEvent', 'endEvent', 'intermediateCatchEvent', 'intermediateThrowEvent', 'boundaryEvent',
 ]);
 
 // The five OMG Gateway subclasses in the NodeType enum. Same rationale as EVENT_TYPES.
-const GATEWAY_TYPES = new Set([
+export const GATEWAY_TYPES = new Set([
   'exclusiveGateway', 'parallelGateway', 'inclusiveGateway', 'eventBasedGateway', 'complexGateway',
 ]);
 
@@ -28,6 +32,10 @@ export function isBoundaryEvent(node) {
   return node.type === 'boundaryEvent' || !!node.attachedTo;
 }
 
+// Backs isArtifact below. Exported for the same reverse-direction reason as EVENT_TYPES/
+// GATEWAY_TYPES — see the comment there.
+export const ARTIFACT_TYPES = new Set(['dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group']);
+
 /**
  * Layout sense of "artifact": drawable, but kept out of the ELK graph because it
  * is not part of the sequence flow. Wider than the BPMN class of the same name —
@@ -35,7 +43,7 @@ export function isBoundaryEvent(node) {
  * that has to be right against the XSD.
  */
 export function isArtifact(type) {
-  return ['dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group'].includes(type);
+  return ARTIFACT_TYPES.has(type);
 }
 
 /**
@@ -69,6 +77,20 @@ export function isBpmnArtifact(type) {
  * `CallActivity` (:1188), `AdHocSubProcess` (:1222) and `Transaction` (:1233) all descend from
  * it. `grep -n InteractionNode BPMN20.cmof` returns exactly `Event`, `ConversationNode`,
  * `Participant` and `Task` — the property is granted per class, never inherited.
+ *
+ * `adHocSubProcess` is deliberately kept despite NOT being a member of `references/
+ * input-schema.json`'s `NodeType` enum — that schema instead expresses ad-hoc as `isAdHoc: true`
+ * on a plain `subProcess` node, and neither importer (`import.js`, `moddle-import.js`) ever
+ * produces the string `'adHocSubProcess'`, nor does `bpmnXmlTag` map it to anything but the
+ * `task` fallback. So this is a real class (`AdHocSubProcess`, BPMN20.cmof:1222) the schema does
+ * not yet expose, not a dead list entry: `pipeline.test.js`'s "S14 accepts the legal endpoint
+ * classes and rejects every container class" test already builds a hand-written Logic-Core node
+ * with this exact type string (bypassing the schema gate, which only runs at the HTTP boundary)
+ * and relies on `CONTAINER_TYPES` classifying it correctly. Removing it here would silently
+ * change what that test — and any other direct Logic-Core caller using the same string — gets
+ * back. Reconciling the schema, the importers and the serializer with this class is a bigger,
+ * separate decision; `types.test.js`'s reverse-direction fence allowlists this one entry with
+ * this same reasoning rather than either silently passing or wrongly failing on it.
  */
 export const CONTAINER_TYPES = new Set(['subProcess', 'transaction', 'adHocSubProcess', 'callActivity']);
 
@@ -151,9 +173,13 @@ export function isInteractionNode(type) {
 }
 
 /**
- * Is this node exempt from "must be reached by an incoming sequence flow" — the check S04/S07
- * each approximate today, differently, which is why both misfire on the same inputs (see
- * types.test.js's reproduction and CLAUDE.md's Known Limitations for the shared root cause).
+ * Is this node exempt from "must be reached by an incoming sequence flow" — the check S04
+ * ("appears isolated") and S07 ("no outgoing flow") each approximate today, differently, which is
+ * why both misfire on the same inputs: an event subprocess, a compensation activity, or a group
+ * artifact each currently trips both warnings, because neither rule's hand-rolled approximation
+ * recognises them as legitimately reached some other way. `types.test.js`'s `isSequenceFlowExempt`
+ * tests exercise each member below directly, in isolation from S04/S07 — this stage does not
+ * change those rules, only names the predicate they will call in Stage 2.
  *
  * The membership, each with its own reason a sequence flow cannot be the thing that reaches it:
  *   - `startEvent`     — by definition the entry point; nothing precedes it in its own scope.
