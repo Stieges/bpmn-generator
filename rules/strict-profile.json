@@ -17,6 +17,7 @@
     "M06": { "severity": "ERROR" },
     "M07": { "severity": "ERROR" },
     "M08": { "severity": "ERROR" },
+    "S14": { "severity": "ERROR" },
     "P01": { "severity": "WARNING" }
   }
 }

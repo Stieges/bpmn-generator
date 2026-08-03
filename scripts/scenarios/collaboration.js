@@ -74,6 +74,15 @@ export function messagePlaceId(messageFlowId) {
  * (workflow-net.js:136-165). A message arc has to apply to ALL of them — any one of them
  * firing IS that node executing.
  *
+ * Since Stage 1 a CONTAINER also has more than one, and for a different reason: `bpmnToPN`
+ * refines a subprocess into a subnet whose boundary is an entry/exit pair
+ * (workflow-net.js:382-418) — `t_C#enter` (or one `t_C#enter#i` per incoming edge) and
+ * `t_C#exit`, all carrying the container's `bpmnNodeId`. Those two are not alternatives, they
+ * are the two ENDS of one execution, so the "any one of them firing IS that node executing"
+ * reading above does not hold for them. That is why `composeCollaboration` never routes a
+ * container id through here for message-flow wiring — see the `'container'` branch in
+ * `resolve()`.
+ *
  * @param {object} pn - a net from `bpmnToPN`
  * @param {string} nodeId
  * @returns {string[]} local (unprefixed) transition ids, in insertion order
@@ -100,10 +109,13 @@ export function transitionsForNode(pn, nodeId) {
  *   places, value `{poolId, edge}`.
  * @property {Array<object>} messagePlaces - one per wired message flow:
  *   `{messageFlowId, placeId, senderTransitions, receiverTransitions, senderIsBlackBox,
- *   receiverIsBlackBox, gates}`.
+ *   receiverIsBlackBox, senderKind, receiverKind, gates}`. The two `*Kind` fields are
+ *   `resolve()`'s verdict verbatim — `'node' | 'blackBox' | 'container' | 'unresolved'`.
  * @property {string[]} unconsumablePlaces - message places no transition consumes.
  * @property {Array<object>} unresolved - message flows an endpoint could not be resolved
- *   for: `{messageFlowId, endpoint: 'source'|'target', id}`. Reported, never thrown.
+ *   for: `{messageFlowId, endpoint: 'source'|'target', id, reason}`, where `reason` is
+ *   `'unknownId'` (names nothing in the model) or `'container'` (names a subprocess, which
+ *   is not a valid MessageFlow endpoint — see `resolve()`). Reported, never thrown.
  */
 
 /**
@@ -130,6 +142,10 @@ export function composeCollaboration(lc) {
   // unique across pools; if it is not, every match is wired, which is the only reading
   // that cannot silently drop a synchronisation.
   const nodeOwners = new Map();
+  // Container nodes, across all pools. Kept apart from `nodeOwners` because a container is not
+  // a legal message-flow endpoint at all (see `resolve()`), so the question is never "which
+  // transitions" but "is this an endpoint we must refuse".
+  const containerIds = new Set();
 
   // A pool without an `id` still needs one to scope its places with. Generated rather
   // than assumed free: `pool_0` is a legal pool id, and colliding with a real one would
@@ -168,6 +184,12 @@ export function composeCollaboration(lc) {
     }
 
     for (const n of pn.flatNodes) {
+      // `bpmnToPN`'s own container predicate, by the same criterion (workflow-net.js:128) —
+      // a node with children is a subnet, not a transition. Recorded whether or not the
+      // container was actually refined: the fallback path (no inner start/end) gives it a
+      // single transition and so would wire cleanly, but the reason to refuse is the class,
+      // not the translation. See `resolve()`.
+      if (Array.isArray(n.nodes) && n.nodes.length > 0) containerIds.add(n.id);
       const tIds = transitionsForNode(pn, n.id).map(t => scopedId(poolId, t));
       if (!tIds.length) continue;
       if (!nodeOwners.has(n.id)) nodeOwners.set(n.id, []);
@@ -187,7 +209,29 @@ export function composeCollaboration(lc) {
     });
   }
 
+  // ── Why a container endpoint resolves to NOTHING ────────────────────────────────────────
+  // A message flow naming a subprocess is not an under-modelled legal shape, it is a schema
+  // violation: `MessageFlow.sourceRef`/`targetRef` are typed `InteractionNode`
+  // (BPMN20.cmof:851-852). `Task` (:1191) and `Event` (:287) are InteractionNodes by an
+  // explicit second superclass and `Participant` (:863) likewise, but `Activity` is
+  // `superClass="FlowNode"` alone (:1095), and `SubProcess` (:1147), `CallActivity` (:1188),
+  // `AdHocSubProcess` (:1222) and `Transaction` (:1233) all inherit from it. S14
+  // (`scripts/bpmn/rules.js`) is where the author hears about it.
+  //
+  // Given that, neither of the container's two transitions is the right attach point, and this
+  // branch has to come BEFORE the `nodeOwners` lookup or one of two wrong things happens:
+  //   - wiring both (what the plain `nodeOwners` path does since Stage 1 put the container in
+  //     `flatNodes`) makes a container-as-source push a `T→P` arc into `pmsg_<mf>` from BOTH
+  //     `t_C#enter` and `t_C#exit` — the message is sent twice, from a model that says nothing
+  //     of the kind — and flips `gates` to `true` for a container-as-target, hanging consuming
+  //     arcs on both ends of the subnet;
+  //   - picking one invents a reading the standard does not offer. "Source → exit" and
+  //     "target → entry" are each defensible in isolation, and neither is what the model says.
+  // Refusing is the only answer that adds no claim. It is also not a dead end for the author:
+  // the remedy always exists one level down — a send/receive task or a message start/end event
+  // inside the subprocess — which is exactly what S14's message names.
   const resolve = (id) => {
+    if (containerIds.has(id)) return { kind: 'container', transitionIds: [] };
     const owners = nodeOwners.get(id);
     if (owners) return { kind: 'node', transitionIds: owners.flatMap(o => o.transitionIds) };
     if (collapsed.has(id)) return { kind: 'blackBox', transitionIds: [] };
@@ -200,8 +244,17 @@ export function composeCollaboration(lc) {
   for (const mf of messageFlows) {
     const src = resolve(mf.source);
     const tgt = resolve(mf.target);
-    if (src.kind === 'unresolved') unresolved.push({ messageFlowId: mf.id, endpoint: 'source', id: mf.source });
-    if (tgt.kind === 'unresolved') unresolved.push({ messageFlowId: mf.id, endpoint: 'target', id: mf.target });
+    // Both kinds land on `unresolved[]`, because from the net's point of view they are the same
+    // fact — this endpoint wires to no transition — but they are NOT the same defect, so the
+    // `reason` travels with them. `'unknownId'` names nothing in the model; `'container'` names
+    // something real that may not be named here. A reader told only "could not be mapped" would
+    // go looking for a missing node in the second case.
+    const record = (endpoint, id, kind) => {
+      if (kind === 'unresolved') unresolved.push({ messageFlowId: mf.id, endpoint, id, reason: 'unknownId' });
+      else if (kind === 'container') unresolved.push({ messageFlowId: mf.id, endpoint, id, reason: 'container' });
+    };
+    record('source', mf.source, src.kind);
+    record('target', mf.target, tgt.kind);
 
     const placeId = messagePlaceId(mf.id);
     places.set(placeId, { id: placeId, label: mf.name || '', messageFlowId: mf.id });
@@ -216,8 +269,16 @@ export function composeCollaboration(lc) {
       receiverTransitions: tgt.transitionIds,
       senderIsBlackBox: src.kind === 'blackBox',
       receiverIsBlackBox: tgt.kind === 'blackBox',
+      // The raw `resolve()` verdicts, kept rather than collapsed into the two booleans above.
+      // `senderIsBlackBox === false` used to mean "a real node", and since the `'container'` and
+      // `'unresolved'` kinds exist it does not — anything deriving from the booleans alone would
+      // report a failure to map as a deliberate black box.
+      senderKind: src.kind,
+      receiverKind: tgt.kind,
       // "gates" = does this flow actually constrain the receiver? Only a real sender does;
-      // a black-box sender is the always-available environment (module header).
+      // a black-box sender is the always-available environment (module header). This already
+      // yields `false` for `'container'` and `'unresolved'` without a change — both compare
+      // unequal to `'node'` — which is checked rather than assumed in `collaboration.test.js`.
       gates: src.kind === 'node' && tgt.kind === 'node',
     });
   }
@@ -353,20 +414,27 @@ export function composeCollaboration(lc) {
  *   an OR split is fired as an AND, so the list is an under-enumeration marker.
  * @property {Array<object>} stats.skipped - `{poolId, id, reason}`.
  * @property {Array<object>} stats.messageFlows - one per flow: `{id, placeId, gates,
- *   senderIsBlackBox, receiverIsBlackBox, senderTransitions, receiverTransitions}`.
- * @property {string[]} stats.ungatedMessageFlows - flows that enforce NO ordering: either
- *   sent by a black box (nothing produces the token, and by the decision above nothing
- *   waits for it) or received by one (nothing consumes it). **Read this before trusting
- *   the joint order** — for these, the two ends are not synchronised at all.
+ *   senderIsBlackBox, receiverIsBlackBox, ungatedReason, senderTransitions,
+ *   receiverTransitions}`. `ungatedReason` is `null` when the flow gates, and otherwise
+ *   `'blackBox'` (a deliberate modelling choice — see the module header) or
+ *   `'unmappedEndpoint'` (an endpoint that could not be mapped: a container or an unknown
+ *   id, both listed in `unresolvedEndpoints` — a defect, not a choice).
+ * @property {string[]} stats.ungatedMessageFlows - flows that enforce NO ordering: sent by a
+ *   black box (nothing produces the token, and by the decision above nothing waits for it),
+ *   received by one (nothing consumes it), or with an endpoint that could not be mapped at
+ *   all. **Read this before trusting the joint order** — for these, the two ends are not
+ *   synchronised at all. `stats.messageFlows[].ungatedReason` tells the three apart.
  * @property {string[]} stats.unconsumedMessagePlaces - message places no transition can
  *   ever consume: every ungated flow qualifies, whether because its receiver is a black
  *   box or because its black-box SENDER means no consuming arc was added (`mf4` in
  *   `realistic-collaboration.json` is the second kind — its receiver is a real node).
  * @property {Array<object>} stats.unresolvedEndpoints - message flow endpoints this
- *   module could not map to a transition: an id matching no node and no collapsed pool
- *   (malformed), but also the legal shape of addressing an expanded participant by its
- *   POOL id rather than by a node inside it, which is simply not handled. Never thrown,
- *   always reported — such a flow synchronises nothing.
+ *   module could not map to a transition, each carrying a `reason`. `'unknownId'`: an id
+ *   matching no node and no collapsed pool (malformed), but also the legal shape of
+ *   addressing an expanded participant by its POOL id rather than by a node inside it,
+ *   which is simply not handled. `'container'`: an id naming a subprocess, which is not a
+ *   valid MessageFlow endpoint at all (`resolve()`, and S14 in `scripts/bpmn/rules.js`).
+ *   Never thrown, always reported — such a flow synchronises nothing.
  * @property {number} stats.deadEndPaths - includes genuine CROSS-POOL deadlocks: a path
  *   where one pool's branch means a message is never sent and the partner waits forever.
  *   Deliberately not a separate category — the accounting is the same as Task 1's, and
@@ -457,6 +525,17 @@ export function enumerateCollaboration(lc, options = {}) {
         gates: mp.gates,
         senderIsBlackBox: mp.senderIsBlackBox,
         receiverIsBlackBox: mp.receiverIsBlackBox,
+        // WHY this flow enforces no ordering, in one field, derived here rather than in
+        // `format.js`: this module's own rule is that `stats` is passed through whole rather
+        // than curated downstream, so a presentation layer must not have to re-derive a fact
+        // the composition already knows. `'blackBox'` is a modelling CHOICE (the module header
+        // argues for it at length); `'unmappedEndpoint'` is a defect in the model or in this
+        // translation, and `stats.unresolvedEndpoints` says which endpoint and why.
+        ungatedReason: mp.gates
+          ? null
+          : ((mp.senderKind === 'blackBox' || mp.receiverKind === 'blackBox')
+            ? 'blackBox'
+            : 'unmappedEndpoint'),
         senderTransitions: [...mp.senderTransitions],
         receiverTransitions: [...mp.receiverTransitions],
       })),

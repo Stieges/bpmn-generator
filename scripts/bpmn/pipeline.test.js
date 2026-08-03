@@ -1053,6 +1053,85 @@ describe('Workflow-Net Soundness', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// §11c  B10 — message-flow endpoints and subprocess containers
+// ═══════════════════════════════════════════════════════════════
+
+describe('B10 — message flow endpoints around a subprocess container', () => {
+  // `messageflow-to-subprocess.json` pins both halves of B10 in one file: `mf_inner` names a
+  // node INSIDE the container (legal, and the remedy S14 recommends), `mf_container` names the
+  // container itself (a schema violation S14 reports).
+
+  test('S10 does not report an endpoint naming a node inside a subprocess', () => {
+    const lc = loadFixture('messageflow-to-subprocess.json');
+    const result = runRules(lc);
+    // S10 used to collect node ids flat, one level per pool, so `inner_recv` looked like a
+    // dangling reference. That is exactly the endpoint S14 tells authors to use — reporting it
+    // would walk the reader out of one false finding into another.
+    expect(result.errors.some(e => e.includes('inner_recv'))).toBe(false);
+    expect(result.errors.some(e => /unknown (source|target)/i.test(e))).toBe(false);
+  });
+
+  test('S14 reports the container endpoint as a WARNING under the default profile', () => {
+    const lc = loadFixture('messageflow-to-subprocess.json');
+    const result = runRules(lc);
+    const hit = result.warnings.find(w => w.includes('mf_container') && w.includes('fulfil'));
+    expect(hit).toBeDefined();
+    expect(hit).toMatch(/subProcess/);
+    expect(hit).toMatch(/InteractionNode/);
+    // The message has to carry the remedy — that is the whole reason the rule exists.
+    expect(hit).toMatch(/isExpanded/);
+    expect(result.errors.some(e => e.includes('mf_container'))).toBe(false);
+  });
+
+  test('S14 is an ERROR under rules/strict-profile.json', () => {
+    const lc = loadFixture('messageflow-to-subprocess.json');
+    const profile = loadRuleProfile(resolve(fixturesDir, '../../rules/strict-profile.json'));
+    const result = runRules(lc, profile);
+    expect(result.errors.some(e => e.includes('mf_container') && e.includes('fulfil'))).toBe(true);
+  });
+
+  test('S14 accepts the legal endpoint classes and rejects every container class', () => {
+    const base = (type) => ({
+      pools: [
+        { id: 'P1', nodes: [{ id: 'a', type: 'sendTask' }], edges: [] },
+        { id: 'P2', nodes: [{ id: 'b', type }], edges: [] },
+      ],
+      messageFlows: [{ id: 'mf', source: 'a', target: 'b' }],
+    });
+    for (const type of ['subProcess', 'transaction', 'callActivity', 'adHocSubProcess']) {
+      const result = runRules(base(type));
+      expect(result.warnings.some(w => w.includes('mf') && w.includes(type))).toBe(true);
+    }
+    for (const type of ['receiveTask', 'userTask', 'intermediateCatchEvent', 'startEvent']) {
+      const result = runRules(base(type));
+      expect(result.warnings.some(w => w.includes('"mf"') && w.includes('InteractionNode'))).toBe(false);
+    }
+  });
+
+  test('S12 sees a gateway inside a container that is not marked isExpanded', () => {
+    // Same one-word fix as Stage 1's: `isExpanded` is a BPMNShape attribute (BPMNDI.xsd:55,
+    // BPMNDI.cmof:34) with no semantic counterpart, so gating a semantic walk on it hid every
+    // node inside a collapsed container from the rule.
+    const lc = {
+      pools: [
+        { id: 'P1', nodes: [{ id: 'a', type: 'sendTask' }], edges: [] },
+        {
+          id: 'P2',
+          nodes: [{
+            id: 'sub', type: 'subProcess',
+            nodes: [{ id: 'gw', type: 'exclusiveGateway' }], edges: [],
+          }],
+          edges: [],
+        },
+      ],
+      messageFlows: [{ id: 'mf', source: 'a', target: 'gw' }],
+    };
+    const result = runRules(lc);
+    expect(result.errors.some(e => e.includes('gw') && e.includes('Gateway'))).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 // §12  OMG BPMN 2.0.2 Compliance — Semantic & Structural Gaps
 // ═══════════════════════════════════════════════════════════════
 
