@@ -1,56 +1,212 @@
 {
-  "pools": [{
-    "id": "P_Fidelity",
-    "name": "Fidelity",
-    "nodes": [
-      { "id": "s", "type": "startEvent", "name": "Request received" },
-      {
-        "id": "outer", "type": "subProcess", "name": "Handle request", "isExpanded": true,
-        "documentation": "Documentation on the subprocess itself already survived before this fixture existed.",
-        "nodes": [
-          { "id": "c_start", "type": "startEvent", "name": "Child start" },
-          { "id": "c_doc", "type": "userTask", "name": "Check documents", "documentation": "Child documentation must survive serialisation." },
-          { "id": "c_loop", "type": "userTask", "name": "Repeat check", "loopType": "standard" },
-          { "id": "c_mi", "type": "serviceTask", "name": "Notify parties", "multiInstance": "parallel" },
-          { "id": "c_script", "type": "scriptTask", "name": "Compute score", "scriptFormat": "groovy", "script": "score = 1" },
-          { "id": "c_call", "type": "callActivity", "name": "Call rating", "calledElement": "RatingProcess" },
-          { "id": "c_rule", "type": "businessRuleTask", "name": "Apply rating rules", "decisionRef": "RatingDecision" },
-          { "id": "c_gw", "type": "exclusiveGateway", "name": "Complete?" },
-          { "id": "c_bnd", "type": "boundaryEvent", "marker": "timer", "attachedTo": "c_doc", "name": "7d" },
-          {
-            "id": "inner", "type": "subProcess", "name": "Archive", "isExpanded": true,
-            "nodes": [
-              { "id": "g_start", "type": "startEvent", "name": "Archive start" },
-              { "id": "g_task", "type": "userTask", "name": "Store record", "documentation": "Grandchild documentation must survive too." },
-              { "id": "g_end", "type": "endEvent", "name": "Archive done" }
-            ],
-            "edges": [
-              { "id": "g_f1", "source": "g_start", "target": "g_task" },
-              { "id": "g_f2", "source": "g_task", "target": "g_end" }
-            ]
-          },
-          { "id": "c_end", "type": "endEvent", "name": "Child done" },
-          { "id": "c_end2", "type": "endEvent", "name": "Deadline missed" }
-        ],
-        "edges": [
-          { "id": "c_f1", "source": "c_start", "target": "c_doc" },
-          { "id": "c_f2", "source": "c_doc", "target": "c_loop" },
-          { "id": "c_f3", "source": "c_loop", "target": "c_gw" },
-          { "id": "c_f4", "source": "c_gw", "target": "c_mi", "label": "yes" },
-          { "id": "c_f5", "source": "c_gw", "target": "c_script", "label": "no" },
-          { "id": "c_f6", "source": "c_mi", "target": "c_call" },
-          { "id": "c_f7", "source": "c_script", "target": "c_call" },
-          { "id": "c_f8", "source": "c_call", "target": "c_rule" },
-          { "id": "c_f8b", "source": "c_rule", "target": "inner" },
-          { "id": "c_f9", "source": "inner", "target": "c_end" },
-          { "id": "c_f10", "source": "c_bnd", "target": "c_end2" }
-        ]
-      },
-      { "id": "e", "type": "endEvent", "name": "Request closed" }
-    ],
-    "edges": [
-      { "id": "f1", "source": "s", "target": "outer" },
-      { "id": "f2", "source": "outer", "target": "e" }
-    ]
-  }]
+  "pools": [
+    {
+      "id": "P_Fidelity",
+      "name": "Fidelity",
+      "nodes": [
+        {
+          "id": "s",
+          "type": "startEvent",
+          "name": "Request received"
+        },
+        {
+          "id": "outer",
+          "type": "subProcess",
+          "name": "Handle request",
+          "isExpanded": true,
+          "documentation": "Documentation on the subprocess itself already survived before this fixture existed.",
+          "nodes": [
+            {
+              "id": "c_start",
+              "type": "startEvent",
+              "name": "Child start"
+            },
+            {
+              "id": "c_doc",
+              "type": "userTask",
+              "name": "Check documents",
+              "documentation": "Child documentation must survive serialisation."
+            },
+            {
+              "id": "c_loop",
+              "type": "userTask",
+              "name": "Repeat check",
+              "loopType": "standard"
+            },
+            {
+              "id": "c_mi",
+              "type": "serviceTask",
+              "name": "Notify parties",
+              "multiInstance": "parallel"
+            },
+            {
+              "id": "c_script",
+              "type": "scriptTask",
+              "name": "Compute score",
+              "scriptFormat": "groovy",
+              "script": "score = 1"
+            },
+            {
+              "id": "c_call",
+              "type": "callActivity",
+              "name": "Call rating",
+              "calledElement": "RatingProcess"
+            },
+            {
+              "id": "c_rule",
+              "type": "businessRuleTask",
+              "name": "Apply rating rules",
+              "decisionRef": "RatingDecision"
+            },
+            {
+              "id": "c_gw",
+              "type": "exclusiveGateway",
+              "name": "Complete?"
+            },
+            {
+              "id": "c_bnd",
+              "type": "boundaryEvent",
+              "marker": "timer",
+              "attachedTo": "c_doc",
+              "name": "7d"
+            },
+            {
+              "id": "inner",
+              "type": "subProcess",
+              "name": "Archive",
+              "isExpanded": true,
+              "nodes": [
+                {
+                  "id": "g_start",
+                  "type": "startEvent",
+                  "name": "Archive start"
+                },
+                {
+                  "id": "g_task",
+                  "type": "userTask",
+                  "name": "Store record",
+                  "documentation": "Grandchild documentation must survive too."
+                },
+                {
+                  "id": "g_data",
+                  "type": "dataObjectReference",
+                  "name": "Archive batch",
+                  "isCollection": true
+                },
+                {
+                  "id": "g_end",
+                  "type": "endEvent",
+                  "name": "Archive done"
+                }
+              ],
+              "edges": [
+                {
+                  "id": "g_f1",
+                  "source": "g_start",
+                  "target": "g_task"
+                },
+                {
+                  "id": "g_f2",
+                  "source": "g_task",
+                  "target": "g_end"
+                }
+              ]
+            },
+            {
+              "id": "c_data",
+              "type": "dataObjectReference",
+              "name": "Case file",
+              "isCollection": true
+            },
+            {
+              "id": "c_end",
+              "type": "endEvent",
+              "name": "Child done"
+            },
+            {
+              "id": "c_end2",
+              "type": "endEvent",
+              "name": "Deadline missed"
+            }
+          ],
+          "edges": [
+            {
+              "id": "c_f1",
+              "source": "c_start",
+              "target": "c_doc"
+            },
+            {
+              "id": "c_f2",
+              "source": "c_doc",
+              "target": "c_loop"
+            },
+            {
+              "id": "c_f3",
+              "source": "c_loop",
+              "target": "c_gw"
+            },
+            {
+              "id": "c_f4",
+              "source": "c_gw",
+              "target": "c_mi",
+              "label": "yes"
+            },
+            {
+              "id": "c_f5",
+              "source": "c_gw",
+              "target": "c_script",
+              "label": "no"
+            },
+            {
+              "id": "c_f6",
+              "source": "c_mi",
+              "target": "c_call"
+            },
+            {
+              "id": "c_f7",
+              "source": "c_script",
+              "target": "c_call"
+            },
+            {
+              "id": "c_f8",
+              "source": "c_call",
+              "target": "c_rule"
+            },
+            {
+              "id": "c_f8b",
+              "source": "c_rule",
+              "target": "inner"
+            },
+            {
+              "id": "c_f9",
+              "source": "inner",
+              "target": "c_end"
+            },
+            {
+              "id": "c_f10",
+              "source": "c_bnd",
+              "target": "c_end2"
+            }
+          ]
+        },
+        {
+          "id": "e",
+          "type": "endEvent",
+          "name": "Request closed"
+        }
+      ],
+      "edges": [
+        {
+          "id": "f1",
+          "source": "s",
+          "target": "outer"
+        },
+        {
+          "id": "f2",
+          "source": "outer",
+          "target": "e"
+        }
+      ]
+    }
+  ]
 }

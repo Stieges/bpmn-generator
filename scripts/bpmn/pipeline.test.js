@@ -5038,6 +5038,28 @@ describe('subprocess children — nothing is lost on the way down', () => {
     expect(r.bpmnXml).toMatch(/<bpmn:boundaryEvent id="c_bnd"[^>]*attachedToRef="c_doc"/);
   });
 
+  test('isCollection round-trips through BOTH importers, at both depths', async () => {
+    // The field-set test above uses `bpmnToLogicCore` only, and `import.js` is the fallback path;
+    // fixing one importer and not the other is how this class of defect has twice looked repaired
+    // while it was not — the same reasoning as the decisionRef pair further down, and CLAUDE.md's
+    // "Adding a New BPMN Element" step 6 says both explicitly.
+    //
+    // `isCollection` is the sharpest case for it: the attribute is written to the companion
+    // `<bpmn:dataObject>`, not to the reference the field is authored on, so an importer reading
+    // the reference finds nothing and reports nothing. Both importers did exactly that.
+    const r = await runPipeline(loadFixture(CHILD_FIXTURE));
+    const viaModdle = await bpmnToLogicCore(r.bpmnXml);
+    const viaLegacy = bpmnToLogicCoreLegacy(r.bpmnXml);
+
+    for (const [label, back] of [['moddle', viaModdle], ['legacy', viaLegacy]]) {
+      const byId = new Map(childrenOf(back).map(n => [n.id, n]));
+      // c_data sits one level down, g_data two — the child and grandchild branches are separate
+      // code paths in both importers, so covering only one proves only one.
+      expect({ label, child: byId.get('c_data')?.isCollection }).toEqual({ label, child: true });
+      expect({ label, grand: byId.get('g_data')?.isCollection }).toEqual({ label, grand: true });
+    }
+  });
+
   test('grandchildren survive — the child branch recurses', async () => {
     const r = await runPipeline(loadFixture(CHILD_FIXTURE));
     expect(r.bpmnXml).toContain('id="g_task"');
@@ -5058,7 +5080,15 @@ describe('subprocess children — nothing is lost on the way down', () => {
 
     for (const [id, orig] of before) {
       const got = after.get(id);
-      for (const field of ['documentation', 'scriptFormat', 'script', 'calledElement', 'attachedTo', 'decisionRef']) {
+      // `isCollection` is in this list for a reason worth keeping: it is the one field that is
+      // NOT written to the node's own element — it goes onto the companion `<bpmn:dataObject>`,
+      // because that is where OMG puts it. So it is the field most able to round-trip on paper
+      // and not in fact, and it did exactly that: the write was corrected to target the object
+      // while both importers went on reading the reference, leaving it lossy on every path. The
+      // fixture carries a data reference at BOTH depths so this covers the child and grandchild
+      // branches, not just the top level.
+      for (const field of ['documentation', 'scriptFormat', 'script', 'calledElement', 'attachedTo',
+        'decisionRef', 'isCollection']) {
         if (orig[field] === undefined) continue;
         expect({ id, field, value: got[field] }).toEqual({ id, field, value: orig[field] });
       }
