@@ -128,10 +128,28 @@ itself: does every Logic-Core node have a transition, does every place get produ
 are ids unique. A process that is legitimately unsound (a real deadlock, a real dead end) is
 expected to come out of this check clean — that judgment stays `checkSoundness`/WF01–WF03's job.
 
-Not yet wired into `runPipeline` or reachable over HTTP or MCP; today it runs directly
-(`checkNetIntegrity(bpmnToPN(proc), proc)`) and is fenced over every Logic-Core fixture under
-`tests/fixtures/` by `scripts/bpmn/net-check.test.js`, so a new fixture is covered the day it
-lands without anyone having to remember to add it.
+It runs on **every** `runPipeline` call and lands on `result.netDiagnostics` — same shape as
+`diagnostics` (`{ ok, issues }`, `ok` meaning "no ERROR"), `null` on the early-return path where
+validation blocked and no net was built. One call per process, with each finding prefixed
+`[pool] ` and carrying `process`: NC messages name a node id and nothing else, and two
+participants may legally reuse one, so an unprefixed collaboration finding would be
+unattributable. It is computed **before layout**, not next to `checkDiagramIntegrity`, because
+`preprocessLogicCore` rebuilds `proc.nodes` from an id-keyed map in place — two nodes sharing an
+id collapse into one before ELK, and a later check would be judging a graph the defect had already
+left.
+
+It is a **separate key** from `diagnostics` rather than merged into it: `DiagnosticIssue.code` in
+`references/api-schema.json` is a closed `DI01`–`DI06` enum with `additionalProperties: false`.
+For the same reason `netDiagnostics` is **not surfaced over HTTP or MCP** — `/generate`,
+`/orchestrate` and `generate_bpmn` assemble their payloads key by key and none of them carries it.
+The CLI does gate on it, exactly as it gates on DI: an NC ERROR is fatal with no files written, an
+NC WARNING/INFO is printed and fatal only under `--strict`.
+
+It is additionally fenced over every Logic-Core fixture at the top level of `tests/fixtures/` by
+`scripts/bpmn/net-check.test.js`, so a new fixture is covered the day it lands without anyone
+having to remember to add it. `tests/fixtures/negative/` is exempt from that scan by construction
+(the fence reads one directory level) and is where a fixture that exists to be dirty belongs —
+`tests/fixtures/negative/duplicate-ids-across-containers.json` is the NC06 case.
 
 | Code | Severity | Meaning |
 |------|----------|---------|
