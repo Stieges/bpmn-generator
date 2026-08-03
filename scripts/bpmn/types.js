@@ -198,9 +198,9 @@ export function isInteractionNode(type) {
  *                         a dataObjectReference is exempt here for the same reason a
  *                         textAnnotation is, regardless of the FlowElement/Artifact split that
  *                         matters to `isBpmnArtifact`).
- *   - `isCompensation`  — OMG `isForCompensation` (serialised at bpmn-xml.js's `buildFlowNode`,
- *                         `attrs.isForCompensation`), reached by a compensation association when
- *                         the compensation fires, not by a SequenceFlow.
+ *   - `isCompensation` on an Activity — OMG `isForCompensation` (serialised at bpmn-xml.js's
+ *                         `buildFlowNode`, `attrs.isForCompensation`), reached by a compensation
+ *                         association when the compensation fires, not by a SequenceFlow.
  *   - `isEventSubProcess` on a subProcess — OMG `triggeredByEvent` (serialised the same way,
  *                         `attrs.triggeredByEvent`), entered by its own start event when the
  *                         triggering event occurs, never by a SequenceFlow crossing into it.
@@ -208,13 +208,24 @@ export function isInteractionNode(type) {
  * Takes a **node**, not a type: `isCompensation`/`isEventSubProcess` are instance fields
  * (references/input-schema.json), not a function of the type string alone — two `subProcess`
  * nodes can differ only in `isEventSubProcess` and need different verdicts here.
+ *
+ * Both instance flags are ALSO guarded on the node's class, and both guards are load-bearing in
+ * the same way. `references/input-schema.json` declares each as a generic property of `Node`,
+ * valid on any `NodeType`; OMG scopes them far more narrowly — `isForCompensation` is an
+ * attribute of `Activity`, `triggeredByEvent` one of `SubProcess`. Ungurded, either flag becomes
+ * a universal opt-out of the two always-on rules that call this predicate: a
+ * `{ type: 'parallelGateway', isCompensation: true }` with no edges at all would be silent in
+ * both S04 and S07, so a genuinely isolated gateway would be reported by nothing. The exemption
+ * has to be as narrow as the OMG attribute it stands for, not as wide as the schema's field.
+ * `bpmn-xml.js`'s `buildFlowNode` already applies the same narrowing on the way out for
+ * `isEventSubProcess`, which is where the pattern comes from.
  */
 export function isSequenceFlowExempt(node) {
   if (!node) return false;
   return node.type === 'startEvent'
     || isBoundaryEvent(node)
     || isArtifact(node.type)
-    || !!node.isCompensation
+    || (isActivity(node.type) && !!node.isCompensation)
     || (node.type === 'subProcess' && !!node.isEventSubProcess);
 }
 

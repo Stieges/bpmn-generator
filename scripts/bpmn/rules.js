@@ -314,11 +314,22 @@ const SOUNDNESS_RULES = [
     // dead by construction. That is the same property WF01 checks exhaustively in the opt-in
     // workflow_net layer; S04 is its always-on, purely local approximation (no incoming flow at
     // all, rather than no path from the start event).
+    //
+    // No OMG clause is cited, and that absence is deliberate rather than an omission. Checked
+    // against references/omg-spec/normative/BPMN-2.0.2-spec.pdf: §7.3.1 is "Basic BPMN Modeling
+    // Elements", a shape catalogue that says nothing about connectivity. The Sequence Flow
+    // Connection Rules are §7.6.1 / Table 7.3, and that clause governs which PAIRS may be
+    // connected while stating in its own words that "the quantity of connections into and out of
+    // an object is subject to various configuration dependencies [and] are not specified here" —
+    // the spec expressly declines to require an incoming flow. So there is no clause to cite, and
+    // citing one anyway would be the third S04 misattribution of this phase rather than the fix
+    // for the second.
     ref: {
-      omg: '§7.3.1 Sequence Flow Connection Rules',
       wfnet: 'van der Aalst (1997), "Verification of Workflow Nets" — a WF-net requires every '
-        + 'node to lie on a directed path from source to sink; a node no sequence flow reaches '
-        + 'lies on none. Exhaustively checked by WF01 (opt-in); S04 is the always-on local case.',
+        + 'node to lie on a directed path from source to sink, so a node no sequence flow '
+        + 'reaches lies on none. Exhaustively checked by WF01 (opt-in). S04 is the always-on '
+        + 'local case. Deliberately no OMG clause: §7.6.1/Table 7.3 constrains which pairs may '
+        + 'be connected and expressly leaves the quantity of connections unspecified.',
     },
     scope: 'process',
     check: (proc) => {
@@ -527,10 +538,18 @@ const SOUNDNESS_RULES = [
           // S09, S10, S12 and S14 alike. Written as "not an InteractionNode, minus what others
           // own" rather than as `isArtifact`, so a future NodeType that is neither fails safe.
           if (isGateway(node.type) || isContainerNode(node)) continue;
+          // No '; ' anywhere in this string, and that is a hard constraint rather than a style
+          // choice: `classifyResult` (below) splits a rule's `message` on exactly that separator,
+          // because it is what the rules use to join several findings into one message. A
+          // semicolon inside a SINGLE finding therefore silently becomes a second entry — here it
+          // was the fragment "an Artifact is not even a FlowNode. Point the flow at …", with no
+          // flow id and no endpoint in it, doubling the reported error count for one bad endpoint
+          // and carrying that into `validation.errors`, the HTTP response and `--strict`. S12,
+          // S13 and S14 all keep their prose free of '; ' for the same reason.
           msgs.push(`MessageFlow "${mf.id || ''}" ${role} "${id}" is a ${node.type} — not an `
             + 'InteractionNode. MessageFlow.sourceRef/targetRef are typed InteractionNode, which '
             + 'BPMN20.cmof grants per class to Task, Event, Participant and ConversationNode '
-            + 'only; an Artifact is not even a FlowNode. Point the flow at a task, at a message '
+            + 'only. An Artifact is not even a FlowNode. Point the flow at a task, at a message '
             + 'event, or at a participant.');
         }
       }

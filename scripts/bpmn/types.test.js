@@ -208,6 +208,33 @@ describe('isSequenceFlowExempt', () => {
     expect(isSequenceFlowExempt({ id: 't', type: 'userTask' })).toBe(false);
   });
 
+  // Both instance flags are guarded on the node's CLASS, and the guards are what keep the
+  // exemption as narrow as the OMG attribute rather than as wide as the schema's field.
+  // `references/input-schema.json` declares `isCompensation` on `Node`, so it is schema-valid on
+  // any NodeType — but OMG's `isForCompensation` is an Activity attribute. Ungurded, the flag
+  // would be a universal opt-out of both S04 and S07 and a genuinely isolated gateway carrying it
+  // would be reported by nothing.
+  test.each(['exclusiveGateway', 'parallelGateway', 'intermediateCatchEvent', 'endEvent', 'textAnnotation'])(
+    'isCompensation on a %s does not exempt it — isForCompensation is an Activity attribute',
+    (type) => {
+      // textAnnotation is exempt anyway (it is an artifact), so assert the flag is not what did it.
+      const expected = type === 'textAnnotation';
+      expect(isSequenceFlowExempt({ id: 'n', type, isCompensation: true })).toBe(expected);
+    });
+
+  test.each(['userTask', 'task', 'serviceTask', 'subProcess', 'transaction', 'callActivity'])(
+    'isCompensation on a %s does exempt it — every Activity subclass may carry isForCompensation',
+    (type) => {
+      expect(isSequenceFlowExempt({ id: 'n', type, isCompensation: true })).toBe(true);
+    });
+
+  test('isEventSubProcess outside a subProcess does not exempt either', () => {
+    // The neighbouring guard, asserted for the same reason: `triggeredByEvent` is a SubProcess
+    // attribute, and `bpmn-xml.js`'s buildFlowNode already narrows it the same way on the way out.
+    expect(isSequenceFlowExempt({ id: 'n', type: 'userTask', isEventSubProcess: true })).toBe(false);
+    expect(isSequenceFlowExempt({ id: 'n', type: 'callActivity', isEventSubProcess: true })).toBe(false);
+  });
+
   test('a gateway or an ordinary intermediate event is not exempt', () => {
     expect(isSequenceFlowExempt({ id: 'gw', type: 'exclusiveGateway' })).toBe(false);
     expect(isSequenceFlowExempt({ id: 'ice', type: 'intermediateCatchEvent' })).toBe(false);
