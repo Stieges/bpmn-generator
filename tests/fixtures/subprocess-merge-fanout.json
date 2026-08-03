@@ -1,0 +1,45 @@
+{
+  "pools": [{
+    "id": "Pool_Merge",
+    "name": "Batch Merge",
+    "nodes": [
+      { "id": "start", "type": "startEvent", "name": "Request received" },
+      { "id": "gw_split", "type": "exclusiveGateway", "name": "Which intake path?" },
+      { "id": "branch_a", "type": "task", "name": "Prepare via A" },
+      { "id": "branch_b", "type": "task", "name": "Prepare via B" },
+      {
+        "id": "batch", "type": "subProcess", "name": "Process batch", "isExpanded": true,
+        "nodes": [
+          { "id": "c_start_x", "type": "startEvent", "name": "Start X" },
+          { "id": "c_start_y", "type": "startEvent", "name": "Start Y" },
+          { "id": "c_task_x", "type": "task", "name": "Handle X" },
+          { "id": "c_task_y", "type": "task", "name": "Handle Y" },
+          { "id": "c_end_x", "type": "endEvent", "name": "Done X" },
+          { "id": "c_end_y", "type": "endEvent", "name": "Done Y" }
+        ],
+        "edges": [
+          { "id": "cf1", "source": "c_start_x", "target": "c_task_x" },
+          { "id": "cf2", "source": "c_task_x", "target": "c_end_x" },
+          { "id": "cf3", "source": "c_start_y", "target": "c_task_y" },
+          { "id": "cf4", "source": "c_task_y", "target": "c_end_y" }
+        ]
+      },
+      { "id": "post_a", "type": "task", "name": "Confirm A" },
+      { "id": "post_b", "type": "task", "name": "Confirm B" },
+      { "id": "gw_join", "type": "parallelGateway", "name": "Join", "has_join": true },
+      { "id": "end", "type": "endEvent", "name": "Request closed" }
+    ],
+    "edges": [
+      { "id": "f1", "source": "start", "target": "gw_split" },
+      { "id": "f2", "source": "gw_split", "target": "branch_a", "label": "Path A" },
+      { "id": "f3", "source": "gw_split", "target": "branch_b", "label": "Path B" },
+      { "id": "f4", "source": "branch_a", "target": "batch" },
+      { "id": "f5", "source": "branch_b", "target": "batch" },
+      { "id": "f6", "source": "batch", "target": "post_a" },
+      { "id": "f7", "source": "batch", "target": "post_b" },
+      { "id": "f8", "source": "post_a", "target": "gw_join" },
+      { "id": "f9", "source": "post_b", "target": "gw_join" },
+      { "id": "f10", "source": "gw_join", "target": "end" }
+    ]
+  }]
+}
