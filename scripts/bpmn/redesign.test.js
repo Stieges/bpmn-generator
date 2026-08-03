@@ -1307,11 +1307,33 @@ describe('isolateException', () => {
     expect(r.reason).toMatch(/unbekannt/i);
   });
 
-  test('verweigert, wenn attachTo kein Aufgaben-Typ ist (z.B. ein Gateway)', () => {
+  test('verweigert, wenn attachTo keine Aktivitaet ist (z.B. ein Gateway)', () => {
     const r = previewIsolateException(lcExc, { endId: 'xend', attachTo: 'gw',
                                                marker: 'timer', cancelActivity: true });
     expect(r.feasible).toBe('none');
-    expect(r.reason).toMatch(/aufgaben/i);
+    expect(r.reason).toMatch(/aktivit/i);
+  });
+
+  test('akzeptiert einen Sub-Prozess als Host — BoundaryEvent.attachedToRef ist Activity, nicht Task', () => {
+    // Die alte Pruefung las eine private TASK_TYPES-Liste ohne die Container-Klassen und
+    // verweigerte damit legales BPMN: ein Boundary-Ereignis haengt laut OMG §10.4.3 Table 10.86
+    // an einer *Activity*, und SubProcess/Transaction/CallActivity sind Activity-Unterklassen.
+    // Der Eingriff selbst kennt keinen Grund fuer die Engfassung — applyIsolateException haengt
+    // nur ein Boundary-Ereignis an den Host und leitet die vorhandene Ausnahme-Kante darauf um;
+    // nichts davon liest den Host-Typ.
+    const lcSub = {
+      ...lcExc,
+      nodes: lcExc.nodes.map(n => (n.id === 'task' ? { ...n, type: 'subProcess' } : n)),
+    };
+    const pv = previewIsolateException(lcSub, { endId: 'xend', attachTo: 'task',
+                                                marker: 'error', cancelActivity: true });
+    expect(pv.feasible).toBe('full');
+    const r = applyIsolateException(lcSub, { endId: 'xend', attachTo: 'task',
+                                             marker: 'error', cancelActivity: true });
+    const bnd = r.lc.nodes.find(n => n.type === 'boundaryEvent');
+    expect(bnd.attachedTo).toBe('task');
+    // Und das Ergebnis ist auch nach der Regel-Engine sauber — S13 akzeptiert den Container-Host.
+    expect(runRules(r.lc).errors).toEqual([]);
   });
 
   test('verweigert bei geschuetztem Host', () => {

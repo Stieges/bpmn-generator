@@ -16,13 +16,9 @@
  * so nothing is asserted as certain and nothing is reordered automatically.
  */
 
-import { isGateway } from './types.js';
+import { isGateway, TASK_TYPES } from './types.js';
 import { resolveLaneId } from './topology.js';
 
-const TASK_TYPES = new Set([
-  'task', 'userTask', 'serviceTask', 'scriptTask', 'manualTask',
-  'businessRuleTask', 'sendTask', 'receiveTask',
-]);
 const EXCEPTION_MARKERS = new Set(['error', 'terminate', 'escalation', 'cancel']);
 // German-first exception stems (match inflected forms: eskaliert/eskalation,
 // storniert/storno, ablehnung/abgelehnt, verworfen/verwerfen, abgebrochen/abbruch).
@@ -39,6 +35,16 @@ const DEFAULTS = {
 const out = (edges) => { const m = {}; for (const e of edges) (m[e.source] ??= []).push(e); return m; };
 const inc = (edges) => { const m = {}; for (const e of edges) (m[e.target] ??= []).push(e); return m; };
 const byId = (nodes) => { const m = {}; for (const n of nodes) m[n.id] = n; return m; };
+// The shared `TASK_TYPES` (types.js), not a private copy of the same eight names, and
+// deliberately NOT the wider `isActivity`. Every advisory that reads this predicate is about a
+// leaf work step: O04 nominates a linear same-lane chain for parallelisation, and the transform
+// that would carry that advisory out — `previewParallelize` (redesign.js) — refuses a chain
+// containing a subprocess on purpose, because parallelising a scope is not a reordering. An
+// advisory the toolbox is guaranteed to refuse is worse than no advisory, so the two layers ask
+// the same question. O01/O02's knock-out heuristic is scoped the same way for the same reason
+// (Reijers & Limam Mansar's knock-out best practice is stated over tasks). That containers are
+// therefore never nominated is a real, deliberate gap, not an oversight: closing it means
+// widening the transform first.
 const isTask = (n) => n && TASK_TYPES.has(n.type);
 const isEnd = (n) => n && n.type === 'endEvent';
 // An exception end = negative termination (reject / error / abort), by marker or name.

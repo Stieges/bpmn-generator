@@ -15,6 +15,7 @@
  */
 
 import { cloneLc, checkGate, nextId, isProtected, refusal, resolveLaneId, warningsDelta } from './redesign-core.js';
+import { TASK_TYPES, isActivity } from './types.js';
 
 const procOf = (lc) => (lc.pools ? lc.pools[0] : lc);
 
@@ -102,8 +103,11 @@ function dependencyState(lc, ids) {
   return 'proven';
 }
 
-const TASK_TYPES = new Set(['task', 'userTask', 'serviceTask', 'scriptTask', 'manualTask',
-                            'businessRuleTask', 'sendTask', 'receiveTask']);
+// TASK_TYPES/isActivity kommen aus types.js (siehe Import oben) — hier stand bis Stufe 2 eine
+// zweite, private Kopie derselben acht Namen. Welche der beiden ein Aufrufer braucht, ist eine
+// fachliche Frage und wird an jeder Stelle einzeln begruendet: previewParallelize und
+// previewMergeTasks bleiben bewusst auf TASK_TYPES (Blatt-Aufgaben), previewIsolateException
+// fragt isActivity, weil BoundaryEvent.attachedToRef laut OMG auf Activity typisiert ist.
 
 /**
  * Effektive aktuelle Bahn eines Knotens, formatuebergreifend (node.lane ODER
@@ -700,7 +704,22 @@ export function previewIsolateException(lc, { endId, attachTo, marker, cancelAct
   if (end.type !== 'endEvent') return refusal('Ziel ist kein End-Ereignis.');
   const host = (proc.nodes || []).find(n => n.id === attachTo);
   if (!host) return refusal(`Unbekannte Aufgabe: ${attachTo}`);
-  if (!TASK_TYPES.has(host.type)) return refusal('Boundary-Ereignisse hängen nur an Aufgaben.');
+  // isActivity statt der frueheren TASK_TYPES-Pruefung: die alte Fassung ("Boundary-Ereignisse
+  // haengen nur an Aufgaben") verweigerte legales BPMN. BoundaryEvent.attachedToRef ist laut OMG
+  // §10.4.3 Table 10.86 auf *Activity* typisiert, und SubProcess/Transaction/CallActivity sind
+  // Activity-Unterklassen — an einem Sub-Prozess haengt ein Boundary-Ereignis genauso zulaessig
+  // wie an einer Aufgabe (der uebliche Fall fuer ein Error-Boundary-Event ueberhaupt).
+  //
+  // Geprueft, nicht angenommen: der Eingriff selbst hat KEINEN eigenen Grund, eine Aufgabe zu
+  // verlangen. applyIsolateException legt ein boundaryEvent mit attachedTo an, uebernimmt die
+  // Bahn des Hosts und haengt die bereits vorhandene Ausnahme-Kante darauf um; keine dieser
+  // Operationen liest den Host-Typ, und keine der drei Wachen (Sackgasse, verwaiste
+  // Assoziationen, Rollback-Gate) haengt daran. Damit war die Engfassung eine Folge der privaten
+  // TASK_TYPES-Liste ohne die Container-Klassen, kein fachliches Urteil — also ein Fehler.
+  if (!isActivity(host.type)) {
+    return refusal('Boundary-Ereignisse hängen nur an Aktivitäten (Aufgabe, Sub-Prozess, ' +
+                   'Transaktion, Call-Activity).');
+  }
   if (isProtected(host, policy, lc) || isProtected(end, policy, lc)) {
     return refusal('Geschütztes Element betroffen.');
   }
