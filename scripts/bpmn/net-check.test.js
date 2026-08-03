@@ -283,6 +283,45 @@ describe('NC04 is ERROR now that every sequence flow has a place of its own', ()
   });
 });
 
+describe('NC06(b) is provably unreachable on a real net — vacuity fence, same shape as NC04', () => {
+  // NC06(b) asks whether an edge-derived place id collides with the reserved `p_source` /
+  // `p_sink` keys. `namePlaces` (workflow-net.js) always mints an edge's place id as
+  // `p_${edge.source}_${edge.target}` (or that string with a `#<k>` suffix) — the string
+  // ALWAYS contains the literal `_` that separates the source and target node ids, at least
+  // once. `sourcePlace`/`sinkPlace` are the literal strings 'p_source' and 'p_sink': strip
+  // their `p_` prefix and neither `source` nor `sink` contains an underscore at all. No pair
+  // of (non-empty, per `references/input-schema.json`'s id pattern) node ids can concatenate
+  // with a literal `_` between them and produce a string with zero underscores, so this branch
+  // can never fire on a net `bpmnToPN` produced, by construction — exactly the argument NC04's
+  // own vacuity test makes for its own collision. Kept anyway, not deleted, because the
+  // argument is a fact about the CURRENT naming rule, not a law: a future `namePlaces` change
+  // (e.g. a scheme without the separating `_`) could reopen this branch, and the fence has to
+  // already exist to catch it, not be written in response to it.
+  test('an edge place id forced to the reserved sink key fails the fence rather than staying silent', () => {
+    const proc = {
+      id: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 't', type: 'task' },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [{ id: 'f1', source: 's', target: 't' }, { id: 'f2', source: 't', target: 'e' }],
+    };
+    const pn = bpmnToPN(proc);
+    const f2 = proc.edges[1];
+    // Sanity first: the real translation never produces the reserved key on its own.
+    expect(pn.placeOfEdge.get(f2)).not.toBe(pn.sinkPlace);
+
+    pn.placeOfEdge.set(f2, pn.sinkPlace);
+    const { ok, issues } = checkNetIntegrity(pn, proc);
+    const nc06 = issues.filter(i => i.code === 'NC06');
+    expect(nc06).toHaveLength(1);
+    expect(nc06[0].severity).toBe('ERROR');
+    expect(nc06[0].elements).toEqual([pn.sinkPlace, 'f2']);
+    expect(ok).toBe(false);
+  });
+});
+
 describe('checkNetIntegrity — judges the translation, never the model', () => {
   test('deadlock-process.json is deliberately unsound (S05/WF03 catch it) but must be a clean translation', () => {
     const lc = JSON.parse(

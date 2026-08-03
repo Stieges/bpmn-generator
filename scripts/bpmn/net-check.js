@@ -359,6 +359,15 @@ export function checkNetIntegrity(pn, proc, opts = {}) {
   //      'p_sink' collides with the synthesized boundary places bpmnToPN always creates first.
   //      Asked of `pn.placeOfEdge`, for the reason NC04 gives above: the naming rule lives in
   //      one place, and this check has to follow it rather than restate it.
+  //
+  //      Same status as NC04: `namePlaces` always mints an edge's place id as
+  //      `p_${edge.source}_${edge.target}` (optionally `#<k>`-suffixed), which by construction
+  //      contains the literal `_` separating source and target. 'p_source'/'p_sink' strip to
+  //      'source'/'sink' — neither contains an underscore — so no pair of node ids can ever
+  //      produce them here; this branch cannot fire on a net `bpmnToPN` built, under the
+  //      current naming rule. Kept as a regression fence (see the vacuity test in
+  //      net-check.test.js) rather than removed, because that is a fact about today's naming
+  //      rule, not a law the type system enforces.
   {
     const nodesById = new Map();
     for (const n of (flatNodes || [])) {
