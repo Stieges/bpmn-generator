@@ -666,7 +666,7 @@ that nothing legitimate trips it, is a reasonable later step.
 > engine only when its line says "DMN".
 
 A decision model is not "sound" in the workflow sense — it has no start, no end and no token, so
-S01–S14 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the
+S01–S15 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the
 shape of its tables, and whether the two agree with the specification.
 
 ### Layers and modes
