@@ -16,8 +16,10 @@
  *      scripts/http-server.js builds it, validated against references/api-schema.json.
  *   2. numbers — every "<N> rules" claim (README.md, CLAUDE.md) against
  *      scripts/bpmn/rules.js; the "<N> top-level scripts" claim (CLAUDE.md) against
- *      `scripts/*.js`; every DI code in references/api-reference.md against
- *      scripts/bpmn/di-check.js, in both directions.
+ *      `scripts/*.js`; every diagnostic code in references/api-reference.md against
+ *      the module that emits it, in both directions — driven by a small
+ *      (module, prefix, doc) table (CODE_FAMILIES) covering DI (scripts/bpmn/di-check.js)
+ *      and NC (scripts/bpmn/net-check.js) today.
  *   3. doc-paths — every `scripts/...`-, `references/...`-, `rules/...`-,
  *      `tests/...`-, `docs/...`-, `frontend/...`- or `.github/...`-shaped path
  *      string mentioned in prose (README.md, CLAUDE.md, ROADMAP.md, SKILL.md,
@@ -196,6 +198,53 @@ const RULE_LAYER_PATTERNS = [
 // cannot tell those sentences apart either.
 const DMN_CLAIM_RE = /\bdmn\b/i;
 
+// Diagnostic-code families, each pinned against the doc section that documents it. Table-driven
+// (module, prefix, doc) so a new family — NC today, whatever comes after it — is one entry, not a
+// second copy of the whole check. Two properties both entries must keep:
+//  - fails in both drift directions: a code the module emits but the doc never mentions, AND a
+//    code the doc mentions that the module no longer emits;
+//  - the `prefix` regex is anchored with `\b` on both ends, so a code appearing inside running
+//    prose (not as a standalone token) never accidentally satisfies the check.
+// NC02b/NC03a/NC03b are not the same shape as DI01…DI06 — `prefix` has to match the optional
+// trailing letter, or NC02b would be misread as a mention of NC02.
+const CODE_FAMILIES = [
+  {
+    check: 'di-codes',
+    module: 'scripts/bpmn/di-check.js',
+    doc: 'references/api-reference.md',
+    prefix: /\bDI0\d\b/g,
+    actualCodesKey: 'actualDiCodes',
+  },
+  {
+    check: 'nc-codes',
+    module: 'scripts/bpmn/net-check.js',
+    doc: 'references/api-reference.md',
+    prefix: /\bNC0[1-6][ab]?\b/g,
+    actualCodesKey: 'actualNcCodes',
+  },
+];
+
+/**
+ * One family's drift check, both directions. Pure: takes the doc text it is pinned against and
+ * the actual codes the caller already extracted from the module's source.
+ */
+function checkCodeFamily(family, docText, actualCodes) {
+  const findings = [];
+  const docCodes = new Set([...docText.matchAll(family.prefix)].map((m) => m[0]));
+  const codeCodes = new Set(actualCodes);
+  const missingInDocs = [...codeCodes].filter((c) => !docCodes.has(c));
+  const missingInCode = [...docCodes].filter((c) => !codeCodes.has(c));
+  if (missingInDocs.length) {
+    findings.push({ check: family.check, detail:
+      `${family.module} emits codes not documented in ${family.doc}: ${missingInDocs.join(', ')}` });
+  }
+  if (missingInCode.length) {
+    findings.push({ check: family.check, detail:
+      `${family.doc} documents codes ${family.module} does not emit: ${missingInCode.join(', ')}` });
+  }
+  return findings;
+}
+
 /** The line `index` falls on, for deciding which engine a claim is about. */
 function lineContaining(text, index) {
   const start = text.lastIndexOf('\n', index) + 1;
@@ -210,8 +259,9 @@ function lineContaining(text, index) {
 export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   roadmapText, skillText, evaluationText, pipelineDocText,
   actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
-  actualTopLevelScriptCount, actualDiCodes }) {
+  actualTopLevelScriptCount, actualDiCodes, actualNcCodes }) {
   const findings = [];
+  const actualCodesByKey = { actualDiCodes, actualNcCodes };
 
   const numberSources = [
     ['README.md', readmeText], ['CLAUDE.md', claudeMdText], ['ROADMAP.md', roadmapText],
@@ -254,17 +304,11 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
     }
   }
 
-  const docCodes = new Set([...apiReferenceText.matchAll(/\bDI0\d\b/g)].map((m) => m[0]));
-  const codeCodes = new Set(actualDiCodes);
-  const missingInDocs = [...codeCodes].filter((c) => !docCodes.has(c));
-  const missingInCode = [...docCodes].filter((c) => !codeCodes.has(c));
-  if (missingInDocs.length) {
-    findings.push({ check: 'di-codes', detail:
-      `scripts/bpmn/di-check.js emits codes not documented in references/api-reference.md: ${missingInDocs.join(', ')}` });
-  }
-  if (missingInCode.length) {
-    findings.push({ check: 'di-codes', detail:
-      `references/api-reference.md documents codes scripts/bpmn/di-check.js does not emit: ${missingInCode.join(', ')}` });
+  // Both families document today in the same file (references/api-reference.md); the table
+  // still carries `doc` per-entry so a family that moves to its own doc file is a one-line change.
+  const docTextByFile = { 'references/api-reference.md': apiReferenceText };
+  for (const family of CODE_FAMILIES) {
+    findings.push(...checkCodeFamily(family, docTextByFile[family.doc], actualCodesByKey[family.actualCodesKey]));
   }
 
   return findings;
@@ -280,6 +324,7 @@ function gatherNumberInputs() {
   const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
   const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'rules.js'), 'utf8');
   const diCheckSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'di-check.js'), 'utf8');
+  const netCheckSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'net-check.js'), 'utf8');
 
   const actualRuleCount = [...rulesSrc.matchAll(/^\s*id: '/gm)].length;
   // Each rule declares a `layer:`; the distinct values are the layer count — this
@@ -291,6 +336,8 @@ function gatherNumberInputs() {
   const actualDmnRuleCount = [...dmnRulesSrc.matchAll(/^\s*id: '/gm)].length;
   const actualDmnLayerCount = new Set([...dmnRulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
   const actualDiCodes = [...new Set([...diCheckSrc.matchAll(/code: '(DI0\d)'/g)].map((m) => m[1]))];
+  // NC02b/NC03a/NC03b carry a trailing letter DI's codes never do — see CODE_FAMILIES' comment.
+  const actualNcCodes = [...new Set([...netCheckSrc.matchAll(/code: '(NC0[1-6][ab]?)'/g)].map((m) => m[1]))];
 
   let topLevelStdout;
   try {
@@ -305,7 +352,7 @@ function gatherNumberInputs() {
 
   return { readmeText, claudeMdText, apiReferenceText, roadmapText, skillText, evaluationText,
     pipelineDocText, actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
-    actualTopLevelScriptCount, actualDiCodes };
+    actualTopLevelScriptCount, actualDiCodes, actualNcCodes };
 }
 
 // ==================================================================== 3. doc-paths
