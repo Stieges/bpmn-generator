@@ -160,24 +160,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   response and `--strict`, inflating the error count for one defect. `S10` hit it for real and was
   fixed by rewording, which fixed the instance and left the trap armed. A rule's `check` may now
   return `messages: string[]`, one entry per finding, and `classifyResult` no longer splits
-  anything: `message` is taken verbatim as exactly one finding. The 19 rules that built lists were
-  converted; the rest keep `message` and are correct by construction. `M10` gains from it twice —
-  it embedded `'; '` as a list separator *inside* a declared-single message, so every offender
-  after the first was rendered as a bare contextless fragment (`lane "…" (31 chars)`); each
-  offender is now its own complete sentence. Note that no lint over the rule sources could have
-  closed this: messages are built at runtime from node and lane names, so a task named
-  `"Prüfen; freigeben"` trips it from *data*. That is the case now pinned by test.
-- **`bpmn-xml.js` no longer emits `isForCompensation` on a non-Activity.** OMG scopes
-  `isForCompensation` to `Activity`, but `references/input-schema.json` declares `isCompensation`
-  as a generic property of `Node`, valid on any `NodeType` — so schema-valid input produced
-  XSD-invalid output: `<bpmn:parallelGateway isForCompensation="true">`, an attribute outside the
-  gateway's content model, which bpmn-moddle duly reported back as `unknown attribute
-  <isForCompensation>`. `buildFlowNode` now guards it on `isActivity` exactly as its neighbour
-  guards `triggeredByEvent` on `subProcess`. The flag is dropped, not reported, and that is a
-  layering decision: the serialiser's contract is to emit valid BPMN for the model it was handed,
-  not to diagnose it — and because `isSequenceFlowExempt` was narrowed the same way earlier in
-  this release, such a node is no longer excused from `S04`/`S07` and is reported there. No golden
-  moves; no fixture carries the flag on a non-Activity.
+  anything: `message` is taken verbatim as exactly one finding. Of the 26 rules that report a
+  failing `message`, the **20** that built lists were converted to `messages`; the remaining **6**
+  keep `message` and are correct by construction. Converting exactly those let the split be
+  *deleted* rather than worked around, so the trap is closed for every rule, existing and future,
+  not only for the converted ones. Note that no lint over the rule sources could have closed it:
+  messages are built at runtime from node and lane names, so a task named `"Prüfen; freigeben"`
+  trips it from *data*. That is the case now pinned by test. `classifyResult` also keeps an
+  explicit check that a failing rule actually carries a message — the deleted `.split` used to
+  provide that by accident, and without it a typo'd result key would have pushed the literal
+  string `"undefined"` into `validation.errors`.
+- **`M10` reported every lane after the first as a contextless fragment.** Found while closing the
+  `classifyResult` trap above, but it is a shipped bug in its own right rather than a latent one:
+  `M10` built its offender list with `'; '` *inside* what it declared to be a single `message`, so
+  `classifyResult` tore it apart. A pool and two over-long lanes produced one intelligible sentence
+  plus two fragments with no verb and no threshold in them — `lane "…" (31 chars)` — in
+  `validation.warnings`, the HTTP response and `--strict`. It now emits one complete sentence per
+  offender: three findings, three readable sentences.
+- **The serialiser no longer emits a per-node field on a class OMG does not define it on, and
+  `S15` now reports when it drops one.** `references/input-schema.json` declares `isCompensation`,
+  `implementation`, `isEventSubProcess`, `calledElement`, `scriptFormat` and `isCollection` as
+  generic properties of `Node`, valid on any `NodeType` — JSON Schema cannot say "only when `type`
+  is one of …" without a conditional block per field — while OMG scopes each far more narrowly.
+  `buildFlowNode` wrote those guards out one per line, which is how **two** of the six came to be
+  missing while the four beside them were correct: `isForCompensation` emitted
+  `<bpmn:parallelGateway isForCompensation="true">` and `implementation` was emitted on every node
+  type at all, both XSD-invalid and both reported straight back by bpmn-moddle as
+  `unknown attribute <…>`. The scopes now live once, in `OMG_NODE_FIELD_SCOPE`
+  (`scripts/bpmn/types.js`), read by the serialiser *and* by the new rule — a rule that disagreed
+  with the serialiser about which fields are legal where would be worse than no rule.
+  `implementation` is the reason the table is per-field rather than one `isActivity` test: BPMN20.cmof
+  grants it per class to `userTask`/`serviceTask`/`sendTask`/`receiveTask`/`businessRuleTask` and
+  never inherits it from `Activity`, so a `subProcess` is an Activity that may not carry it.
+  **`S15`** (soundness, WARNING, recursive into subprocess children) reports the drop. It is needed
+  precisely *because* the guards work: guarding made the output valid and removed bpmn-moddle's
+  `unknown attribute` signal with it, so a `{ type: 'startEvent', isCompensation: true }` wired
+  normally into a flow produced nothing at all — no error, no warning, exit 0 — and the author
+  never learned the field had been ignored. `S04`/`S07` do not cover it: they fire only on
+  *disconnected* nodes and speak about connectivity. WARNING and not ERROR because the emitted XML
+  is valid — something the author wrote was ignored, which is worth saying and not worth refusing
+  to build over — matching `S14`'s reasoning and the layer's existing WARNING rules. The rule count
+  is now **36**. No golden moves; no fixture carries any of these fields out of scope.
 - **`S04`/`S07` no longer warn about three shapes a sequence flow legitimately never touches.** An
   event subprocess (`isEventSubProcess`, OMG `triggeredByEvent`) is entered by its own start event;
   a compensation activity (`isCompensation`, OMG `isForCompensation`) is reached by a compensation

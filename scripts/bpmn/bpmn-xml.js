@@ -7,7 +7,7 @@
  */
 
 import { BpmnModdle } from 'bpmn-moddle';
-import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, isActivity, bpmnXmlTag } from './types.js';
+import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, OMG_NODE_FIELD_SCOPE, bpmnXmlTag } from './types.js';
 import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { inferGatewayDirections } from './topology.js';
@@ -227,29 +227,30 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     if (node.cancelActivity === false) attrs.cancelActivity = false;
   }
 
-  // Special attributes
+  // Special attributes — every one of them scoped to the node classes OMG defines it on.
   //
-  // `isForCompensation` is guarded on the node's class for the same reason `triggeredByEvent`
-  // one line down is: `references/input-schema.json` declares `isCompensation` as a generic
-  // property of `Node`, valid on any `NodeType`, while OMG scopes `isForCompensation` to
-  // `Activity` (and `triggeredByEvent` to `SubProcess`). Unguarded, a
-  // `{ type: 'parallelGateway', isCompensation: true }` emitted `<bpmn:parallelGateway
-  // isForCompensation="true">`, which is XSD-invalid — the attribute is not on the gateway's
-  // content model at all. `types.js`'s `isSequenceFlowExempt` was narrowed to `isActivity` for
-  // the same reason; this is the serialisation half of that same narrowing.
+  // `references/input-schema.json` declares each of these as a generic property of `Node`, valid
+  // on any `NodeType`, so schema-valid input can put any of them on any node. OMG scopes them far
+  // more narrowly, and an attribute outside a class's content model is not merely unusual, it is
+  // XSD-invalid — bpmn-moddle reports it straight back as `unknown attribute <…>` when we re-parse
+  // our own output. These guards used to be written out one per line here, which is how two of
+  // them came to be missing (`isForCompensation`, emitting `<bpmn:parallelGateway
+  // isForCompensation="true">`, and `implementation`, emitting it on events and gateways alike)
+  // while the four beside them were correct. The scopes now come from `OMG_NODE_FIELD_SCOPE` in
+  // types.js, which S15 reads too — a rule that disagreed with the serialiser about which fields
+  // are legal where would be worse than no rule, and a shared table makes disagreeing impossible.
   //
-  // The flag is dropped, not reported, and that is a layering decision rather than an oversight:
-  // this function's contract is "emit valid BPMN for the model it was handed", not "diagnose the
-  // model" — the same separation that keeps `net-check.js` out of judging XML. A node carrying
-  // the flag on the wrong class is a MODEL defect and the rule engine owns it: because the
-  // exemption above is type-guarded, such a node is no longer silently excused from S04/S07 and
-  // is reported there ("appears isolated" / "has no outgoing flow").
-  if (node.isCompensation && isActivity(node.type)) attrs.isForCompensation = true;
-  if (node.isCollection && node.type === 'dataObjectReference') attrs.isCollection = true;
-  if (node.isEventSubProcess && node.type === 'subProcess') attrs.triggeredByEvent = true;
-  if (node.calledElement && node.type === 'callActivity') attrs.calledElement = node.calledElement;
-  if (node.scriptFormat && node.type === 'scriptTask') attrs.scriptFormat = node.scriptFormat;
-  if (node.implementation) attrs.implementation = node.implementation;
+  // A field the node's class may not carry is dropped, not reported, and that is a layering
+  // decision: this function's contract is "emit valid BPMN for the model it was handed", not
+  // "diagnose the model" — the same separation that keeps `net-check.js` out of judging XML. The
+  // reporting is S15's job, in the layer that owns model defects and can say so in prose.
+  for (const spec of OMG_NODE_FIELD_SCOPE) {
+    const value = node[spec.field];
+    if (!value) continue;              // falsy: nothing to serialise, same as before
+    if (!spec.allowed.has(node.type)) continue;
+    // The booleans serialise as `true`; the strings carry their own value.
+    attrs[spec.attr] = typeof value === 'boolean' ? true : value;
+  }
   if (node.type === 'eventBasedGateway') {
     if (node.eventGatewayType) attrs.eventGatewayType = node.eventGatewayType;
     if (node.instantiate) attrs.instantiate = true;
