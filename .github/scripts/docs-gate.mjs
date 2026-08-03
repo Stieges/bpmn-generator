@@ -207,10 +207,15 @@ const DMN_CLAIM_RE = /\bdmn\b/i;
 //    prose (not as a standalone token) never accidentally satisfies the check.
 // NC02b/NC03a/NC03b are not the same shape as DI01…DI06 — `prefix` has to match the optional
 // trailing letter, or NC02b would be misread as a mention of NC02. That is the only way NC's
-// shape differs from DI's: `\bNC0\d[ab]?\b` stays as open-ended in the digit as DI0\d is, on
+// shape differs from DI's: `\bNC\d{2}[ab]?\b` stays as open-ended in the digit as DI\d{2} is, on
 // purpose — a family that is hard-coded to the codes that exist today (`NC0[1-6]`) would go
 // blind to NC07 the day it ships, which is exactly the drift this check exists to catch, one
 // level up. Two later stages of this plan touch net-check.js and are expected to add codes.
+// Both patterns match exactly two digits, not `0\d` (one hard-coded leading zero + one digit):
+// a tenth code in either family (DI10, NC10) has no leading zero, and `0\d` would leave it
+// invisible on both the `prefix` side (never counted as "documented") and the `sourcePattern`
+// side (never counted as "emitted") at once — the exact symmetric blind spot this comment
+// used to warn about while still being one instance of it.
 // `sourcePattern` extracts the codes a module actually emits from its own source text (the
 // `code: '...'` object-literal idiom both di-check.js and net-check.js use), one capture group
 // per code. It is deliberately as open in the digit as `prefix` — a family whose sourcePattern is
@@ -222,16 +227,16 @@ export const CODE_FAMILIES = [
     check: 'di-codes',
     module: 'scripts/bpmn/di-check.js',
     doc: 'references/api-reference.md',
-    prefix: /\bDI0\d\b/g,
-    sourcePattern: /code: '(DI0\d)'/g,
+    prefix: /\bDI\d{2}\b/g,
+    sourcePattern: /code: '(DI\d{2})'/g,
     actualCodesKey: 'actualDiCodes',
   },
   {
     check: 'nc-codes',
     module: 'scripts/bpmn/net-check.js',
     doc: 'references/api-reference.md',
-    prefix: /\bNC0\d[ab]?\b/g,
-    sourcePattern: /code: '(NC0\d[ab]?)'/g,
+    prefix: /\bNC\d{2}[ab]?\b/g,
+    sourcePattern: /code: '(NC\d{2}[ab]?)'/g,
     actualCodesKey: 'actualNcCodes',
   },
 ];
