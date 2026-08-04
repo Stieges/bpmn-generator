@@ -2162,6 +2162,52 @@ describe('OMG Compliance — Execution Attributes', () => {
     const result = await runPipeline(lc);
     expect(result.bpmnXml).toContain('triggeredByEvent="true"');
   });
+
+  test('transaction carrying isEventSubProcess survives the round trip on both importer paths', async () => {
+    const lc = {
+      pools: [{
+        id: 'P1', name: 'Transaction Event SubProcess Test',
+        nodes: [
+          { id: 's', type: 'startEvent', name: 'Start' },
+          { id: 'tx', type: 'transaction', name: 'Tx', isExpanded: true, isEventSubProcess: true,
+            nodes: [
+              { id: 'es', type: 'startEvent', name: 'Error Start', marker: 'error' },
+              { id: 'et', type: 'userTask', name: 'Handle Error' },
+              { id: 'ee', type: 'endEvent', name: 'Done' },
+            ],
+            edges: [
+              { id: 'ef1', source: 'es', target: 'et' },
+              { id: 'ef2', source: 'et', target: 'ee' },
+            ],
+          },
+          { id: 't', type: 'userTask', name: 'Main Task' },
+          { id: 'e', type: 'endEvent', name: 'End' },
+        ],
+        edges: [
+          { id: 'f1', source: 's', target: 't' },
+          { id: 'f2', source: 't', target: 'e' },
+        ],
+        lanes: [],
+      }],
+    };
+    const result = await runPipeline(lc);
+    expect(result.bpmnXml).toContain('<bpmn:transaction');
+    expect(result.bpmnXml).toContain('triggeredByEvent="true"');
+
+    const moddleReimported = await bpmnToLogicCore(result.bpmnXml);
+    const moddleTx = (moddleReimported.pools ? moddleReimported.pools[0].nodes : moddleReimported.nodes)
+      .find(n => n.id === 'tx');
+    expect(moddleTx).toBeDefined();
+    expect(moddleTx.type).toBe('transaction');
+    expect(moddleTx.isEventSubProcess).toBe(true);
+
+    const legacyReimported = bpmnToLogicCoreLegacy(result.bpmnXml);
+    const legacyTx = (legacyReimported.pools ? legacyReimported.pools[0].nodes : legacyReimported.nodes)
+      .find(n => n.id === 'tx');
+    expect(legacyTx).toBeDefined();
+    expect(legacyTx.type).toBe('transaction');
+    expect(legacyTx.isEventSubProcess).toBe(true);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
