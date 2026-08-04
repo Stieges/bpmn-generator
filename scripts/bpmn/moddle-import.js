@@ -7,8 +7,15 @@
  */
 
 import { BpmnModdle } from 'bpmn-moddle';
+import { OMG_NODE_FIELD_SCOPE } from './types.js';
 
 const moddle = new BpmnModdle();
+
+// The class set `isEventSubProcess`/`triggeredByEvent` is allowed on, read out of the field-scope
+// table `bpmn-xml.js`'s writer already trusts — rather than restated as a fourth hand-written
+// copy. See the "Adding a per-node field" note in CLAUDE.md and this fix's own report for why a
+// restatement is exactly the failure mode being closed.
+export const EVENT_SUBPROCESS_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field === 'isEventSubProcess').allowed;
 
 const FLOW_NODE_TYPES = new Set([
   'bpmn:StartEvent', 'bpmn:EndEvent', 'bpmn:IntermediateCatchEvent', 'bpmn:IntermediateThrowEvent', 'bpmn:BoundaryEvent',
@@ -281,8 +288,8 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
       if (el.instantiate === true) node.instantiate = true;
     }
 
-    // Event SubProcess
-    if (type === 'subProcess' && el.triggeredByEvent === true) node.isEventSubProcess = true;
+    // Event SubProcess (also a Transaction — see EVENT_SUBPROCESS_TYPES above)
+    if (EVENT_SUBPROCESS_TYPES.has(type) && el.triggeredByEvent === true) node.isEventSubProcess = true;
 
     // Loop / Multi-instance
     if (el.loopCharacteristics) {

@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { moddleParse, moddleToLogicCore } from './moddle-import.js';
+import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES } from './moddle-import.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -379,8 +379,9 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
       if (child.attrs.instantiate === 'true') node.instantiate = true;
     }
 
-    // Event SubProcess: triggeredByEvent (OMG spec §10.2.4)
-    if (tag === 'subProcess' && child.attrs.triggeredByEvent === 'true') node.isEventSubProcess = true;
+    // Event SubProcess: triggeredByEvent (OMG spec §10.2.4), also a Transaction —
+    // see EVENT_SUBPROCESS_TYPES's doc comment in moddle-import.js
+    if (EVENT_SUBPROCESS_TYPES.has(tag) && child.attrs.triggeredByEvent === 'true') node.isEventSubProcess = true;
 
     // Loop / Multi-instance with details
     const slc = findChild(child, 'standardLoopCharacteristics');
