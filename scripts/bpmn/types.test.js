@@ -70,9 +70,14 @@ function loadEdgeFieldTypes() {
 // exactly how three earlier guards were simultaneously green over a live `isCollection` defect.
 //
 // Column vocabulary, kept here as data so a new value cannot slip in without a decision:
-const SHAPES = ['attr', 'childElement', 'eventDefinition', 'extension', 'di', 'labelRouting', 'layoutOnly', 'unserialised'];
-const ROUND_TRIPS = ['exact', 'presence', 'lossy', 'none'];
-const ENFORCERS = ['table', 'writeSite', 'moddle', 'none'];
+// Each vocabulary is exactly what the rows use, and a fence below asserts that in BOTH directions:
+// a value no row carries is a claim that a category exists, which is the same kind of unbacked
+// statement these tables were built to end. (`labelRouting` and `presence` were in the design's
+// vocabulary and are gone for precisely that reason — no row needed either. Re-adding a value is a
+// deliberate act that comes with the row that uses it.)
+const SHAPES = ['attr', 'childElement', 'eventDefinition', 'extension', 'di', 'layoutOnly', 'unserialised'];
+const ROUND_TRIPS = ['exact', 'lossy', 'none'];
+const ENFORCERS = ['table', 'convention', 'writeSite', 'moddle', 'none'];
 const VALUE_TYPES = ['boolean', 'string', 'object', 'array', 'mixed'];
 // The two shapes that mean "there is no serialisation target". `attr` must be null for exactly
 // these, in both directions — a row naming a target it never writes is precisely the kind of
@@ -123,6 +128,12 @@ describe('the table shape fence — every row is well-formed and every claim bel
       expect(spec.reason.length).toBeGreaterThan(40);
     });
 
+  test.each([['SHAPES', SHAPES, 'shape'], ['ROUND_TRIPS', ROUND_TRIPS, 'roundTrip'], ['ENFORCERS', ENFORCERS, 'enforcedBy']])(
+    '%s has no member no row uses — a vocabulary is not a place to keep aspirations', (_name, vocabulary, column) => {
+      const used = new Set(ALL_ROWS.map((s) => s[column]));
+      expect(vocabulary.filter((v) => !used.has(v))).toEqual([]);
+    });
+
   test.each(ALL_ROWS)('$table $field: `attr` is null exactly when the shape has no target', (spec) => {
     const targetless = TARGETLESS_SHAPES.includes(spec.shape);
     expect(spec.attr === null).toBe(targetless);
@@ -135,6 +146,10 @@ describe('the table shape fence — every row is well-formed and every claim bel
     '$table $field: a fieldLoop row is a plain attribute, guarded by the table', (spec) => {
       expect(spec.shape).toBe('attr');
       expect(spec.enforcedBy).toBe('table');
+      // Not `['table','convention']`: the generic loop writes a plain attribute, and a
+      // `'convention'` row is by construction one BPMN has no attribute for. If that ever stops
+      // being true the loop's contract needs re-reading, not this line widening.
+
     });
 
   // The converse of `bpmn-xml.js`'s `fieldAllowedOn`, which throws on an unknown field: every
