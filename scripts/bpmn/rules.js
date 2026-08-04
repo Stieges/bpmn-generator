@@ -746,14 +746,19 @@ const SOUNDNESS_RULES = [
     description: 'A per-node field must sit on a node class OMG defines it on — isForCompensation '
       + 'is an Activity attribute, implementation belongs to the five invoking Task types, '
       + 'triggeredByEvent to SubProcess and its Transaction specialization, calledElement to '
-      + 'CallActivity, scriptFormat to '
-      + 'ScriptTask, isCollection to DataObjectReference',
+      + 'CallActivity, scriptFormat and the script body to ScriptTask, isCollection to '
+      + 'DataObjectReference, cancelActivity to BoundaryEvent, eventGatewayType to '
+      + 'EventBasedGateway, instantiate to EventBasedGateway and ReceiveTask, loop and '
+      + 'multi-instance characteristics to an Activity, and decisionRef to a businessRuleTask',
     ref: {
       omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity)',
       cmof: 'Activity.isForCompensation (BPMN20.cmof:1095), SubProcess.triggeredByEvent (:1147, '
         + 'inherited by Transaction :1233), '
         + 'CallActivity.calledElement (:1188), ScriptTask.scriptFormat (:1251), '
-        + 'DataObjectReference.isCollection (:641), and `implementation` granted per class to '
+        + 'DataObjectReference.isCollection (:641), ScriptTask.script (:1251), '
+        + 'BoundaryEvent.cancelActivity (:301), EventBasedGateway.eventGatewayType (:1015), '
+        + '`instantiate` granted per class to EventBasedGateway (:1015) and ReceiveTask (:1214), '
+        + 'Activity.loopCharacteristics (:1095), and `implementation` granted per class to '
         + 'UserTask (:1263), ServiceTask (:1240), SendTask (:1229), ReceiveTask (:1214) and '
         + 'BusinessRuleTask (:1177) — never inherited from Activity, which is why a plain Task, '
         + 'a scriptTask, a manualTask and every container may not carry it. The scopes live once '
@@ -789,7 +794,14 @@ const SOUNDNESS_RULES = [
       // level would be silent about exactly the nesting level CLAUDE.md says gets forgotten.
       const walk = (nodes) => {
         for (const node of (nodes || [])) {
-          for (const spec of OMG_NODE_FIELD_SCOPE) {
+          // `enforcedBy: 'table'` and nothing else. The table now covers every `$defs.Node`
+          // property, but this rule's message says the field "is dropped when the BPMN is written",
+          // and that sentence is only TRUE for the rows whose write site actually consults
+          // `spec.allowed` — see `bpmn-xml.js`'s `fieldAllowedOn`. Walking the rest would make the
+          // rule claim a drop that does not happen (a textAnnotation's `name` really does survive,
+          // as `<bpmn:text>`) or report a defect it is not the right layer to report (`nodes` on a
+          // non-container is a crash, queued as its own stage, not a "your field was ignored").
+          for (const spec of OMG_NODE_FIELD_SCOPE.filter((f) => f.enforcedBy === 'table')) {
             // Wrong class and wrong type are different mistakes with different remedies, so the
             // rule says one thing about a field, not two. Class first: if the node may not carry
             // the field at all, its value's type is beside the point.

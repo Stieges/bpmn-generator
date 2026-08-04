@@ -1552,6 +1552,65 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       expect(found[0]).toContain('OMG defines isForCompensation only on');
     });
 
+    // ── The three writes that used to be unguarded, and the one class that used to be unreachable
+    //
+    // These four cases are the measured before/after of the stage that turned the six-row table
+    // into a per-field one. Each was silent in a different way, which is why they are asserted
+    // individually rather than folded into a generated loop: silence has no single shape.
+
+    test.each([
+      ['loopType', 'startEvent', 'standard', 'loopCharacteristics'],
+      ['multiInstance', 'parallelGateway', 'parallel', 'loopCharacteristics'],
+    ])('%s on a %s is reported, not silently swallowed by moddle', (field, type, value, attr) => {
+      // Measured before the guard: NO element in the XML, NO `unknown attribute` warning, NO rule
+      // finding, exit 0. bpmn-moddle reports attributes it does not KNOW; a PROPERTY it has no
+      // descriptor for it simply discards, so the author got a green build and no loop marker.
+      // `loopCharacteristics` is an Activity property, and neither an event nor a gateway is one.
+      const found = s15(runRules(wire({ id: 'n', type, name: 'X', [field]: value })));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain(`carries "${field}"`);
+      expect(found[0]).toContain(`OMG defines ${attr} only on an Activity`);
+    });
+
+    test('decisionRef off a businessRuleTask is dropped and reported', async () => {
+      // Different from the two above: before the guard this field was not dropped at all. It was
+      // WRITTEN — `<bg:decisionRef>` in extensionElements on a userTask — and read straight back,
+      // so the round trip looked perfect while the output claimed a decision binding on a class
+      // `references/input-schema.json` scopes the property away from ("For businessRuleTask: id of
+      // the decision this task invokes"). A silent acceptance, not a silent drop.
+      const lc = wire({ id: 'n', type: 'userTask', name: 'Antrag pruefen', decisionRef: 'dec_1' });
+      const found = s15(runRules(lc));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain('OMG defines decisionRef only on a businessRuleTask');
+      const result = await runPipeline(lc);
+      expect(result.bpmnXml).not.toContain('decisionRef');
+    });
+
+    test('decisionRef ON a businessRuleTask still round-trips — the guard narrowed, it did not break', async () => {
+      const lc = wire({ id: 'n', type: 'businessRuleTask', name: 'Bonitaet pruefen', decisionRef: 'dec_1' });
+      expect(s15(runRules(lc))).toHaveLength(0);
+      const result = await runPipeline(lc);
+      expect(result.bpmnXml).toContain('dec_1');
+      const viaLegacy = bpmnToLogicCoreLegacy(result.bpmnXml);
+      const { rootElement } = await moddleParse(result.bpmnXml);
+      const viaModdle = moddleToLogicCore(rootElement);
+      for (const back of [viaLegacy, viaModdle]) {
+        const node = (back.pools ? back.pools[0].nodes : back.nodes).find(n => n.id === 'n');
+        expect(node.decisionRef).toBe('dec_1');
+      }
+    });
+
+    test('cancelActivity is guarded by the table, not by the wider isBoundaryEvent predicate', async () => {
+      // `isBoundaryEvent` answers true for anything carrying `attachedTo`, not only for the
+      // boundaryEvent CLASS, so the old inline guard emitted `<bpmn:task cancelActivity="false">`
+      // for a task with an `attachedTo` — an attribute OMG grants to BoundaryEvent alone. The
+      // emission condition (only `false` is written; `true` is the XSD default) stays at the write
+      // site, which is why this row is `writeSite: 'buildFlowNode'` and not `'fieldLoop'`.
+      const lc = wire({ id: 'n', type: 'userTask', name: 'T', attachedTo: 'x', cancelActivity: false });
+      const result = await runPipeline(lc);
+      expect(result.bpmnXml).not.toContain('cancelActivity');
+    });
+
     describe('the round-trip fence — bpmn-moddle accepts every entry where the table says it may', () => {
       // The only fence here with an EXTERNAL oracle, and the reason it exists: every other test
       // around this table checks the table against itself (does the rule agree with the
@@ -1576,7 +1635,17 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
         }
         : wire(node));
 
-      for (const spec of OMG_FIELD_SPECS) {
+      // `writeSite: 'fieldLoop'` and nothing else, and that is a narrowing of the ITERATION, not of
+      // the expectation. This block asserts one specific thing — "the attribute `spec.attr` appears
+      // in the XML with an `=` after it" — which is a true statement only about a field the
+      // serialiser writes as a plain attribute straight from the value. The table now covers every
+      // `$defs.Node` property, most of which serialise some other way (a child element, an
+      // eventDefinition property, extensionElements, the DI), and a `documentation` or a `marker`
+      // would fail this assertion for being correct. `fieldLoop` is the table's own name for
+      // exactly the rows this test was written against; scoping to it keeps every original case and
+      // gains `eventGatewayType` and `instantiate`, which joined the loop in the same stage. The
+      // rows this leaves uncovered are Stage 2's subject — see `roundTrip` in `types.js`.
+      for (const spec of OMG_FIELD_SPECS.filter(f => f.writeSite === 'fieldLoop')) {
         for (const type of spec.allowed) {
           test(`${spec.field} on ${type} round-trips without an unknown-attribute warning`, async () => {
             const value = spec.type === 'boolean' ? true : 'x';
@@ -1664,7 +1733,11 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
         }
         : wire(node));
 
-      for (const spec of OMG_NODE_FIELD_SCOPE) {
+      // Scoped to `writeSite: 'fieldLoop'` for the same reason as the round-trip fence above: this
+      // block's two assertions are "`spec.attr=` appears exactly when the class allows it" and
+      // "it appears on `<bpmn:${type}>` itself", and both are statements about a plain attribute
+      // written from the field's value. See that block's comment for the full argument.
+      for (const spec of OMG_NODE_FIELD_SCOPE.filter(f => f.writeSite === 'fieldLoop')) {
         for (const type of ['startEvent', 'exclusiveGateway', 'userTask', 'subProcess',
           'callActivity', 'scriptTask', 'dataObjectReference']) {
           const mayCarry = spec.allowed.has(type);
