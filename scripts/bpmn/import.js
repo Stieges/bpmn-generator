@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep } from './moddle-import.js';
+import { isBpmnArtifact } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -420,6 +421,13 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
         const subSeqFlows = findChildren(child, 'sequenceFlow');
         if (subFlowNodes.length > 0) {
           node.nodes = subFlowNodes.map(nodeFromChild);
+        }
+        // `edges` is keyed off the FLOW-node children, not off `subFlowNodes`, which this DOM
+        // parser also fills with artifacts (it has no `flowElements`-vs-`artifacts` split to go on).
+        // Without the distinction a container holding only a textAnnotation came back with
+        // `edges: []` here and with no `edges` key at all from moddle-import.js — a divergence the
+        // `nodes` row's contract implicitly denies, and one no fence sample reaches.
+        if (subFlowNodes.some(c => !isBpmnArtifact(stripNs(c.tag)))) {
           node.edges = subSeqFlows.map(sf => {
             const se = { id: sf.attrs.id, source: sf.attrs.sourceRef, target: sf.attrs.targetRef };
             if (sf.attrs.name) se.label = sf.attrs.name;
@@ -427,10 +435,9 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
           });
         }
       }
-      // Outside the content gate — see the same move in moddle-import.js: `isExpanded` is a DI fact
-      // about the shape, and reading it only for a container that happens to have content is the
-      // content-based inference `expandedIds` was introduced to replace.
-      if (expandedIds.has(child.attrs.id)) node.isExpanded = true;
+      // Gated on the container having content — see the same gate, and the same reason, in
+      // moddle-import.js.
+      if (node.nodes && expandedIds.has(child.attrs.id)) node.isExpanded = true;
     }
 
     return node;

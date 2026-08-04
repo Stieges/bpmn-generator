@@ -794,12 +794,6 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
   return create('bpmndi:BPMNDiagram', { id: 'BPMNDiagram_1', plane });
 }
 
-// The two classes `BPMNShape#isExpanded` is written for. Hard-coded here rather than read out of
-// `OMG_NODE_FIELD_SCOPE`, because that row's `enforcedBy` is `'writeSite'` — the column says the
-// class guard lives at the write site and that the row states the scope for the reader. Keep the
-// two in step: this set and the `isExpanded` row's `allowed` are the same two classes.
-const EXPANDABLE_SHAPE_TYPES = new Set(['subProcess', 'transaction']);
-
 /**
  * One `<bpmndi:BPMNShape>` per node, at EVERY nesting depth, plus the BPMNEdge of every nested
  * sequence flow. The BPMNDI plane is flat — a nested node's shape is a sibling of a top-level
@@ -812,13 +806,14 @@ const EXPANDABLE_SHAPE_TYPES = new Set(['subProcess', 'transaction']);
  * The single recursive walk is what makes the depth-0 and depth-N shape identical BY CONSTRUCTION;
  * that is the same reason CLAUDE.md gives for keeping geometry in one place.
  *
- * `isExpanded` is written for the two classes the `isExpanded` row of `OMG_NODE_FIELD_SCOPE` allows
- * — the row's `enforcedBy: 'writeSite'` says that guard lives here — and it no longer depends on
- * the container also carrying children. The old `node.isExpanded && node.nodes` made "expanded but
- * empty" inexpressible while "collapsed but drillable" was expressible, which is a loss of the
- * author's statement, not a rule: `BPMNShape#isExpanded` is a drawing property in bpmndi.json and
- * has no child-count precondition. The recursion into children stays gated on both, because there
- * is nothing to recurse into otherwise.
+ * `isExpanded` keeps its `node.isExpanded && node.nodes` condition, and that is a decision, not an
+ * oversight. Dropping the `node.nodes` half would make "expanded but empty" expressible in the DI —
+ * `BPMNShape#isExpanded` in bpmndi.json has no child-count precondition — but the DI is not the
+ * only thing that draws this model: `svg.js` gates the expanded frame on the SAME condition and
+ * `layout.js` sizes a childless container as a task. Writing the attribute alone would leave the
+ * two renderers disagreeing about one model, which is the failure CLAUDE.md's "never compute
+ * geometry in a renderer" records three times over. The loss is recorded on the `isExpanded` row
+ * instead, naming all three places a fix has to touch.
  */
 function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeElements) {
   for (const node of (nodes || [])) {
@@ -831,7 +826,7 @@ function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeEleme
       bounds: create('dc:Bounds', { x: rn(c.x), y: rn(c.y), width: rn(c.w), height: rn(c.h) }),
     };
     if (node.type === 'exclusiveGateway') shapeAttrs.isMarkerVisible = true;
-    if (node.isExpanded && EXPANDABLE_SHAPE_TYPES.has(node.type)) shapeAttrs.isExpanded = true;
+    if (node.isExpanded && node.nodes) shapeAttrs.isExpanded = true;
 
     // bioc color
     if (node.color) {

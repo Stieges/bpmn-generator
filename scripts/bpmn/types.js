@@ -480,7 +480,19 @@ export const OMG_NODE_FIELD_SCOPE = [
   // (bpmndi.json), and the file's semantics are identical either way — which is why `buildFlowNode`
   // deliberately does NOT gate a subprocess's children on it.
   { field: 'isExpanded', attr: 'isExpanded', type: 'boolean', on: 'bpmnShape', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
-    shape: 'di', writeSite: 'buildDiagram', enforcedBy: 'writeSite', roundTrip: 'exact' },
+    shape: 'di', writeSite: 'buildDiagram', enforcedBy: 'writeSite', roundTrip: 'lossy',
+    reason: 'Exact at EVERY depth for a container that carries children — the top-level-only DI '
+      + 'walk that dropped it at depth >= 1 is closed (`buildNodeShapeDI` recurses). What remains '
+      + 'is one clause: WRITTEN ONLY WHEN THE CONTAINER ALSO CARRIES CHILDREN '
+      + '(`node.isExpanded && node.nodes`), so `isExpanded: true` on a childless container is '
+      + 'dropped at any depth. "Collapsed but drillable" is expressible; "expanded but empty" is '
+      + 'not. This is NOT a one-line gap: `BPMNShape#isExpanded` in bpmndi.json has no child-count '
+      + 'precondition, so the DI could carry it — but `svg.js` gates the expanded frame on the same '
+      + 'condition and would keep drawing the collapsed `[+]` marker, and `layout.js` sizes a '
+      + 'childless container as a task. Writing the attribute alone makes the two renderers '
+      + 'disagree about one model, which is exactly what CLAUDE.md\'s "never compute geometry in a '
+      + 'renderer" is about. Closing it means all three places at once, as its own decision. '
+      + 'Measured by `field-fidelity.test.js`.' },
   // BPMN-in-Color: two attributes in the `bioc:` namespace on the BPMNShape. A de-facto convention
   // (bpmn.io / Camunda), not part of OMG's metamodel at all, which is why the fence checks the `on`
   // class against bpmndi.json but exempts the `bioc:`-prefixed attribute names themselves.
@@ -542,14 +554,23 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'input, so no meaning is lost — but the value is not deep-equal. Dropped entirely when the '
       + 'same node also carries `loopType` (one loopCharacteristics slot).' },
   { field: 'nodes', attr: 'flowElements', type: 'array', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
-    shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'exact',
-    reason: 'A child round-trips at any depth, whatever its class — a flow node, a data reference '
-      + 'or an Artifact. The Artifact half was NOT true until the nested-artifact read was added to '
-      + '`moddle-import.js`: bpmn-moddle places a `textAnnotation`/`group` in a container\'s '
-      + '`artifacts`, the child walk read `flowElements`, and the two classes were silently dropped '
-      + 'on the primary path while `import.js`\'s DOM walk recovered them. Same defect as the '
-      + 'top-level one CLAUDE.md\'s round-trip limitation records, one level down; found by '
-      + '`field-fidelity.test.js`. '
+    shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'lossy',
+    reason: 'A flow-node child, a data reference and a `textAnnotation` child all round-trip '
+      + 'exactly, at any depth. The `textAnnotation` half was NOT true until the nested-artifact '
+      + 'read was added to `moddle-import.js`: bpmn-moddle places an Artifact in a container\'s '
+      + '`artifacts`, the child walk read `flowElements`, so both artifact classes were silently '
+      + 'dropped on the primary path while `import.js`\'s DOM walk recovered them — the same defect '
+      + 'CLAUDE.md\'s round-trip limitation records at top level, one level down. What is still '
+      + 'lost is narrower and older: A NESTED `group` LOSES ITS `name`, on BOTH importer paths, at '
+      + 'depth 1 and depth 2. A Group carries no `name` attribute (BaseElement declares only `id`); '
+      + 'its label travels as a `<bpmn:categoryValue>` the Group references, and '
+      + '`buildCategoryForGroup` is applied only in `buildProcess`\'s top-level loop, never in '
+      + '`buildFlowNode`\'s recursion. Measured: a top-level group named "Grp d0" survives, the '
+      + 'same group one level down comes back with `name: ""`. Pre-existing and not created by the '
+      + 'nested-artifact read; recorded rather than fixed because the fix has to thread the '
+      + 'process\'s `categories` list into the recursion, which is a write-site change with no '
+      + 'stage behind it. Found by `field-fidelity.test.js`, which now samples a `group` child '
+      + 'precisely so a later fix turns this row red. '
       + 'enforcedBy none, and it costs a crash: `buildFlowNode` recurses on `node.nodes` for '
       + 'ANY node type, and the recursion itself throws — the child element is built and then '
       + 'pushed into `el.get("flowElements")`, which is `undefined` on a class that is not a '
