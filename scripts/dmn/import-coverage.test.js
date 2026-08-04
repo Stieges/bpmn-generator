@@ -6,7 +6,7 @@ import path from 'path';
 
 import {
   DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS, DMN_ELEMENT_BASE,
-  IMPORT_CODES, BLIND_MECHANISMS, coverageForElement, coverageForModdleType,
+  IMPORT_CODES, IMPORT_CODE_KINDS, BLIND_MECHANISMS, coverageForElement, coverageForModdleType,
 } from './import-scope.js';
 import { HANDLERS } from './import.js';
 
@@ -286,7 +286,31 @@ describe('F1 — every non-abstract global element in the XSDs has exactly one r
       .filter(([, c]) => !c.title?.trim() || !c.remedy?.trim())
       .map(([id]) => `${id} needs a non-empty title and remedy`);
     expect(bad).toEqual([]);
-    expect(Object.keys(IMPORT_CODES)).toEqual(['IM01', 'IM02', 'IM03', 'IM04', 'IM05', 'IM06', 'IM07', 'IM08']);
+    expect(Object.keys(IMPORT_CODES))
+      .toEqual(['IM01', 'IM02', 'IM03', 'IM04', 'IM05', 'IM06', 'IM07', 'IM08', 'IM09']);
+  });
+
+  /**
+   * The grouping axis lives on the table (judgment call 3 of Stage 4), so the fence that keeps a new
+   * code from landing ungrouped lives here rather than in the formatter. Without it a code added
+   * without a `kind` would render in the "unknown code" section — visible, but only to whoever
+   * happened to read a report.
+   */
+  test('every code declares a kind the kind register knows, and every kind is used', () => {
+    const kinds = Object.keys(IMPORT_CODE_KINDS);
+    const defects = [
+      ...Object.entries(IMPORT_CODES)
+        .filter(([, c]) => !kinds.includes(c.kind))
+        .map(([id, c]) => `${id} declares kind ${JSON.stringify(c.kind)} — must be one of ${kinds.join('|')}`),
+      ...Object.entries(IMPORT_CODE_KINDS)
+        .filter(([, k]) => !k.label?.trim() || !k.blurb?.trim())
+        .map(([id]) => `IMPORT_CODE_KINDS.${id} needs a non-empty label and blurb`),
+      // A kind nothing uses is a heading a reader will never see — either a code belongs on it or it
+      // belongs deleted.
+      ...kinds.filter((k) => !Object.values(IMPORT_CODES).some((c) => c.kind === k))
+        .map((k) => `no code carries kind ${k} — remove the kind or move a code onto it`),
+    ];
+    expect(defects).toEqual([]);
   });
 });
 

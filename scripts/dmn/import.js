@@ -54,7 +54,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_ELEMENT_BASE, DMN_XSD_DEFAULTS, IMPORT_CODES,
-  coverageForModdleType,
+  IMPORT_CODE_KINDS, coverageForModdleType,
 } from './import-scope.js';
 import { requirementKey } from './coordinates.js';
 import { decisionCoreSchemaPath } from '../shared/resource-paths.js';
@@ -141,16 +141,21 @@ const readOwn = (el, prop) => (hasOwn(el, prop) ? el[prop] : undefined);
  * prototype-or-reference-following walk would loop back into the DRG through the DI. (The same
  * asymmetry the converter has to know about — see `localHref`.)
  */
-export function walkModdle(el, path, visit) {
+export function walkModdle(el, path, visit, container = null) {
   if (!isElement(el)) return;
-  visit(el, path);
+  visit(el, path, container);
   for (const key of Object.keys(el)) {
     if (key.startsWith('$')) continue;                 // $type, $parent, $attrs — moddle internals
     const value = el[key];
+    // The container is passed down explicitly rather than read back off `el.$parent`. moddle sets
+    // `$parent` on a PARSED tree only, and `moddleToDecisionCore` accepts a hand-built one by
+    // contract — so a `$parent` read would work through `dmnToDecisionCore` and silently return
+    // undefined through the pure entry point, which is the half the tests use.
+    const at = { type: el.$type, property: key };
     if (Array.isArray(value)) {
-      value.forEach((item, i) => walkModdle(item, `${path}.${key}[${i}]`, visit));
+      value.forEach((item, i) => walkModdle(item, `${path}.${key}[${i}]`, visit, at));
     } else if (isElement(value)) {
-      walkModdle(value, `${path}.${key}`, visit);
+      walkModdle(value, `${path}.${key}`, visit, at);
     }
   }
 }
@@ -198,8 +203,26 @@ const SUBTREE_DEDUPE_EXEMPT = new Set(['dmndi:DMNDiagram']);
 
 /**
  * DERIVED, like everything else here, from `import-scope.js` — the `exceptAt` column on an
- * `unrepresented` entry. Keyed `moddleType@containerProperty` → the properties that entry does NOT
- * lose at that position.
+ * `unrepresented` entry. Keyed `moddleType@containerType.containerProperty` → the properties that
+ * entry does NOT lose at that position.
+ *
+ * The key carries the CONTAINER TYPE, and Stage 4 is where it started to. The first revision keyed
+ * on the property name alone, which threw away half of what `exceptAt` states: an exception declared
+ * for `dmn:InputClause.inputExpression` would also have suppressed the finding at any OTHER
+ * container type with a property of that name. No live instance — `inputExpression` is unique across
+ * dmn-moddle's descriptors — but that is a fact about today's descriptors, not an invariant, and it
+ * is the same defect as the contradiction `exceptAt` was introduced to fix: the table stating
+ * something the code then ignores.
+ *
+ * The alternative considered and rejected was an F1b check that every `exceptAt`'s
+ * `containerProperty` is unique across all declared containers. That would fence the CONSEQUENCE
+ * while leaving the cause, and it would forbid a perfectly legitimate future row — two container
+ * types each reading a `text` property, say — for no reason other than that this map could not tell
+ * them apart. Carrying the type is strictly stronger and costs one field on the key.
+ *
+ * Matching is by EXACT container type, not by ancestry: `exceptAt` names the type whose own `mapsTo`
+ * must reciprocally list the property (F1b checks that), and a subtype that inherits the property
+ * without inheriting the read would be a different claim needing its own row.
  *
  * One case today: `<literalExpression>.typeRef` is an IM05 loss at four of the five positions a
  * literal expression can occupy (a decision's logic, a BKM's body, an `<outputEntry>`, a
@@ -221,15 +244,17 @@ const POSITION_DEPENDENT_READS = new Map();
 for (const entry of [...DMN_ELEMENT_COVERAGE, ...DMN_NESTED_TYPE_COVERAGE]) {
   for (const u of entry.unrepresented ?? []) {
     for (const x of u.exceptAt ?? []) {
-      const key = `${entry.moddleType}@${x.containerProperty}`;
+      const key = positionKey(entry.moddleType, x.containerType, x.containerProperty);
       if (!POSITION_DEPENDENT_READS.has(key)) POSITION_DEPENDENT_READS.set(key, new Set());
       POSITION_DEPENDENT_READS.get(key).add(u.property);
     }
   }
 }
 
-/** The property name a path's last segment names, `inputExpression` from `….inputExpression`. */
-const containerPropertyOf = (path) => path.slice(path.lastIndexOf('.') + 1).replace(/\[\d+\]$/, '');
+/** The one place the key shape is written, so the build side and the lookup side cannot disagree. */
+function positionKey(moddleType, containerType, containerProperty) {
+  return `${moddleType}@${containerType}.${containerProperty}`;
+}
 
 /**
  * Every finding the tree itself yields: IM01/IM02/IM03/IM06 from `reported` rows, IM04/IM05 from
@@ -253,15 +278,33 @@ const containerPropertyOf = (path) => path.slice(path.lastIndexOf('.') + 1).repl
  * A blunter "stop dead at a reported element" was the alternative and was rejected: it would make
  * the `<functionItem>` and `<contextEntry>` rows permanently unreachable, since neither is legal as
  * a direct child of `<definitions>`, and a row that can never fire is a row nobody can trust.
+ *
+ * `droppedByConverter` extends BOTH rules to the subtrees the CONVERTER declares gone (Stage 4).
+ * Rule 1 keys on `reported` rows, but a converter-side drop happens on a `mapped` one — so a
+ * `<decision>` whose logic is a `<functionDefinition>` containing a `<literalExpression>` produced
+ * `IM02 …decisionLogic` plus two IM05s pointing INSIDE the subtree the IM02 had already declared
+ * gone. No loss was missed; it was noise, and exactly the noise rule 1 exists to prevent. The two
+ * passes therefore run converter-first now, and the paths it dropped are seeded here as roots.
  */
-function detectFindings(definitions) {
+function detectFindings(definitions, droppedByConverter = []) {
   const findings = [];
-  /** Roots of already-reported subtrees: `{ path, seen: Set<moddleType> }`, outermost first. */
-  const reportedRoots = [];
+  /**
+   * Roots of already-reported subtrees: `{ path, seen: Set<moddleType> }`, outermost first — which
+   * is what lets `enclosingOf`'s `find` return the OUTERMOST match, so a nested root cannot open a
+   * second dedupe scope. Converter drops are seeded shortest-path-first for the same reason; the
+   * walk then appends its own roots in DFS order, parents before children.
+   */
+  const reportedRoots = [...droppedByConverter]
+    .sort((a, b) => a.length - b.length)
+    .map((path) => ({ path, seen: new Set() }));
 
-  const enclosingOf = (path) => reportedRoots.find((r) => path.startsWith(`${r.path}.`));
+  // Inclusive of the root path itself, which matters only for a converter-dropped root: the element
+  // sitting there is of a MAPPED class, so unlike a reported element it reaches the property loop
+  // below — and its own properties are as gone as its children's. For a walk-discovered reported
+  // root the root is pushed only after its own visit, so inclusivity changes nothing there.
+  const enclosingOf = (path) => reportedRoots.find((r) => path === r.path || path.startsWith(`${r.path}.`));
 
-  walkModdle(definitions, 'definitions', (el, path) => {
+  walkModdle(definitions, 'definitions', (el, path, container) => {
     const row = coverageForModdleType(el.$type);
     const enclosing = enclosingOf(path);
 
@@ -289,7 +332,8 @@ function detectFindings(definitions) {
 
     const unrepresented = UNREPRESENTED_BY_TYPE.get(el.$type);
     if (unrepresented) {
-      const wonByContainer = POSITION_DEPENDENT_READS.get(`${el.$type}@${containerPropertyOf(path)}`);
+      const wonByContainer = container
+        && POSITION_DEPENDENT_READS.get(positionKey(el.$type, container.type, container.property));
       for (const [prop, spec] of unrepresented) {
         if (wonByContainer?.has(prop)) continue;
         const value = readOwn(el, prop);
@@ -443,6 +487,14 @@ export const HANDLERS = {
  * every position a handler can meet is exhaustive. The `reported` check below is what keeps this
  * from double-reporting the boxed expressions the walk already names.
  */
+/**
+ * Record that the converter dropped whatever sits at `path`, so `detectFindings` suppresses the
+ * property findings inside it. Called at EVERY converter-side drop and nowhere else — a site that
+ * reports a loss without losing the subtree (`putId`, the optional-id path) must not call it, or the
+ * findings for a perfectly imported element's properties would disappear.
+ */
+const droppedSubtree = (ctx, path) => ctx.droppedSubtrees.push(path);
+
 function reportUnreadExpression(ctx, el, path, where) {
   if (!isElement(el)) return;
   const row = coverageForModdleType(el.$type);
@@ -452,6 +504,7 @@ function reportUnreadExpression(ctx, el, path, where) {
     `A <${named}> is not one of the forms Decision-Core can hold as ${where}, so the logic is `
     + 'dropped while the element that carried it imports normally and looks intact. '
     + IMPORT_CODES.IM02.remedy));
+  droppedSubtree(ctx, path);
 }
 
 /** `<literalExpression>` collapses to whichever bare string slot its position implies. */
@@ -515,12 +568,17 @@ function readFunctionDefinition(el, ctx, path) {
  */
 function readDecisionTable(el, ctx, path) {
   if (asArray(el.output).length === 0) {
-    ctx.findings.push(finding('IM02', el, path, 'decisionTable',
-      'The decision table declares no output clause. Decision-Core requires at least one — an '
-      + 'output-less table states no result and there is nothing for a rule\'s `then` to line up '
-      + 'against — so the table is dropped and the decision imports without logic. The source file '
-      + 'is malformed here: DMN13.xsd gives tDecisionTable/output no minOccurs, which defaults it '
-      + 'to 1. ' + IMPORT_CODES.IM02.remedy));
+    // IM09, not IM02: the file is wrong, not this tool's model too narrow. DMN13.xsd gives
+    // tDecisionTable/output no minOccurs, which defaults it to 1, so an output-less table is
+    // invalid DMN — and telling a reader "Decision-Core cannot hold this" would send them looking
+    // for a capability we are missing rather than at the export that produced the file.
+    ctx.findings.push(finding('IM09', el, path, 'decisionTable',
+      'The decision table declares no output clause. DMN13.xsd gives tDecisionTable/output no '
+      + 'minOccurs, which defaults it to 1, so the source file is invalid here — and Decision-Core '
+      + 'requires at least one output too, since an output-less table states no result and there is '
+      + 'nothing for a rule\'s `then` to line up against. The table is dropped and the decision '
+      + 'imports without logic. ' + IMPORT_CODES.IM09.remedy));
+    droppedSubtree(ctx, path);
     return null;
   }
   const table = {};
@@ -596,18 +654,16 @@ function readRequirement(el, ctx, path, kind, targetId) {
     // everything that did not arrive. The element carried an id the file authored; the finding says
     // which.
     //
-    // IM03 rather than a code of its own: within this module IM03 already means "a requirement was
-    // dropped because its source could not be resolved", and a caller meeting the same outcome
-    // should meet the same code from either cause. IMPORT_CODES has no member for "the source file
-    // is malformed", which is a gap recorded for the table's owner rather than papered over here —
-    // hence the case-specific reason below instead of IM03's generic remedy, which describes
-    // document-level constructs and would mislead if appended.
-    ctx.findings.push(finding('IM03', el, path, XSD_ELEMENT_OF_TYPE.get(el.$type),
+    // IM09, and Stage 4 is where it stopped being IM03. The earlier revision put it on IM03 with a
+    // comment recording that IMPORT_CODES had no member for "the source file is invalid" — it has
+    // one now, and this is the case that asked for it: a requirement with no reference is not a
+    // construct we cannot represent, it is a construct DMN does not permit.
+    ctx.findings.push(finding('IM09', el, path, XSD_ELEMENT_OF_TYPE.get(el.$type),
       'The requirement names nothing it requires — none of requiredDecision, requiredInput, '
       + 'requiredKnowledge or requiredAuthority is present — so it cannot become a Decision-Core '
       + 'edge, which is {type, source, target}. It is dropped. DMN 1.3 gives each requirement class '
-      + 'exactly one such reference, so the source file is malformed here; fix it there, since '
-      + 'nothing on this side can infer what the requirement pointed at.'));
+      + 'exactly one such reference, so the source file is invalid here. ' + IMPORT_CODES.IM09.remedy));
+    droppedSubtree(ctx, path);
     return null;
   }
   const resolved = localHref(ref.href);
@@ -617,6 +673,7 @@ function readRequirement(el, ctx, path, kind, targetId) {
       + 'Decision-Core describes one self-contained model and has no import mechanism to resolve '
       + 'it against, so the requirement is dropped rather than emitted as an edge to an id this '
       + 'document does not declare. ' + IMPORT_CODES.IM03.remedy));
+    droppedSubtree(ctx, path);
     return null;
   }
   const req = { type: kind, source: resolved.id, target: targetId };
@@ -747,11 +804,16 @@ function putId(target, el, ctx, path, what) {
  * A REQUIRED Decision-Core id (`Node.id`). Two ways it can be missing, and both mean the element
  * cannot be expressed at all rather than expressed without a field:
  *
- *   - absent      `tDMNElement/@id` is optional in DMN and required on a Decision-Core Node.
+ *   - absent      `tDMNElement/@id` is optional in DMN and required on a Decision-Core Node. IM09,
+ *                 not IM07: nothing about this is a limit of Decision-Core's vocabulary. A DRG
+ *                 element with no id cannot be named by any `@href`, cannot be pointed at by DI and
+ *                 cannot be referenced by a decision service — it is unusable in DMN's own terms
+ *                 long before it reaches us, and the fix is in the file.
  *   - unusable    measured, dmn-moddle's own id validation is BOTH narrower than NCName (it rejects
  *                 a Unicode letter, dropping the element entirely — that is IM08's second
  *                 mechanism) and WIDER (it accepts `a:b`, which no NCName permits). The wider half
- *                 is what keeps IM07 reachable after Stage 2's ASCII-plus-`.` widening.
+ *                 is what keeps IM07 reachable after Stage 2's ASCII-plus-`.` widening. IM07 stays
+ *                 IM07: the id is one DMN allows and we do not, which is the tool being narrower.
  *
  * Either way the element is dropped, which loses only itself: an id-less element can never be the
  * target of an `@href`, and an unusable-id element's incoming requirements are dropped alongside it
@@ -759,12 +821,15 @@ function putId(target, el, ctx, path, what) {
  */
 function putRequiredId(target, el, ctx, path) {
   if (typeof el.id === 'string' && DC_ID_PATTERN.test(el.id)) { target.id = el.id; return true; }
-  ctx.findings.push(finding('IM07', el, path, xsdElementOf(el),
-    el.id == null
-      ? 'The element carries no id. Decision-Core requires one on every node (it is the only way a '
-        + 'requirement can name it), so the element is dropped. ' + IMPORT_CODES.IM07.remedy
-      : `The id "${el.id}" is one dmn-moddle surfaces but Decision-Core cannot hold, and a node's `
-        + 'id is required, so the element is dropped. ' + IMPORT_CODES.IM07.remedy));
+  ctx.findings.push(el.id == null
+    ? finding('IM09', el, path, xsdElementOf(el),
+      'The element carries no id. DMN makes @id optional, but it is the only way an @href, a '
+      + '<DMNShape> or a <decisionService> can name the element, and Decision-Core requires one on '
+      + 'every node — so the element is dropped. ' + IMPORT_CODES.IM09.remedy)
+    : finding('IM07', el, path, xsdElementOf(el),
+      `The id "${el.id}" is one dmn-moddle surfaces but Decision-Core cannot hold, and a node's `
+      + 'id is required, so the element is dropped. ' + IMPORT_CODES.IM07.remedy));
+  droppedSubtree(ctx, path);
   return false;
 }
 
@@ -878,9 +943,13 @@ export async function parseDmnXml(xml) {
  *   report; the converter cannot see them itself, which is the whole point of IM08
  */
 export function moddleToDecisionCore(definitions, opts = {}) {
-  const ctx = { findings: [] };
-  const detected = detectFindings(definitions);
+  const ctx = { findings: [], droppedSubtrees: [] };
+  // Converter first, walk second — the walk needs to know which subtrees the converter declared gone
+  // (rule 1, extended in Stage 4). The findings are still ASSEMBLED walk-first below, so the report's
+  // order is unchanged: element findings, then what the converter learned while resolving, then the
+  // parser's warnings.
   const dc = HANDLERS.definitions(definitions, ctx);
+  const detected = detectFindings(definitions, ctx.droppedSubtrees);
   const { defaultsMaterialised } = applyDecisionCoreDefaults(dc);
 
   const parserWarnings = opts.parserWarnings ?? [];
@@ -968,6 +1037,12 @@ function buildReport(findings, parserWarnings, defaultsMaterialised) {
  *
  * Grouped by code rather than listed flat: `IMPORT_CODES[code].remedy` is the sentence a reader
  * actually has to act on, and repeating it per occurrence buries it.
+ *
+ * And the code groups are themselves grouped by WHOSE PROBLEM the finding is — `IMPORT_CODES[code]
+ * .kind`, rendered through `IMPORT_CODE_KINDS` (Stage 4). "This tool cannot represent your
+ * construct" and "your file is invalid" call for completely different actions, and a flat list
+ * makes the reader classify each line themselves, which they will stop doing. The kinds and their
+ * order come from the table, not from here — see `IMPORT_CODE_KINDS` for that argument.
  */
 export function formatImportReport(report, { file } = {}) {
   const where = file ? ` — ${file}` : '';
@@ -984,14 +1059,29 @@ export function formatImportReport(report, { file } = {}) {
     if (!byCode.has(f.code)) byCode.set(f.code, []);
     byCode.get(f.code).push(f);
   }
-  for (const code of [...byCode.keys()].sort()) {
-    const group = byCode.get(code);
-    lines.push('', `${code} — ${IMPORT_CODES[code]?.title ?? 'unknown code'} (${group.length})`);
-    for (const f of group) {
-      const named = [f.xsdElement && `<${f.xsdElement}>`, f.id && `#${f.id}`].filter(Boolean).join(' ');
-      lines.push(`  ${f.path}${named ? `  ${named}` : ''}`);
+  // An unknown code has no kind to sort it under, and dropping it would be the one failure a report
+  // renderer must never have. It gets its own trailing section instead.
+  const kindOf = (code) => (IMPORT_CODE_KINDS[IMPORT_CODES[code]?.kind] ? IMPORT_CODES[code].kind : null);
+  const kindOrder = [...Object.keys(IMPORT_CODE_KINDS), null];
+
+  for (const kind of kindOrder) {
+    const codes = [...byCode.keys()].filter((c) => kindOf(c) === kind).sort();
+    if (codes.length === 0) continue;
+    const total = codes.reduce((n, c) => n + byCode.get(c).length, 0);
+    const heading = kind
+      ? `${IMPORT_CODE_KINDS[kind].label} (${total})`
+      : `Findings under a code this build does not know (${total})`;
+    lines.push('', `── ${heading} ──`);
+    if (kind) lines.push(`   ${IMPORT_CODE_KINDS[kind].blurb}`);
+    for (const code of codes) {
+      const group = byCode.get(code);
+      lines.push('', `${code} — ${IMPORT_CODES[code]?.title ?? 'unknown code'} (${group.length})`);
+      for (const f of group) {
+        const named = [f.xsdElement && `<${f.xsdElement}>`, f.id && `#${f.id}`].filter(Boolean).join(' ');
+        lines.push(`  ${f.path}${named ? `  ${named}` : ''}`);
+      }
+      if (IMPORT_CODES[code]?.remedy) lines.push(`  → ${IMPORT_CODES[code].remedy}`);
     }
-    if (IMPORT_CODES[code]?.remedy) lines.push(`  → ${IMPORT_CODES[code].remedy}`);
   }
 
   if (report.parserWarnings.length) {

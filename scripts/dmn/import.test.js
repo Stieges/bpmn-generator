@@ -110,10 +110,13 @@ describe('the import report — one test per IM code', () => {
     });
   });
 
-  test('IM07 — a DRG element with no id at all, which Decision-Core requires', async () => {
+  test('IM09 — a DRG element with no id at all, which is the FILE\'s problem and not a gap here', async () => {
+    // Stage 4 moved this off IM07. DMN makes @id optional, but an id-less DRG element cannot be
+    // named by an @href, a <DMNShape> or a <decisionService> — it is unusable in DMN's own terms,
+    // so telling a reader "Decision-Core cannot hold this id" would point them at the wrong file.
     const r = await report('<decision name="Nameless in the id sense"/>');
     expect(r.unrepresented.map(shape)).toContainEqual({
-      code: 'IM07', xsdElement: 'decision', path: 'definitions.drgElement[0]',
+      code: 'IM09', xsdElement: 'decision', path: 'definitions.drgElement[0]',
     });
   });
 
@@ -275,6 +278,31 @@ describe('a mapped expression class in a position the converter does not read', 
     });
   });
 
+  /**
+   * Stage 4, carried Minor 4b. Rule 1 ("no property finding inside a reported subtree") keyed on
+   * `reported` rows only — but a converter-side drop happens on a `mapped` one, so the IM02 that
+   * declared the whole `<functionDefinition>` gone was followed by IM05s pointing INSIDE it. No loss
+   * was missed; it was noise, and exactly the noise rule 1 exists to prevent.
+   */
+  test('a converter-side drop suppresses the property findings inside it, as a reported one does',
+    async () => {
+      const r = await report(
+        '<decision id="d1" name="D"><functionDefinition id="f1">'
+        + '<literalExpression id="l1"><text>1</text></literalExpression>'
+        + '</functionDefinition></decision>');
+      // Before the fix: this IM02 plus IM05 at `.decisionLogic.id` and `.decisionLogic.body.id`.
+      expect(r.unrepresented.map(shape)).toEqual([{
+        code: 'IM02', xsdElement: 'functionDefinition', path: 'definitions.drgElement[0].decisionLogic',
+      }]);
+      expect(r.counts.unrepresented).toBe(1);
+    });
+
+  test('an element the converter drops for a BROKEN id suppresses its property findings too — the '
+    + 'rule is "the subtree is gone", not "which code said so"', async () => {
+    const r = await report('<decision name="D" label="Shown instead of the name"/>');
+    expect(r.unrepresented.map((f) => f.code)).toEqual(['IM09']);
+  });
+
   test('the control case still works — a `reported` class in the same slot reports once, from the '
     + 'walk, and the converter does not double it', async () => {
     const r = await report(
@@ -286,7 +314,13 @@ describe('a mapped expression class in a position the converter does not read', 
   });
 });
 
-describe('malformed source content the report must still name', () => {
+/**
+ * IM09's own describe block, and Stage 4 is where these three stopped being capability-gap codes.
+ * The distinction is for the reader: "this tool cannot represent your construct" and "your file is
+ * invalid" call for completely different actions, and a report that blurs them teaches people to
+ * ignore it. `formatImportReport` groups by that axis; these assert the codes it groups on.
+ */
+describe('IM09 — malformed source content, which is the file\'s problem and not this tool\'s', () => {
   test('a <decisionTable> with no output clause cannot be held and is reported, not emitted '
     + 'half-built for our own schema gate to trip over', async () => {
     const { dc, report: r } = await dmnToDecisionCore(doc(
@@ -296,7 +330,7 @@ describe('malformed source content the report must still name', () => {
     expect(dc.nodes[0].decisionTable).toBeUndefined();
     expect(r.lossless).toBe(false);
     expect(r.unrepresented.map(shape)).toContainEqual({
-      code: 'IM02', xsdElement: 'decisionTable', path: 'definitions.drgElement[0].decisionLogic',
+      code: 'IM09', xsdElement: 'decisionTable', path: 'definitions.drgElement[0].decisionLogic',
     });
     expect(validateDecisionCoreSchema(dc).errors).toEqual([]);
   });
@@ -307,11 +341,69 @@ describe('malformed source content the report must still name', () => {
     expect(dc.requirements ?? []).toEqual([]);
     expect(r.lossless).toBe(false);
     expect(r.unrepresented.map(shape)).toContainEqual({
-      code: 'IM03', xsdElement: 'informationRequirement',
+      code: 'IM09', xsdElement: 'informationRequirement',
       path: 'definitions.drgElement[0].informationRequirement[0]',
     });
     // It carried an id the file authored — the finding has to say which one.
-    expect(r.unrepresented.find((f) => f.code === 'IM03').id).toBe('ir1');
+    expect(r.unrepresented.find((f) => f.code === 'IM09').id).toBe('ir1');
+  });
+
+  /**
+   * The line IM09 draws, asserted from both sides in one test. A colon is not a legal NCName and
+   * dmn-moddle accepts it anyway (measured) — so `a:b` is an id DMN's own schema allows through the
+   * parser while ours does not, which is this tool being the narrower of the two: IM07. An ABSENT
+   * id is the file failing to say something DMN needs it to say: IM09.
+   */
+  test('an unusable id stays IM07 while an absent id is IM09 — the axis is whose problem it is', async () => {
+    const narrow = await report('<decision id="a:b" name="D"/>');
+    expect(narrow.unrepresented.map((f) => f.code)).toEqual(['IM07']);
+
+    const invalid = await report('<decision name="D"/>');
+    expect(invalid.unrepresented.map((f) => f.code)).toEqual(['IM09']);
+  });
+});
+
+/**
+ * Stage 4, carried Minor 4a. `POSITION_DEPENDENT_READS` used to be keyed by container PROPERTY name
+ * alone, discarding the `containerType` half of what `exceptAt` states — so an exception declared
+ * for `dmn:InputClause.inputExpression` would also have fired at any other container type with a
+ * property of that name.
+ *
+ * There is no live instance to demonstrate it with: `inputExpression` is unique across dmn-moddle's
+ * descriptors, which is the only reason the old key was harmless. So these trees are hand-built and
+ * one of them puts a property where dmn-moddle does not declare it — deliberately, because the drift
+ * being fenced is exactly "a second container gains a property of that name", and a fence that can
+ * only be written after that happens is a fence written too late. `moddleToDecisionCore` takes a
+ * hand-built tree by contract, which is what makes this expressible at all.
+ */
+describe('a position-dependent read is keyed by container TYPE, not by property name alone', () => {
+  const literalWithTypeRef = () => ({ $type: 'dmn:LiteralExpression', typeRef: 'number', text: 'v' });
+  const treeWithClauseHolding = (clause) => ({
+    $type: 'dmn:Definitions', id: 'D', name: 'D', namespace: 'http://bpmn-generator.local/t',
+    drgElement: [{
+      $type: 'dmn:Decision', id: 'd1', name: 'D1',
+      decisionLogic: {
+        $type: 'dmn:DecisionTable', id: 't1', output: [{ $type: 'dmn:OutputClause', id: 'o1' }],
+        ...clause,
+      },
+    }],
+  });
+
+  test('at dmn:InputClause.inputExpression the typeRef is read, so no IM05 is raised', () => {
+    const { report: r } = moddleToDecisionCore(treeWithClauseHolding({
+      input: [{ $type: 'dmn:InputClause', id: 'i1', inputExpression: literalWithTypeRef() }],
+    }));
+    expect(r.unrepresented.filter((f) => f.path.endsWith('.typeRef'))).toEqual([]);
+  });
+
+  test('the same property name on a DIFFERENT container type is not covered by that exception', () => {
+    const { report: r } = moddleToDecisionCore(treeWithClauseHolding({
+      output: [{ $type: 'dmn:OutputClause', id: 'o1', inputExpression: literalWithTypeRef() }],
+    }));
+    expect(r.unrepresented.map(shape)).toContainEqual({
+      code: 'IM05', xsdElement: 'literalExpression',
+      path: 'definitions.drgElement[0].decisionLogic.output[0].inputExpression.typeRef',
+    });
   });
 });
 
@@ -523,6 +615,43 @@ describe('formatImportReport — the one rendering', () => {
     expect(text).toMatch(/IM03/);
     expect(text).toMatch(/definitions\.drgElement\[0\]/);
     expect(text).toMatch(/definitions\.itemDefinition\[0\]/);
+  });
+
+  /**
+   * The grouping Stage 4 added, asserted on the axis it exists for: a reader must be able to see, at
+   * a glance, which findings are theirs to fix in the source file and which are this tool's limits.
+   * The section ORDER is the table's (`IMPORT_CODE_KINDS`, source first), and is asserted rather than
+   * described so a reordering that buries the actionable half fails.
+   */
+  test('findings are grouped by whose problem they are, source-first', async () => {
+    const r = await report(
+      '<decisionService id="ds1" name="S"/>'                 // IM01 — tool
+      + '<decision id="d1" name="D" label="L"/>'             // IM05 — tool
+      + '<decision id="d2" name="E"><informationRequirement id="ir1"/></decision>'   // IM09 — source
+      + '<organizationUnit id="ou1" name="Finance"/>');      // IM08 — parser
+    const text = formatImportReport(r);
+    const at = (needle) => text.indexOf(needle);
+
+    expect(at('The source file is invalid')).toBeGreaterThan(-1);
+    expect(at('Decision-Core has no slot for it')).toBeGreaterThan(-1);
+    expect(at('The parser never surfaced it')).toBeGreaterThan(-1);
+    expect(at('The source file is invalid')).toBeLessThan(at('Decision-Core has no slot for it'));
+    expect(at('Decision-Core has no slot for it')).toBeLessThan(at('The parser never surfaced it'));
+    // The codes land under their own kind's heading, not merely somewhere in the text.
+    expect(at('IM09')).toBeGreaterThan(at('The source file is invalid'));
+    expect(at('IM09')).toBeLessThan(at('Decision-Core has no slot for it'));
+    expect(at('IM01')).toBeGreaterThan(at('Decision-Core has no slot for it'));
+    expect(at('IM01')).toBeLessThan(at('The parser never surfaced it'));
+  });
+
+  test('a finding under a code this build does not know still renders, in its own section', () => {
+    const text = formatImportReport({
+      lossless: false, parserWarnings: [], defaultsMaterialised: [],
+      counts: { unrepresented: 1, byCode: { IM99: 1 }, parserWarnings: 0 },
+      unrepresented: [{ code: 'IM99', xsdElement: null, moddleType: null, path: 'definitions', id: null, name: null, reason: 'x' }],
+    });
+    expect(text).toMatch(/does not know/);
+    expect(text).toMatch(/IM99/);
   });
 });
 
