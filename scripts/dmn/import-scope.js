@@ -128,11 +128,58 @@
 export const BLIND_MECHANISMS = ['spelling', 'absent'];
 
 /**
- * The importer's finding vocabulary. Wider than the row table by design: IM04 and IM07 describe
- * things that happen to CONTENT inside otherwise ordinary elements, so no element row owns them.
+ * WHOSE PROBLEM A FINDING IS — the axis `formatImportReport` groups by.
+ *
+ * Judgment call 3 of Stage 4, recorded: this lives here, as a column on `IMPORT_CODES`, rather than
+ * as a set of code names inside the formatter. The formatter already reads `title` and `remedy` from
+ * this register, so reading a third field is no new coupling — whereas a hand-written grouping in
+ * the formatter would be a SECOND authority about codes, and this plan has now been bitten twice by
+ * exactly that shape (the `exceptAt` contradiction, and the derived-map key that ignored
+ * `containerType`). With the column here, a fence can assert that every code carries a kind, so a
+ * new code cannot land ungrouped.
+ *
+ * The distinction is worth making at all because the two answers call for completely different
+ * actions: "this tool cannot represent your construct" is ours to widen or to live with, "your file
+ * is invalid" is fixed at the source and nowhere else. A report that blurs them teaches people to
+ * ignore it.
+ *
+ * `parser` is a third kind rather than a fudge. IM08 covers two mechanisms that genuinely fall on
+ * different sides — an element whose XSD spelling dmn-moddle does not recognise (`<organizationUnit>`
+ * — ours) and an id or a document dmn-moddle refuses to read (the file's) — and nothing in the
+ * finding distinguishes them except its message. Claiming one owner for the pair would be the blur
+ * this column exists to remove, one level down.
+ *
+ * Ordered: the formatter renders the kinds in declaration order, source-first, because that is the
+ * section a reader can act on today.
+ */
+export const IMPORT_CODE_KINDS = {
+  source: {
+    label: 'The source file is invalid',
+    blurb: 'DMN 1.3 requires something this file does not say. Nothing on this side can infer it; '
+      + 'fix the file and re-import.',
+  },
+  tool: {
+    label: 'Decision-Core has no slot for it',
+    blurb: 'The file is fine; this generator\'s model is narrower than DMN. The construct is '
+      + 'dropped, and the element carrying it imports normally.',
+  },
+  parser: {
+    label: 'The parser never surfaced it',
+    blurb: 'dmn-moddle built no object for this content, so a warning is the only evidence it '
+      + 'existed. The cause may be on either side — read the message.',
+  },
+};
+
+/**
+ * The importer's finding vocabulary. Wider than the row table by design: IM04, IM07 and IM09
+ * describe things that happen to CONTENT inside otherwise ordinary elements, so no element row owns
+ * them.
+ *
+ * Every entry carries `kind` — see `IMPORT_CODE_KINDS` for what that axis is and why it lives here.
  */
 export const IMPORT_CODES = {
   IM01: {
+    kind: 'tool',
     title: 'DRG element class with no Decision-Core equivalent',
     remedy: 'The element itself is dropped, but read the message before assuming a decision was '
       + 'lost: a <decisionService> is a packaging boundary over decisions that already exist as '
@@ -141,6 +188,7 @@ export const IMPORT_CODES = {
       + 'If the grouping matters, keep the source file; nothing in Decision-Core can express it.',
   },
   IM02: {
+    kind: 'tool',
     title: 'decision logic in a form Decision-Core cannot hold',
     remedy: 'Decision-Core gives a decision exactly two logic slots — `decisionTable` (structured) '
       + 'and `expression` (one string) — and the boxed expressions (context, invocation, relation, '
@@ -149,6 +197,7 @@ export const IMPORT_CODES = {
       + 'file before importing.',
   },
   IM03: {
+    kind: 'tool',
     title: 'document-level construct outside the decision graph',
     remedy: 'Imports, type definitions, element collections, business-context elements and DRD '
       + 'artifacts describe the document AROUND the decision graph, which is all Decision-Core '
@@ -157,6 +206,7 @@ export const IMPORT_CODES = {
       + 'and not only a cosmetic one.',
   },
   IM04: {
+    kind: 'tool',
     title: 'extension content',
     remedy: 'Vendor content (Camunda, Signavio, …) in <extensionElements> or an extension '
       + 'attribute. `decision-core-schema.json` is `additionalProperties: false` throughout, so '
@@ -165,12 +215,14 @@ export const IMPORT_CODES = {
       + 'the element the content was stripped from.',
   },
   IM05: {
+    kind: 'tool',
     title: 'property with no Decision-Core slot, on a type we do import',
     remedy: 'The element imports; this one property does not. The finding names both, so the loss '
       + 'is checkable rather than inferable. Where the property points at a construct with a '
       + 'finding of its own, that finding carries the detail instead.',
   },
   IM06: {
+    kind: 'tool',
     title: 'diagram interchange',
     remedy: 'The whole DMNDI tree — diagrams, shape bounds, edge waypoints, styles, labels, '
       + '`isCollapsed` — is dropped, by design rather than by omission: Decision-Core is '
@@ -179,6 +231,7 @@ export const IMPORT_CODES = {
       + 'import-then-emit returns a correct model with a differently arranged diagram.',
   },
   IM07: {
+    kind: 'tool',
     title: 'id legal in DMN, not expressible in Decision-Core',
     remedy: 'Decision-Core ids match `^[a-zA-Z_][a-zA-Z0-9_.-]*$` (widened from '
       + '`^[a-zA-Z_][a-zA-Z0-9_-]*$` in dmn-xml-importer Stage 2, so `my.decision` — a legal DMN id '
@@ -194,6 +247,7 @@ export const IMPORT_CODES = {
       + 'the finding that actually fires is IM08.',
   },
   IM08: {
+    kind: 'parser',
     title: 'the parser never surfaced it',
     remedy: 'dmn-moddle could not build an object for this content, so the only evidence it existed '
       + 'is a `warnings[]` entry — there is nothing in the parsed tree for the importer to read, '
@@ -202,6 +256,19 @@ export const IMPORT_CODES = {
       + 'xsd:ID — in practice, one carrying a non-ASCII (Unicode) character, which is legal NCName '
       + 'but which dmn-moddle\'s own id validation does not accept — which drops THE WHOLE ELEMENT. '
       + 'Do not silence the parser warnings; they are the only channel this class has.',
+  },
+  IM09: {
+    kind: 'source',
+    title: 'the source file does not say what DMN 1.3 requires',
+    remedy: 'Not a gap in this tool: the construct is one DMN can express and this file does not. '
+      + 'Three cases reach here — a requirement naming nothing it requires (DMN gives each '
+      + 'requirement class exactly one such reference), a decision table with no output clause '
+      + '(DMN13.xsd gives tDecisionTable/output no minOccurs, so it defaults to 1), and a DRG element '
+      + 'with no id at all (optional in DMN, but the only way anything can name it, so nothing here '
+      + 'can hold it). Each drops the element it sits on. Nothing on this side can infer what was '
+      + 'meant, so the fix is in the source file; re-export it or edit it, and re-import. Note the '
+      + 'contrast with IM07, which looks similar and is not: there the id is legal DMN and '
+      + 'Decision-Core is the narrower of the two.',
   },
 };
 
