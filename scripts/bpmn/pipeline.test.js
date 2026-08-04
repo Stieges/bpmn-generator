@@ -5147,6 +5147,13 @@ describe('artifact contract — the label survives serialisation', () => {
 // These pin the whole class rather than the individual fields: the round-trip
 // test compares what went in against what comes back, so the next field added to
 // the top-level path cannot quietly skip the child path.
+//
+// `bpmn/field-fidelity.test.js` is the complement, not the replacement: it drives every field the
+// schema declares through the pipeline in ISOLATION (one field, every class its row allows, both
+// depths, both importers, generated from `references/input-schema.json`), which is what makes an
+// omission impossible to forget. This fixture is COMPOSITION — one realistic model where a boundary
+// event, a grandchild, a data reference and seven field classes meet — and it catches the loss that
+// only happens when two of them interact, which a per-field sweep by construction cannot.
 describe('subprocess children — nothing is lost on the way down', () => {
   const CHILD_FIXTURE = 'subprocess-child-fidelity.json';
   const childrenOf = (lc) => {
