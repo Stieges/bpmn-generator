@@ -428,7 +428,21 @@ export const DMN_ELEMENT_COVERAGE = [
         reason: 'Every one of the slots above is a bare string. The expression\'s identity has '
           + 'nowhere to go, and the writer generates a fresh id on emit.' },
       { property: 'description', code: 'IM05', reason: 'As `id` — the slot is a string.' },
-      { property: 'typeRef', code: 'IM05', reason: 'As `id` — the slot is a string.' },
+      { property: 'typeRef', code: 'IM05',
+        reason: 'As `id` — the slot is a string. True at four of the five positions a literal '
+          + 'expression can occupy; see `exceptAt` for the fifth.',
+        // The one place in this table where a property's fate is per-POSITION rather than per-TYPE,
+        // and the reason the column exists at all: at `<inputExpression>` the typeRef IS read, into
+        // `InputClause.typeRef`. Before this column the row said "dropped" flatly while
+        // `dmn:InputClause.inputExpression`'s own mapsTo said "read" — two entries of one table
+        // contradicting each other, joined only by a sentence, which is why no fence saw it (F1b
+        // reads mapsTo's KEYS, never its prose VALUES, deliberately). F1b now checks all three
+        // halves, the decisive one being reciprocity: the container named here must list
+        // `containerProperty` among its own mapsTo keys.
+        exceptAt: [{
+          containerType: 'dmn:InputClause', containerProperty: 'inputExpression',
+          readInto: 'InputClause.typeRef',
+        }] },
       { property: 'expressionLanguage', code: 'IM05',
         reason: 'Decision-Core carries ONE language for the whole document (root '
           + '`expressionLanguage`), so a file that overrides the language per expression loses the '
@@ -825,10 +839,18 @@ export const DMN_XSD_DEFAULTS = [
   {
     xsdFile: 'DMN13', ownerType: 'tDecisionTable', attr: 'hitPolicy', xsdDefault: 'UNIQUE',
     moddleMaterialises: true, slot: 'DecisionTable.hitPolicy', materialize: true,
-    reason: 'The one default the importer cannot choose about: dmn-moddle has already put "UNIQUE" '
-      + 'on the object, so by the time we look, a silent file and an explicit UNIQUE are '
-      + 'indistinguishable. Recorded rather than left implicit, because it means an imported table '
-      + 'always states a hit policy — and `scenarios/decision-table.js` branches on that value.',
+    reason: 'dmn-moddle has already put "UNIQUE" on the object by the time the importer looks — but '
+      + 'on the PROTOTYPE, so a silent file and an explicit UNIQUE remain DISTINGUISHABLE via '
+      + '`Object.prototype.hasOwnProperty`, which is exactly how `import.js` tells them apart (see '
+      + 'its `readOwn`). An earlier revision of this sentence said they were indistinguishable, '
+      + 'which the shipped importer contradicts. The importer materialises the default from THIS '
+      + 'table rather than from moddle\'s descriptor, and records each application in '
+      + '`report.defaultsMaterialised`. Why materialise at all, given that both consumers already '
+      + 'default it themselves (`scenarios/decision-table.js` uses `|| \'UNIQUE\'`, `dmn/rules.js` '
+      + '`?? \'UNIQUE\'`): round-trip identity. The writer omits `hitPolicy="UNIQUE"` because moddle '
+      + 'drops any attribute equal to its descriptor default, so without materialising, '
+      + '{hitPolicy:"UNIQUE"} -> XML -> {} and the round-trip fence would need a tolerance for a '
+      + 'field that is not actually lost.',
   },
   {
     xsdFile: 'DMN13', ownerType: 'tDecisionTable', attr: 'preferredOrientation', xsdDefault: 'Rule-as-Row',
