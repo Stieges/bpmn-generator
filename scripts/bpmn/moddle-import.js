@@ -416,11 +416,12 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
           return se;
         });
       }
-      // Outside the content gate on purpose. `isExpanded` is a DI fact about the shape, not about
-      // the content — the same reason `expandedIds` exists at all instead of inferring open-vs-
-      // collapsed from `flowElements`. Reading it inside the gate re-introduced that inference by
-      // the back door: a container the author marked expanded but left empty came back collapsed.
-      if (expandedIds.has(el.id)) node.isExpanded = true;
+      // Gated on the container having content, mirroring the write side exactly: `bpmn-xml.js`
+      // emits `isExpanded` only for a container with children (`node.isExpanded && node.nodes`), so
+      // a childless one never carries the attribute to read back. Ungating this read alone would
+      // recover nothing our own writer produces — see the `isExpanded` row in `types.js` for the
+      // three places that loss actually lives.
+      if (node.nodes && expandedIds.has(el.id)) node.isExpanded = true;
     }
 
     // Preserve unknown extension attributes for round-trip (Phase B)

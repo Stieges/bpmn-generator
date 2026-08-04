@@ -259,15 +259,20 @@ const SAMPLES = {
     { label: '{ type: "sequential", loopCardinality }', value: { type: 'sequential', loopCardinality: '3' } },
   ],
   nodes: [{
-    // The annotation is in this list because the row's loss is about an ARTIFACT child specifically
-    // — a flow-node child round-trips on both paths, so a sample of flow nodes alone would leave the
-    // row's stated mechanism unexercised.
-    label: 'three flow-node children, a flow, and an annotation',
+    // BOTH artifact classes are in this list, and that is the sample's whole point: a flow-node
+    // child round-trips on both paths, so flow nodes alone would leave the row's stated mechanism
+    // unexercised — and the two artifact classes do NOT behave alike. A `textAnnotation` carries its
+    // label in `<bpmn:text>`, which `buildFlowNode` writes at any depth; a `group` carries it in a
+    // CategoryValue that only `buildProcess`'s top-level loop builds, so a nested group comes back
+    // with an empty name. Sampling only the annotation is how the row came to claim a fidelity the
+    // `group` class does not have.
+    label: 'three flow-node children, a flow, an annotation and a group',
     value: [
       { id: 'kid_s', type: 'startEvent', name: 'Kind Start' },
       { id: 'kid_t', type: 'userTask', name: 'Kind Schritt' },
       { id: 'kid_e', type: 'endEvent', name: 'Kind Ende' },
       { id: 'kid_note', type: 'textAnnotation', name: 'Hinweis im Kind' },
+      { id: 'kid_grp', type: 'group', name: 'Gruppe im Kind' },
     ],
     extra: {
       edges: [
@@ -703,6 +708,36 @@ const LOSSY_CONTRACTS = {
     quote: 'NOT WRITTEN AT ALL at depth >= 1',
     assert: (ctx) => {
       sameAs(ctx, ctx.out?.lane, ctx.depth === 0 ? ctx.value : undefined);
+    },
+  },
+
+  isExpanded: {
+    quote: 'WRITTEN ONLY WHEN THE CONTAINER ALSO CARRIES CHILDREN',
+    assert: (ctx) => {
+      // Depth is deliberately NOT in this predicate any more, and that is the whole point of the
+      // stage that changed it: the row used to lose the field at depth >= 1 as well, and asserting
+      // `hasChildren && depth === 0` would let that regress unnoticed. Children alone decide.
+      const hasChildren = (ctx.input.nodes ?? []).length > 0;
+      sameAs(ctx, ctx.out?.isExpanded, hasChildren ? true : undefined,
+        `children: ${hasChildren}, depth: ${ctx.depth}`);
+    },
+  },
+
+  nodes: {
+    quote: 'A NESTED `group` LOSES ITS `name`',
+    assert: (ctx) => {
+      const back = walkNodes(ctx.lc);
+      for (const child of ctx.value) {
+        const got = back.find((n) => n.id === child.id);
+        sameAs(ctx, got?.id, child.id, `child ${child.id} (${child.type}) survives at depth ${ctx.depth}`);
+        sameAs(ctx, got.type, child.type, `child ${child.id}: its class survives`);
+        // A group's label travels as a CategoryValue, which `buildCategoryForGroup` builds only in
+        // `buildProcess`'s top-level loop — never in `buildFlowNode`'s recursion. A `nodes` child is
+        // nested by definition, so every group in this sample loses its name at every placement.
+        const labelLost = child.type === 'group';
+        sameAs(ctx, got.name, labelLost ? '' : child.name,
+          `child ${child.id}: its label${labelLost ? ' is lost — no CategoryValue is built below the top level' : ' survives'}`);
+      }
     },
   },
 
