@@ -41,13 +41,34 @@
  * Same class, second member — an id our parser rejects outright:
  *
  *   id="plain_ok"           → parsed
- *   id="my.decision"        → parsed   (legal DMN; OUR schema's id pattern rejects it → IM07)
+ *   id="my.decision"        → parsed   (legal DMN; OUR schema's id pattern used to reject it — now
+ *                             accepted, see IM07 below: Stage 2 of the dmn-xml-importer plan
+ *                             widened `decision-core-schema.json`'s id pattern from
+ *                             `^[a-zA-Z_][a-zA-Z0-9_-]*$` to `^[a-zA-Z_][a-zA-Z0-9_.-]*$`)
  *   id="Entscheidung_Über"  → DROPPED, warnings: ['unparsable content <decision> detected …
  *                             illegal ID <Entscheidung_Über>']  → IM08
  *
  * That one is a property of an id VALUE rather than of an element class, so it has no row; it lives
  * in IMPORT_CODES, which is the importer's finding vocabulary and is deliberately wider than this
  * table (IM04 and IM07 are reachable at run time without any row naming them).
+ *
+ * IM07's remaining domain, and why it was not closed by widening further (Stage 2, recorded here
+ * because a later reader who notices `xsd:ID`/NCName permits Unicode letters is the reader this
+ * paragraph is for): `\p{L}` would compile under ajv 8's `u`-flagged `pattern`, so the schema
+ * COULD accept `Entscheidung_Über`. Measured against dmn-moddle, though, doing so would not close
+ * the gap — it would silently trade it for a worse one. dmn-moddle WRITES a non-ASCII id without
+ * complaint and then cannot READ it back: `id="my.decision"` round-trips clean (1 drgElement, no
+ * warnings), `id="Entscheidung_Über"` round-trips to 0 drgElements with `'unparsable content
+ * <dmn:decision>'` and `'unresolved reference <Entscheidung_Über>'` among the warnings — the exact
+ * IM08 mechanism, on OUR OWN emitted output. So a Unicode Decision-Core id would let the pipeline
+ * generate a `.dmn` file the pipeline's own importer cannot read — the round-trip breakage this
+ * whole plan exists to fence. That is a dmn-moddle library defect (its `Ids.assign` validation is
+ * ASCII-only, narrower than the NCName it claims to check), not a design choice on our part, and
+ * not one this project can widen its way past: it lives one layer below the schema. IM07 therefore
+ * still fires, but its domain shrank to "legal DMN id, and parseable by dmn-moddle, that our schema
+ * cannot hold" — after the ASCII-plus-`.` widening, no such id is known; every remaining case that
+ * used to reach IM07 (a Unicode id) is intercepted one step earlier by dmn-moddle itself and reaches
+ * IM08 instead.
  *
  * WRITING A ROW — the guide the fences point at
  *
@@ -159,10 +180,18 @@ export const IMPORT_CODES = {
   },
   IM07: {
     title: 'id legal in DMN, not expressible in Decision-Core',
-    remedy: 'Decision-Core ids match `^[a-zA-Z_][a-zA-Z0-9_-]*$` while DMN inherits the far wider '
-      + 'xsd:ID, so `my.decision` is a legal DMN id that our schema rejects. Until Stage 2 decides '
-      + 'between widening the pattern and rewriting ids on import, such a document cannot be '
-      + 'imported without editing the ids at the source.',
+    remedy: 'Decision-Core ids match `^[a-zA-Z_][a-zA-Z0-9_.-]*$` (widened from '
+      + '`^[a-zA-Z_][a-zA-Z0-9_-]*$` in dmn-xml-importer Stage 2, so `my.decision` — a legal DMN id '
+      + '— now imports) while DMN inherits the far wider xsd:ID/NCName, which additionally permits '
+      + 'Unicode letters. The pattern was deliberately NOT widened that far: dmn-moddle itself '
+      + 'cannot round-trip a non-ASCII id (writes it without complaint, then fails to read it back '
+      + '— see IM08 and the measurement in this file\'s doc comment, and in '
+      + '`references/decision-core-schema.json`\'s `id` field description), so accepting one here '
+      + 'would only move the loss one step later and make it self-inflicted. This is a dmn-moddle '
+      + 'library defect, not a design choice — do not widen further without re-measuring dmn-moddle '
+      + 'first. A document with a Unicode id cannot be imported without editing the id at the '
+      + 'source; in practice dmn-moddle intercepts such ids before our schema even sees them, so '
+      + 'the finding that actually fires is IM08.',
   },
   IM08: {
     title: 'the parser never surfaced it',
@@ -170,8 +199,9 @@ export const IMPORT_CODES = {
       + 'is a `warnings[]` entry — there is nothing in the parsed tree for the importer to read, '
       + 'skip or report on. Two known mechanisms: an element whose XSD spelling dmn-moddle does not '
       + 'recognise (`<organizationUnit>`), and an element whose id dmn-moddle rejects as an illegal '
-      + 'xsd:ID, which drops THE WHOLE ELEMENT. Do not silence the parser warnings; they are the '
-      + 'only channel this class has.',
+      + 'xsd:ID — in practice, one carrying a non-ASCII (Unicode) character, which is legal NCName '
+      + 'but which dmn-moddle\'s own id validation does not accept — which drops THE WHOLE ELEMENT. '
+      + 'Do not silence the parser warnings; they are the only channel this class has.',
   },
 };
 

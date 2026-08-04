@@ -39,6 +39,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checked on every pipeline run rather than only where a test happened to look. Message flows and
   associations are intentionally out of scope — DI05 and the geometry-contract tests already cover
   those.
+- **`references/decision-core-schema.json`'s id pattern widened to ASCII NCName
+  (dmn-xml-importer plan, Stage 2).** All seven sites repeating the id pattern (root `id`, `Node`,
+  `Requirement`, `DecisionTable`, `InputClause`, `OutputClause`, `DecisionRule`) moved from
+  `^[a-zA-Z_][a-zA-Z0-9_-]*$` to `^[a-zA-Z_][a-zA-Z0-9_.-]*$` — accept-only, nothing previously
+  valid becomes invalid. `xsd:ID` is an XML NCName and `my.decision` is a legal DMN id that the
+  narrower pattern rejected outright, which made such a document unimportable without editing ids
+  at the source; `scripts/scenarios/bridge.js` matches a BPMN `decisionRef` against the DMN
+  decision's id, so rewriting ids on import was never an option. Deliberately **not** widened to
+  full NCName's Unicode letters, even though ajv 8 compiles `pattern` with the `u` flag and `\p{L}`
+  would work: measured against dmn-moddle, it writes a non-ASCII id (e.g. `Entscheidung_Über`)
+  without complaint and then cannot read it back — 0 `drgElement`s, `'unparsable content
+  <dmn:decision>'`, `'unresolved reference <Entscheidung_Über>'` — while `my.decision` round-trips
+  clean. Accepting Unicode here would therefore let the pipeline emit a `.dmn` file its own
+  importer cannot read, which is the exact round-trip breakage this plan exists to fence. The
+  reason is recorded at the schema's `id` field, in `scripts/dmn/import-scope.js`'s IM07/IM08
+  rows, and here, because the obvious later "NCName allows it, widen further" edit is exactly the
+  change being declined — it is a dmn-moddle library defect, not a design choice.
 - **`scripts/bpmn/field-fidelity.test.js` — the spanning fence, whose oracle is execution.** Every
   field `references/input-schema.json` declares is driven through the real `runPipeline` and read
   back through **both** importers (`bpmnToLogicCore` and `bpmnToLogicCoreLegacy`), for every class
