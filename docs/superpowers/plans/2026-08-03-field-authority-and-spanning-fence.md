@@ -164,7 +164,18 @@ Each is a one-brief stage with its own red-first verification; the fence rows al
    instead. Fence rows tighten to `'exact'`. (1–2 rounds)
 8. **Decision (iii)** — schema per-type scoping via `allOf`/`if`/`then` forbids, generated **text**
    from the table (committed, fenced against it), `additionalProperties:false` intact. Own
-   initiative, after B12.
+   initiative, after B12. **Note:** `field-fidelity.test.js`'s completeness check asserts today's
+   flat `$defs.Node`/`$defs.Edge` shape as its premise and will fail on the first applicator
+   keyword — deliberately, so the fence is taught the new shape in the same commit rather than
+   silently covering less. The two statements of per-type scoping (the schema's and the table's
+   `allowed`) get reconciled there, which is the real content of this item.
+9. **Container-level field authority** — the tables and the spanning fence cover per-**node** and
+   per-**edge** fields only. Process-, pool- and lane-level fields (`lanes`, a pool's `name`, a
+   process's `documentation`, `messageFlows`, `associations`) have no row and no round-trip
+   contract, so the four-places class is unfenced at that level. Not a defect of Stage 2 — its
+   brief scoped it out — but nothing else covers it either, and the same shape of loss is available
+   there. Scope before size: decide whether these want rows in a third table or a separate fence.
+   (Unsized, unscheduled.)
 
 ## Verification (core)
 

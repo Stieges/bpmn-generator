@@ -11,6 +11,14 @@
  * fences were simultaneously green over a live `isCollection` defect, because an internally
  * consistent table is consistent with itself regardless of what it claims about the world.
  *
+ * WHAT "SPANNING" MEANS HERE, AND WHAT IT DOES NOT. It spans the four PLACES a per-node or per-edge
+ * field passes through (schema, write site, both read sites) — not every level of the model. Fields
+ * that belong to a process, a pool or a lane (`lanes`, a pool's `name`, a process's `documentation`)
+ * have no row in either table and no case here, so the four-places class remains unfenced at
+ * container level. That was the brief's scope, not an oversight; it is tracked as backlog item 9 in
+ * `docs/superpowers/plans/2026-08-03-field-authority-and-spanning-fence.md`. Do not read the file
+ * name as total coverage.
+ *
  * This fence is different in exactly one respect, and it is the respect that matters: **its oracle
  * is execution.** It runs the real `runPipeline`, re-reads the real XML through `bpmnToLogicCore`
  * (bpmn-moddle, the primary path) AND `bpmnToLogicCoreLegacy` (the DOM parser, the fallback), and
@@ -113,6 +121,37 @@ describe('the completeness check — no schema field escapes the fence', () => {
     expect([`unregistered $defs.Edge properties — ${HOWTO('OMG_EDGE_FIELD_SCOPE')}`, unregistered])
       .toEqual([`unregistered $defs.Edge properties — ${HOWTO('OMG_EDGE_FIELD_SCOPE')}`, []]);
   });
+
+  // THE PREMISE the two checks above depend on, asserted rather than assumed.
+  //
+  // They read `$defs.Node.properties` and `$defs.Edge.properties` and nothing else. That is total
+  // only while those two schemas declare their properties FLAT — no `oneOf`/`allOf`/`if`/`then`
+  // branch introducing a property from somewhere else, and `additionalProperties: false` closing the
+  // set. Today both hold, by convention; the convention was asserted nowhere, and the plan's backlog
+  // item 8 contemplates adding exactly that scoping to this schema.
+  //
+  // Asserting the premise rather than walking the branches, deliberately. Walking them means
+  // implementing a JSON-Schema applicator resolver inside a test whose subject is not JSON Schema —
+  // and worse, it would quietly succeed: a property declared inside an `if`/`then` is a CONDITIONAL
+  // declaration ("this field exists only on these types"), and the table has its own vocabulary for
+  // that (`allowed`), which a flat merge would paper over. So when that schema change lands, this
+  // check must fail, so that the fence is taught the new shape and the two statements of per-type
+  // scoping are reconciled ON PURPOSE, in the same commit — not shrunk in silence.
+  const APPLICATORS = ['oneOf', 'anyOf', 'allOf', 'not', 'if', 'then', 'else', '$ref',
+    'patternProperties', 'dependentSchemas', 'unevaluatedProperties'];
+
+  test.each(['Node', 'Edge'])(
+    '$defs.%s declares its properties flat — the premise the completeness check rests on', (def) => {
+      const schema = SCHEMA.$defs[def];
+      const found = APPLICATORS.filter((k) => k in schema);
+      expect({
+        [`applicator keywords in $defs.${def} (teach the completeness check the new shape before adding one)`]: found,
+        additionalProperties: schema.additionalProperties,
+      }).toEqual({
+        [`applicator keywords in $defs.${def} (teach the completeness check the new shape before adding one)`]: [],
+        additionalProperties: false,
+      });
+    });
 
   // The reverse direction: a row for a field the schema does not declare is a contract nobody can
   // author, and it would silently generate cases for a field that can never appear in real input.
@@ -556,6 +595,38 @@ function sameAs(ctx, actual, expected, what = '') {
   expect([where, actual]).toEqual([where, expected]);
 }
 
+const IMPORTER_PATHS = ['moddle', 'legacy'];
+
+/**
+ * Run one assertion block per importer path and report the verdicts TOGETHER.
+ *
+ * A plain loop with inline assertions aborts on the first path that throws, so a field dropped from
+ * BOTH importers in one commit reads as `via moddle` and nothing else. The author fixes
+ * `moddle-import.js`, re-runs, and the fence is still red — with the second half of the same defect
+ * appearing only then, as if it were new. That is precisely the "a failure that does not say where
+ * to look" shape this fence was built to avoid, so the failure has to speak for both paths at once.
+ *
+ * The verdict line comes first (`moddle: FAILED, legacy: ok`) because it answers the one question
+ * that decides what to do next: is this one importer's defect, or the shared write side's? Each
+ * path's own Jest diff follows verbatim underneath, so nothing is lost — only the code frame, which
+ * pointed at `sameAs` rather than at the case anyway.
+ */
+function reportBothPaths(blocks) {
+  const failures = [];
+  for (const [path, run] of blocks) {
+    try {
+      run();
+    } catch (err) {
+      failures.push({ path, message: err.message });
+    }
+  }
+  if (failures.length === 0) return;
+  const failed = new Set(failures.map((f) => f.path));
+  const verdict = blocks.map(([path]) => `${path}: ${failed.has(path) ? 'FAILED' : 'ok'}`).join(', ');
+  const detail = failures.map((f) => `──────── ${f.path} ────────\n${f.message}`).join('\n\n');
+  throw new Error(`${verdict}\n\n${detail}`);
+}
+
 /**
  * The 15 `roundTrip: 'lossy'` contracts.
  *
@@ -922,7 +993,11 @@ describe('the spanning round trip — every field, every allowed class, both dep
     const { row, sample, type, placement } = testCase;
     const { xml, input, reimported } = await runCase(testCase);
 
-    for (const path of ['moddle', 'legacy']) {
+    // Both paths are always evaluated, and their verdicts are reported together — see
+    // `reportBothPaths`. Asserting inline would abort on the first failing path, so a field dropped
+    // from BOTH importers in one commit would read as a moddle-only defect, and the author would fix
+    // one importer and find the fence still red.
+    reportBothPaths(IMPORTER_PATHS.map((path) => [path, () => {
       const lc = reimported[path];
       const out = row.table === 'node' ? nodeById(lc, SUBJECT) : edgeById(lc, SUBJECT_EDGE);
       const ctx = {
@@ -935,7 +1010,7 @@ describe('the spanning round trip — every field, every allowed class, both dep
       // skipped — see NESTED_ARTIFACT_LOSS.
       if (NESTED_ARTIFACT_LOSS.applies(ctx)) {
         sameAs(ctx, out, undefined, NESTED_ARTIFACT_LOSS.note);
-        continue;
+        return;
       }
 
       // The subject must have survived AS AN ELEMENT before any field claim about it means
@@ -955,6 +1030,6 @@ describe('the spanning round trip — every field, every allowed class, both dep
         // row and its reason to be updated — nothing improves silently either.
         sameAs(ctx, out[row.field], undefined, 'roundTrip "none": the field must not survive');
       }
-    }
+    }]));
   });
 });
