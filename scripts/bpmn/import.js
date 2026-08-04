@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES } from './moddle-import.js';
+import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES } from './moddle-import.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -373,11 +373,13 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     const decisionRefEl = findChild(findChild(child, 'extensionElements'), 'decisionRef');
     if (decisionRefEl?.text) node.decisionRef = decisionRefEl.text;
 
-    // EventBasedGateway: eventGatewayType, instantiate (OMG spec §10.5.6)
+    // EventBasedGateway: eventGatewayType (OMG spec §10.5.6). `instantiate` is read one line down
+    // and NOT under this guard — OMG grants it to ReceiveTask too (§10.2.4); see
+    // INSTANTIATE_TYPES's doc comment in moddle-import.js.
     if (tag === 'eventBasedGateway') {
       if (child.attrs.eventGatewayType && child.attrs.eventGatewayType !== 'Exclusive') node.eventGatewayType = child.attrs.eventGatewayType;
-      if (child.attrs.instantiate === 'true') node.instantiate = true;
     }
+    if (INSTANTIATE_TYPES.has(tag) && child.attrs.instantiate === 'true') node.instantiate = true;
 
     // Event SubProcess: triggeredByEvent (OMG spec §10.2.4), also a Transaction —
     // see EVENT_SUBPROCESS_TYPES's doc comment in moddle-import.js
