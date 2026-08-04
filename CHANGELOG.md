@@ -39,6 +39,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checked on every pipeline run rather than only where a test happened to look. Message flows and
   associations are intentionally out of scope — DI05 and the geometry-contract tests already cover
   those.
+- **`scripts/dmn/import.js` — DMN 1.3 XML → Decision-Core, and a structured report of what could
+  not come with it (dmn-xml-importer plan, Stage 3).** `parseDmnXml` (async, the thin dmn-moddle
+  wrapper, throws), `moddleToDecisionCore` (pure and synchronous, so a hand-built moddle tree is a
+  valid input), `dmnToDecisionCore` (the public path), plus `applyDecisionCoreDefaults`,
+  `canonicalizeDecisionCore`, `formatImportReport` and the `HANDLERS` dispatch table.
+  `scripts/dmn/import-scope.js` is its specification and its only exclusion list: fence **F5** in
+  `import-coverage.test.js` now asserts `Object.keys(HANDLERS)` equals the set of `mapped` rows in
+  both directions, so demoting a row without removing its handler fails naming the row. The report
+  is the half that matters — measured, a document carrying `itemDefinition + decisionService +
+  textAnnotation` parses with **zero** dmn-moddle warnings, so a naive `drgElement` loop produces a
+  Decision-Core that looks complete, feeds SC02–SC05 a model that is not, and nothing says so.
+  `report.lossless` is the one bit a caller branches on; findings carry a **positional** path
+  (`definitions.drgElement[2].decisionLogic.rule[0]`), because four DMN types carry no `id` by
+  construction. IM04/IM05 come from one generic recursive detector (`walkModdle`) and nowhere else,
+  so nothing is reported twice. No geometry is read and none is fabricated: Decision-Core is
+  coordinate-free and `dmn/layout.js` re-lays-out on every emit, so every diagram is an IM06
+  finding — which is also what voids the DMN-integration plan's instruction to import
+  `DMNShape/@isCollapsed`, an instruction with no target. Exactly one XSD default is materialised,
+  `tDecisionTable/@hitPolicy`, read from `DMN_XSD_DEFAULTS` rather than from moddle's descriptor
+  and recorded in `report.defaultsMaterialised`; the reason is round-trip identity, not consumer
+  need (both consumers already default it). Two deref rules live in one file on purpose — a
+  requirement's `@href` is `#`-stripped and refused when it reaches into another document (IM03),
+  while `usingTask`/`usingProcess` keep theirs verbatim, because the writer emits a bare id there
+  for a reason. No CLI yet (Stage 6).
 - **`references/decision-core-schema.json`'s id pattern widened to ASCII NCName
   (dmn-xml-importer plan, Stage 2).** All seven sites repeating the id pattern (root `id`, `Node`,
   `Requirement`, `DecisionTable`, `InputClause`, `OutputClause`, `DecisionRule`) moved from

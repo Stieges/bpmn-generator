@@ -110,9 +110,23 @@ DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
     ├── dmn-xml.js           ← ../shared/utils.js, coordinates.js (requirementKey), dmn-moddle
     │                          (generateDmnXml, validateDmnXml)
     └── constants.js         ← ../shared/utils.js (DRD shape sizes, spacing, edge markers, from CFG.dmn)
+  import-scope.js            (no deps — the coverage table: one row per non-abstract global element
+                               in DMN13.xsd/DMNDI13.xsd, disposition `mapped`/`reported`/
+                               `parser-blind`, plus DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS and
+                               IMPORT_CODES IM01–IM08. The importer's ONLY exclusion list)
+  import.js                  ← import-scope.js, coordinates.js (requirementKey),
+                               ../shared/resource-paths.js, dmn-moddle
+                               (DMN XML → Decision-Core + a structured loss report. `parseDmnXml`
+                               async/throwing, `moddleToDecisionCore` pure+sync, `dmnToDecisionCore`
+                               the public path returning `{dc, report}` — a shaped failure, never a
+                               throw. `report.lossless` is the one bit a caller branches on; paths
+                               are positional. Reads no DMNDI and fabricates none — Decision-Core is
+                               coordinate-free and layout.js re-lays-out on every emit, so every
+                               diagram is an IM06 finding. Not yet reached by runDmnPipeline)
   (produces a real .dmn file, XSD-validated — see
-   docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: the importer,
-   SVG rendering and the tool surface, Stages 5–7.)
+   docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: SVG rendering and
+   the tool surface, Stages 6–7; the importer is
+   docs/superpowers/plans/2026-08-04-dmn-xml-importer.md, whose Stage 6 adds its CLI.)
 
 Agent subsystem (scripts/agents/)
   chat.js, compliance.js, layout.js, llm-provider.js, modeler.js, prompt-sections.js, reviewer.js
