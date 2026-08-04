@@ -1,0 +1,388 @@
+import { describe, test, expect } from '@jest/globals';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+import {
+  DMN_ELEMENT_COVERAGE, DMN_XSD_DEFAULTS, DMN_ELEMENT_BASE, IMPORT_CODES, BLIND_MECHANISMS,
+  coverageForElement, coverageForModdleType,
+} from './import-scope.js';
+
+/**
+ * TWO ORACLES, NEITHER RESTATED HERE.
+ *
+ * Oracle A is the normative XSD (`references/omg-spec/normative/dmn/`) — it says what a conformant
+ * file may CONTAIN. Oracle B is dmn-moddle's own descriptors (`dmn-moddle/resources/dmn/json/`) —
+ * they say what our parser can SURFACE. Both are read at test time; the table under test is never
+ * allowed to be its own evidence.
+ *
+ * One oracle was not enough, and the reason is measurable rather than theoretical. A registry-only
+ * fence asks dmn-moddle "does every type you know have a row?". It knows `dmn:OrganisationalUnit`,
+ * so a row exists, so the fence is green — while a conformant file writes `<organizationUnit>`, the
+ * AMERICAN spelling the XSD declares (DMN13.xsd:132), which dmn-moddle cannot parse at all:
+ *
+ *   <organizationUnit id="ou1" name="Finance"/>
+ *   → warnings: ['unparsable content <organizationUnit> detected … unknown type
+ *                <dmn:OrganizationUnit>']
+ *   → businessContextElement: 0   — the element is GONE from the tree
+ *
+ * An internally consistent table is consistent with itself regardless of what it claims about the
+ * world. Only the divergence BETWEEN the two oracles exposes that class of gap, which is what F2
+ * measures.
+ */
+
+const require = createRequire(import.meta.url);
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const XSD_DIR = path.join(HERE, '..', '..', 'references', 'omg-spec', 'normative', 'dmn');
+
+// ── Oracle A ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A depth-tracking tag scan rather than a `^\t<xsd:element` line match: "global" means "a direct
+ * child of xsd:schema", and indentation is a formatting accident that a re-download could change
+ * without changing a single declaration. The scan is deliberately small — these four files are
+ * frozen normative artefacts with no CDATA, no comments carrying `<`, and no namespace surprises,
+ * so a full XML parser would buy nothing and would mean a new dependency.
+ */
+function scanXsd(xsdFile) {
+  const text = readFileSync(path.join(XSD_DIR, `${xsdFile}.xsd`), 'utf8');
+  const tag = /<(\/?)(?:xsd:)?([A-Za-z][\w.:-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g;
+  const globalElements = [];
+  const defaults = [];
+  const open = [];
+  let m;
+  while ((m = tag.exec(text))) {
+    const [, closing, tagName, attrs, selfClosing] = m;
+    if (closing) { open.pop(); continue; }
+    const name = attrs.match(/\bname="([^"]*)"/)?.[1] ?? null;
+    if (tagName === 'element' && open.length === 1) {
+      globalElements.push({ xsdFile, name, abstract: /\babstract="true"/.test(attrs) });
+    }
+    const dflt = attrs.match(/\bdefault="([^"]*)"/)?.[1];
+    if (tagName === 'attribute' && dflt !== undefined) {
+      // The owning complexType is the nearest enclosing `<xsd:complexType name="…">`.
+      const owner = [...open].reverse().find((o) => o.tagName === 'complexType')?.name ?? null;
+      defaults.push({ xsdFile, ownerType: owner, attr: name, xsdDefault: dflt });
+    }
+    if (!selfClosing) open.push({ tagName, name });
+  }
+  return { globalElements, defaults };
+}
+
+const XSD_FILES_WITH_ELEMENTS = ['DMN13', 'DMNDI13'];
+// F4 reads all four: DC.xsd and DI.xsd declare no defaults today, and the fence should say so by
+// looking rather than by our leaving them out.
+const XSD_FILES_WITH_DEFAULTS = ['DMN13', 'DMNDI13', 'DC', 'DI'];
+
+const XSD_ELEMENTS = XSD_FILES_WITH_ELEMENTS
+  .flatMap((f) => scanXsd(f).globalElements)
+  .filter((e) => !e.abstract);   // an abstract head is a substitution-group anchor, never in a file
+
+const XSD_DEFAULTS = XSD_FILES_WITH_DEFAULTS.flatMap((f) => scanXsd(f).defaults);
+
+// ── Oracle B ────────────────────────────────────────────────────────────────────────────────────
+
+const PACKAGES = ['dmn13', 'dmndi13', 'dc', 'di']
+  .map((f) => require(`dmn-moddle/resources/dmn/json/${f}.json`));
+
+/** Every descriptor, keyed `prefix:Name` — the identity our rows use. */
+const DESCRIPTORS = new Map(
+  PACKAGES.flatMap((pkg) => pkg.types.map((t) => [`${pkg.prefix}:${t.name}`, { ...t, prefix: pkg.prefix }])),
+);
+
+/**
+ * XSD element name → moddle type, by moddle's OWN naming rule rather than by a table of ours:
+ * a package declaring `xml.tagAlias === 'lowerCase'` (dmn13 does, dmndi13 does not) is read with the
+ * type name's first letter lowered. That is exactly the rule the parser applies, which is why a
+ * spelling the rule cannot reach is genuinely unreachable and not merely unlisted.
+ */
+const TAG_TO_TYPE = new Map();
+for (const pkg of PACKAGES) {
+  const lower = pkg.xml?.tagAlias === 'lowerCase';
+  for (const t of pkg.types) {
+    const tag = lower ? t.name[0].toLowerCase() + t.name.slice(1) : t.name;
+    TAG_TO_TYPE.set(`${pkg.prefix}|${tag}`, `${pkg.prefix}:${t.name}`);
+  }
+}
+const PREFIX_OF_XSD_FILE = { DMN13: 'dmn', DMNDI13: 'dmndi' };
+const resolveTag = (row) => TAG_TO_TYPE.get(`${PREFIX_OF_XSD_FILE[row.xsdFile]}|${row.xsdElement}`);
+
+/** Descriptor properties including everything inherited through `superClass`. */
+function propertiesOf(typeName, seen = new Set()) {
+  if (seen.has(typeName)) return [];
+  seen.add(typeName);
+  const d = DESCRIPTORS.get(typeName);
+  if (!d) return [];
+  const prefix = typeName.split(':')[0];
+  const inherited = (d.superClass ?? [])
+    .flatMap((s) => propertiesOf(s.includes(':') ? s : `${prefix}:${s}`, seen));
+  return [...inherited, ...(d.properties ?? []).map((p) => p.name)];
+}
+
+const HOWTO = 'see the row-writing guide at the top of scripts/dmn/import-scope.js';
+
+// ── F1 — element completeness (Oracle A) ────────────────────────────────────────────────────────
+
+describe('F1 — every non-abstract global element in the XSDs has exactly one row', () => {
+  test('no element is unlisted, no row is stale, no element is listed twice', () => {
+    const rows = new Map();
+    for (const row of DMN_ELEMENT_COVERAGE) {
+      const key = `${row.xsdFile}:${row.xsdElement}`;
+      rows.set(key, (rows.get(key) ?? 0) + 1);
+    }
+    const declared = new Set(XSD_ELEMENTS.map((e) => `${e.xsdFile}:${e.name}`));
+
+    // One flat list of instructions rather than three assertions: jest reports only the first
+    // failure, and a table can be short a row AND carry a stale one at the same time. Each line
+    // names the element and the action, so the failure is actionable without opening this file.
+    const problems = [
+      ...[...declared].filter((k) => !rows.has(k))
+        .map((k) => `add a row to scripts/dmn/import-scope.js for <${k.split(':')[1]}> (${k.split(':')[0]}.xsd) — ${HOWTO}`),
+      ...[...rows.keys()].filter((k) => !declared.has(k))
+        .map((k) => `remove the stale row for <${k.split(':')[1]}>: ${k.split(':')[0]}.xsd declares no such global element`),
+      ...[...rows].filter(([, n]) => n > 1)
+        .map(([k]) => `remove the duplicate row for <${k.split(':')[1]}> (${k.split(':')[0]}.xsd)`),
+    ];
+    expect(problems).toEqual([]);
+  });
+
+  test('the scan found the XSDs at all — a silent empty oracle would pass every check above', () => {
+    expect(XSD_ELEMENTS.length).toBeGreaterThan(20);
+    expect(XSD_ELEMENTS.some((e) => e.name === 'decision')).toBe(true);
+    expect(XSD_ELEMENTS.some((e) => e.name === 'DMNShape')).toBe(true);
+    // The abstract heads really are dropped, so the filter is doing work rather than matching
+    // nothing: `drgElement` is declared abstract="true" and must never earn a row.
+    expect(XSD_ELEMENTS.some((e) => e.name === 'drgElement')).toBe(false);
+  });
+
+  test('every row carries what its disposition obliges it to carry', () => {
+    const defects = [];
+    for (const row of DMN_ELEMENT_COVERAGE) {
+      const at = `<${row.xsdElement}>`;
+      if (!['mapped', 'reported', 'parser-blind'].includes(row.disposition)) {
+        defects.push(`${at}: unknown disposition ${JSON.stringify(row.disposition)}`);
+        continue;
+      }
+      if (row.disposition === 'mapped') {
+        if (!row.mapsTo || Object.keys(row.mapsTo).length === 0) {
+          defects.push(`${at}: 'mapped' needs a non-empty mapsTo naming the Decision-Core slots`);
+        }
+      } else {
+        if (!row.code) defects.push(`${at}: '${row.disposition}' needs a code`);
+        if (!row.reason?.trim()) defects.push(`${at}: '${row.disposition}' needs a non-empty reason`);
+      }
+      for (const code of [row.code, ...(row.unrepresented ?? []).map((u) => u.code)].filter(Boolean)) {
+        if (!IMPORT_CODES[code]) defects.push(`${at}: unknown code ${code} — add it to IMPORT_CODES`);
+      }
+      for (const u of row.unrepresented ?? []) {
+        if (!u.reason?.trim()) defects.push(`${at}.${u.property}: an unrepresented property needs a reason`);
+      }
+    }
+    expect(defects).toEqual([]);
+  });
+
+  test('every code has a title and a remedy a stranger can act on', () => {
+    const bad = Object.entries(IMPORT_CODES)
+      .filter(([, c]) => !c.title?.trim() || !c.remedy?.trim())
+      .map(([id]) => `${id} needs a non-empty title and remedy`);
+    expect(bad).toEqual([]);
+    expect(Object.keys(IMPORT_CODES)).toEqual(['IM01', 'IM02', 'IM03', 'IM04', 'IM05', 'IM06', 'IM07', 'IM08']);
+  });
+});
+
+// ── F1b — property completeness (Oracle B) ──────────────────────────────────────────────────────
+
+describe('F1b — every property of every mapped type is accounted for', () => {
+  const mapped = DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'mapped');
+
+  test('there are mapped rows to check', () => {
+    expect(mapped.length).toBeGreaterThan(5);
+  });
+
+  test.each(mapped.map((r) => [r.xsdElement, r]))(
+    '<%s>: every descriptor property is either mapped or named unrepresented', (_name, row) => {
+      const props = propertiesOf(row.moddleType);
+      expect(props.length).toBeGreaterThan(0);   // a typo'd moddleType would silently check nothing
+      const named = new Set([
+        ...Object.keys(row.mapsTo ?? {}),
+        ...(row.unrepresented ?? []).map((u) => u.property),
+        ...Object.keys(DMN_ELEMENT_BASE),
+      ]);
+      const unaccounted = props.filter((p) => !named.has(p))
+        .map((p) => `<${row.xsdElement}>.${p} has no slot in mapsTo and no unrepresented entry — ${HOWTO}`);
+      expect(unaccounted).toEqual([]);
+    });
+
+  test.each(mapped.map((r) => [r.xsdElement, r]))(
+    '<%s>: nothing is claimed that the descriptor does not have', (_name, row) => {
+      const props = new Set(propertiesOf(row.moddleType));
+      const phantom = [
+        ...Object.keys(row.mapsTo ?? {}),
+        ...(row.unrepresented ?? []).map((u) => u.property),
+      ].filter((p) => !props.has(p))
+        .map((p) => `<${row.xsdElement}> claims property ${p}, which dmn:${row.moddleType} does not declare`);
+      expect(phantom).toEqual([]);
+    });
+
+  /**
+   * The hoist is only legitimate while it is genuinely uniform. Two conditions, both checked:
+   * the property must be DECLARED on the shared base (not on some individual type that happened to
+   * be convenient), and every mapped type must actually inherit it. Either failing means the
+   * property belongs on rows, not in the base.
+   */
+  test('the hoisted base properties are genuinely inherited by every mapped type', () => {
+    const base = new Set(propertiesOf('dmn:DMNElement'));
+    const defects = [];
+    for (const p of Object.keys(DMN_ELEMENT_BASE)) {
+      if (!base.has(p)) defects.push(`${p} is not declared on dmn:DMNElement — it belongs on its rows`);
+      for (const row of mapped) {
+        if (!propertiesOf(row.moddleType).includes(p)) {
+          defects.push(`<${row.xsdElement}> does not inherit ${p} — the hoist is no longer uniform`);
+        }
+      }
+    }
+    expect(defects).toEqual([]);
+  });
+
+  test('every hoisted base property carries a known code and a reason', () => {
+    const bad = Object.entries(DMN_ELEMENT_BASE)
+      .filter(([, v]) => !IMPORT_CODES[v.code] || !v.reason?.trim())
+      .map(([p]) => `DMN_ELEMENT_BASE.${p} needs a known code and a non-empty reason`);
+    expect(bad).toEqual([]);
+  });
+});
+
+// ── F2 — the divergence between the oracles ─────────────────────────────────────────────────────
+
+describe('F2 — a row resolves against dmn-moddle exactly when it claims the parser can see it', () => {
+  test('mapped and reported rows resolve, and to the type the row names', () => {
+    const defects = [];
+    for (const row of DMN_ELEMENT_COVERAGE.filter((r) => r.disposition !== 'parser-blind')) {
+      const resolved = resolveTag(row);
+      if (!resolved) {
+        defects.push(`<${row.xsdElement}> is '${row.disposition}', but dmn-moddle cannot parse that `
+          + `element name at all — the disposition must become 'parser-blind' (IM08)`);
+      } else if (resolved !== row.moddleType) {
+        defects.push(`<${row.xsdElement}> names moddleType ${row.moddleType}, but dmn-moddle resolves `
+          + `that element to ${resolved}`);
+      }
+    }
+    expect(defects).toEqual([]);
+  });
+
+  /**
+   * The anti-staleness half, and the reason there are two oracles at all. The day a dmn-moddle
+   * release renames `OrganisationalUnit` to the XSD's `OrganizationUnit`, `resolveTag` starts
+   * succeeding and this goes red — forcing the disposition to change from `parser-blind` to a real
+   * one, instead of leaving a row that quietly understates what we could now read.
+   */
+  test('parser-blind rows do NOT resolve, and say by which mechanism', () => {
+    const blind = DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'parser-blind');
+    const defects = [];
+    for (const row of blind) {
+      const resolved = resolveTag(row);
+      if (resolved) {
+        defects.push(`<${row.xsdElement}> is 'parser-blind', but dmn-moddle now resolves it to `
+          + `${resolved} — the parser gained sight of it; change the disposition and give it a mapsTo `
+          + `or a code`);
+      }
+      if (row.moddleType !== null) defects.push(`<${row.xsdElement}>: a parser-blind row carries moddleType: null`);
+      if (row.code !== 'IM08') defects.push(`<${row.xsdElement}>: a parser-blind row carries code IM08`);
+      if (!BLIND_MECHANISMS.includes(row.blind?.mechanism)) {
+        defects.push(`<${row.xsdElement}>: blind.mechanism must be one of ${BLIND_MECHANISMS.join('|')}`);
+      }
+      // Judgment call 3 made checkable: `moddleType: null` alone cannot distinguish "moddle has no
+      // concept for this" from "moddle has the concept under a name the XSD never uses". The second
+      // must name the unreachable type, and that type must really exist — otherwise the row is
+      // asserting a spelling divergence that is not there.
+      if (row.blind?.moddleTypeIfReachable !== null
+          && !DESCRIPTORS.has(row.blind?.moddleTypeIfReachable)) {
+        defects.push(`<${row.xsdElement}>: blind.moddleTypeIfReachable names `
+          + `${row.blind?.moddleTypeIfReachable}, which is not a dmn-moddle type — use null if moddle `
+          + `has no concept for this element at all`);
+      }
+    }
+    expect(defects).toEqual([]);
+    expect(blind.length).toBeGreaterThan(0);   // the class is real; an empty set would pass vacuously
+  });
+});
+
+// ── F4 — the XSD-declared attribute defaults ────────────────────────────────────────────────────
+
+describe('F4 — the XSD defaults, and the two that dmn-moddle materialises', () => {
+  const key = (d) => `${d.xsdFile}:${d.ownerType}@${d.attr}`;
+
+  test('DMN_XSD_DEFAULTS covers exactly the declared defaults, with the declared values', () => {
+    const declared = new Map(XSD_DEFAULTS.map((d) => [key(d), d.xsdDefault]));
+    const listed = new Map(DMN_XSD_DEFAULTS.map((d) => [key(d), d.xsdDefault]));
+    const problems = [
+      ...[...declared].filter(([k]) => !listed.has(k))
+        .map(([k, v]) => `add a DMN_XSD_DEFAULTS row for ${k} (XSD default ${JSON.stringify(v)})`),
+      ...[...listed].filter(([k]) => !declared.has(k))
+        .map(([k]) => `remove the stale DMN_XSD_DEFAULTS row for ${k}: no XSD declares that default`),
+      ...[...listed].filter(([k, v]) => declared.has(k) && declared.get(k) !== v)
+        .map(([k, v]) => `${k}: row says ${JSON.stringify(v)}, the XSD says ${JSON.stringify(declared.get(k))}`),
+    ];
+    expect(problems).toEqual([]);
+    expect(declared.size).toBeGreaterThan(0);
+  });
+
+  /**
+   * The 2-of-9 divergence as a tested fact rather than a coincidence we depend on. dmn-moddle
+   * carries a descriptor `default` for `hitPolicy` and `textFormat` only — which is why moddle DROPS
+   * `hitPolicy="UNIQUE"` on write while keeping `preferredOrientation="Rule-as-Row"`, a difference
+   * `references/decision-core-schema.json` already had to record for the golden files. Every other
+   * XSD default is ours to apply or ignore deliberately.
+   */
+  test('exactly hitPolicy and textFormat carry a moddle descriptor default', () => {
+    const moddleOwner = (d) => (d.xsdFile === 'DMN13' ? `dmn:${d.ownerType.replace(/^t/, '')}` : `dmndi:${d.ownerType}`);
+    const mismatches = [];
+    for (const d of DMN_XSD_DEFAULTS) {
+      const descriptor = DESCRIPTORS.get(moddleOwner(d));
+      const prop = descriptor?.properties?.find((p) => p.name === d.attr);
+      const actually = prop?.default !== undefined;
+      if (actually !== d.moddleMaterialises) {
+        mismatches.push(`${key(d)}: row says moddleMaterialises ${d.moddleMaterialises}, dmn-moddle `
+          + `${actually ? 'does' : 'does not'} carry a descriptor default`);
+      }
+      if (actually && prop.default !== d.xsdDefault) {
+        mismatches.push(`${key(d)}: dmn-moddle's descriptor default ${JSON.stringify(prop.default)} `
+          + `disagrees with the XSD's ${JSON.stringify(d.xsdDefault)}`);
+      }
+    }
+    expect(mismatches).toEqual([]);
+    expect(DMN_XSD_DEFAULTS.filter((d) => d.moddleMaterialises).map((d) => d.attr).sort())
+      .toEqual(['hitPolicy', 'textFormat']);
+  });
+
+  test('a default we materialise must have somewhere to go', () => {
+    const bad = DMN_XSD_DEFAULTS.filter((d) => d.materialize && d.slot === null)
+      .map((d) => `${key(d)}: materialize: true with slot: null — there is no Decision-Core field to write it into`);
+    expect(bad).toEqual([]);
+  });
+});
+
+// ── The lookups ─────────────────────────────────────────────────────────────────────────────────
+
+describe('the lookups', () => {
+  test('coverageForElement answers by XSD element name', () => {
+    expect(coverageForElement('decision').disposition).toBe('mapped');
+    expect(coverageForElement('decisionService').disposition).toBe('reported');
+    expect(coverageForElement('tDecision')).toBeUndefined();
+  });
+
+  test('coverageForModdleType answers by moddle type, and never matches a parser-blind row', () => {
+    expect(coverageForModdleType('dmn:Decision').xsdElement).toBe('decision');
+    expect(coverageForModdleType('dmn:OrganisationalUnit')).toBeUndefined();
+    // The guard that makes that last line more than a fact about today: a parser-blind row's
+    // moddleType is null, and a caller passing null must not be handed the first such row.
+    expect(coverageForModdleType(null)).toBeUndefined();
+    expect(coverageForModdleType(undefined)).toBeUndefined();
+  });
+});
+
+// A fifth fence lands in Stage 3, once scripts/dmn/import.js exists:
+//   Object.keys(HANDLERS) must equal the set of `mapped` rows.
+// That is what stops the table and the importer from drifting apart. It is deliberately NOT stubbed
+// and NOT skipped here — a skipped test reads as coverage that exists, and it does not.
