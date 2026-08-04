@@ -39,6 +39,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checked on every pipeline run rather than only where a test happened to look. Message flows and
   associations are intentionally out of scope — DI05 and the geometry-contract tests already cover
   those.
+- **`scripts/dmn/roundtrip.test.js` + `tests/fixtures/dmn/roundtrip-all-fields.json` — the
+  round-trip fence, and the three claims it had to correct (dmn-xml-importer plan, Stage 4b/5).**
+  Stage 4's fences check what the importer does with a *foreign* file; this one checks the far side,
+  that our own output is re-readable and the representable subset is exact. The fixture instantiates
+  every property declared anywhere in `references/decision-core-schema.json` — six had no instance
+  in `discount-decision.json` (`$schemaVersion`, `expressionLanguage`, `usingProcess`,
+  `aggregation`, input `allowedValues`, output `defaultValue`) — and the completeness check
+  **derives** the required set from the schema, walking `$ref`/`oneOf`/`items` and asserting as a
+  premise that no other applicator keyword appears and that every object closes itself with
+  `additionalProperties: false`. That is the property on which this plan declined a DMN
+  field-authority table: a new schema property fails CI naming itself, demonstrated by adding
+  `Node.dummyNewField` and by adding a fifth `Node.type` enum member. Three claims the stage brief
+  made turned out to be false as written and are now pinned as findings rather than worked around:
+  `report.lossless` is **structurally unreachable** for our own output (the writer always emits a
+  `<dmndi:DMNDI>` tree → IM06, and it *generates* the `<variable>`/`<literalExpression>` ids the
+  importer then reports → IM05 — both stated in `import-scope.js`, both regenerated identically on
+  the next emit, so the claimable statement is "no finding outside those two classes" and that is
+  asserted positively); `xml₁ === xml₂` does **not** hold, because `buildDmnDiagrams` keys
+  `edgeCoords` in `dc.requirements` array order while the importer rebuilds that array grouped by
+  target, so the `<dmndi:DMNEdge>` children permute — the documents are byte-identical up to
+  `<dmndi:DMNDI>` and the fixed point is `xml₂ === xml₃`; and `$schemaVersion` does not survive at
+  all. Nothing was added to `canonicalizeDecisionCore` and the fixture was not trimmed. Also
+  surfaced and **not** fixed here: `readDecisionTable` reads a rule's `<description>` into
+  `DecisionRule.documentation`, a property the schema does not declare, so a foreign file carrying
+  one imports into a `dc` that fails our own schema gate — and `import-scope.js`'s `dmn:DecisionRule`
+  row claims that mapping in prose, which F1b never reads.
 - **`scripts/dmn/import.js` — DMN 1.3 XML → Decision-Core, and a structured report of what could
   not come with it (dmn-xml-importer plan, Stage 3).** `parseDmnXml` (async, the thin dmn-moddle
   wrapper, throws), `moddleToDecisionCore` (pure and synchronous, so a hand-built moddle tree is a
