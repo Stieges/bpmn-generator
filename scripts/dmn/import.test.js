@@ -198,6 +198,24 @@ describe('the suppression rule inside a reported subtree', () => {
     expect(inClause.report.unrepresented.filter((f) => f.path.endsWith('.typeRef'))).toEqual([]);
   });
 
+  test('a reported element nested in one of its OWN class reports once — the outer root counts '
+    + 'itself as seen', async () => {
+    // Measured before the fix: the reported root never added its own class to `seen`, so a
+    // same-class CHILD reported a second time while same-class SIBLINGS deduped correctly. The
+    // second line carried the parent row's prose attached to a component of it, which reads as a
+    // separate loss and is not one.
+    const nested = await report('<itemDefinition id="a" name="A"><itemComponent id="b" name="B"/></itemDefinition>');
+    expect(nested.unrepresented.filter((f) => f.xsdElement === 'itemDefinition').map((f) => f.path))
+      .toEqual(['definitions.itemDefinition[0]']);
+
+    const inContext = await report(
+      '<decision id="d1" name="D"><context id="c1"><contextEntry id="ce1">'
+      + '<context id="c2"><contextEntry id="ce2"><literalExpression><text>1</text></literalExpression></contextEntry></context>'
+      + '</contextEntry></context></decision>');
+    expect(inContext.unrepresented.filter((f) => f.xsdElement === 'context')).toHaveLength(1);
+    expect(inContext.unrepresented.filter((f) => f.xsdElement === 'contextEntry')).toHaveLength(1);
+  });
+
   test('every DMNDiagram is reported — a view is a fact, a shape is not', async () => {
     const r = await report(
       '<decision id="d1" name="D1"/><dmndi:DMNDI>'
@@ -209,6 +227,91 @@ describe('the suppression rule inside a reported subtree', () => {
     expect(r.unrepresented.filter((f) => f.xsdElement === 'DMNDiagram').map((f) => f.path))
       .toEqual(['definitions.dmnDI.diagrams[0]', 'definitions.dmnDI.diagrams[1]']);
     expect(r.unrepresented.filter((f) => f.xsdElement === 'DMNShape').length).toBe(1);
+  });
+});
+
+/**
+ * The seam that made C1 invisible: `detectFindings` raises element findings only for `reported`
+ * rows, and `decisionTable` / `literalExpression` / `functionDefinition` are all `mapped`. So a
+ * mapped expression class landing in a slot the converter has no branch for was seen by neither
+ * side — the walk stayed quiet because the row is mapped, the converter stayed quiet because it
+ * simply fell through. Only the converter knows which POSITIONS it reads, so only the converter can
+ * report this.
+ */
+describe('a mapped expression class in a position the converter does not read', () => {
+  test('a <decisionTable> as a BKM body is reported, not silently dropped', async () => {
+    const { dc, report: r } = await dmnToDecisionCore(doc(
+      '<businessKnowledgeModel id="b1" name="B"><encapsulatedLogic>'
+      + '<decisionTable id="t1"><output id="o1"/></decisionTable>'
+      + '</encapsulatedLogic></businessKnowledgeModel>'));
+    expect(dc.nodes[0].body).toBeUndefined();
+    expect(r.lossless).toBe(false);
+    expect(r.unrepresented.map(shape)).toContainEqual({
+      code: 'IM02', xsdElement: 'decisionTable',
+      path: 'definitions.drgElement[0].encapsulatedLogic.body',
+    });
+  });
+
+  test('a <functionDefinition> as decision logic is reported', async () => {
+    const { dc, report: r } = await dmnToDecisionCore(doc(
+      '<decision id="d1" name="D"><functionDefinition id="f1">'
+      + '<literalExpression id="l1"><text>1</text></literalExpression>'
+      + '</functionDefinition></decision>'));
+    expect(dc.nodes[0].expression).toBeUndefined();
+    expect(dc.nodes[0].decisionTable).toBeUndefined();
+    expect(r.unrepresented.map(shape)).toContainEqual({
+      code: 'IM02', xsdElement: 'functionDefinition', path: 'definitions.drgElement[0].decisionLogic',
+    });
+  });
+
+  test('a <functionDefinition> as a function body is reported', async () => {
+    const r = await report(
+      '<businessKnowledgeModel id="b1" name="B"><encapsulatedLogic>'
+      + '<functionDefinition id="f2"><literalExpression id="l1"><text>1</text></literalExpression></functionDefinition>'
+      + '</encapsulatedLogic></businessKnowledgeModel>');
+    expect(r.unrepresented.map(shape)).toContainEqual({
+      code: 'IM02', xsdElement: 'functionDefinition',
+      path: 'definitions.drgElement[0].encapsulatedLogic.body',
+    });
+  });
+
+  test('the control case still works — a `reported` class in the same slot reports once, from the '
+    + 'walk, and the converter does not double it', async () => {
+    const r = await report(
+      '<decision id="d1" name="D"><context id="c1">'
+      + '<contextEntry id="ce1"><literalExpression><text>1</text></literalExpression></contextEntry>'
+      + '</context></decision>');
+    expect(r.unrepresented.filter((f) => f.path === 'definitions.drgElement[0].decisionLogic'))
+      .toHaveLength(1);
+  });
+});
+
+describe('malformed source content the report must still name', () => {
+  test('a <decisionTable> with no output clause cannot be held and is reported, not emitted '
+    + 'half-built for our own schema gate to trip over', async () => {
+    const { dc, report: r } = await dmnToDecisionCore(doc(
+      '<decision id="d1" name="D"><decisionTable id="t1">'
+      + '<input id="i1"><inputExpression><text>v</text></inputExpression></input>'
+      + '</decisionTable></decision>'));
+    expect(dc.nodes[0].decisionTable).toBeUndefined();
+    expect(r.lossless).toBe(false);
+    expect(r.unrepresented.map(shape)).toContainEqual({
+      code: 'IM02', xsdElement: 'decisionTable', path: 'definitions.drgElement[0].decisionLogic',
+    });
+    expect(validateDecisionCoreSchema(dc).errors).toEqual([]);
+  });
+
+  test('a requirement with no required* child is reported rather than vanishing', async () => {
+    const { dc, report: r } = await dmnToDecisionCore(doc(
+      '<decision id="d1" name="D"><informationRequirement id="ir1"/></decision>'));
+    expect(dc.requirements ?? []).toEqual([]);
+    expect(r.lossless).toBe(false);
+    expect(r.unrepresented.map(shape)).toContainEqual({
+      code: 'IM03', xsdElement: 'informationRequirement',
+      path: 'definitions.drgElement[0].informationRequirement[0]',
+    });
+    // It carried an id the file authored — the finding has to say which one.
+    expect(r.unrepresented.find((f) => f.code === 'IM03').id).toBe('ir1');
   });
 });
 
@@ -407,6 +510,10 @@ describe('formatImportReport — the one rendering', () => {
     const text = formatImportReport(r, { file: 'a.dmn' });
     expect(text).toMatch(/a\.dmn/);
     expect(text).toMatch(/lossless/i);
+  });
+
+  test('a missing report renders rather than throwing — the CLI must be able to print anything', () => {
+    expect(formatImportReport(null)).toMatch(/no report/);
   });
 
   test('a lossy report names every code, its remedy and the paths', async () => {
