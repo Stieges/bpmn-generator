@@ -701,16 +701,71 @@ describe('F3 — the importer, run on a foreign file, reports exactly the `repor
    * The half set equality above cannot reach, because it filters to the reported universe first: a
    * finding under a code or an element name that appears nowhere in the table at all. Cheap, and it
    * is the check that keeps the filter from hiding something.
+   *
+   * The IM08 exemption this used to carry is gone: `warningToFinding` now claims an `xsdElement`
+   * only when the warning names one the table knows, so a synthesised finding is held to the same
+   * standard as any other.
    */
   test('every finding names a code and an element the table knows', () => {
     const strays = result.report.unrepresented.flatMap((f) => [
       ...(IMPORT_CODES[f.code] ? [] : [`${f.path}: code ${f.code} is not in IMPORT_CODES`]),
-      // A parser-blind finding is synthesised from a warning message, so its xsdElement is whatever
-      // the message named — including, legitimately, an attribute rather than an element.
-      ...(f.xsdElement === null || f.code === 'IM08' || coverageForElement(f.xsdElement) ? []
+      ...(f.xsdElement === null || coverageForElement(f.xsdElement) ? []
         : [`${f.path}: <${f.xsdElement}> has no row`]),
     ]);
     expect(strays).toEqual([]);
+  });
+
+  /**
+   * THE SECOND DIRECTION, CLOSED. The set equality above filters `actual` to elements whose row is
+   * `reported`, so a wrong code emitted by the CONVERTER on a `mapped` element never enters the set
+   * at all: a spurious `IM01 × <decision>` on every DRG element left all of F3 green. My Stage 4
+   * report claimed "the direction that mattered is the second one", and that overstated what was
+   * actually covered.
+   *
+   * So the whole report is pinned as a `{code × xsdElement}` set. Judgment call 2 stands — the
+   * granularity is still the pair, not the path and not the count, so nothing here moves when the
+   * fixture is reordered or when an instance is added to exercise something else. What it does move
+   * on is the fixture gaining a construct it did not carry, which is a deliberate act whose diff
+   * names itself, and on the importer emitting a pair nobody sanctioned, which is the point.
+   *
+   * Note `IM08 × (no element named)` sitting in the list as a first-class member rather than an
+   * absence: it is the `biodi:` attribute, whose warning names an attribute and therefore earns no
+   * `xsdElement` at all. A pin that silently dropped null-element findings would be the same class
+   * of blindness one field over.
+   */
+  test('the whole report emits exactly these code × element pairs, and no others', () => {
+    const pairs = [...new Set(result.report.unrepresented
+      .map((f) => `${f.code} × ${f.xsdElement ? `<${f.xsdElement}>` : '(no element named)'}`))].sort();
+    expect(pairs).toEqual([
+      'IM01 × <decisionService>',
+      'IM02 × <context>',
+      'IM02 × <contextEntry>',
+      'IM02 × <invocation>',
+      'IM02 × <list>',
+      'IM02 × <relation>',
+      'IM03 × <association>',
+      'IM03 × <elementCollection>',
+      'IM03 × <functionItem>',
+      'IM03 × <group>',
+      'IM03 × <import>',
+      'IM03 × <itemDefinition>',
+      'IM03 × <performanceIndicator>',
+      'IM03 × <textAnnotation>',
+      'IM04 × <decision>',
+      'IM05 × <definitions>',
+      'IM05 × <functionDefinition>',
+      'IM05 × <informationItem>',
+      'IM05 × <literalExpression>',
+      'IM06 × <DMNDI>',
+      'IM06 × <DMNDecisionServiceDividerLine>',
+      'IM06 × <DMNDiagram>',
+      'IM06 × <DMNEdge>',
+      'IM06 × <DMNLabel>',
+      'IM06 × <DMNShape>',
+      'IM06 × <DMNStyle>',
+      'IM08 × (no element named)',
+      'IM08 × <organizationUnit>',
+    ]);
   });
 
   /**
@@ -733,7 +788,10 @@ describe('F3 — the importer, run on a foreign file, reports exactly the `repor
   test('no property finding is raised inside a subtree already reported whole', () => {
     const inside = result.report.unrepresented
       .filter((f) => ['IM04', 'IM05'].includes(f.code))
-      .filter((f) => result.report.unrepresented.some((g) => g !== f
+      // `g.path != null` is load-bearing, not defensive: `warningToFinding` used to hard-code
+      // `path: 'definitions'`, a prefix of every path, so one parser warning made every IM05 in the
+      // document look like it sat inside a reported subtree. Measured — 16 spurious failures here.
+      .filter((f) => result.report.unrepresented.some((g) => g !== f && g.path != null
         && coverageForElement(g.xsdElement)?.disposition === 'reported'
         && f.path.startsWith(`${g.path}.`)))
       .map((f) => `${f.code} at ${f.path} sits inside the reported subtree that already declared it gone`);
@@ -868,7 +926,18 @@ describe('F6 — every mapped class, in every polymorphic slot it can occupy, is
       .filter(Boolean);
   }
 
-  /** moddle type → every MINIMAL-length containment route from `dmn:Definitions` to it. */
+  /**
+   * moddle type → every MINIMAL-length containment route from `dmn:Definitions` to it.
+   *
+   * KNOWN LIMIT, stated because it is one step from the `FunctionDefinition` case this fence was
+   * built around: `if (routes.has(to)) continue` keeps only the SHORTEST routes. A type reachable at
+   * length n through a dropped path and at length n+1 through a read one would keep only the first,
+   * and every case under it would then pass on the "everything below a drop is reported" arm —
+   * exactly the coverage the two-route `FunctionDefinition` case exists to preserve, lost one level
+   * deeper. Not live today (the discriminating-set pin below would go red if it became so, since the
+   * affected cases would silently move to pre-covered), and the fix if it ever is: keep every simple
+   * route, not every minimal one.
+   */
   const ROUTES = (() => {
     const routes = new Map([['dmn:Definitions', [[]]]]);
     let frontier = ['dmn:Definitions'];
@@ -963,6 +1032,26 @@ describe('F6 — every mapped class, in every polymorphic slot it can occupy, is
     slot.holds.map((row) => ({ slot, route, row }))));
 
   /**
+   * Cases whose class has a minimal instance. A missing one used to throw a `TypeError` out of the
+   * verdict loop, burying the sibling guard that reports it by name — a crash on top of a real
+   * signal. The guard names it; this runs the rest.
+   */
+  const RUNNABLE = CASES.filter((c) => MINIMAL_INSTANCES[c.row.moddleType]);
+
+  /**
+   * Does any finding declare this path gone — itself, or a subtree containing it?
+   *
+   * PATHLESS FINDINGS ARE SKIPPED, and that is not defensive tidiness. `warningToFinding` used to
+   * hard-code `path: 'definitions'` on every IM08 — a prefix of EVERY other path — so one parser
+   * warning satisfied this predicate for all 25 cases at once and the fence went green with C1
+   * fully restored. F6 was safe only by accident, because it calls the pure `moddleToDecisionCore`
+   * with no warnings; pointing it at `dmnToDecisionCore` would have disabled it permanently and
+   * silently. The synthesised finding now carries `path: null` and this skips it.
+   */
+  const covers = (report, slotPath) => report.unrepresented
+    .some((f) => f.path != null && (slotPath === f.path || slotPath.startsWith(`${f.path}.`)));
+
+  /**
    * The count the review's own enumeration is a check on. Pinned as the full list rather than a
    * number, so a slot appearing or vanishing says WHICH — a bare count would let one slot replace
    * another silently.
@@ -1000,39 +1089,64 @@ describe('F6 — every mapped class, in every polymorphic slot it can occupy, is
   });
 
   /**
-   * THE VACUOUS-PASS GUARD, and it is here because the vacuous pass actually happened. A first
-   * revision of `buildCase` built its wrappers from `propertiesOf(type).map((p) => p.name)` —
-   * `propertiesOf` already returns names, so the map produced `undefined`s, no wrapper ever got an
-   * `id`, every generated decision was dropped as invalid source (IM09), and every case therefore
-   * counted as "reported" because a finding sat above its slot. The fence was green and testing
-   * nothing; only the red-first run exposed it.
+   * THE VACUOUS-PASS GUARD, and it is here because the vacuous pass happened twice.
    *
-   * So: the SCAFFOLDING must import cleanly. A baseline tree — no instance in the slot at all — may
-   * legitimately report what the table says is unrepresentable, but it must never report that the
-   * source is broken or that an id could not be held, because the generator wrote those ids.
+   * A case is DISCRIMINATING when its baseline — the same tree with the slot empty — is NOT already
+   * covered by a finding. Only then does the with-instance verdict say anything about the instance.
+   * A case is PRE-COVERED when an ancestor drop already covers the slot without it: legitimate (that
+   * is what "under a `reported` row" means, and why those four slots are in the set at all — they
+   * start testing something the day their row is promoted to `mapped`), and worth exactly nothing
+   * today.
+   *
+   * An earlier revision guarded this with a CODE LIST — "no baseline finding coded IM07 or IM09" —
+   * which is an enumeration of the mechanism that bit me, not of the failure mode. It missed the
+   * general shape: ANY finding at a path shallow enough to cover a slot turns cases green, and one
+   * at `'definitions'` turns all 25 green at once. Both known instances are of that shape: wrappers
+   * built without ids (every decision dropped as IM09), and `warningToFinding`'s hard-coded
+   * `path: 'definitions'`. Pinning the discriminating SET catches both, and catches the next one
+   * without knowing its code.
+   *
+   * The naive form — "no baseline may be covered at all" — was measured and is too strong: 12 of the
+   * 25 are legitimately pre-covered. So the pin is the set, not its absence.
+   *
+   * WHICH MEANS F6'S REACH IS 10 OF 25 CASES, and this is the place that says so, because a fence
+   * whose reach is overstated is how the next reader over-trusts it. The 10 are the `drgElement`
+   * list (4), `<decision>`'s own logic slot (3), and a BKM's function body (3) — the last only
+   * because both minimal routes to `dmn:FunctionDefinition` are kept. The other 15 are placeholders
+   * that will start earning their keep the day a boxed-expression row is promoted.
    */
-  test('the generated scaffolding is well formed — a broken wrapper would make every case pass', () => {
-    const broken = [];
-    for (const { slot, route } of CASES) {
-      const { report } = moddleToDecisionCore(buildCase(route, slot, null).tree);
-      for (const f of report.unrepresented.filter((x) => ['IM07', 'IM09'].includes(x.code))) {
-        broken.push(`${slot.owner}.${slot.property}: the generated tree itself reports ${f.code} at `
-          + `${f.path} — the scaffolding is malformed, so every case under it passes for free`);
-      }
-    }
-    expect([...new Set(broken)]).toEqual([]);
+  test('the discriminating case set is exactly this — anything shallower makes cases pass for free', () => {
+    const discriminating = RUNNABLE
+      .filter(({ slot, route }) => !covers(moddleToDecisionCore(buildCase(route, slot, null).tree).report,
+        buildCase(route, slot, null).slotPath))
+      .map(({ slot, row }) => `${slot.owner}.${slot.property} <- <${row.xsdElement}>`);
+
+    expect(discriminating.sort()).toEqual([
+      'dmn:Decision.decisionLogic <- <decisionTable>',
+      'dmn:Decision.decisionLogic <- <functionDefinition>',
+      'dmn:Decision.decisionLogic <- <literalExpression>',
+      'dmn:Definitions.drgElement <- <businessKnowledgeModel>',
+      'dmn:Definitions.drgElement <- <decision>',
+      'dmn:Definitions.drgElement <- <inputData>',
+      'dmn:Definitions.drgElement <- <knowledgeSource>',
+      'dmn:FunctionDefinition.body <- <decisionTable>',
+      'dmn:FunctionDefinition.body <- <functionDefinition>',
+      'dmn:FunctionDefinition.body <- <literalExpression>',
+    ]);
+    // Read the failure in the right direction. SHRANK: something now covers a slot in the BASELINE
+    // that did not before — malformed scaffolding, or a finding carrying a path shallower than the
+    // thing it describes; the cases named are no longer testing anything. GREW: a new slot, route or
+    // mapped row arrived, which is the fence doing its job — extend the list.
   });
 
   test('no case is silent — every mapped class in every slot is either read or reported', () => {
     const silent = [];
-    for (const { slot, route, row } of CASES) {
+    for (const { slot, route, row } of RUNNABLE) {
       const withIt = buildCase(route, slot, row.moddleType);
       const without = buildCase(route, slot, null);
       const read = JSON.stringify(moddleToDecisionCore(withIt.tree).dc)
         !== JSON.stringify(moddleToDecisionCore(without.tree).dc);
-      const { report } = moddleToDecisionCore(withIt.tree);
-      const reported = report.unrepresented
-        .some((f) => withIt.slotPath === f.path || withIt.slotPath.startsWith(`${f.path}.`));
+      const reported = covers(moddleToDecisionCore(withIt.tree).report, withIt.slotPath);
       if (!read && !reported) {
         silent.push(`<${row.xsdElement}> at ${slot.owner}.${slot.property} (${withIt.slotPath}) is `
           + `neither read into Decision-Core nor named in the report — it is dropped in silence, `

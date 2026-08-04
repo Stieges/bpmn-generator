@@ -298,13 +298,19 @@
          one. That asymmetry is the <DMNDI> row's doctrine and is exercised here. -->
     <dmndi:DMNDiagram id="dd_overview" name="Overview"/>
     <!-- The style sits at <DMNDI> level, as a shared style, rather than locally on the shape it
-         paints. Both are XSD-legal; only this one survives the parser. dmn-moddle declares
-         di:DiagramElement.style with `isReference: true`, so it expects an IDREF where DI.xsd
+         paints. Both positions are XSD-legal; only this one survives the parser. dmn-moddle declares
+         di:DiagramElement.style with `isReference: true`, so it expects an IDREF where DI.xsd:33
          declares a contained element — a locally-owned <dmndi:DMNStyle> inside a <DMNShape> is
          rejected with `unrecognized element <dmndi:DMNStyle>` and reaches the report as IM08, not as
-         the IM06 the <DMNStyle> row promises. Measured, recorded in the Stage 4 report, and NOT
-         worked around here: the fixture's job is to be conformant, and this position is the one a
-         conformant file can use and have read. -->
+         the IM06 the <DMNStyle> row promises.
+
+         READ THAT AS A TABLE DEFECT, NOT ONLY A PARSER LIMITATION, because the two are told apart
+         by exactly one thing — which position this fixture happened to choose. Measured: move the
+         style into the <DMNShape> (still XSD-valid) and F3 goes red with `IM06 × <DMNStyle>` missing
+         and `IM08 × <DMNStyle>` extra. The row is accurate for a shared style and wrong for a local
+         one, and it says neither. Ledgered for the table's owner; NOT worked around here, because
+         the fixture's job is to be a conformant file and this is the position a conformant file can
+         use and have read. -->
     <dmndi:DMNStyle id="sty_decision" fontFamily="Arial" fontSize="12" fontBold="true"/>
   </dmndi:DMNDI>
 </definitions>
