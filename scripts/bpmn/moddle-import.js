@@ -49,6 +49,62 @@ const EVENT_DEF_MAP = {
 };
 
 /**
+ * Find a converted Logic-Core node by id ANYWHERE in a node tree, not only at the top level.
+ *
+ * The DI plane is FLAT: `buildDI` pushes a `<bpmndi:BPMNShape>` for a nested container's children
+ * into the same `<bpmndi:BPMNPlane>` as a top-level node's, so a DI read that walks the plane sees
+ * every shape at every depth — and then has to be able to reach the node the shape names. The
+ * previous `(pool.nodes || []).find(...)` could not: it looked only at depth 0, so a coloured node
+ * inside a subProcess or transaction came back with no `color` at all while the attribute sat in
+ * the XML. Shared by both importers (`import.js` imports it) because both had the identical
+ * top-level-only lookup and a second copy is what let the first one go unnoticed.
+ *
+ * @param {Array<object>|undefined} nodes
+ * @param {string} id
+ * @returns {object|undefined}
+ */
+export function findNodeDeep(nodes, id) {
+  for (const n of nodes || []) {
+    if (n.id === id) return n;
+    const hit = findNodeDeep(n.nodes, id);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/**
+ * A `<bpmn:textAnnotation>` or `<bpmn:group>` element → its Logic-Core node, or `null` for
+ * anything else in an `artifacts` list (an Association, which is read separately).
+ *
+ * Shared by the process-level artifact walk and the CONTAINER-level one, and that sharing is the
+ * point: bpmn-moddle parks an Artifact in `artifacts`, never in `flowElements`, at every level. The
+ * process-level walk was added when annotations and groups turned out to be dropped on import; the
+ * container-level one was not, so the identical defect stayed alive one level down — a
+ * `textAnnotation` inside a subProcess was written to the XML and never read back. One function
+ * now, so the next level cannot diverge from this one.
+ *
+ * @param {object} el bpmn-moddle element from an `artifacts` list
+ * @returns {object|null}
+ */
+function artifactFromElement(el) {
+  const type = shortType(el.$type);
+  if (type !== 'textAnnotation' && type !== 'group') return null;
+
+  // Logic-Core keeps every label in `name`; BPMN splits it per artifact class.
+  // The fallback reads $attrs because `name` is not in the Artifact descriptor:
+  // moddle cannot map it onto the element and parks it there instead — the very
+  // behaviour that let the old, invalid output pass unnoticed. Files written
+  // before the fix are recovered through exactly that channel.
+  let name = el.name || el.$attrs?.name || '';
+  if (type === 'textAnnotation') name = el.text || name;
+  if (type === 'group') name = el.categoryValueRef?.value || name;
+
+  const node = { id: el.id, type, name };
+  if (el.documentation?.[0]?.text) node.documentation = el.documentation[0].text;
+  return node;
+}
+
+/**
  * Parse BPMN XML using bpmn-moddle.
  * @param {string} xml - BPMN 2.0 XML string
  * @returns {Promise<{rootElement: object, warnings: string[]}>}
@@ -169,7 +225,7 @@ function moddleToLogicCore(definitions) {
         const biocFill = diElement.fill ?? diElement.$attrs?.['bioc:fill'];
         if (bpmnElement && (biocStroke || biocFill)) {
           for (const pool of pools) {
-            const node = (pool.nodes || []).find(n => n.id === bpmnElement);
+            const node = findNodeDeep(pool.nodes, bpmnElement);
             if (node) {
               node.color = {};
               if (biocStroke) node.color.stroke = biocStroke;
@@ -342,17 +398,28 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
 
     // SubProcess content — read whether or not the shape is expanded, and
     // recursively, so a subprocess inside a subprocess keeps its own children.
-    if ((type === 'subProcess' || type === 'transaction') && el.flowElements?.length) {
-      const subFlowNodes = el.flowElements.filter(c => flowNodeTags.has(shortType(c.$type)));
-      const subSeqFlows = el.flowElements.filter(c => c.$type === 'bpmn:SequenceFlow');
+    if (type === 'subProcess' || type === 'transaction') {
+      // The container's own artifacts, read from `artifacts` and NOT from `flowElements` — the
+      // same split bpmn-moddle applies at process level. Appended after the flow-node children so
+      // the order matches what `buildFlowNode` writes (flow elements, then artifacts).
+      const subArtifacts = (el.artifacts || []).map(artifactFromElement).filter(Boolean);
+
+      const subFlowNodes = (el.flowElements || []).filter(c => flowNodeTags.has(shortType(c.$type)));
+      const subSeqFlows = (el.flowElements || []).filter(c => c.$type === 'bpmn:SequenceFlow');
+      if (subFlowNodes.length > 0 || subArtifacts.length > 0) {
+        node.nodes = [...subFlowNodes.map(nodeFromElement), ...subArtifacts];
+      }
       if (subFlowNodes.length > 0) {
-        node.nodes = subFlowNodes.map(nodeFromElement);
         node.edges = subSeqFlows.map(sf => {
           const se = { id: sf.id, source: sf.sourceRef?.id || sf.sourceRef, target: sf.targetRef?.id || sf.targetRef };
           if (sf.name) se.label = sf.name;
           return se;
         });
       }
+      // Outside the content gate on purpose. `isExpanded` is a DI fact about the shape, not about
+      // the content — the same reason `expandedIds` exists at all instead of inferring open-vs-
+      // collapsed from `flowElements`. Reading it inside the gate re-introduced that inference by
+      // the back door: a container the author marked expanded but left empty came back collapsed.
       if (expandedIds.has(el.id)) node.isExpanded = true;
     }
 
@@ -375,21 +442,9 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
   // above never sees them. Skipping this dropped every annotation and group on
   // import and left their associations pointing at ids that no longer existed.
   for (const el of proc.artifacts || []) {
-    const type = shortType(el.$type);
-    if (type !== 'textAnnotation' && type !== 'group') continue;
-
-    // Logic-Core keeps every label in `name`; BPMN splits it per artifact class.
-    // The fallback reads $attrs because `name` is not in the Artifact descriptor:
-    // moddle cannot map it onto the element and parks it there instead — the very
-    // behaviour that let the old, invalid output pass unnoticed. Files written
-    // before the fix are recovered through exactly that channel.
-    let name = el.name || el.$attrs?.name || '';
-    if (type === 'textAnnotation') name = el.text || name;
-    if (type === 'group') name = el.categoryValueRef?.value || name;
-
-    const node = { id: el.id, type, name };
+    const node = artifactFromElement(el);
+    if (!node) continue;
     if (nodeLaneMap[node.id]) node.lane = nodeLaneMap[node.id];
-    if (el.documentation?.[0]?.text) node.documentation = el.documentation[0].text;
     nodes.push(node);
   }
 
