@@ -71,12 +71,26 @@ function scanXsd(xsdFile) {
 }
 
 /**
- * Two of the four, and the reason is reachability rather than convenience: `DC.xsd` and `DI.xsd`
- * declare global elements (`Point`, `Bounds`, `Style`, …), but nothing in DMN13 or DMNDI13
- * substitutes for them — a conformant `.dmn` reaches DC and DI types only through LOCAL elements
- * inside a DMNDI shape (`<Bounds>`, `<waypoint>`, `<Size>`). So no `.dmn` document can contain one
- * as an element in its own right, and a row for it would describe a file we cannot be handed. The
- * defaults scan below reads all four regardless, because a default is a fact about an attribute
+ * Two of the four, and the reason is containment — NOT unreachability. Getting this justification
+ * right matters more than it looks: an earlier draft of this comment claimed no conformant `.dmn`
+ * can contain a DC or DI global element at all, and that was simply untrue about the world, which is
+ * the exact failure mode this file's preamble warns about.
+ *
+ * Measured against both XSDs: of the five global elements DC and DI declare, exactly two are
+ * reachable in a conformant document, and by `ref=` to the GLOBAL element rather than by a local
+ * declaration — `<xsd:element ref="dc:Bounds"/>` inside `di:Shape` (DI.xsd:74) and
+ * `<xsd:element ref="di:Style"/>` inside `di:DiagramElement` (DI.xsd:33), both of which
+ * `dmndi:DMNShape` and `dmndi:DMNEdge` extend. A real `.dmn` therefore does contain
+ * `<dc:Bounds x=… y=…/>` in its DI, and `<dmndi:DMNStyle>` substitutes for the `di:Style` ref. The
+ * other three (`Color`, `Point`, `Dimension`) appear only as the TYPE of a local element
+ * (`<waypoint>`, `<Size>`, `<FillColor>`), never as elements in their own right.
+ *
+ * They need no rows anyway, for the reason that actually applies: their only containers —
+ * `<DMNShape>`, `<DMNEdge>`, `<DMNDiagram>` — are `reported` (IM06), so their content is dropped
+ * with them. Same rule that keeps `dmn:Binding` out: a construct behind a reported one is covered by
+ * that one. `<DMNStyle>` already has a row of its own.
+ *
+ * The defaults scan below reads all four regardless, because a default is a fact about an attribute
  * wherever its owner is used.
  */
 const XSD_FILES_WITH_ELEMENTS = ['DMN13', 'DMNDI13'];
@@ -132,6 +146,27 @@ function propertyDescriptorsOf(typeName, seen = new Set()) {
 }
 
 const propertiesOf = (typeName) => propertyDescriptorsOf(typeName).map((p) => p.name);
+
+/** The type itself plus everything it inherits from, transitively. */
+function ancestryOf(typeName, seen = new Set()) {
+  if (seen.has(typeName) || !DESCRIPTORS.has(typeName)) return [...seen];
+  seen.add(typeName);
+  const prefix = typeName.split(':')[0];
+  for (const s of DESCRIPTORS.get(typeName).superClass ?? []) ancestryOf(qualify(s, prefix), seen);
+  return [...seen];
+}
+
+/**
+ * `DMN_ELEMENT_BASE` is a statement about what `tDMNElement` contributes, so only a type that
+ * actually inherits it may draw on that statement. Three of the nested types
+ * (`dmn:DMNElementReference`, `dmn:RuleAnnotation`, `dmn:RuleAnnotationClause`) do not extend
+ * `tDMNElement` at all — DMN gives them no id, no label, no extension points — and handing them the
+ * hoist's free pass would excuse a property the hoist says nothing about. Vacuous today, since none
+ * of the three declares one of those names; it stops being vacuous the moment a dmn-moddle release
+ * gives one of them its own `label`.
+ */
+const inheritsBase = (typeName) => ancestryOf(typeName).includes('dmn:DMNElement');
+const baseCoverageFor = (typeName) => (inheritsBase(typeName) ? Object.keys(DMN_ELEMENT_BASE) : []);
 
 /**
  * The types a mapped row's own properties lead to, that have no row of their own — `dmn:InputClause`
@@ -270,7 +305,7 @@ describe('F1b — every property of every mapped type is accounted for', () => {
       const named = new Set([
         ...Object.keys(row.mapsTo ?? {}),
         ...(row.unrepresented ?? []).map((u) => u.property),
-        ...Object.keys(DMN_ELEMENT_BASE),
+        ...baseCoverageFor(row.moddleType),
       ]);
       const unaccounted = props.filter((p) => !named.has(p))
         .map((p) => `<${row.xsdElement}>.${p} has no slot in mapsTo and no unrepresented entry — ${HOWTO}`);
@@ -291,21 +326,31 @@ describe('F1b — every property of every mapped type is accounted for', () => {
   /**
    * The hoist is only legitimate while it is genuinely uniform. Two conditions, both checked:
    * the property must be DECLARED on the shared base (not on some individual type that happened to
-   * be convenient), and every mapped type must actually inherit it. Either failing means the
-   * property belongs on rows, not in the base.
+   * be convenient), and every type DRAWING on the hoist must actually inherit it. Either failing
+   * means the property belongs on the rows, not in the base.
+   *
+   * The consumers are the mapped rows plus the nested entries that extend `tDMNElement` — and it is
+   * `baseCoverageFor` that decides who those are, so the same predicate gates the free pass and this
+   * assertion. A nested type outside `tDMNElement` (`dmn:DMNElementReference`, `dmn:RuleAnnotation`,
+   * `dmn:RuleAnnotationClause`) neither draws on the hoist nor is measured against it.
    */
-  test('the hoisted base properties are genuinely inherited by every mapped type', () => {
+  test('the hoisted base properties are genuinely inherited by everything that draws on them', () => {
     const base = new Set(propertiesOf('dmn:DMNElement'));
+    const consumers = [
+      ...mapped.map((r) => [`<${r.xsdElement}>`, r.moddleType]),
+      ...DMN_NESTED_TYPE_COVERAGE.map((e) => [e.moddleType, e.moddleType]),
+    ].filter(([, t]) => baseCoverageFor(t).length > 0);
     const defects = [];
     for (const p of Object.keys(DMN_ELEMENT_BASE)) {
       if (!base.has(p)) defects.push(`${p} is not declared on dmn:DMNElement — it belongs on its rows`);
-      for (const row of mapped) {
-        if (!propertiesOf(row.moddleType).includes(p)) {
-          defects.push(`<${row.xsdElement}> does not inherit ${p} — the hoist is no longer uniform`);
+      for (const [label, type] of consumers) {
+        if (!propertiesOf(type).includes(p)) {
+          defects.push(`${label} does not inherit ${p} — the hoist is no longer uniform`);
         }
       }
     }
     expect(defects).toEqual([]);
+    expect(consumers.length).toBeGreaterThan(mapped.length);   // the nested half really is included
   });
 
   // ── the nested half: types a mapped row leads to that have no row of their own ───────────────
@@ -347,7 +392,7 @@ describe('F1b — every property of every mapped type is accounted for', () => {
         ...Object.keys(entry.mapsTo ?? {}),
         ...(entry.unrepresented ?? []).map((u) => u.property),
       ];
-      const named = new Set([...claimed, ...Object.keys(DMN_ELEMENT_BASE)]);
+      const named = new Set([...claimed, ...baseCoverageFor(entry.moddleType)]);
       expect([
         ...props.filter((p) => !named.has(p))
           .map((p) => `${entry.moddleType}.${p} has no slot in mapsTo and no unrepresented entry — ${HOWTO}`),
