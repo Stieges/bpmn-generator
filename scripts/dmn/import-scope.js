@@ -62,6 +62,13 @@
  *                     (property → slot) and `unrepresented[]` for every descriptor property that
  *                     has no slot. Between them they must account for EVERY property of the
  *                     descriptor, inherited ones included — that is fence F1b.
+ *   mapsTo        Its KEYS are load-bearing: each must be a real property of the row's descriptor
+ *                 (F1b rejects an invented one), the set of them is what Stage 3's handler set is
+ *                 derived from, and the fence follows them into the types behind them
+ *                 (`DMN_NESTED_TYPE_COVERAGE`). Its VALUES are prose for humans and are never
+ *                 parsed — a fence that read them would be restating our own text as if it were
+ *                 evidence, which is the failure this stage exists to prevent. So a value may be
+ *                 rewritten freely; a key may not.
  *     `reported`      dmn-moddle surfaces it, Decision-Core cannot hold it, the importer emits a
  *                     finding. Carries `code` + `reason`.
  *     `parser-blind`  dmn-moddle cannot surface it; the only evidence is `warnings[]`. Carries
@@ -182,6 +189,10 @@ export const IMPORT_CODES = {
  * fate genuinely varies (`description` becomes `Node.documentation` on a DRG element, has nowhere
  * to go on a requirement or a decision table; an expression's `id` is not read at all), and
  * hoisting a property whose answer differs per type would state something false.
+ *
+ * The live proof that "a row may name one itself, and then the row wins" is not hypothetical:
+ * `dmn:InputClause` maps `label` (Decision-Core gives an input column a label slot) while its
+ * sibling `dmn:OutputClause`, which has `name` instead, drops it with everything else here.
  */
 export const DMN_ELEMENT_BASE = {
   label: {
@@ -626,6 +637,124 @@ export const DMN_ELEMENT_COVERAGE = [
 ];
 
 /**
+ * The types a mapped row's properties lead to that have no global element of their own — the decision
+ * table's clauses and rules, and the `<requiredDecision>`-style pointers.
+ *
+ * Why a separate export rather than more rows (judgment call, recorded): the row set is keyed by
+ * what a conformant file may WRITE as an element, and F1's set equality against the XSDs is what
+ * makes this table impossible to quietly outgrow. `dmn:InputClause` is not a global element; giving
+ * it a row would mean either weakening that equality to a subset test or inventing an `xsdElement`
+ * value no file contains. Keeping it here costs one extra export and keeps both authorities exact.
+ *
+ * Why keyed by moddle type rather than nested under the owning row: `dmn:DMNElementReference` is
+ * reached from eight different properties across four rows, and `dmn:UnaryTests` from three. Copies
+ * drift. `reachedFrom` gives back the navigation a nested shape would have provided — and it is
+ * measured by the fence against the actual traversal, so it cannot describe an older graph.
+ *
+ * Entries are `{ moddleType, reachedFrom, mapsTo?, unrepresented? }` and obey the same accounting
+ * rule as a mapped row: between `mapsTo`, `unrepresented` and `DMN_ELEMENT_BASE`, every descriptor
+ * property must be named.
+ */
+export const DMN_NESTED_TYPE_COVERAGE = [
+  {
+    moddleType: 'dmn:DMNElementReference',
+    reachedFrom: [
+      '<authorityRequirement>.requiredAuthority', '<authorityRequirement>.requiredDecision',
+      '<authorityRequirement>.requiredInput', '<decision>.usingProcess', '<decision>.usingTask',
+      '<informationRequirement>.requiredDecision', '<informationRequirement>.requiredInput',
+      '<knowledgeRequirement>.requiredKnowledge',
+    ],
+    mapsTo: {
+      href: 'the id it points at — Requirement.source, or an entry in Node.usingTask[] / '
+        + 'Node.usingProcess[]. The pointer itself has no identity to keep: what it names is '
+        + 'recorded by whatever contains it, and giving the mechanism a second slot would give the '
+        + 'importer two places to claim one fact. An href reaching INTO another document '
+        + '(`file.dmn#id`) is a different matter and reports through the <import> row, since '
+        + 'without the import there is nothing for it to resolve against',
+    },
+  },
+  {
+    moddleType: 'dmn:InputClause',
+    reachedFrom: ['<decisionTable>.input'],
+    mapsTo: {
+      id: 'InputClause.id',
+      // The live exception to DMN_ELEMENT_BASE's hoist, and the reason the hoist is a default rather
+      // than a ceiling: Decision-Core gives an input clause a `label` slot, so here `label` is read.
+      // Its sibling OutputClause has `name` instead and drops its label with everything else.
+      label: 'InputClause.label — the column header',
+      inputExpression: 'InputClause.expression and InputClause.typeRef, from the literal '
+        + 'expression\'s text and typeRef',
+      inputValues: 'InputClause.allowedValues — see dmn:UnaryTests for what the cell text loses',
+    },
+    unrepresented: [
+      { property: 'description', code: 'IM05',
+        reason: 'A Decision-Core InputClause is {id, label, expression, typeRef, allowedValues}; '
+          + 'documentation belongs to the decision, not to a column of its table.' },
+    ],
+  },
+  {
+    moddleType: 'dmn:OutputClause',
+    reachedFrom: ['<decisionTable>.output'],
+    mapsTo: {
+      id: 'OutputClause.id',
+      name: 'OutputClause.name — the column header, which on an output clause is @name and not @label',
+      typeRef: 'OutputClause.typeRef',
+      outputValues: 'OutputClause.allowedValues',
+      defaultOutputEntry: 'OutputClause.defaultValue, from the literal expression\'s text',
+    },
+    unrepresented: [
+      { property: 'description', code: 'IM05', reason: 'As on an input clause: no documentation slot.' },
+    ],
+  },
+  {
+    moddleType: 'dmn:RuleAnnotationClause',
+    reachedFrom: ['<decisionTable>.annotation'],
+    mapsTo: { name: 'DecisionTable.annotations[] — the annotation COLUMN header' },
+    // No id, and deliberately so in the spec: tRuleAnnotationClause is one of the few DMN types that
+    // does not extend tDMNElement, which is why this entry has no base properties to account for.
+  },
+  {
+    moddleType: 'dmn:DecisionRule',
+    reachedFrom: ['<decisionTable>.rule'],
+    mapsTo: {
+      id: 'DecisionRule.id',
+      description: 'DecisionRule.documentation — a rule is the one part of a table Decision-Core '
+        + 'does let you document',
+      inputEntry: 'DecisionRule.when[] — see dmn:UnaryTests',
+      outputEntry: 'DecisionRule.then[] — see the <literalExpression> row',
+      annotationEntry: 'DecisionRule.annotations[] — see dmn:RuleAnnotation',
+    },
+  },
+  {
+    moddleType: 'dmn:UnaryTests',
+    reachedFrom: [
+      'dmn:DecisionRule.inputEntry', 'dmn:InputClause.inputValues', 'dmn:OutputClause.outputValues',
+    ],
+    mapsTo: {
+      text: 'the cell text, into DecisionRule.when[], InputClause.allowedValues or '
+        + 'OutputClause.allowedValues',
+    },
+    unrepresented: [
+      { property: 'id', code: 'IM05',
+        reason: 'Every slot above is a bare string; a rule cell has no identity in Decision-Core and '
+          + 'the writer emits no id for one.' },
+      { property: 'description', code: 'IM05', reason: 'As `id` — the slot is a string.' },
+      { property: 'typeRef', code: 'IM05', reason: 'As `id` — the slot is a string.' },
+      { property: 'expressionLanguage', code: 'IM05',
+        reason: 'The per-cell language override. This is the same loss as on <literalExpression> but '
+          + 'multiplied by every cell of every table, and it is the one drop in this file that '
+          + 'changes MEANING rather than only losing detail: the text survives and the language it '
+          + 'must be read in does not. Decision-Core carries one language for the whole document.' },
+    ],
+  },
+  {
+    moddleType: 'dmn:RuleAnnotation',
+    reachedFrom: ['dmn:DecisionRule.annotationEntry'],
+    mapsTo: { text: 'DecisionRule.annotations[] — the per-rule annotation cell text' },
+  },
+];
+
+/**
  * Every `default="…"` the four XSDs declare on an attribute, and what the importer does about it.
  *
  * Why this is a table and not a footnote: an XSD default means "absent has this meaning", so an
@@ -703,9 +832,17 @@ export const DMN_XSD_DEFAULTS = [
   },
 ];
 
-/** The row for an XSD element name, or undefined when no such global element is declared. */
-export function coverageForElement(xsdElement) {
-  return DMN_ELEMENT_COVERAGE.find((row) => row.xsdElement === xsdElement);
+/**
+ * The row for an XSD element name, or undefined when no such global element is declared.
+ *
+ * `xsdFile` is optional but is half the primary key, and passing it is the correct habit: the names
+ * alone are unique only because DMN13 is camelCase and DMNDI13 PascalCase, which neither spec
+ * promises to keep. The fence asserts that uniqueness, so the one-argument form cannot silently
+ * start returning the wrong row — but a caller that knows the file should say so.
+ */
+export function coverageForElement(xsdElement, xsdFile) {
+  return DMN_ELEMENT_COVERAGE.find((row) => row.xsdElement === xsdElement
+    && (xsdFile === undefined || row.xsdFile === xsdFile));
 }
 
 /**

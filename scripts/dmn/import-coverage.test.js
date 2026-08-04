@@ -5,8 +5,8 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 import {
-  DMN_ELEMENT_COVERAGE, DMN_XSD_DEFAULTS, DMN_ELEMENT_BASE, IMPORT_CODES, BLIND_MECHANISMS,
-  coverageForElement, coverageForModdleType,
+  DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS, DMN_ELEMENT_BASE,
+  IMPORT_CODES, BLIND_MECHANISMS, coverageForElement, coverageForModdleType,
 } from './import-scope.js';
 
 /**
@@ -70,6 +70,15 @@ function scanXsd(xsdFile) {
   return { globalElements, defaults };
 }
 
+/**
+ * Two of the four, and the reason is reachability rather than convenience: `DC.xsd` and `DI.xsd`
+ * declare global elements (`Point`, `Bounds`, `Style`, …), but nothing in DMN13 or DMNDI13
+ * substitutes for them — a conformant `.dmn` reaches DC and DI types only through LOCAL elements
+ * inside a DMNDI shape (`<Bounds>`, `<waypoint>`, `<Size>`). So no `.dmn` document can contain one
+ * as an element in its own right, and a row for it would describe a file we cannot be handed. The
+ * defaults scan below reads all four regardless, because a default is a fact about an attribute
+ * wherever its owner is used.
+ */
 const XSD_FILES_WITH_ELEMENTS = ['DMN13', 'DMNDI13'];
 // F4 reads all four: DC.xsd and DI.xsd declare no defaults today, and the fence should say so by
 // looking rather than by our leaving them out.
@@ -108,16 +117,70 @@ for (const pkg of PACKAGES) {
 const PREFIX_OF_XSD_FILE = { DMN13: 'dmn', DMNDI13: 'dmndi' };
 const resolveTag = (row) => TAG_TO_TYPE.get(`${PREFIX_OF_XSD_FILE[row.xsdFile]}|${row.xsdElement}`);
 
-/** Descriptor properties including everything inherited through `superClass`. */
-function propertiesOf(typeName, seen = new Set()) {
+/** A moddle `superClass` / property `type` may be written unprefixed, meaning "same package". */
+const qualify = (name, prefix) => (name.includes(':') ? name : `${prefix}:${name}`);
+
+/** Descriptor property objects, including everything inherited through `superClass`. */
+function propertyDescriptorsOf(typeName, seen = new Set()) {
   if (seen.has(typeName)) return [];
   seen.add(typeName);
   const d = DESCRIPTORS.get(typeName);
   if (!d) return [];
   const prefix = typeName.split(':')[0];
-  const inherited = (d.superClass ?? [])
-    .flatMap((s) => propertiesOf(s.includes(':') ? s : `${prefix}:${s}`, seen));
-  return [...inherited, ...(d.properties ?? []).map((p) => p.name)];
+  const inherited = (d.superClass ?? []).flatMap((s) => propertyDescriptorsOf(qualify(s, prefix), seen));
+  return [...inherited, ...(d.properties ?? [])];
+}
+
+const propertiesOf = (typeName) => propertyDescriptorsOf(typeName).map((p) => p.name);
+
+/**
+ * The types a mapped row's own properties lead to, that have no row of their own — `dmn:InputClause`
+ * behind `<decisionTable>.input`, `dmn:UnaryTests` two steps behind it, and so on. Without this,
+ * F1b fences the twelve top-level types and stops: `UnaryTests.expressionLanguage` would be dropped
+ * on every rule cell of every imported table with no fence noticing, while the identical drop on
+ * `LiteralExpression` is listed with a reason.
+ *
+ * The link between a property and the type behind it comes from Oracle B's own `type` field, NOT
+ * from reading our prose. `mapsTo`'s KEYS are property names and are machine-read; its VALUES are
+ * sentences for humans, and deriving a type by regexing them would restate the oracle inside the
+ * fence — the exact failure this stage exists to prevent.
+ *
+ * Traversal follows `mapsTo` keys only, never `unrepresented` ones: a property already declared
+ * dropped takes its subtree with it, so `LiteralExpression.importedValues` does not drag
+ * `dmn:ImportedValues` in to be documented for a path the importer never walks. Rows and abstract
+ * heads terminate the walk — a row is fenced by F1b already, and an abstract head's properties are
+ * checked on each concrete type that inherits them.
+ */
+function nestedClosure() {
+  const rowTypes = new Set(DMN_ELEMENT_COVERAGE.map((r) => r.moddleType).filter(Boolean));
+  const reached = new Map();          // moddle type → Set of the paths that reach it
+  const queue = [];
+
+  const follow = (label, typeName, mapsTo) => {
+    const byName = new Map(propertyDescriptorsOf(typeName).map((p) => [p.name, p]));
+    for (const key of Object.keys(mapsTo ?? {})) {
+      const target = byName.get(key)?.type;
+      if (!target) continue;                                   // a string/boolean-valued property
+      const qualified = qualify(target, typeName.split(':')[0]);
+      const d = DESCRIPTORS.get(qualified);
+      if (!d || d.isAbstract || rowTypes.has(qualified)) continue;
+      queue.push([qualified, `${label}.${key}`]);
+    }
+  };
+
+  for (const row of DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'mapped')) {
+    follow(`<${row.xsdElement}>`, row.moddleType, row.mapsTo);
+  }
+  while (queue.length) {
+    const [typeName, from] = queue.shift();
+    if (!reached.has(typeName)) reached.set(typeName, new Set());
+    if (reached.get(typeName).has(from)) continue;
+    reached.get(typeName).add(from);
+    // An unlisted type contributes no further reach — which is correct rather than a shortcut: the
+    // fence below names it as missing, and only once it has a mapsTo is there anything to follow.
+    follow(typeName, typeName, DMN_NESTED_TYPE_COVERAGE.find((e) => e.moddleType === typeName)?.mapsTo);
+  }
+  return reached;
 }
 
 const HOWTO = 'see the row-writing guide at the top of scripts/dmn/import-scope.js';
@@ -245,6 +308,72 @@ describe('F1b — every property of every mapped type is accounted for', () => {
     expect(defects).toEqual([]);
   });
 
+  // ── the nested half: types a mapped row leads to that have no row of their own ───────────────
+
+  const REACHED = nestedClosure();
+  const nestedEntry = (t) => DMN_NESTED_TYPE_COVERAGE.find((e) => e.moddleType === t);
+
+  test('every nested type a mapped row leads to has exactly one entry, and none is stale', () => {
+    const listed = new Map();
+    for (const e of DMN_NESTED_TYPE_COVERAGE) listed.set(e.moddleType, (listed.get(e.moddleType) ?? 0) + 1);
+    const problems = [
+      ...[...REACHED.keys()].filter((t) => !listed.has(t)).map((t) => `add a DMN_NESTED_TYPE_COVERAGE `
+        + `entry for ${t}, reached from ${[...REACHED.get(t)].sort().join(', ')} — ${HOWTO}`),
+      ...[...listed.keys()].filter((t) => !REACHED.has(t)).map((t) => `remove the stale `
+        + `DMN_NESTED_TYPE_COVERAGE entry for ${t}: no mapped row's mapsTo leads to it`),
+      ...[...listed].filter(([, n]) => n > 1).map(([t]) => `remove the duplicate entry for ${t}`),
+    ];
+    expect(problems).toEqual([]);
+    expect(REACHED.size).toBeGreaterThan(0);
+  });
+
+  /**
+   * The invariant the whole two-oracle design rests on: one row per global element, and F1's set
+   * equality against the XSDs. Nested coverage lives in its own export precisely so it cannot dilute
+   * that — an entry duplicating a row would put the same construct in two authorities.
+   */
+  test('a nested entry never shadows a row', () => {
+    const rowTypes = new Set(DMN_ELEMENT_COVERAGE.map((r) => r.moddleType).filter(Boolean));
+    const shadowing = DMN_NESTED_TYPE_COVERAGE.filter((e) => rowTypes.has(e.moddleType))
+      .map((e) => `${e.moddleType} has a row of its own — it must not also be a nested entry`);
+    expect(shadowing).toEqual([]);
+  });
+
+  test.each(DMN_NESTED_TYPE_COVERAGE.map((e) => [e.moddleType, e]))(
+    '%s: every property is either mapped or named unrepresented, and nothing is invented', (_t, entry) => {
+      const props = propertiesOf(entry.moddleType);
+      expect(props.length).toBeGreaterThan(0);
+      const claimed = [
+        ...Object.keys(entry.mapsTo ?? {}),
+        ...(entry.unrepresented ?? []).map((u) => u.property),
+      ];
+      const named = new Set([...claimed, ...Object.keys(DMN_ELEMENT_BASE)]);
+      expect([
+        ...props.filter((p) => !named.has(p))
+          .map((p) => `${entry.moddleType}.${p} has no slot in mapsTo and no unrepresented entry — ${HOWTO}`),
+        ...claimed.filter((p) => !props.includes(p))
+          .map((p) => `${entry.moddleType} claims property ${p}, which dmn-moddle does not declare`),
+      ]).toEqual([]);
+    });
+
+  /**
+   * `reachedFrom` is navigation, not decoration: `dmn:UnaryTests` is where a reader goes looking for
+   * the per-cell `expressionLanguage` loss, and the entry has to say that it is arrived at through
+   * `<decisionTable>`. Measured against the closure rather than trusted, so it cannot rot into a
+   * description of an older graph.
+   */
+  test.each(DMN_NESTED_TYPE_COVERAGE.map((e) => [e.moddleType, e]))(
+    '%s: reachedFrom is what the traversal actually finds', (_t, entry) => {
+      expect([...(entry.reachedFrom ?? [])].sort()).toEqual([...(REACHED.get(entry.moddleType) ?? [])].sort());
+    });
+
+  test('every nested entry carries known codes and non-empty reasons', () => {
+    const bad = DMN_NESTED_TYPE_COVERAGE.flatMap((e) => (e.unrepresented ?? [])
+      .filter((u) => !IMPORT_CODES[u.code] || !u.reason?.trim())
+      .map((u) => `${e.moddleType}.${u.property} needs a known code and a non-empty reason`));
+    expect(bad).toEqual([]);
+  });
+
   test('every hoisted base property carries a known code and a reason', () => {
     const bad = Object.entries(DMN_ELEMENT_BASE)
       .filter(([, v]) => !IMPORT_CODES[v.code] || !v.reason?.trim())
@@ -340,7 +469,15 @@ describe('F4 — the XSD defaults, and the two that dmn-moddle materialises', ()
     const mismatches = [];
     for (const d of DMN_XSD_DEFAULTS) {
       const descriptor = DESCRIPTORS.get(moddleOwner(d));
-      const prop = descriptor?.properties?.find((p) => p.name === d.attr);
+      // Without this, a naming rule that stops holding (`tFoo` → `dmn:Foo`) makes the lookup return
+      // undefined, `actually` false, and every row saying `false` pass FOR THE WRONG REASON — the
+      // fence would go quiet exactly when the two layers had drifted.
+      if (!descriptor) {
+        mismatches.push(`${key(d)}: no dmn-moddle descriptor for ${moddleOwner(d)} — the owner-type `
+          + `naming rule no longer holds, so this row cannot be checked at all`);
+        continue;
+      }
+      const prop = descriptor.properties?.find((p) => p.name === d.attr);
       const actually = prop?.default !== undefined;
       if (actually !== d.moddleMaterialises) {
         mismatches.push(`${key(d)}: row says moddleMaterialises ${d.moddleMaterialises}, dmn-moddle `
@@ -366,10 +503,26 @@ describe('F4 — the XSD defaults, and the two that dmn-moddle materialises', ()
 // ── The lookups ─────────────────────────────────────────────────────────────────────────────────
 
 describe('the lookups', () => {
-  test('coverageForElement answers by XSD element name', () => {
+  test('coverageForElement answers by XSD element name, and by file when asked', () => {
     expect(coverageForElement('decision').disposition).toBe('mapped');
     expect(coverageForElement('decisionService').disposition).toBe('reported');
     expect(coverageForElement('tDecision')).toBeUndefined();
+    expect(coverageForElement('DMNShape', 'DMNDI13').code).toBe('IM06');
+    expect(coverageForElement('DMNShape', 'DMN13')).toBeUndefined();
+  });
+
+  /**
+   * The primary key is (xsdElement, xsdFile), so the one-argument form is only safe while the names
+   * alone happen to be unique — true today because DMN13 is camelCase and DMNDI13 PascalCase, but
+   * nothing in either spec promises it stays that way. Asserted rather than assumed: the day a DMNDI
+   * revision adds an `<association>`, this goes red before a caller can be handed the DMN13 row for
+   * a DI element and told it is an IM03.
+   */
+  test('no two rows share an xsdElement, which is what makes the one-argument lookup safe', () => {
+    const seen = new Map();
+    for (const row of DMN_ELEMENT_COVERAGE) seen.set(row.xsdElement, (seen.get(row.xsdElement) ?? 0) + 1);
+    expect([...seen].filter(([, n]) => n > 1).map(([e]) => `<${e}> is declared in two XSDs — `
+      + `every coverageForElement caller must now pass xsdFile`)).toEqual([]);
   });
 
   test('coverageForModdleType answers by moddle type, and never matches a parser-blind row', () => {
