@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`OMG_NODE_FIELD_SCOPE` is now the project's single statement of per-field BPMN knowledge, and
+  it covers every field.** The table in `scripts/bpmn/types.js` grew from 6 rows to 29 — one for
+  every `$defs.Node` property except `id` and `type` — and gained a sibling
+  `OMG_EDGE_FIELD_SCOPE` with a row for every `$defs.Edge` property except `id`. Each row now
+  carries four more columns beside "which class may hold this": `shape` (how the field serialises —
+  attribute, child element, event definition, extension element, DI, layout-only, or not at all),
+  `writeSite` (which function writes it), `enforcedBy` (whether the write site actually consults
+  the row's `allowed` set, and therefore whether rule S15 reports on it), and `roundTrip` (what
+  survives Logic-Core → XML → Logic-Core, with a **mandatory reason** for anything short of
+  `exact`). A new fence in `types.test.js` fails CI, naming the property, if a field is added to
+  `references/input-schema.json` without a row — the four-places problem is now structurally
+  unforgettable rather than a habit.
+- **The metamodel fence covers every row with a metamodel counterpart, in both directions.** It
+  used to check 6 hand-picked rows; it now checks every row whose attribute bpmn-moddle actually
+  knows — including the structural ones (`marker` → `eventDefinitions`, `loopType`/`multiInstance`
+  → `loopCharacteristics`, `has_join` → `gatewayDirection`) — against both `bpmn.json` and
+  `bpmndi.json`, for `allowed` sets that are too wide *and* too narrow. Widening it is what found
+  the `instantiate` defect below.
+
 - **`net-check.js` — a Petri-net translation integrity guard, `NC01`–`NC06`.** Mirrors
   `di-check.js`'s shape for geometry: `checkNetIntegrity` judges the *translation* `bpmnToPN`
   produces (every node has a transition, every place is produced and consumed, every id is
@@ -133,8 +152,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `collaboration.js` and rendered as a note — never a warning, the enumeration did finish — by
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
-
 ### Fixed
+- **`instantiate` on a `receiveTask` was unreachable from both ends at once.** OMG grants
+  `instantiate` to `ReceiveTask` as well as `EventBasedGateway` (BPMN 2.0.2 §10.2.4 — an
+  instantiating Receive Task is how a process starts on an incoming message without a message start
+  event). The serialiser and *both* importers said `eventBasedGateway` alone, so a schema-valid
+  `{ type: 'receiveTask', instantiate: true }` never reached the XML, and a
+  `<bpmn:receiveTask instantiate="true">` written by any other tool was dropped on import. Because
+  neither end could express it, no round-trip test could have caught it; the widened metamodel
+  fence did. Write and both reads are widened; `references/input-schema.json`'s property
+  description is corrected.
+- **Three unguarded writes that bpmn-moddle was discarding in silence.** `loopType` on a
+  `startEvent` and `multiInstance` on a `parallelGateway` produced no element, no
+  `unknown attribute` warning and no rule finding — bpmn-moddle reports attributes it does not
+  *know*, but a property it has no descriptor for it simply drops. Both are now scoped to
+  `Activity` by the table and reported by S15. `decisionRef` was the mirror image: it was written
+  into `extensionElements` on **any** class and read straight back, so the round trip looked
+  perfect while the output claimed a decision binding on a class
+  `references/input-schema.json` scopes the property away from ("For businessRuleTask"). It is now
+  scoped to `businessRuleTask`.
+- **`cancelActivity` could land on a task.** The guard was `isBoundaryEvent`, which also answers
+  true for anything carrying `attachedTo`, so `{ type: 'userTask', attachedTo: 'x',
+  cancelActivity: false }` emitted `<bpmn:task cancelActivity="false">` — an attribute OMG grants
+  to `BoundaryEvent` alone. The class guard now comes from the table; the emission condition (only
+  `false` is written, since `true` is the XSD default) stays at the write site.
 - **A duplicate id in the emitted XML is now fatal on the ordinary generate path.** `xsd:ID` is
   document-wide unique, so a duplicate does not degrade the file — it makes it unloadable, and
   which of the two elements a reader binds a reference to is arbitrary. `NC06` already blocked
@@ -454,6 +495,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Unresolved endpoints now carry their `reason` into the prose. And the skipped-nodes note is
   rendered per reason, so Stage 1's `subProcessWithoutStartOrEnd` is no longer explained by a
   sentence about `eventBasedGateway` race semantics.
+
+### Changed
+- **S15's coverage grew from 6 fields to 13.** It now also reports `cancelActivity`,
+  `eventGatewayType`, `instantiate`, `script`, `loopType`, `multiInstance` and `decisionRef` on a
+  class OMG (or, for `decisionRef`, this project's own published schema) does not define them on.
+  The rule walks exactly the rows the serialiser guards from the same table — `enforcedBy: 'table'`
+  — so the two still cannot disagree. Rule count is unchanged at 34.
 
 ### Known limitations
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
