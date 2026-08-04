@@ -154,9 +154,17 @@ export const BLIND_MECHANISMS = ['spelling', 'absent'];
  */
 export const IMPORT_CODE_KINDS = {
   source: {
-    label: 'The source file is invalid',
-    blurb: 'DMN 1.3 requires something this file does not say. Nothing on this side can infer it; '
-      + 'fix the file and re-import.',
+    label: 'Only the source file can fix it',
+    // The axis is WHO CAN FIX IT, not "is the file conformant" — and getting that wrong once
+    // already produced the exact outcome this column exists to prevent. An earlier revision read
+    // "The source file is invalid", which is true of three of IM09's four cases and false of the
+    // fourth: DMN13.xsd:29 makes @id optional, so a DRG element without one is legal DMN 1.3. It is
+    // still unusable and still fixable only at the source, which is what puts it here — so the
+    // heading says that, and each finding's own message says whether DMN forbids the shape or
+    // merely permits something nothing can act on.
+    blurb: 'The file does not carry information this importer needs, and nothing on this side can '
+      + 'infer it. Read each message for whether the file breaks a DMN 1.3 rule or exercises a '
+      + 'freedom DMN allows and nothing downstream can use. Either way: fix it there, re-import.',
   },
   tool: {
     label: 'Decision-Core has no slot for it',
@@ -259,16 +267,23 @@ export const IMPORT_CODES = {
   },
   IM09: {
     kind: 'source',
-    title: 'the source file does not say what DMN 1.3 requires',
-    remedy: 'Not a gap in this tool: the construct is one DMN can express and this file does not. '
-      + 'Three cases reach here — a requirement naming nothing it requires (DMN gives each '
-      + 'requirement class exactly one such reference), a decision table with no output clause '
-      + '(DMN13.xsd gives tDecisionTable/output no minOccurs, so it defaults to 1), and a DRG element '
-      + 'with no id at all (optional in DMN, but the only way anything can name it, so nothing here '
-      + 'can hold it). Each drops the element it sits on. Nothing on this side can infer what was '
-      + 'meant, so the fix is in the source file; re-export it or edit it, and re-import. Note the '
-      + 'contrast with IM07, which looks similar and is not: there the id is legal DMN and '
-      + 'Decision-Core is the narrower of the two.',
+    title: 'information the source file does not carry',
+    // Deliberately makes NO universal claim about conformance, because one of the four cases is
+    // conformant DMN and the register text is appended to every IM09 message. Which of the four a
+    // reader has is stated per finding, at the site that knows.
+    remedy: 'Not a gap in this tool\'s vocabulary: the construct is one DMN can express, and this '
+      + 'file leaves out something without which nothing on this side can proceed. Four cases reach '
+      + 'here. Three break a DMN 1.3 rule — a requirement naming nothing it requires (DMN13.xsd:193 '
+      + 'makes the choice mandatory), a requirement reference with no @href (:42, use="required"), '
+      + 'and a decision table with no output clause (:304, output has no minOccurs, so it defaults '
+      + 'to 1). The fourth does not: a DRG element with no id is legal DMN (:29, @id is '
+      + 'use="optional"), and is unusable anyway — nothing can name it, so no @href, no <DMNShape '
+      + 'dmnElementRef> and no <decisionService> can reach it, and Decision-Core requires one on '
+      + 'every node. Each case drops the element it sits on. Nothing here can infer what was meant, '
+      + 'so the fix is in the source file; re-export or edit it, and re-import. Note the contrast '
+      + 'with IM07, which looks similar and is not: there the id is one DMN allows AND dmn-moddle '
+      + 'reads, and Decision-Core is the narrower of the two — that is this tool\'s limit, not the '
+      + 'file\'s.',
   },
 };
 

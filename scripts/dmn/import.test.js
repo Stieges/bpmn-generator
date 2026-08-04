@@ -8,7 +8,7 @@ import {
   applyDecisionCoreDefaults, canonicalizeDecisionCore, formatImportReport, HANDLERS,
 } from './import.js';
 import { validateDecisionCoreSchema } from './schema-gate.js';
-import { DMN_ELEMENT_COVERAGE } from './import-scope.js';
+import { DMN_ELEMENT_COVERAGE, IMPORT_CODES } from './import-scope.js';
 
 /**
  * Stage 3's own tests. One per IM code, each an inline snippet asserting the exact
@@ -110,23 +110,41 @@ describe('the import report — one test per IM code', () => {
     });
   });
 
-  test('IM09 — a DRG element with no id at all, which is the FILE\'s problem and not a gap here', async () => {
-    // Stage 4 moved this off IM07. DMN makes @id optional, but an id-less DRG element cannot be
-    // named by an @href, a <DMNShape> or a <decisionService> — it is unusable in DMN's own terms,
-    // so telling a reader "Decision-Core cannot hold this id" would point them at the wrong file.
+  test('IM09 — a DRG element with no id at all, which only the source file can fix', async () => {
+    // Stage 4 moved this off IM07. DMN makes @id optional (DMN13.xsd:29), so the file is conformant
+    // — but an id-less DRG element cannot be named by an @href, a <DMNShape> or a <decisionService>,
+    // so it is inert in DMN's own terms and unholdable here. Telling a reader "Decision-Core cannot
+    // hold this id" would point them at the wrong file; telling them the file is invalid would be
+    // false. IM09's register says neither.
     const r = await report('<decision name="Nameless in the id sense"/>');
     expect(r.unrepresented.map(shape)).toContainEqual({
       code: 'IM09', xsdElement: 'decision', path: 'definitions.drgElement[0]',
     });
   });
 
-  test('IM08 — the parser never surfaced it', async () => {
+  test('IM08 — the parser never surfaced it, and the finding claims no location', async () => {
     const r = await report('<organizationUnit id="ou1" name="Finance"/><decision id="d1" name="D1"/>');
+    // `path: null`, not `'definitions'`. Nothing here knows a path — no object reached the tree —
+    // and `'definitions'` is a prefix of every other path, so consumers reasoning "a finding above
+    // me means my subtree is gone" were told yes for the whole document. See `warningToFinding`.
     expect(r.unrepresented.map(shape)).toContainEqual({
-      code: 'IM08', xsdElement: 'organizationUnit', path: 'definitions',
+      code: 'IM08', xsdElement: 'organizationUnit', path: null,
     });
     expect(r.parserWarnings.length).toBe(1);
     expect(r.parserWarnings[0]).toMatch(/organizationUnit/);
+  });
+
+  test('IM08 claims an xsdElement only when the warning names one the table knows', async () => {
+    // An ATTRIBUTE, not an element. Measured: dmn-moddle knows the bpmn.io biodi namespace URI and
+    // warns about attributes in it that it does not declare, so every real bpmn.io export reaches
+    // this — and the old regex put `foldedIn` in the field reserved for XSD element names.
+    const attr = await report(
+      '<decision id="d1" name="D1" xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" biodi:foldedIn="false"/>');
+    expect(attr.unrepresented.filter((f) => f.code === 'IM08').map((f) => f.xsdElement)).toEqual([null]);
+    // …while the same channel still names an element when the warning really names one.
+    const el = await report('<organizationUnit id="ou1" name="F"/><decision id="d1" name="D"/>');
+    expect(el.unrepresented.filter((f) => f.code === 'IM08').map((f) => f.xsdElement))
+      .toEqual(['organizationUnit']);
   });
 
   test('every finding carries the full shape, and a reason a stranger can act on', async () => {
@@ -315,12 +333,14 @@ describe('a mapped expression class in a position the converter does not read', 
 });
 
 /**
- * IM09's own describe block, and Stage 4 is where these three stopped being capability-gap codes.
- * The distinction is for the reader: "this tool cannot represent your construct" and "your file is
- * invalid" call for completely different actions, and a report that blurs them teaches people to
- * ignore it. `formatImportReport` groups by that axis; these assert the codes it groups on.
+ * IM09's own describe block, and Stage 4 is where these stopped being capability-gap codes. The
+ * distinction is for the reader: "this tool cannot represent your construct" and "only your file
+ * can supply this" call for completely different actions, and a report that blurs them teaches
+ * people to ignore it. `formatImportReport` groups by that axis; these assert the codes it groups
+ * on — and the last one guards the axis against the mistake of restating it as "conformant vs
+ * invalid", which it is not.
  */
-describe('IM09 — malformed source content, which is the file\'s problem and not this tool\'s', () => {
+describe('IM09 — information the source file does not carry, which only it can supply', () => {
   test('a <decisionTable> with no output clause cannot be held and is reported, not emitted '
     + 'half-built for our own schema gate to trip over', async () => {
     const { dc, report: r } = await dmnToDecisionCore(doc(
@@ -358,8 +378,36 @@ describe('IM09 — malformed source content, which is the file\'s problem and no
     const narrow = await report('<decision id="a:b" name="D"/>');
     expect(narrow.unrepresented.map((f) => f.code)).toEqual(['IM07']);
 
-    const invalid = await report('<decision name="D"/>');
-    expect(invalid.unrepresented.map((f) => f.code)).toEqual(['IM09']);
+    const absent = await report('<decision name="D"/>');
+    expect(absent.unrepresented.map((f) => f.code)).toEqual(['IM09']);
+  });
+
+  /**
+   * IM09 GROUPS BY WHO CAN FIX IT, NOT BY WHETHER THE FILE IS CONFORMANT — and this test exists
+   * because the first revision confused the two.
+   *
+   * Three of IM09's four cases are DMN-conformance failures. The fourth is not: `DMN13.xsd:29`
+   * declares `tDMNElement/@id` `use="optional"`, so a DRG element with no id is perfectly legal DMN
+   * 1.3. It is still unusable — nothing can name it, so no `@href`, no `<DMNShape dmnElementRef>`
+   * and no `<decisionService>` can reach it, and Decision-Core requires an id on every node — and it
+   * is still fixable only at the source. That is what puts it on IM09.
+   *
+   * The register's text is appended to every IM09 message, so a universal conformance claim there
+   * reaches this case too, and told the author of a conformant file that their file was invalid.
+   * That is the outcome the whole `kind` axis exists to prevent, arriving through the axis itself.
+   *
+   * What this can and cannot fence, stated so nobody over-reads it: it checks the ONE claim it
+   * names, on the one case that contradicts it. The general shape — register prose asserting
+   * something one of its call sites falsifies — has no fence, for the same reason `import-scope.js`
+   * gives for never parsing `mapsTo`'s prose VALUES: a fence that read our sentences would be
+   * restating them as evidence.
+   */
+  test('IM09 does not tell the author of a CONFORMANT file that it is invalid', async () => {
+    const r = await report('<decision name="D"/>');
+    const f = r.unrepresented.find((x) => x.code === 'IM09');
+    // The per-finding message must concede the point the register cannot make universally.
+    expect(f.reason).toMatch(/DMN makes @id optional/);
+    expect(`${f.reason} ${IMPORT_CODES.IM09.title}`).not.toMatch(/\binvalid\b|DMN 1\.3 requires/);
   });
 });
 
@@ -632,13 +680,13 @@ describe('formatImportReport — the one rendering', () => {
     const text = formatImportReport(r);
     const at = (needle) => text.indexOf(needle);
 
-    expect(at('The source file is invalid')).toBeGreaterThan(-1);
+    expect(at('Only the source file can fix it')).toBeGreaterThan(-1);
     expect(at('Decision-Core has no slot for it')).toBeGreaterThan(-1);
     expect(at('The parser never surfaced it')).toBeGreaterThan(-1);
-    expect(at('The source file is invalid')).toBeLessThan(at('Decision-Core has no slot for it'));
+    expect(at('Only the source file can fix it')).toBeLessThan(at('Decision-Core has no slot for it'));
     expect(at('Decision-Core has no slot for it')).toBeLessThan(at('The parser never surfaced it'));
     // The codes land under their own kind's heading, not merely somewhere in the text.
-    expect(at('IM09')).toBeGreaterThan(at('The source file is invalid'));
+    expect(at('IM09')).toBeGreaterThan(at('Only the source file can fix it'));
     expect(at('IM09')).toBeLessThan(at('Decision-Core has no slot for it'));
     expect(at('IM01')).toBeGreaterThan(at('Decision-Core has no slot for it'));
     expect(at('IM01')).toBeLessThan(at('The parser never surfaced it'));
