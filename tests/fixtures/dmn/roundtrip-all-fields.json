@@ -1,0 +1,140 @@
+{
+  "$schemaVersion": "1.0",
+  "id": "Definitions_creditLimit",
+  "name": "Credit limit",
+  "namespace": "http://bpmn-generator.local/dmn/credit-limit",
+  "expressionLanguage": "https://www.omg.org/spec/DMN/20191111/FEEL/",
+  "documentation": "Round-trip fixture: every property declared in references/decision-core-schema.json is instantiated at least once, and the model is a sane one — it goes through the real rule engine.",
+  "nodes": [
+    {
+      "id": "in_annualIncome",
+      "type": "inputData",
+      "name": "Annual income",
+      "documentation": "Gross annual income in EUR, as stated on the application.",
+      "variable": "annualIncome",
+      "typeRef": "number"
+    },
+    {
+      "id": "in_applicantAge",
+      "type": "inputData",
+      "name": "Applicant age",
+      "typeRef": "number"
+    },
+    {
+      "id": "ks_creditPolicy",
+      "type": "knowledgeSource",
+      "name": "Credit policy",
+      "documentation": "The lending policy the risk categories and surcharges are derived from.",
+      "sourceType": "Policy document",
+      "locationURI": "http://bpmn-generator.local/policies/credit"
+    },
+    {
+      "id": "bkm_riskScore",
+      "type": "businessKnowledgeModel",
+      "name": "Risk score",
+      "documentation": "Scores an applicant on a 0..100 scale from income and age.",
+      "variable": "riskScore",
+      "typeRef": "number",
+      "parameters": [
+        { "name": "income", "typeRef": "number" },
+        { "name": "age", "typeRef": "number" }
+      ],
+      "body": "min(100, (income / 1000) - (if age < 25 then 10 else 0))"
+    },
+    {
+      "id": "dec_riskCategory",
+      "type": "decision",
+      "name": "Risk category",
+      "documentation": "Buckets the risk score into the three categories the credit policy names.",
+      "question": "Which risk category does this applicant fall into?",
+      "allowedAnswers": "low, medium, high",
+      "variable": "riskCategory",
+      "typeRef": "string",
+      "usingTask": "task_assessRisk",
+      "usingProcess": ["process_creditApplication", "process_creditReview"],
+      "decisionTable": {
+        "id": "table_riskCategory",
+        "hitPolicy": "UNIQUE",
+        "preferredOrientation": "Rule-as-Row",
+        "outputLabel": "Risk category",
+        "inputs": [
+          {
+            "id": "inclause_riskScore",
+            "label": "Risk score",
+            "expression": "riskScore(annualIncome, applicantAge)",
+            "typeRef": "number",
+            "allowedValues": "[0..100]"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outclause_category",
+            "name": "category",
+            "typeRef": "string",
+            "allowedValues": "\"low\",\"medium\",\"high\"",
+            "defaultValue": "\"high\""
+          }
+        ],
+        "annotations": [{ "name": "Rationale" }],
+        "rules": [
+          { "id": "rule_low", "when": ["[60..100]"], "then": ["\"low\""], "annotations": ["Comfortable margin over the policy floor"] },
+          { "id": "rule_medium", "when": ["[30..60)"], "then": ["\"medium\""], "annotations": ["Within appetite, priced up"] },
+          { "id": "rule_high", "when": ["[0..30)"], "then": ["\"high\""], "annotations": ["Below appetite"] }
+        ]
+      }
+    },
+    {
+      "id": "dec_surchargePoints",
+      "type": "decision",
+      "name": "Surcharge points",
+      "question": "Which age surcharges apply, and what do they add up to?",
+      "variable": "surchargePoints",
+      "typeRef": "number",
+      "usingTask": ["task_computeSurcharge"],
+      "decisionTable": {
+        "id": "table_surchargePoints",
+        "hitPolicy": "COLLECT",
+        "aggregation": "SUM",
+        "preferredOrientation": "Rule-as-Row",
+        "outputLabel": "Surcharge points",
+        "inputs": [
+          {
+            "id": "inclause_age",
+            "label": "Applicant age",
+            "expression": "applicantAge",
+            "typeRef": "number"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outclause_points",
+            "name": "points",
+            "typeRef": "number"
+          }
+        ],
+        "rules": [
+          { "id": "rule_young", "when": ["< 25"], "then": ["10"] },
+          { "id": "rule_senior", "when": ["> 70"], "then": ["5"] }
+        ]
+      }
+    },
+    {
+      "id": "dec_creditLimit",
+      "type": "decision",
+      "name": "Credit limit",
+      "question": "What credit limit is granted?",
+      "variable": "creditLimit",
+      "typeRef": "number",
+      "expression": "if riskCategory = \"high\" then 0 else (annualIncome * 0.3) - (surchargePoints * 100)"
+    }
+  ],
+  "requirements": [
+    { "id": "ir_income_category", "type": "information", "source": "in_annualIncome", "target": "dec_riskCategory" },
+    { "id": "ir_age_category", "type": "information", "source": "in_applicantAge", "target": "dec_riskCategory" },
+    { "id": "ir_age_surcharge", "type": "information", "source": "in_applicantAge", "target": "dec_surchargePoints" },
+    { "id": "ir_category_limit", "type": "information", "source": "dec_riskCategory", "target": "dec_creditLimit" },
+    { "id": "ir_surcharge_limit", "type": "information", "source": "dec_surchargePoints", "target": "dec_creditLimit" },
+    { "id": "kr_riskScore_category", "type": "knowledge", "source": "bkm_riskScore", "target": "dec_riskCategory" },
+    { "id": "ar_policy_category", "type": "authority", "source": "ks_creditPolicy", "target": "dec_riskCategory" }
+  ]
+}
