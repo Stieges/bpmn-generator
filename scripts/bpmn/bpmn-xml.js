@@ -716,79 +716,9 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
     }
   }
 
-  // Node shapes
+  // Node shapes — recursive, at every nesting depth. See buildNodeShapeDI.
   for (const proc of (lc.pools || [lc])) {
-    for (const node of (proc.nodes || [])) {
-      const c = coords[node.id];
-      if (!c) continue;
-
-      const flowNodeEl = allFlowNodeMaps.get(node.id);
-      const shapeAttrs = {
-        id: `${node.id}_di`,
-        bpmnElement: flowNodeEl || node.id,
-        bounds: create('dc:Bounds', { x: rn(c.x), y: rn(c.y), width: rn(c.w), height: rn(c.h) }),
-      };
-      if (node.type === 'exclusiveGateway') shapeAttrs.isMarkerVisible = true;
-      if (node.isExpanded && node.nodes) shapeAttrs.isExpanded = true;
-
-      // bioc color
-      if (node.color) {
-        if (node.color.stroke) shapeAttrs['bioc:stroke'] = node.color.stroke;
-        if (node.color.fill) shapeAttrs['bioc:fill'] = node.color.fill;
-      }
-
-      const shape = create('bpmndi:BPMNShape', shapeAttrs);
-
-      // Label bounds for events/gateways
-      if ((isEvent(node.type) || isGateway(node.type)) && node.name) {
-        const labelW = Math.min(node.name.length * 6.5 + 10, 90);
-        const labelX = c.x + c.w / 2 - labelW / 2;
-        const labelY = c.y + c.h + LABEL_DISTANCE;
-        shape.label = create('bpmndi:BPMNLabel', {
-          bounds: create('dc:Bounds', { x: rn(labelX), y: rn(labelY), width: rn(labelW), height: 20 }),
-        });
-      }
-      planeElements.push(shape);
-
-      // Expanded SubProcess children DI
-      if (node.isExpanded && node.nodes) {
-        for (const child of node.nodes) {
-          const cc = coords[child.id];
-          if (!cc) continue;
-          const childShapeAttrs = {
-            id: `${child.id}_di`,
-            bpmnElement: allFlowNodeMaps.get(child.id) || child.id,
-            bounds: create('dc:Bounds', { x: rn(cc.x), y: rn(cc.y), width: rn(cc.w), height: rn(cc.h) }),
-          };
-          if (child.type === 'exclusiveGateway') childShapeAttrs.isMarkerVisible = true;
-          if (child.color) {
-            if (child.color.stroke) childShapeAttrs['bioc:stroke'] = child.color.stroke;
-            if (child.color.fill) childShapeAttrs['bioc:fill'] = child.color.fill;
-          }
-          const childShape = create('bpmndi:BPMNShape', childShapeAttrs);
-          if ((isEvent(child.type) || isGateway(child.type)) && child.name) {
-            const clw = Math.min(child.name.length * 6.5 + 10, 90);
-            const clx = cc.x + cc.w / 2 - clw / 2;
-            const cly = cc.y + cc.h + LABEL_DISTANCE;
-            childShape.label = create('bpmndi:BPMNLabel', {
-              bounds: create('dc:Bounds', { x: rn(clx), y: rn(cly), width: rn(clw), height: 20 }),
-            });
-          }
-          planeElements.push(childShape);
-        }
-        // SubProcess edge DI
-        for (const subEdge of (node.edges || [])) {
-          const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
-          const spts = edgeCoords[seid] || [];
-          const waypoints = buildWaypoints(spts, coords, subEdge.source, subEdge.target);
-          planeElements.push(create('bpmndi:BPMNEdge', {
-            id: `${seid}_di`,
-            bpmnElement: allFlowNodeMaps.get(seid) || seid,
-            waypoint: waypoints,
-          }));
-        }
-      }
-    }
+    buildNodeShapeDI(proc.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements);
   }
 
   // Edge DI
@@ -862,6 +792,81 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
   }
 
   return create('bpmndi:BPMNDiagram', { id: 'BPMNDiagram_1', plane });
+}
+
+// The two classes `BPMNShape#isExpanded` is written for. Hard-coded here rather than read out of
+// `OMG_NODE_FIELD_SCOPE`, because that row's `enforcedBy` is `'writeSite'` — the column says the
+// class guard lives at the write site and that the row states the scope for the reader. Keep the
+// two in step: this set and the `isExpanded` row's `allowed` are the same two classes.
+const EXPANDABLE_SHAPE_TYPES = new Set(['subProcess', 'transaction']);
+
+/**
+ * One `<bpmndi:BPMNShape>` per node, at EVERY nesting depth, plus the BPMNEdge of every nested
+ * sequence flow. The BPMNDI plane is flat — a nested node's shape is a sibling of a top-level
+ * node's, not a child of it — so recursion here changes which shapes exist, never where they go.
+ *
+ * This was two loops before: one over the process's own nodes and a copy of it, one level down,
+ * over `node.nodes`. The copy had drifted — it wrote `isMarkerVisible`, the colours and the label
+ * bounds, but not `isExpanded`, and it did not recurse — so a container nested inside another
+ * container was drawn collapsed however the author marked it, and a grandchild got no shape at all.
+ * The single recursive walk is what makes the depth-0 and depth-N shape identical BY CONSTRUCTION;
+ * that is the same reason CLAUDE.md gives for keeping geometry in one place.
+ *
+ * `isExpanded` is written for the two classes the `isExpanded` row of `OMG_NODE_FIELD_SCOPE` allows
+ * — the row's `enforcedBy: 'writeSite'` says that guard lives here — and it no longer depends on
+ * the container also carrying children. The old `node.isExpanded && node.nodes` made "expanded but
+ * empty" inexpressible while "collapsed but drillable" was expressible, which is a loss of the
+ * author's statement, not a rule: `BPMNShape#isExpanded` is a drawing property in bpmndi.json and
+ * has no child-count precondition. The recursion into children stays gated on both, because there
+ * is nothing to recurse into otherwise.
+ */
+function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeElements) {
+  for (const node of (nodes || [])) {
+    const c = coords[node.id];
+    if (!c) continue;
+
+    const shapeAttrs = {
+      id: `${node.id}_di`,
+      bpmnElement: allFlowNodeMaps.get(node.id) || node.id,
+      bounds: create('dc:Bounds', { x: rn(c.x), y: rn(c.y), width: rn(c.w), height: rn(c.h) }),
+    };
+    if (node.type === 'exclusiveGateway') shapeAttrs.isMarkerVisible = true;
+    if (node.isExpanded && EXPANDABLE_SHAPE_TYPES.has(node.type)) shapeAttrs.isExpanded = true;
+
+    // bioc color
+    if (node.color) {
+      if (node.color.stroke) shapeAttrs['bioc:stroke'] = node.color.stroke;
+      if (node.color.fill) shapeAttrs['bioc:fill'] = node.color.fill;
+    }
+
+    const shape = create('bpmndi:BPMNShape', shapeAttrs);
+
+    // Label bounds for events/gateways
+    if ((isEvent(node.type) || isGateway(node.type)) && node.name) {
+      const labelW = Math.min(node.name.length * 6.5 + 10, 90);
+      const labelX = c.x + c.w / 2 - labelW / 2;
+      const labelY = c.y + c.h + LABEL_DISTANCE;
+      shape.label = create('bpmndi:BPMNLabel', {
+        bounds: create('dc:Bounds', { x: rn(labelX), y: rn(labelY), width: rn(labelW), height: 20 }),
+      });
+    }
+    planeElements.push(shape);
+
+    // Expanded container: its children's shapes and its own edges' BPMNEdges.
+    if (node.isExpanded && node.nodes) {
+      buildNodeShapeDI(node.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements);
+      for (const subEdge of (node.edges || [])) {
+        const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
+        const spts = edgeCoords[seid] || [];
+        const waypoints = buildWaypoints(spts, coords, subEdge.source, subEdge.target);
+        planeElements.push(create('bpmndi:BPMNEdge', {
+          id: `${seid}_di`,
+          bpmnElement: allFlowNodeMaps.get(seid) || seid,
+          waypoint: waypoints,
+        }));
+      }
+    }
+  }
 }
 
 function buildLaneDI(lanes, laneCoords, planeElements, allFlowNodeMaps) {

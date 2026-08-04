@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES } from './moddle-import.js';
+import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep } from './moddle-import.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -217,7 +217,7 @@ function bpmnToLogicCoreLegacy(xml) {
       const biocFill = shape.attrs['bioc:fill'];
       if (bpmnElement && (biocStroke || biocFill)) {
         for (const pool of pools) {
-          const node = (pool.nodes || []).find(n => n.id === bpmnElement);
+          const node = findNodeDeep(pool.nodes, bpmnElement);
           if (node) {
             node.color = {};
             if (biocStroke) node.color.stroke = biocStroke;
@@ -414,17 +414,22 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
 
     // SubProcess content — read regardless of whether the shape is expanded, and
     // recursively, so nesting survives.
-    if ((tag === 'subProcess' || tag === 'transaction') && child.children && child.children.length > 0) {
-      const subFlowNodes = child.children.filter(c => flowNodeTags.has(stripNs(c.tag)));
-      const subSeqFlows = findChildren(child, 'sequenceFlow');
-      if (subFlowNodes.length > 0) {
-        node.nodes = subFlowNodes.map(nodeFromChild);
-        node.edges = subSeqFlows.map(sf => {
-          const se = { id: sf.attrs.id, source: sf.attrs.sourceRef, target: sf.attrs.targetRef };
-          if (sf.attrs.name) se.label = sf.attrs.name;
-          return se;
-        });
+    if (tag === 'subProcess' || tag === 'transaction') {
+      if (child.children && child.children.length > 0) {
+        const subFlowNodes = child.children.filter(c => flowNodeTags.has(stripNs(c.tag)));
+        const subSeqFlows = findChildren(child, 'sequenceFlow');
+        if (subFlowNodes.length > 0) {
+          node.nodes = subFlowNodes.map(nodeFromChild);
+          node.edges = subSeqFlows.map(sf => {
+            const se = { id: sf.attrs.id, source: sf.attrs.sourceRef, target: sf.attrs.targetRef };
+            if (sf.attrs.name) se.label = sf.attrs.name;
+            return se;
+          });
+        }
       }
+      // Outside the content gate — see the same move in moddle-import.js: `isExpanded` is a DI fact
+      // about the shape, and reading it only for a container that happens to have content is the
+      // content-based inference `expandedIds` was introduced to replace.
       if (expandedIds.has(child.attrs.id)) node.isExpanded = true;
     }
 

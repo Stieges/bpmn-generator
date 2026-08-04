@@ -65,7 +65,7 @@ import { runPipeline } from './pipeline.js';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import {
   OMG_NODE_FIELD_SCOPE, OMG_EDGE_FIELD_SCOPE, nodeFieldSpec,
-  DEFAULT_FLOW_SOURCE_TYPES, isArtifact, isBpmnArtifact,
+  DEFAULT_FLOW_SOURCE_TYPES, isArtifact,
 } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -699,40 +699,10 @@ const LOSSY_CONTRACTS = {
     },
   },
 
-  isExpanded: {
-    quote: 'Additionally lost at depth >= 1 even WITH children',
-    assert: (ctx) => {
-      const hasChildren = (ctx.input.nodes ?? []).length > 0;
-      const written = hasChildren && ctx.depth === 0;
-      sameAs(ctx, ctx.out?.isExpanded, written ? true : undefined, `children: ${hasChildren}, depth: ${ctx.depth}`);
-    },
-  },
-
-  color: {
-    quote: 'LOST AT DEPTH >= 1, on BOTH importer paths',
-    assert: (ctx) => {
-      sameAs(ctx, ctx.out?.color, ctx.depth === 0 ? ctx.value : undefined);
-    },
-  },
-
   lane: {
     quote: 'NOT WRITTEN AT ALL at depth >= 1',
     assert: (ctx) => {
       sameAs(ctx, ctx.out?.lane, ctx.depth === 0 ? ctx.value : undefined);
-    },
-  },
-
-  nodes: {
-    quote: 'AN ARTIFACT CHILD DOES NOT, on the PRIMARY path only',
-    assert: (ctx) => {
-      const back = walkNodes(ctx.lc);
-      for (const child of ctx.value) {
-        const lost = isBpmnArtifact(child.type) && ctx.path === 'moddle';
-        const got = back.find((n) => n.id === child.id);
-        sameAs(ctx, got?.id, lost ? undefined : child.id,
-          `child ${child.id} (${child.type})${lost ? ' is lost — bpmn-moddle puts an Artifact in `artifacts`, the child walk reads `flowElements`' : ' survives'}`);
-        if (!lost) sameAs(ctx, got.type, child.type, `child ${child.id}: its class survives`);
-      }
     },
   },
 
@@ -852,26 +822,14 @@ const LOSSY_CONTRACTS = {
   },
 };
 
-/**
- * The one PRECONDITION that is itself a recorded loss, and why it is not a second exclusion list.
- *
- * A `textAnnotation` or `group` inside a container does not come back from `moddle-import.js` at
- * all — the walk reads `flowElements`, bpmn-moddle puts an Artifact in `artifacts`. That is stated,
- * with its mechanism, in the `nodes` row of `OMG_NODE_FIELD_SCOPE`, and the `nodes` cases assert it
- * directly. But it also means that on that path, at depth >= 1, such a subject does not EXIST, so no
- * per-field claim about it (`color`, `documentation`, `extensions`) can be evaluated.
- *
- * The tempting move is a local skip. This is the opposite: the case asserts the recorded loss
- * POSITIVELY — the subject must be absent — quoting the row that records it, exactly as a
- * `roundTrip: 'none'` row is asserted. Close the importer gap and this turns red, which forces the
- * `nodes` row and its reason to be updated rather than letting the improvement pass in silence.
- */
-const NESTED_ARTIFACT_LOSS = {
-  quote: 'AN ARTIFACT CHILD DOES NOT, on the PRIMARY path only',
-  applies: (ctx) => ctx.depth >= 1 && ctx.path === 'moddle' && isBpmnArtifact(ctx.type),
-  note: 'recorded in the `nodes` row: a textAnnotation/group child of a container is not read back '
-    + 'by moddle-import.js, so the subject itself is absent and no field claim about it applies',
-};
+// There was a PRECONDITION here, and its removal is the point. A `textAnnotation` or `group` inside
+// a container used not to come back from `moddle-import.js` at all — the child walk read
+// `flowElements`, bpmn-moddle puts an Artifact in `artifacts` — so at depth >= 1 on that path such
+// a subject did not EXIST and no per-field claim about it (`color`, `documentation`, `extensions`)
+// could be evaluated. Rather than skip those cases, the fence asserted the loss POSITIVELY: the
+// subject must be absent. Closing the importer gap turned that assertion red, which is exactly what
+// it was written to do — an improvement could not pass in silence either. The `nodes` row now reads
+// `roundTrip: 'exact'` and every artifact subject is asserted like any other.
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // 6. Case generation
@@ -976,12 +934,6 @@ describe('the fence covers what the table says it covers', () => {
       const { quote } = LOSSY_CONTRACTS[row.field];
       expect([row.field, row.reason.includes(quote)]).toEqual([row.field, true]);
     });
-
-  // The same thread for the one precondition, and for the same reason: it stands in for a loss the
-  // `nodes` row records, so it must not outlive that row's statement of it.
-  test('the nested-artifact precondition quotes the `nodes` row\'s reason verbatim', () => {
-    expect(nodeFieldSpec('nodes').reason.includes(NESTED_ARTIFACT_LOSS.quote)).toBe(true);
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -1005,13 +957,6 @@ describe('the spanning round trip — every field, every allowed class, both dep
         path, xml, input, out, lc,
         where: `${row.field}=${sample.label} on ${type} at ${placement.label} via ${path}`,
       };
-
-      // The one recorded exception to the survival precondition below, asserted rather than
-      // skipped — see NESTED_ARTIFACT_LOSS.
-      if (NESTED_ARTIFACT_LOSS.applies(ctx)) {
-        sameAs(ctx, out, undefined, NESTED_ARTIFACT_LOSS.note);
-        return;
-      }
 
       // The subject must have survived AS AN ELEMENT before any field claim about it means
       // anything — otherwise a row whose contract is "the field is absent" would pass because the
