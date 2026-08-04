@@ -732,6 +732,16 @@ describe('F3 — the importer, run on a foreign file, reports exactly the `repor
    * absence: it is the `biodi:` attribute, whose warning names an attribute and therefore earns no
    * `xsdElement` at all. A pin that silently dropped null-element findings would be the same class
    * of blindness one field over.
+   *
+   * THE RESTATEMENT IS DELIBERATE. 21 of these 28 lines are already asserted by the set-equality
+   * test above; only 7 (the `IM04`, the four `IM05`s and the two `IM08`s) are the non-derivable
+   * second direction. Narrowing the pin to those 7 was proposed and DECLINED: it would make this
+   * test's completeness rest on set equality still covering the other 21, so a later narrowing
+   * THERE would open a gap HERE, in a test that looks untouched. This project's recurring defect is
+   * the fence that is silently hollow, not the fence that is noisily redundant — so the failure mode
+   * chosen is 21 lines going red on a legitimate table change, which is loud and diffable, over an
+   * invisible dependency between two tests. If you are here because those 21 lines just failed:
+   * re-derive them, do not paste them.
    */
   test('the whole report emits exactly these code × element pairs, and no others', () => {
     const pairs = [...new Set(result.report.unrepresented
