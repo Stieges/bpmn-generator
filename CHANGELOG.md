@@ -164,29 +164,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
-- **Three nesting losses the spanning fence found are closed; their rows now read `exact`.** All
-  three sat at nesting depth ≥ 1 and none was visible before the fence existed. (1) **`color` at
-  depth ≥ 1**, on both importer paths: the write was already correct — the nested node's
-  `<bpmndi:BPMNShape>` carried `bioc:stroke`/`bioc:fill` — but both DI reads resolved the shape's
-  `bpmnElement` with a top-level-only `pool.nodes.find(...)`, so a coloured node inside a
-  `subProcess`/`transaction` came back uncoloured. A shared `findNodeDeep` now walks the node tree,
-  which is what the flat BPMNDI plane has always required. (2) **`isExpanded` on a nested
-  container**, the same top-level-only walk seen from the write side: `buildDI` had one loop over
-  the process's nodes and a *copy* of it one level down, and the copy had drifted — it wrote
-  `isMarkerVisible`, the colours and the label bounds but not `isExpanded`, and it did not recurse,
-  so a **grandchild got no `<bpmndi:BPMNShape>` at all**. One recursive `buildNodeShapeDI` replaces
-  both, making depth 0 and depth N identical by construction. The same row's second loss goes with
-  it: `isExpanded` no longer requires the container to also carry children (the old
-  `node.isExpanded && node.nodes`), because `BPMNShape#isExpanded` is a drawing property with no
-  child-count precondition — "expanded but empty" is now expressible, as "collapsed but drillable"
-  already was — and both importers now read it outside their content gate for the same reason.
-  (3) **A `textAnnotation`/`group` inside a container is read back by `moddle-import.js`**: its
-  child walk read `flowElements`, and bpmn-moddle places an Artifact in `artifacts` — the same
-  defect that was closed at top level and left open one level down (CLAUDE.md's round-trip
-  limitation records the top-level half). Both levels now go through one `artifactFromElement`.
-  `import.js`, the legacy DOM path, was already correct here and is unchanged. No golden file
-  moved: no fixture has a nested container carrying `color` or a nested `isExpanded`, and the one
-  fixture with a grandchild (`tests/fixtures/subprocess-child-fidelity.json`) has no golden.
+- **Three nesting losses the spanning fence found are closed.** All three sat at nesting depth ≥ 1
+  and none was visible before the fence existed. (1) **`color` at depth ≥ 1**, on both importer
+  paths: the write was already correct — the nested node's `<bpmndi:BPMNShape>` carried
+  `bioc:stroke`/`bioc:fill` — but both DI reads resolved the shape's `bpmnElement` with a
+  top-level-only `pool.nodes.find(...)`, so a coloured node inside a `subProcess`/`transaction` came
+  back uncoloured. A shared `findNodeDeep` now walks the node tree, which is what the flat BPMNDI
+  plane has always required. Row: `exact`. (2) **`isExpanded` on a nested container**, the same
+  top-level-only walk seen from the write side: `buildDI` had one loop over the process's nodes and
+  a *copy* of it one level down, and the copy had drifted — it wrote `isMarkerVisible`, the colours
+  and the label bounds but not `isExpanded`, and it did not recurse, so a **grandchild got no
+  `<bpmndi:BPMNShape>` at all**. One recursive `buildNodeShapeDI` replaces both, making depth 0 and
+  depth N identical by construction. The row's *other* clause deliberately stays: `isExpanded` is
+  still written only for a container that also carries children, because `svg.js` gates the expanded
+  frame on the same condition and `layout.js` sizes a childless container as a task — writing the
+  attribute alone would make the DI and the SVG disagree about one model, and closing it means all
+  three places at once. (3) **A `textAnnotation`/`group` inside a container is read back by
+  `moddle-import.js`**: its child walk read `flowElements`, and bpmn-moddle places an Artifact in
+  `artifacts` — the same defect that was closed at top level and left open one level down
+  (CLAUDE.md's round-trip limitation records the top-level half). Both levels now go through one
+  `artifactFromElement`. `import.js`, the legacy DOM path, was already correct here and is
+  unchanged. No golden file moved: no fixture has a nested container carrying `color`, and the only
+  fixture that nests an `isExpanded` container and a grandchild
+  (`tests/fixtures/subprocess-child-fidelity.json`) has no golden.
+- **A nested `group` loses its `name` — recorded, and now fenced.** A Group carries no `name`
+  attribute (BaseElement declares only `id`); its label travels as a `<bpmn:categoryValue>` the
+  Group references, and `buildCategoryForGroup` runs only in `buildProcess`'s top-level loop, never
+  in `buildFlowNode`'s recursion. Measured: a top-level group named `"Grp d0"` survives, the same
+  group one level down comes back `name: ""`, on **both** importer paths, at depth 1 and depth 2.
+  Pre-existing and older than the nested-artifact read above; it stayed invisible because the `name`
+  row excludes groups and the fence's `nodes` sample carried only an annotation. The sample now
+  carries a `group` child too, so the `nodes` row states this loss and a later fix turns the fence
+  red.
+- **Both importers now agree on a container that holds only artifacts.** `import.js`'s DOM parser
+  has no `flowElements`-vs-`artifacts` split to go on, so it counted a `textAnnotation` child as a
+  flow node and returned `edges: []`, where `moddle-import.js` returned no `edges` key at all. The
+  legacy read now keys `edges` off the non-artifact children.
 - **Four `roundTrip` claims corrected against what the pipeline actually does, all at nesting
   depth ≥ 1.** The spanning fence measured them; the rows now state the debt instead of asserting
   a fidelity that does not hold. `color` and `isExpanded` are written onto a nested node's
