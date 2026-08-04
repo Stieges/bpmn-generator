@@ -62,6 +62,74 @@ describe('DMN schema gate', () => {
     dc.nodes[4].usingTask = ['task_applyDiscount', 'task_reviewDiscount'];
     expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
   });
+
+  // Stage 2 (dmn-xml-importer plan): `xsd:ID` is an XML NCName, which permits `.` — a real DMN
+  // file may legally write `my.decision`. The schema's id pattern was ASCII-hyphen-only and
+  // rejected it. One assertion per site — all seven places `decision-core-schema.json` repeats
+  // the id pattern, not only the node id — because a widening applied to one site and forgotten
+  // on another is exactly the kind of gap this stage exists to close.
+  describe('a dotted id (legal DMN, `.` is a valid NCName character)', () => {
+    test('is accepted as the Definitions root id', () => {
+      const dc = good();
+      dc.id = 'Definitions.discount';
+      expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+    });
+
+    test('is accepted as a Node id', () => {
+      const dc = good();
+      dc.nodes[4].id = 'dec.discountLevel';
+      dc.requirements.forEach((r) => {
+        if (r.source === 'dec_discountLevel') r.source = 'dec.discountLevel';
+        if (r.target === 'dec_discountLevel') r.target = 'dec.discountLevel';
+      });
+      expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+    });
+
+    test('is accepted as a Requirement id', () => {
+      const dc = good();
+      dc.requirements[0].id = 'ir.1';
+      expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+    });
+
+    test('is accepted as a DecisionTable id', () => {
+      const dc = good();
+      dc.nodes[4].decisionTable.id = 'table.discountLevel';
+      expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+    });
+
+    test('is accepted as an InputClause id', () => {
+      const dc = good();
+      dc.nodes[4].decisionTable.inputs[0].id = 'in.1';
+      expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+    });
+
+    test('is accepted as an OutputClause id', () => {
+      const dc = good();
+      dc.nodes[4].decisionTable.outputs[0].id = 'out.1';
+      expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+    });
+
+    test('is accepted as a DecisionRule id', () => {
+      const dc = good();
+      dc.nodes[4].decisionTable.rules[0].id = 'r.1';
+      expect(validateDecisionCoreSchema(dc)).toMatchObject({ valid: true, errors: [] });
+    });
+  });
+
+  // The declined half of the same change: Unicode stays rejected. NCName permits it and ajv 8
+  // compiles `pattern` with the `u` flag, so `\p{L}` would validate — but measured against
+  // dmn-moddle (see the schema's own comment on the `id` field and CHANGELOG.md), it writes a
+  // non-ASCII id without complaint and then cannot read it back: `id="Entscheidung_Über"` parses
+  // to 0 drgElements, with `'unparsable content <dmn:decision>'` and `'unresolved reference
+  // <Entscheidung_Über>'` among the warnings. Accepting it here would let our own pipeline emit a
+  // `.dmn` file our own importer cannot read — the round-trip breakage this whole plan fences.
+  // This assertion is what stops a later "NCName allows it, so widen further" edit from landing
+  // silently.
+  test('a Unicode id stays rejected — NCName-legal, but dmn-moddle cannot round-trip it (measured)', () => {
+    const dc = good();
+    dc.nodes[4].id = 'Entscheidung_Über';
+    expect(validateDecisionCoreSchema(dc).valid).toBe(false);
+  });
 });
 
 describe('DMN rule engine — the reference model is clean', () => {

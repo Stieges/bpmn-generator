@@ -11,7 +11,11 @@
       "const": "1.0",
       "description": "Optional schema version (current: \"1.0\"). Absent or \"1.0\" accepted."
     },
-    "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$", "description": "Definitions id" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$",
+      "description": "Definitions id. `xsd:ID` is an XML NCName, which is wider than this pattern — the same is true at every other `id` in this schema (Node, Requirement, DecisionTable, InputClause, OutputClause, DecisionRule). ASCII letters/digits/`_`/`-`/`.` are accepted, matching what a legal DMN id may need for the import path (dmn-xml-importer plan, Stage 2) to accept it; `.` was widened for exactly that reason (`my.decision` is legal DMN and was previously rejected). Full NCName also permits Unicode letters, and that is intentionally NOT accepted here: measured against dmn-moddle, a non-ASCII id like `Entscheidung_Über` writes without complaint and then fails to read back (0 drgElements, 'unparsable content', 'unresolved reference' — see CHANGELOG.md [Unreleased] and scripts/dmn/import-scope.js's IM07/IM08 for the full measurement). Widening this pattern to `\\p{L}` would therefore let our own pipeline emit a `.dmn` file our own importer cannot read. This is a dmn-moddle library defect, not a design choice — do not 'fix' the narrowness without re-measuring dmn-moddle first."
+    },
     "name": { "type": "string", "description": "Definitions name. tNamedElement declares name as required, so a fallback is emitted when this is absent" },
     "namespace": {
       "type": "string",
@@ -33,7 +37,7 @@
       "type": "object",
       "required": ["id", "type", "name"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$", "description": "xsd:ID (NCName), narrowed to ASCII — see the root `id` field's description for why." },
         "type": {
           "enum": ["decision", "inputData", "knowledgeSource", "businessKnowledgeModel"],
           "description": "The DRG element classes that substitute into DMN13.xsd's drgElement group. decisionService is deliberately out of scope for now — it is a grouping construct with four reference lists and its own DI divider line"
@@ -91,7 +95,7 @@
       "required": ["type", "source", "target"],
       "description": "An edge of the decision requirement graph. source/target read in FLOW direction: the required element is the source, the requiring element is the target. The XML nests the requirement under the target.",
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$", "description": "xsd:ID (NCName), narrowed to ASCII — see the root `id` field's description for why." },
         "type": {
           "enum": ["information", "knowledge", "authority"],
           "description": "information: decision|inputData -> decision. knowledge: businessKnowledgeModel -> decision|businessKnowledgeModel. authority: decision|inputData|knowledgeSource -> knowledgeSource|decision"
@@ -106,7 +110,7 @@
       "type": "object",
       "required": ["outputs"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$", "description": "xsd:ID (NCName), narrowed to ASCII — see the root `id` field's description for why." },
         "hitPolicy": {
           "enum": ["UNIQUE", "FIRST", "PRIORITY", "ANY", "COLLECT", "RULE ORDER", "OUTPUT ORDER"],
           "description": "Defaults to UNIQUE. Note bpmn-io's dmn-moddle drops hitPolicy=\"UNIQUE\" on write because it is the schema default, while keeping preferredOrientation=\"Rule-as-Row\" which is also a default — relevant to golden files, not to meaning"
@@ -140,7 +144,7 @@
       "type": "object",
       "required": ["expression"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$", "description": "xsd:ID (NCName), narrowed to ASCII — see the root `id` field's description for why." },
         "label": { "type": "string", "description": "Column header shown to readers" },
         "expression": { "type": "string", "description": "The value being tested, as text. Not parsed" },
         "typeRef": { "type": "string" },
@@ -152,7 +156,7 @@
     "OutputClause": {
       "type": "object",
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$", "description": "xsd:ID (NCName), narrowed to ASCII — see the root `id` field's description for why." },
         "name": { "type": "string", "description": "Required when the table has more than one output clause" },
         "typeRef": { "type": "string" },
         "allowedValues": { "type": "string" },
@@ -165,7 +169,7 @@
       "type": "object",
       "required": ["then"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+        "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$", "description": "xsd:ID (NCName), narrowed to ASCII — see the root `id` field's description for why." },
         "when": {
           "type": "array",
           "items": { "type": "string" },

@@ -66,6 +66,29 @@ describe('runDmnPipeline — success path', () => {
     expect(semantic.validation.warnings.some((w) => w.startsWith('[B03]'))).toBe(false);
     expect(bestPractice.validation.warnings.some((w) => w.startsWith('[B03]'))).toBe(true);
   });
+
+  // Stage 2 (dmn-xml-importer plan) blast radius: a dotted id is now accepted by the schema gate,
+  // so it flows further than before — through dmn-xml.js's generated-id families
+  // (`${id}_var`/`${id}_di`) and through coordinates.js's requirementKey. Both are still legal
+  // NCNames with a `.` inside them, but that is checked here rather than assumed.
+  test('a dotted node id round-trips clean — no serialisation warnings, DI intact', async () => {
+    const dc = good();
+    const decision = dc.nodes.find((n) => n.id === 'dec_discountLevel');
+    decision.id = 'dec.discountLevel';
+    dc.requirements.forEach((r) => {
+      if (r.source === 'dec_discountLevel') r.source = 'dec.discountLevel';
+      if (r.target === 'dec_discountLevel') r.target = 'dec.discountLevel';
+    });
+    const result = await runDmnPipeline(dc);
+    expect(result.validation.errors).toEqual([]);
+    expect(result.validation.xmlWarnings).toEqual([]);
+    expect(result.diagnostics.ok).toBe(true);
+    // The generated variable/DI ids derived from the dotted node id must still land in the XML,
+    // proving nextDcId's collision suffixing and dmn-moddle's own id validation both accept them.
+    expect(result.xml).toContain('id="dec.discountLevel"');
+    expect(result.xml).toContain('id="dec.discountLevel_var"');
+    expect(result.xml).toContain('id="dec.discountLevel_di"');
+  });
 });
 
 describe('runDmnPipeline — degenerate inputs', () => {
