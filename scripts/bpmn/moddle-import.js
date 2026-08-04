@@ -154,8 +154,19 @@ function moddleToLogicCore(definitions) {
     for (const diElement of plane.planeElement || []) {
       if (diElement.$type === 'bpmndi:BPMNShape') {
         const bpmnElement = diElement.bpmnElement?.id;
-        const biocStroke = diElement.$attrs?.['bioc:stroke'];
-        const biocFill = diElement.$attrs?.['bioc:fill'];
+        // Read the PARSED properties first, `$attrs` only as a fallback — and that order is the
+        // whole fix. bpmn-moddle ships the bpmn.io colour package as a registered extension
+        // (`resources/bpmn-io/json/bioc.json`: `ColoredShape extends bpmndi:BPMNShape` with
+        // `stroke` and `fill`), so a `bioc:`-prefixed attribute is a KNOWN property and moddle
+        // materialises it under its local name on the shape itself. `$attrs` is the bag for
+        // attributes moddle does not recognise, and it is therefore `{}` here — measured:
+        // `Object.keys(shape)` is `$type,id,stroke,fill,bounds` and `$attrs` is empty, whether or
+        // not the file declares `xmlns:bioc`. So the `$attrs`-only read could never match, and
+        // `color` was lost on this path — the primary one — while `import.js`'s own DOM parser
+        // (which sees raw attribute names) recovered it. The `$attrs` fallback stays for a file
+        // written against some other colour namespace that moddle has no package for.
+        const biocStroke = diElement.stroke ?? diElement.$attrs?.['bioc:stroke'];
+        const biocFill = diElement.fill ?? diElement.$attrs?.['bioc:fill'];
         if (bpmnElement && (biocStroke || biocFill)) {
           for (const pool of pools) {
             const node = (pool.nodes || []).find(n => n.id === bpmnElement);
