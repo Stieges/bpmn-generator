@@ -71,7 +71,7 @@ Wer eine Regel ändert, aktualisiert `description` und passt diese Zeile sinngem
 | S12 | Message Flow source/target darf kein Gateway sein | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode (Gateway extends FlowNode, not InteractionNode) | implementiert |
 | S13 | Boundary Event muss an einer existierenden Aktivität im selben Container hängen — und der Host muss wirklich eine Aktivität sein | OMG §10.4.3 Table 10.86, CMOF: BoundaryEvent.attachedToRef : Activity [1..1] | implementiert |
 | S14 | Message Flow source/target darf kein Container sein — der Klasse nach (SubProcess/Transaction/AdHocSubProcess/CallActivity) oder der Struktur nach (eigenes `nodes`-Array) (Severity WARNING) | OMG §7.6.2 Table 7.4, CMOF: MessageFlow.sourceRef/targetRef typed as InteractionNode; Activity superClass="FlowNode" only (BPMN20.cmof:1095) | implementiert |
-| S15 | Ein Knotenfeld muss auf einer Klasse sitzen, für die OMG das Attribut definiert — `isForCompensation` nur auf Activity, `implementation` nur auf den fünf aufrufenden Task-Typen, `triggeredByEvent` nur auf SubProcess und dessen Spezialisierung Transaction, `calledElement` nur auf CallActivity, `scriptFormat` nur auf ScriptTask, `isCollection` nur auf DataObjectReference (Severity WARNING) | OMG §10.2, §10.2.2/§10.2.3, §10.2.5, §10.2.6; CMOF: Activity.isForCompensation (BPMN20.cmof:1095), `implementation` per Klasse an UserTask (:1263)/ServiceTask (:1240)/SendTask (:1229)/ReceiveTask (:1214)/BusinessRuleTask (:1177) | implementiert |
+| S15 | Ein Knotenfeld muss auf einer Klasse sitzen, für die OMG das Attribut definiert — `isForCompensation` nur auf Activity, `implementation` nur auf den fünf aufrufenden Task-Typen, `triggeredByEvent` nur auf SubProcess und dessen Spezialisierung Transaction, `calledElement` nur auf CallActivity, `scriptFormat` und der Script-Rumpf nur auf ScriptTask, `isCollection` nur auf DataObjectReference, `cancelActivity` nur auf BoundaryEvent, `eventGatewayType` nur auf EventBasedGateway, `instantiate` auf EventBasedGateway **und** ReceiveTask, Loop- und Multi-Instance-Merkmale nur auf einer Activity, `decisionRef` nur auf einem businessRuleTask (Severity WARNING) | OMG §10.2, §10.2.2/§10.2.3, §10.2.4, §10.2.5, §10.2.6, §10.5.6; CMOF: Activity.isForCompensation (BPMN20.cmof:1095), Activity.loopCharacteristics (:1095), BoundaryEvent.cancelActivity (:301), EventBasedGateway.eventGatewayType (:1015), `instantiate` per Klasse an EventBasedGateway (:1015)/ReceiveTask (:1214), `implementation` per Klasse an UserTask (:1263)/ServiceTask (:1240)/SendTask (:1229)/ReceiveTask (:1214)/BusinessRuleTask (:1177) | implementiert |
 
 **Zu S04:** Die Regel fragt nach **eingehenden** Kanten, nicht nach Kanten überhaupt — und das
 ist eine Korrektur, keine Umformulierung.
@@ -558,15 +558,23 @@ container endpoint outright and records it on `unresolvedEndpoints` with `reason
 
 > Written in English, like M11 and S14 above.
 
-`references/input-schema.json` declares `isCompensation`, `implementation`, `isEventSubProcess`,
-`calledElement`, `scriptFormat` and `isCollection` as generic properties of `Node`, valid on any
-`NodeType`. JSON Schema's `properties` has no way to say "only when `type` is one of …" without a
-conditional block per field, so all six are schema-valid anywhere. OMG scopes each one far more
-narrowly, and an attribute outside a class's content model is not merely unusual — it is
-XSD-invalid.
+`references/input-schema.json` declares all 31 `Node` properties flat, valid on any `NodeType`.
+JSON Schema's `properties` has no way to say "only when `type` is one of …" without a conditional
+block per field, so every one of them is schema-valid anywhere. OMG scopes each far more narrowly,
+and an attribute outside a class's content model is not merely unusual — it is XSD-invalid.
 
 The narrowing therefore has to happen after the schema gate, and it has to happen in exactly one
 place. It now does: `OMG_NODE_FIELD_SCOPE` in `scripts/bpmn/types.js` is read by both consumers.
+
+**The table now covers every `$defs.Node` and `$defs.Edge` property, not only the fields S15
+reports on.** Each row also carries how the field serialises (`shape`), which function writes it
+(`writeSite`), what survives a round trip (`roundTrip`, with a mandatory reason for anything less
+than exact) and — the column that matters here — `enforcedBy`: whether the write site actually
+consults the row's `allowed` set. **S15 walks the `enforcedBy: 'table'` rows and only those.** Its
+message says the field "is dropped when the BPMN is written", and that sentence is true exactly
+there. A `textAnnotation`'s `name` is outside `allowed` because OMG's `TextAnnotation` has no
+`name` attribute, yet the label survives as `<bpmn:text>` — reporting it would be a false claim,
+and `enforcedBy` is what keeps the rule from making it.
 
 | Field | OMG attribute | Type | May sit on |
 |-------|---------------|------|------------|
@@ -576,6 +584,13 @@ place. It now does: `OMG_NODE_FIELD_SCOPE` in `scripts/bpmn/types.js` is read by
 | `calledElement` | `calledElement` | string | `callActivity` |
 | `scriptFormat` | `scriptFormat` | string | `scriptTask` |
 | `isCollection` | `isCollection` | boolean | `dataObjectReference` — but the attribute is written onto the companion `<bpmn:dataObject>`, see below |
+| `cancelActivity` | `cancelActivity` | boolean | `boundaryEvent` — the guard used to be `isBoundaryEvent`, which also answers true for anything carrying `attachedTo`, so a task with an `attachedTo` got the attribute |
+| `eventGatewayType` | `eventGatewayType` | string | `eventBasedGateway` |
+| `instantiate` | `instantiate` | boolean | `eventBasedGateway`, `receiveTask` — OMG grants it to both (§10.2.4: an instantiating Receive Task starts a process on an incoming message without a message start event). The writer and both importers said `eventBasedGateway` alone, so the field was unreachable from both ends at once |
+| `script` | `script` | string | `scriptTask` |
+| `loopType` | `loopCharacteristics` | string \| object | any `Activity` — a child element, not an attribute, and previously unguarded: `loopType` on a `startEvent` produced no element and no moddle warning, because bpmn-moddle discards a property it has no descriptor for in silence |
+| `multiInstance` | `loopCharacteristics` | string \| object | any `Activity` — same slot, same previous silence (`multiInstance` on a `parallelGateway`). OMG gives an Activity one `loopCharacteristics`, so a node carrying both fields keeps only `loopType` |
+| `decisionRef` | `decisionRef` (our own extension namespace) | string | `businessRuleTask` — the one entry with no OMG counterpart to derive the scope from; `references/input-schema.json`'s own property description ("For businessRuleTask: id of the decision this task invokes") is the authority. Previously unguarded, and unlike the two above this was a silent **acceptance**, not a silent drop: the element was written on any class and read straight back |
 
 **One field is authored in one place and written in another.** Logic-Core models a data object and
 the reference to it as a single node, while BPMN splits them into a `DataObject` (the thing) and a
