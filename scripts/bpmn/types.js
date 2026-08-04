@@ -484,7 +484,10 @@ export const OMG_NODE_FIELD_SCOPE = [
     reason: 'Written only when the node ALSO carries children (`node.isExpanded && node.nodes` in '
       + 'bpmn-xml.js\'s DI loop), so `isExpanded: true` on a childless or collapsed-with-no-`nodes` '
       + 'container is dropped. "Collapsed but drillable" is expressible; "expanded but empty" is '
-      + 'not.' },
+      + 'not. Additionally lost at depth >= 1 even WITH children: that DI loop walks the process\'s '
+      + 'own node list, so a nested container\'s `<bpmndi:BPMNShape>` carries no `isExpanded` at '
+      + 'all — the same top-level-only DI walk the `color` row records from the read side. Found by '
+      + '`field-fidelity.test.js`.' },
   // BPMN-in-Color: two attributes in the `bioc:` namespace on the BPMNShape. A de-facto convention
   // (bpmn.io / Camunda), not part of OMG's metamodel at all, which is why the fence checks the `on`
   // class against bpmndi.json but exempts the `bioc:`-prefixed attribute names themselves.
@@ -494,15 +497,32 @@ export const OMG_NODE_FIELD_SCOPE = [
   // registered extension. So the primary importer returned the node with no `color` at all while
   // `import.js`'s DOM parser recovered it. See that read's own comment.
   { field: 'color', attr: ['bioc:stroke', 'bioc:fill'], type: 'object', on: 'bpmnShape', allowed: ALL_NODE_TYPES, scope: 'any node',
-    shape: 'di', writeSite: 'buildDiagram', enforcedBy: 'none', roundTrip: 'exact',
-    reason: 'enforcedBy none: every drawable node gets a BPMNShape, so there is no class to '
-      + 'restrict — `allowed` is the whole enum and nothing needs to consult it.' },
+    shape: 'di', writeSite: 'buildDiagram', enforcedBy: 'none', roundTrip: 'lossy',
+    reason: 'Exact at depth 0, on every one of the 25 classes. LOST AT DEPTH >= 1, on BOTH importer '
+      + 'paths, and the loss is on the READ side only: the DI loop writes `bioc:stroke`/`bioc:fill` '
+      + 'onto a nested node\'s `<bpmndi:BPMNShape>` exactly as it does for a top-level one, and '
+      + 'neither importer looks a DI shape up for a node below the top level, so a coloured node '
+      + 'inside a subProcess or transaction comes back with no `color` at all. Measured by '
+      + '`field-fidelity.test.js` at both wrapper classes; found by it and reported rather than '
+      + 'fixed — no backlog stage covers the DI read yet, so it is stated debt awaiting one. '
+      + 'enforcedBy none: every drawable node gets a '
+      + 'BPMNShape, so there is no class to restrict — `allowed` is the whole enum and nothing needs '
+      + 'to consult it.' },
 
   // ── shape: 'childElement' ──────────────────────────────────────────────────────────────────────
   { field: 'documentation', attr: 'documentation', type: 'string', on: 'self', allowed: ALL_NODE_TYPES, scope: 'any node',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'writeSite', roundTrip: 'exact' },
   { field: 'lane', attr: 'flowNodeRef', type: 'string', on: 'lane', allowed: FLOW_NODE_TYPES, scope: 'a FlowNode (not an artifact or a data reference)',
-    shape: 'childElement', writeSite: 'buildLane', enforcedBy: 'writeSite', roundTrip: 'exact',
+    shape: 'childElement', writeSite: 'buildLane', enforcedBy: 'writeSite', roundTrip: 'lossy',
+    reason: 'Exact at depth 0, on all 21 FlowNode classes. NOT WRITTEN AT ALL at depth >= 1: '
+      + '`buildLane` filters the process\'s OWN node list, so a `lane` on a node inside a subProcess '
+      + 'or transaction never reaches a `<bpmn:flowNodeRef>` and comes back absent on both importer '
+      + 'paths — the lane element is emitted empty. Unlike the neighbouring depth losses this one '
+      + 'is not simply a gap to close: a LaneSet belongs to a Process OR to a SubProcess, so a '
+      + 'nested node\'s lane would have to become the container\'s own laneSet rather than a '
+      + 'reference from the outer one, and the pipeline has no notion of a per-container laneSet '
+      + 'today. Found by `field-fidelity.test.js`; the modelling question is stated here, not '
+      + 'decided.',
     // `allowed` is hand-stated because `Lane#flowNodeRef` expresses its restriction as a TYPE
     // (`FlowNode`) rather than as a per-class property, which is the one shape the metamodel fence's
     // `carries()` resolver cannot read. An artifact or data reference carrying `lane` is therefore
@@ -537,8 +557,18 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'input, so no meaning is lost — but the value is not deep-equal. Dropped entirely when the '
       + 'same node also carries `loopType` (one loopCharacteristics slot).' },
   { field: 'nodes', attr: 'flowElements', type: 'array', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
-    shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'exact',
-    reason: 'enforcedBy none, and it costs a crash: `buildFlowNode` recurses on `node.nodes` for '
+    shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'lossy',
+    reason: 'A flow-node child round-trips exactly, at any depth. AN ARTIFACT CHILD DOES NOT, on '
+      + 'the PRIMARY path only: a `textAnnotation` or `group` inside a container is written (it '
+      + 'appears as a child element of the `<bpmn:subProcess>`) and `moddle-import.js`\'s child walk '
+      + 'never reads it back, because bpmn-moddle places an Artifact in `artifacts` and that walk '
+      + 'reads `flowElements`. This is the same defect that was closed at top level and left open '
+      + 'one level down — see the round-trip limitation in CLAUDE.md, which records the top-level '
+      + 'half. `import.js`, the legacy DOM path, recovers both classes. A data reference '
+      + '(`dataObjectReference`/`dataStoreReference`) is unaffected: those are FlowElements and '
+      + 'really do live in `flowElements`. Found by `field-fidelity.test.js`; reported, not fixed — '
+      + 'the nested-artifact read has no backlog stage yet, so it is stated debt awaiting one. '
+      + 'enforcedBy none, and it costs a crash: `buildFlowNode` recurses on `node.nodes` for '
       + 'ANY node type, and the recursion itself throws — the child element is built and then '
       + 'pushed into `el.get("flowElements")`, which is `undefined` on a class that is not a '
       + 'FlowElementsContainer. Measured: a schema-valid `{ type: "userTask", nodes: [...] }` '
