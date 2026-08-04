@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A DMN 1.3 file this project did NOT write.
+
+  Hand-authored, deliberately: it is the oracle for fence F3 in scripts/dmn/import-coverage.test.js,
+  which asserts that the importer's findings are exactly what import-scope.js's `reported` rows say
+  they should be. Generating it from `generateDmnXml` would make the fence circular — our writer
+  emits only what Decision-Core can already hold, so a generated fixture could never contain a single
+  construct the table exists to describe, and F3 would prove nothing beyond "we can read ourselves".
+
+  It is also XSD-validated against DMN13.xsd (xmllint, in the same fence), because F3's premise is
+  "this is what a conformant foreign file looks like" — an invalid fixture would quietly narrow what
+  the fence covers while still passing.
+
+  How realistic (Stage 4 judgment call 1, recorded here because a later reader will wonder): realistic
+  enough to carry what real exports carry — @exporter/@exporterVersion, <extensionElements> with
+  vendor content, a prefixed vendor ATTRIBUTE in the biodi namespace bpmn.io's DMN modeller really
+  emits, hand-chosen id styles rather than our generator's — and no further. The exporter name is
+  fictional on purpose: a fixture built to match one vendor's output becomes a test of that vendor's
+  quirks, goes red when they change something irrelevant, and says nothing about conformance.
+
+  Two constructs the table describes that CANNOT appear here, both for structural reasons rather than
+  by choice:
+
+    <DMNDiagramElement>  DMNDI13.xsd:16 declares it non-abstract (which is why it earns a row) but
+                         types it di:DiagramElement, which DI.xsd:23 declares abstract="true". No
+                         XSD-valid document can instantiate it. F3 derives that exclusion from the
+                         descriptors rather than hard-coding it.
+    an id our schema
+    rejects (`a:b`)      dmn-moddle accepts a colon in an xsd:ID; xmllint does not, because a colon
+                         is illegal in an NCName. The two cannot both be satisfied in one file, and
+                         XSD validity is this fixture's whole premise — so IM07's reachability is
+                         asserted in import.test.js on inline XML instead, where no XSD gate applies.
+
+  What it is NOT: a model that means anything. The decisions are shaped to reach every row of the
+  table, not to triage a claim.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0"
+             xmlns:mds="http://meridian.example/schema/dmn/1.0"
+             id="Definitions_ClaimsTriage"
+             name="Claims triage"
+             namespace="http://meridian.example/dmn/claims-triage"
+             exporter="Meridian Decision Studio"
+             exporterVersion="4.2.1">
+
+  <description>Exported from a modelling tool that is not this generator.</description>
+
+  <!-- ── document-level constructs outside the decision graph (IM03) ───────────────────────── -->
+
+  <import id="imp_shared"
+          name="shared"
+          namespace="http://meridian.example/dmn/shared-types"
+          locationURI="shared-types.dmn"
+          importType="https://www.omg.org/spec/DMN/20191111/MODEL/"/>
+
+  <!-- Nesting case 1: <itemDefinition> inside <itemDefinition>. The suppression rules are exercised
+       here rather than asserted — the inner one must NOT produce a second finding. -->
+  <itemDefinition id="type_Claim" name="Claim">
+    <itemComponent id="type_Claim_amount" name="amount">
+      <typeRef>number</typeRef>
+    </itemComponent>
+    <itemComponent id="type_Claim_region" name="region">
+      <typeRef>string</typeRef>
+    </itemComponent>
+  </itemDefinition>
+
+  <!-- <functionItem> has no legal home but inside an <itemDefinition>, so it can only be reached
+       through a subtree that is itself reported. That is what rule 2 (dedupe BY CLASS, not "stop
+       dead at a reported element") exists to keep reachable. -->
+  <itemDefinition id="type_Scorer" name="Scorer">
+    <functionItem id="type_Scorer_signature" outputTypeRef="number">
+      <parameters id="type_Scorer_signature_p1" name="amount" typeRef="number"/>
+    </functionItem>
+  </itemDefinition>
+
+  <!-- ── the DRG ───────────────────────────────────────────────────────────────────────────── -->
+
+  <inputData id="in_claim" name="Claim">
+    <variable id="in_claim_var" name="claim" typeRef="Claim"/>
+  </inputData>
+
+  <knowledgeSource id="ks_policy" name="Claims handling policy"
+                   locationURI="http://meridian.example/policies/claims-handling">
+    <description>The underwriting manual, chapter 4.</description>
+    <type>Policy document</type>
+  </knowledgeSource>
+
+  <businessKnowledgeModel id="bkm_surcharge" name="Regional surcharge">
+    <variable id="bkm_surcharge_var" name="regionalSurcharge" typeRef="number"/>
+    <encapsulatedLogic kind="FEEL">
+      <formalParameter id="bkm_surcharge_p1" name="region" typeRef="string"/>
+      <literalExpression>
+        <text>if region = "north" then 0.05 else 0</text>
+      </literalExpression>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+
+  <!-- The ordinary decision: a decision table, a requirement, vendor extension content in both of
+       the two shapes vendors use (an <extensionElements> child and a prefixed attribute). -->
+  <decision id="dec_triageLevel" name="Triage level" biodi:foldedIn="false">
+    <extensionElements>
+      <mds:reviewState status="approved" reviewer="a.mueller"/>
+    </extensionElements>
+    <question>How urgently must this claim be handled?</question>
+    <allowedAnswers>fast-track, standard, manual</allowedAnswers>
+    <variable id="dec_triageLevel_var" name="triageLevel" typeRef="string"/>
+    <informationRequirement id="ir_claim_triage">
+      <requiredInput href="#in_claim"/>
+    </informationRequirement>
+    <authorityRequirement id="ar_policy_triage">
+      <requiredAuthority href="#ks_policy"/>
+    </authorityRequirement>
+    <usingTask href="task_triageClaim"/>
+    <decisionTable id="dt_triage" hitPolicy="FIRST" outputLabel="Triage level">
+      <input id="dt_triage_in1" label="Claim amount">
+        <inputExpression id="dt_triage_in1_expr" typeRef="number">
+          <text>claim.amount</text>
+        </inputExpression>
+      </input>
+      <output id="dt_triage_out1" name="level" typeRef="string">
+        <outputValues>
+          <text>"fast-track","standard","manual"</text>
+        </outputValues>
+      </output>
+      <annotation name="Rationale"/>
+      <rule id="dt_triage_r1">
+        <description>Small claims never need a human.</description>
+        <inputEntry>
+          <text>&lt; 1000</text>
+        </inputEntry>
+        <outputEntry>
+          <text>"fast-track"</text>
+        </outputEntry>
+        <annotationEntry>
+          <text>Below the manual-review threshold.</text>
+        </annotationEntry>
+      </rule>
+      <rule id="dt_triage_r2">
+        <inputEntry>
+          <text>&gt;= 1000</text>
+        </inputEntry>
+        <outputEntry>
+          <text>"manual"</text>
+        </outputEntry>
+        <annotationEntry>
+          <text>Underwriter decides.</text>
+        </annotationEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <!-- Boxed expressions: one decision per form, so that each opens its own reported subtree instead
+       of deduping against a sibling. Nesting case 2 lives in dec_boxedContext: a <context> inside a
+       <contextEntry> of a <context>, which must still report the class exactly once. -->
+  <decision id="dec_boxedContext" name="Coverage summary">
+    <variable id="dec_boxedContext_var" name="coverage" typeRef="Claim"/>
+    <context id="ctx_coverage">
+      <contextEntry id="ctx_coverage_e1">
+        <variable id="ctx_coverage_e1_var" name="base" typeRef="number"/>
+        <literalExpression>
+          <text>claim.amount * 0.8</text>
+        </literalExpression>
+      </contextEntry>
+      <contextEntry id="ctx_coverage_e2">
+        <variable id="ctx_coverage_e2_var" name="breakdown" typeRef="Claim"/>
+        <context id="ctx_coverage_e2_inner">
+          <contextEntry id="ctx_coverage_e2_inner_e1">
+            <variable id="ctx_coverage_e2_inner_e1_var" name="excess" typeRef="number"/>
+            <literalExpression>
+              <text>250</text>
+            </literalExpression>
+          </contextEntry>
+        </context>
+      </contextEntry>
+    </context>
+  </decision>
+
+  <decision id="dec_boxedInvocation" name="Surcharge">
+    <variable id="dec_boxedInvocation_var" name="surcharge" typeRef="number"/>
+    <knowledgeRequirement id="kr_surcharge">
+      <requiredKnowledge href="#bkm_surcharge"/>
+    </knowledgeRequirement>
+    <invocation id="inv_surcharge">
+      <literalExpression>
+        <text>Regional surcharge</text>
+      </literalExpression>
+      <binding>
+        <parameter id="inv_surcharge_b1_p" name="region" typeRef="string"/>
+        <literalExpression>
+          <text>claim.region</text>
+        </literalExpression>
+      </binding>
+    </invocation>
+  </decision>
+
+  <decision id="dec_boxedList" name="Escalation contacts">
+    <variable id="dec_boxedList_var" name="escalationContacts" typeRef="string"/>
+    <list id="lst_contacts">
+      <literalExpression>
+        <text>"claims-duty@meridian.example"</text>
+      </literalExpression>
+      <literalExpression>
+        <text>"fraud-desk@meridian.example"</text>
+      </literalExpression>
+    </list>
+  </decision>
+
+  <decision id="dec_boxedRelation" name="Regional loadings">
+    <variable id="dec_boxedRelation_var" name="regionalLoadings" typeRef="number"/>
+    <relation id="rel_loadings">
+      <column id="rel_loadings_c1" name="region" typeRef="string"/>
+      <column id="rel_loadings_c2" name="loading" typeRef="number"/>
+      <row id="rel_loadings_r1">
+        <literalExpression>
+          <text>"north"</text>
+        </literalExpression>
+        <literalExpression>
+          <text>0.05</text>
+        </literalExpression>
+      </row>
+    </relation>
+  </decision>
+
+  <!-- A grouping construct that parses with ZERO moddle warnings and sits in the same drgElement
+       list as a decision — the textbook case for the whole coverage table. -->
+  <decisionService id="ds_triage" name="Claims triage service">
+    <variable id="ds_triage_var" name="claimsTriageService" typeRef="Any"/>
+    <outputDecision href="#dec_triageLevel"/>
+    <encapsulatedDecision href="#dec_boxedInvocation"/>
+    <inputData href="#in_claim"/>
+  </decisionService>
+
+  <!-- ── artifacts ─────────────────────────────────────────────────────────────────────────── -->
+
+  <group id="grp_underwriting" name="Underwriting"/>
+
+  <textAnnotation id="ann_threshold" textFormat="text/plain">
+    <text>The 1000 threshold is set by legal, not by us.</text>
+  </textAnnotation>
+
+  <association id="assoc_threshold" associationDirection="One">
+    <sourceRef href="#ann_threshold"/>
+    <targetRef href="#dec_triageLevel"/>
+  </association>
+
+  <!-- ── element collections and business context ──────────────────────────────────────────── -->
+
+  <elementCollection id="col_triage" name="Triage decisions">
+    <drgElement href="#dec_triageLevel"/>
+    <drgElement href="#dec_boxedInvocation"/>
+  </elementCollection>
+
+  <performanceIndicator id="kpi_cycleTime" name="Claim cycle time"
+                        URI="http://meridian.example/kpi/cycle-time">
+    <impactingDecision href="#dec_triageLevel"/>
+  </performanceIndicator>
+
+  <!-- The parser-blind class. XSD-legal (DMN13.xsd:132 declares the AMERICAN spelling), and
+       dmn-moddle cannot build an object for it at all — it spells the type OrganisationalUnit, so
+       its tag alias looks for <organisationalUnit>. The element is absent from the parsed tree and
+       the only evidence it was ever here is a `warnings[]` entry. That is IM08, and this element is
+       the only thing in the file that can produce it. -->
+  <organizationUnit id="ou_claims" name="Claims department">
+    <decisionMade href="#dec_triageLevel"/>
+  </organizationUnit>
+
+  <!-- ── diagram interchange (IM06) ────────────────────────────────────────────────────────── -->
+
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="dd_main" name="Claims triage DRD" resolution="72">
+      <dmndi:DMNShape id="shp_in_claim" dmnElementRef="in_claim">
+        <dc:Bounds x="160" y="320" width="180" height="60"/>
+        <dmndi:DMNLabel>
+          <dc:Bounds x="160" y="320" width="180" height="20"/>
+          <dmndi:Text>Claim (as filed)</dmndi:Text>
+        </dmndi:DMNLabel>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="shp_dec_triage" dmnElementRef="dec_triageLevel" sharedStyle="sty_decision">
+        <dc:Bounds x="160" y="180" width="180" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="shp_ds_triage" dmnElementRef="ds_triage" isCollapsed="false">
+        <dc:Bounds x="480" y="120" width="280" height="180"/>
+        <dmndi:DMNDecisionServiceDividerLine>
+          <di:waypoint x="480" y="210"/>
+          <di:waypoint x="760" y="210"/>
+        </dmndi:DMNDecisionServiceDividerLine>
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge id="edg_ir_claim" dmnElementRef="ir_claim_triage">
+        <di:waypoint x="250" y="320"/>
+        <di:waypoint x="250" y="240"/>
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+    <!-- A second view over the same DRG. Every diagram is a fact of its own; a hundred shapes are
+         one. That asymmetry is the <DMNDI> row's doctrine and is exercised here. -->
+    <dmndi:DMNDiagram id="dd_overview" name="Overview"/>
+    <!-- The style sits at <DMNDI> level, as a shared style, rather than locally on the shape it
+         paints. Both are XSD-legal; only this one survives the parser. dmn-moddle declares
+         di:DiagramElement.style with `isReference: true`, so it expects an IDREF where DI.xsd
+         declares a contained element — a locally-owned <dmndi:DMNStyle> inside a <DMNShape> is
+         rejected with `unrecognized element <dmndi:DMNStyle>` and reaches the report as IM08, not as
+         the IM06 the <DMNStyle> row promises. Measured, recorded in the Stage 4 report, and NOT
+         worked around here: the fixture's job is to be conformant, and this position is the one a
+         conformant file can use and have read. -->
+    <dmndi:DMNStyle id="sty_decision" fontFamily="Arial" fontSize="12" fontBold="true"/>
+  </dmndi:DMNDI>
+</definitions>

@@ -1,5 +1,6 @@
-import { describe, test, expect } from '@jest/globals';
-import { readFileSync } from 'fs';
+import { beforeAll, describe, test, expect } from '@jest/globals';
+import { execFileSync } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -8,7 +9,7 @@ import {
   DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS, DMN_ELEMENT_BASE,
   IMPORT_CODES, IMPORT_CODE_KINDS, BLIND_MECHANISMS, coverageForElement, coverageForModdleType,
 } from './import-scope.js';
-import { HANDLERS } from './import.js';
+import { HANDLERS, dmnToDecisionCore } from './import.js';
 
 /**
  * TWO ORACLES, NEITHER RESTATED HERE.
@@ -51,6 +52,7 @@ function scanXsd(xsdFile) {
   const tag = /<(\/?)(?:xsd:)?([A-Za-z][\w.:-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g;
   const globalElements = [];
   const defaults = [];
+  const complexTypes = [];
   const open = [];
   let m;
   while ((m = tag.exec(text))) {
@@ -58,7 +60,16 @@ function scanXsd(xsdFile) {
     if (closing) { open.pop(); continue; }
     const name = attrs.match(/\bname="([^"]*)"/)?.[1] ?? null;
     if (tagName === 'element' && open.length === 1) {
-      globalElements.push({ xsdFile, name, abstract: /\babstract="true"/.test(attrs) });
+      globalElements.push({
+        xsdFile, name,
+        abstract: /\babstract="true"/.test(attrs),
+        // The element's declared TYPE, kept because "the element is not abstract" and "the element
+        // can appear in a document" are different questions — see `UNINSTANTIABLE` below.
+        type: attrs.match(/\btype="([^"]*)"/)?.[1] ?? null,
+      });
+    }
+    if (tagName === 'complexType' && name) {
+      complexTypes.push({ xsdFile, name, abstract: /\babstract="true"/.test(attrs) });
     }
     const dflt = attrs.match(/\bdefault="([^"]*)"/)?.[1];
     if (tagName === 'attribute' && dflt !== undefined) {
@@ -68,7 +79,7 @@ function scanXsd(xsdFile) {
     }
     if (!selfClosing) open.push({ tagName, name });
   }
-  return { globalElements, defaults };
+  return { globalElements, defaults, complexTypes };
 }
 
 /**
@@ -104,6 +115,35 @@ const XSD_ELEMENTS = XSD_FILES_WITH_ELEMENTS
   .filter((e) => !e.abstract);   // an abstract head is a substitution-group anchor, never in a file
 
 const XSD_DEFAULTS = XSD_FILES_WITH_DEFAULTS.flatMap((f) => scanXsd(f).defaults);
+
+/**
+ * Which complexTypes the four XSDs declare `abstract="true"`, keyed `file:LocalName`, plus the
+ * prefix→file map needed to resolve a `type="di:DiagramElement"` reference to one of them. Read from
+ * all four, since an element declared in DMNDI13 may be typed by DI.
+ */
+const XSD_ABSTRACT_TYPES = new Set(
+  XSD_FILES_WITH_DEFAULTS.flatMap((f) => scanXsd(f).complexTypes)
+    .filter((t) => t.abstract).map((t) => `${t.xsdFile}:${t.name}`),
+);
+const XSD_FILE_OF_PREFIX = { dmn: 'DMN13', dmndi: 'DMNDI13', dc: 'DC', di: 'DI' };
+
+/**
+ * A global element no XSD-valid document can contain — because its declared TYPE is abstract, even
+ * though the element declaration itself is not.
+ *
+ * Exactly one such element exists and it is the reason this function does: DMNDI13.xsd:16 declares
+ * `<DMNDiagramElement>` without `abstract="true"` (which is why F1's mechanical rule gives it a row)
+ * and types it `di:DiagramElement`, which DI.xsd:23 declares `abstract="true"`. F3 has to leave it
+ * out of the set the fixture is measured against, and derives that exclusion here rather than
+ * carrying a name — the day a spec revision makes the type concrete, or a second element acquires
+ * the same shape, the derivation follows and the hand list would not.
+ */
+function typeIsAbstract(element) {
+  if (!element?.type) return false;
+  const [maybePrefix, local] = element.type.includes(':') ? element.type.split(':') : [null, element.type];
+  const file = maybePrefix ? XSD_FILE_OF_PREFIX[maybePrefix] : element.xsdFile;
+  return XSD_ABSTRACT_TYPES.has(`${file}:${local}`);
+}
 
 // ── Oracle B ────────────────────────────────────────────────────────────────────────────────────
 
@@ -585,6 +625,159 @@ describe('F2 — a row resolves against dmn-moddle exactly when it claims the pa
     }
     expect(defects).toEqual([]);
     expect(blind.length).toBeGreaterThan(0);   // the class is real; an empty set would pass vacuously
+  });
+});
+
+// ── F3 — the behavioural fence, over a file we did not write ────────────────────────────────────
+
+/**
+ * F1, F1b, F2, F4 and F5 are all STATIC: they compare the table against its oracles, or against the
+ * importer's dispatch table. Not one of them checks that the importer, run on an actual file, DOES
+ * what the table says. F3 is that check, and `tests/fixtures/dmn/foreign-kitchen-sink.dmn` is the
+ * file — hand-written rather than produced by `generateDmnXml`, because our writer emits only what
+ * Decision-Core can already hold, so a generated fixture could not contain a single construct this
+ * table exists to describe and the fence would only ever prove we can read ourselves.
+ *
+ * SET EQUALITY, IN BOTH DIRECTIONS, rather than per-row presence. Per-row presence cannot see the
+ * importer reporting something the table does not list — and one-directional checks passing over a
+ * live defect is this project's own history, twice over in this plan alone.
+ *
+ * JUDGMENT CALL 2 (Stage 4), recorded: the equality is over `{code × xsdElement}`, not over anything
+ * finer. Finer — the path, or the count per row — catches more and buys it by coupling the fence to
+ * facts that may legitimately change: a path moves when the fixture is reordered, a count moves when
+ * an instance is added to exercise something else, and neither movement means the importer's
+ * behaviour changed. `{code × xsdElement}` is exactly what a `reported` row STATES ("this element
+ * class produces this code"), so the fence measures the claim and nothing around it. What finer
+ * would have caught and this does not — a row firing at the wrong path, or once where it should fire
+ * per occurrence — is covered where it belongs: `import.test.js` pins paths for the cases whose
+ * paths are the point, and the suppression rules get their own assertions below.
+ */
+describe('F3 — the importer, run on a foreign file, reports exactly the `reported` rows', () => {
+  const FIXTURE = path.join(HERE, '..', '..', 'tests', 'fixtures', 'dmn', 'foreign-kitchen-sink.dmn');
+  const REPORTED = DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'reported');
+  const UNINSTANTIABLE = REPORTED.filter((row) =>
+    typeIsAbstract(XSD_ELEMENTS.find((e) => e.xsdFile === row.xsdFile && e.name === row.xsdElement)));
+  const pair = (code, xsdElement) => `${code} × <${xsdElement}>`;
+
+  let result;
+  beforeAll(async () => {
+    result = await dmnToDecisionCore(readFileSync(FIXTURE, 'utf8'));
+  });
+
+  test('the fixture parsed at all — an unreadable one would make every check below vacuous', () => {
+    expect(result.dc).not.toBeNull();
+    expect(result.dc.nodes.length).toBeGreaterThan(5);
+    expect(result.report.lossless).toBe(false);
+  });
+
+  /**
+   * The exclusion, asserted rather than applied silently. It is derived (see `typeIsAbstract`), but a
+   * derivation that quietly grew to cover half the table would hollow the fence out without failing
+   * it — so the SET is pinned too. One member, and the fixture's own header comment says why.
+   */
+  test('exactly one reported row is structurally impossible to put in a conformant file', () => {
+    expect(UNINSTANTIABLE.map((r) => r.xsdElement)).toEqual(['DMNDiagramElement']);
+  });
+
+  test('set equality — every reported row fires, and nothing fires that no row claims', () => {
+    const expected = new Set(REPORTED.filter((r) => !UNINSTANTIABLE.includes(r))
+      .map((r) => pair(r.code, r.xsdElement)));
+    const actual = new Set(result.report.unrepresented
+      .filter((f) => coverageForElement(f.xsdElement)?.disposition === 'reported')
+      .map((f) => pair(f.code, f.xsdElement)));
+
+    const problems = [
+      ...[...expected].filter((p) => !actual.has(p)).map((p) => `${p}: the row claims this and the `
+        + `importer did not produce it — either the fixture lacks an instance, or the importer does `
+        + `not report the construct the row says it reports`),
+      ...[...actual].filter((p) => !expected.has(p)).map((p) => `${p}: the importer produced this `
+        + `and no reported row claims it — the row's code and the finding's code disagree`),
+    ];
+    expect(problems).toEqual([]);
+    expect(expected.size).toBeGreaterThan(15);   // an empty expectation would pass vacuously
+  });
+
+  /**
+   * The half set equality above cannot reach, because it filters to the reported universe first: a
+   * finding under a code or an element name that appears nowhere in the table at all. Cheap, and it
+   * is the check that keeps the filter from hiding something.
+   */
+  test('every finding names a code and an element the table knows', () => {
+    const strays = result.report.unrepresented.flatMap((f) => [
+      ...(IMPORT_CODES[f.code] ? [] : [`${f.path}: code ${f.code} is not in IMPORT_CODES`]),
+      // A parser-blind finding is synthesised from a warning message, so its xsdElement is whatever
+      // the message named — including, legitimately, an attribute rather than an element.
+      ...(f.xsdElement === null || f.code === 'IM08' || coverageForElement(f.xsdElement) ? []
+        : [`${f.path}: <${f.xsdElement}> has no row`]),
+    ]);
+    expect(strays).toEqual([]);
+  });
+
+  /**
+   * The suppression rules exercised rather than asserted — which is why the fixture carries two
+   * nesting cases (`<itemDefinition>` in `<itemComponent>`, `<context>` inside a `<contextEntry>`'s
+   * value). Rule 2 dedupes BY CLASS inside a reported subtree, and a same-class CHILD is the case
+   * that once escaped it.
+   */
+  test('a reported class inside a subtree of its own class reports exactly once per outer subtree', () => {
+    const paths = (el) => result.report.unrepresented.filter((f) => f.xsdElement === el).map((f) => f.path);
+    expect(paths('itemDefinition')).toEqual([
+      'definitions.itemDefinition[0]', 'definitions.itemDefinition[1]',
+    ]);
+    expect(paths('context')).toEqual(['definitions.drgElement[4].decisionLogic']);
+    expect(paths('contextEntry')).toEqual(['definitions.drgElement[4].decisionLogic.contextEntry[0]']);
+    // …while a <DMNDiagram> is exempt, because a view is a fact and a shape is not.
+    expect(paths('DMNDiagram')).toHaveLength(2);
+  });
+
+  test('no property finding is raised inside a subtree already reported whole', () => {
+    const inside = result.report.unrepresented
+      .filter((f) => ['IM04', 'IM05'].includes(f.code))
+      .filter((f) => result.report.unrepresented.some((g) => g !== f
+        && coverageForElement(g.xsdElement)?.disposition === 'reported'
+        && f.path.startsWith(`${g.path}.`)))
+      .map((f) => `${f.code} at ${f.path} sits inside the reported subtree that already declared it gone`);
+    expect(inside).toEqual([]);
+  });
+
+  /**
+   * The parser-blind class end to end. `<organizationUnit>` is XSD-legal and dmn-moddle spells the
+   * type `OrganisationalUnit`, so the element never reaches the tree — a `warnings[]` entry is the
+   * only evidence it was ever in the file, which is the entire reason the `parser-blind` disposition
+   * exists.
+   */
+  test('the parser-blind element leaves nothing but a warning, and that warning becomes IM08', () => {
+    expect(result.report.parserWarnings.some((w) => w.includes('organizationUnit'))).toBe(true);
+    expect(result.report.unrepresented.some((f) => f.code === 'IM08' && f.xsdElement === 'organizationUnit'))
+      .toBe(true);
+    expect(JSON.stringify(result.dc)).not.toMatch(/ou_claims|Claims department/);
+  });
+});
+
+/**
+ * F3's own premise — "this is what a conformant foreign file looks like" — is unverified without
+ * this. A malformed fixture would quietly narrow what F3 covers while still passing every assertion
+ * above, since the importer would simply see less.
+ *
+ * Two independent dependencies, guarded separately, mirroring `dmn-xml.test.js:465-482`: the xmllint
+ * binary and the schema file. A worktree can have one without the other in either direction.
+ */
+function xmllintAvailable() {
+  try {
+    execFileSync('xmllint', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const DMN13_XSD = path.join(XSD_DIR, 'DMN13.xsd');
+const describeIfXmllint = (xmllintAvailable() && existsSync(DMN13_XSD)) ? describe : describe.skip;
+
+describeIfXmllint('F3 — the fixture really is a conformant DMN 1.3 document', () => {
+  test('foreign-kitchen-sink.dmn validates against the normative XSD', () => {
+    const fixture = path.join(HERE, '..', '..', 'tests', 'fixtures', 'dmn', 'foreign-kitchen-sink.dmn');
+    expect(() => execFileSync('xmllint', ['--noout', '--schema', DMN13_XSD, fixture],
+      { stdio: ['pipe', 'pipe', 'pipe'] })).not.toThrow();
   });
 });
 
