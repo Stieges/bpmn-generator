@@ -171,6 +171,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   perfect while the output claimed a decision binding on a class
   `references/input-schema.json` scopes the property away from ("For businessRuleTask"). It is now
   scoped to `businessRuleTask`.
+- **`color` was lost on the primary importer path.** `moddle-import.js` read `bioc:stroke` /
+  `bioc:fill` out of `$attrs`, the bag bpmn-moddle keeps for attributes it does **not** recognise —
+  and it does recognise these, because it ships the bpmn.io colour package as a registered
+  extension (`ColoredShape extends bpmndi:BPMNShape`). Measured: `$attrs` is `{}` and the values sit
+  on the shape as plain `stroke` / `fill`, whether or not the file declares `xmlns:bioc`. So the
+  read could never match and a coloured node came back with no `color` at all, while `import.js`'s
+  own DOM parser (which sees raw attribute names) recovered it correctly. Now read from the parsed
+  properties, with the `$attrs` path kept as a fallback for a file written against some other
+  colour namespace.
 - **`cancelActivity` could land on a task.** The guard was `isBoundaryEvent`, which also answers
   true for anything carrying `attachedTo`, so `{ type: 'userTask', attachedTo: 'x',
   cancelActivity: false }` emitted `<bpmn:task cancelActivity="false">` — an attribute OMG grants
@@ -497,11 +506,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
-- **S15's coverage grew from 6 fields to 13.** It now also reports `cancelActivity`,
-  `eventGatewayType`, `instantiate`, `script`, `loopType`, `multiInstance` and `decisionRef` on a
-  class OMG (or, for `decisionRef`, this project's own published schema) does not define them on.
-  The rule walks exactly the rows the serialiser guards from the same table — `enforcedBy: 'table'`
-  — so the two still cannot disagree. Rule count is unchanged at 34.
+- **S15's coverage grew from 6 fields to 12.** It now also reports `cancelActivity`,
+  `eventGatewayType`, `instantiate`, `script`, `loopType` and `multiInstance` on a class OMG does
+  not define them on. The rule walks exactly the rows the serialiser guards from the same table —
+  `enforcedBy: 'table'` — so the two still cannot disagree. Rule count is unchanged at 34.
+- **M11's message now says the field is dropped, and M11 remains the only rule that reports
+  `decisionRef`.** `decisionRef` is guarded by the same table, but its row is
+  `enforcedBy: 'convention'`, not `'table'`: BPMN has no `decisionRef` attribute, so S15's sentence
+  would be quoting an OMG class that does not exist, and M11 already owned the field in the style
+  layer that owns this project's own conventions. One field on one node still produces one message.
+  M11's comment used to say putting `decisionRef` elsewhere "round-trips fine"; that is no longer
+  true and has been corrected.
 
 ### Known limitations
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
