@@ -23,9 +23,12 @@ const moddle = new BpmnModdle();
  * May `node` carry `field`, with the value it actually holds?
  *
  * The single question every table-guarded write site asks, so that "guarded by the table" means one
- * thing across all of them. `OMG_NODE_FIELD_SCOPE`'s `enforcedBy: 'table'` rows are exactly the
- * rows whose write site calls this — and exactly the rows rule S15 reports on, which is what keeps
- * the serialiser and the rule from ever disagreeing about which fields are legal where.
+ * thing across all of them. The rows whose write site calls this are exactly the ones whose
+ * `enforcedBy` is `'table'` or `'convention'` — the two values that mean "`allowed` is consulted
+ * here". The split between them is about which RULE reports the drop, not about whether it happens:
+ * `'table'` rows are S15's (the scope is OMG's), the single `'convention'` row is M11's (the scope
+ * is our own published contract). Either way the serialiser and the reporting rule read one table,
+ * which is what keeps them from disagreeing about which fields are legal where.
  *
  * Throws on an unknown field rather than returning `true`: a mistyped name here would silently
  * remove a guard, which is the failure mode this whole table exists to end.

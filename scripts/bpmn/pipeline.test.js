@@ -1572,16 +1572,20 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       expect(found[0]).toContain(`OMG defines ${attr} only on an Activity`);
     });
 
-    test('decisionRef off a businessRuleTask is dropped and reported', async () => {
+    test('decisionRef off a businessRuleTask is dropped, and reported ONCE — by M11, not by S15', async () => {
       // Different from the two above: before the guard this field was not dropped at all. It was
       // WRITTEN — `<bg:decisionRef>` in extensionElements on a userTask — and read straight back,
       // so the round trip looked perfect while the output claimed a decision binding on a class
       // `references/input-schema.json` scopes the property away from ("For businessRuleTask: id of
       // the decision this task invokes"). A silent acceptance, not a silent drop.
       const lc = wire({ id: 'n', type: 'userTask', name: 'Antrag pruefen', decisionRef: 'dec_1' });
-      const found = s15(runRules(lc));
-      expect(found).toHaveLength(1);
-      expect(found[0]).toContain('OMG defines decisionRef only on a businessRuleTask');
+      const warnings = runRules(lc).warnings;
+      // M11 says it, in the style layer that owns this project's own conventions…
+      expect(warnings.filter(w => /decisionRef on a non-businessRuleTask/.test(w))).toHaveLength(1);
+      // …and S15 does not, because its sentence quotes OMG and OMG has no `decisionRef` at all.
+      // The row is `enforcedBy: 'convention'` for exactly this reason: the guard is real, the
+      // reporting belongs to one rule, and one field on one node produces one message.
+      expect(s15(runRules(lc))).toHaveLength(0);
       const result = await runPipeline(lc);
       expect(result.bpmnXml).not.toContain('decisionRef');
     });

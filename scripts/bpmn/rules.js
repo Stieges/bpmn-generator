@@ -801,6 +801,14 @@ const SOUNDNESS_RULES = [
           // rule claim a drop that does not happen (a textAnnotation's `name` really does survive,
           // as `<bpmn:text>`) or report a defect it is not the right layer to report (`nodes` on a
           // non-container is a crash, queued as its own stage, not a "your field was ignored").
+          //
+          // Deliberately NOT the wider "is `allowed` consulted at the write site" set, which also
+          // contains `enforcedBy: 'convention'`. `decisionRef` is guarded exactly like these rows
+          // and IS dropped — but its scope is this project's own contract, not OMG's, so this
+          // rule's sentence ("OMG defines … only on …") would be quoting a spec that says nothing
+          // about it. M11 already owns that field, in the style layer that owns our conventions.
+          // Both rules firing on one field on one node is the two-sentences-about-one-mistake
+          // problem `isFieldOutOfScope`'s own doc argues against, one level up.
           for (const spec of OMG_NODE_FIELD_SCOPE.filter((f) => f.enforcedBy === 'table')) {
             // Wrong class and wrong type are different mistakes with different remedies, so the
             // rule says one thing about a field, not two. Class first: if the node may not carry
@@ -1047,10 +1055,17 @@ const STYLE_RULES = [
     id: 'M11', layer: 'style', defaultSeverity: 'WARNING',
     description: 'decisionRef belongs on a businessRuleTask — that is the element that invokes a decision',
     // Our own convention, not Bruce Silver: `decisionRef` is a generator extension
-    // (see EXTENSION_NS in utils.js). BPMN allows extensionElements on any
-    // BaseElement, so putting it elsewhere is legal XML and round-trips fine — it
-    // just does not mean anything, and no engine will act on it. Hence WARNING,
-    // not ERROR: the file is valid, the modelling is not.
+    // (see EXTENSION_NS in utils.js) and BPMN has no attribute for it at all, which
+    // is why the scope cannot come from OMG and this rule rather than S15 is the one
+    // that reports it — see `OMG_NODE_FIELD_SCOPE`'s `decisionRef` row and its
+    // `enforcedBy: 'convention'`.
+    //
+    // This comment used to end "putting it elsewhere is legal XML and round-trips
+    // fine — it just does not mean anything". The first half is no longer true: the
+    // serialiser now consults the same row and DROPS the field off a
+    // businessRuleTask, so the message is not merely "this is meaningless" but
+    // "this was ignored". Still WARNING, not ERROR, for the reason it always was:
+    // the emitted file is valid, the modelling is not.
     ref: { omg: '§10.2.5 Business Rule Task', note: 'generator extension, no OMG attribute exists' },
     scope: 'process',
     check: (proc) => {
@@ -1066,7 +1081,8 @@ const STYLE_RULES = [
       walk(proc);
       return offenders.length === 0
         ? { pass: true }
-        : { pass: false, message: `decisionRef on a non-businessRuleTask has no meaning: ${offenders.join(', ')}` };
+        : { pass: false, message: 'decisionRef on a non-businessRuleTask has no meaning and is '
+            + `dropped when the BPMN is written: ${offenders.join(', ')}` };
     }
   },
 ];
