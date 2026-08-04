@@ -7,13 +7,34 @@
  */
 
 import { BpmnModdle } from 'bpmn-moddle';
-import { isEvent, isGateway, isBoundaryEvent, isBpmnArtifact, OMG_NODE_FIELD_SCOPE, bpmnXmlTag } from './types.js';
+import {
+  isEvent, isGateway, isBoundaryEvent, isBpmnArtifact,
+  OMG_NODE_FIELD_SCOPE, nodeFieldSpec, matchesFieldType, bpmnXmlTag,
+} from './types.js';
+
 import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { inferGatewayDirections } from './topology.js';
 import { inferEventMarker } from './icons.js';
 
 const moddle = new BpmnModdle();
+
+/**
+ * May `node` carry `field`, with the value it actually holds?
+ *
+ * The single question every table-guarded write site asks, so that "guarded by the table" means one
+ * thing across all of them. `OMG_NODE_FIELD_SCOPE`'s `enforcedBy: 'table'` rows are exactly the
+ * rows whose write site calls this — and exactly the rows rule S15 reports on, which is what keeps
+ * the serialiser and the rule from ever disagreeing about which fields are legal where.
+ *
+ * Throws on an unknown field rather than returning `true`: a mistyped name here would silently
+ * remove a guard, which is the failure mode this whole table exists to end.
+ */
+function fieldAllowedOn(node, field) {
+  const spec = nodeFieldSpec(field);
+  if (!spec) throw new Error(`bpmn-xml.js: no OMG_NODE_FIELD_SCOPE row for "${field}"`);
+  return spec.allowed.has(node.type) && matchesFieldType(node[field], spec.type);
+}
 
 /**
  * Return the effective lane-header strip width for a pool, preferring
@@ -240,14 +261,17 @@ function buildDataObject(node, refEl) {
   if (node.type !== 'dataObjectReference') return null;
   const attrs = { id: `${node.id}_do` };
   for (const spec of OMG_NODE_FIELD_SCOPE) {
-    if (spec.on !== 'dataObject') continue;
+    // The generic loop's other half: `writeSite: 'fieldLoop'` is what puts a row in a loop at all,
+    // and `on` decides which of the two loops. Filtering on `on` alone would sweep up every row
+    // whose emission target happens to be a dataObject but whose write lives elsewhere.
+    if (spec.writeSite !== 'fieldLoop' || spec.on !== 'dataObject') continue;
     const value = node[spec.field];
     // Same three guards as the `on: 'self'` loop, for the same reasons: falsy is nothing to
     // write, a class that may not carry the field is dropped (S15 reports it), and a wrongly
     // typed value is dropped rather than coerced.
     if (!value) continue;
     if (!spec.allowed.has(node.type)) continue;
-    if (typeof value !== spec.type) continue;
+    if (!matchesFieldType(value, spec.type)) continue;
     attrs[spec.attr] = value;
   }
   const dataObject = create('bpmn:DataObject', attrs);
@@ -263,9 +287,21 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     attrs.gatewayDirection = node._direction;
   }
 
-  // Boundary event — attachedToRef is resolved later, once all nodes exist
-  if (isBoundaryEvent(node)) {
-    if (node.cancelActivity === false) attrs.cancelActivity = false;
+  // Boundary event — attachedToRef is resolved later, once all nodes exist.
+  //
+  // The class guard now comes from `OMG_NODE_FIELD_SCOPE` (`enforcedBy: 'table'`), and that is not
+  // cosmetic: `isBoundaryEvent` is deliberately wider than the boundaryEvent CLASS — it also
+  // answers true for anything carrying `attachedTo` — so this branch used to emit
+  // `<bpmn:task cancelActivity="false">` for a task with an `attachedTo`, an attribute OMG grants
+  // to BoundaryEvent alone.
+  //
+  // The emission condition stays here rather than joining the generic loop, because it is the one
+  // attribute in the table where FALSE is the value worth writing: `cancelActivity` defaults to
+  // true in the XSD, so an interrupting boundary event is spelled by the attribute's absence. The
+  // loop skips falsy values — right for every other row, exactly wrong for this one — so putting
+  // this row in the loop would have dropped every `cancelActivity: false` in the corpus.
+  if (isBoundaryEvent(node) && node.cancelActivity === false && fieldAllowedOn(node, 'cancelActivity')) {
+    attrs.cancelActivity = false;
   }
 
   // Special attributes — every one of them scoped to the node classes OMG defines it on.
@@ -286,11 +322,18 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   // "diagnose the model" — the same separation that keeps `net-check.js` out of judging XML. The
   // reporting is S15's job, in the layer that owns model defects and can say so in prose.
   for (const spec of OMG_NODE_FIELD_SCOPE) {
-    // `on: 'self'` only. `isCollection` is written onto the companion `<bpmn:dataObject>` by
+    // The rows this loop owns are exactly `writeSite: 'fieldLoop'` + `on: 'self'`. The table now
+    // covers every `$defs.Node` property, and most of them serialise some other way — as a child
+    // element, as an eventDefinition property, into extensionElements, or into the DI — so the loop
+    // has to say which rows are its own instead of taking the whole array. `writeSite` is that
+    // statement, and it is explicit on every row rather than inferred, so that adding a row cannot
+    // accidentally enrol it here.
+    //
+    // `isCollection` is written onto the companion `<bpmn:dataObject>` by
     // `buildDataObject` below, because OMG puts the attribute on DataObject and not on
     // DataObjectReference — writing it here produced `<bpmn:dataObjectReference
     // isCollection="true">` and an `unknown attribute <isCollection>` on every round trip.
-    if (spec.on !== 'self') continue;
+    if (spec.writeSite !== 'fieldLoop' || spec.on !== 'self') continue;
     const value = node[spec.field];
     if (!value) continue;                        // falsy: nothing to serialise, same as before
     if (!spec.allowed.has(node.type)) continue;  // wrong class for this attribute
@@ -303,12 +346,8 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     // Dropped rather than coerced, and `isCompensation: 'no'` is why: `!!'no'` is `true`, so
     // coercion would emit the exact opposite of what the author wrote, with no way to tell. A
     // serialiser guessing at intent is worse than one that declines. S15 reports the drop.
-    if (typeof value !== spec.type) continue;
+    if (!matchesFieldType(value, spec.type)) continue;
     attrs[spec.attr] = value;
-  }
-  if (node.type === 'eventBasedGateway') {
-    if (node.eventGatewayType) attrs.eventGatewayType = node.eventGatewayType;
-    if (node.instantiate) attrs.instantiate = true;
   }
 
   const el = create(moddleType(node.type), attrs);
@@ -324,8 +363,19 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     el.get('eventDefinitions').push(eventDef);
   }
 
-  // Loop / Multi-instance
-  if (node.loopType) {
+  // Loop / Multi-instance.
+  //
+  // Both guarded by the table since this stage, and the guards close a measured silent drop: OMG
+  // puts `loopCharacteristics` on Activity, so a `loopType` on a `startEvent` or a `multiInstance`
+  // on a `parallelGateway` produced NO element and NO moddle warning — bpmn-moddle reports
+  // attributes it does not KNOW, but a property it has no descriptor for it simply discards. The
+  // author got a green build, valid XML, and no loop. Now the field is dropped deliberately, which
+  // is the same output, and S15 says so, which is the whole difference.
+  //
+  // The `else if` is not a style choice: OMG gives an Activity ONE `loopCharacteristics` slot, so a
+  // node carrying both fields can only express one of them. `loopType` wins; the `multiInstance`
+  // row's `roundTrip` reason records that.
+  if (node.loopType && fieldAllowedOn(node, 'loopType')) {
     const loopAttrs = {};
     if (typeof node.loopType === 'object') {
       if (node.loopType.testBefore) loopAttrs.testBefore = true;
@@ -335,7 +385,7 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
       }
     }
     el.loopCharacteristics = create('bpmn:StandardLoopCharacteristics', loopAttrs);
-  } else if (node.multiInstance) {
+  } else if (node.multiInstance && fieldAllowedOn(node, 'multiInstance')) {
     const mi = typeof node.multiInstance === 'object' ? node.multiInstance : { type: node.multiInstance };
     const miAttrs = { isSequential: mi.type === 'sequential' };
     if (mi.loopCardinality) {
@@ -347,8 +397,9 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     el.loopCharacteristics = create('bpmn:MultiInstanceLoopCharacteristics', miAttrs);
   }
 
-  // Script body
-  if (node.type === 'scriptTask' && node.script) {
+  // Script body. The `scriptTask` literal is now the table's `allowed` set — same verdict, one
+  // fewer restatement of a class scope, and the row is what S15 reads to report the drop.
+  if (node.script && fieldAllowedOn(node, 'script')) {
     el.script = node.script;
   }
 
@@ -359,7 +410,13 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   // goes into extensionElements under our own namespace rather than borrowing
   // `camunda:`. Created via createAny so the namespace URI travels with the
   // element — see EXTENSION_NS in utils.js for why that matters.
-  if (node.decisionRef) {
+  //
+  // Scoped to `businessRuleTask` by the table since this stage. `references/input-schema.json` is
+  // the authority for that — the property's own description reads "For businessRuleTask" — and the
+  // write was unguarded, so a `decisionRef` on a userTask was emitted, re-imported and never
+  // questioned. Unlike loopType/multiInstance this was not a silent DROP but a silent
+  // ACCEPTANCE: the field reached the XML on a class the published contract does not scope it to.
+  if (node.decisionRef && fieldAllowedOn(node, 'decisionRef')) {
     const ref = moddle.createAny(`${EXTENSION_PREFIX}:decisionRef`, EXTENSION_NS, {
       $body: String(node.decisionRef),
     });
