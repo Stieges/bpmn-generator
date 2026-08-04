@@ -413,6 +413,87 @@ describe('F1b — every property of every mapped type is accounted for', () => {
       expect([...(entry.reachedFrom ?? [])].sort()).toEqual([...(REACHED.get(entry.moddleType) ?? [])].sort());
     });
 
+  /**
+   * F1b's answer to the one thing its key-level checks could not see: a property whose fate depends
+   * on the POSITION its element occupies, not on its type.
+   *
+   * The live case, and the defect that produced this check: `<literalExpression>.typeRef` is listed
+   * unrepresented ("As `id` — the slot is a string"), which holds at four of the five positions a
+   * literal expression can occupy — and is FALSE at `<inputExpression>`, where `dmn:InputClause`'s
+   * own `mapsTo` says the typeRef becomes `InputClause.typeRef`, and where the importer really does
+   * read it. Two entries of one table contradicting each other, joined only by a sentence — which is
+   * why nothing caught it: F1b reads `mapsTo`'s KEYS and never its prose VALUES, deliberately, since
+   * a fence that parsed our own sentences would be restating them as evidence.
+   *
+   * `exceptAt` is the row shape that lets a table entry state it, and all three of its halves are
+   * checkable with machinery already here. The decisive one is RECIPROCITY: the container's entry
+   * must list the container property among its `mapsTo` keys. That is a key-level check, it stays
+   * clear of prose, and it is exactly what would have caught the original contradiction.
+   */
+  describe('exceptAt — a property read at one position and dropped at the others', () => {
+    const allEntries = [
+      ...DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'mapped')
+        .map((r) => ({ label: `<${r.xsdElement}>`, moddleType: r.moddleType, entry: r })),
+      ...DMN_NESTED_TYPE_COVERAGE.map((e) => ({ label: e.moddleType, moddleType: e.moddleType, entry: e })),
+    ];
+    const exceptions = allEntries.flatMap(({ label, entry }) =>
+      (entry.unrepresented ?? []).flatMap((u) =>
+        (u.exceptAt ?? []).map((x) => ({ label, property: u.property, x }))));
+
+    test('the known position-dependent read is stated in the table, not in import.js', () => {
+      // The whole point of the column: `import.js` derives its behaviour from here, so this entry
+      // existing is what makes the exception observable, fenceable and reviewable.
+      expect(exceptions.map(({ label, property, x }) =>
+        `${label}.${property}@${x.containerType}.${x.containerProperty}`))
+        .toContain('<literalExpression>.typeRef@dmn:InputClause.inputExpression');
+    });
+
+    test('every exceptAt names a container this table knows', () => {
+      const known = new Map([
+        ...DMN_ELEMENT_COVERAGE.filter((r) => r.moddleType).map((r) => [r.moddleType, r]),
+        ...DMN_NESTED_TYPE_COVERAGE.map((e) => [e.moddleType, e]),
+      ]);
+      const defects = exceptions
+        .filter(({ x }) => !known.has(x.containerType))
+        .map(({ label, property, x }) => `${label}.${property}: exceptAt names container type `
+          + `${x.containerType}, which has neither a row nor a nested entry`);
+      expect(defects).toEqual([]);
+    });
+
+    test('every exceptAt names a real descriptor property of that container', () => {
+      const defects = exceptions
+        .filter(({ x }) => !propertiesOf(x.containerType).includes(x.containerProperty))
+        .map(({ label, property, x }) => `${label}.${property}: exceptAt names `
+          + `${x.containerType}.${x.containerProperty}, which dmn-moddle does not declare`);
+      expect(defects).toEqual([]);
+    });
+
+    /**
+     * The half that would have caught the original defect. An exception claims "my container reads
+     * me here" — so the container's entry has to actually say it reads that property. If it does
+     * not, the two entries still disagree and the exception is the wrong half of the disagreement.
+     */
+    test('reciprocity — the container maps the property the exception hides behind', () => {
+      const known = new Map([
+        ...DMN_ELEMENT_COVERAGE.filter((r) => r.moddleType).map((r) => [r.moddleType, r]),
+        ...DMN_NESTED_TYPE_COVERAGE.map((e) => [e.moddleType, e]),
+      ]);
+      const defects = exceptions
+        .filter(({ x }) => !Object.keys(known.get(x.containerType)?.mapsTo ?? {}).includes(x.containerProperty))
+        .map(({ label, property, x }) => `${label}.${property}: exceptAt claims `
+          + `${x.containerType} reads it through .${x.containerProperty}, but that entry's mapsTo `
+          + `does not list ${x.containerProperty} — the two entries still disagree`);
+      expect(defects).toEqual([]);
+    });
+
+    test('every exceptAt says where the value lands, so the claim is checkable by a reader', () => {
+      const defects = exceptions.filter(({ x }) => !x.readInto?.trim())
+        .map(({ label, property }) => `${label}.${property}: an exceptAt needs a readInto naming the `
+          + 'Decision-Core slot the value reaches');
+      expect(defects).toEqual([]);
+    });
+  });
+
   test('every nested entry carries known codes and non-empty reasons', () => {
     const bad = DMN_NESTED_TYPE_COVERAGE.flatMap((e) => (e.unrepresented ?? [])
       .filter((u) => !IMPORT_CODES[u.code] || !u.reason?.trim())
