@@ -8,7 +8,7 @@ import {
   applyDecisionCoreDefaults, canonicalizeDecisionCore, formatImportReport, HANDLERS,
 } from './import.js';
 import { validateDecisionCoreSchema } from './schema-gate.js';
-import { DMN_ELEMENT_COVERAGE, IMPORT_CODES } from './import-scope.js';
+import { DMN_ELEMENT_COVERAGE, IMPORT_CODES, IMPORT_CODE_KINDS } from './import-scope.js';
 
 /**
  * Stage 3's own tests. One per IM code, each an inline snippet asserting the exact
@@ -134,17 +134,36 @@ describe('the import report — one test per IM code', () => {
     expect(r.parserWarnings[0]).toMatch(/organizationUnit/);
   });
 
-  test('IM08 claims an xsdElement only when the warning names one the table knows', async () => {
-    // An ATTRIBUTE, not an element. Measured: dmn-moddle knows the bpmn.io biodi namespace URI and
-    // warns about attributes in it that it does not declare, so every real bpmn.io export reaches
-    // this — and the old regex put `foldedIn` in the field reserved for XSD element names.
-    const attr = await report(
-      '<decision id="d1" name="D1" xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" biodi:foldedIn="false"/>');
-    expect(attr.unrepresented.filter((f) => f.code === 'IM08').map((f) => f.xsdElement)).toEqual([null]);
-    // …while the same channel still names an element when the warning really names one.
-    const el = await report('<organizationUnit id="ou1" name="F"/><decision id="d1" name="D"/>');
-    expect(el.unrepresented.filter((f) => f.code === 'IM08').map((f) => f.xsdElement))
-      .toEqual(['organizationUnit']);
+  /**
+   * The discriminator is the WARNING'S SHAPE, not whether the name it quotes happens to resolve to a
+   * row — and this test is written around the case that proves the difference. A name lookup asks a
+   * question about the VALUE; only `unparsable content <X> detected` means "an element was here".
+   *
+   * `biodi:group`, `biodi:import` and `biodi:list` are the demonstration: all three are ATTRIBUTES,
+   * all three have local names that ARE rows, so a lookup-based guard let each of them put an
+   * attribute's name in the field reserved for XSD element names — and F3's stray check could not
+   * see it precisely because those names have rows.
+   */
+  describe('IM08 names an element only when the warning names one', () => {
+    const biodi = (attr) => report(
+      `<decision id="d1" name="D1" xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" biodi:${attr}="1"/>`);
+    const im08 = (r) => r.unrepresented.filter((f) => f.code === 'IM08').map((f) => f.xsdElement);
+
+    test.each(['foldedIn', 'group', 'import', 'list'])(
+      'an `unknown attribute <biodi:%s>` warning names no element, collision or not', async (attr) => {
+        expect(im08(await biodi(attr))).toEqual([null]);
+      });
+
+    test('an `unparsable content <…>` warning still names its element', async () => {
+      const el = await report('<organizationUnit id="ou1" name="F"/><decision id="d1" name="D"/>');
+      expect(im08(el)).toEqual(['organizationUnit']);
+    });
+
+    test('a warning naming a moddle TYPE rather than an XSD element claims nothing', async () => {
+      const { report: r } = await dmnToDecisionCore(
+        '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"/>');
+      expect(im08(r)).toEqual([null]);   // `failed to parse document as <dmn:Definitions>`
+    });
   });
 
   test('every finding carries the full shape, and a reason a stranger can act on', async () => {
@@ -355,6 +374,39 @@ describe('IM09 — information the source file does not carry, which only it can
     expect(validateDecisionCoreSchema(dc).errors).toEqual([]);
   });
 
+  /**
+   * `href=""` is the no-`@href` case one value over, and it used to pass in silence. The attribute
+   * is present, so DMN13.xsd:42's `use="required"` is satisfied and the file is CONFORMANT — it
+   * simply names nothing. The importer resolved it to `{ok: true, id: ''}` and emitted
+   * `{source: "", …}` with zero findings and `lossless: true`.
+   *
+   * Downstream mitigation is why this was not the C1 shape — D01 does report an empty source — but
+   * "someone else notices later" is not what `lossless` means, and the neighbouring
+   * `<requiredInput/>` gets an IM09 for naming nothing in exactly the same way.
+   */
+  test.each(['', '#'])('a requirement reference whose @href="%s" names nothing is IM09, not a '
+    + 'lossless import', async (href) => {
+    const { dc, report: r } = await dmnToDecisionCore(doc(
+      '<inputData id="in1" name="I"/><decision id="d1" name="D"><informationRequirement id="ir1">'
+      + `<requiredInput href="${href}"/></informationRequirement></decision>`));
+    expect(r.lossless).toBe(false);
+    expect(dc.requirements ?? []).toEqual([]);
+    expect(r.unrepresented.map(shape)).toContainEqual({
+      code: 'IM09', xsdElement: 'informationRequirement',
+      path: 'definitions.drgElement[1].informationRequirement[0]',
+    });
+    // The message must not accuse a conformant file of breaking the rule it satisfies.
+    expect(r.unrepresented.find((f) => f.code === 'IM09').reason).toMatch(/is conformant/);
+  });
+
+  test('a cross-document href with an empty fragment stays IM03 — that limit is ours', async () => {
+    const { report: r } = await dmnToDecisionCore(doc(
+      '<decision id="d1" name="D"><informationRequirement id="ir1">'
+      + '<requiredDecision href="other.dmn#"/></informationRequirement></decision>'));
+    expect(r.unrepresented.filter((f) => ['IM03', 'IM09'].includes(f.code)).map((f) => f.code))
+      .toEqual(['IM03']);
+  });
+
   test('a requirement with no required* child is reported rather than vanishing', async () => {
     const { dc, report: r } = await dmnToDecisionCore(doc(
       '<decision id="d1" name="D"><informationRequirement id="ir1"/></decision>'));
@@ -369,12 +421,19 @@ describe('IM09 — information the source file does not carry, which only it can
   });
 
   /**
-   * The line IM09 draws, asserted from both sides in one test. A colon is not a legal NCName and
-   * dmn-moddle accepts it anyway (measured) — so `a:b` is an id DMN's own schema allows through the
-   * parser while ours does not, which is this tool being the narrower of the two: IM07. An ABSENT
-   * id is the file failing to say something DMN needs it to say: IM09.
+   * The line IM09 draws, asserted from both sides in one test — and the line is WHO CAN FIX IT, not
+   * whether the file conforms. A colon is not a legal NCName and dmn-moddle accepts it anyway
+   * (measured), so `a:b` is an id DMN's own schema allows through the parser while ours does not:
+   * this tool is the narrower of the two, IM07. An ABSENT id is legal DMN too (DMN13.xsd:29, @id is
+   * use="optional") and leaves the element unnameable by anything — no @href, no <DMNShape>, no
+   * <decisionService> — so nothing here can hold it and nothing here can supply it either: IM09.
+   *
+   * An earlier revision of this comment said an absent id was "the file failing to say something DMN
+   * needs it to say", which is false, and was corrected thirty lines below by the very test written
+   * against that claim. Two statements in one file disagreeing, joined by nothing — the shape this
+   * stage keeps meeting.
    */
-  test('an unusable id stays IM07 while an absent id is IM09 — the axis is whose problem it is', async () => {
+  test('an unusable id stays IM07 while an absent id is IM09 — the axis is who can fix it', async () => {
     const narrow = await report('<decision id="a:b" name="D"/>');
     expect(narrow.unrepresented.map((f) => f.code)).toEqual(['IM07']);
 
@@ -396,6 +455,18 @@ describe('IM09 — information the source file does not carry, which only it can
    * reaches this case too, and told the author of a conformant file that their file was invalid.
    * That is the outcome the whole `kind` axis exists to prevent, arriving through the axis itself.
    *
+   * EVERY PIECE OF REGISTER PROSE A READER MEETS ALONGSIDE THIS FINDING IS CHECKED, not just the
+   * title. A first revision concatenated `reason` + `title` only — and the original false claim
+   * lived in the KIND BLURB as much as in the title, so reverting the blurb to "DMN 1.3 requires
+   * something this file does not say; the file is invalid." left all 243 dmn tests green. A future
+   * prose pass would have restored the exact defect, and every IM09 group would render "the file is
+   * invalid" as a heading over a finding on a conformant file. The kind is read from the code rather
+   * than named, so the fence follows if IM09 is ever regrouped.
+   *
+   * The label is also incidentally pinned by the formatter-grouping test's string search. Included
+   * here anyway: incidental coverage is coverage nobody chose, and it disappears the moment that
+   * test is rewritten for an unrelated reason.
+   *
    * What this can and cannot fence, stated so nobody over-reads it: it checks the ONE claim it
    * names, on the one case that contradicts it. The general shape — register prose asserting
    * something one of its call sites falsifies — has no fence, for the same reason `import-scope.js`
@@ -407,7 +478,12 @@ describe('IM09 — information the source file does not carry, which only it can
     const f = r.unrepresented.find((x) => x.code === 'IM09');
     // The per-finding message must concede the point the register cannot make universally.
     expect(f.reason).toMatch(/DMN makes @id optional/);
-    expect(`${f.reason} ${IMPORT_CODES.IM09.title}`).not.toMatch(/\binvalid\b|DMN 1\.3 requires/);
+
+    const kind = IMPORT_CODE_KINDS[IMPORT_CODES.IM09.kind];
+    // `f.reason` already carries IM09's remedy — the finding appends it — so this is every string
+    // that reaches a reader looking at this finding in a rendered report.
+    const everythingTheReaderSees = [f.reason, IMPORT_CODES.IM09.title, kind.label, kind.blurb].join(' ');
+    expect(everythingTheReaderSees).not.toMatch(/\binvalid\b|DMN 1\.3 requires/);
   });
 });
 

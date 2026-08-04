@@ -1106,14 +1106,22 @@ describe('F6 — every mapped class, in every polymorphic slot it can occupy, is
    * `path: 'definitions'`. Pinning the discriminating SET catches both, and catches the next one
    * without knowing its code.
    *
-   * The naive form — "no baseline may be covered at all" — was measured and is too strong: 12 of the
-   * 25 are legitimately pre-covered. So the pin is the set, not its absence.
+   * The naive form — "no baseline may be covered at all" — was measured and is too strong: **15 of
+   * the 25 are legitimately pre-covered**. So the pin is the set, not its absence.
    *
    * WHICH MEANS F6'S REACH IS 10 OF 25 CASES, and this is the place that says so, because a fence
    * whose reach is overstated is how the next reader over-trusts it. The 10 are the `drgElement`
    * list (4), `<decision>`'s own logic slot (3), and a BKM's function body (3) — the last only
    * because both minimal routes to `dmn:FunctionDefinition` are kept. The other 15 are placeholders
-   * that will start earning their keep the day a boxed-expression row is promoted.
+   * that will start earning their keep the day a boxed-expression row is promoted: the four slots
+   * under `reported` rows (`Invocation.calledFunction`, `Binding.bindingFormula`,
+   * `ContextEntry.value`, `List.elements`) at 3 classes each, plus `FunctionDefinition.body` ×3 on
+   * the `decisionLogic` route, where the enclosing function definition is itself dropped.
+   *
+   * 15 and 10 sum to 25, and they are written here together for that reason: an earlier revision of
+   * this paragraph said "12 … are legitimately pre-covered" three lines above "The other 15 are
+   * placeholders", inside the very argument for making the reach honest. The list below is the only
+   * one of the three numbers that is measured rather than asserted — read it, not them.
    */
   test('the discriminating case set is exactly this — anything shallower makes cases pass for free', () => {
     const discriminating = RUNNABLE
