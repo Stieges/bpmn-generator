@@ -41,7 +41,11 @@
  * replaces the DMN-integration plan's Stage 5 instruction to read `@isCollapsed`, which has no
  * target — see the `<DMNShape>` row in `import-scope.js`.)
  *
- * @typedef {{ code: string, xsdElement: string|null, moddleType: string|null, path: string,
+ * `path` is `null` on exactly one class of finding — one synthesised from a parser warning, where
+ * nothing reached the tree to have a position. It is the field a consumer most has to branch on, so
+ * it is spelled `string|null` like every other nullable one here rather than left to be discovered.
+ *
+ * @typedef {{ code: string, xsdElement: string|null, moddleType: string|null, path: string|null,
  *             id: string|null, name: string|null, reason: string }} Finding
  * @typedef {{ lossless: boolean, unrepresented: Finding[], parserWarnings: string[],
  *             defaultsMaterialised: { path: string, attr: string, value: string }[],
@@ -669,16 +673,34 @@ function readRequirement(el, ctx, path, kind, targetId) {
     droppedSubtree(ctx, path);
     return null;
   }
-  // A reference element that carries no @href at all. IM09, not IM03: DMN13.xsd:42 declares
-  // tDMNElementReference/@href `use="required"`, so this is invalid source — and routing it through
-  // `localHref` instead produced a finding that read «the source href "undefined" reaches into
-  // another document», which is false twice over. There is no href, and it reaches nowhere.
-  if (typeof ref.href !== 'string') {
+  // A reference element that names nothing — three shapes, one meaning, one finding.
+  //
+  //   no @href at all   DMN13.xsd:42 declares tDMNElementReference/@href `use="required"`, so the
+  //                     file is invalid. Routing this through `localHref` instead produced a finding
+  //                     reading «the source href "undefined" reaches into another document», which
+  //                     is false twice over: there is no href, and it reaches nowhere.
+  //   href=""           XSD-VALID — `use="required"` is satisfied by the empty string — and just as
+  //                     empty. It used to resolve to `{ok: true, id: ''}` and emit
+  //                     `{source: "", …}` with ZERO findings and `lossless: true`, i.e. the report
+  //                     claimed a faithful import of a file it had silently degraded. Mitigated
+  //                     downstream (D01 reports the empty source), which is why it was not the C1
+  //                     shape — but "someone else notices later" is not what `lossless` means.
+  //   href="#"          A fragment pointing at nothing. Same treatment.
+  //
+  // Note `other.dmn#` is NOT caught here: it names another document and stays IM03 below, which is a
+  // limit of ours rather than a defect of the file's.
+  const href = typeof ref.href === 'string' ? ref.href : null;
+  if (href === null || href.replace(/^#/, '').trim() === '') {
     ctx.findings.push(finding('IM09', el, path, XSD_ELEMENT_OF_TYPE.get(el.$type),
-      'The requirement carries a reference element with no @href, so it names nothing and cannot '
-      + 'become a Decision-Core edge, which is {type, source, target}. It is dropped. '
-      + 'DMN13.xsd:42 declares tDMNElementReference/@href use="required", so the source file is '
-      + 'invalid here. ' + IMPORT_CODES.IM09.remedy));
+      (href === null
+        ? 'The requirement carries a reference element with no @href at all — DMN13.xsd:42 declares '
+          + 'tDMNElementReference/@href use="required", so the source file is invalid here'
+        : `The requirement's reference carries @href="${href}", which names no element. The `
+          + 'attribute is present, so the file satisfies DMN13.xsd:42\'s use="required" and is '
+          + 'conformant; it simply says nothing')
+      + '. Either way the requirement cannot become a Decision-Core edge, which is '
+      + '{type, source, target}, and it is dropped rather than emitted with an empty source. '
+      + IMPORT_CODES.IM09.remedy));
     droppedSubtree(ctx, path);
     return null;
   }
@@ -1027,17 +1049,33 @@ export async function dmnToDecisionCore(xml) {
  *              location says so, and both fences skip pathless findings.
  *
  *   xsdElement was the first `<…>` in the message with its prefix stripped, whatever that named.
- *              Two of the three warning shapes do not name an XSD element at all: `unknown
- *              attribute <biodi:foldedIn>` names an ATTRIBUTE (measured — dmn-moddle knows the
- *              bpmn.io biodi namespace URI and warns about attributes in it, so every real bpmn.io
- *              export hits this), and `failed to parse document as <dmn:Definitions>` names a
- *              MODDLE TYPE. Both produced an `xsdElement` no row has, in the field everywhere else
- *              reserved for a name the table knows. Now: claimed only when it resolves to a row.
+ *              Only ONE of moddle's warning shapes names an XSD element: `unparsable content <X>
+ *              detected`, which means "an element was here and no object could be built for it".
+ *              `unknown attribute <biodi:foldedIn>` names an ATTRIBUTE (measured — dmn-moddle knows
+ *              the bpmn.io biodi namespace URI and warns about attributes in it, so every real
+ *              bpmn.io export hits this), `failed to parse document as <dmn:Definitions>` names a
+ *              MODDLE TYPE, and `missing start tag` names nothing.
+ *
+ * WHY THE DISCRIMINATOR IS THE MESSAGE SHAPE AND NOT A NAME LOOKUP. The first attempt asked "does
+ * the name resolve to a row?", which is a check on the VALUE and not on what the value means — so an
+ * attribute whose local name happens to collide with a row sailed through. Measured: `biodi:group`,
+ * `biodi:import` and `biodi:list` each produced `xsdElement: "group"/"import"/"list"`, an
+ * attribute's local name in the field reserved for XSD element names, and F3's stray check could not
+ * see it precisely because those names do have rows. The shape is available, unambiguous, and says
+ * what the lookup was only approximating.
+ *
+ * The row lookup stays as a second, narrower gate on the value: a shape-valid name with no row is a
+ * LOCAL element (`<FillColor>` inside a `<DMNStyle>`, say), and this table is keyed by global
+ * elements, so claiming one would assert a row that does not exist. The name is not lost — the
+ * warning is quoted verbatim in `reason`.
  */
 const KNOWN_XSD_ELEMENTS = new Set(DMN_ELEMENT_COVERAGE.map((r) => r.xsdElement));
 
+/** The one warning shape that names an element. Anything else names an attribute, a type, or nothing. */
+const UNPARSABLE_ELEMENT = /^unparsable content <([^>\s]+)> detected/;
+
 function warningToFinding(message) {
-  const named = /<([^>\s]+)>/.exec(message)?.[1]?.replace(/^[^:]+:/, '') ?? null;
+  const named = UNPARSABLE_ELEMENT.exec(message.split('\n')[0])?.[1]?.replace(/^[^:]+:/, '') ?? null;
   return {
     code: 'IM08',
     xsdElement: named && KNOWN_XSD_ELEMENTS.has(named) ? named : null,
