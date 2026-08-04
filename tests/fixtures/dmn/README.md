@@ -6,6 +6,27 @@ Reference Decision-Core fixture used by `scripts/dmn/rules.test.js` and `scripts
 Exercises every node type and every requirement kind. See `scripts/dmn/rules.js`'s own doc comment
 for the rule-engine side.
 
+## `roundtrip-all-fields.json`
+
+The round-trip fixture (`scripts/dmn/roundtrip.test.js`, dmn-xml-importer plan Stage 5). Every
+property declared anywhere in `references/decision-core-schema.json` is instantiated on at least one
+instance, and the fence DERIVES that requirement from the schema rather than restating it — which is
+what makes a new schema property fail CI naming itself, and is the argument on which this plan
+declined a DMN field-authority table.
+
+**A separate file from `discount-decision.json`, on purpose.** `discount-decision.expected.dmn` is a
+byte-for-byte golden; extending the fixture it belongs to in order to reach field completeness would
+move that golden for a reason that has nothing to do with what it guards. The two also have
+different jobs: `discount-decision.json` is the *readable reference* model the rule-engine and
+serialiser tests reason about, and a field-complete model is denser than a readable one — six of the
+schema's properties (`$schemaVersion`, `expressionLanguage`, `usingProcess`, `aggregation`, input
+`allowedValues`, output `defaultValue`) had no instance there, measured, before this file existed.
+
+**Do not trim it to make an assertion pass.** A field that turns out not to survive the round trip is
+a finding, and it stays in the fixture with the loss asserted as a loss —
+`$schemaVersion` is exactly that case today (the writer has no branch for it and DMN 1.3 has no
+attribute for it).
+
 ## Golden-file normalisation, measured 2026-07-31 (Task 5)
 
 `hitPolicy` and `preferredOrientation` are both declared `use="optional"` with an explicit XSD
