@@ -716,7 +716,10 @@ export const OMG_EDGE_FIELD_SCOPE = [
       + 'OR gateway and the edge is not the default, `buildProcess` copies `label` into a '
       + '`<bpmn:conditionExpression>` (bpmn-xml.js, the `needsCondition` branch). The label itself '
       + 'survives as `name`, but the re-imported Logic-Core carries a `condition` the author never '
-      + 'wrote, so LC -> XML -> LC is not idempotent for such an edge. Removal is decided and '
+      + 'wrote, so LC -> XML -> LC is not idempotent for such an edge. At depth >= 1 nothing is '
+      + 'fabricated, because the child-edge branch of `buildFlowNode` writes no '
+      + 'conditionExpression at all — the neighbouring `condition` row records that loss from '
+      + 'the other side. Removal is decided and '
       + 'queued (plan "Root fix", backlog item 7); three goldens move when it lands.' },
   { field: 'condition', attr: 'conditionExpression', type: 'string', on: 'sequenceFlow', allowed: DEFAULT_FLOW_SOURCE_TYPES, scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'childElement', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'lossy',
@@ -729,7 +732,10 @@ export const OMG_EDGE_FIELD_SCOPE = [
     reason: 'The serialiser FABRICATES it: when a diverging XOR or OR gateway has more than one '
       + 'outgoing flow and none is marked, `buildDefaultFlowMap` makes the LAST one the default. So '
       + 'an edge that carried no `isDefault` can come back carrying one, and which edge that is '
-      + 'depends on array order. An explicitly marked edge does survive. Removal is decided and '
+      + 'depends on array order. An explicitly marked edge does survive — at depth 0 only: the '
+      + 'child-edge branch of `buildFlowNode` writes no per-container `default`, so both the '
+      + 'fabrication and the honest mark are absent at depth >= 1 (the `edges` row records the '
+      + 'same loss from the container\'s side). Removal is decided and '
       + 'queued (plan "Root fix", backlog item 7); three goldens move when it lands. enforcedBy '
       + 'none: `buildDefaultFlowMap` records `isDefault` from a source of any class, and '
       + '`buildProcess` then writes `default` onto that element whatever it is.' },

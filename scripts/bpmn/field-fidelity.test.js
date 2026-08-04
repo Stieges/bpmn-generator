@@ -26,7 +26,7 @@
  *    table's owner, not a line to add here.
  *
  * 2. **A `'lossy'` row's assertion is row-specific and bound to its own `reason` text.** A shared
- *    presence check over 15 lossy rows would be a fence that passes on nearly anything. So each
+ *    presence check across every lossy row would be a fence that passes on nearly anything. So each
  *    lossy row has an entry in `LOSSY_CONTRACTS` below that (a) states what comes back for a given
  *    input, per importer path and per depth, and (b) carries a `quote`: a verbatim fragment of that
  *    row's `reason` in `types.js`, asserted to still appear there. Rewrite the reason's mechanism
@@ -745,7 +745,7 @@ const LOSSY_CONTRACTS = {
   },
 
   label: {
-    quote: 'when the source is a diverging XOR or OR gateway and the edge is not the default',
+    quote: 'At depth >= 1 nothing is fabricated',
     assert: (ctx) => {
       sameAs(ctx, ctx.out?.label, ctx.value, 'the label itself survives as `name`');
       // The fabrication the row records: the label is copied into a conditionExpression the author
@@ -766,7 +766,7 @@ const LOSSY_CONTRACTS = {
   },
 
   isDefault: {
-    quote: '`buildDefaultFlowMap` makes the LAST one the default',
+    quote: 'An explicitly marked edge does survive — at depth 0 only',
     assert: (ctx) => {
       const fabricator = ['exclusiveGateway', 'inclusiveGateway'].includes(ctx.type) && ctx.depth === 0;
       if (ctx.value === true) {
