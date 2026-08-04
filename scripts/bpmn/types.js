@@ -282,7 +282,6 @@ export const DEFAULT_FLOW_SOURCE_TYPES = new Set([
  *                    'eventDefinition' a property of the `<bpmn:*EventDefinition>` under an Event;
  *                    'extension'       our own `extensionElements` namespace (no OMG counterpart);
  *                    'di'              a BPMNDI concern — `<bpmndi:BPMNShape>`, not the semantics;
- *                    'labelRouting'    consumed while placing a label, never serialised;
  *                    'layoutOnly'      consumed by layout, never serialised;
  *                    'unserialised'    nothing writes it at all (today).
  *                  `shape` NAMES the mechanism; it does not describe it. See "how far a row's
@@ -300,10 +299,17 @@ export const DEFAULT_FLOW_SOURCE_TYPES = new Set([
  *
  *   `enforcedBy` — WHO reads `allowed`, and therefore whether an out-of-scope value is dropped and
  *                  reported. One of:
- *                    'table'      the write site consults `spec.allowed` from this row. These rows,
- *                                 and only these, are what rule S15 walks: S15's message says the
- *                                 field "is dropped when the BPMN is written", and that sentence is
- *                                 only true here.
+ *                    'table'      the write site consults `spec.allowed` from this row, and the
+ *                                 scope it enforces is OMG's. These rows, and only these, are what
+ *                                 rule S15 walks: S15's message says the field "is dropped when the
+ *                                 BPMN is written" and names an OMG class, and both halves of that
+ *                                 sentence are true only here.
+ *                    'convention' the write site consults `spec.allowed` exactly as above, but the
+ *                                 scope comes from this project's own published contract rather
+ *                                 than from OMG — `decisionRef` is the only case, and rule M11
+ *                                 reports it, in the layer that owns our conventions. Separated
+ *                                 from `'table'` so that one field on one node produces one
+ *                                 message and not two.
  *                    'writeSite'  the class restriction is hard-coded at the write site (an
  *                                 `isGateway` test, a `node.type === 'scriptTask'` branch, a
  *                                 special case in `buildNodeAttrs`). The row states the scope for
@@ -317,10 +323,11 @@ export const DEFAULT_FLOW_SOURCE_TYPES = new Set([
  *                                 costs; `nodes` is the one that costs a crash.
  *
  *   `roundTrip`  — the CONTRACT: what survives Logic-Core → XML → Logic-Core, through both
- *                  importers. One of `'exact'` (deep-equal), `'presence'` (the field comes back,
- *                  the value may not be identical), `'lossy'` (something specific is known to be
- *                  lost — the `reason` says exactly what), `'none'` (the field does not survive at
- *                  all). **This column is the exclusion list for the spanning fence in
+ *                  importers — `import.js` AND `moddle-import.js`, which is stricter than it
+ *                  sounds and caught two rows that were true of one path only. One of `'exact'`
+ *                  (deep-equal), `'lossy'` (something specific is known to be lost — the `reason`
+ *                  says exactly what), `'none'` (the field does not survive at all).
+ *                  **This column is the exclusion list for the spanning fence in
  *                  `field-fidelity.test.js`. There is no second list.** A row that cannot be
  *                  round-tripped is skipped by the fence only because THIS column says so, and
  *                  only with a `reason` a stranger can act on.
@@ -481,6 +488,11 @@ export const OMG_NODE_FIELD_SCOPE = [
   // BPMN-in-Color: two attributes in the `bioc:` namespace on the BPMNShape. A de-facto convention
   // (bpmn.io / Camunda), not part of OMG's metamodel at all, which is why the fence checks the `on`
   // class against bpmndi.json but exempts the `bioc:`-prefixed attribute names themselves.
+  // `roundTrip: 'exact'` is true as of this stage and was NOT true before it: `moddle-import.js`
+  // read the colours out of `$attrs`, which is the bag for attributes bpmn-moddle does not
+  // recognise — and it recognises these, because it ships the bpmn.io colour package as a
+  // registered extension. So the primary importer returned the node with no `color` at all while
+  // `import.js`'s DOM parser recovered it. See that read's own comment.
   { field: 'color', attr: ['bioc:stroke', 'bioc:fill'], type: 'object', on: 'bpmnShape', allowed: ALL_NODE_TYPES, scope: 'any node',
     shape: 'di', writeSite: 'buildDiagram', enforcedBy: 'none', roundTrip: 'exact',
     reason: 'enforcedBy none: every drawable node gets a BPMNShape, so there is no class to '
@@ -505,11 +517,18 @@ export const OMG_NODE_FIELD_SCOPE = [
   // because moddle drops a property it has no descriptor for in silence.
   { field: 'loopType', attr: 'loopCharacteristics', type: 'mixed', on: 'self', allowed: ACTIVITY_TYPES, scope: 'an Activity',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
-    reason: 'Sub-properties whose value is false are left implicit and come back absent: '
-      + '`{ testBefore: false }` round-trips to `{}`, because the importers only set `testBefore` '
-      + 'when the attribute is literally "true". `loopMaximum` and `loopCondition` round-trip '
-      + 'exactly, as does the `"standard"` shorthand. A node carrying BOTH loopType and '
-      + 'multiInstance keeps only loopType — OMG has one loopCharacteristics slot, not two.' },
+    reason: 'Two distinct losses, both measured on both importer paths. (1) An object whose only '
+      + 'sub-properties are false collapses to the string shorthand: `{ testBefore: false }` comes '
+      + 'back as `"standard"`, because `testBefore` is written only when true and the importers '
+      + 'then find an attribute-less `<bpmn:standardLoopCharacteristics>`, which is exactly what '
+      + 'the shorthand means. Equivalent input, not a deep-equal value. `{ testBefore: true }`, '
+      + '`loopMaximum`, `loopCondition` and the `"standard"` shorthand itself are all exact. '
+      + '(2) `loopCondition` loses XML entity unescaping on the LEGACY `import.js` path only: '
+      + '`x<3` comes back as `x&lt;3`. `moddle-import.js`, the primary path, is exact. That is a '
+      + 'defect in the legacy DOM parser\'s text handling (it never unescapes a text node), not in '
+      + 'this field — see `conditionExpression`\'s reason for the same asymmetry and the list of '
+      + 'other fields it touches. A node carrying BOTH loopType and multiInstance keeps only '
+      + 'loopType — OMG has one loopCharacteristics slot, not two.' },
   { field: 'multiInstance', attr: 'loopCharacteristics', type: 'mixed', on: 'self', allowed: ACTIVITY_TYPES, scope: 'an Activity',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
     reason: 'The object form collapses to the string shorthand when it carries nothing else: '
@@ -520,9 +539,12 @@ export const OMG_NODE_FIELD_SCOPE = [
   { field: 'nodes', attr: 'flowElements', type: 'array', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'exact',
     reason: 'enforcedBy none, and it costs a crash: `buildFlowNode` recurses on `node.nodes` for '
-      + 'ANY node type, and the layout then dereferences a child coordinate that was never '
-      + 'produced — a schema-valid `{ type: "userTask", nodes: [...] }` reaches a TypeError past a '
-      + 'green rule engine. Gating the recursion on this row and reporting the dropped children is '
+      + 'ANY node type, and the recursion itself throws — the child element is built and then '
+      + 'pushed into `el.get("flowElements")`, which is `undefined` on a class that is not a '
+      + 'FlowElementsContainer. Measured: a schema-valid `{ type: "userTask", nodes: [...] }` '
+      + 'raises `TypeError: Cannot read properties of undefined (reading \'push\')` inside '
+      + '`buildFlowNode`\'s child loop, past a green rule engine and before the layout is reached. '
+      + 'Gating the recursion on this row and reporting the dropped children is '
       + 'a decided, queued change (plan "Root fix", Stage 3); it is not made here because it is a '
       + 'behaviour change that needs its own red-first test.' },
   { field: 'edges', attr: 'flowElements', type: 'array', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
@@ -556,7 +578,16 @@ export const OMG_NODE_FIELD_SCOPE = [
   { field: 'conditionExpression', attr: 'condition', type: 'string', on: 'conditionalEventDefinition', allowed: EVENT_TYPES, scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Written only when `marker === "conditional"`; on any other marker the field is '
-      + 'silently ignored. With that marker it round-trips exactly.' },
+      + 'silently ignored. With that marker it is exact through `moddle-import.js` (the primary '
+      + 'path) and NOT through the legacy `import.js`, which returns `x&lt;1` for `x<1`: its DOM '
+      + 'parser accumulates a text node character by character and never unescapes entities '
+      + '(import.js, the `parseXml` text branch). That is one parser-level defect, not a '
+      + 'conditionExpression one — measured, it also hits `loopType.loopCondition`, and by '
+      + 'inspection every other value read out of a text node on that path (`documentation`, '
+      + '`script`, `decisionRef`, `multiInstance.loopCardinality`/`.completionCondition`, '
+      + '`edge.condition`, a timer expression, a textAnnotation\'s name). Fixing it is a change to '
+      + 'the shared parser affecting ~10 fields and belongs in its own stage; stated here rather '
+      + 'than claimed away, because this row would otherwise assert more than holds.' },
   { field: 'timerExpression', attr: ['timeDate', 'timeDuration', 'timeCycle'], type: 'object', on: 'timerEventDefinition', allowed: EVENT_TYPES, scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Written only when `marker === "timer"`; on any other marker the field is silently '
@@ -568,7 +599,15 @@ export const OMG_NODE_FIELD_SCOPE = [
   // No OMG counterpart exists, so `attr` names our own element and the metamodel fence exempts the
   // row by shape rather than by an allowlist entry.
   { field: 'decisionRef', attr: 'decisionRef', type: 'string', on: 'self', allowed: new Set(['businessRuleTask']), scope: 'a businessRuleTask',
-    shape: 'extension', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'exact',
+    shape: 'extension', writeSite: 'buildFlowNode', enforcedBy: 'convention', roundTrip: 'exact',
+    // `'convention'`, not `'table'`, and the one word is load-bearing. The write site DOES consult
+    // `allowed` — the field is dropped off a businessRuleTask exactly like a `'table'` row — but
+    // the scope it enforces is not OMG's. BPMN 2.0 has no attribute here at all; the scope comes
+    // from this project's own published contract (`references/input-schema.json`: "For
+    // businessRuleTask"). S15's message quotes OMG and would be quoting nothing, and rule M11
+    // already owns this field in the layer that owns OUR conventions — so S15 skips this row and
+    // M11 reports it. Without the distinction both rules fired on one field on one node, which is
+    // the two-sentences-about-one-field problem `isFieldWrongType`'s own doc argues against.
     // `allowed` is hand-stated, and `references/input-schema.json` is the authority it is stated
     // from: the property's own description reads "For businessRuleTask: id of the decision this
     // task invokes". BPMN 2.0 has no standard attribute here (the DMN side of the link,
