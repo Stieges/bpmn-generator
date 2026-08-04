@@ -310,9 +310,22 @@ shared between top-level nodes and subprocess children — put the field in a ca
 the function and it silently applies to one nesting level only.
 
 The failure mode is invisible: bpmn-moddle reports attributes it does not *know*, never fields
-that never arrived, so an omission produces no warning and `validation.errors` stays empty. The
-guard is the field-set round-trip test over `tests/fixtures/subprocess-child-fidelity.json` —
-extend that fixture with the new field and it will tell you which of the four places you missed.
+that never arrived, so an omission produces no warning and `validation.errors` stays empty.
+
+**So the procedure is: add a row to `OMG_NODE_FIELD_SCOPE` (or `OMG_EDGE_FIELD_SCOPE`) in
+`scripts/bpmn/types.js`, then let `scripts/bpmn/field-fidelity.test.js` name every place you
+missed.** Adding the property to `references/input-schema.json` without a row fails CI naming the
+property; with a row, the fence drives the field through the real pipeline and back through both
+importers, for every class the row allows, at depth 0 and one level down — so a write that skipped
+the child path, or a read that only one importer learned, fails with the field, the class, the
+depth and the importer path in the message. The row's `roundTrip` column is the whole exclusion
+list; there is no second one, so a field you cannot make round-trip is stated as `lossy`/`none`
+with a reason rather than quietly skipped.
+
+Second guard, complementary: the field-set round-trip test over
+`tests/fixtures/subprocess-child-fidelity.json` (composition — several fields in one realistic
+model, where the fence above is one field at a time). Extend that fixture too when the new field
+can interact with a boundary event, a grandchild or a data reference.
 
 ### Docs gate
 

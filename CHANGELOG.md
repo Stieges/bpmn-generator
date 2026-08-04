@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`scripts/bpmn/field-fidelity.test.js` — the spanning fence, whose oracle is execution.** Every
+  field `references/input-schema.json` declares is driven through the real `runPipeline` and read
+  back through **both** importers (`bpmnToLogicCore` and `bpmnToLogicCoreLegacy`), for every class
+  its row's `allowed` set names, at depth 0 **and** one level down inside a `subProcess` *and* a
+  `transaction` — 1398 generated cases, ~15 s. Each case asserts the contract the row's `roundTrip`
+  column states: `exact` deep-equals, `none` must not survive, and each of the 18 `lossy` rows has
+  its own assertion, bound to that row's `reason` text by a verbatim quote so the two cannot drift.
+  The `roundTrip` column **is** the exclusion list — there is no second one, and no local skip. This
+  matters because the guards built before it all checked one of the project's restatements against
+  another, which is how three fences were simultaneously green over a live `isCollection` defect.
+  Four table rows were corrected by what it measured (see *Fixed*).
 - **`OMG_NODE_FIELD_SCOPE` is now the project's single statement of per-field BPMN knowledge, and
   it covers every field.** The table in `scripts/bpmn/types.js` grew from 6 rows to 29 — one for
   every `$defs.Node` property except `id` and `type` — and gained a sibling
@@ -153,6 +164,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **Four `roundTrip` claims corrected against what the pipeline actually does, all at nesting
+  depth ≥ 1.** The spanning fence measured them; the rows now state the debt instead of asserting
+  a fidelity that does not hold. `color` and `isExpanded` are written onto a nested node's
+  `<bpmndi:BPMNShape>` or not written at all, and no importer reads a DI shape for a node below the
+  top level, so a coloured node inside a `subProcess`/`transaction` comes back uncoloured on both
+  paths. `lane` never reaches a `<bpmn:flowNodeRef>` for a nested node, because `buildLane` walks
+  the process's own node list — and closing that is a modelling decision (a `LaneSet` belongs to a
+  Process *or* a SubProcess), not a gap to fill, which the row now says. `nodes` round-trips a
+  flow-node child exactly and loses a `textAnnotation`/`group` child on the primary path only:
+  `moddle-import.js`'s child walk reads `flowElements`, and bpmn-moddle puts an Artifact in
+  `artifacts` — the same defect that was closed at top level and left open one level down. **No
+  behaviour changed here**: these are corrections to what the table claims, each with the mechanism
+  written down, and each is one of the queued backlog stages' subjects.
 - **`instantiate` on a `receiveTask` was unreachable from both ends at once.** OMG grants
   `instantiate` to `ReceiveTask` as well as `EventBasedGateway` (BPMN 2.0.2 §10.2.4 — an
   instantiating Receive Task is how a process starts on an incoming message without a message start
