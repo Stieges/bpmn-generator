@@ -394,6 +394,9 @@ function finding(code, el, path, xsdElement, reason) {
  * @returns {{ ok: true, id: string } | { ok: false, href: string }}
  */
 function localHref(href) {
+  // Unreachable from `readRequirement`, which screens a missing @href onto IM09 before calling —
+  // kept because this is a pure helper with a shaped return, and one that threw on a non-string
+  // would be a worse contract than one that refuses it.
   if (typeof href !== 'string') return { ok: false, href: String(href) };
   const hash = href.indexOf('#');
   if (hash > 0) return { ok: false, href };                 // `other.dmn#d1` — reaches out of the document
@@ -663,6 +666,19 @@ function readRequirement(el, ctx, path, kind, targetId) {
       + 'requiredKnowledge or requiredAuthority is present — so it cannot become a Decision-Core '
       + 'edge, which is {type, source, target}. It is dropped. DMN 1.3 gives each requirement class '
       + 'exactly one such reference, so the source file is invalid here. ' + IMPORT_CODES.IM09.remedy));
+    droppedSubtree(ctx, path);
+    return null;
+  }
+  // A reference element that carries no @href at all. IM09, not IM03: DMN13.xsd:42 declares
+  // tDMNElementReference/@href `use="required"`, so this is invalid source — and routing it through
+  // `localHref` instead produced a finding that read «the source href "undefined" reaches into
+  // another document», which is false twice over. There is no href, and it reaches nowhere.
+  if (typeof ref.href !== 'string') {
+    ctx.findings.push(finding('IM09', el, path, XSD_ELEMENT_OF_TYPE.get(el.$type),
+      'The requirement carries a reference element with no @href, so it names nothing and cannot '
+      + 'become a Decision-Core edge, which is {type, source, target}. It is dropped. '
+      + 'DMN13.xsd:42 declares tDMNElementReference/@href use="required", so the source file is '
+      + 'invalid here. ' + IMPORT_CODES.IM09.remedy));
     droppedSubtree(ctx, path);
     return null;
   }
@@ -994,17 +1010,39 @@ export async function dmnToDecisionCore(xml) {
 
 /**
  * A parser warning is the ONLY evidence a parser-blind construct left behind — there is nothing in
- * the tree to attach a finding to — so the finding is synthesised from the message. The element
- * name is the first `<…>` in it (`unparsable content <organizationUnit> detected …`), prefix
- * stripped; `null` when the message names none (`missing start tag`).
+ * the tree to attach a finding to — so the finding is synthesised from the message.
+ *
+ * A SYNTHESISED FINDING MUST NOT ASSERT WHAT IT CANNOT KNOW. Both fields below used to, and both
+ * did damage:
+ *
+ *   path       was hard-coded `'definitions'`. Nothing here knows a path; the whole premise of the
+ *              class is that no object reached the tree. Worse, `'definitions'` is a PREFIX OF
+ *              EVERY OTHER PATH, so any consumer reasoning "a finding above me means my subtree is
+ *              gone" was told yes for the entire document by one parser warning. Measured: with a
+ *              locally-owned `<DMNStyle>` in the fixture, F3's "no property finding inside a
+ *              reported subtree" produced 16 spurious failures, all of the form «IM05 at
+ *              definitions.exporter sits inside the reported subtree that already declared it
+ *              gone»; and pointing F6 at `dmnToDecisionCore` instead of the pure entry point would
+ *              have disabled that fence permanently and silently. `null` — a finding with no
+ *              location says so, and both fences skip pathless findings.
+ *
+ *   xsdElement was the first `<…>` in the message with its prefix stripped, whatever that named.
+ *              Two of the three warning shapes do not name an XSD element at all: `unknown
+ *              attribute <biodi:foldedIn>` names an ATTRIBUTE (measured — dmn-moddle knows the
+ *              bpmn.io biodi namespace URI and warns about attributes in it, so every real bpmn.io
+ *              export hits this), and `failed to parse document as <dmn:Definitions>` names a
+ *              MODDLE TYPE. Both produced an `xsdElement` no row has, in the field everywhere else
+ *              reserved for a name the table knows. Now: claimed only when it resolves to a row.
  */
+const KNOWN_XSD_ELEMENTS = new Set(DMN_ELEMENT_COVERAGE.map((r) => r.xsdElement));
+
 function warningToFinding(message) {
-  const named = /<([^>\s]+)>/.exec(message)?.[1] ?? null;
+  const named = /<([^>\s]+)>/.exec(message)?.[1]?.replace(/^[^:]+:/, '') ?? null;
   return {
     code: 'IM08',
-    xsdElement: named ? named.replace(/^[^:]+:/, '') : null,
+    xsdElement: named && KNOWN_XSD_ELEMENTS.has(named) ? named : null,
     moddleType: null,
-    path: 'definitions',
+    path: null,
     id: null,
     name: null,
     reason: `${message.split('\n')[0]} — ${IMPORT_CODES.IM08.remedy}`,
@@ -1078,7 +1116,10 @@ export function formatImportReport(report, { file } = {}) {
       lines.push('', `${code} — ${IMPORT_CODES[code]?.title ?? 'unknown code'} (${group.length})`);
       for (const f of group) {
         const named = [f.xsdElement && `<${f.xsdElement}>`, f.id && `#${f.id}`].filter(Boolean).join(' ');
-        lines.push(`  ${f.path}${named ? `  ${named}` : ''}`);
+        // A synthesised finding has no path — see `warningToFinding`. Say so rather than printing
+        // `null`, and rather than inventing a location the finding does not have.
+        const where = f.path ?? '(no location — nothing reached the parsed tree)';
+        lines.push(`  ${where}${named ? `  ${named}` : ''}`);
       }
       if (IMPORT_CODES[code]?.remedy) lines.push(`  → ${IMPORT_CODES[code].remedy}`);
     }
