@@ -197,30 +197,36 @@ for (const entry of [...DMN_ELEMENT_COVERAGE, ...DMN_NESTED_TYPE_COVERAGE]) {
 const SUBTREE_DEDUPE_EXEMPT = new Set(['dmndi:DMNDiagram']);
 
 /**
- * NOT a second exclusion list — a disambiguation between two entries of the ONE list that
- * contradict each other, keyed `moddleType@containerProperty` → the properties the container's
- * entry wins on.
+ * DERIVED, like everything else here, from `import-scope.js` — the `exceptAt` column on an
+ * `unrepresented` entry. Keyed `moddleType@containerProperty` → the properties that entry does NOT
+ * lose at that position.
  *
- * The single case today, measured rather than anticipated: the `<literalExpression>` row lists
- * `typeRef` as an IM05 loss ("As `id` — the slot is a string"), which is true at four of the five
- * positions a literal expression can occupy — a decision's logic, a BKM's body, an
- * `<outputEntry>`, a `<defaultOutputEntry>`. At the fifth, `<inputExpression>`, it is false: the
- * `dmn:InputClause` entry's own `mapsTo.inputExpression` says "InputClause.expression and
- * InputClause.typeRef, from the literal expression's text and typeRef", and `readDecisionTable`
- * does exactly that. Emitting IM05 there would put a loss that did not happen into
- * `report.unrepresented` and flip `lossless` to false for a file that lost nothing — which is worse
- * than the reverse, because the report's whole value is that a caller can trust it.
+ * One case today: `<literalExpression>.typeRef` is an IM05 loss at four of the five positions a
+ * literal expression can occupy (a decision's logic, a BKM's body, an `<outputEntry>`, a
+ * `<defaultOutputEntry>`) and is READ at the fifth, `<inputExpression>`, into `InputClause.typeRef`
+ * — which is what `readDecisionTable` below actually does. Emitting IM05 there would put a loss
+ * that did not happen into `report.unrepresented` and flip `lossless` to false for a file that lost
+ * nothing; a report a caller learns to distrust is worth less than no report.
  *
- * `import-scope.js` is deliberately not edited to paper over this: its rows are per-TYPE and the
- * fate here is per-POSITION, so neither row is writable as true on its own. F1b cannot see the
- * contradiction because it reads `mapsTo`'s KEYS and never its prose VALUES — correctly, since a
- * fence that parsed our own sentences would be restating them as evidence. Recorded for the table's
- * owner in the Stage 3 report; this map must shrink to empty the day the table gains a way to say
- * "position-dependent".
+ * An earlier revision hand-wrote this map here, with a comment calling it "not a second exclusion
+ * list, a disambiguation". That was a distinction with no mechanical difference: nothing could
+ * observe it growing from one entry to five, and nothing enforced its own promise to shrink. The
+ * column moved into the table instead, where F1b checks all three halves of every `exceptAt` — the
+ * container type resolves, the container property is real, and, decisively, RECIPROCITY: the
+ * container's own `mapsTo` must list that property. That last check is what would have caught the
+ * original contradiction, which was invisible only because the two entries were joined by a
+ * sentence rather than by a key.
  */
-const POSITION_DEPENDENT_READS = new Map([
-  ['dmn:LiteralExpression@inputExpression', new Set(['typeRef'])],
-]);
+const POSITION_DEPENDENT_READS = new Map();
+for (const entry of [...DMN_ELEMENT_COVERAGE, ...DMN_NESTED_TYPE_COVERAGE]) {
+  for (const u of entry.unrepresented ?? []) {
+    for (const x of u.exceptAt ?? []) {
+      const key = `${entry.moddleType}@${x.containerProperty}`;
+      if (!POSITION_DEPENDENT_READS.has(key)) POSITION_DEPENDENT_READS.set(key, new Set());
+      POSITION_DEPENDENT_READS.get(key).add(u.property);
+    }
+  }
+}
 
 /** The property name a path's last segment names, `inputExpression` from `….inputExpression`. */
 const containerPropertyOf = (path) => path.slice(path.lastIndexOf('.') + 1).replace(/\[\d+\]$/, '');
@@ -269,7 +275,13 @@ function detectFindings(definitions) {
       }
       // The OUTERMOST reported element owns the subtree, so a nested one does not open a second
       // dedupe scope that would let its own children re-report a class the outer scope has seen.
-      if (!enclosing) reportedRoots.push({ path, seen: new Set() });
+      //
+      // It seeds `seen` with its OWN class, which is not a detail: DMN nests several classes inside
+      // themselves (`<itemDefinition>` in `<itemComponent>`, `<context>` in a `<contextEntry>`'s
+      // value). Without the seed, same-class SIBLINGS deduped correctly while a same-class CHILD
+      // reported a second time — and that second line carried the parent row's prose attached to a
+      // component of it, which reads as a separate loss and is not one.
+      if (!enclosing) reportedRoots.push({ path, seen: new Set([el.$type]) });
       return;
     }
 
@@ -412,6 +424,36 @@ export const HANDLERS = {
   informationItem: readInformationItem,
 };
 
+/**
+ * An expression sitting in a slot this converter has no branch for.
+ *
+ * THE SEAM THIS CLOSES, because it is not visible from either side alone. `detectFindings` raises
+ * element findings only for rows whose disposition is `reported` — and `decisionTable`,
+ * `literalExpression` and `functionDefinition` are all `mapped`. So a mapped expression class
+ * landing where the converter does not read it was seen by NOBODY: the walk stayed quiet because
+ * the row is mapped, and the converter stayed quiet because it simply fell through. Measured, a
+ * BKM whose `<encapsulatedLogic>` body is a `<decisionTable>` — the ordinary way to model a BKM —
+ * imported with its knowledge gone and `lossless: true`, which is verbatim the situation this
+ * module's own doc comment says the report exists to prevent.
+ *
+ * The fix belongs here rather than in the walk because only the converter knows which POSITIONS it
+ * reads. A row is a statement about a type; "read at this slot" is not a property of the type.
+ *
+ * Note what F5 does and does not buy: it fences that every `mapped` row has A handler, never that
+ * every position a handler can meet is exhaustive. The `reported` check below is what keeps this
+ * from double-reporting the boxed expressions the walk already names.
+ */
+function reportUnreadExpression(ctx, el, path, where) {
+  if (!isElement(el)) return;
+  const row = coverageForModdleType(el.$type);
+  if (row?.disposition === 'reported') return;      // the walk names it, under its own row's code
+  const named = row?.xsdElement ?? el.$type;
+  ctx.findings.push(finding('IM02', el, path, row?.xsdElement ?? null,
+    `A <${named}> is not one of the forms Decision-Core can hold as ${where}, so the logic is `
+    + 'dropped while the element that carried it imports normally and looks intact. '
+    + IMPORT_CODES.IM02.remedy));
+}
+
 /** `<literalExpression>` collapses to whichever bare string slot its position implies. */
 function readLiteralExpression(el) {
   return el?.text;
@@ -439,7 +481,7 @@ function readInformationItem(el, ownerName) {
 }
 
 /** `<functionDefinition>` is flattened into its BKM's `parameters[]` and `body`. */
-function readFunctionDefinition(el) {
+function readFunctionDefinition(el, ctx, path) {
   const out = {};
   const params = asArray(el.formalParameter).map((p) => {
     const param = { name: p.name };
@@ -448,16 +490,39 @@ function readFunctionDefinition(el) {
   });
   if (params.length) out.parameters = params;
   // DMN allows ANY expression as the body; Decision-Core's `body` is a string. A boxed body is
-  // dropped here and reported by its own row from the detector walk — see the <functionDefinition>
-  // row's `body` entry.
+  // reported by its own row from the detector walk (see the <functionDefinition> row's `body`
+  // entry); a MAPPED class in this slot is reported here, because the walk cannot know that this
+  // position is one the converter does not read.
   if (el.body?.$type === 'dmn:LiteralExpression') {
     const text = HANDLERS.literalExpression(el.body);
     if (text != null) out.body = text;
+  } else if (el.body) {
+    reportUnreadExpression(ctx, el.body, `${path}.body`, "a business knowledge model's body "
+      + '(only a single literal expression fits the string slot)');
   }
   return out;
 }
 
+/**
+ * `<decisionTable>` → a Decision-Core `DecisionTable`, or `null` when it has no output clause.
+ *
+ * Why null rather than `outputs: []`: `decision-core-schema.json` gives `DecisionTable.outputs`
+ * `minItems: 1` (and makes it required), because DMN13.xsd gives `tDecisionTable/output` no
+ * `minOccurs` and so defaults it to 1. An output-less table is therefore logic Decision-Core
+ * genuinely cannot hold — IM02's exact definition — and emitting the half-table anyway produced the
+ * worst possible outcome: `lossless: true` alongside a `dc` that fails OUR OWN schema gate, so a
+ * caller who trusted the report got an error about our output instead of about their file.
+ */
 function readDecisionTable(el, ctx, path) {
+  if (asArray(el.output).length === 0) {
+    ctx.findings.push(finding('IM02', el, path, 'decisionTable',
+      'The decision table declares no output clause. Decision-Core requires at least one — an '
+      + 'output-less table states no result and there is nothing for a rule\'s `then` to line up '
+      + 'against — so the table is dropped and the decision imports without logic. The source file '
+      + 'is malformed here: DMN13.xsd gives tDecisionTable/output no minOccurs, which defaults it '
+      + 'to 1. ' + IMPORT_CODES.IM02.remedy));
+    return null;
+  }
   const table = {};
   putId(table, el, ctx, path, 'a decision table');
   // `hasOwn`, not `el.hitPolicy`: moddle carries "UNIQUE" on the PROTOTYPE, so a plain read cannot
@@ -525,9 +590,24 @@ function readDecisionTable(el, ctx, path) {
 function readRequirement(el, ctx, path, kind, targetId) {
   const ref = REQUIREMENT_SOURCE_PROPS.map((p) => el[p]).find(Boolean);
   if (!ref) {
-    // A requirement with no source is not expressible as an edge. It is also not a loss the table
-    // has a row for — it is a malformed source file — so it is left to the caller's own validation
-    // rather than reported under a code that would misdescribe it.
+    // An earlier revision returned null silently here, reasoning that a malformed source file is
+    // the caller's validation to do. That was wrong on a fact: NO caller can do it, because the
+    // element is gone from `dc` before anything downstream runs — and the report claims to name
+    // everything that did not arrive. The element carried an id the file authored; the finding says
+    // which.
+    //
+    // IM03 rather than a code of its own: within this module IM03 already means "a requirement was
+    // dropped because its source could not be resolved", and a caller meeting the same outcome
+    // should meet the same code from either cause. IMPORT_CODES has no member for "the source file
+    // is malformed", which is a gap recorded for the table's owner rather than papered over here —
+    // hence the case-specific reason below instead of IM03's generic remedy, which describes
+    // document-level constructs and would mislead if appended.
+    ctx.findings.push(finding('IM03', el, path, XSD_ELEMENT_OF_TYPE.get(el.$type),
+      'The requirement names nothing it requires — none of requiredDecision, requiredInput, '
+      + 'requiredKnowledge or requiredAuthority is present — so it cannot become a Decision-Core '
+      + 'edge, which is {type, source, target}. It is dropped. DMN 1.3 gives each requirement class '
+      + 'exactly one such reference, so the source file is malformed here; fix it there, since '
+      + 'nothing on this side can infer what the requirement pointed at.'));
     return null;
   }
   const resolved = localHref(ref.href);
@@ -565,13 +645,18 @@ function readDrgElement(el, ctx, path) {
     if (el.allowedAnswers != null) node.allowedAnswers = el.allowedAnswers;
     const logic = el.decisionLogic;
     if (logic?.$type === 'dmn:DecisionTable') {
-      node.decisionTable = HANDLERS.decisionTable(logic, ctx, `${path}.decisionLogic`);
+      // May come back null — a table with no output clause is logic Decision-Core cannot hold.
+      const table = HANDLERS.decisionTable(logic, ctx, `${path}.decisionLogic`);
+      if (table) node.decisionTable = table;
     } else if (logic?.$type === 'dmn:LiteralExpression') {
       const text = HANDLERS.literalExpression(logic);
       if (text != null) node.expression = text;
+    } else if (logic) {
+      // Either a boxed expression — already named by the walk, under its own `reported` row — or a
+      // MAPPED expression class in a slot with no branch above, which nothing but this line sees.
+      reportUnreadExpression(ctx, logic, `${path}.decisionLogic`, "a decision's logic "
+        + '(only a decision table or a single literal expression fit)');
     }
-    // Any other decisionLogic is a boxed expression: the decision imports with no logic and the
-    // expression reports through its own row, from the detector walk. Nothing to do here.
     const tasks = asArray(el.usingTask).map(bareHref).filter((h) => h != null);
     const processes = asArray(el.usingProcess).map(bareHref).filter((h) => h != null);
     // NON-IDENTITY 3 of 3: the schema is oneOf(string, array), so one entry is emitted as a STRING.
