@@ -17,6 +17,16 @@ const moddle = new BpmnModdle();
 // restatement is exactly the failure mode being closed.
 export const EVENT_SUBPROCESS_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field === 'isEventSubProcess').allowed;
 
+// Read from the same table, for the same reason, and closing the same shape of gap one field over.
+// OMG grants `instantiate` to `ReceiveTask` as well as `EventBasedGateway` (BPMN 2.0.2 §10.2.4 — an
+// instantiating Receive Task is how a process starts on an incoming message without a message start
+// event), and this read said `eventBasedGateway` alone, as did `import.js` and the writer. So a
+// `<bpmn:receiveTask instantiate="true">` written by any other tool was dropped on import, and one
+// authored in Logic-Core never reached the XML to begin with — the field was unreachable from both
+// ends at once, which is why no round-trip test could see it. The metamodel fence in types.test.js
+// is what found it.
+export const INSTANTIATE_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field === 'instantiate').allowed;
+
 const FLOW_NODE_TYPES = new Set([
   'bpmn:StartEvent', 'bpmn:EndEvent', 'bpmn:IntermediateCatchEvent', 'bpmn:IntermediateThrowEvent', 'bpmn:BoundaryEvent',
   'bpmn:Task', 'bpmn:UserTask', 'bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:SendTask', 'bpmn:ReceiveTask',
@@ -282,11 +292,12 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
       .find(v => v.$type?.split(':').pop() === 'decisionRef');
     if (decisionRefEl?.$body) node.decisionRef = decisionRefEl.$body;
 
-    // EventBasedGateway
+    // EventBasedGateway. `eventGatewayType` really is this one class's attribute; `instantiate` is
+    // not, and reading them together is what hid that for as long as it did.
     if (type === 'eventBasedGateway') {
       if (el.eventGatewayType && el.eventGatewayType !== 'Exclusive') node.eventGatewayType = el.eventGatewayType;
-      if (el.instantiate === true) node.instantiate = true;
     }
+    if (INSTANTIATE_TYPES.has(type) && el.instantiate === true) node.instantiate = true;
 
     // Event SubProcess (also a Transaction — see EVENT_SUBPROCESS_TYPES above)
     if (EVENT_SUBPROCESS_TYPES.has(type) && el.triggeredByEvent === true) node.isEventSubProcess = true;

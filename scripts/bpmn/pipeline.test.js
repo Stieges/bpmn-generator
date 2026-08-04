@@ -1600,6 +1600,27 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       }
     });
 
+    test('instantiate on a receiveTask survives the write and BOTH importer reads', async () => {
+      // OMG grants `instantiate` to ReceiveTask as well as EventBasedGateway (BPMN 2.0.2 §10.2.4 —
+      // an instantiating Receive Task starts a process on an incoming message without a message
+      // start event). The writer and both readers said `eventBasedGateway` alone, so the field was
+      // unreachable from BOTH ends at once: nothing could emit it and nothing could read it, which
+      // is why no round-trip test could ever have seen it. `types.test.js`'s metamodel fence found
+      // it by comparing `allowed` against bpmn-moddle's own descriptor.
+      const lc = wire({ id: 'n', type: 'receiveTask', name: 'Antwort empfangen', instantiate: true });
+      expect(s15(runRules(lc))).toHaveLength(0);
+      const result = await runPipeline(lc);
+      expect(result.bpmnXml).toMatch(/<bpmn:receiveTask\b[^>]*instantiate="true"/);
+      expect(result.validation.xmlWarnings.filter(w => w.includes('instantiate'))).toEqual([]);
+      const viaLegacy = bpmnToLogicCoreLegacy(result.bpmnXml);
+      const { rootElement } = await moddleParse(result.bpmnXml);
+      const viaModdle = moddleToLogicCore(rootElement);
+      for (const back of [viaLegacy, viaModdle]) {
+        const node = (back.pools ? back.pools[0].nodes : back.nodes).find(n => n.id === 'n');
+        expect(node.instantiate).toBe(true);
+      }
+    });
+
     test('cancelActivity is guarded by the table, not by the wider isBoundaryEvent predicate', async () => {
       // `isBoundaryEvent` answers true for anything carrying `attachedTo`, not only for the
       // boundaryEvent CLASS, so the old inline guard emitted `<bpmn:task cancelActivity="false">`

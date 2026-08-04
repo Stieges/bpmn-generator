@@ -137,7 +137,7 @@
         "implementation": { "type": "string", "description": "For service/send/receive/businessRule tasks: implementation type" },
         "decisionRef": { "type": "string", "description": "For businessRuleTask: id of the decision this task invokes. Serialised into bpmn:extensionElements under the generator's own namespace, not camunda:" },
         "eventGatewayType": { "enum": ["Exclusive", "Parallel"], "description": "For eventBasedGateway" },
-        "instantiate": { "type": "boolean", "description": "For eventBasedGateway: instantiate process" },
+        "instantiate": { "type": "boolean", "description": "For eventBasedGateway or receiveTask: instantiate process. OMG grants `instantiate` to both classes (BPMN 2.0.2 \u00a710.2.4) \u2014 an instantiating Receive Task starts a process on an incoming message without a message start event" },
         "linkName": { "type": "string", "description": "For link events: linkEventDefinition name" },
         "conditionExpression": { "type": "string", "description": "For conditional events: condition body" },
         "timerExpression": {
