@@ -9,7 +9,7 @@ import {
   DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS, DMN_ELEMENT_BASE,
   IMPORT_CODES, IMPORT_CODE_KINDS, BLIND_MECHANISMS, coverageForElement, coverageForModdleType,
 } from './import-scope.js';
-import { HANDLERS, dmnToDecisionCore } from './import.js';
+import { HANDLERS, dmnToDecisionCore, moddleToDecisionCore } from './import.js';
 
 /**
  * TWO ORACLES, NEITHER RESTATED HERE.
@@ -778,6 +778,268 @@ describeIfXmllint('F3 — the fixture really is a conformant DMN 1.3 document', 
     const fixture = path.join(HERE, '..', '..', 'tests', 'fixtures', 'dmn', 'foreign-kitchen-sink.dmn');
     expect(() => execFileSync('xmllint', ['--noout', '--schema', DMN13_XSD, fixture],
       { stdio: ['pipe', 'pipe', 'pipe'] })).not.toThrow();
+  });
+});
+
+// ── F6 — exhaustiveness: every polymorphic slot × every class that can land in it ────────────────
+
+/**
+ * THE FENCE THAT WOULD HAVE CAUGHT C1.
+ *
+ * Stage 3's review found a Critical no fence could see: a `mapped` expression class landing in a
+ * position the converter had no branch for was dropped while the report said `lossless: true`. A
+ * business knowledge model written as a decision table — the ordinary way to model one — imported
+ * with no logic at all. F5 fences that every `mapped` row has A handler; it can say nothing about
+ * whether every POSITION that handler can meet is covered, because a row is a statement about a
+ * TYPE and "read at this slot" is not a property of a type.
+ *
+ * So this fence enumerates the positions, and it does so from the descriptors and the table — never
+ * from a hand-written position list, which would be the same document C1 slipped past. That
+ * generation is the point rather than a nicety: `Invocation.calledFunction`, `Binding.bindingFormula`,
+ * `ContextEntry.value` and `List.elements` are covered here TODAY only because the walk drops their
+ * whole subtree, and the day any of those rows is promoted to `mapped` they become converter-
+ * reachable — a generated case set follows that promotion, a written one does not.
+ *
+ * DERIVATION, in three steps, each with its own reason:
+ *
+ *   1. CONTAINMENT ROUTES.  Breadth-first from `dmn:Definitions` over non-reference properties,
+ *      refusing to traverse a property the table declares unrepresented — the same rule
+ *      `nestedClosure()` already uses ("a property already declared dropped takes its subtree with
+ *      it"). That is what keeps `dmn:ExtensionElements` out without a hand exclusion: it is reachable
+ *      only through `extensionElements`, which `DMN_ELEMENT_BASE` declares an IM04 loss.
+ *      ALL routes of minimal length are kept, not one. `dmn:FunctionDefinition` sits one step from
+ *      the root twice over — as a decision's logic, where the converter does NOT read it, and as a
+ *      BKM's `encapsulatedLogic`, where it does — and keeping only the first would have made
+ *      `FunctionDefinition.body` pass for the wrong reason, since everything under a dropped subtree
+ *      is trivially "reported". C1 lived on the second route.
+ *
+ *   2. SLOTS.  A property of a reachable type whose declared type is ABSTRACT and at least one
+ *      `mapped` class descends from it. Abstractness is the mechanism: a monomorphic slot's class is
+ *      fixed, so "the converter has no branch for this class here" cannot arise.
+ *
+ *   3. CASES.  Slot × route × every `mapped` class that can land there. For each, a tree is built
+ *      with the instance and an identical one without it, and the two are compared.
+ *
+ * READ-OR-REPORTED is the assertion, and both arms are generic:
+ *   read      the resulting `dc` differs from the instance-less baseline — the importer did
+ *             something with it.
+ *   reported  some finding's path is the slot's path, or a prefix of it — the slot, or a subtree
+ *             containing it, was declared gone.
+ * Neither is the C1 shape exactly: content arrived, nothing read it, nothing said so.
+ *
+ * WHAT THE REVIEW COUNTED, AND WHERE I DIFFER (asked for explicitly, so stated explicitly). The
+ * review enumerated six polymorphic slots, all `dmn:Expression`-typed: four under `reported` rows,
+ * two converter-reachable and both handled. That is right, and this derivation finds all six. It
+ * also finds a SEVENTH the review did not name — `dmn:Definitions.drgElement`, typed by the abstract
+ * `dmn:DRGElement` — and I kept it rather than narrowing the rule to `dmn:Expression`, because it is
+ * the same defect class and not a near miss: a `mapped` DRG row whose class `NODE_TYPE_OF` has no
+ * entry for falls through `readDefinitions`' `handler ? … : null` and is dropped in exactly C1's
+ * silence. Narrowing to `dmn:Expression` would have meant naming a type by hand to exclude a live
+ * hole, which is the shape of the thing being fenced against.
+ */
+describe('F6 — every mapped class, in every polymorphic slot it can occupy, is read or reported', () => {
+  const MAPPED_ROWS = DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'mapped');
+  const tableEntryFor = (type) =>
+    [...DMN_ELEMENT_COVERAGE, ...DMN_NESTED_TYPE_COVERAGE].find((e) => e.moddleType === type);
+
+  /** Does the table declare this property of this type dropped, so its subtree goes with it? */
+  function isDroppedProperty(typeName, property) {
+    const entry = tableEntryFor(typeName);
+    if ((entry?.unrepresented ?? []).some((u) => u.property === property)) return true;
+    // The hoisted base losses apply to every type that does not itself map the property.
+    return Object.keys(DMN_ELEMENT_BASE).includes(property)
+      && !Object.keys(entry?.mapsTo ?? {}).includes(property);
+  }
+
+  const concreteSubtypesOf = (type) => [...DESCRIPTORS.keys()]
+    .filter((k) => !DESCRIPTORS.get(k).isAbstract && ancestryOf(k).includes(type));
+
+  /** Every property a walk could descend through, with the concrete types it can hold. */
+  function descendableProperties(typeName) {
+    const prefix = typeName.split(':')[0];
+    return propertyDescriptorsOf(typeName)
+      .filter((p) => !p.isReference && !isDroppedProperty(typeName, p.name))
+      .map((p) => {
+        const target = qualify(p.type, prefix);
+        const d = DESCRIPTORS.get(target);
+        if (!d) return null;
+        return { property: p.name, isMany: !!p.isMany, target, concrete: d.isAbstract ? concreteSubtypesOf(target) : [target] };
+      })
+      .filter(Boolean);
+  }
+
+  /** moddle type → every MINIMAL-length containment route from `dmn:Definitions` to it. */
+  const ROUTES = (() => {
+    const routes = new Map([['dmn:Definitions', [[]]]]);
+    let frontier = ['dmn:Definitions'];
+    while (frontier.length) {
+      const discovered = new Map();
+      for (const from of frontier) {
+        for (const p of descendableProperties(from)) {
+          for (const to of p.concrete) {
+            if (routes.has(to)) continue;                       // already reached, at a shorter length
+            if (!discovered.has(to)) discovered.set(to, []);
+            for (const r of routes.get(from)) {
+              discovered.get(to).push([...r, { ownerType: from, property: p.property, isMany: p.isMany }]);
+            }
+          }
+        }
+      }
+      for (const [type, rs] of discovered) routes.set(type, rs);
+      frontier = [...discovered.keys()];
+    }
+    return routes;
+  })();
+
+  const SLOTS = [...ROUTES.keys()].flatMap((owner) => descendableProperties(owner)
+    .filter((p) => DESCRIPTORS.get(p.target)?.isAbstract)
+    .map((p) => ({
+      owner, property: p.property, isMany: p.isMany, slotType: p.target,
+      holds: MAPPED_ROWS.filter((r) => ancestryOf(r.moddleType).includes(p.target)),
+    }))
+    .filter((s) => s.holds.length > 0));
+
+  /**
+   * The one hand-written part, and it cannot be otherwise: "a minimal instance that is observably
+   * read" is a semantic fact, not a descriptor one — nothing in dmn-moddle says a
+   * `<literalExpression>` is empty without its `text`, or that a `<decisionTable>` needs an output
+   * clause to be a table rather than an IM09. An empty instance would make the read arm fail and the
+   * fence report a defect that is not there.
+   *
+   * Fenced instead of trusted: the test below asserts that every mapped class the derivation puts in
+   * a case has an entry here, so promoting a row to `mapped` fails loudly rather than generating a
+   * hollow instance that quietly passes.
+   */
+  let serial = 0;
+  const gen = () => `gen_${serial++}`;
+  const MINIMAL_INSTANCES = {
+    'dmn:LiteralExpression': () => ({ $type: 'dmn:LiteralExpression', text: '42' }),
+    'dmn:DecisionTable': () => ({
+      $type: 'dmn:DecisionTable', id: gen(),
+      output: [{ $type: 'dmn:OutputClause', id: gen(), name: 'out' }],
+    }),
+    'dmn:FunctionDefinition': () => ({
+      $type: 'dmn:FunctionDefinition', body: { $type: 'dmn:LiteralExpression', text: '42' },
+    }),
+    'dmn:Decision': () => ({ $type: 'dmn:Decision', id: gen(), name: 'X' }),
+    'dmn:InputData': () => ({ $type: 'dmn:InputData', id: gen(), name: 'X' }),
+    'dmn:KnowledgeSource': () => ({ $type: 'dmn:KnowledgeSource', id: gen(), name: 'X' }),
+    'dmn:BusinessKnowledgeModel': () => ({ $type: 'dmn:BusinessKnowledgeModel', id: gen(), name: 'X' }),
+  };
+
+  /**
+   * A tree reaching `slot` along `route`, with the instance in the slot or without it.
+   *
+   * The wrapper ids are POSITIONAL (`w_0`, `w_owner`) rather than drawn from the same counter as the
+   * instance: a shared counter made the with- and without-instance trees differ in their wrappers'
+   * ids, so `dc` differed for every case and the read arm was satisfied by an artefact of the
+   * generator. Measured — it turned five honest `reported` verdicts into false `read` ones.
+   */
+  function buildCase(route, slot, mappedType) {
+    const wrapper = (type, id) => {
+      const props = new Set(propertiesOf(type));
+      const el = { $type: type };
+      if (props.has('id')) el.id = id;
+      if (props.has('name')) el.name = 'X';
+      if (type === 'dmn:Definitions') el.namespace = 'http://bpmn-generator.local/t';
+      return el;
+    };
+    let node = wrapper(slot.owner, 'w_owner');
+    if (mappedType) {
+      const made = MINIMAL_INSTANCES[mappedType]();
+      node[slot.property] = slot.isMany ? [made] : made;
+    }
+    for (let i = route.length - 1; i >= 0; i -= 1) {
+      const parent = wrapper(route[i].ownerType, `w_${i}`);
+      parent[route[i].property] = route[i].isMany ? [node] : node;
+      node = parent;
+    }
+    const slotPath = route.reduce((p, s) => `${p}.${s.property}${s.isMany ? '[0]' : ''}`, 'definitions')
+      + `.${slot.property}${slot.isMany ? '[0]' : ''}`;
+    return { tree: node, slotPath };
+  }
+
+  const CASES = SLOTS.flatMap((slot) => (ROUTES.get(slot.owner) ?? []).flatMap((route) =>
+    slot.holds.map((row) => ({ slot, route, row }))));
+
+  /**
+   * The count the review's own enumeration is a check on. Pinned as the full list rather than a
+   * number, so a slot appearing or vanishing says WHICH — a bare count would let one slot replace
+   * another silently.
+   */
+  test('the derivation finds the six dmn:Expression slots, plus the drgElement list', () => {
+    expect(SLOTS.map((s) => `${s.owner}.${s.property} :: ${s.slotType}`).sort()).toEqual([
+      'dmn:Binding.bindingFormula :: dmn:Expression',
+      'dmn:ContextEntry.value :: dmn:Expression',
+      'dmn:Decision.decisionLogic :: dmn:Expression',
+      'dmn:Definitions.drgElement :: dmn:DRGElement',
+      'dmn:FunctionDefinition.body :: dmn:Expression',
+      'dmn:Invocation.calledFunction :: dmn:Expression',
+      'dmn:List.elements :: dmn:Expression',
+    ]);
+    // Four of the six sit under `reported` rows, which is why they pass on the reported arm today.
+    expect(SLOTS.filter((s) => coverageForModdleType(s.owner)?.disposition === 'reported')
+      .map((s) => s.owner).sort())
+      .toEqual(['dmn:ContextEntry', 'dmn:Invocation', 'dmn:List']);
+    // `dmn:Binding` is the fourth, and has no row at all — it is reached only through <invocation>.
+    expect(coverageForModdleType('dmn:Binding')).toBeUndefined();
+  });
+
+  test('dmn:FunctionDefinition is reached by both of its minimal routes, not just the first', () => {
+    expect((ROUTES.get('dmn:FunctionDefinition') ?? []).map((r) => r.map((s) => s.property).join('.')).sort())
+      .toEqual(['drgElement.decisionLogic', 'drgElement.encapsulatedLogic']);
+  });
+
+  test('every mapped class in a case has a minimal instance — a hollow one would pass falsely', () => {
+    const missing = [...new Set(CASES.map((c) => c.row.moddleType))]
+      .filter((t) => !MINIMAL_INSTANCES[t])
+      .map((t) => `${t} became reachable in a polymorphic slot — add a MINIMAL_INSTANCES entry for `
+        + `it, or this fence generates an empty element and passes without testing anything`);
+    expect(missing).toEqual([]);
+    expect(CASES.length).toBeGreaterThan(20);   // an empty case set would pass vacuously
+  });
+
+  /**
+   * THE VACUOUS-PASS GUARD, and it is here because the vacuous pass actually happened. A first
+   * revision of `buildCase` built its wrappers from `propertiesOf(type).map((p) => p.name)` —
+   * `propertiesOf` already returns names, so the map produced `undefined`s, no wrapper ever got an
+   * `id`, every generated decision was dropped as invalid source (IM09), and every case therefore
+   * counted as "reported" because a finding sat above its slot. The fence was green and testing
+   * nothing; only the red-first run exposed it.
+   *
+   * So: the SCAFFOLDING must import cleanly. A baseline tree — no instance in the slot at all — may
+   * legitimately report what the table says is unrepresentable, but it must never report that the
+   * source is broken or that an id could not be held, because the generator wrote those ids.
+   */
+  test('the generated scaffolding is well formed — a broken wrapper would make every case pass', () => {
+    const broken = [];
+    for (const { slot, route } of CASES) {
+      const { report } = moddleToDecisionCore(buildCase(route, slot, null).tree);
+      for (const f of report.unrepresented.filter((x) => ['IM07', 'IM09'].includes(x.code))) {
+        broken.push(`${slot.owner}.${slot.property}: the generated tree itself reports ${f.code} at `
+          + `${f.path} — the scaffolding is malformed, so every case under it passes for free`);
+      }
+    }
+    expect([...new Set(broken)]).toEqual([]);
+  });
+
+  test('no case is silent — every mapped class in every slot is either read or reported', () => {
+    const silent = [];
+    for (const { slot, route, row } of CASES) {
+      const withIt = buildCase(route, slot, row.moddleType);
+      const without = buildCase(route, slot, null);
+      const read = JSON.stringify(moddleToDecisionCore(withIt.tree).dc)
+        !== JSON.stringify(moddleToDecisionCore(without.tree).dc);
+      const { report } = moddleToDecisionCore(withIt.tree);
+      const reported = report.unrepresented
+        .some((f) => withIt.slotPath === f.path || withIt.slotPath.startsWith(`${f.path}.`));
+      if (!read && !reported) {
+        silent.push(`<${row.xsdElement}> at ${slot.owner}.${slot.property} (${withIt.slotPath}) is `
+          + `neither read into Decision-Core nor named in the report — it is dropped in silence, `
+          + `which is the C1 shape: either give the converter a branch for it, or make it report`);
+      }
+    }
+    expect(silent).toEqual([]);
   });
 });
 
