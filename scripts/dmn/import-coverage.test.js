@@ -8,6 +8,7 @@ import {
   DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS, DMN_ELEMENT_BASE,
   IMPORT_CODES, BLIND_MECHANISMS, coverageForElement, coverageForModdleType,
 } from './import-scope.js';
+import { HANDLERS } from './import.js';
 
 /**
  * TWO ORACLES, NEITHER RESTATED HERE.
@@ -580,7 +581,37 @@ describe('the lookups', () => {
   });
 });
 
-// A fifth fence lands in Stage 3, once scripts/dmn/import.js exists:
-//   Object.keys(HANDLERS) must equal the set of `mapped` rows.
-// That is what stops the table and the importer from drifting apart. It is deliberately NOT stubbed
-// and NOT skipped here — a skipped test reads as coverage that exists, and it does not.
+// ── F5 — the table and the importer cannot drift apart ──────────────────────────────────────────
+
+describe('F5 — Object.keys(HANDLERS) is exactly the set of `mapped` rows', () => {
+  /**
+   * The fence the other four could not provide. F1 keeps the row set honest against the XSDs and
+   * F1b keeps each mapped row's properties accounted for — but neither can tell whether the
+   * IMPORTER still reads the row it says it reads. Demoting a row from `mapped` to `reported`
+   * without deleting its handler leaves the property fencing F1b did for it silently gone, since
+   * F1b only walks `mapped` rows; adding a handler with no row lets a construct be imported that
+   * the table never mentions. Set equality in BOTH directions closes both.
+   *
+   * `dmn:DMNElementReference` deliberately has no key: it is a nested type, not a global element,
+   * so it has no `xsdElement` to key one by, and its `href`'s Decision-Core slot depends on its
+   * container. See the HANDLERS doc comment in import.js for that argument in full.
+   */
+  test('no mapped row is unhandled, and no handler is stray', () => {
+    const mapped = DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'mapped').map((r) => r.xsdElement);
+    const handled = Object.keys(HANDLERS);
+    const problems = [
+      ...mapped.filter((e) => !handled.includes(e))
+        .map((e) => `<${e}> is 'mapped' but scripts/dmn/import.js has no HANDLERS entry for it — `
+          + `either add the handler or change the row's disposition`),
+      ...handled.filter((e) => !mapped.includes(e))
+        .map((e) => `HANDLERS has an entry for <${e}>, which is not a 'mapped' row in `
+          + `scripts/dmn/import-scope.js — ${HOWTO}`),
+    ];
+    expect(problems).toEqual([]);
+    expect(mapped.length).toBeGreaterThan(5);   // an empty mapped set would pass vacuously
+  });
+
+  test('every handler is callable', () => {
+    expect(Object.values(HANDLERS).every((h) => typeof h === 'function')).toBe(true);
+  });
+});
