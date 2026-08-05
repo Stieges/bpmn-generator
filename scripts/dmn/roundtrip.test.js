@@ -89,15 +89,63 @@ const SUBSCHEMA_SINGLE = ['items', 'not', 'if', 'then', 'else', 'contains', 'add
 const ALL_APPLICATORS = ['$ref', ...SUBSCHEMA_LISTS, ...SUBSCHEMA_SINGLE, 'patternProperties',
   'dependentSchemas'];
 
+/**
+ * Resolve a subschema, THROWING on a `$ref` this walk cannot follow.
+ *
+ * FAILING LOUD IS THE WHOLE POINT, and the earlier revision failed OPEN in exactly the way the
+ * premise test's own comment says it exists to prevent. `SCHEMA.$defs[name]` returning `undefined`
+ * left both walks bailing at their `if (!s …)` guard, which removed the type from `declared` and
+ * `present` ALIKE — so the set difference stayed empty and the completeness check passed having
+ * required nothing. Measured: moving `$defs.DecisionRule` into a draft-07-style `definitions` block,
+ * re-pointing `DecisionTable.properties.rules.items.$ref` at `#/definitions/DecisionRule` and adding
+ * a brand-new `brandNewNeverUsed` property to it left all 15 tests green — and the schema gate green
+ * too, because ajv resolves that pointer perfectly well. The fence had zero coverage of an entire
+ * `$defs` type and said nothing.
+ *
+ * The premise test cannot catch this: `$ref` is in `HANDLED_APPLICATORS`, and its value is a string
+ * so the `appliesSubschema` test never even considers it. `'definitions'` was already in
+ * `SUBSCHEMA_MAPS` for that scan while this function handled only `$defs` — the inconsistency was
+ * internal to this file, which is why the guard belongs here, at the one place that resolves.
+ *
+ * A pointer form this walk does not implement is a schema change that must be TAUGHT to the walk,
+ * not absorbed by it.
+ */
+const REF_PREFIX = '#/$defs/';
+
 function deref(node) {
   if (node && typeof node.$ref === 'string') {
-    const name = node.$ref.replace('#/$defs/', '');
-    return { schema: SCHEMA.$defs[name], name };
+    const ref = node.$ref;
+    if (!ref.startsWith(REF_PREFIX)) {
+      throw new Error(`roundtrip.test.js: $ref "${ref}" is not of the form "${REF_PREFIX}<name>", which is `
+        + 'the only pointer form the completeness walks resolve. Teach `deref` the new form before '
+        + 'using it in decision-core-schema.json — silently skipping it would remove the whole type '
+        + 'from BOTH the declared and the instantiated set, and the completeness check would pass '
+        + 'having required nothing.');
+    }
+    const name = ref.slice(REF_PREFIX.length);
+    const schema = SCHEMA.$defs?.[name];
+    if (!schema) {
+      // Belt to the prefix check's braces. This half is already unreachable in practice: a
+      // `#/$defs/<name>` pointing at nothing makes ajv fail to compile the schema, and `schema-gate.js`
+      // compiles at module load, so the whole suite fails to run before this line is reached
+      // (measured). The prefix check above is the one that catches the case ajv is HAPPY with —
+      // a well-formed pointer into a location this walk does not follow.
+      throw new Error(`roundtrip.test.js: $ref "${ref}" resolves to nothing — decision-core-schema.json `
+        + `declares no $defs.${name}.`);
+    }
+    return { schema, name };
   }
   return { schema: node, name: null };
 }
 
-/** typeName → Set of property names the schema declares on it. */
+/**
+ * typeName → `{ schema, properties: Set<string> }`.
+ *
+ * The schema object is handed back rather than re-derived by the callers, so the `type`-enum check
+ * below does not have to reconstruct a `$ref` from a type NAME — which for an anonymous type
+ * (`Node.parameters[]`) it cannot do, and which under the new throwing `deref` would fail rather
+ * than silently skip.
+ */
 function declaredProperties() {
   const out = new Map();
   const visit = (node, fallbackName) => {
@@ -106,7 +154,7 @@ function declaredProperties() {
     if (!s || typeof s !== 'object') return;
     if (s.properties) {
       if (out.has(typeName)) return;                   // a $defs type reached twice is the same type
-      out.set(typeName, new Set(Object.keys(s.properties)));
+      out.set(typeName, { schema: s, properties: new Set(Object.keys(s.properties)) });
       for (const [k, sub] of Object.entries(s.properties)) visit(sub, `${typeName}.${k}`);
     }
     if (s.items) visit(s.items, `${typeName}[]`);
@@ -116,12 +164,32 @@ function declaredProperties() {
   return out;
 }
 
-/** typeName → Set of property names present on at least one instance of it inside `doc`. */
+/**
+ * typeName → `{ properties: Set<string>, enumValues: Map<property, Set<value>> }` — what instances
+ * inside `doc` actually carry.
+ *
+ * `enumValues` is collected on the SAME traversal rather than by a second sweep, and that is the fix
+ * for a real hole: the earlier `type`-enum check gathered every `.type` string found ANYWHERE in the
+ * document into one global set, so `Node.type` was satisfied by a Requirement's `"authority"` and
+ * `Requirement.type` by a Node's `"decision"`. Measured — adding `"authority"` to `Node.type.enum`
+ * and `"decision"` to `Requirement.type.enum`, two entirely unexercised element classes, left all 15
+ * tests green. This walk is already type-keyed; that check was the one place the file's stated "one
+ * traversal, two consumers" design was violated.
+ */
 function instantiatedProperties(doc) {
   const out = new Map();
-  const record = (typeName, prop) => {
-    if (!out.has(typeName)) out.set(typeName, new Set());
-    out.get(typeName).add(prop);
+  const entry = (typeName) => {
+    if (!out.has(typeName)) out.set(typeName, { properties: new Set(), enumValues: new Map() });
+    return out.get(typeName);
+  };
+  const record = (typeName, prop, value, sub) => {
+    const e = entry(typeName);
+    e.properties.add(prop);
+    // Values are kept only where the schema constrains the property to an enum — the rest are free
+    // text and a set of them would say nothing.
+    if (!Array.isArray(sub?.enum) || typeof value !== 'string') return;
+    if (!e.enumValues.has(prop)) e.enumValues.set(prop, new Set());
+    e.enumValues.get(prop).add(value);
   };
   const visit = (value, node, fallbackName) => {
     const { schema: s, name } = deref(node);
@@ -130,7 +198,7 @@ function instantiatedProperties(doc) {
     if (s.properties && typeof value === 'object' && !Array.isArray(value)) {
       for (const [k, sub] of Object.entries(s.properties)) {
         if (!Object.prototype.hasOwnProperty.call(value, k)) continue;
-        record(typeName, k);
+        record(typeName, k, value[k], sub);
         visit(value[k], sub, `${typeName}.${k}`);
       }
     }
@@ -195,9 +263,9 @@ describe('roundtrip-all-fields.json — completeness against decision-core-schem
     const declared = declaredProperties();
     const present = instantiatedProperties(readFixture());
     const missing = [];
-    for (const [typeName, props] of declared) {
-      const have = present.get(typeName) ?? new Set();
-      for (const prop of props) if (!have.has(prop)) missing.push(`${typeName}.${prop}`);
+    for (const [typeName, { properties }] of declared) {
+      const have = present.get(typeName)?.properties ?? new Set();
+      for (const prop of properties) if (!have.has(prop)) missing.push(`${typeName}.${prop}`);
     }
     expect(['schema properties no instance in tests/fixtures/dmn/roundtrip-all-fields.json carries '
       + '— add them there (and, if they turn out not to survive the round trip, report the loss '
@@ -218,26 +286,33 @@ describe('roundtrip-all-fields.json — completeness against decision-core-schem
   //
   // The selector is mechanical (`the enum named `type``) rather than a list of two pointers, so a
   // third discriminator added later is covered the day it lands.
-  test('every value of every `type` enum in the schema appears in the fixture', () => {
-    const fixture = readFixture();
+  //
+  // Values are read from `instantiatedProperties`' own type-keyed traversal, NOT gathered globally.
+  // The earlier revision collected every `.type` string found anywhere in the document into one set,
+  // which made the two enums satisfy each other: measured, adding `"authority"` to `Node.type.enum`
+  // and `"decision"` to `Requirement.type.enum` — two element classes the fixture does not contain —
+  // left every test green, because a Requirement carries `"authority"` and a Node carries
+  // `"decision"`. Disjoint enums made that harmless today and would not have kept it harmless.
+  test('every value of every `type` enum appears on an instance OF THAT TYPE', () => {
     const declared = declaredProperties();
-    const present = instantiatedProperties(fixture);
+    const present = instantiatedProperties(readFixture());
     const uninstantiated = [];
-    for (const [typeName] of declared) {
-      const { schema: s } = deref(typeName === 'root' ? SCHEMA : { $ref: `#/$defs/${typeName}` });
-      const enumValues = s?.properties?.type?.enum;
+    const checked = [];
+    for (const [typeName, { schema }] of declared) {
+      const enumValues = schema.properties?.type?.enum;
       if (!enumValues) continue;
-      expect(present.get(typeName)?.has('type')).toBe(true);   // guarded by the check above; restated so the loop cannot pass vacuously
-      const seen = new Set();
-      const collect = (v) => {
-        if (Array.isArray(v)) { v.forEach(collect); return; }
-        if (v && typeof v === 'object') { if (typeof v.type === 'string') seen.add(v.type); Object.values(v).forEach(collect); }
-      };
-      collect(fixture);
+      checked.push(typeName);
+      const seen = present.get(typeName)?.enumValues.get('type') ?? new Set();
       for (const value of enumValues) if (!seen.has(value)) uninstantiated.push(`${typeName}.type = "${value}"`);
     }
-    expect(['`type` enum values no instance in the fixture carries', uninstantiated.sort()])
-      .toEqual(['`type` enum values no instance in the fixture carries', []]);
+    // Vacuity guard: a refactor that stopped finding any `type` enum would otherwise leave this test
+    // green while checking nothing. Not pinned to an exact list of type names — the selector is meant
+    // to pick up a third discriminator without being edited.
+    expect(checked.length).toBeGreaterThan(0);
+    expect([`\`type\` enum values no instance of its own type carries (checked: ${checked.sort().join(', ')})`,
+      uninstantiated.sort()])
+      .toEqual([`\`type\` enum values no instance of its own type carries (checked: ${checked.sort().join(', ')})`,
+        []]);
   });
 });
 
@@ -269,18 +344,16 @@ const sortRequirements = (dc) => (dc.requirements
 const drgHalf = (xml) => xml.slice(0, xml.indexOf('<dmndi:DMNDI'));
 
 describe('Decision-Core → DMN XML → Decision-Core', () => {
-  let fixture, xml1, dc, report, xml2, xml3;
+  let fixture, first, xml1, dc, report, second, xml2, xml3;
 
   beforeAll(async () => {
     fixture = readFixture();
-    const first = await runDmnPipeline(fixture);
-    expect(first.validation.errors).toEqual([]);
+    first = await runDmnPipeline(fixture);
     xml1 = first.xml;
 
     ({ dc, report } = await dmnToDecisionCore(xml1));
 
-    const second = await runDmnPipeline(dc);
-    expect(second.validation.errors).toEqual([]);
+    second = await runDmnPipeline(dc);
     xml2 = second.xml;
 
     const { dc: dc2 } = await dmnToDecisionCore(xml2);
@@ -288,10 +361,27 @@ describe('Decision-Core → DMN XML → Decision-Core', () => {
     xml3 = third.xml;
   });
 
-  test('the emit is clean — no rule warnings, no serialisation warnings', () => {
-    // Not incidental: a fixture that instantiates every field is exactly the one most likely to
-    // trip a rule, and a WARNING here would mean the round trip is being measured over a model the
-    // engine already objects to.
+  // All FOUR channels, on both emits. The earlier revision was named for this and asserted only
+  // `report.parserWarnings` — which is a fifth thing entirely (the IMPORTER's moddle warnings), so
+  // the guard was a name rather than a check. Nothing was broken behind it; that is not the same as
+  // it having been checked. A fixture that instantiates every field is exactly the one most likely
+  // to trip a rule or to place an element the serialiser objects to, and a warning in any of these
+  // would mean the round trip is being measured over a model the pipeline already complains about.
+  test.each([['the first emit, from the fixture', () => first], ['the second emit, from the re-import', () => second]])(
+    'the pipeline is silent on all four channels — %s', (_label, get) => {
+      const result = get();
+      expect({
+        errors: result.validation.errors,
+        warnings: result.validation.warnings,
+        xmlWarnings: result.validation.xmlWarnings,
+        diagnostics: result.diagnostics.issues,
+      }).toEqual({ errors: [], warnings: [], xmlWarnings: [], diagnostics: [] });
+    });
+
+  test('the importer raises no parser warnings over our own output', () => {
+    // The fifth channel, and a separate claim: dmn-moddle re-reading what dmn-moddle wrote. An
+    // entry here would be the IM08 class — content the parser could not build an object for — on our
+    // own file.
     expect(report.parserWarnings).toEqual([]);
   });
 
