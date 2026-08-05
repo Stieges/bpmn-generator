@@ -56,15 +56,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `<dmndi:DMNDI>` tree → IM06, and it *generates* the `<variable>`/`<literalExpression>` ids the
   importer then reports → IM05 — both stated in `import-scope.js`, both regenerated identically on
   the next emit, so the claimable statement is "no finding outside those two classes" and that is
-  asserted positively); `xml₁ === xml₂` does **not** hold, because `buildDmnDiagrams` keys
-  `edgeCoords` in `dc.requirements` array order while the importer rebuilds that array grouped by
-  target, so the `<dmndi:DMNEdge>` children permute — the documents are byte-identical up to
-  `<dmndi:DMNDI>` and the fixed point is `xml₂ === xml₃`; and `$schemaVersion` does not survive at
-  all. Nothing was added to `canonicalizeDecisionCore` and the fixture was not trimmed. Also
-  surfaced and **not** fixed here: `readDecisionTable` reads a rule's `<description>` into
-  `DecisionRule.documentation`, a property the schema does not declare, so a foreign file carrying
-  one imports into a `dc` that fails our own schema gate — and `import-scope.js`'s `dmn:DecisionRule`
-  row claims that mapping in prose, which F1b never reads.
+  asserted positively); `xml₁ === xml₂` did **not** hold as of this stage, because `buildDmnDiagrams`
+  keyed `edgeCoords` in `dc.requirements` array order while the importer rebuilds that array grouped
+  by target, so the `<dmndi:DMNEdge>` children permuted — the documents were byte-identical up to
+  `<dmndi:DMNDI>` and the strongest available claim was the fixed point `xml₂ === xml₃`
+  (**closed in Stage 5b**, see the two Fixed entries at the head of this section); and
+  `$schemaVersion` does not survive at all. Nothing was added to `canonicalizeDecisionCore` and the
+  fixture was not trimmed. Also surfaced and **not** fixed here: `readDecisionTable` reads a rule's
+  `<description>` into `DecisionRule.documentation`, a property the schema does not declare, so a
+  foreign file carrying one imports into a `dc` that fails our own schema gate — and
+  `import-scope.js`'s `dmn:DecisionRule` row claims that mapping in prose, which F1b never reads
+  (**also closed in Stage 5b**).
 - **`scripts/dmn/import.js` — DMN 1.3 XML → Decision-Core, and a structured report of what could
   not come with it (dmn-xml-importer plan, Stage 3).** `parseDmnXml` (async, the thin dmn-moddle
   wrapper, throws), `moddleToDecisionCore` (pure and synchronous, so a hand-built moddle tree is a
@@ -331,6 +333,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is now decided by an explicit alignability rule that names why each excluded class is not a
   defect, and area gained an aspect-ratio column plus a note that it is not comparable between raw
   ELK and the pipeline.
+- **A rule's documentation had a read, a claim and no schema (dmn-xml-importer plan, Stage 5b).**
+  `readDecisionTable` wrote `DecisionRule.documentation` into every imported Decision-Core,
+  `references/decision-core-schema.json` declared no such property and closes itself with
+  `additionalProperties: false`, and `buildDecisionTable` in `scripts/dmn/dmn-xml.js` had no branch
+  to write it back. So a foreign file with `<rule><description>` imported into a Decision-Core our
+  **own** schema gate rejects — `tests/fixtures/dmn/foreign-kitchen-sink.dmn`, one of our own Stage-4
+  fixtures, among them — while the field was lost on the write side too, which made the round trip
+  symmetric and the hole invisible from the round-trip fence. The content is now **carried**: a
+  rule's rationale is business content, and an importer that discards it loses what foreign files are
+  read for. `import-scope.js`'s `dmn:DecisionRule` row now states the line it draws against
+  `dmn:DecisionTable`'s own `description` (still an IM05 loss) rather than leaving it to be inferred.
+  The row claimed the mapping in **prose** all along; F1b reads `mapsTo`'s keys and never its values,
+  which is exactly why no fence saw it. The guard that makes the class impossible is therefore on the
+  **gate**, not on a field list: `scripts/dmn/import.test.js` now asserts, directory-driven over
+  every `.dmn` in `tests/fixtures/dmn/` (our own `.expected.dmn` golden included), that each imports
+  into a Decision-Core passing `validateDecisionCoreSchema`. Measured by biting it — with the schema
+  property removed again the run fails naming `foreign-kitchen-sink.dmn` and printing the ajv error.
+  Load-bearing for Stages 6 and 7, which both feed the imported Decision-Core through that same gate.
+- **The `<dmndi:DMNEdge>` order followed the input array, not the model (dmn-xml-importer plan,
+  Stage 5b).** `buildDmnDiagrams` keyed `edgeCoords` by walking `dc.requirements` flat and
+  `buildDmnDI` emits one edge per key in key order, so the emitted DI depended on the order the
+  requirements happened to arrive in; the importer rebuilds that array grouped by target, so a
+  re-emit permuted the edge list — same edges, same waypoints, different order, and `xml₁ !== xml₂`
+  (recorded as an unreachable claim in the Stage 4b/5 entry below). The DRG half already had the
+  property by accident of nesting. `orderedRequirements` in `scripts/dmn/coordinates.js` now states
+  the order explicitly — by target in `dc.nodes` order, then by DMN13.xsd's kind sequence, preserving
+  array order inside a group — and **both** halves go through it, so their agreement stops being a
+  property of moddle's collections. `roundtrip.test.js` asserts `xml₁ === xml₂` directly in place of
+  the FINDING; `xml₂ === xml₃` is kept although it now follows, as a diagnostic split between a
+  permutation that settles and an instability that compounds.
+  `tests/fixtures/dmn/discount-decision.expected.dmn` moved, inspected: exactly one `<dmndi:DMNEdge>`
+  block relocating with byte-identical waypoints, everything before the edge list identical, and the
+  new order matching the order the requirement elements appear in the DRG half of the same document.
 - **Three nesting losses the spanning fence found are closed.** All three sat at nesting depth ≥ 1
   and none was visible before the fence existed. (1) **`color` at depth ≥ 1**, on both importer
   paths: the write was already correct — the nested node's `<bpmndi:BPMNShape>` carried
