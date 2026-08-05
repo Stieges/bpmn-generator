@@ -386,11 +386,14 @@ describe('Decision-Core → DMN XML → Decision-Core', () => {
   });
 
   test('the re-imported Decision-Core passes our own schema gate', () => {
-    // The failure this pins is real and has a live sibling: `readDecisionTable` reads a rule's
-    // `<description>` into `DecisionRule.documentation`, a property the schema does not declare, so
-    // a foreign file carrying one imports into a `dc` this gate REJECTS. That path is unreachable
-    // from our own writer (it emits no rule description), which is why this fixture cannot cover it
-    // — see the stage report's finding list.
+    // The failure this pins used to have a live sibling, and the shape of it is worth keeping:
+    // `readDecisionTable` read a rule's `<description>` into `DecisionRule.documentation`, a property
+    // the schema did not declare and which `additionalProperties: false` therefore REJECTED — so a
+    // foreign file carrying one imported into a `dc` this very gate refused. This fixture could not
+    // reach it, because our own writer emitted no rule description either; the hole was symmetric
+    // and so invisible from here. Stage 5b closed both halves (schema property + `buildDecisionTable`
+    // branch), and the guard that covers the general case is directory-driven over every foreign
+    // `.dmn` fixture in `import.test.js` — a gate check, not a field list.
     const result = validateDecisionCoreSchema(dc);
     expect([result.valid, result.errors ?? []]).toEqual([true, []]);
   });

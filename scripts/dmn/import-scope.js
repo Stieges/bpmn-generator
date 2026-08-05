@@ -844,8 +844,19 @@ export const DMN_NESTED_TYPE_COVERAGE = [
     reachedFrom: ['<decisionTable>.rule'],
     mapsTo: {
       id: 'DecisionRule.id',
+      // THE LINE, stated rather than left to be inferred: a RULE is documented, its TABLE is not
+      // (`dmn:DecisionTable`'s own `description` is an IM05 loss two rows up). The ground is that a
+      // rule's rationale is business content unique to that row, while a table's description
+      // restates the decision that owns it — Decision-Core already has `Node.documentation` for
+      // that. Both halves of the mapping are real code: `references/decision-core-schema.json`
+      // declares `$defs.DecisionRule.documentation` and `dmn-xml.js`'s `buildDecisionTable` emits it
+      // back. Until Stage 5b none of that was true — the schema declared no such property and is
+      // `additionalProperties: false`, so this row claimed a mapping that produced a Decision-Core
+      // our OWN schema gate rejected. It stayed invisible because F1b reads `mapsTo`'s KEYS and
+      // never its prose VALUES; the guard that would have caught it is the directory-driven
+      // schema-gate fence in `import.test.js`, not anything in this table.
       description: 'DecisionRule.documentation — a rule is the one part of a table Decision-Core '
-        + 'does let you document',
+        + 'does let you document, unlike dmn:DecisionTable\'s own description (IM05)',
       inputEntry: 'DecisionRule.when[] — see dmn:UnaryTests',
       outputEntry: 'DecisionRule.then[] — see the <literalExpression> row',
       annotationEntry: 'DecisionRule.annotations[] — see dmn:RuleAnnotation',

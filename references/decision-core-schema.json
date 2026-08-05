@@ -170,6 +170,10 @@
       "required": ["then"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$", "description": "xsd:ID (NCName), narrowed to ASCII — see the root `id` field's description for why." },
+        "documentation": {
+          "type": "string",
+          "description": "Serialised as tDMNElement/description. A rule is the one part of a decision table Decision-Core lets you document, and that is a deliberate line rather than an oversight: a rule's rationale (\"why does this row exist\") is business content a reader of a foreign file is looking for, while a DecisionTable's own description restates the decision that owns it — so `DecisionTable.description` stays an IM05 loss (see scripts/dmn/import-scope.js) and this one is carried."
+        },
         "when": {
           "type": "array",
           "items": { "type": "string" },
