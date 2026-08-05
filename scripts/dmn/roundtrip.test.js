@@ -30,11 +30,13 @@
  *     reports as unrepresented (IM05). Every one of those is content the writer regenerates
  *     identically on the next emit — so the honest claim is "no finding OUTSIDE those two classes",
  *     and that is asserted positively below.
- *   - `xml₁ === xml₂` does NOT hold, and the cause is not the DRG: the two documents are
- *     byte-identical up to `<dmndi:DMNDI>` and differ only in the ORDER of `<dmndi:DMNEdge>`
- *     children, because `buildDmnDiagrams` keys `edgeCoords` in `dc.requirements` array order while
- *     the importer rebuilds that array grouped by target. So the fixed point is reached one step
- *     later, and `xml₂ === xml₃` is the claim that has no ordering ambiguity.
+ *   - `xml₁ === xml₂` did NOT hold when this file was written, and the cause was not the DRG: the two
+ *     documents were byte-identical up to `<dmndi:DMNDI>` and differed only in the ORDER of
+ *     `<dmndi:DMNEdge>` children, because `buildDmnDiagrams` keyed `edgeCoords` in `dc.requirements`
+ *     array order while the importer rebuilds that array grouped by target. Stage 5b closed it by
+ *     making the emitted order a function of the MODEL — `orderedRequirements` in `coordinates.js`,
+ *     shared by the DI half and the DRG half — so the identity is asserted directly below and the
+ *     fixed point one step later is now a consequence rather than the strongest available claim.
  *   - `$schemaVersion` does not survive at all. It is a finding, kept in the fixture and asserted AS
  *     A LOSS in its own test.
  *
@@ -330,11 +332,15 @@ describe('roundtrip-all-fields.json — completeness against decision-core-schem
  *
  * Sorted HERE rather than normalised inside `canonicalizeDecisionCore`, deliberately. That function
  * is called by production consumers of the importer, and a sort there would silently reorder every
- * caller's requirements to hide a difference only this test cares about — while also destroying the
- * one thing the order DOES still control, which is the emission order of `<dmndi:DMNEdge>` (the
- * xml₁/xml₂ non-identity below). A normalisation is a claim that something is representational; this
- * one would be a claim about the comparison, not about the model, and it belongs where the
- * comparison is.
+ * caller's requirements to hide a difference only this test cares about. A normalisation is a claim
+ * that something is representational; this one would be a claim about the comparison, not about the
+ * model, and it belongs where the comparison is.
+ *
+ * Note what changed in Stage 5b and what did not. The array order used to control one visible thing
+ * — the emission order of `<dmndi:DMNEdge>` — and now controls nothing: `orderedRequirements` derives
+ * the emitted order from `dc.nodes` and the requirement kinds. So the permutation this sort absorbs
+ * is now genuinely invisible in the artefact, which is the strongest form of the argument for
+ * absorbing it, and `xml₁ === xml₂` below is the proof.
  */
 const sortRequirements = (dc) => (dc.requirements
   ? { ...dc, requirements: [...dc.requirements].sort((a, b) => requirementKey(a).localeCompare(requirementKey(b))) }
@@ -499,19 +505,24 @@ describe('the XML is the artefact', () => {
     expect(drgHalf(xml2)).toBe(drgHalf(xml1));
   });
 
-  test('FINDING — xml₁ !== xml₂: the DMNEdge order follows dc.requirements array order', () => {
-    // `buildDmnDiagrams` keys `edgeCoords` by walking `dc.requirements` in array order, and
-    // `buildDmnDI` emits `<dmndi:DMNEdge>` in that key order — so the importer's target-grouped
-    // rebuild of the array permutes the DI edge list. Same edges, same waypoints, different order.
-    expect(xml2).not.toBe(xml1);
-    const sortedLines = (x) => x.split('\n').map((l) => l.trim()).sort();
-    expect(sortedLines(xml2)).toEqual(sortedLines(xml1));
+  test('the WHOLE document is byte-identical after a round trip — xml₁ === xml₂', () => {
+    // The claim the earlier revision recorded as a FINDING it could not make. `buildDmnDiagrams`
+    // used to key `edgeCoords` by walking `dc.requirements` in array order, and `buildDmnDI` emits
+    // `<dmndi:DMNEdge>` in that key order — so the importer's target-grouped rebuild of the array
+    // permuted the DI edge list (same edges, same waypoints, different order). Both halves now go
+    // through `orderedRequirements`, which derives the order from `dc.nodes` and the XSD's kind
+    // sequence, so two Decision-Cores describing the same model emit the same bytes whatever order
+    // their `requirements` array happens to be in.
+    expect(xml2).toBe(xml1);
   });
 
   test('one round trip reaches a fixed point — xml₂ === xml₃', () => {
-    // The claim `xml₁ === xml₂` was meant to carry, stated where it is true: once the requirement
-    // array has been through the importer's grouping once, it is stable, so every further round trip
-    // is byte-for-byte identical. Nothing about the model degrades on repeated import/emit.
+    // Kept, though it now FOLLOWS from the test above (if emit(import(x)) === x for x = xml₁, then
+    // xml₃ = emit(import(xml₂)) = emit(import(xml₁)) = xml₂). It earns its line as a diagnostic
+    // SPLIT rather than as an independent claim: should the identity above ever regress, these two
+    // together say whether the instability is one-shot — a permutation that settles, which is what
+    // the old behaviour was — or compounding, which would be a far worse defect wearing the same
+    // failure message. One line to tell those apart is cheap.
     expect(xml3).toBe(xml2);
   });
 });
