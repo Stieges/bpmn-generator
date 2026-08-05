@@ -13,7 +13,7 @@
 
 import { DmnModdle } from 'dmn-moddle';
 import { rn } from '../shared/utils.js';
-import { requirementKey } from './coordinates.js';
+import { requirementKey, orderedRequirements } from './coordinates.js';
 
 const moddle = new DmnModdle();
 
@@ -231,7 +231,12 @@ function buildDrgElement(node, usedIds) {
 function attachRequirements(dc, nodeMap) {
   const nodesById = new Map(dc.nodes.map((n) => [n.id, n]));
   const requirementMap = new Map();
-  for (const req of (dc.requirements ?? [])) {
+  // `orderedRequirements`, not `dc.requirements`, so the DRG half and the DI half derive their
+  // element order from ONE function. A no-op for this loop today — the per-target, per-kind nesting
+  // below already groups whatever order arrives — which is exactly why it is worth stating: the
+  // agreement between the two halves stops being a property of moddle's collections and becomes a
+  // property of the code. See `orderedRequirements`' doc comment in coordinates.js.
+  for (const req of orderedRequirements(dc)) {
     const targetEl = nodeMap.get(req.target);
     const sourceNode = nodesById.get(req.source);
     if (!targetEl || !sourceNode) continue; // D01 guarantees this for rule-gated input; defend anyway

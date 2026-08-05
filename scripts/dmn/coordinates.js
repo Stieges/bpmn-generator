@@ -58,7 +58,65 @@ export function requirementKey(req) {
 }
 
 /**
- * @param {object} dc - Decision-Core JSON (only `name` and `requirements` are read)
+ * The three requirement kinds in the order DMN13.xsd sequences them inside a DRG element
+ * (`informationRequirement`, then `knowledgeRequirement`, then `authorityRequirement` — the same
+ * order `import.js`'s `REQUIREMENT_KINDS` walks on the way back in).
+ */
+const REQUIREMENT_EMIT_KINDS = ['information', 'knowledge', 'authority'];
+
+/**
+ * `dc.requirements` in the order the requirement ELEMENTS appear in the emitted document: grouped by
+ * target in `dc.nodes` order, then by kind, preserving the input array's order inside each group.
+ *
+ * WHY THIS EXISTS. The emitted order has to be a function of the MODEL, not of the input array's
+ * order, and until Stage 5b only half of it was. The DRG half already had the property by accident
+ * of nesting — `attachRequirements` pushes each requirement into a per-target, per-kind collection,
+ * so whatever order it iterates in, the XML comes out grouped. The DI half did not: `edgeCoords` was
+ * keyed by walking `dc.requirements` flat, and `dmn-xml.js` emits `<dmndi:DMNEdge>` in that key
+ * order. Since the importer rebuilds the array grouped, a re-emit permuted the DI edge list and
+ * `xml₁ !== xml₂` — same edges, same waypoints, different order (`roundtrip.test.js` measured it as
+ * exactly two blocks moving).
+ *
+ * Both callers now go through this function, so the two halves agree by construction rather than by
+ * coincidence. For `attachRequirements` it is a no-op TODAY, for the nesting reason above — that is
+ * the point: the guarantee stops depending on a property of moddle's collections.
+ *
+ * Requirements the grouping cannot place (a target that is not a declared node, an unknown `type`)
+ * are appended in array order rather than dropped: neither reaches the XML, but a caller iterating
+ * this instead of `dc.requirements` must not silently lose one.
+ *
+ * @param {object} dc - Decision-Core JSON (`nodes` and `requirements`)
+ * @returns {Array<object>}
+ */
+export function orderedRequirements(dc) {
+  const requirements = dc.requirements ?? [];
+  if (requirements.length < 2) return requirements;
+
+  const byTarget = new Map();
+  for (const req of requirements) {
+    if (!byTarget.has(req.target)) byTarget.set(req.target, []);
+    byTarget.get(req.target).push(req);
+  }
+
+  const ordered = [];
+  const placed = new Set();
+  for (const node of (dc.nodes ?? [])) {
+    const group = byTarget.get(node.id);
+    if (!group) continue;
+    for (const kind of REQUIREMENT_EMIT_KINDS) {
+      for (const req of group) {
+        if (req.type !== kind) continue;
+        ordered.push(req);
+        placed.add(req);
+      }
+    }
+  }
+  for (const req of requirements) if (!placed.has(req)) ordered.push(req);
+  return ordered;
+}
+
+/**
+ * @param {object} dc - Decision-Core JSON (`name`, `nodes` and `requirements` are read)
  * @param {object} laidOutGraph - result of runDmnElkLayout: { children: [{ id, x, y, width, height }, ...] }
  * @returns {[{ id: string, name: string, size: {w:number,h:number}, coordMap: { coords: object, edgeCoords: object } }]}
  */
@@ -99,7 +157,9 @@ export function buildDmnDiagrams(dc, laidOutGraph) {
   }
 
   const edgeCoords = {};
-  for (const req of (dc.requirements || [])) {
+  // Insertion order matters here and nowhere else in this module: `dmn-xml.js` emits one
+  // `<dmndi:DMNEdge>` per `Object.entries(edgeCoords)` key, in key order. See `orderedRequirements`.
+  for (const req of orderedRequirements(dc)) {
     const a = coords[req.source];
     const b = coords[req.target];
     if (!a || !b) continue; // dangling reference — D01 reports this upstream; stay defensive here
