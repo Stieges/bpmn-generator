@@ -118,6 +118,10 @@
         <di:waypoint x="514.4" y="349.7" />
         <di:waypoint x="471.1" y="267.4" />
       </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="ar_1_di" dmnElementRef="ar_1">
+        <di:waypoint x="389.4" y="349.7" />
+        <di:waypoint x="430.2" y="267.4" />
+      </dmndi:DMNEdge>
       <dmndi:DMNEdge id="ir_2_di" dmnElementRef="ir_2">
         <di:waypoint x="404" y="187.4" />
         <di:waypoint x="303.5" y="100" />
@@ -129,10 +133,6 @@
       <dmndi:DMNEdge id="kr_1_di" dmnElementRef="kr_1">
         <di:waypoint x="113.5" y="187.4" />
         <di:waypoint x="212.3" y="100" />
-      </dmndi:DMNEdge>
-      <dmndi:DMNEdge id="ar_1_di" dmnElementRef="ar_1">
-        <di:waypoint x="389.4" y="349.7" />
-        <di:waypoint x="430.2" y="267.4" />
       </dmndi:DMNEdge>
     </dmndi:DMNDiagram>
   </dmndi:DMNDI>
