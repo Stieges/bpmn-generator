@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -652,6 +652,46 @@ describe('the parse/convert split', () => {
     const out = moddleToDecisionCore(definitions);
     expect(out.dc.nodes.map((n) => n.id)).toEqual(['d1']);
     expect(out.report.lossless).toBe(true);
+  });
+});
+
+/**
+ * THE STRUCTURAL GUARD: whatever the importer produces must be something our own pipeline accepts.
+ *
+ * An importer that emits input its own schema gate rejects is a defect regardless of WHICH field
+ * causes it, so the fence sits on the gate rather than on a list of fields. That distinction is not
+ * theoretical — it is the defect this block was written for. `readDecisionTable` wrote
+ * `DecisionRule.documentation`, `decision-core-schema.json` declared no such property and closes
+ * itself with `additionalProperties: false`, and `foreign-kitchen-sink.dmn` — a fixture already in
+ * this directory, already exercised by three other fences — imported into a Decision-Core this gate
+ * refused. Nothing said so, because `import-scope.js`'s `dmn:DecisionRule` row claimed the mapping in
+ * PROSE and F1b reads `mapsTo`'s keys, never its values. A field-list fence would have had to name
+ * `documentation` to catch it; this one had only to run.
+ *
+ * It matters downstream, not just here: Stages 6 and 7 (the import CLI, and `--decisions` accepting
+ * a `.dmn`) both feed the imported Decision-Core straight through `validateDecisionCoreSchema`.
+ *
+ * Directory-driven in the idiom of `bpmn/net-check.test.js` — the list is DERIVED, so a `.dmn`
+ * fixture added later is covered the day it lands rather than the day someone remembers this file.
+ * Every `.dmn` in the directory qualifies, our own `.expected.dmn` golden included: "our writer made
+ * it" is not a reason to exempt a file from the claim that reading it produces valid input.
+ */
+describe('every .dmn fixture imports into a Decision-Core that passes the schema gate', () => {
+  const FIXTURE_FILES = readdirSync(FIXTURES).filter((f) => f.endsWith('.dmn')).sort();
+
+  // Vacuity guard: a moved directory or a changed extension would otherwise leave this block green
+  // while iterating nothing at all.
+  test('the directory scan finds at least one .dmn fixture', () => {
+    expect(FIXTURE_FILES.length).toBeGreaterThan(0);
+  });
+
+  test.each(FIXTURE_FILES)('%s', async (file) => {
+    const { dc } = await dmnToDecisionCore(readFileSync(path.join(FIXTURES, file), 'utf8'));
+    const result = validateDecisionCoreSchema(dc);
+    // The errors first, so a failure PRINTS what the gate objected to — a fence that names its own
+    // violation gets fixed; one that only says `false !== true` gets argued with.
+    expect([file, result.errors ?? []]).toEqual([file, []]);
+    expect(result.valid).toBe(true);
   });
 });
 
