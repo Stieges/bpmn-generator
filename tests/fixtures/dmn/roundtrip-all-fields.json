@@ -77,7 +77,7 @@
         ],
         "annotations": [{ "name": "Rationale" }],
         "rules": [
-          { "id": "rule_low", "when": ["[60..100]"], "then": ["\"low\""], "annotations": ["Comfortable margin over the policy floor"] },
+          { "id": "rule_low", "when": ["[60..100]"], "then": ["\"low\""], "annotations": ["Comfortable margin over the policy floor"], "documentation": "Scores at or above the policy floor carry no additional review; the rationale is the 2019 underwriting review, not the score itself." },
           { "id": "rule_medium", "when": ["[30..60)"], "then": ["\"medium\""], "annotations": ["Within appetite, priced up"] },
           { "id": "rule_high", "when": ["[0..30)"], "then": ["\"high\""], "annotations": ["Below appetite"] }
         ]

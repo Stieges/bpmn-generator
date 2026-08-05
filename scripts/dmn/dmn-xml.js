@@ -133,6 +133,11 @@ function buildDecisionTable(t) {
   for (const rule of (t.rules ?? [])) {
     table.get('rule').push(create('dmn:DecisionRule', { // nest
       id: rule.id,
+      // tDMNElement/description. A rule is the ONE part of a table Decision-Core documents (the
+      // table's own description is an IM05 loss — see import-scope.js), and the importer has always
+      // read it back; without this branch the field survived the read and vanished on the write, so
+      // the round trip lost it in the direction no foreign-file fence looks.
+      ...(rule.documentation != null ? { description: rule.documentation } : {}),
       inputEntry: (rule.when ?? []).map((w) => create('dmn:UnaryTests', { text: w })),
       outputEntry: rule.then.map((v) => create('dmn:LiteralExpression', { text: v })),
       // NO id on annotationEntry — tRuleAnnotation is one of the four id-less types.
