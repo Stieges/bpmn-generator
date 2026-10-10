@@ -126,10 +126,13 @@ DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
                                throw. `report.lossless` is the one bit a caller branches on; paths
                                are positional. Reads no DMNDI and fabricates none — Decision-Core is
                                coordinate-free and layout.js re-lays-out on every emit, so every
-                               diagram is an IM06 finding. Not yet reached by runDmnPipeline)
+                               diagram is an IM06 finding — so even a file this generator wrote imports as
+                               not lossless. Not reached by runDmnPipeline, but it has its own CLI:
+                               `node dmn/import.js <input.dmn | -> [output.json] [--strict]`, and
+                               scenarios/pipeline.js imports through it)
   (produces a real .dmn file, XSD-validated — see
    docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: SVG rendering and
-   the tool surface, Stages 6–7. The importer has no CLI yet.)
+   the tool surface, Stages 6–7.)
 
 Agent subsystem (scripts/agents/)
   chat.js, compliance.js, layout.js, llm-provider.js, modeler.js, prompt-sections.js, reviewer.js
@@ -173,7 +176,7 @@ Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
                                1-5's outputs, never re-derives them; no fachliche/
                                business-sense judgment.)
   pipeline.js                ← collaboration.js, decision-table.js, bridge.js, format.js,
-                               rules.js
+                               rules.js, ../dmn/import.js
                                (runScenarioPipeline — Orchestrator + CLI, mirrors
                                dmn/pipeline.js's idiom. Always routes through the
                                collaboration pair (enumerateCollaboration /
@@ -263,6 +266,9 @@ membership instead of coordinates.
 | `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
 | `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 17 rules, 3 layers, 2 modes. **Counted separately from the BPMN engine** — see the DMN section under Rule Engine |
 | `scripts/dmn/dmn-xml.js` | `generateDmnXml`, `validateDmnXml` — DMN 1.3 XML + DMNDI via dmn-moddle, mirroring `bpmn-xml.js` |
+| `scripts/dmn/import.js` | `dmnToDecisionCore(xml)` → `{ dc, report }` — DMN 1.3 XML → Decision-Core plus a structured loss report (`IM01`–`IM08`, positional paths); `report.lossless` is the one bit a caller branches on, and a failure is a shaped result, never a throw. Reads no DMNDI: Decision-Core is coordinate-free and `layout.js` recomputes the layout on every emit, so every diagram is an IM06 finding. **Consequence worth knowing: a `.dmn` this generator wrote imports as not lossless** (it also generates the `<variable>`/`<literalExpression>` ids it then reports as IM05), so `--strict` on the import CLI or on `scenarios/pipeline.js --decisions` aborts on our own output. The claimable statement is "no finding outside IM05/IM06", asserted by `roundtrip.test.js`. The CLI is `node dmn/import.js <input.dmn \| -> [output.json] [--strict]`: not-XML and not-DMN input exit with a message, `--strict` aborts on a lossy import and writes nothing, and the output passes the Decision-Core schema gate |
+| `scripts/dmn/import-scope.js` | The importer's coverage table — one row per non-abstract global element in `DMN13.xsd`/`DMNDI13.xsd` (`mapped`/`reported`/`parser-blind`), nested-type coverage, XSD defaults and the `IM01`–`IM08` codes. The only exclusion list; `import-coverage.test.js` fences it against the XSDs |
+| `scripts/dmn/requirement-order.js` | `requirementKey`, `orderedRequirements` — the one place a requirement's identity and emitted order are derived, so DMN XML and DRD geometry depend on the model and not on the `dc.requirements` array order (a permutation fence in `requirement-order.test.js`). Dependency-free; used by `layout.js`, `coordinates.js`, `dmn-xml.js` and `import.js` |
 | `scripts/dmn/pipeline.js` | `runDmnPipeline` — Orchestrator + CLI + Public API for the DMN side, gate order schema→rules→layout→coordinates→di-check→serialisation |
 | `references/decision-core-schema.json` | Formal JSON Schema for DMN Decision-Core input |
 | `rules/dmn-default-profile.json` | Default DMN profile (semantic: soundness + semantics) |
@@ -584,10 +590,31 @@ node dmn/pipeline.js input.json output --strict
 
 # Enable the opt-in best_practice rule layer:
 node dmn/pipeline.js input.json output --best-practice
+
+# DMN 1.3 XML -> Decision-Core JSON, with a loss report on stderr
+node dmn/import.js input.dmn output.json
+
+# Stdin; abort (nothing written) when the import is not lossless
+cat input.dmn | node dmn/import.js - output.json --strict
+
+# Scenarios accept DMN files directly (routed by content, not extension)
+node scenarios/pipeline.js input.json --decisions table.dmn
 ```
 
 ## Known Limitations
 
+
+- The DMN importer reads no DMNDI, so every diagram is reported as IM06 and **`report.lossless` is
+  never true for a file this generator wrote** — the writer always emits a DMNDI tree (IM06) and
+  generates `<variable>`/`<literalExpression>` ids (IM05). `--strict` on `dmn/import.js` and on
+  `scenarios/pipeline.js --decisions` therefore rejects our own output; use it on foreign files and
+  read the report otherwise. Layout is recomputed on the next emit, so nothing is lost that could
+  not be regenerated. Two dmn-moddle-vs-XSD divergences (`organizationUnit` unparseable, non-ASCII
+  NCName ids rejected) are pinned by tests so an upstream fix turns them red
+- `references/input-schema.json` still has the narrow id pattern that Decision-Core dropped for
+  ASCII NCName, so the BPMN importer has the same latent defect against foreign files. Neither
+  `/api/v1/import` nor the MCP `import_bpmn` tool has a test, and `scripts/bpmn/import.js` swallows
+  every moddle error with a bare `catch {}`
 - Rule placeholders: M05-M06 (Style) registered with severity=OFF (POS tagger problem; tracked in ROADMAP)
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)

@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **DMN XML importer — `scripts/dmn/import.js` (DMN 1.3 XML → Decision-Core).** `dmnToDecisionCore`
+  returns `{ dc, report }`: the model plus a structured loss report (`IM01`–`IM08`, positional paths),
+  with `report.lossless` as the one bit a caller branches on; a failure is a shaped result, never a
+  throw. What is mapped, reported or invisible to the parser is one table,
+  `scripts/dmn/import-scope.js`, fenced against `DMN13.xsd`/`DMNDI13.xsd`. The importer reads no
+  DMNDI — Decision-Core is coordinate-free and layout is recomputed on every emit — so every diagram
+  is an IM06 finding, and **a `.dmn` this generator wrote also imports as not lossless**
+  (`--strict` rejects it); see Known limitations.
+- **Import CLI: `node dmn/import.js <input.dmn | -> [output.json] [--strict]`.** Not-XML and
+  not-DMN input exit with a message; `--strict` aborts on a lossy import and writes nothing; the
+  output passes the Decision-Core schema gate.
+- **`scenarios/pipeline.js --decisions` accepts DMN files**, routed by content (first non-whitespace
+  character is `<`), not by extension. The import report prints to stderr and its findings count
+  toward `--strict`. New dependency edge `scenarios/ → dmn/`.
+- **DMN round-trip and permutation fences** (`scripts/dmn/roundtrip.test.js`,
+  `scripts/dmn/requirement-order.test.js`) and `tests/fixtures/dmn/negative/`, the home for
+  deliberately invalid DMN fixtures (excluded from the import schema-gate scan).
 - **`references/bpmn-ontology.jsonld` — the BPMN vocabulary as one JSON-LD file** (classes, node
   types, markers, definition kinds, element fields), loaded and validated at import by
   `scripts/bpmn/ontology.js`; exported as `bpmn-generator/ontology`; linked to the OMG metamodel
@@ -264,6 +281,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **DMN XML no longer depends on the order of `dc.requirements`.** Layout, coordinates, serialisation
+  and import each derived requirement order on their own; `scripts/dmn/requirement-order.js`
+  (`requirementKey`, `orderedRequirements`) is now the single source, so permuting the array no
+  longer changes the geometry or the emitted bytes.
+- **Decision-Core ids accept the full ASCII NCName pattern**, so foreign DMN files whose ids the old
+  pattern rejected import and re-validate.
 - **An unknown or announced node type was silently serialised as `<bpmn:task>`.** It now fails
   with the type and node id. `transaction` had no shape size of its own (no visible change: the
   fallback gave the same 100x80); `artifactSize` no longer falls back to a non-existent key;
@@ -785,6 +808,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   true and has been corrected.
 
 ### Known limitations
+- The DMN importer reads no DMNDI, so `report.lossless` is never true for DMN this generator wrote
+  (IM06 for the diagram, IM05 for generated `<variable>`/`<literalExpression>` ids); `--strict` on the
+  import CLI and on `scenarios/pipeline.js --decisions` rejects our own output. Nothing is lost that
+  the next emit would not regenerate.
+- `references/input-schema.json` has the same narrow id pattern Decision-Core dropped, and
+  `scripts/bpmn/import.js` swallows every moddle error with a bare `catch {}`; neither
+  `/api/v1/import` nor the MCP `import_bpmn` tool has a test. Not addressed here.
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
 
