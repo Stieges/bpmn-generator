@@ -183,6 +183,10 @@ async function handleToolCall(request) {
   }
 
   if (name === 'orchestrate_bpmn') {
+    // Same gate as the other tools: a string here would otherwise be taken for a process
+    // description, and a malformed model would surface as a thrown error, not a schema_error.
+    const rejected = schemaGate(args.logicCore);
+    if (rejected) return rejected;
     const result = await orchestrate(args.logicCore, {
       ruleProfile: ruleProfileOf(args),
       mode: args.mode,
