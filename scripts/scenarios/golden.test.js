@@ -4,6 +4,11 @@
  * into the BPMN, DMN and cross-notation rule modules; the move must not change one byte of the JSON
  * (findings, their order, skippedTableAnalyses) or the Markdown. A diff here is a defect, never a
  * reason to regenerate.
+ *
+ * Known false positive frozen on purpose: `combined.scenarios.json` carries an SC01 finding on
+ * branch `f3` that comes from the residual gap in SC01's cycle-bound guard. A correct fix to SC01
+ * removes it — make that change deliberately, in its own commit, with the reviewed golden diff;
+ * never as a side effect of regenerating these files.
  */
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
