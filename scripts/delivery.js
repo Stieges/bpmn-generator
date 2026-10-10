@@ -3,6 +3,7 @@ import { join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { auditLog } from './audit.js';
+import { pinnedRequest, OutboundRefusedError } from './shared/outbound-url.js';
 
 function resolveDeadLetterDir() {
   if (process.env.DEAD_LETTER_PATH) return resolve(process.env.DEAD_LETTER_PATH);
@@ -34,20 +35,31 @@ function writeDeadLetter(payload) {
   return dlPath;
 }
 
-export async function deliver(callbackUrl, payload, retries = 3) {
+/**
+ * POSTs `payload` to a client-supplied callback URL, with retries. The request goes through
+ * `pinnedRequest`: the URL is re-validated, the connection goes only to the addresses that passed
+ * the check, and a redirect counts as a failed attempt. A target refused by the check is not
+ * retried. `requestOptions` is passed through to `pinnedRequest` (tests inject a resolver).
+ */
+export async function deliver(callbackUrl, payload, retries = 3, requestOptions = {}) {
   for (let i = 0; i < retries; i++) {
     try {
-      const res = await fetch(callbackUrl, {
+      const res = await pinnedRequest(callbackUrl, {
+        ...requestOptions,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(10_000),
+        timeoutMs: 10_000,
+        maxResponseBytes: 64 * 1024,
+        label: 'callbackUrl',
       });
       if (res.ok) {
         auditLog({ event: 'delivery_sent', correlationId: payload.correlationId });
         return { status: 'sent' };
       }
-    } catch { /* retry */ }
+    } catch (err) {
+      if (err instanceof OutboundRefusedError) break;
+    }
     if (i < retries - 1) await sleep(1000 * 4 ** i);
   }
   const dlPath = writeDeadLetter(payload);

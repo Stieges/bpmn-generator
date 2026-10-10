@@ -11,6 +11,7 @@ import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { mkdtempSync, rmSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
 
 let root;
 let deadLetterDir;
@@ -60,5 +61,55 @@ describe('dead-letter files', () => {
     expect(a.path).not.toBe(b.path);
     expect(JSON.parse(readFileSync(a.path, 'utf8')).n).toBe(1);
     expect(JSON.parse(readFileSync(b.path, 'utf8')).n).toBe(2);
+  });
+});
+
+describe('delivery connects only where it was allowed to', () => {
+  let hits;
+  let servers;
+  const listen = (handler) => new Promise((done) => {
+    const s = createServer(handler);
+    s.listen(0, '127.0.0.1', () => done(s));
+  });
+
+  beforeAll(async () => {
+    hits = { target: [], redirector: [] };
+    const target = await listen((req, res) => { hits.target.push(req.url); req.resume(); res.end('ok'); });
+    const redirector = await listen((req, res) => {
+      hits.redirector.push({ url: req.url, host: req.headers.host });
+      req.resume();
+      res.writeHead(302, { location: `http://127.0.0.1:${target.address().port}/followed` });
+      res.end();
+    });
+    servers = { target, redirector };
+  });
+
+  afterAll(async () => {
+    await Promise.all(Object.values(servers).map((s) => new Promise((done) => s.close(done))));
+  });
+
+  test('an internal address written as an IPv4-mapped IPv6 literal is refused before connecting', async () => {
+    const before = hits.target.length;
+    const result = await deliver(`http://[::ffff:127.0.0.1]:${servers.target.address().port}/mapped`, { correlationId: 'mapped' }, 1);
+    expect(result.status).toBe('dead_letter');
+    expect(hits.target.length).toBe(before);
+  });
+
+  test('a redirect is not followed, and the request goes to the address that was checked', async () => {
+    const resolved = [];
+    // The first lookup answers with the (test-allowed) loopback address; any later lookup would
+    // answer with a different address — a delivery that re-resolved would never reach the server.
+    const resolve = async (host) => {
+      resolved.push(host);
+      return resolved.length === 1 ? [{ address: '127.0.0.1', family: 4 }] : [{ address: '10.0.0.1', family: 4 }];
+    };
+    const allowLoopbackOnly = (address) => address !== '127.0.0.1';
+    const port = servers.redirector.address().port;
+    const result = await deliver(`http://callback.test:${port}/hook`, { correlationId: 'redirect' }, 1,
+      { resolve, isBlocked: allowLoopbackOnly });
+    expect(result.status).toBe('dead_letter');
+    expect(resolved).toEqual(['callback.test']);
+    expect(hits.redirector).toEqual([{ url: '/hook', host: `callback.test:${port}` }]);
+    expect(hits.target).not.toContain('/followed');
   });
 });
