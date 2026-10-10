@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { ontologyPath } from './resource-paths.js';
 import { buildVocabulary, VOCABULARY } from './ontology.js';
 import { partitionForModule, rulesExpectedIn, registerFindings, buildRuleCatalog, RULE_METADATA_FIELDS } from './rule-catalog.js';
-import { RULE_REGISTER as BPMN_MAIN, RULES, runRules, loadRuleProfile } from '../bpmn/rules.js';
+import { RULE_REGISTER as BPMN_MAIN, RULES, runRules, loadRuleProfile, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES } from '../bpmn/rules.js';
+import { DMN_MODES, dmnProfileForMode } from '../dmn/rules.js';
+import { clientRuleProfile } from '../http-server.js';
+import { ProfileRejectedError } from './rule-profile.js';
 import { checkWorkflowNetSoundness } from '../bpmn/workflow-net.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -75,7 +78,7 @@ describe('the BPMN main catalog', () => {
     expect(rulesExpectedIn({ ruleSet: 'BPMN', runsIn: 'scenario' }).map((r) => r.id)).toEqual(['SC01', 'SC06']);
   });
 
-  test('a code entry still carrying a metadata literal names rule and field (M10)', () => {
+  test('a code entry still carrying a metadata literal names rule and field', () => {
     const entries = BPMN_MAIN.entries.map((e) => (e.id === 'S04' ? { ...e, defaultSeverity: 'WARNING' } : e));
     expect(registerFindings({ ...BPMN_MAIN, entries })).toEqual(['S04: carries its own defaultSeverity literal — that belongs to references/ontology.jsonld']);
   });
@@ -135,6 +138,44 @@ describe('WF03 improper-completion severity', () => {
   test('under rules/strict-profile.json an improper completion lands in errors, as before the fix', () => {
     const strict = loadRuleProfile(join(__dirname, '..', '..', 'rules', 'strict-profile.json'));
     expect(runRules(twoEnds, strict).errors.some((m) => m.startsWith('Improper completion'))).toBe(true);
+  });
+});
+
+describe('layer names used in code exist in the ontology', () => {
+  const layersOf = (ruleSet) => new Set(VOCABULARY.ruleSets[ruleSet].layers);
+
+  test('each BPMN layer slice in rules.js is exactly the ontology\'s rules of that layer', () => {
+    const slices = { soundness: SOUNDNESS_RULES, style: STYLE_RULES, pragmatics: PRAGMATICS_RULES, workflow_net: WORKFLOW_NET_RULES, optimization: OPTIMIZATION_RULES };
+    for (const [layer, rules] of Object.entries(slices)) {
+      expect(layersOf('BPMN').has(layer)).toBe(true);
+      const expected = VOCABULARY.rules.filter((r) => r.ruleSet === 'BPMN' && r.layer === layer && r.runsIn === 'main').map((r) => r.id).sort();
+      expect(rules.map((r) => r.id).sort()).toEqual(expected);
+      expect(rules.length).toBeGreaterThan(0);
+    }
+  });
+
+  test.each(DMN_MODES)('every layer DMN mode %s switches exists in the DMN rule set', (mode) => {
+    for (const layer of Object.keys(dmnProfileForMode(null, mode).layers)) expect(layersOf('DMN').has(layer)).toBe(true);
+  });
+
+  test('the HTTP soundness guard names a real BPMN layer: switching it off is refused', () => {
+    expect(layersOf('BPMN').has('soundness')).toBe(true);
+    expect(() => clientRuleProfile({ ruleProfile: { layers: { soundness: { enabled: false } } } })).toThrow(ProfileRejectedError);
+  });
+});
+
+describe('net-analysis issues carry the ontology severity of their rule', () => {
+  const unbounded = { id: 'P_Unbounded', name: 'Unbounded', nodes: [
+    { id: 's', type: 'startEvent' }, { id: 'f', type: 'parallelGateway' }, { id: 'a', type: 'task', name: 'A' }, { id: 'b', type: 'task', name: 'B' },
+    { id: 'm', type: 'exclusiveGateway' }, { id: 't', type: 'task', name: 'T' }, { id: 'e', type: 'endEvent' }],
+  edges: [['s', 'f'], ['f', 'a'], ['f', 'b'], ['a', 'm'], ['b', 'm'], ['m', 't'], ['t', 'e']].map(([source, target], i) => ({ id: `x${i}`, source, target })) };
+  const deadlock = JSON.parse(readFileSync(join(__dirname, '..', '..', 'tests', 'fixtures', 'deadlock-process.json'), 'utf8'));
+
+  test.each([['WF01', deadlock], ['WF02', unbounded]])('%s', (rule, lc) => {
+    const issues = checkWorkflowNetSoundness(lc).issues.filter((i) => i.rule === rule);
+    expect(issues.length).toBeGreaterThan(0);
+    const expected = VOCABULARY.rules.find((r) => r.id === rule).defaultSeverity;
+    expect(issues.every((i) => i.severity === expected)).toBe(true);
   });
 });
 
