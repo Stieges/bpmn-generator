@@ -44,11 +44,11 @@ const SHAPE={startEvent:{w:36,h:36},endEvent:{w:36,h:36},intermediateCatchEvent:
   task:{w:100,h:80},userTask:{w:100,h:80},serviceTask:{w:100,h:80},
   scriptTask:{w:100,h:80},sendTask:{w:100,h:80},receiveTask:{w:100,h:80},
   manualTask:{w:100,h:80},businessRuleTask:{w:100,h:80},
-  callActivity:{w:100,h:80},subProcess:{w:100,h:80},
+  callActivity:{w:100,h:80},subProcess:{w:100,h:80},transaction:{w:100,h:80},
   exclusiveGateway:{w:50,h:50},parallelGateway:{w:50,h:50},
-  inclusiveGateway:{w:50,h:50},eventBasedGateway:{w:50,h:50},
+  inclusiveGateway:{w:50,h:50},eventBasedGateway:{w:50,h:50},complexGateway:{w:50,h:50},
   dataObjectReference:{w:36,h:50},dataStoreReference:{w:50,h:50},
-  textAnnotation:{w:100,h:30}};
+  textAnnotation:{w:100,h:30},group:{w:300,h:300}};
 
 const SW={startEvent:2,endEvent:4,intermediate:1.5,task:2,callActivity:5,
   gateway:2,pool:1.5,lane:1.5,connection:1.5};

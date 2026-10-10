@@ -407,3 +407,54 @@ describe('format and ontology agree', () => {
     expect(validateLogicCoreSchema(lc('2.0')).valid).toBe(false);
   });
 });
+
+// ── Task 8: prompt, docs and skill template stay in line with the ontology ──
+// Prompt token rule: a type-name candidate is a backticked token or a token right after `→`.
+// Doc table rule: SKILL.md and logic-core-schema.md node-type table, first column backticked types.
+// omg-compliance rule: every supported type's label appears in references/omg-compliance.md.
+// Skill template rule: inline-template.md SHAPE keys include every supported type; isArtifact equals the Artifact class.
+const md = (p) => readFileSync(join(__dirname, '..', '..', p), 'utf8');
+const CANDIDATE = /^(task|group|transaction|subProcess|callActivity|[a-z][A-Za-z]*(Task|Event|Gateway|Reference|Annotation|SubProcess))$/;
+const supported = new Set(VOCABULARY.nodeTypeNames(['supported', 'lossy']));
+const ALL_TYPES = new Set(VOCABULARY.nodeTypeNames());
+
+function firstColumnTypes(text) {
+  // "the node-type table" rule: of the Markdown tables (consecutive lines starting with `|`), use the one
+  // whose first column holds the most supported node types; field tables are other tables and are ignored.
+  const tables = [];
+  let cur = null;
+  for (const line of text.split('\n')) {
+    if (line.startsWith('|')) { if (!cur) { cur = []; tables.push(cur); } cur.push(line); } else cur = null;
+  }
+  const firsts = tables.map(rows => new Set(rows.map(r => /^\|\s*`([A-Za-z]+)`\s*\|/.exec(r)?.[1])
+    .filter(t => t && CANDIDATE.test(t))));
+  const score = (set) => [...set].filter(t => supported.has(t)).length;
+  return firsts.reduce((best, set) => (score(set) > score(best) ? set : best), new Set());
+}
+
+describe('prompt and docs follow the ontology', () => {
+  test('the prompt names no unknown type and omits none', () => {
+    const p = md('references/prompt-template.md');
+    const tokens = [...p.matchAll(/`([A-Za-z]+)`|→\s*([A-Za-z]+)/g)].map(m => m[1] ?? m[2]).filter(t => CANDIDATE.test(t));
+    // "no unknown name": checked against every ontology node type, announced ones included
+    expect([...new Set(tokens)].filter(t => !ALL_TYPES.has(t))).toEqual([]);
+    expect([...supported].filter(t => !p.includes(t))).toEqual([]);
+  });
+  for (const file of ['SKILL.md', 'references/logic-core-schema.md']) {
+    test(`${file}: the node-type table lists exactly the supported types`, () => {
+      expect([...firstColumnTypes(md(file))].sort()).toEqual([...supported].sort());
+    });
+  }
+  test('omg-compliance.md names every supported type by its label', () => {
+    const t = md('references/omg-compliance.md');
+    expect(VOCABULARY.nodeTypes.filter(n => supported.has(n.name) && !t.includes(n.label)).map(n => n.name)).toEqual([]);
+  });
+  test('the skill template knows every supported type and the Artifact class', () => {
+    const t = md('references/inline-template.md');
+    const shapeBlock = /SHAPE\s*=\s*\{([\s\S]*?)\};/.exec(t)[1];
+    const keys = new Set([...shapeBlock.matchAll(/([A-Za-z]+)\s*:/g)].map(m => m[1]));
+    expect([...supported].filter(s => !keys.has(s))).toEqual([]);
+    const art = /isArtifact\s*=\s*t\s*=>\s*\[([^\]]+)\]/.exec(t)[1];
+    expect([...art.matchAll(/'([^']+)'/g)].map(m => m[1]).sort()).toEqual([...VOCABULARY.classMembers('Artifact')].sort());
+  });
+});
