@@ -87,7 +87,9 @@ const ONTOLOGY_SCHEMA = {
             then: { required: ['name', 'element'],
                     properties: { ...BASE, name: { type: 'string' },
                                   element: { enum: ['Process', 'Collaboration', 'Pool', 'CollapsedPool', 'Node', 'Edge', 'Lane', 'MessageFlow', 'Association', 'TopLevelDefinition',
-                                                   'DecisionCore', 'DecisionNode', 'Requirement', 'DecisionTable'] },
+                                                   // DMN: $defs names of decision-core-schema.json, plus DecisionCore (its root, the one
+                                                   // non-$defs value). `Node` is shared with BPMN; a DMN property is told apart by its notation.
+                                                   'DecisionCore', 'Requirement', 'DecisionTable', 'InputClause', 'OutputClause', 'DecisionRule'] },
                                   domain: IDS },
                     additionalProperties: false } },
           // A notation is an open class: a new one is a new entry, never a schema change (E3).
