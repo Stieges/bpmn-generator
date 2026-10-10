@@ -22,6 +22,7 @@ import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
+import { isMainModule } from './shared/entry-point.js';
 
 export async function orchestrate(input, options = {}) {
   const maxReviewIterations = options.maxReviewIterations ?? 3;
@@ -176,7 +177,7 @@ export async function orchestrate(input, options = {}) {
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────
-const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+const isMain = isMainModule(import.meta.url, process.argv[1]);
 
 if (isMain) {
   const args = process.argv.slice(2);

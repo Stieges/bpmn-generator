@@ -312,6 +312,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **The "run as main" guard no longer fails on Windows (#51).** `mcp-bpmn-server.js` compared
+  `import.meta.url` with `` `file://${process.argv[1]}` ``, false for `file:///C:/…` vs `C:\…`, so the
+  server never connected and exited 0. `scripts/shared/entry-point.js` (`isMainModule`) compares
+  file-system paths with the platform's own path rules; `http-server.js`, `orchestrator.js` and
+  `robustness/cli.js`, which had the same pattern, use it too. Unit-tested with Windows paths.
 - **WF03's improper-completion issue carried WARNING** in `checkWorkflowNetSoundness`'s own output while
   the rule is ERROR; it now says ERROR. `runRules` already reported it as ERROR.
 - **Edges without an `id` no longer fail the CLI with DI07 (#64).** The schema requires only

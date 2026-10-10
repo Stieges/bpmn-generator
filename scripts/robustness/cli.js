@@ -7,6 +7,7 @@
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { isMainModule } from '../shared/entry-point.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = resolve(__dirname, 'config.json');
@@ -218,6 +219,6 @@ async function main() {
 }
 
 // Only run main when invoked directly, not when imported in tests
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   main().catch(err => { console.error(err); process.exit(1); });
 }
