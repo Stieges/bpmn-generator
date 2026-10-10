@@ -54,13 +54,16 @@
  */
 
 import { DmnModdle } from 'dmn-moddle';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_ELEMENT_BASE, DMN_XSD_DEFAULTS, IMPORT_CODES,
   IMPORT_CODE_KINDS, coverageForModdleType,
 } from './import-scope.js';
 import { requirementKey } from './requirement-order.js';
+import { validateDecisionCoreSchema } from './schema-gate.js';
 import { decisionCoreSchemaPath } from '../shared/resource-paths.js';
 
 const moddle = new DmnModdle();
@@ -1175,4 +1178,79 @@ export function formatImportReport(report, { file } = {}) {
   }
 
   return lines.join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CLI ENTRY POINT — node dmn/import.js <input.dmn | -> [output.json] [--strict]
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * "Not XML" and "not a DMN document" are told apart by the parser warning `dmnToDecisionCore`
+ * folds into the report: dmn-moddle says `failed to parse document as <dmn:Definitions>` only for
+ * well-formed XML whose root is not DMN; every other parse failure is malformed XML.
+ */
+const NOT_DMN_ROOT = /^failed to parse document as </;
+
+async function main() {
+  const args = process.argv.slice(2);
+  const strict = args.includes('--strict');
+  const positional = args.filter((a) => !a.startsWith('--'));
+  const [inputArg, outputArg] = positional;
+  const fail = (msg) => { console.error(`✗ ${msg}`); process.exit(1); };
+
+  if (!inputArg) {
+    console.error('Usage: node import.js <input.dmn | -> [output.json] [--strict]');
+    process.exit(1);
+  }
+
+  let xml;
+  if (inputArg === '-') {
+    const chunks = [];
+    for await (const chunk of process.stdin) chunks.push(chunk);
+    xml = Buffer.concat(chunks).toString('utf8');
+  } else {
+    try {
+      xml = readFileSync(resolve(inputArg), 'utf8');
+    } catch (err) {
+      fail(`cannot read input file ${inputArg}: ${err.code ?? err.message}`);
+    }
+  }
+
+  const { dc, report } = await dmnToDecisionCore(xml);
+
+  if (!dc) {
+    const first = report.parserWarnings[0] ?? '';
+    fail(NOT_DMN_ROOT.test(first)
+      ? `${inputArg === '-' ? 'stdin' : inputArg} is not a DMN document (well-formed XML, but the root is not DMN 1.3 <definitions>)`
+      : `${inputArg === '-' ? 'stdin' : inputArg} is not XML (${first.split('\n').pop().trim() || 'parse failed'})`);
+  }
+
+  const gate = validateDecisionCoreSchema(dc);
+  if (!gate.valid) {
+    console.error('✗ The imported Decision-Core fails its schema — nothing written:');
+    gate.errors.forEach((e) => console.error(`  · ${e.path} ${e.message}`));
+    process.exit(1);
+  }
+
+  if (!report.lossless) {
+    console.error(formatImportReport(report, { file: inputArg === '-' ? undefined : inputArg }));
+    if (strict) {
+      console.error('\n✗ --strict: the import is not lossless. No files written.');
+      process.exit(1);
+    }
+  }
+
+  const json = JSON.stringify(dc, null, 2) + '\n';
+  if (outputArg) {
+    writeFileSync(resolve(outputArg), json, 'utf8');
+    console.error(`✓ Decision-Core → ${outputArg}`);
+  } else {
+    process.stdout.write(json);
+  }
+}
+
+// Only run CLI when executed directly (not imported) — same idiom as scripts/dmn/pipeline.js.
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (isDirectRun) {
+  main().catch((err) => { console.error('Import error:', err); process.exit(1); });
 }
