@@ -13,6 +13,8 @@ import {
   extractActualCodes,
   CODE_FAMILIES,
   ToolingError,
+  ruleSetCounts,
+  loadRuleSetCounts,
 } from '../.github/scripts/docs-gate.mjs';
 
 // This file lives in scripts/, so __dirname here is the same absolute path
@@ -80,17 +82,19 @@ describe('docs-gate — checkResponseContract', () => {
 
 describe('docs-gate — checkNumbers', () => {
   const base = (overrides = {}) => ({
-    readmeText: 'The rule engine has 33 rules, 5 layers, covering soundness and style.',
-    claudeMdText: '29 top-level scripts live under scripts/. The rule engine has 33 rules, 5 layers.',
+    readmeText: 'The rule engine has 33 BPMN rules, 5 layers, covering soundness and style.',
+    claudeMdText: '29 top-level scripts live under scripts/. The rule engine has 33 BPMN rules, 5 layers.',
     apiReferenceText: 'Codes: DI01, DI02, DI03, DI04, DI05, DI06. NC codes: NC01, NC02, NC02b, NC03a, NC03b, NC04, NC05, NC06.',
-    roadmapText: 'Validation (33 rules, 5 layers) via ElkJS.',
+    roadmapText: 'Validation (33 BPMN rules, 5 layers) via ElkJS.',
     skillText: 'No rule/layer count claim in this fixture — SKILL.md does not currently make one.',
-    evaluationText: 'Configurable rule engine | Yes (33 rules, 5 layers, JSON profiles).',
-    pipelineDocText: 'Führt 33 Regeln in 5 Schichten aus.',
-    actualRuleCount: 33,
-    actualLayerCount: 5,
-    actualDmnRuleCount: 8,
-    actualDmnLayerCount: 2,
+    evaluationText: 'Configurable rule engine | Yes (33 BPMN rules, 5 layers, JSON profiles).',
+    pipelineDocText: 'Führt 33 BPMN-Regeln in 5 Schichten aus.',
+    ruleSets: {
+      BPMN: { rules: 33, layers: 5 },
+      DMN: { rules: 8, layers: 2 },
+      ArchiMate: { rules: 0, layers: 0 },
+      'cross-notation': { rules: 2, layers: 1 },
+    },
     actualTopLevelScriptCount: 29,
     actualDiCodes: ['DI01', 'DI02', 'DI03', 'DI04', 'DI05', 'DI06'],
     actualNcCodes: ['NC01', 'NC02', 'NC02b', 'NC03a', 'NC03b', 'NC04', 'NC05', 'NC06'],
@@ -101,106 +105,80 @@ describe('docs-gate — checkNumbers', () => {
     expect(checkNumbers(base())).toEqual([]);
   });
 
-  // Two rule engines now: scripts/bpmn/rules.js and scripts/dmn/rules.js. A claim is
-  // routed by whether its own LINE says DMN — see the comment on DMN_CLAIM_RE for
-  // why routing on the text beats accepting whatever matches either engine.
-  test('a DMN claim is measured against the DMN engine, not the BPMN one', () => {
-    expect(checkNumbers(base({
-      claudeMdText: '29 top-level scripts. The DMN engine has 8 rules, 2 layers.',
-    }))).toEqual([]);
-  });
-
-  test('a wrong DMN claim is still caught, and names the DMN file', () => {
-    const findings = checkNumbers(base({
-      claudeMdText: '29 top-level scripts. The DMN engine has 9 rules, 2 layers.',
-    }));
-    expect(findings).toHaveLength(1);
-    expect(findings[0].detail).toContain('scripts/dmn/rules.js');
-    expect(findings[0].detail).toContain('has 8 rules');
-  });
-
-  test('an unqualified claim is measured against the BPMN engine even when it fits DMN', () => {
-    // The point of routing on the line rather than on "does it match either":
-    // "8 rules, 2 layers" with no mention of DMN is a wrong BPMN claim, and has
-    // to fail. A reader cannot tell those sentences apart either.
-    const findings = checkNumbers(base({
-      readmeText: 'The rule engine has 8 rules, 2 layers.',
-    }));
-    expect(findings).toHaveLength(2);        // rule count and layer count
-    expect(findings[0].detail).toContain('scripts/bpmn/rules.js');
-  });
-
-  test('the two engines are checked independently in one file', () => {
-    const findings = checkNumbers(base({
-      claudeMdText: '29 top-level scripts. Engine: 33 rules, 5 layers.\nDMN: 7 rules, 2 layers.',
-    }));
-    expect(findings).toHaveLength(1);
-    expect(findings[0].detail).toContain('scripts/dmn/rules.js');
-  });
-
-  test('a stale rule count in README.md is a finding', () => {
-    const findings = checkNumbers(base({ readmeText: 'The rule engine has 32 rules, 5 layers.' }));
+  // Every claim names its rule set right at the number (decisions F20, F28) and is measured
+  // against that rule set's count in the ontology — never routed by a word elsewhere in the line.
+  test.each([
+    ['40 BPMN rules, 5 layers', { BPMN: { rules: 40, layers: 5 } }],
+    ['40 BPMN rules in 5 layers', { BPMN: { rules: 40, layers: 5 } }],
+    ['40 BPMN rules across 5 layers', { BPMN: { rules: 40, layers: 5 } }],
+    ['40 BPMN-Regeln in 5 Schichten', { BPMN: { rules: 40, layers: 5 } }],
+    ['19 DMN rules, 3 layers', { DMN: { rules: 19, layers: 3 } }],
+    ['2 cross-notation rules, 1 layer', { 'cross-notation': { rules: 2, layers: 1 } }],
+    ['2 übergreifende Regeln in 1 Schicht', { 'cross-notation': { rules: 2, layers: 1 } }],
+  ])('"%s" is checked against its own rule set', (claim, sets) => {
+    const only = (ruleSets) => base({ readmeText: `See ${claim}.`, claudeMdText: '29 top-level scripts.',
+      roadmapText: '', evaluationText: '', pipelineDocText: '', ruleSets });
+    const ruleSets = { ...base().ruleSets, ...sets };
+    expect(checkNumbers(only(ruleSets))).toEqual([]);
+    const wrong = Object.fromEntries(Object.entries(sets).map(([k, v]) => [k, { ...v, rules: v.rules + 1 }]));
+    const findings = checkNumbers(only({ ...ruleSets, ...wrong }));
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ check: 'rule-count' });
     expect(findings[0].detail).toContain('README.md');
   });
 
-  test('a stale rule count in CLAUDE.md is a finding', () => {
-    const findings = checkNumbers(base({ claudeMdText: '29 top-level scripts. The rule engine has 34 rules, 5 layers.' }));
+  test.each([
+    'The rule engine has 40 rules, 5 layers.',
+    'DMN rule engine (19 rules, 3 layers)',
+    '38 rules across 5 layers with configurable severity',
+    'Führt 38 Regeln in 5 Schichten aus.',
+  ])('an unqualified claim fails even when a notation word sits elsewhere in the line: %s', (line) => {
+    const findings = checkNumbers(base({ readmeText: line }));
     expect(findings).toHaveLength(1);
-    expect(findings[0].detail).toContain('CLAUDE.md');
+    expect(findings[0]).toMatchObject({ check: 'rule-count' });
+    expect(findings[0].detail).toContain('without naming its rule set at the number');
+  });
+
+  test('a wrong number names file, claim, rule set and the ontology count', () => {
+    const findings = checkNumbers(base({ readmeText: 'The rule engine has 37 BPMN rules, 5 layers.' }));
+    expect(findings).toEqual([{ check: 'rule-count',
+      detail: 'README.md says "37 BPMN rules, 5 layers" — the ontology has 33 BPMN rules' }]);
+  });
+
+  test('a stale layer count is caught even when the rule count is right', () => {
+    const findings = checkNumbers(base({ roadmapText: 'Validation (33 BPMN rules, 4 layers) via ElkJS.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('ROADMAP.md');
+    expect(findings[0].detail).toContain('5 BPMN layers');
+  });
+
+  test('BPMN soundness and DMN soundness are not merged: each rule set has its own layer count', () => {
+    const findings = checkNumbers(base({ claudeMdText: '29 top-level scripts. 33 BPMN rules, 5 layers.\n8 DMN rules, 5 layers.' }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('2 DMN layers');
   });
 
   test('an unrelated "N rules" mention does not false-positive', () => {
-    // Regression pin: README.md's "WF-Net (3 rules)" mention (WF01-WF03) once
-    // matched a broader /\d+ rules\b/ and was wrongly compared to the 33-rule
-    // engine total. Requiring a layer count in the same match is what protects
-    // this: a subset claim never also states how many layers the engine has.
     const findings = checkNumbers(base({
-      readmeText: 'WF-Net soundness (3 rules) is opt-in. The rule engine has 33 rules, 5 layers.',
+      readmeText: 'WF-Net soundness (3 rules) is opt-in. The rule engine has 33 BPMN rules, 5 layers.',
     }));
     expect(findings).toEqual([]);
   });
 
-  test('a stale layer count is caught even when the rule count is right', () => {
-    // Regression pin: the original pattern hard-coded the literal "5 layers",
-    // so a doc claiming a wrong layer count with the right rule count was
-    // invisible to it by construction — this is exactly the class of bug
-    // that shipped in ROADMAP.md/EVALUATION.md ("N rules, 4 layers").
-    const findings = checkNumbers(base({ roadmapText: 'Validation (33 rules, 4 layers) via ElkJS.' }));
-    expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ check: 'rule-count' });
-    expect(findings[0].detail).toContain('ROADMAP.md');
-    expect(findings[0].detail).toContain('distinct layers');
-  });
-
-  test('a stale rule count in ROADMAP.md is a finding — a file the old check never read', () => {
-    const findings = checkNumbers(base({ roadmapText: 'Validation (28 rules, 5 layers) via ElkJS.' }));
-    expect(findings).toHaveLength(1);
-    expect(findings[0].detail).toContain('ROADMAP.md');
-  });
-
-  test('the "N rules in M layers" phrasing (no comma) is also caught', () => {
-    const findings = checkNumbers(base({ evaluationText: 'Configurable rule engine | Yes (27 rules in 4 layers).' }));
-    expect(findings).toHaveLength(2); // wrong rule count AND wrong layer count in one match
-    expect(findings.every((f) => f.detail.includes('EVALUATION.md'))).toBe(true);
-  });
-
-  test('the German phrasing in docs/bpmn-generator-pipeline.md is checked too', () => {
-    const findings = checkNumbers(base({ pipelineDocText: 'Führt 22 Regeln in 4 Schichten aus.' }));
-    expect(findings).toHaveLength(2);
-    expect(findings.every((f) => f.detail.includes('docs/bpmn-generator-pipeline.md'))).toBe(true);
+  test('a notation the docs never count is not a finding (F24)', () => {
+    const ruleSets = { ...base().ruleSets, ArchiMate: { rules: 7, layers: 2 } };
+    expect(checkNumbers(base({ ruleSets }))).toEqual([]);
   });
 
   test('a missing "N top-level scripts" claim in CLAUDE.md is a finding', () => {
-    const findings = checkNumbers(base({ claudeMdText: 'The rule engine has 33 rules, 5 layers.' }));
+    const findings = checkNumbers(base({ claudeMdText: 'The rule engine has 33 BPMN rules, 5 layers.' }));
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ check: 'script-count' });
     expect(findings[0].detail).toContain('wording changed');
   });
 
   test('a stale top-level script count is a finding', () => {
-    const findings = checkNumbers(base({ claudeMdText: '28 top-level scripts. 33 rules, 5 layers.' }));
+    const findings = checkNumbers(base({ claudeMdText: '28 top-level scripts. 33 BPMN rules, 5 layers.' }));
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ check: 'script-count' });
     expect(findings[0].detail).toContain('28');
@@ -289,6 +267,42 @@ describe('docs-gate — checkNumbers', () => {
     expect(findings).toHaveLength(2);
     expect(findings.find((f) => f.check === 'di-codes').detail).toContain('DI07');
     expect(findings.find((f) => f.check === 'nc-codes').detail).toContain('NC06');
+  });
+});
+
+describe('docs-gate — rule counts come from the ontology', () => {
+  test('the real ontology: BPMN 40/5, DMN 19/3, cross-notation 2/1', async () => {
+    const counts = await loadRuleSetCounts();
+    expect(counts.BPMN).toEqual({ rules: 40, layers: 5 });
+    expect(counts.DMN).toEqual({ rules: 19, layers: 3 });
+    expect(counts['cross-notation']).toEqual({ rules: 2, layers: 1 });
+  });
+
+  test('a cross-notation rule counts only in the cross-notation rule set (F23)', () => {
+    const vocabulary = {
+      notations: [{ name: 'BPMN', status: 'supported' }, { name: 'DMN', status: 'supported' }],
+      ruleSets: { BPMN: { rules: ['S01'], layers: ['soundness'] }, DMN: { rules: ['D01'], layers: ['soundness'] },
+        'cross-notation': { rules: ['SC02'], layers: ['consistency'] } },
+    };
+    expect(ruleSetCounts(vocabulary)).toEqual({ BPMN: { rules: 1, layers: 1 }, DMN: { rules: 1, layers: 1 },
+      'cross-notation': { rules: 1, layers: 1 } });
+  });
+
+  test('zero rules for a supported notation is a tooling error, never a count of 0', () => {
+    const vocabulary = { notations: [{ name: 'BPMN', status: 'supported' }], ruleSets: { BPMN: { rules: [], layers: [] } } };
+    expect(() => ruleSetCounts(vocabulary)).toThrow(ToolingError);
+    expect(() => ruleSetCounts(vocabulary)).toThrow(/no BPMN rules — refusing to count 0/);
+  });
+
+  test('an announced notation with no rules is fine (F24)', () => {
+    const vocabulary = { notations: [{ name: 'ArchiMate', status: 'announced' }], ruleSets: { ArchiMate: { rules: [], layers: [] } } };
+    expect(ruleSetCounts(vocabulary)).toEqual({ ArchiMate: { rules: 0, layers: 0 } });
+  });
+
+  test('an ontology that fails to load is a ToolingError (exit 2), not a crash or a zero', async () => {
+    const failing = () => Promise.reject(new Error('ontology.jsonld is invalid (/x): boom'));
+    await expect(loadRuleSetCounts(failing)).rejects.toThrow(ToolingError);
+    await expect(loadRuleSetCounts(failing)).rejects.toThrow(/^could not load the ontology \(references\/ontology\.jsonld\): ontology\.jsonld is invalid/);
   });
 });
 

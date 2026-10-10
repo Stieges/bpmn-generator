@@ -174,29 +174,33 @@ export function checkResponseContract(responses, schema, ajv) {
 
 // ==================================================================== 2. numbers
 
-// Matches only phrasing that states the whole rule engine's shape — rule count AND
-// layer count together, in one of the two forms this repo actually uses ("N rules,
-// M layers" / "N rules in M layers"), plus the German form docs/bpmn-generator-pipeline.md
-// uses. Deliberately NOT a bare /(\d+) rules\b/: that also matches README.md's "WF-Net
-// (3 rules)", a true claim about the WF01-WF03 subset, not the engine total. Requiring
-// both numbers in one match is what keeps a subset claim like that from tripping this —
-// a subset mention never also states a layer count in the same breath.
-const RULE_LAYER_PATTERNS = [
-  /(\d+)\s+rules,?\s*(?:in\s+)?(\d+)\s+layers/gi,
-  /(\d+)\s+Regeln\s+in\s+(\d+)\s+Schichten/gi,
-];
+// Rule-count claims must name their rule set right at the number (decisions F20, F28): "40 BPMN
+// rules, 5 layers", "19 DMN rules in 3 layers", "40 BPMN rules across 5 layers", "2 cross-notation
+// rules, 1 layer", German "40 BPMN-Regeln in 5 Schichten" / "2 übergreifende Regeln in 1 Schicht".
+// The actual counts come from the ontology (references/ontology.jsonld, via scripts/shared/ontology.js),
+// one per rule set — never from the rule modules' source, whose rule objects carry no `layer:`
+// literal any more, so a source scan would count 0. An unqualified claim ("38 rules, 5 layers",
+// "DMN rule engine (19 rules, 3 layers)") fails outright: neither a reader nor the gate can tell
+// which rule set it is about. Requiring a layer count in the same match keeps subset claims such as
+// README's "WF-Net (3 rules)" out of scope.
+const GERMAN_RULE_SET_WORDS = { 'übergreifende': 'cross-notation' };
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// There are two rule engines now: scripts/bpmn/rules.js against Logic-Core, and
-// scripts/dmn/rules.js against Decision-Core. A claim is checked against the DMN
-// engine when the line it sits on says so, and against the BPMN engine otherwise.
-//
-// Routing on the line rather than on which numbers happen to match is deliberate.
-// Accepting a claim that is true of EITHER engine would let a wrong BPMN number
-// through whenever it coincided with the DMN one. This way an unqualified claim is
-// always measured against the BPMN engine — so a DMN sentence that forgets to say
-// "DMN" fails the gate, which is exactly the ambiguity worth failing on: a reader
-// cannot tell those sentences apart either.
-const DMN_CLAIM_RE = /\bdmn\b/i;
+/** Pure: the claim patterns for a given list of rule-set names (from the ontology). */
+export function ruleClaimPatterns(ruleSetNames) {
+  const en = ruleSetNames.map(escapeRe).join('|');
+  const de = [...ruleSetNames, ...Object.keys(GERMAN_RULE_SET_WORDS)].map(escapeRe).join('|');
+  return {
+    qualified: [
+      new RegExp(`(\\d+)\\s+(${en})\\s+rules,?\\s*(?:in\\s+|across\\s+)?(\\d+)\\s+layers?\\b`, 'g'),
+      new RegExp(`(\\d+)\\s+(${de})[-\\s]Regeln\\s+in\\s+(\\d+)\\s+Schicht(?:en)?\\b`, 'g'),
+    ],
+    unqualified: [
+      /(\d+)\s+rules,?\s*(?:in\s+|across\s+)?(\d+)\s+layers?\b/gi,
+      /(\d+)\s+Regeln\s+in\s+(\d+)\s+Schicht(?:en)?\b/gi,
+    ],
+  };
+}
 
 // Diagnostic-code families, each pinned against the doc section that documents it. Table-driven
 // (module, prefix, doc) so a new family — NC today, whatever comes after it — is one entry, not a
@@ -272,23 +276,17 @@ function checkCodeFamily(family, docText, actualCodes) {
   return findings;
 }
 
-/** The line `index` falls on, for deciding which engine a claim is about. */
-function lineContaining(text, index) {
-  const start = text.lastIndexOf('\n', index) + 1;
-  const end = text.indexOf('\n', index);
-  return text.slice(start, end === -1 ? text.length : end);
-}
-
 /**
  * Pure: every input is text already read from disk, or a number already
  * computed by the caller. See gatherNumberInputs() for the I/O side.
+ * `ruleSets` is `{ [ruleSetName]: { rules: number, layers: number } }` (see ruleSetCounts()).
  */
 export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   roadmapText, skillText, evaluationText, pipelineDocText,
-  actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
-  actualTopLevelScriptCount, actualDiCodes, actualNcCodes }) {
+  ruleSets, actualTopLevelScriptCount, actualDiCodes, actualNcCodes }) {
   const findings = [];
   const actualCodesByKey = { actualDiCodes, actualNcCodes };
+  const { qualified, unqualified } = ruleClaimPatterns(Object.keys(ruleSets));
 
   const numberSources = [
     ['README.md', readmeText], ['CLAUDE.md', claudeMdText], ['ROADMAP.md', roadmapText],
@@ -296,22 +294,25 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
     ['docs/bpmn-generator-pipeline.md', pipelineDocText],
   ];
   for (const [file, text] of numberSources) {
-    for (const pattern of RULE_LAYER_PATTERNS) {
+    for (const pattern of qualified) {
       for (const m of text.matchAll(pattern)) {
-        const claimedRules = Number(m[1]);
-        const claimedLayers = Number(m[2]);
-        const isDmn = DMN_CLAIM_RE.test(lineContaining(text, m.index));
-        const engine = isDmn ? 'scripts/dmn/rules.js' : 'scripts/bpmn/rules.js';
-        const rules = isDmn ? actualDmnRuleCount : actualRuleCount;
-        const layers = isDmn ? actualDmnLayerCount : actualLayerCount;
-        if (claimedRules !== rules) {
+        const ruleSet = GERMAN_RULE_SET_WORDS[m[2]] ?? m[2];
+        const actual = ruleSets[ruleSet];
+        if (Number(m[1]) !== actual.rules) {
           findings.push({ check: 'rule-count', detail:
-            `${file} says "${m[0]}" — ${engine} has ${rules} rules` });
+            `${file} says "${m[0]}" — the ontology has ${actual.rules} ${ruleSet} rules` });
         }
-        if (claimedLayers !== layers) {
+        if (Number(m[3]) !== actual.layers) {
           findings.push({ check: 'rule-count', detail:
-            `${file} says "${m[0]}" — ${engine} has ${layers} distinct layers` });
+            `${file} says "${m[0]}" — the ontology has ${actual.layers} ${ruleSet} layers` });
         }
+      }
+    }
+    for (const pattern of unqualified) {
+      for (const m of text.matchAll(pattern)) {
+        findings.push({ check: 'rule-count', detail:
+          `${file} says "${m[0]}" without naming its rule set at the number — write ` +
+          `"${m[1]} BPMN rules", "${m[1]} DMN rules" or "${m[1]} cross-notation rules"` });
       }
     }
   }
@@ -341,7 +342,38 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   return findings;
 }
 
-function gatherNumberInputs() {
+/**
+ * Pure: rule and layer counts per rule set, from a vocabulary built by scripts/shared/ontology.js.
+ * Refuses to report 0 rules for a supported notation — that is a broken ontology, not a fact.
+ */
+export function ruleSetCounts(vocabulary) {
+  const out = {};
+  for (const [name, set] of Object.entries(vocabulary.ruleSets)) {
+    out[name] = { rules: set.rules.length, layers: set.layers.length };
+  }
+  for (const n of vocabulary.notations) {
+    if (n.status === 'supported' && !(out[n.name]?.rules > 0)) {
+      throw new ToolingError(`the ontology lists no ${n.name} rules — refusing to count 0 (references/ontology.jsonld)`);
+    }
+  }
+  return out;
+}
+
+/**
+ * Loads the ontology dynamically, so a broken or missing file is a ToolingError (exit 2), never a
+ * static-import crash before main() (exit 1, which would read as "a proof check failed").
+ */
+export async function loadRuleSetCounts(importOntology = () => import(join(SCRIPTS_DIR, 'shared', 'ontology.js'))) {
+  let mod;
+  try {
+    mod = await importOntology();
+  } catch (err) {
+    throw new ToolingError(`could not load the ontology (references/ontology.jsonld): ${err.message}`);
+  }
+  return ruleSetCounts(mod.VOCABULARY);
+}
+
+async function gatherNumberInputs() {
   const readmeText = readFileSync(join(REPO_ROOT, 'README.md'), 'utf8');
   const claudeMdText = readFileSync(join(REPO_ROOT, 'CLAUDE.md'), 'utf8');
   const apiReferenceText = readFileSync(join(REFERENCES_DIR, 'api-reference.md'), 'utf8');
@@ -349,17 +381,7 @@ function gatherNumberInputs() {
   const skillText = readFileSync(join(REPO_ROOT, 'SKILL.md'), 'utf8');
   const evaluationText = readFileSync(join(REPO_ROOT, 'EVALUATION.md'), 'utf8');
   const pipelineDocText = readFileSync(join(REPO_ROOT, 'docs', 'bpmn-generator-pipeline.md'), 'utf8');
-  const rulesSrc = readFileSync(join(SCRIPTS_DIR, 'bpmn', 'rules.js'), 'utf8');
-
-  const actualRuleCount = [...rulesSrc.matchAll(/^\s*id: '/gm)].length;
-  // Each rule declares a `layer:`; the distinct values are the layer count — this
-  // way a new layer (like Optimization was) is picked up without touching the gate.
-  const actualLayerCount = new Set([...rulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
-  // The DMN engine is counted the same way from its own file; which of the two a
-  // documented claim is measured against is decided in checkNumbers().
-  const dmnRulesSrc = readFileSync(join(SCRIPTS_DIR, 'dmn', 'rules.js'), 'utf8');
-  const actualDmnRuleCount = [...dmnRulesSrc.matchAll(/^\s*id: '/gm)].length;
-  const actualDmnLayerCount = new Set([...dmnRulesSrc.matchAll(/layer: '([a-zA-Z_]+)'/g)].map((m) => m[1])).size;
+  const ruleSets = await loadRuleSetCounts();
 
   // Driven by the same CODE_FAMILIES table checkNumbers() checks against, so a family's actual
   // codes are always extracted with the exact `sourcePattern` that table declares for it — no
@@ -383,8 +405,7 @@ function gatherNumberInputs() {
   const actualTopLevelScriptCount = topLevelStdout.trim().split('\n').filter(Boolean).length;
 
   return { readmeText, claudeMdText, apiReferenceText, roadmapText, skillText, evaluationText,
-    pipelineDocText, actualRuleCount, actualLayerCount, actualDmnRuleCount, actualDmnLayerCount,
-    actualTopLevelScriptCount, actualDiCodes, actualNcCodes };
+    pipelineDocText, ruleSets, actualTopLevelScriptCount, actualDiCodes, actualNcCodes };
 }
 
 // ==================================================================== 3. doc-paths
@@ -771,7 +792,7 @@ async function main(argv) {
   const { docSources, exists } = gatherDocPathInputs();
   const violations = [
     ...checkResponseContract(responses, schema, ajv),
-    ...checkNumbers(gatherNumberInputs()),
+    ...checkNumbers(await gatherNumberInputs()),
     ...checkDocPaths(docSources, exists),
     ...checkPackageIntegrity(getPackedFiles(), reachableAbsPaths),
   ];

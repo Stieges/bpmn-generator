@@ -218,7 +218,7 @@ membership instead of coordinates.
 | File | Purpose |
 |------|---------|
 | `scripts/bpmn/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/bpmn/rules.js` | Rule Engine: 38 rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in); M05/M06 severity=OFF. Verify count: `grep -c '^\s*id:' scripts/bpmn/rules.js` |
+| `scripts/bpmn/rules.js` | Rule engine of the BPMN rule set: 40 BPMN rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in) — 38 run here, SC01/SC06 in the scenario pipeline; M05/M06 severity=OFF. Counts per rule set: `VOCABULARY.ruleSets` (`scripts/shared/ontology.js`) |
 | `scripts/bpmn/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
 | `scripts/bpmn/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
 | `scripts/bpmn/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
@@ -264,7 +264,7 @@ membership instead of coordinates.
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
 | `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
 | `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
-| `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 17 rules, 3 layers, 2 modes. **Counted separately from the BPMN engine** — see the DMN section under Rule Engine |
+| `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 19 DMN rules, 3 layers, 2 modes (17 run here, SC04/SC05 in the scenario pipeline). **Counted separately from the BPMN rule set** — see the DMN section under Rule Engine |
 | `scripts/dmn/dmn-xml.js` | `generateDmnXml`, `validateDmnXml` — DMN 1.3 XML + DMNDI via dmn-moddle, mirroring `bpmn-xml.js` |
 | `scripts/dmn/import.js` | `dmnToDecisionCore(xml)` → `{ dc, report }` — DMN 1.3 XML → Decision-Core plus a structured loss report (`IM01`–`IM09`, positional paths); `report.lossless` is the one bit a caller branches on, and a failure is a shaped result, never a throw. Reads no DMNDI: Decision-Core is coordinate-free and `layout.js` recomputes the layout on every emit, so every diagram is an IM06 finding. **Consequence worth knowing: a `.dmn` this generator wrote imports as not lossless** (it also generates the `<variable>`/`<literalExpression>` ids it then reports as IM05), so `--strict` on the import CLI or on `scenarios/pipeline.js --decisions` aborts on our own output. The claimable statement is "no finding outside IM05/IM06", asserted by `roundtrip.test.js`. The CLI is `node dmn/import.js <input.dmn \| -> [output.json] [--strict]`: not-XML and not-DMN input exit with a message, `--strict` aborts on a lossy import and writes nothing, and the output passes the Decision-Core schema gate |
 | `scripts/dmn/import-scope.js` | The importer's coverage table — one row per non-abstract global element in `DMN13.xsd`/`DMNDI13.xsd` (`mapped`/`reported`/`parser-blind`), nested-type coverage, XSD defaults and the `IM01`–`IM09` codes. The only exclusion list; `import-coverage.test.js` fences it against the XSDs |
@@ -374,7 +374,7 @@ response field for three commits.
 
 1. Four **proof** checks (exit 1 on violation): the HTTP response contract vs.
    `references/api-schema.json` (ajv, validated against a real response built from each
-   endpoint), numeric claims ("N rules, 5 layers" in README.md/CLAUDE.md, "N top-level scripts"
+   endpoint), numeric claims (rule counts per rule set — "N BPMN rules, M layers", "N DMN rules …", "N cross-notation rules …", counted from references/ontology.jsonld; a claim that does not name its rule set at the number fails — "N top-level scripts"
    in CLAUDE.md, DI codes in `references/api-reference.md`) vs. the actual counts, doc paths —
    proof #3: every `scripts/`-, `references/`-, `rules/`-, `tests/`-, `docs/`-, `frontend/`- or
    `.github/`-shaped path string mentioned in prose (and every `node <file>.js` CLI example)
@@ -471,26 +471,31 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ## Rule Engine
 
-5 layers with configurable severity:
+Rules, their layers, default severities and run locations live in `references/ontology.jsonld`
+(`bg:Rule`, `bg:Layer`, `bg:Severity`, `bg:Notation`); the code holds only each rule's check. Three
+rule sets — one per notation plus one across notations — and every count below is per rule set.
+
+### BPMN rule set — 40 BPMN rules, 5 layers
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
 | Soundness | ERROR | S01-S17 | Structural correctness (OMG compliance) |
 | Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
-| Workflow-Net | ERROR/WARNING | WF01-WF03 | Petri-Net soundness (opt-in) |
+| Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Petri-Net soundness |
 | Optimization | ADVISORY | O01-O04 | Redesign advisories — `optimize`/`soll` mode only (opt-in); Reijers 2005 + BABOK Lean. Emits `validation.advisories` + `metrics.optimization` |
 
 Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/bpmn/optimize.js`.
 
-### DMN rule engine — a separate count
+### DMN rule set — 19 DMN rules, 3 layers
 
-`scripts/dmn/rules.js` holds 17 rules in 3 layers against Decision-Core, not Logic-Core:
+`scripts/dmn/rules.js` runs 17 of them against Decision-Core, not Logic-Core; SC04/SC05 run in the
+scenario pipeline:
 
 | Layer | Default severity | Rules | Focus |
 |-------|-----------------|-------|-------|
 | soundness | ERROR | D01–D05, D09–D11 | Graph, table shape, DMN 1.3 conformance |
-| semantics | WARNING | D06–D08 | Points at something demonstrably wrong |
+| semantics | WARNING | D06–D08; SC04, SC05 (scenario pipeline) | Points at something demonstrably wrong |
 | best_practice | WARNING | B01–B06 | Readability and method (opt-in) |
 
 Two modes, mirroring `document`/`optimize`: **`semantic`** (default — does it hold together) and
@@ -500,10 +505,20 @@ is more specific than a mode, so an explicit `enabled` in a profile wins. Profil
 under `rules/custom/` — **loaded by path, never scanned**, so dropping a file in cannot change
 behaviour silently. Thresholds in `config.json → dmn`.
 
-The table above and every "N rules, 5 layers" claim in this file and README.md are about
-`scripts/bpmn/rules.js` only. The docs gate routes a claim to the DMN engine when its own line says
-"DMN", and to the BPMN engine otherwise — so an unqualified DMN sentence fails the gate, which is
-the ambiguity worth failing on.
+### Cross-notation rule set — 2 cross-notation rules, 1 layer
+
+| Layer | Default severity | Rules | Focus |
+|-------|-----------------|-------|-------|
+| consistency | WARNING | SC02, SC03 | A BPMN `decisionRef` that resolves to no DMN decision, or to more than one |
+
+SC01–SC06 run only in the scenario pipeline (`scripts/scenarios/pipeline.js`), which takes no
+profile — they are not profile-switchable yet (see Known Limitations).
+
+Every rule-count claim in the docs names its rule set right at the number — "40 BPMN rules, 5
+layers", "19 DMN rules, 3 layers", "2 cross-notation rules, 1 layer" (German: "40 BPMN-Regeln in 5
+Schichten"). The docs gate counts each rule set from `references/ontology.jsonld` and fails a claim
+that does not name its rule set there: a sentence a reader cannot attribute is the ambiguity worth
+failing on.
 
 ## Conventions
 
@@ -635,3 +650,7 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   `config.json` applies, etc.) are enforced by review convention, not tooling (#32)
 - No test coverage collection or threshold gate — `npm test -- --coverage` works, nothing runs it
   in CI or reports the result (#33)
+- SC01–SC06 are not profile-switchable: the scenario pipeline takes no profile. A profile that turns
+  off the BPMN `workflow_net` layer (`rules/default-profile.json` does) or the DMN `semantics` layer
+  silences WF01–WF03 resp. D06–D08 in the main pipeline, but the scenario pipeline still reports
+  SC01/SC06 resp. SC04/SC05, which sit in those layers

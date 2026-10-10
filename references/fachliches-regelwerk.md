@@ -748,9 +748,9 @@ S17's.
 ## DMN Rules — a separate engine, three layers, two modes
 
 > Written in English, like M11 above. These rules live in `scripts/dmn/rules.js` and run against
-> **Decision-Core**, not Logic-Core. They are counted separately: every "N rules, 5 layers" claim in
-> README.md and CLAUDE.md is about `scripts/bpmn/rules.js` alone. The docs gate routes a claim to the DMN
-> engine only when its line says "DMN".
+> **Decision-Core**, not Logic-Core. They form the DMN rule set, counted separately from the BPMN one — 19 DMN rules, 3 layers, of which
+> SC04/SC05 run in the scenario pipeline. Every count claim in the docs names its rule set at the number;
+> the docs gate counts each rule set from `references/ontology.jsonld`.
 
 A decision model is not "sound" in the workflow sense — it has no start, no end and no token, so
 S01–S17 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the

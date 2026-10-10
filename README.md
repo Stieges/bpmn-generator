@@ -39,7 +39,7 @@ Full gallery: [docs/screenshots/](docs/screenshots/). All SVGs regenerated from 
 | Multi-pool with lanes + message flows | **✅ verified** | ✅ | ❌ (bpmn-auto-layout limitation) | ? |
 | Strict JSON Schema input gate (ajv) | **✅** | n/a | partial | partial |
 | Soundness check | WF-Net (3 rules) | POWL by construction | none | none |
-| Configurable rule engine | **38 rules, 5 layers, JSON profiles** | limited | none | none |
+| Configurable rule engine | **40 BPMN rules, 5 layers, JSON profiles** | limited | none | none |
 | MCP server | **✅** | ❌ | ❌ | ❌ |
 | Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
 | License | MIT | GPL-3.0 | MIT-ish | unclear |
@@ -72,7 +72,7 @@ Think of it as going from **0% → 80%** in seconds. The remaining 20% is domain
 
 ```
 User Text → [Phase 1] Intent Extraction (LLM → JSON Logic-Core)
-          → [Phase 2] Validation (38 rules, 5 layers, deadlock detection)
+          → [Phase 2] Validation (40 BPMN rules, 5 layers, deadlock detection)
           → [Phase 3] Auto-Layout (ElkJS Sugiyama layered algorithm)
           → [Phase 4] Serialization → BPMN 2.0 XML + SVG
 ```
@@ -128,7 +128,7 @@ scripts/
 ├── bpmn/               Core BPMN pipeline (runs on every generate call)
 │   ├── pipeline.js     Orchestrator + CLI (public API: runPipeline)
 │   ├── validate.js     Validation wrapper → rules.js
-│   ├── rules.js        Rule engine (38 rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md`
+│   ├── rules.js        Rule engine (40 BPMN rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md`
 │   ├── optimize.js     Optimization Advisory layer (O01-O04, opt-in via optimize/soll mode)
 │   ├── topology.js     Gateway directions, topological sort, lane ordering
 │   ├── layout.js       ELK graph construction + layout execution
@@ -145,7 +145,7 @@ scripts/
 ├── dmn/                DMN 1.3 pipeline (opt-in, not reached by runPipeline)
 │   ├── pipeline.js      Orchestrator + CLI (public API: runDmnPipeline)
 │   ├── schema-gate.js    ajv gate for Decision-Core input
-│   ├── rules.js          DMN rule engine (17 rules, 3 layers, 2 modes)
+│   ├── rules.js          DMN rule engine (19 DMN rules, 3 layers, 2 modes)
 │   ├── layout.js          DRD ELK layout (decisionCoreToElk, runDmnElkLayout)
 │   ├── coordinates.js      DRD coordinate mapping (buildDmnDiagrams)
 │   ├── di-check.js          Diagram integrity check (DD01-DD03)
@@ -239,14 +239,14 @@ bpmn-generator/
 
 ## Rule Engine
 
-38 rules across 5 layers with configurable severity via JSON profiles (2 are registered as placeholders). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
+40 BPMN rules across 5 layers with configurable severity via JSON profiles (2 are registered as placeholders; SC01 and SC06 run in the scenario pipeline and are not profile-switchable yet). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
 
 | Layer | Severity | Rules | Examples |
 |-------|----------|-------|----------|
 | Soundness | ERROR | S01-S17 | Start/End events, deadlocks, boundary events |
 | Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
-| Workflow-Net | ERROR/WARNING | WF01-WF03 | Liveness, boundedness, deadlock-freedom (opt-in) |
+| Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Liveness, boundedness, deadlock-freedom (opt-in) |
 | Optimization | ADVISORY | O01-O04 | Redesign opportunities — `optimize`/`soll` mode only (opt-in); each names a transform in the redesign toolbox |
 
 ```bash
@@ -314,7 +314,7 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **Round-tripping** (BPMN XML → Logic-Core JSON → BPMN XML)
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
-- **Configurable rule engine** (38 rules, 5 layers, JSON profiles — 2 registered as placeholders)
+- **Configurable rule engine** (40 BPMN rules, 5 layers, JSON profiles — 2 registered as placeholders)
 - **Redesign toolbox** (5 deterministic process transforms with preview/apply, no LLM — see below)
 - **OMG BPMN 2.0.2 compliant** XML output (ISO/IEC 19510:2013)
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)
@@ -456,7 +456,7 @@ mapping → diagram integrity check → DMN 1.3 XML + DMNDI (via `dmn-moddle`). 
 against the normative `DMN13.xsd`.
 
 This is a separate, sibling subsystem — `dmn/` never imports from `bpmn/` and isn't reached by
-`runPipeline`. It has its own rule engine (17 rules, 3 layers — see the "DMN rule engine" section
+`runPipeline`. It has its own rule engine (19 DMN rules, 3 layers — see the "DMN rule set" section
 of [`CLAUDE.md`](CLAUDE.md) for the layer breakdown), its own CLI, and its own test coverage.
 
 ```bash
