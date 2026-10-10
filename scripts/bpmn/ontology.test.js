@@ -453,6 +453,19 @@ describe('prompt and docs follow the ontology', () => {
     const hasRow = (label) => firstCells.some(c => c === label || c.startsWith(label + ' ') || c.startsWith(label + '('));
     expect(VOCABULARY.nodeTypes.filter(n => supported.has(n.name) && !hasRow(n.label)).map(n => n.name)).toEqual([]);
   });
+  test('omg-compliance.md: every table row has as many cells as its table header', () => {
+    // A row with a missing or duplicated cell still renders as a table, so only a count check catches it.
+    const cellCount = (l) => l.trimEnd().replace(/^\|/, '').replace(/\|$/, '').split('|').length;
+    const bad = [];
+    let header = null;
+    md('references/omg-compliance.md').split('\n').forEach((l, i) => {
+      if (!l.startsWith('|')) { header = null; return; }
+      const n = cellCount(l);
+      if (header === null) header = n;
+      else if (n !== header) bad.push(`references/omg-compliance.md:${i + 1} has ${n} cells, its table header has ${header}`);
+    });
+    expect(bad).toEqual([]);
+  });
   test('the skill template knows every supported type and the Artifact class', () => {
     const t = md('references/inline-template.md');
     const shapeBlock = /SHAPE\s*=\s*\{([\s\S]*?)\};/.exec(t)[1];
