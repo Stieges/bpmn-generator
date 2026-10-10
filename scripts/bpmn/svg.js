@@ -26,6 +26,10 @@ function laneHeaderW(poolCoords, poolKey) {
       ?? LANE_HEADER_W;
 }
 
+/**
+ * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
+ * `assignEdgeIds`); `runPipeline` instead works on a copy.
+ */
 function generateSvg(lc, coordMap) {
   // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
   assignEdgeIds(lc);

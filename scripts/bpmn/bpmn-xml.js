@@ -914,6 +914,10 @@ function resolveMessageFlowRef(ref, processes, collapsedPools, participantMap) {
 // MAIN ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
+ * `assignEdgeIds`); `runPipeline` instead works on a copy.
+ */
 async function generateBpmnXml(lc, coordMap) {
   // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
   assignEdgeIds(lc);
