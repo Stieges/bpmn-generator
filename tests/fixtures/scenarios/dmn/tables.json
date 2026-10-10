@@ -1,0 +1,99 @@
+{
+  "id": "Definitions_tables",
+  "name": "Definitions_tables",
+  "namespace": "http://bpmn-generator.local/dmn/Definitions_tables",
+  "nodes": [
+    {
+      "id": "dec_gap",
+      "type": "decision",
+      "name": "dec_gap",
+      "variable": "result",
+      "typeRef": "string",
+      "decisionTable": {
+        "id": "table_gap",
+        "hitPolicy": "UNIQUE",
+        "inputs": [
+          {
+            "id": "in_1",
+            "label": "amount",
+            "expression": "amount",
+            "typeRef": "number"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out_1",
+            "name": "level",
+            "typeRef": "string"
+          }
+        ],
+        "rules": [
+          {
+            "id": "r1",
+            "when": [
+              "< 100"
+            ],
+            "then": [
+              "\"none\""
+            ]
+          },
+          {
+            "id": "r3",
+            "when": [
+              ">= 500"
+            ],
+            "then": [
+              "\"silver\""
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "dec_overlap",
+      "type": "decision",
+      "name": "dec_overlap",
+      "variable": "result",
+      "typeRef": "string",
+      "decisionTable": {
+        "id": "table_overlap",
+        "hitPolicy": "UNIQUE",
+        "inputs": [
+          {
+            "id": "in_1",
+            "label": "amount",
+            "expression": "amount",
+            "typeRef": "number"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out_1",
+            "name": "ok",
+            "typeRef": "string"
+          }
+        ],
+        "rules": [
+          {
+            "id": "r1",
+            "when": [
+              "[100..600)"
+            ],
+            "then": [
+              "\"a\""
+            ]
+          },
+          {
+            "id": "r2",
+            "when": [
+              ">= 500"
+            ],
+            "then": [
+              "\"b\""
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

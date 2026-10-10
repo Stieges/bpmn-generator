@@ -1,0 +1,27 @@
+[
+  {
+    "name": "combined",
+    "lc": "combined.json",
+    "decisions": []
+  },
+  {
+    "name": "ambiguous",
+    "lc": "ambiguous.json",
+    "decisions": [
+      "dmn/ambiguous-a.json",
+      "dmn/ambiguous-b.json"
+    ]
+  },
+  {
+    "name": "tables",
+    "lc": "tables.json",
+    "decisions": [
+      "dmn/tables.json"
+    ]
+  },
+  {
+    "name": "simple-approval",
+    "lc": "../simple-approval.json",
+    "decisions": []
+  }
+]

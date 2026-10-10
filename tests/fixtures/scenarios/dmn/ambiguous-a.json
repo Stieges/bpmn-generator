@@ -1,0 +1,44 @@
+{
+  "id": "Definitions_A",
+  "name": "Definitions_A",
+  "namespace": "http://bpmn-generator.local/dmn/Definitions_A",
+  "nodes": [
+    {
+      "id": "dec_ambiguous",
+      "type": "decision",
+      "name": "dec_ambiguous",
+      "variable": "result",
+      "typeRef": "string",
+      "decisionTable": {
+        "id": "table_a",
+        "hitPolicy": "UNIQUE",
+        "inputs": [
+          {
+            "id": "in_1",
+            "label": "amount",
+            "expression": "amount",
+            "typeRef": "number"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out_1",
+            "name": "ok",
+            "typeRef": "string"
+          }
+        ],
+        "rules": [
+          {
+            "id": "r1",
+            "when": [
+              "-"
+            ],
+            "then": [
+              "\"a\""
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

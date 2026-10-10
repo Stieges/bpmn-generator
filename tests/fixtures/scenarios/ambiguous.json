@@ -1,0 +1,36 @@
+{
+  "pools": [
+    {
+      "id": "P_tables",
+      "name": "Tables",
+      "nodes": [
+        {
+          "id": "s",
+          "type": "startEvent"
+        },
+        {
+          "id": "rule1",
+          "type": "businessRuleTask",
+          "name": "Decide 1",
+          "decisionRef": "dec_ambiguous"
+        },
+        {
+          "id": "e",
+          "type": "endEvent"
+        }
+      ],
+      "edges": [
+        {
+          "id": "f1",
+          "source": "s",
+          "target": "rule1"
+        },
+        {
+          "id": "f2",
+          "source": "rule1",
+          "target": "e"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "happyPath": {
+    "derived": true,
+    "found": true,
+    "decisions": [],
+    "perPool": [
+      {
+        "poolId": "P_tables",
+        "derived": true,
+        "found": true,
+        "edges": [
+          {
+            "id": "f1",
+            "source": "s",
+            "target": "rule1"
+          },
+          {
+            "id": "f2",
+            "source": "rule1",
+            "target": "e"
+          }
+        ],
+        "decisions": []
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "index": 0,
+      "transitions": [
+        "P_tables::t_s",
+        "P_tables::t_rule1",
+        "P_tables::t_e"
+      ],
+      "nodes": [
+        "s",
+        "rule1",
+        "e"
+      ],
+      "interleavingCount": 1,
+      "cycleUseCounts": {},
+      "poolIds": [
+        "P_tables",
+        "P_tables",
+        "P_tables"
+      ],
+      "messagesSent": [],
+      "messagesReceived": [],
+      "residualPlaces": [],
+      "sinkTokens": {
+        "P_tables": 1
+      },
+      "decisions": [],
+      "groupKey": "[]",
+      "happyPathDistance": 0
+    }
+  ],
+  "groupCount": 1,
+  "truncated": false,
+  "stats": {
+    "backwardEdges": [],
+    "cycleBound": 1,
+    "scenarioCount": 1,
+    "cappedPaths": 0,
+    "deadEndPaths": 0,
+    "lengthTruncatedPaths": 0,
+    "statesExplored": 4,
+    "orGateways": [],
+    "skipped": [],
+    "approximations": [],
+    "messageFlows": [],
+    "ungatedMessageFlows": [],
+    "unconsumedMessagePlaces": [],
+    "unresolvedEndpoints": []
+  },
+  "issues": [
+    {
+      "rule": "SC03",
+      "severity": "WARNING",
+      "nodeId": "rule1",
+      "poolId": "P_tables",
+      "decisionRef": "dec_ambiguous",
+      "candidateDecisionCoreIds": [
+        "Definitions_A",
+        "Definitions_B"
+      ],
+      "message": "node \"rule1\" (pool \"P_tables\") references decisionRef \"dec_ambiguous\", which resolves to 2 distinct decisions (Definitions_A, Definitions_B) — no single answer is possible"
+    }
+  ],
+  "skippedTableAnalyses": 0
+}

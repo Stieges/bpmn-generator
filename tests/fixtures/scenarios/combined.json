@@ -1,0 +1,163 @@
+{
+  "pools": [
+    {
+      "id": "P_loop",
+      "name": "Loop",
+      "nodes": [
+        {
+          "id": "s1",
+          "type": "startEvent"
+        },
+        {
+          "id": "gw",
+          "type": "exclusiveGateway",
+          "name": "Ok?"
+        },
+        {
+          "id": "a",
+          "type": "userTask",
+          "name": "A"
+        },
+        {
+          "id": "b",
+          "type": "userTask",
+          "name": "B"
+        },
+        {
+          "id": "c",
+          "type": "userTask",
+          "name": "C"
+        },
+        {
+          "id": "end1",
+          "type": "endEvent"
+        }
+      ],
+      "edges": [
+        {
+          "id": "f1",
+          "source": "s1",
+          "target": "gw"
+        },
+        {
+          "id": "f2",
+          "source": "gw",
+          "target": "a",
+          "label": "yes"
+        },
+        {
+          "id": "f3",
+          "source": "gw",
+          "target": "b",
+          "label": "no"
+        },
+        {
+          "id": "f4",
+          "source": "a",
+          "target": "end1"
+        },
+        {
+          "id": "f5",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "f6",
+          "source": "c",
+          "target": "b"
+        }
+      ]
+    },
+    {
+      "id": "P_ref",
+      "name": "Ref",
+      "nodes": [
+        {
+          "id": "s2",
+          "type": "startEvent"
+        },
+        {
+          "id": "rule",
+          "type": "businessRuleTask",
+          "name": "Decide",
+          "decisionRef": "NoSuchDecision"
+        },
+        {
+          "id": "end2",
+          "type": "endEvent"
+        }
+      ],
+      "edges": [
+        {
+          "id": "g1",
+          "source": "s2",
+          "target": "rule"
+        },
+        {
+          "id": "g2",
+          "source": "rule",
+          "target": "end2"
+        }
+      ]
+    },
+    {
+      "id": "P_fork",
+      "name": "Fork",
+      "nodes": [
+        {
+          "id": "s3",
+          "type": "startEvent"
+        },
+        {
+          "id": "fork",
+          "type": "parallelGateway"
+        },
+        {
+          "id": "x",
+          "type": "userTask",
+          "name": "X"
+        },
+        {
+          "id": "y",
+          "type": "userTask",
+          "name": "Y"
+        },
+        {
+          "id": "e3",
+          "type": "endEvent"
+        },
+        {
+          "id": "e4",
+          "type": "endEvent"
+        }
+      ],
+      "edges": [
+        {
+          "id": "h1",
+          "source": "s3",
+          "target": "fork"
+        },
+        {
+          "id": "h2",
+          "source": "fork",
+          "target": "x"
+        },
+        {
+          "id": "h3",
+          "source": "fork",
+          "target": "y"
+        },
+        {
+          "id": "h4",
+          "source": "x",
+          "target": "e3"
+        },
+        {
+          "id": "h5",
+          "source": "y",
+          "target": "e4"
+        }
+      ]
+    }
+  ]
+}
