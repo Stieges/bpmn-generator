@@ -445,9 +445,13 @@ describe('prompt and docs follow the ontology', () => {
       expect([...firstColumnTypes(md(file))].sort()).toEqual([...supported].sort());
     });
   }
-  test('omg-compliance.md names every supported type by its label', () => {
-    const t = md('references/omg-compliance.md');
-    expect(VOCABULARY.nodeTypes.filter(n => supported.has(n.name) && !t.includes(n.label)).map(n => n.name)).toEqual([]);
+  test('omg-compliance.md: every supported type has a table row whose first cell starts with its label', () => {
+    // First cells of every Markdown table row (backticks and bold stripped). A label must start one,
+    // followed by end, a space or "(" — a whole-file substring match would pass on incidental words.
+    const firstCells = md('references/omg-compliance.md').split('\n').filter(l => l.startsWith('|'))
+      .map(l => l.split('|')[1].replace(/[`*]/g, '').trim());
+    const hasRow = (label) => firstCells.some(c => c === label || c.startsWith(label + ' ') || c.startsWith(label + '('));
+    expect(VOCABULARY.nodeTypes.filter(n => supported.has(n.name) && !hasRow(n.label)).map(n => n.name)).toEqual([]);
   });
   test('the skill template knows every supported type and the Artifact class', () => {
     const t = md('references/inline-template.md');

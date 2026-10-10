@@ -291,7 +291,7 @@
       "@id": "bg:adHocSubProcess",
       "@type": "bg:NodeType",
       "name": "adHocSubProcess",
-      "label": "Ad Hoc Sub Process",
+      "label": "Ad-Hoc Sub-Process",
       "subClassOf": [
         "bg:Container"
       ],
@@ -350,7 +350,7 @@
       "@id": "bg:intermediateCatchEvent",
       "@type": "bg:NodeType",
       "name": "intermediateCatchEvent",
-      "label": "Intermediate Catch",
+      "label": "Intermediate Catch Event",
       "subClassOf": [
         "bg:Event"
       ],
@@ -365,7 +365,7 @@
       "@id": "bg:intermediateThrowEvent",
       "@type": "bg:NodeType",
       "name": "intermediateThrowEvent",
-      "label": "Intermediate Throw",
+      "label": "Intermediate Throw Event",
       "subClassOf": [
         "bg:Event"
       ],
@@ -395,7 +395,7 @@
       "@id": "bg:exclusiveGateway",
       "@type": "bg:NodeType",
       "name": "exclusiveGateway",
-      "label": "Exclusive (XOR)",
+      "label": "Exclusive Gateway",
       "subClassOf": [
         "bg:Gateway"
       ],
@@ -410,7 +410,7 @@
       "@id": "bg:parallelGateway",
       "@type": "bg:NodeType",
       "name": "parallelGateway",
-      "label": "Parallel (AND)",
+      "label": "Parallel Gateway",
       "subClassOf": [
         "bg:Gateway"
       ],
@@ -440,7 +440,7 @@
       "@id": "bg:eventBasedGateway",
       "@type": "bg:NodeType",
       "name": "eventBasedGateway",
-      "label": "Event-Based",
+      "label": "Event-Based Gateway",
       "subClassOf": [
         "bg:Gateway"
       ],
@@ -470,7 +470,7 @@
       "@id": "bg:dataObjectReference",
       "@type": "bg:NodeType",
       "name": "dataObjectReference",
-      "label": "Data Object",
+      "label": "Data Object Reference",
       "subClassOf": [
         "bg:DataReference"
       ],
@@ -484,7 +484,7 @@
       "@id": "bg:dataStoreReference",
       "@type": "bg:NodeType",
       "name": "dataStoreReference",
-      "label": "Data Store",
+      "label": "Data Store Reference",
       "subClassOf": [
         "bg:DataReference"
       ],
@@ -498,7 +498,7 @@
       "@id": "bg:textAnnotation",
       "@type": "bg:NodeType",
       "name": "textAnnotation",
-      "label": "TextAnnotation",
+      "label": "Text Annotation",
       "subClassOf": [
         "bg:BpmnArtifact"
       ],
