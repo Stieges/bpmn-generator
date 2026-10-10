@@ -29,6 +29,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 ```
 - `logicCore` (required, object) — validated against `references/input-schema.json` via the ajv strict gate.
 - `mode` (optional, string) — `"document"` (default, faithful IST) or `"optimize"`/`"soll"`. In optimize mode the response `validation` gains `advisories` (redesign suggestions) and `metrics.optimization` (Lean metrics). Advisories are heuristic, non-blocking, never auto-applied.
+- `ruleProfile` (optional, object) — an inline rule profile, see "Rule profiles over HTTP" below.
 - `poolOrder` (optional, string) — `"auto"` (default) or `"declared"`. With `"auto"` the participants of a collaboration are stacked so that the ones exchanging messages sit next to each other; a message flow spanning N positions has to cross N-1 uninvolved pools, which reads as a participation that does not exist. With `"declared"` the input order is kept instead — routing stays orthogonal, there are simply more crossings, and `diagnostics` reports them as DI05.
 
 `validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
@@ -61,8 +62,32 @@ None of this is applied automatically; turning an advisory into an actual model 
 **Errors:**
 - `400 { correlationId, status: "schema_error", errors: [...] }` — Logic-Core failed the schema gate.
 - `400 { error: "callbackUrl ..." }` — invalid or internal callback URL.
-- `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused (unknown severity, `ADVISORY` outside the optimization layer, or a profile file that is not JSON). `/generate` and `/validate` take an inline profile object only.
+- `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused; see "Rule profiles over HTTP" below.
 - `500 { correlationId, status: "internal_error", error }` — pipeline threw.
+
+### Rule profiles over HTTP
+
+`/generate`, `/validate` and `/orchestrate` accept `ruleProfile` as an **inline JSON object only**,
+in the format of the files in `rules/` (`profile`, `version`, `description`, `layers`, `overrides`).
+A string — a profile name or a file path — is refused: the server never reads a file a client
+names. Every profile passes `references/rule-profile-schema.json` before the rule engine sees it.
+
+| Limit | Value |
+|---|---|
+| serialised size | 64 KiB |
+| `layers` | at most 32, keys `^[a-z_]{1,32}$`, value `{ enabled?: boolean, severity?: … }` |
+| `overrides` | at most 256, keys `^[A-Za-z0-9_]{1,16}$`, value `{ enabled?: boolean, severity?: ERROR \| WARNING \| INFO \| ADVISORY \| OFF }` |
+| `profile` / `version` / `description` | strings of at most 200 / 32 / 1000 characters |
+| other top-level keys | refused |
+
+Refused with `400 profile_error` (the message names the problem, at most five schema problems,
+never a server path): anything that is not an object; a profile over a limit or failing the
+schema; `ADVISORY` on a rule outside the optimization layer; and — over HTTP only — a profile that
+**relaxes the soundness layer** (disables it, or sets a soundness rule to `OFF`, `INFO` or
+`ADVISORY`), so a soundness finding can never vanish from the response. A soundness rule may
+still be set to `ERROR` or `WARNING` (the finding is reported either way), and every other layer
+may be relaxed. Rule ids and layers the BPMN rule set does
+not know are not an error; the server logs a warning (at most 20 per request) and ignores them.
 
 ### validation vs. diagnostics
 
@@ -275,7 +300,7 @@ Validate Logic-Core against the rule engine without generating output.
 
 **Request:** `{ "logicCore": {...}, "mode": "optimize", "correlationId": "uuid", "clientId": "my-app" }`
 
-`mode` (optional) — `"document"` (default) or `"optimize"`; in optimize mode `validation` gains `advisories` + `metrics.optimization`. `advisories` object shape: see `/api/v1/generate` above.
+`mode` (optional) — `"document"` (default) or `"optimize"`; in optimize mode `validation` gains `advisories` + `metrics.optimization`. `advisories` object shape: see `/api/v1/generate` above. `ruleProfile` (optional) — an inline profile object, as for `/api/v1/generate`.
 
 **Response 200:**
 ```json
@@ -323,7 +348,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
   "userText": "Order processing with manager approval",
   "logicCore": { ... },
   "llmConfig": { "baseUrl": "https://api.openai.com/v1", "apiKey": "sk-...", "model": "gpt-4o-mini", "timeout": 120000 },
-  "ruleProfile": "rules/strict-profile.json",
+  "ruleProfile": { "profile": "strict-ish", "overrides": { "M01": { "severity": "ERROR" } } },
   "mode": "optimize",
   "correlationId": "uuid",
   "clientId": "my-app"
@@ -331,6 +356,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 ```
 - One of `userText` or `logicCore` is required.
 - `mode` (optional) — `"document"` (default) or `"optimize"`/`"soll"`; optimize mode adds `validation.advisories` + `metrics.optimization` to the response.
+- `ruleProfile` (optional) — an inline profile object, as for `/api/v1/generate`; it applies in the compliance phase.
 - `llmConfig` is required when `userText` is given; if omitted, the server falls back to `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` env vars when present.
 - `timeout` optional, clamped to (0, 300000], default 120000.
 
@@ -355,6 +381,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 - `400 { error: "Provide userText (string) or logicCore (object)" }` — neither given.
 - `400 { error: "llmConfig requires baseUrl, apiKey, model" }` — incomplete `llmConfig`.
 - `400 { correlationId, status: "schema_error", errors }` — provided `logicCore` failed the schema gate.
+- `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused (see `/api/v1/generate`).
 - `500 { correlationId, status: "internal_error", error }`.
 
 **Example:**

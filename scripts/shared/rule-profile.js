@@ -156,8 +156,8 @@ export function assertRuleProfile(profile, label) {
 
 /**
  * Refuse a profile that switches `layer` off, or sets one of its rules to a severity that stops it
- * from failing a run (OFF, INFO, ADVISORY). For profiles from a remote client: they may tighten
- * soundness, never relax it, so a `status: "success"` keeps meaning the model is structurally sound.
+ * from being reported as an error or a warning (OFF, INFO, ADVISORY). For profiles from a remote
+ * client, so that it can never make a soundness finding vanish from the response.
  * `context` is profileContext() from rule-catalog.js (its `ruleLayer`).
  */
 export function assertLayerNotWeakened(profile, layer, context) {

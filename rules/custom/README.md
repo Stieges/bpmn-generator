@@ -23,10 +23,27 @@ runDmnRules(decisionCore, {
 });
 ```
 
-`loadRuleProfile` returns `null` for a path it cannot read or parse, and a null
-profile means "use the defaults" — a missing profile does not fail the run. That
-is convenient and it is also a trap: check the return value if it matters that
-your profile was actually applied.
+A path that does not exist runs every rule at its default severity and prints a
+`⚠ rule profile … not found` warning — check for it if it matters that your
+profile was actually applied. A file that is not a regular file, is larger than
+256 KiB, is not JSON, or does not match `references/rule-profile-schema.json` is
+refused (`ProfileRejectedError`).
+
+### Over MCP: by name
+
+The MCP tools (`generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn`) take a
+profile **name**, never a path, resolved inside this repository's `rules/`
+directory: `strict`, `strict-profile`, `dmn-default-profile`, or
+`custom/<name>` for a file here (`custom/acme` → `rules/custom/acme.json`).
+Names are lowercase letters, digits and `-`; no other directory, no `..`, and a
+symlink that leaves `rules/` is refused.
+
+### Over HTTP: inline
+
+The HTTP API takes the profile itself as an inline JSON object in the request
+body (`ruleProfile: { … }`); it reads no profile file at all. See
+`references/api-reference.md` → "Rule profiles over HTTP" for the limits, and
+note that over HTTP a profile may not relax the soundness layer.
 
 ## Format
 
@@ -76,6 +93,13 @@ Files here are ordinary tracked files. If a profile encodes something about a
 client engagement, it does not belong in this repository — keep it outside and
 pass an absolute path.
 
-A profile is checked when a runner uses it: an unknown rule id or layer, or an override of SC01–SC06
-(scenario-pipeline rules, not profile-switchable yet), prints a `⚠ rule profile …` warning; an
-unknown severity is refused; a file that is not valid JSON aborts with its line and column.
+A profile is checked when a runner uses it. First the schema
+(`references/rule-profile-schema.json`): only the keys `profile`, `version`,
+`description`, `layers`, `overrides`; at most 32 layers and 256 overrides; each
+entry `{ enabled, severity }` with a severity of `ERROR`, `WARNING`, `INFO`,
+`ADVISORY`, `OFF` — anything else is refused. Then the rule set: an unknown rule
+id or layer, or an override of SC01–SC06 (scenario-pipeline rules, not
+profile-switchable yet), prints a `⚠ rule profile …` warning (at most 20);
+`ADVISORY` on a BPMN rule outside the optimization layer is refused, because its
+findings would be dropped; a file that is not valid JSON aborts with its line and
+column.
