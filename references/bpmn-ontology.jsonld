@@ -20,7 +20,7 @@
       "@container": "@set"
     },
     "domain": {
-      "@id": "rdfs:domain",
+      "@id": "bg:allowedOn",
       "@type": "@id",
       "@container": "@set"
     },
@@ -31,15 +31,23 @@
     "element": "bg:element",
     "eventDefinition": "bg:eventDefinition",
     "groups": {
-      "@id": "bg:group",
+      "@id": "bg:markerGroup",
       "@container": "@set"
     }
   },
-  "@id": "https://stieges.github.io/bpmn-generator/ontology",
-  "@type": "owl:Ontology",
-  "version": "1.0",
-  "label": "bpmn-generator BPMN vocabulary",
   "@graph": [
+    {
+      "@id": "https://stieges.github.io/bpmn-generator/ontology",
+      "@type": "owl:Ontology",
+      "version": "1.0",
+      "label": "bpmn-generator BPMN vocabulary"
+    },
+    {
+      "@id": "bg:allowedOn",
+      "@type": "owl:AnnotationProperty",
+      "label": "allowed on",
+      "comment": "Node types that may carry this Logic-Core field; for Edge fields, the node types allowed as the edge's source. Deliberately not rdfs:domain, whose multiple values are conjunctive."
+    },
     {
       "@id": "bg:FlowNode",
       "@type": "owl:Class",
