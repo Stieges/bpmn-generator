@@ -7,9 +7,11 @@ import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING, ARTIFACT_GAP, artifactSize } from './constants.js';
 import { CFG } from '../shared/utils.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
-import { preprocessLogicCore } from './topology.js';
+import { preprocessLogicCore, assignEdgeIds } from './topology.js';
 
 function logicCoreToElk(lc, opts = {}) {
+  // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
+  assignEdgeIds(lc);
   // Pre-process: sort nodes topologically, order lanes by flow,
   // order participants by who talks to whom
   preprocessLogicCore(lc, { poolOrder: opts.poolOrder });
@@ -288,7 +290,7 @@ function buildElkEdge(edge, idx) {
     props['elk.layered.priority.direction'] = '10';
   }
   return {
-    id: edge.id || `edge_${idx}`,
+    id: edge.id,
     sources: [edge.source],
     targets: [edge.target],
     labels: edge.label ? [{ text: edge.label }] : [],

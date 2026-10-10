@@ -16,7 +16,7 @@ import {
 
 import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
-import { inferGatewayDirections } from './topology.js';
+import { inferGatewayDirections, assignEdgeIds } from './topology.js';
 import { inferEventMarker } from './icons.js';
 
 const moddle = new BpmnModdle();
@@ -453,7 +453,7 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
       if (childDataObject) el.get('flowElements').push(childDataObject);
     }
     for (const subEdge of (node.edges || [])) {
-      const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
+      const seid = subEdge.id;
       const seAttrs = { id: seid };
       if (subEdge.label) seAttrs.name = subEdge.label;
       seAttrs.sourceRef = childMap.get(subEdge.source);
@@ -481,7 +481,7 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
   const incomingMap = {};
   const outgoingMap = {};
   for (const e of edges) {
-    const eid = e.id || `flow_${e.source}_${e.target}`;
+    const eid = e.id;
     if (!outgoingMap[e.source]) outgoingMap[e.source] = [];
     outgoingMap[e.source].push(eid);
     if (!incomingMap[e.target]) incomingMap[e.target] = [];
@@ -533,7 +533,7 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
   const defaultFlowIds = new Set(Object.values(defaultFlowMap));
   const seqFlowMap = new Map();
   for (const edge of edges) {
-    const eid = edge.id || `flow_${edge.source}_${edge.target}`;
+    const eid = edge.id;
     const attrs = {
       id: eid,
       sourceRef: flowNodeMap.get(edge.source),
@@ -558,7 +558,7 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
 
   // Set incoming/outgoing references on flow nodes (industry convention)
   for (const edge of edges) {
-    const eid = edge.id || `flow_${edge.source}_${edge.target}`;
+    const eid = edge.id;
     const seqFlow = seqFlowMap.get(eid);
     if (!seqFlow) continue;
     const srcEl = flowNodeMap.get(edge.source);
@@ -650,7 +650,7 @@ function buildDefaultFlowMap(proc) {
 
   for (const e of edges) {
     if (e.isDefault) {
-      map[e.source] = e.id || `flow_${e.source}_${e.target}`;
+      map[e.source] = e.id;
     }
   }
   for (const n of nodes) {
@@ -659,7 +659,7 @@ function buildDefaultFlowMap(proc) {
       const gwOutEdges = edges.filter(e => e.source === n.id);
       if (gwOutEdges.length > 1) {
         const defaultEdge = gwOutEdges[gwOutEdges.length - 1];
-        map[n.id] = defaultEdge.id || `flow_${defaultEdge.source}_${defaultEdge.target}`;
+        map[n.id] = defaultEdge.id;
       }
     }
   }
@@ -728,7 +728,7 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
   // Edge DI
   for (const proc of (lc.pools || [lc])) {
     for (const edge of (proc.edges || [])) {
-      const eid = edge.id || `flow_${edge.source}_${edge.target}`;
+      const eid = edge.id;
       const pts = edgeCoords[eid] || [];
       const waypoints = buildWaypoints(pts, coords, edge.source, edge.target);
       // DI requires at least two waypoints. Reachable when an endpoint has no
@@ -855,7 +855,7 @@ function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeEleme
     if (node.isExpanded && node.nodes) {
       buildNodeShapeDI(node.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements);
       for (const subEdge of (node.edges || [])) {
-        const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
+        const seid = subEdge.id;
         const spts = edgeCoords[seid] || [];
         const waypoints = buildWaypoints(spts, coords, subEdge.source, subEdge.target);
         planeElements.push(create('bpmndi:BPMNEdge', {
@@ -915,6 +915,8 @@ function resolveMessageFlowRef(ref, processes, collapsedPools, participantMap) {
 // ═══════════════════════════════════════════════════════════════════════
 
 async function generateBpmnXml(lc, coordMap) {
+  // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
+  assignEdgeIds(lc);
   const isMultiPool = lc.pools && lc.pools.length > 0;
   const processes = isMultiPool ? lc.pools : [lc];
   const collapsedPools = lc.collapsedPools || [];

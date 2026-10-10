@@ -305,6 +305,55 @@ export function normalizeLaneAssignments(proc) {
 }
 
 /**
+ * Give every sequence-flow edge without an id a deterministic one, in place.
+ *
+ * `flow_<source>_<target>`; on a collision with any id anywhere in the document (nodes, edges,
+ * pools, lanes, definitions, message flows, associations) or with an id generated earlier in this
+ * run, `_2`, `_3`, ... in document order. An id the author gave is never touched. Edges whose
+ * source/target are not strings are left alone for validation to report.
+ *
+ * Idempotent. This is the ONLY place an edge id is invented: layout, serialisation and rendering
+ * all read `edge.id` as-is, so a missing id downstream is a bug, not a case to handle (#64).
+ * Message flows and associations require an `id` in the schema and need no such step.
+ */
+export function assignEdgeIds(lc) {
+  const used = new Set();
+  const collect = (v) => {
+    if (Array.isArray(v)) { v.forEach(collect); return; }
+    if (v && typeof v === 'object') {
+      if (typeof v.id === 'string') used.add(v.id);
+      for (const k of Object.keys(v)) collect(v[k]);
+    }
+  };
+  collect(lc);
+
+  const assign = (v) => {
+    if (Array.isArray(v)) { v.forEach(assign); return; }
+    if (!v || typeof v !== 'object') return;
+    if (Array.isArray(v.edges)) {
+      for (const e of v.edges) {
+        if (!e || typeof e !== 'object') continue;
+        if (e.id !== undefined && e.id !== null && e.id !== '') continue;
+        if (typeof e.source !== 'string' || typeof e.target !== 'string') continue;
+        const base = `flow_${e.source}_${e.target}`;
+        let id = base;
+        for (let n = 2; used.has(id); n++) id = `${base}_${n}`;
+        used.add(id);
+        e.id = id;
+      }
+    }
+    for (const k of Object.keys(v)) if (k !== 'edges') assign(v[k]);
+  };
+  assign(lc);
+  return lc;
+}
+
+/** Pure form of `assignEdgeIds`: returns a deep copy, the caller's object is not touched. */
+export function normalizeEdgeIds(lc) {
+  return assignEdgeIds(JSON.parse(JSON.stringify(lc)));
+}
+
+/**
  * Pre-process a Logic-Core before ELK graph construction.
  */
 export function preprocessLogicCore(lc, opts = {}) {

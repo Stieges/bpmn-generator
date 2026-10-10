@@ -30,7 +30,7 @@ import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
-import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
+import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges } from './coordinates.js';
 import { checkDiagramIntegrity } from './di-check.js';
@@ -104,7 +104,9 @@ function checkNetTranslation(lc) {
  * }>}
  */
 async function runPipeline(logicCore, opts = {}) {
-  const lc = JSON.parse(JSON.stringify(logicCore)); // deep clone to avoid mutation
+  // Deep clone (no mutation of the caller's object) that also gives every id-less edge its id,
+  // once, before validation, the net check and layout: nothing downstream invents one (#64).
+  const lc = normalizeEdgeIds(logicCore);
   let baseProfile = opts.ruleProfile ?? null;
   if (typeof baseProfile === 'string') baseProfile = loadRuleProfile(baseProfile);
   const profile = profileForMode(baseProfile, opts.mode);
