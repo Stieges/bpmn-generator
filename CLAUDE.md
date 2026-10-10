@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 24 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
+7 top-level scripts (standalone tooling) + 26 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
 9 robustness + 7 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -322,8 +322,10 @@ the function and it silently applies to one nesting level only.
 The failure mode is invisible: bpmn-moddle reports attributes it does not *know*, never fields
 that never arrived, so an omission produces no warning and `validation.errors` stays empty.
 
-**So the procedure is: add the property to `references/input-schema.json` and an `rdf:Property` with its `rdfs:domain` to `references/bpmn-ontology.jsonld`, then add a row to `OMG_NODE_FIELD_SCOPE` (or `OMG_EDGE_FIELD_SCOPE`) in
-`scripts/bpmn/types.js` (its `allowed` now comes from that domain), then let `scripts/bpmn/field-fidelity.test.js` name every place you
+**So the procedure is: add the property to `references/input-schema.json` and an `rdf:Property`
+with its `rdfs:domain` to `references/bpmn-ontology.jsonld`, then add a row to
+`OMG_NODE_FIELD_SCOPE` (or `OMG_EDGE_FIELD_SCOPE`) in `scripts/bpmn/types.js` (its `allowed` now
+comes from that domain), then let `scripts/bpmn/field-fidelity.test.js` name every place you
 missed.** Adding the property to `references/input-schema.json` without a row fails CI naming the
 property; with a row, the fence drives the field through the real pipeline and back through both
 importers, for every class the row allows, at depth 0 and one level down — so a write that skipped
