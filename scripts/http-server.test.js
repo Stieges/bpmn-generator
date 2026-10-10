@@ -7,7 +7,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup } from './http-server.js';
+import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup, resolveClientLlmConfig } from './http-server.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { getAuditPath } from './audit.js';
 
@@ -93,7 +93,7 @@ describe('POST /api/v1/chat', () => {
       body: JSON.stringify({
         messages: [{ role: 'user', content: 'Ich brauche einen Genehmigungsprozess.' }],
         correlationId: 'test-correlation-id',
-        llmConfig: { baseUrl: 'http://x/v1', apiKey: 'k', model: 'm' },
+        llmConfig: { apiKey: 'k', model: 'm' },
       }),
     });
 
@@ -113,7 +113,7 @@ describe('POST /api/v1/chat', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: [{ role: 'user', content: 'hi' }],
-        llmConfig: { baseUrl: 'http://x/v1', apiKey: 'k', model: 'm' },
+        llmConfig: { apiKey: 'k', model: 'm' },
       }),
     });
 
@@ -466,4 +466,98 @@ describe('callbackUrl is checked against every internal address form', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/credentials/);
   });
+});
+
+describe('llmConfig.baseUrl from a client', () => {
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const chat = { messages: [{ role: 'user', content: 'hi' }] };
+  const orch = { userText: 'An approval process' };
+  let providerCalls;
+  beforeEach(() => {
+    _resetRateLimit();
+    providerCalls = [];
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith(baseUrl)) return realFetch(url, init);
+      providerCalls.push(String(url));
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ reply: 'ok', readyToGenerate: false, suggestedSummary: null }) } }] }) };
+    };
+  });
+  afterEach(() => {
+    delete process.env.LLM_BASE_URL_ALLOWLIST;
+    _setDnsLookup(null);
+  });
+
+  for (const [path, body] of [['/api/v1/chat', chat], ['/api/v1/orchestrate', orch]]) {
+    test(`${path}: refused by default — no outbound request is made`, async () => {
+      const res = await post(path, { ...body, llmConfig: { baseUrl: 'http://127.0.0.1:9/admin?', apiKey: 'k', model: 'm' } });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/baseUrl/);
+      expect(providerCalls).toEqual([]);
+    });
+
+    test(`${path}: an origin outside LLM_BASE_URL_ALLOWLIST is refused`, async () => {
+      process.env.LLM_BASE_URL_ALLOWLIST = 'https://llm.example.test';
+      const res = await post(path, { ...body, llmConfig: { baseUrl: 'https://other.example.test/v1', apiKey: 'k', model: 'm' } });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/baseUrl/);
+      expect(providerCalls).toEqual([]);
+    });
+
+    test(`${path}: an allowlisted origin that resolves to an internal address is still refused`, async () => {
+      process.env.LLM_BASE_URL_ALLOWLIST = 'https://llm.example.test';
+      _setDnsLookup(async () => [{ address: '10.0.0.5', family: 4 }]);
+      const res = await post(path, { ...body, llmConfig: { baseUrl: 'https://llm.example.test/v1', apiKey: 'k', model: 'm' } });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/internal/);
+      expect(providerCalls).toEqual([]);
+    });
+  }
+
+  test('without baseUrl the client key goes to the server-configured endpoint', async () => {
+    const res = await post('/api/v1/chat', { ...chat, llmConfig: { apiKey: 'k', model: 'm' } });
+    expect(res.status).toBe(200);
+    expect(providerCalls).toEqual(['https://api.openai.com/v1/chat/completions']);
+  });
+
+  test('resolveClientLlmConfig accepts an allowlisted origin that resolves to a public address', async () => {
+    _setDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]);
+    const env = { LLM_BASE_URL_ALLOWLIST: 'https://llm.example.test, http://other.example.test:8080' };
+    const ok = await resolveClientLlmConfig({ baseUrl: 'https://llm.example.test/v1', apiKey: 'k', model: 'm' }, env);
+    expect(ok.error).toBeUndefined();
+    expect(ok.config.baseUrl).toBe('https://llm.example.test/v1');
+    expect(typeof ok.config.request).toBe('function');
+    const wrongPort = await resolveClientLlmConfig({ baseUrl: 'http://other.example.test:8081/v1', apiKey: 'k', model: 'm' }, env);
+    expect(wrongPort.error).toMatch(/baseUrl/);
+  });
+});
+
+describe('LLM provider failures are not reflected to the client', () => {
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  beforeEach(() => {
+    _resetRateLimit();
+    process.env.OPENAI_API_KEY = 'env-key';
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith(baseUrl)) return realFetch(url, init);
+      return { ok: false, status: 500, text: async () => 'INTERNAL-SECRET-RESPONSE: db_password=hunter2' };
+    };
+  });
+
+  for (const [path, body] of [
+    ['/api/v1/chat', { messages: [{ role: 'user', content: 'hi' }] }],
+    ['/api/v1/orchestrate', { userText: 'An approval process' }],
+  ]) {
+    test(`${path}: 502 llm_error with a correlation id and no upstream body`, async () => {
+      const res = await post(path, { ...body, correlationId: 'llm-fail-1' });
+      const text = await res.text();
+      expect(res.status).toBe(502);
+      const data = JSON.parse(text);
+      expect(data.status).toBe('llm_error');
+      expect(data.correlationId).toBe('llm-fail-1');
+      expect(text).not.toMatch(/SECRET|hunter2|500/);
+    });
+  }
 });

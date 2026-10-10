@@ -51,7 +51,7 @@ export async function orchestrate(input, options = {}) {
       state.history.push({ agent: 'modeler', phase: 'extract', ts: new Date().toISOString() });
     } catch (err) {
       state.history.push({ agent: 'modeler', phase: 'extract', error: err.message, ts: new Date().toISOString() });
-      throw new Error(`Modeler agent failed: ${err.message}`);
+      throw new Error(`Modeler agent failed: ${err.message}`, { cause: err });
     }
   }
 
@@ -84,7 +84,7 @@ export async function orchestrate(input, options = {}) {
       if (review.isValid) break;
     } catch (err) {
       state.history.push({ agent: 'reviewer', iteration: i, error: err.message, ts: new Date().toISOString() });
-      throw new Error(`Reviewer agent failed (iteration ${i}): ${err.message}`);
+      throw new Error(`Reviewer agent failed (iteration ${i}): ${err.message}`, { cause: err });
     }
 
     // Last iteration — don't try to fix, just proceed with what we have
@@ -124,7 +124,7 @@ export async function orchestrate(input, options = {}) {
       if (layout.done) break;
     } catch (err) {
       state.history.push({ agent: 'layout', iteration: i, error: err.message, ts: new Date().toISOString() });
-      throw new Error(`Layout agent failed (iteration ${i}): ${err.message}`);
+      throw new Error(`Layout agent failed (iteration ${i}): ${err.message}`, { cause: err });
     }
 
     // Structural layout feedback → amend via Modeler

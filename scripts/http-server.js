@@ -16,11 +16,12 @@ import { profileContext } from './shared/rule-catalog.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 import { chatAgent } from './agents/chat.js';
-import { createLlmProvider } from './agents/llm-provider.js';
+import { createLlmProvider, LlmProviderError } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
-import { checkUrlShape, resolveOutboundUrl, _setResolver } from './shared/outbound-url.js';
+import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
+import { quoteForMessage } from './shared/rule-profile.js';
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.BPMN_API_KEY || null; // null = no auth (dev mode)
@@ -161,6 +162,57 @@ export function resolveEnvLlmConfig() {
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   };
+}
+
+const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1';
+const LLM_TIMEOUT_DEFAULT = 120_000;
+const LLM_TIMEOUT_MAX = 300_000;
+
+/** The origins an operator lets clients name as `llmConfig.baseUrl` (comma-separated env var). */
+function llmBaseUrlAllowlist(env) {
+  return String(env.LLM_BASE_URL_ALLOWLIST || '').split(',').map((entry) => entry.trim()).filter(Boolean)
+    .flatMap((entry) => { try { return [new URL(entry).origin]; } catch { return []; } });
+}
+
+/**
+ * Turns a client's `llmConfig` into provider options, or `{ error }` (→ 400).
+ *
+ * Without `baseUrl` the client's key and model go to the operator's endpoint
+ * (`OPENAI_BASE_URL`, else the OpenAI default). A client `baseUrl` is an outbound request to a
+ * client-chosen host, so it is refused unless its origin is on the operator's
+ * `LLM_BASE_URL_ALLOWLIST` (empty by default = never), and even then it must pass the same
+ * outbound-URL check as a callback; the request is then made over the pinned transport, which
+ * connects only to the checked addresses and follows no redirect.
+ */
+export async function resolveClientLlmConfig(llmConfig, env = process.env) {
+  if (typeof llmConfig !== 'object' || llmConfig === null || Array.isArray(llmConfig)) {
+    return { error: 'llmConfig must be an object with apiKey and model' };
+  }
+  const { baseUrl, apiKey, model, timeout } = llmConfig;
+  if (typeof apiKey !== 'string' || !apiKey || typeof model !== 'string' || !model) {
+    return { error: 'llmConfig requires apiKey and model' };
+  }
+  const safeTimeout = typeof timeout === 'number' && timeout > 0 && timeout <= LLM_TIMEOUT_MAX ? timeout : LLM_TIMEOUT_DEFAULT;
+  if (baseUrl === undefined || baseUrl === null || baseUrl === '') {
+    return { config: { baseUrl: env.OPENAI_BASE_URL || DEFAULT_LLM_BASE_URL, apiKey, model, timeout: safeTimeout } };
+  }
+  let origin;
+  try { origin = new URL(String(baseUrl)).origin; } catch { return { error: 'llmConfig.baseUrl is not a valid URL' }; }
+  if (!llmBaseUrlAllowlist(env).includes(origin)) {
+    return { error: 'llmConfig.baseUrl is not accepted from a client unless the server allowlists its origin; omit it to use the server-configured endpoint' };
+  }
+  const check = await resolveOutboundUrl(String(baseUrl), { label: 'llmConfig.baseUrl' });
+  if (!check.ok) return { error: check.error };
+  const request = (url, opts) => pinnedRequest(url, { ...opts, label: 'llmConfig.baseUrl' });
+  return { config: { baseUrl: String(baseUrl), apiKey, model, timeout: safeTimeout, request } };
+}
+
+/** The LlmProviderError behind an error, following `cause` (the orchestrator wraps agent errors). */
+function llmFailureOf(err) {
+  for (let e = err, depth = 0; e && depth < 5; e = e.cause, depth++) {
+    if (e instanceof LlmProviderError) return e;
+  }
+  return null;
 }
 
 const server = createServer(async (req, res) => {
@@ -317,19 +369,17 @@ const server = createServer(async (req, res) => {
       };
 
       // Optional LLM provider for text→BPMN or review-fix loops
+      let envLlmConfig = null;
       if (!body.llmConfig) {
-        const envCfg = resolveEnvLlmConfig();
-        if (envCfg) body.llmConfig = envCfg;
+        envLlmConfig = resolveEnvLlmConfig();
+        if (envLlmConfig) body.llmConfig = envLlmConfig;
       }
 
       if (body.llmConfig) {
-        const { baseUrl, apiKey, model, timeout } = body.llmConfig;
-        if (!baseUrl || !apiKey || !model) {
-          return json(res, 400, { error: 'llmConfig requires baseUrl, apiKey, model' });
-        }
-        const safeTimeout = typeof timeout === 'number' && timeout > 0 && timeout <= 300_000
-          ? timeout : 120_000;
-        options.llmProvider = createLlmProvider({ baseUrl, apiKey, model, timeout: safeTimeout });
+        // The server's own env config is operator-trusted; a client's goes through the check.
+        const resolved = body.llmConfig === envLlmConfig ? { config: envLlmConfig } : await resolveClientLlmConfig(body.llmConfig);
+        if (resolved.error) return json(res, 400, { error: resolved.error });
+        options.llmProvider = createLlmProvider(resolved.config);
       }
 
       const input = body.userText || body.logicCore;
@@ -371,20 +421,17 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { error: 'messages must be a non-empty array' });
       }
 
+      let envLlmConfig = null;
       if (!body.llmConfig) {
-        const envCfg = resolveEnvLlmConfig();
-        if (envCfg) body.llmConfig = envCfg;
+        envLlmConfig = resolveEnvLlmConfig();
+        if (envLlmConfig) body.llmConfig = envLlmConfig;
       }
       if (!body.llmConfig) {
         return json(res, 400, { error: 'llmConfig is required (or set OPENAI_API_KEY on the server)' });
       }
-      const { baseUrl, apiKey, model, timeout } = body.llmConfig;
-      if (!baseUrl || !apiKey || !model) {
-        return json(res, 400, { error: 'llmConfig requires baseUrl, apiKey, model' });
-      }
-      const safeTimeout = typeof timeout === 'number' && timeout > 0 && timeout <= 300_000
-        ? timeout : 120_000;
-      const llmProvider = createLlmProvider({ baseUrl, apiKey, model, timeout: safeTimeout });
+      const resolved = body.llmConfig === envLlmConfig ? { config: envLlmConfig } : await resolveClientLlmConfig(body.llmConfig);
+      if (resolved.error) return json(res, 400, { error: resolved.error });
+      const llmProvider = createLlmProvider(resolved.config);
 
       const result = await chatAgent({ messages: body.messages, llmProvider });
       const durationMs = Date.now() - t0;
@@ -416,6 +463,13 @@ const server = createServer(async (req, res) => {
     if (err instanceof ProfileRejectedError) {
       auditLog({ event: 'profile_rejected', correlationId, error: truncateForAudit(err.message) });
       return json(res, 400, { correlationId, status: 'profile_error', error: err.message });
+    }
+    // An LLM endpoint's answer can carry anything: log the detail here, return only the class.
+    const llmFailure = llmFailureOf(err);
+    if (llmFailure) {
+      console.error(`LLM provider failure (correlationId ${correlationId}): ${quoteForMessage(llmFailure.message)} ${quoteForMessage(llmFailure.detail, AUDIT_MESSAGE_MAX)}`);
+      auditLog({ event: 'llm_error', correlationId, upstreamStatus: llmFailure.status });
+      return json(res, 502, { correlationId, status: 'llm_error', error: 'LLM provider request failed' });
     }
     auditLog({ event: 'error', correlationId, error: err.message });
     return json(res, 500, { correlationId, status: 'internal_error', error: err.message });

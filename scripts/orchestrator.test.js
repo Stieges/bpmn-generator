@@ -444,3 +444,23 @@ describe('chatAgent', () => {
     })).rejects.toThrow('Chat agent');
   });
 });
+
+describe('createLlmProvider — failures', () => {
+  test('a non-2xx answer throws LlmProviderError carrying the status, not the body in the message', async () => {
+    const { LlmProviderError } = await import('./agents/llm-provider.js');
+    global.fetch = jest.fn(async () => ({ ok: false, status: 503, text: async () => 'upstream secret detail' }));
+    const provider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm' });
+    const err = await provider('s', 'u').catch((e) => e);
+    expect(err).toBeInstanceOf(LlmProviderError);
+    expect(err.status).toBe(503);
+    expect(err.message).not.toContain('secret');
+  });
+
+  test('the orchestrator keeps the provider error as the cause', async () => {
+    const { LlmProviderError } = await import('./agents/llm-provider.js');
+    global.fetch = jest.fn(async () => ({ ok: false, status: 500, text: async () => 'x' }));
+    const llmProvider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm' });
+    const err = await orchestrate('text', { llmProvider }).catch((e) => e);
+    expect(err.cause).toBeInstanceOf(LlmProviderError);
+  });
+});
