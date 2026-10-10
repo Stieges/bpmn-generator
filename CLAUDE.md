@@ -118,7 +118,7 @@ DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
                                in DMN13.xsd/DMNDI13.xsd, disposition `mapped`/`reported`/
                                `parser-blind`, plus DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS and
                                IMPORT_CODES IM01–IM08. The importer's ONLY exclusion list)
-  import.js                  ← import-scope.js, requirement-order.js,
+  import.js                  ← import-scope.js, requirement-order.js, schema-gate.js,
                                ../shared/resource-paths.js, dmn-moddle
                                (DMN XML → Decision-Core + a structured loss report. `parseDmnXml`
                                async/throwing, `moddleToDecisionCore` pure+sync, `dmnToDecisionCore`
@@ -602,7 +602,6 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 ```
 
 ## Known Limitations
-
 
 - The DMN importer reads no DMNDI, so every diagram is reported as IM06 and **`report.lossless` is
   never true for a file this generator wrote** — the writer always emits a DMNDI tree (IM06) and

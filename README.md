@@ -192,11 +192,11 @@ bpmn/dot.js ← bpmn/types
 bpmn/pipeline.js ← all of the above bpmn/ modules
 dmn/schema-gate.js ← shared/resource-paths
 dmn/rules.js ← shared/rule-profile, shared/utils
-dmn/layout.js ← dmn/constants, shared/utils, elkjs
-dmn/coordinates.js ← dmn/constants, shared/geometry
-dmn/dmn-xml.js ← shared/utils, dmn/coordinates, dmn-moddle
+dmn/layout.js ← dmn/constants, dmn/requirement-order, shared/utils, elkjs
+dmn/coordinates.js ← dmn/constants, dmn/requirement-order, shared/geometry
+dmn/dmn-xml.js ← shared/utils, dmn/coordinates, dmn/requirement-order, dmn-moddle
 dmn/requirement-order.js ← (no deps)
-dmn/import.js ← dmn/import-scope, dmn/requirement-order, shared/resource-paths, dmn-moddle
+dmn/import.js ← dmn/import-scope, dmn/requirement-order, dmn/schema-gate, shared/resource-paths, dmn-moddle
 dmn/pipeline.js ← all of the above dmn/ modules except import
 scenarios/pipeline.js ← scenarios/*, bpmn/workflow-net, dmn/import
 ```
