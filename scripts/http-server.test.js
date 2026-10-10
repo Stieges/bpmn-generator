@@ -401,3 +401,37 @@ describe('rule profiles over HTTP — inline objects only, gated, bounded', () =
     expect(data.compliance.errors.join('\n')).not.toMatch(/Compliance check failed/);
   });
 });
+
+describe('correlationId is an identifier, never a path or a blob', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  beforeEach(() => _resetRateLimit());
+
+  const ENDPOINTS = ['/api/v1/generate', '/api/v1/validate', '/api/v1/import', '/api/v1/orchestrate', '/api/v1/chat', '/api/v1/telemetry'];
+  const BAD = ['../outside/x', '/etc/x', 'a b', 'x'.repeat(65), '', 'line\nbreak', 42, { a: 1 }, ['a'], true];
+
+  for (const path of ENDPOINTS) {
+    test(`${path}: a correlationId outside [A-Za-z0-9_-]{1,64} is a 400 and is not echoed`, async () => {
+      for (const correlationId of BAD) {
+        const res = await post(path, { logicCore: lc, correlationId });
+        const text = await res.text();
+        expect(res.status).toBe(400);
+        expect(JSON.parse(text).error).toMatch(/correlationId/);
+        expect(text).not.toContain('outside');
+      }
+    });
+  }
+
+  test('a well-formed correlationId is accepted and echoed', async () => {
+    const res = await post('/api/v1/validate', { logicCore: lc, correlationId: 'Abc_123-xyz' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).correlationId).toBe('Abc_123-xyz');
+  });
+
+  test('a UUID, as the frontend sends, is accepted', async () => {
+    const res = await post('/api/v1/validate', { logicCore: lc, correlationId: '0f8fad5b-d9cb-469f-a165-70867728950e' });
+    expect(res.status).toBe(200);
+  });
+});
