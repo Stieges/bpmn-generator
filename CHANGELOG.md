@@ -971,6 +971,13 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   `scripts/bpmn/types.test.js`), which is a second, adjacent way this release's ad-hoc support is
   thinner than either the schema or the type vocabulary implies on their own.
 
+### Breaking
+- **`/api/v1/orchestrate` refuses a string `ruleProfile`** (it used to read it as a server-side path); send an inline object — see Security, "Rule profiles are treated as untrusted input".
+- **MCP `ruleProfile` is a profile name, not a path** — see the same Security entry.
+- **A profile file that is not valid JSON now aborts** instead of falling back to the defaults — see Changed, "Rule profiles are checked".
+- **An unknown severity, or `ADVISORY` on a BPMN rule outside the optimization layer, refuses the profile** — see Changed, "Rule profiles are checked".
+- **Inline profiles over HTTP may only raise soundness rules**, never disable the layer or lower a rule's default severity — see the same Security entry.
+
 ### Security
 - **Rule profiles are treated as untrusted input on every channel.** Every profile — inline, by
   name or from a file — now passes a JSON Schema gate (`references/rule-profile-schema.json`)
