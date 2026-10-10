@@ -1,6 +1,6 @@
 # BPMN Fachliches Regelwerk
 
-Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **35 registrierte Regeln**, davon 33 aktiv (M05/M06 stehen auf `severity: OFF`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
+Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **40 registrierte Regeln**, davon 38 aktiv (M05/M06 stehen auf `severity: OFF`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
 
 ## Architektur
 
@@ -360,6 +360,15 @@ Fuer regulierte Branchen: Style-Warnungen werden zu Errors.
 }
 ```
 
+### Profile checks (English, new)
+
+A profile is checked by the runner that uses it. An unknown rule id or layer, an override of a
+scenario rule (SC01–SC06 are not profile-switchable yet), or a profile file that does not exist is
+reported as a `⚠ rule profile …` warning on stderr; the findings stay as without that entry. An
+unknown severity — or `ADVISORY` on a BPMN rule outside the optimization layer, whose findings would
+otherwise be dropped — refuses the profile. A profile file that is not valid JSON aborts, naming
+file, line and column.
+
 ---
 
 ## Regel-Objekt Schema
@@ -380,6 +389,23 @@ Fuer regulierte Branchen: Style-Warnungen werden zu Errors.
   }
 }
 ```
+
+### Rule metadata lives in the ontology (since ontology 1.1)
+
+> Written in English: new content in this file is English (convention above). The German block just
+> above shows the rule object as it was before ontology 1.1 and is kept unchanged.
+
+A rule entry in code carries `id`, `description`, `ref`, `scope` (BPMN) and `check` — nothing else.
+Its notation, kind (`specific` or `crossNotation`), layer, default severity and run location
+(`runsIn`: `main` for `runRules`/`runDmnRules`, `scenario` for the scenario pipeline) stand in
+`references/ontology.jsonld` as a `bg:Rule`. When a rule module is imported, `buildRuleCatalog`
+(`scripts/shared/rule-catalog.js`) adds `layer` and `defaultSeverity` to each entry. A rule that
+exists on one side only, sits in the module of another rule set, or carries its own `layer` or
+`defaultSeverity` makes that import fail with the rule named.
+
+Three rule sets, one per notation plus one across notations: 40 BPMN rules, 5 layers; 19 DMN rules,
+3 layers; 2 cross-notation rules, 1 layer. Layers are named per notation (BPMN `soundness` and DMN
+`soundness` are two layers) and by purpose, never by where a rule runs.
 
 ---
 
@@ -745,6 +771,28 @@ S17's.
 
 ---
 
+## Scenario rules SC01–SC06 — three rule sets, one pipeline
+
+> Written in English, like the DMN section below.
+
+The six rules of the scenario pipeline (`scripts/scenarios/pipeline.js`) belong to the rule set of
+the notation they judge. They read the enumeration, bridge and table-analysis results handed to them
+as context and never re-derive them. Default severity WARNING for all six; they are not
+profile-switchable yet — a profile that turns off `workflow_net` (as `rules/default-profile.json`
+does) or DMN `semantics` does not silence them.
+
+| ID | Rule set | Layer | Module | Reports |
+|----|----------|-------|--------|---------|
+| SC01 | BPMN | workflow_net | `scripts/bpmn/scenario-rules.js` | A branch of an acyclic exclusive gateway that no enumerated scenario takes |
+| SC06 | BPMN | workflow_net | `scripts/bpmn/scenario-rules.js` | Improper completion: more than one token on a pool's shared sink in one scenario |
+| SC04 | DMN | semantics | `scripts/dmn/scenario-rules.js` | A coverage gap in a decision table a business rule task invokes |
+| SC05 | DMN | semantics | `scripts/dmn/scenario-rules.js` | Overlapping rules in a UNIQUE decision table |
+| SC02 | cross-notation | consistency | `scripts/cross/rules.js` | A `decisionRef` that resolves to no decision in the given Decision-Core documents |
+| SC03 | cross-notation | consistency | `scripts/cross/rules.js` | A `decisionRef` that resolves to decisions in more than one Decision-Core document |
+
+The pipeline sorts their findings by rule id (stable), so the output order is independent of which
+module a rule lives in.
+
 ## DMN Rules — a separate engine, three layers, two modes
 
 > Written in English, like M11 above. These rules live in `scripts/dmn/rules.js` and run against
@@ -852,10 +900,7 @@ evaluates correctly.
 
 ### Not in this set
 
-Completeness ("does every input combination hit a rule?") and overlap ("does `UNIQUE` actually
-hold?" — the specification requires that unique tables contain no overlapping rules) are **not**
-checked. Both need interval algebra over the input domains, and both are tracked as their own piece
-of work in [the integration plan](../docs/superpowers/plans/2026-07-30-dmn-integration.md), fork G7.
+Completeness ("does every input combination hit a rule?") and overlap ("does `UNIQUE` actually hold?") are not checked by `scripts/dmn/rules.js`: both need interval algebra over the input domains. They are SC04 and SC05 — part of the DMN rule set, run by the scenario pipeline over tables a BPMN `decisionRef` invokes (see "Scenario rules SC01–SC06" above).
 
 Also absent, and deliberately: `decisionService` (a grouping construct with four reference lists and
 its own DI divider line), the boxed-expression types beyond decision table and literal expression,
@@ -864,6 +909,15 @@ and `itemDefinition`.
 ---
 
 ## Erweiterung
+
+### Step 0 — the ontology first (English, new)
+
+Before step 1 below: add the rule to `references/ontology.jsonld` as a `bg:Rule` — `name` (the id),
+`kind` (`specific`), `notation`, `layer` (a `bg:Layer` of that notation), `defaultSeverity` (a
+`bg:Severity`) and `runsIn`. The code entry from step 1 then carries **no** `layer` and **no**
+`defaultSeverity`; the import of the rule module and the parity tests
+(`scripts/shared/rule-catalog.test.js`, `scripts/shared/rule-registers.test.js`) fail until both
+sides agree.
 
 1. Neues Regel-Objekt in `RULES`-Array in `rules.js` einfuegen
 2. `check`-Funktion implementieren (Platzhalter: `() => ({ pass: true })`). Rueckgabe ist

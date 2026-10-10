@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Rules in the ontology.** `references/ontology.jsonld` now holds the rule catalog: every rule of
+  the three rule sets — 40 BPMN rules, 5 layers; 19 DMN rules, 3 layers; 2 cross-notation rules, 1
+  layer — as a `bg:Rule` with notation(s), kind (`specific`/`crossNotation`), layer (`bg:Layer`,
+  named per notation), default severity (`bg:Severity`: ERROR, WARNING, INFO — linked to SHACL's
+  `sh:Violation`/`sh:Warning`/`sh:Info` by `rdfs:seeAlso` only — ADVISORY, OFF) and run location
+  (`runsIn`: `main` or `scenario`). Notations are an open class (`bg:Notation`: BPMN, DMN; ArchiMate
+  announced). The loader checks references after the schema. The code keeps only the checks:
+  `scripts/shared/rule-catalog.js` joins each rule module's register with the ontology at import and
+  aborts that import on a rule only in code, only in the ontology, in the wrong module, or carrying
+  its own `layer`/`defaultSeverity`.
+- **DMN vocabulary in the ontology**: node kinds, requirement kinds, hit policies, aggregations,
+  table orientations and expression kinds (`context`, `invocation`, `list`, `relation` announced),
+  linked to the DMN 1.3 XSD namespace by `rdfs:seeAlso`; `references/decision-core-schema.json`'s
+  enums are fenced equal to it.
+- **Scenario rules in their rule sets**: SC01/SC06 in `scripts/bpmn/scenario-rules.js`, SC04/SC05 in
+  `scripts/dmn/scenario-rules.js`, SC02/SC03 in the new `scripts/cross/rules.js`;
+  `scripts/scenarios/pipeline.js` sorts their findings by rule id, so its output is byte-identical
+  (goldens in `tests/fixtures/scenarios/golden/`).
+- **Profile warnings**: an unknown rule id or layer, an override of a scenario rule, or a profile
+  file that does not exist prints `⚠ rule profile …` from the runner; findings are unchanged.
 - **Events and send/receive tasks name their top-level definition (#53).** New per-node fields
   `messageRef`, `signalRef`, `errorRef`, `escalationRef` (the OMG attribute names) select the
   definition an event definition references; `messageRef` also applies to `sendTask`/`receiveTask`
@@ -292,6 +312,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **WF03's improper-completion issue carried WARNING** in `checkWorkflowNetSoundness`'s own output while
+  the rule is ERROR; it now says ERROR. `runRules` already reported it as ERROR.
 - **Edges without an `id` no longer fail the CLI with DI07 (#64).** The schema requires only
   `source` and `target`, but layout keyed such an edge `edge_<idx>`, the XML and SVG writers
   `flow_<source>_<target>`, and the DI check found no geometry under `undefined`; two parallel
@@ -823,6 +845,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/bpmn/ontology.js` to `scripts/shared/ontology.js` — the file now also describes DMN and
   the rule catalog, and `dmn/` must not import `bpmn/`. The export `bpmn-generator/ontology` keeps
   its name and resolves to the new file; a stale packaged copy under the old name is never read.
+  The export's content gained the `@type`s `bg:Notation`, `bg:Severity`, `bg:Layer`, `bg:Rule`,
+  `bg:DecisionNodeKind`, `bg:RequirementKind`, `bg:HitPolicy`, `bg:Aggregation`,
+  `bg:TableOrientation` and `bg:ExpressionKind`: a consumer filtering `@type == "bg:NodeType"` gets
+  the same 26 node types; one assuming a closed set of `@type`s must widen it. Ontology version 1.1;
+  both `$schemaVersion` defaults in `references/input-schema.json` follow (1.0 documents stay valid).
+- **Docs gate counts rules per rule set from the ontology**, never from rule-module source; a count
+  claim must name its rule set at the number ("40 BPMN rules, 5 layers"), and "N rules across M
+  layers" is now matched too. A missing or invalid ontology is a tooling error (exit 2).
+- **Rule profiles are checked**: a profile file that is not valid JSON aborts, naming file, line and
+  column (it used to fall back to the defaults silently); an unknown severity, or `ADVISORY` on a
+  BPMN rule outside the optimization layer, refuses the profile. A missing profile file still runs
+  the defaults, with a warning.
+- **`scripts/scenarios/rules.js` is gone**; `runScenarioRules` now lives in
+  `scripts/scenarios/pipeline.js` with the same contract.
 - **Type sets derive from the ontology; `$schemaVersion` accepts any `1.x`.** Every type set, the
   field tables' allowed classes, `bpmnXmlTag` and the marker maps now come from the ontology;
   eight private copies (importers, `bpmn-xml.js`, `rules.js` M01/P02, `workflow-net.js`,
@@ -843,6 +879,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
 
+- **SC01–SC06 are not profile-switchable yet**: the scenario pipeline takes no profile. A profile that
+  turns off `workflow_net` (`rules/default-profile.json` does) or DMN `semantics` silences WF01–WF03
+  resp. D06–D08, but not SC01/SC06 resp. SC04/SC05, which sit in those layers.
 - **The DMN importer's `report.lossless` is never true for DMN this generator wrote.** It reads no
   DMNDI, so every diagram is an IM06 finding, and the writer's generated `<variable>` and
   `<literalExpression>` ids are IM05 findings. `--strict` on the import CLI and on
