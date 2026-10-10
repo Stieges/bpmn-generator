@@ -1273,6 +1273,123 @@ describe('the lookups', () => {
   });
 });
 
+// ── F1c — the VALUES of mapsTo name slots that exist in the Decision-Core schema ────────────────
+
+describe('F1c — every mapsTo value names a Decision-Core slot that exists in the schema', () => {
+  /**
+   * F1b fences the KEYS (real dmn-moddle properties). This fences the VALUES against the other
+   * oracle, `references/decision-core-schema.json`: a row may not claim a slot the schema does not
+   * have. (A rule's `documentation` once mapped to a slot the schema lacked and was found only
+   * because a fixture happened to exercise it.)
+   *
+   * Grammar of a value — the schema is the oracle, the prose after the slot is never evidence:
+   *   - it BEGINS with a slot, one of
+   *       `Type.property`          Type is a `$defs` entry (Node, Requirement, DecisionTable, ...)
+   *       `Type{type:"x"}`         a Requirement/Node whose `type` enum contains "x"
+   *       [root ]`property`        a root-level property of the document (id, name, nodes[], ...)
+   *     optionally preceded by "the Decision-Core ";
+   *   - and EVERY other `Type.property` token anywhere in the value must resolve too, so the
+   *     second slot of "Node.typeRef, or parameters[].typeRef" cannot rot behind the first.
+   * A genuinely multi-target value has no single leading slot. It says so with a `multiTarget`
+   * column on its row (`{ <mapsTo key>: reason }`) and then only the embedded-token rule applies —
+   * with at least one token, so the opt-out cannot make a value unchecked.
+   *
+   * Limit: this proves the claimed slot EXISTS, not that the importer writes it. The schema-gate
+   * guard on the roundtrip keeps covering that wherever a fixture exercises the field.
+   */
+  const SCHEMA = JSON.parse(readFileSync(path.join(HERE, '..', '..', 'references', 'decision-core-schema.json'), 'utf8'));
+
+  function slotDefects(schema, rows = slotRows()) {
+    const defs = schema.$defs;
+    const types = Object.keys(defs).join('|');
+    const tokenRe = new RegExp(`\\b(${types})\\.([A-Za-z]+)(?:\\[\\])?`, 'g');
+    const leadRe = new RegExp(
+      `^(?:the Decision-Core )?(?:(${types})\\.([A-Za-z]+)|(${types})\\{type:"([a-z]+)"\\}|(?:root )?\`([A-Za-z]+)(?:\\[\\])?\`)`);
+    const defects = [];
+    for (const { at, mapsTo, multiTarget = {} } of rows) {
+      for (const key of Object.keys(multiTarget)) {
+        if (!(key in (mapsTo ?? {}))) defects.push(`${at}: multiTarget names '${key}', which is not a mapsTo key`);
+        if (!String(multiTarget[key] ?? '').trim()) defects.push(`${at}.${key}: a multiTarget opt-out needs a reason`);
+      }
+      for (const [key, value] of Object.entries(mapsTo ?? {})) {
+        const where = `${at}.mapsTo.${key}`;
+        const tokens = [...value.matchAll(tokenRe)];
+        for (const [token, type, prop] of tokens) {
+          if (!defs[type].properties?.[prop]) defects.push(`${where}: '${token}' is not a property of $defs/${type} in decision-core-schema.json`);
+        }
+        if (key in multiTarget) {
+          if (tokens.length === 0) defects.push(`${where}: opted out as multiTarget but names no Type.property token — nothing would be fenced`);
+          continue;
+        }
+        const m = leadRe.exec(value);
+        if (!m) {
+          defects.push(`${where}: does not begin with a Decision-Core slot (Type.property, Type{type:"x"} or a root \`property\`); `
+            + `a genuinely multi-target value needs a multiTarget entry with a reason`);
+        } else if (m[3]) {
+          if (!defs[m[3]].properties?.type?.enum?.includes(m[4])) defects.push(`${where}: '${m[0]}' — $defs/${m[3]}.type has no value '${m[4]}'`);
+        } else if (m[5]) {
+          if (!schema.properties?.[m[5]]) defects.push(`${where}: root property '${m[5]}' is not in decision-core-schema.json`);
+        }
+      }
+    }
+    return defects;
+  }
+
+  function slotRows() {
+    return [
+      ...DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'mapped')
+        .map((r) => ({ at: `<${r.xsdElement}>`, mapsTo: r.mapsTo, multiTarget: r.multiTarget })),
+      ...DMN_NESTED_TYPE_COVERAGE.map((e) => ({ at: e.moddleType, mapsTo: e.mapsTo, multiTarget: e.multiTarget })),
+    ];
+  }
+
+  test('every value resolves, or is an explicit multiTarget opt-out with a reason', () => {
+    expect(slotDefects(SCHEMA)).toEqual([]);
+  });
+
+  test('the opt-outs are exactly the genuinely multi-target values', () => {
+    const optedOut = slotRows().flatMap((r) => Object.keys(r.multiTarget ?? {}).map((k) => `${r.at}.${k}`)).sort();
+    expect(optedOut).toEqual(['<literalExpression>.text', 'dmn:DMNElementReference.href', 'dmn:UnaryTests.text']);
+  });
+
+  test('renaming a schema property fails the fence and names the row', () => {
+    const renamed = JSON.parse(JSON.stringify(SCHEMA));
+    renamed.$defs.DecisionRule.properties.note = renamed.$defs.DecisionRule.properties.documentation;
+    delete renamed.$defs.DecisionRule.properties.documentation;
+    const defects = slotDefects(renamed);
+    expect(defects.some((d) => d.startsWith('dmn:DecisionRule.mapsTo.description:') && d.includes('DecisionRule.documentation'))).toBe(true);
+  });
+
+  test('renaming a root property fails the fence too', () => {
+    const renamed = JSON.parse(JSON.stringify(SCHEMA));
+    renamed.properties.docs = renamed.properties.documentation;
+    delete renamed.properties.documentation;
+    expect(slotDefects(renamed).some((d) => d.startsWith('<definitions>.mapsTo.description:'))).toBe(true);
+  });
+
+  test('a requirement-shaped slot whose type value left the enum fails', () => {
+    const renamed = JSON.parse(JSON.stringify(SCHEMA));
+    renamed.$defs.Requirement.properties.type.enum = ['information', 'knowledge'];
+    expect(slotDefects(renamed).some((d) => d.includes('authority'))).toBe(true);
+  });
+
+  test('a value with no slot, an unreasoned opt-out and an opt-out with no token are all defects', () => {
+    const rows = [
+      { at: 'A', mapsTo: { x: 'a sentence, no slot' } },
+      { at: 'B', mapsTo: { x: 'Node.id and Node.name' }, multiTarget: { x: ' ' } },
+      { at: 'C', mapsTo: { x: 'prose only' }, multiTarget: { x: 'because' } },
+      { at: 'D', mapsTo: { x: 'Node.id' }, multiTarget: { ghost: 'because' } },
+    ];
+    const defects = slotDefects(SCHEMA, rows);
+    expect(defects).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^A\.mapsTo\.x: does not begin with a Decision-Core slot/),
+      expect.stringMatching(/^B\.x: a multiTarget opt-out needs a reason/),
+      expect.stringMatching(/^C\.mapsTo\.x: opted out as multiTarget but names no/),
+      expect.stringMatching(/^D: multiTarget names 'ghost'/),
+    ]));
+  });
+});
+
 // ── F5 — the table and the importer cannot drift apart ──────────────────────────────────────────
 
 describe('F5 — Object.keys(HANDLERS) is exactly the set of `mapped` rows', () => {

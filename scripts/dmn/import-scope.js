@@ -86,10 +86,19 @@
  *   mapsTo        Its KEYS are load-bearing: each must be a real property of the row's descriptor
  *                 (F1b rejects an invented one), the set of them is what Stage 3's handler set is
  *                 derived from, and the fence follows them into the types behind them
- *                 (`DMN_NESTED_TYPE_COVERAGE`). Its VALUES are prose for humans and are never
- *                 parsed — a fence that read them would be restating our own text as if it were
- *                 evidence, which is the failure this stage exists to prevent. So a value may be
- *                 rewritten freely; a key may not.
+ *                 (`DMN_NESTED_TYPE_COVERAGE`). Its VALUES are sentences for humans that BEGIN
+ *                 with a machine-read Decision-Core slot: fence F1c resolves that leading slot —
+ *                 `Type.property` (Type a `$defs` entry of references/decision-core-schema.json),
+ *                 `Type{type:"x"}` (a Requirement kind) or a root-level `property` — and every
+ *                 other `Type.property` token in the value, against the SCHEMA, not against this
+ *                 file. The oracle is the schema, so a row cannot claim a slot that does not exist;
+ *                 what F1c cannot see is whether the importer writes it (the schema-gate guard on
+ *                 the roundtrip does that, wherever a fixture exercises the field). The prose
+ *                 after the slot may be rewritten freely; the slot may not.
+ *   multiTarget   Optional, on a row or nested-type entry: `{ <mapsTo key>: reason }` for a value
+ *                 that genuinely has no single leading slot (the target depends on where the
+ *                 element sits). It lifts only the leading-slot requirement — the embedded
+ *                 `Type.property` tokens are still resolved, and there must be at least one.
  *     `reported`      dmn-moddle surfaces it, Decision-Core cannot hold it, the importer emits a
  *                     finding. Carries `code` + `reason`.
  *     `parser-blind`  dmn-moddle cannot surface it; the only evidence is `warnings[]`. Carries
@@ -506,6 +515,11 @@ export const DMN_ELEMENT_COVERAGE = [
         + 'Node.body (a BKM\'s function body), InputClause.expression, OutputClause.defaultValue, '
         + 'or DecisionRule.then[]',
     },
+    multiTarget: {
+      text: 'The target depends on the position the literal expression occupies (a decision, a '
+        + 'function body, an input expression, a default output, a rule cell): five slots, no one '
+        + 'leading slot. Every one of them is still fenced as an embedded token.',
+    },
     unrepresented: [
       { property: 'id', code: 'IM05',
         reason: 'Every one of the slots above is a bare string. The expression\'s identity has '
@@ -799,6 +813,10 @@ export const DMN_NESTED_TYPE_COVERAGE = [
         + '(`file.dmn#id`) is a different matter and reports through the <import> row, since '
         + 'without the import there is nothing for it to resolve against',
     },
+    multiTarget: {
+      href: 'The slot depends on the container: a Requirement\'s source, or an entry in the '
+        + 'usingTask/usingProcess lists of a Node. Each is still fenced as an embedded token.',
+    },
   },
   {
     moddleType: 'dmn:InputClause',
@@ -871,6 +889,10 @@ export const DMN_NESTED_TYPE_COVERAGE = [
     mapsTo: {
       text: 'the cell text, into DecisionRule.when[], InputClause.allowedValues or '
         + 'OutputClause.allowedValues',
+    },
+    multiTarget: {
+      text: 'The slot depends on the cell\'s position: a rule\'s input entry, or the allowed values '
+        + 'of an input or an output clause. Each is still fenced as an embedded token.',
     },
     unrepresented: [
       { property: 'id', code: 'IM05',
