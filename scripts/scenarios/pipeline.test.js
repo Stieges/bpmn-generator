@@ -378,6 +378,43 @@ describe('CLI (spawned) — main() wiring', () => {
     expect(fs.existsSync(`${outBase}.scenarios.md`)).toBe(false);
   });
 
+  describe('--decisions file edge cases', () => {
+    const runWithDecisionsFile = async (name, content) => {
+      const { spawnSync } = await import('node:child_process');
+      const os = await import('node:os');
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scenarios-cli-decfile-'));
+      const inPath = path.join(dir, 'in.json');
+      const decPath = path.join(dir, name);
+      fs.writeFileSync(inPath, JSON.stringify(fixture('subprocess-child-fidelity')), 'utf8');
+      fs.writeFileSync(decPath, content, 'utf8');
+      const res = spawnSync('node', ['pipeline.js', inPath, path.join(dir, 'out'), '--decisions', decPath],
+        { cwd: __dirname, encoding: 'utf8' });
+      return { res, decPath };
+    };
+
+    test('a BOM-prefixed JSON decisions file loads', async () => {
+      const { res } = await runWithDecisionsFile('bom.json', '\uFEFF' + JSON.stringify(ratingDecisionCore()));
+      expect(res.status).toBe(0);
+      expect(res.stderr).not.toMatch(/Unexpected token/);
+    });
+
+    test('malformed JSON names the file', async () => {
+      const { res, decPath } = await runWithDecisionsFile('broken.json', '{ not json');
+      expect(res.status).not.toBe(0);
+      expect(res.stderr).toContain(`✗ ${decPath} is not valid JSON`);
+    });
+
+    test('a DMN file whose import fails the Decision-Core schema is refused, naming the file', async () => {
+      const dmn = '<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="d" name="D"/>';
+      const { res, decPath } = await runWithDecisionsFile('nons.dmn', dmn);
+      expect(res.status).not.toBe(0);
+      expect(res.stderr).toContain(`✗ ${decPath}: the imported Decision-Core fails its schema`);
+      expect(res.stderr).not.toMatch(/at .*pipeline\.js:/);
+    });
+  });
+
   test('trailing --decisions with no value → exit ≠ 0, clean "✗ ..." naming the flag, no files written', async () => {
     const { spawnSync } = await import('node:child_process');
     const os = await import('node:os');

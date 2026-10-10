@@ -273,7 +273,8 @@ export const IMPORT_CODES = {
     // reader has is stated per finding, at the site that knows.
     remedy: 'Not a gap in this tool\'s vocabulary: the construct is one DMN can express, and this '
       + 'file leaves out something without which nothing on this side can proceed. Four cases reach '
-      + 'here. Three break a DMN 1.3 rule — a requirement naming nothing it requires (DMN13.xsd:193 '
+      + 'here, plus a fifth family: a value Decision-Core requires that the file merely omits (a name, '
+      + 'the namespace, a clause\'s expression), reported where it is missing. Of the four, three break a DMN 1.3 rule — a requirement naming nothing it requires (DMN13.xsd:193 '
       + 'makes the choice mandatory), a requirement reference with no @href (:42, use="required"), '
       + 'and a decision table with no output clause (:304, output has no minOccurs, so it defaults '
       + 'to 1). The fourth does not: a DRG element with no id is legal DMN (:29, @id is '

@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { enumerateCollaboration } from './collaboration.js';
 import { analyzeDecisionTable } from './decision-table.js';
 import { resolveBridge } from './bridge.js';
+import { validateDecisionCoreSchema } from '../dmn/schema-gate.js';
 import { dmnToDecisionCore, formatImportReport, NOT_DMN_ROOT } from '../dmn/import.js';
 import { formatCollaborationResult, describeEnumerationCompleteness } from './format.js';
 import { runScenarioRules, tableAnalysisKey } from './rules.js';
@@ -167,9 +168,17 @@ async function readJsonInput(arg, { allowStdin = true } = {}) {
  */
 async function loadDecisionFile(p) {
   const raw = readFileSync(resolve(p), 'utf8');
-  if (!raw.trimStart().startsWith('<')) return { dc: JSON.parse(raw), importFindings: 0 };
+  // A UTF-8 BOM (U+FEFF) is what Windows editors prepend; JSON.parse rejects it.
+  const text = raw.replace(/^\uFEFF/, '');
+  if (!text.trimStart().startsWith('<')) {
+    try {
+      return { dc: JSON.parse(text), importFindings: 0 };
+    } catch (e) {
+      throw new Error(`${p} is not valid JSON (${e.message})`);
+    }
+  }
 
-  const { dc, report } = await dmnToDecisionCore(raw);
+  const { dc, report } = await dmnToDecisionCore(text);
   if (!dc) {
     const first = report.parserWarnings[0] ?? '';
     throw new Error(NOT_DMN_ROOT.test(first)
@@ -177,6 +186,10 @@ async function loadDecisionFile(p) {
       : `${p} is not XML (${first.split('\n').pop().trim() || 'parse failed'})`);
   }
   console.error(formatImportReport(report, { file: p }));
+  const gate = validateDecisionCoreSchema(dc);
+  if (!gate.valid) {
+    throw new Error(`${p}: the imported Decision-Core fails its schema (${gate.errors.map((e) => `${e.path} ${e.message}`).join('; ')})`);
+  }
   return { dc, importFindings: report.lossless ? 0 : Math.max(1, report.counts.unrepresented) };
 }
 

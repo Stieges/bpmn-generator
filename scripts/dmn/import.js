@@ -381,6 +381,20 @@ function finding(code, el, path, xsdElement, reason) {
   };
 }
 
+/**
+ * A value Decision-Core's schema REQUIRES and the file leaves out. The element is kept as read
+ * (nothing is invented to fill the hole) and the gap is an IM09: without this the report said
+ * `lossless: true` next to a `dc` that fails our own schema gate. Whether DMN13.xsd also requires
+ * the value is per-site (`name` on a DRG element: yes; `@namespace`: yes; an input clause's
+ * expression: no) — the register text appended here makes no universal claim, as for every IM09.
+ */
+function reportMissing(ctx, el, path, what, why) {
+  ctx.findings.push(finding('IM09', el, path, xsdElementOf(el),
+    `${what} is missing from the source file, and Decision-Core requires it (${why}). The element `
+    + 'is imported without it and the result fails the Decision-Core schema until it is supplied. '
+    + IMPORT_CODES.IM09.remedy));
+}
+
 // ── The two deref rules ─────────────────────────────────────────────────────────────────────────
 
 /**
@@ -546,8 +560,10 @@ function readInformationItem(el, ownerName) {
 /** `<functionDefinition>` is flattened into its BKM's `parameters[]` and `body`. */
 function readFunctionDefinition(el, ctx, path) {
   const out = {};
-  const params = asArray(el.formalParameter).map((p) => {
-    const param = { name: p.name };
+  const params = asArray(el.formalParameter).map((p, i) => {
+    const param = {};
+    if (p.name != null) param.name = p.name;
+    else reportMissing(ctx, p, `${path}.formalParameter[${i}]`, 'A formal parameter name', 'tInformationItem is a tNamedElement, name is required');
     if (p.typeRef != null) param.typeRef = p.typeRef;
     return param;
   });
@@ -605,9 +621,13 @@ function readDecisionTable(el, ctx, path) {
     const clause = {};
     putId(clause, input, ctx, `${path}.input[${i}]`, 'an input clause');
     if (input.label != null) clause.label = input.label;      // the one live exception to the hoist
-    if (input.inputExpression) {
+    const inputPath = `${path}.input[${i}]`;
+    if (!input.inputExpression) {
+      reportMissing(ctx, input, inputPath, 'An input clause\'s inputExpression', 'the clause has no value to test');
+    } else {
       const text = HANDLERS.literalExpression(input.inputExpression);
       if (text != null) clause.expression = text;
+      else reportMissing(ctx, input.inputExpression, `${inputPath}.inputExpression`, 'An input expression\'s text', 'the clause has no value to test');
       if (input.inputExpression.typeRef != null) clause.typeRef = input.inputExpression.typeRef;
     }
     if (input.inputValues?.text != null) clause.allowedValues = input.inputValues.text;
@@ -627,7 +647,10 @@ function readDecisionTable(el, ctx, path) {
     return clause;
   });
 
-  const annotations = asArray(el.annotation).map((a) => ({ name: a.name }));
+  const annotations = asArray(el.annotation).map((a, i) => {
+    if (a.name == null) reportMissing(ctx, a, `${path}.annotation[${i}]`, 'A rule annotation column name', 'tRuleAnnotationClause carries only a name');
+    return a.name != null ? { name: a.name } : {};
+  });
   if (annotations.length) table.annotations = annotations;
 
   const rules = asArray(el.rule).map((rule, i) => {
@@ -636,6 +659,9 @@ function readDecisionTable(el, ctx, path) {
     const when = asArray(rule.inputEntry).map((c) => c.text ?? '');
     if (when.length) out.when = when;
     out.then = asArray(rule.outputEntry).map((c) => HANDLERS.literalExpression(c) ?? '');
+    if (out.then.length === 0) {
+      reportMissing(ctx, rule, `${path}.rule[${i}]`, 'A rule\'s outputEntry', 'a rule with no output states no result');
+    }
     const anns = asArray(rule.annotationEntry).map((c) => c.text ?? '');
     if (anns.length) out.annotations = anns;
     if (rule.description != null) out.documentation = rule.description;
@@ -732,6 +758,7 @@ function readDrgElement(el, ctx, path) {
   const node = { type: NODE_TYPE_OF[el.$type] };
   if (!putRequiredId(node, el, ctx, path)) return null;
   if (el.name != null) node.name = el.name;
+  else reportMissing(ctx, el, path, 'The element name', 'tDRGElement is a tNamedElement, name is required');
   if (el.description != null) node.documentation = el.description;
 
   // `variable` exists on tDecision, tInputData and tInvocable only — tKnowledgeSource extends
@@ -779,7 +806,9 @@ function readDefinitions(el, ctx) {
   const dc = {};
   putId(dc, el, ctx, 'definitions', 'the definitions root');
   if (el.name != null) dc.name = el.name;
-  if (el.namespace != null) dc.namespace = el.namespace;
+  if (el.namespace) dc.namespace = el.namespace;
+  else reportMissing(ctx, el, 'definitions.namespace', el.namespace === '' ? 'A non-empty @namespace' : 'The @namespace',
+    'tDefinitions/@namespace is required');
   if (el.expressionLanguage != null) dc.expressionLanguage = el.expressionLanguage;
   if (el.description != null) dc.documentation = el.description;
 
@@ -819,6 +848,14 @@ function readDefinitions(el, ctx) {
     }
   }
 
+  if (nodes.length === 0 && drgElements.length === 0) {
+    // Nothing was dropped (the id/handler paths already report their own drops), the file just
+    // says nothing. Decision-Core requires at least one node, so this is a source-side gap.
+    // Path is the missing LIST, not `definitions`: that is a prefix of every other path, and a
+    // finding there reads as "the whole document is gone" to import-coverage's F6 fence.
+    reportMissing(ctx, el, 'definitions.drgElement', 'Any DRG element (decision, inputData, knowledgeSource, '
+      + 'businessKnowledgeModel)', 'a Decision-Core model has at least one node');
+  }
   dc.nodes = nodes;
   if (requirements.length) dc.requirements = requirements;
   return dc;
@@ -936,7 +973,7 @@ export function applyDecisionCoreDefaults(dc) {
  *
  *   1. `Requirement.id` — the writer generates `req_<src>_<tgt>` for a requirement that has none,
  *      so the re-imported document has an id the original did not. Filled here on the EXPECTED
- *      side, via `requirementKey` from `./coordinates.js` — the single derivation, reused rather
+ *      side, via `requirementKey` from `./requirement-order.js` — the single derivation, reused rather
  *      than restated, exactly as `dmn-xml.js` reuses it.
  *   2. `usingTask` / `usingProcess` — `oneOf(string, array)`; a one-entry array and the bare string
  *      are the same document.
@@ -1225,6 +1262,12 @@ async function main() {
       : `${inputArg === '-' ? 'stdin' : inputArg} is not XML (${first.split('\n').pop().trim() || 'parse failed'})`);
   }
 
+  // The report goes out BEFORE the schema gate: a schema failure is usually the consequence of a
+  // finding in it, and the reader should see the cause first.
+  if (!report.lossless) {
+    console.error(formatImportReport(report, { file: inputArg === '-' ? undefined : inputArg }));
+  }
+
   const gate = validateDecisionCoreSchema(dc);
   if (!gate.valid) {
     console.error('✗ The imported Decision-Core fails its schema — nothing written:');
@@ -1233,7 +1276,6 @@ async function main() {
   }
 
   if (!report.lossless) {
-    console.error(formatImportReport(report, { file: inputArg === '-' ? undefined : inputArg }));
     if (strict) {
       console.error('\n✗ --strict: the import is not lossless. No files written.');
       process.exit(1);
