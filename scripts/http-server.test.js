@@ -7,7 +7,8 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup, resolveClientLlmConfig } from './http-server.js';
+import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup, resolveClientLlmConfig,
+  apiKeyMatches, rateLimitKey, rateLimitAllows, _rateBucketCount } from './http-server.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { getAuditPath } from './audit.js';
 
@@ -635,5 +636,49 @@ describe('client strings reaching the audit log and responses are bounded and es
     expect(res.status).toBe(500);
     expect(data.error.length).toBeLessThanOrEqual(501);
     for (const l of auditEntries(correlationId)) expect(l.length).toBeLessThan(1000);
+  });
+});
+
+describe('API key comparison', () => {
+  test('matches only the exact key, whatever the length of the attempt', () => {
+    expect(apiKeyMatches('s3cret-key', 's3cret-key')).toBe(true);
+    expect(apiKeyMatches('s3cret-kez', 's3cret-key')).toBe(false);
+    expect(apiKeyMatches('s3cret', 's3cret-key')).toBe(false);
+    expect(apiKeyMatches('s3cret-key-and-more', 's3cret-key')).toBe(false);
+    expect(apiKeyMatches('', 's3cret-key')).toBe(false);
+    expect(apiKeyMatches(undefined, 's3cret-key')).toBe(false);
+    expect(apiKeyMatches(['s3cret-key'], 's3cret-key')).toBe(false);
+  });
+});
+
+describe('rate limiting', () => {
+  const req = (remoteAddress, xff) => ({ socket: { remoteAddress }, headers: xff === undefined ? {} : { 'x-forwarded-for': xff } });
+  beforeEach(() => _resetRateLimit());
+
+  test('the key is the socket address unless the operator trusts a proxy', () => {
+    expect(rateLimitKey(req('10.0.0.9', '1.2.3.4'), {})).toBe('10.0.0.9');
+    expect(rateLimitKey(req('10.0.0.9', '1.2.3.4'), { TRUST_PROXY_HOPS: '0' })).toBe('10.0.0.9');
+  });
+
+  test('behind trusted proxies the key is the address the nearest trusted proxy saw', () => {
+    // A client can prepend anything; only the entries appended by trusted proxies count.
+    expect(rateLimitKey(req('10.0.0.9', 'forged, 203.0.113.7'), { TRUST_PROXY_HOPS: '1' })).toBe('203.0.113.7');
+    expect(rateLimitKey(req('10.0.0.9', 'forged, 203.0.113.7, 10.0.0.2'), { TRUST_PROXY_HOPS: '2' })).toBe('203.0.113.7');
+    expect(rateLimitKey(req('10.0.0.9'), { TRUST_PROXY_HOPS: '1' })).toBe('10.0.0.9');
+  });
+
+  test('allows the configured number of requests per window, then refuses', () => {
+    const now = 1_000_000;
+    for (let i = 0; i < 30; i++) expect(rateLimitAllows('a', now)).toBe(true);
+    expect(rateLimitAllows('a', now)).toBe(false);
+    expect(rateLimitAllows('a', now + 60_001)).toBe(true);
+  });
+
+  test('expired buckets are evicted, so rotating sources cannot grow the table without bound', () => {
+    const now = 2_000_000;
+    for (let i = 0; i < 1000; i++) rateLimitAllows(`src-${i}`, now);
+    expect(_rateBucketCount()).toBe(1000);
+    rateLimitAllows('late', now + 120_001);
+    expect(_rateBucketCount()).toBe(1);
   });
 });
