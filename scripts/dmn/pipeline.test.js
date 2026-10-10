@@ -69,7 +69,7 @@ describe('runDmnPipeline — success path', () => {
 
   // Stage 2 (dmn-xml-importer plan) blast radius: a dotted id is now accepted by the schema gate,
   // so it flows further than before — through dmn-xml.js's generated-id families
-  // (`${id}_var`/`${id}_di`) and through coordinates.js's requirementKey. Both are still legal
+  // (`${id}_var`/`${id}_di`) and through requirement-order.js's requirementKey. Both are still legal
   // NCNames with a `.` inside them, but that is checked here rather than assumed.
   test('a dotted node id round-trips clean — no serialisation warnings, DI intact', async () => {
     const dc = good();
