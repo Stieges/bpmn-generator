@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bpmn-generator.local/api-response.schema.json",
   "title": "BPMN Generator HTTP API — response contract",
-  "description": "The success-response shape of each POST endpoint in scripts/http-server.js, documented in references/api-reference.md. Validated by .github/scripts/docs-gate.mjs against a response actually produced by the running pipeline — not asserted from memory. Error responses (schema_error / validation_error / diagram_error / internal_error) are simpler and covered in prose in api-reference.md, not schematized here.",
+  "description": "The success-response shape of each POST endpoint in scripts/http-server.js, documented in references/api-reference.md. Validated by .github/scripts/docs-gate.mjs against a response actually produced by the running pipeline — not asserted from memory. Error responses (schema_error / validation_error / diagram_error / profile_error / internal_error) are simpler and covered in prose in api-reference.md, not schematized here.",
   "$defs": {
     "GenerateResponse": {
       "type": "object",

@@ -182,7 +182,7 @@ that a number here would go stale immediately; CI enforces it stays green.
 **Dependency graph** (acyclic; `dmn/` never imports `bpmn/`, and vice versa):
 ```
 shared/utils.js, shared/resource-paths.js ← (no deps)
-shared/rule-profile.js ← shared/utils
+shared/rule-profile.js ← shared/resource-paths, ajv
 shared/rule-catalog.js ← shared/ontology
 shared/geometry.js ← (no deps)
 shared/ontology.js ← shared/resource-paths, ajv (loads references/ontology.jsonld)
