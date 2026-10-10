@@ -154,6 +154,7 @@ scripts/
 │   ├── utils.js          Config loader, visual constants, helpers
 │   ├── rule-profile.js    Profile machinery shared by both rule engines
 │   ├── resource-paths.js  Where references/ lives in each layout
+│   ├── ontology.js        Loads + validates references/ontology.jsonld (VOCABULARY)
 │   └── geometry.js        Straight-segment clip maths (clipStraight, clipToRect)
 ├── agents/             Multi-agent orchestration
 │   ├── modeler.js       LLM-powered: text→JSON, refine, amend
@@ -178,7 +179,8 @@ that a number here would go stale immediately; CI enforces it stays green.
 shared/utils.js, shared/resource-paths.js ← (no deps)
 shared/rule-profile.js ← shared/utils
 shared/geometry.js ← (no deps)
-bpmn/types.js ← bpmn/ontology (loads references/bpmn-ontology.jsonld)
+shared/ontology.js ← shared/resource-paths, ajv (loads references/ontology.jsonld)
+bpmn/types.js ← shared/ontology
 bpmn/rules.js ← bpmn/types, bpmn/workflow-net, shared/rule-profile
 bpmn/workflow-net.js ← bpmn/types
 bpmn/validate.js ← bpmn/rules
@@ -286,7 +288,7 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 
 ### Reading the ontology from another package
 
-The BPMN vocabulary (`references/bpmn-ontology.jsonld`) is exported as `bpmn-generator/ontology`.
+The vocabulary (`references/ontology.jsonld`) is exported as `bpmn-generator/ontology`.
 Node cannot `import` a `.jsonld` file (`ERR_UNKNOWN_FILE_EXTENSION`); resolve the path and parse it
 as plain JSON:
 

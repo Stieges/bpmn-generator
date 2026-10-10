@@ -36,9 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DMN round-trip and permutation fences** (`scripts/dmn/roundtrip.test.js`,
   `scripts/dmn/requirement-order.test.js`) and `tests/fixtures/dmn/negative/`, the home for
   deliberately invalid DMN fixtures (excluded from the import schema-gate scan).
-- **`references/bpmn-ontology.jsonld` — the BPMN vocabulary as one JSON-LD file** (classes, node
+- **`references/ontology.jsonld` — the BPMN vocabulary as one JSON-LD file** (classes, node
   types, markers, definition kinds, element fields), loaded and validated at import by
-  `scripts/bpmn/ontology.js`; exported as `bpmn-generator/ontology`; linked to the OMG metamodel
+  `scripts/shared/ontology.js`; exported as `bpmn-generator/ontology`; linked to the OMG metamodel
   and BBO via `rdfs:seeAlso` only; a field's allowed node types are `bg:allowedOn` (a declared
   annotation property, deliberately not `rdfs:domain`, whose several values are conjunctive).
   The file has a single default graph (the `owl:Ontology` header is a node inside `@graph`).
@@ -819,6 +819,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **`references/bpmn-ontology.jsonld` is now `references/ontology.jsonld`**, and its loader moved from
+  `scripts/bpmn/ontology.js` to `scripts/shared/ontology.js` — the file now also describes DMN and
+  the rule catalog, and `dmn/` must not import `bpmn/`. The export `bpmn-generator/ontology` keeps
+  its name and resolves to the new file; a stale packaged copy under the old name is never read.
 - **Type sets derive from the ontology; `$schemaVersion` accepts any `1.x`.** Every type set, the
   field tables' allowed classes, `bpmnXmlTag` and the marker maps now come from the ontology;
   eight private copies (importers, `bpmn-xml.js`, `rules.js` M01/P02, `workflow-net.js`,

@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { inputSchemaPath, promptTemplatePath, resolveWithFallback } from './resource-paths.js';
+import { inputSchemaPath, promptTemplatePath, resolveWithFallback, ontologyPath } from './resource-paths.js';
+import { loadOntology } from './ontology.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGED_DIR = join(__dirname, '..', 'references');
@@ -89,5 +90,30 @@ describe('resource-paths — the published layout still works', () => {
     // was expected, nor that prepack is the thing that did not run.
     expect(() => resolveWithFallback(missing, missing, 'input-schema.json'))
       .toThrow(/input-schema\.json not found[\s\S]*prepack-copy-references\.mjs/);
+  });
+});
+
+describe('the renamed ontology (references/ontology.jsonld)', () => {
+  test('ontologyPath resolves the new name in the repo-root references/', () => {
+    expect(ontologyPath()).toBe(join(REPO_REFERENCES, 'ontology.jsonld'));
+  });
+
+  test('a stale packaged copy under the OLD name is never read (F19)', () => {
+    mkdirSync(PACKAGED_DIR, { recursive: true });
+    writeFileSync(join(PACKAGED_DIR, 'bpmn-ontology.jsonld'), '{ "stale": ');   // not even JSON
+    expect(ontologyPath()).toBe(join(REPO_REFERENCES, 'ontology.jsonld'));
+    expect(() => loadOntology()).not.toThrow();
+    expect(readFileSync(join(__dirname, 'resource-paths.js'), 'utf8')).not.toMatch(/bpmn-ontology/);
+  });
+
+  test('a stale packaged copy under the NEW name loses to the source', () => {
+    mkdirSync(PACKAGED_DIR, { recursive: true });
+    writeFileSync(join(PACKAGED_DIR, 'ontology.jsonld'), '{}');
+    expect(ontologyPath()).toBe(join(REPO_REFERENCES, 'ontology.jsonld'));
+  });
+
+  test('a missing ontology names both searched paths and the new file name', () => {
+    expect(() => resolveWithFallback('/nope/references/ontology.jsonld', '/nope/scripts/references/ontology.jsonld', 'ontology.jsonld'))
+      .toThrow(/^ontology\.jsonld not found — looked for "\/nope\/references\/ontology\.jsonld".*"\/nope\/scripts\/references\/ontology\.jsonld"/);
   });
 });

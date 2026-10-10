@@ -1,9 +1,9 @@
 /**
  * BPMN Type Predicates & Tag Mapping
- * Every type set below is derived from the vocabulary in references/bpmn-ontology.jsonld
- * (scripts/bpmn/ontology.js); this module adds no list of its own.
+ * Every type set below is derived from the vocabulary in references/ontology.jsonld
+ * (scripts/shared/ontology.js); this module adds no list of its own.
  */
-import { VOCABULARY } from './ontology.js';
+import { VOCABULARY } from '../shared/ontology.js';
 
 // The five OMG Event subclasses this project's NodeType enum carries (references/input-schema.json).
 // Backs isEvent below. Derived from the ontology class `Event` rather than a substring test, so a
@@ -154,7 +154,7 @@ export function isActivity(type) {
 // Fails loudly if the ontology loses a field's domain — an empty Set would silently grant nothing.
 const domain = (element, field) => {
   const d = VOCABULARY.fieldDomain(element, field);
-  if (!d) throw new Error(`bpmn-ontology.jsonld: no domain for ${element}.${field}`);
+  if (!d) throw new Error(`ontology.jsonld: no domain for ${element}.${field}`);
   return new Set(d);
 };
 
@@ -973,6 +973,6 @@ export function isDataArtifact(type) {
 const XML_TAG = new Map(VOCABULARY.nodeTypes.filter(t => t.xmlTag).map(t => [t.name, t.xmlTag]));
 export function bpmnXmlTag(type) {
   const tag = XML_TAG.get(type);
-  if (!tag) throw new Error(`no BPMN element for node type "${type}" — it is not a supported type in bpmn-ontology.jsonld`);
+  if (!tag) throw new Error(`no BPMN element for node type "${type}" — it is not a supported type in ontology.jsonld`);
   return tag;
 }

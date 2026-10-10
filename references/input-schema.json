@@ -16,7 +16,7 @@
           "type": "string",
           "pattern": "^1\\.(0|[1-9][0-9]*)$",
           "default": "1.0",
-          "description": "Optional schema version. Absent, or any 1.x, is accepted; the current version is the default, and equals the version of references/bpmn-ontology.jsonld. A new node type or marker raises the minor version; earlier minors stay valid."
+          "description": "Optional schema version. Absent, or any 1.x, is accepted; the current version is the default, and equals the version of references/ontology.jsonld. A new node type or marker raises the minor version; earlier minors stay valid."
         },
         "id": { "type": "string", "description": "Process ID" },
         "name": { "type": "string", "description": "Process name" },
@@ -37,7 +37,7 @@
           "type": "string",
           "pattern": "^1\\.(0|[1-9][0-9]*)$",
           "default": "1.0",
-          "description": "Optional schema version. Absent, or any 1.x, is accepted; the current version is the default, and equals the version of references/bpmn-ontology.jsonld. A new node type or marker raises the minor version; earlier minors stay valid."
+          "description": "Optional schema version. Absent, or any 1.x, is accepted; the current version is the default, and equals the version of references/ontology.jsonld. A new node type or marker raises the minor version; earlier minors stay valid."
         },
         "pools": {
           "type": "array",
