@@ -17,7 +17,7 @@
  * kept locally under references/omg-spec/normative/dmn/.
  */
 
-import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, ProfileRejectedError } from '../shared/rule-profile.js';
+import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, assertRuleProfile, carryProvenance, ProfileRejectedError } from '../shared/rule-profile.js';
 import { CFG } from '../shared/utils.js';
 import { buildRuleCatalog, profileContext } from '../shared/rule-catalog.js';
 
@@ -411,7 +411,8 @@ export function dmnProfileForMode(baseProfile, mode = 'semantic') {
   if (!layers) {
     throw new Error(`Unknown DMN mode "${mode}". Known modes: ${DMN_MODES.join(', ')}.`);
   }
-  const p = baseProfile ? JSON.parse(JSON.stringify(baseProfile)) : {};
+  assertRuleProfile(baseProfile);
+  const p = baseProfile ? carryProvenance(baseProfile, JSON.parse(JSON.stringify(baseProfile))) : {};
   p.layers = p.layers || {};
   for (const [layer, enabled] of Object.entries(layers)) {
     // Only fill in what the profile is silent about.

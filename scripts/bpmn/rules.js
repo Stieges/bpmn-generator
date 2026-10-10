@@ -15,7 +15,7 @@
  *   - BEF4LLM (Kourani et al., 2025)
  */
 
-import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, ProfileRejectedError } from '../shared/rule-profile.js';
+import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, assertRuleProfile, carryProvenance, ProfileRejectedError } from '../shared/rule-profile.js';
 import { buildRuleCatalog, profileContext } from '../shared/rule-catalog.js';
 import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES, TASK_TYPES,
@@ -1349,6 +1349,7 @@ const PROFILE_CONTEXT = { ...profileContext('BPMN'), severityOnlyFor: { ADVISORY
 
 /** Report what a profile says that the BPMN rule set cannot honour: warn, or refuse. */
 function reportProfile(profile) {
+  assertRuleProfile(profile);
   const { warnings, errors } = auditProfile(profile, PROFILE_CONTEXT);
   if (errors.length) throw new ProfileRejectedError(errors.join('; '));
   for (const w of warnings) console.warn(`⚠ ${w}`);
@@ -1368,8 +1369,9 @@ function reportProfile(profile) {
  * @returns {object|null}
  */
 function profileForMode(baseProfile, mode = 'document') {
+  assertRuleProfile(baseProfile);
   if (mode !== 'optimize' && mode !== 'soll') return baseProfile;
-  const p = baseProfile ? JSON.parse(JSON.stringify(baseProfile)) : {};
+  const p = baseProfile ? carryProvenance(baseProfile, JSON.parse(JSON.stringify(baseProfile))) : {};
   p.layers = p.layers || {};
   p.layers.optimization = { ...(p.layers.optimization || {}), enabled: true };
   return p;
