@@ -30,14 +30,21 @@ describe('validate_bpmn passes the full validation result through', () => {
   });
 });
 
-describe('schema gate on generate_bpmn and validate_bpmn', () => {
+describe('schema gate on every tool that takes a Logic-Core', () => {
   const malformed = { nodes: [{ id: 'x', type: 'notARealType' }], edges: [] };
 
-  for (const name of ['generate_bpmn', 'validate_bpmn']) {
+  for (const name of ['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn']) {
     test(`${name} rejects structurally invalid input before the pipeline`, async () => {
       const result = parse(await call(name, { logicCore: malformed }));
       expect(result.status).toBe('schema_error');
       expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    test(`${name} rejects a logicCore that is not an object`, async () => {
+      for (const logicCore of ['a process description', null, [], 7]) {
+        const result = parse(await call(name, { logicCore }));
+        expect(result.status).toBe('schema_error');
+      }
     });
   }
 
