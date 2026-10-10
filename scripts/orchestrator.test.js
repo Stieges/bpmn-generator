@@ -4,6 +4,9 @@
  */
 
 import { describe, test, expect, jest } from '@jest/globals';
+
+// Several tests replace global.fetch; the redirect test needs the real one.
+const realFetch = global.fetch;
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -462,5 +465,30 @@ describe('createLlmProvider — failures', () => {
     const llmProvider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm' });
     const err = await orchestrate('text', { llmProvider }).catch((e) => e);
     expect(err.cause).toBeInstanceOf(LlmProviderError);
+  });
+});
+
+describe('createLlmProvider — redirects', () => {
+  test('the default transport does not follow a redirect; a 3xx is a provider error', async () => {
+    const { createServer } = await import('node:http');
+    const { LlmProviderError } = await import('./agents/llm-provider.js');
+    const hits = [];
+    const listen = (handler) => new Promise((done) => { const s = createServer(handler); s.listen(0, '127.0.0.1', () => done(s)); });
+    const target = await listen((req, res) => { hits.push(req.url); req.resume(); res.end('{}'); });
+    const redirector = await listen((req, res) => {
+      req.resume();
+      res.writeHead(302, { location: `http://127.0.0.1:${target.address().port}/followed` });
+      res.end();
+    });
+    global.fetch = realFetch;
+    try {
+      const provider = createLlmProvider({ baseUrl: `http://127.0.0.1:${redirector.address().port}/v1`, apiKey: 'k', model: 'm', timeout: 5000 });
+      const err = await provider('s', 'u').catch((e) => e);
+      expect(err).toBeInstanceOf(LlmProviderError);
+      expect(err.status).toBe(302);
+      expect(hits).toEqual([]);
+    } finally {
+      await Promise.all([target, redirector].map((s) => new Promise((done) => s.close(done))));
+    }
   });
 });

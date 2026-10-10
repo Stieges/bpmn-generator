@@ -1017,7 +1017,8 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   addresses that passed the check and no longer follow redirects. A client `llmConfig.baseUrl` is
   accepted only for origins the operator lists in `LLM_BASE_URL_ALLOWLIST` and then passes the same
   validator and pinned transport; an LLM provider's response body is never returned to the client
-  (generic `502 llm_error`, detail logged server-side, truncated and escaped). Dead-letter files
+  (generic `502 llm_error`, detail logged server-side, truncated and escaped); no LLM call,
+  to the operator's endpoint either, follows a redirect. Dead-letter files
   are named by a server-generated UUID, created exclusively and kept inside the dead-letter
   directory; `correlationId` is accepted only as a short identifier. Client strings that reach the
   audit log or a response (`clientId`, telemetry fields, error messages) are length-bounded with
