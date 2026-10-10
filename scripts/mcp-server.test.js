@@ -140,3 +140,43 @@ describe('diagnostics reach the callers', () => {
     expect(r.diagnostics).toBeUndefined();
   });
 });
+
+describe('rule profiles over MCP are names inside rules/, never paths', () => {
+  const styled = fixture('boundary-event-shapes.json');
+  const PROFILE_TOOLS = ['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'];
+
+  test.each(['strict', 'rules/strict-profile.json'])('validate_bpmn applies %s', async (ruleProfile) => {
+    const plain = parse(await call('validate_bpmn', { logicCore: styled }));
+    const strict = parse(await call('validate_bpmn', { logicCore: styled, ruleProfile }));
+    expect(plain.errors).toEqual([]);
+    expect(strict.errors.join('\n')).toMatch(/Objekt\+Verb/);
+  });
+
+  test('generate_bpmn and orchestrate_bpmn apply a named profile too', async () => {
+    const gen = parse(await call('generate_bpmn', { logicCore: styled, ruleProfile: 'strict', include: ['validation'] }));
+    expect(gen.validation.errors.length).toBeGreaterThan(0);
+    const orch = parse(await call('orchestrate_bpmn', { logicCore: styled, ruleProfile: 'strict' }));
+    expect(orch.compliance.isCompliant).toBe(false);
+    expect(orch.compliance.errors.join('\n')).not.toMatch(/Compliance check failed/);
+  });
+
+  for (const name of PROFILE_TOOLS) {
+    test.each(['../../etc/passwd', '/etc/passwd', '../rules/strict-profile.json', 'custom/../../x'])(`${name} refuses %s, naming only the name`, async (ruleProfile) => {
+      let err;
+      try { await call(name, { logicCore: styled, ruleProfile }); } catch (e) { err = e; }
+      expect(err?.name).toBe('ProfileRejectedError');
+      expect(err.message).toContain(JSON.stringify(ruleProfile));
+      expect(err.message).not.toMatch(/root:|nobody|Users|scripts/);
+    });
+
+    test(`${name} refuses an unknown name and a non-string`, async () => {
+      await expect(call(name, { logicCore: styled, ruleProfile: 'no-such-profile' })).rejects.toThrow(/unknown rule profile "no-such-profile"/);
+      await expect(call(name, { logicCore: styled, ruleProfile: { overrides: {} } })).rejects.toThrow(/profile name/);
+    });
+
+    test(`${name} describes ruleProfile as a name`, () => {
+      expect(tool(name).inputSchema.properties.ruleProfile.description).toMatch(/name/i);
+      expect(tool(name).inputSchema.properties.ruleProfile.description).not.toMatch(/path/i);
+    });
+  }
+});
