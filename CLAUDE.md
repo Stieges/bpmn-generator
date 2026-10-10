@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 27 bpmn-pipeline + 12 dmn (growing) + 6 shared + 1 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 27 bpmn-pipeline + 12 dmn (growing) + 8 shared + 1 cross-notation + 7 agent +
 9 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -90,6 +90,10 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   resource-paths.js          (no deps — where references/ lives in each layout, and the repository's rules/
                                for named profiles: rulesDirPath, null outside a checkout)
   ontology.js                ← resource-paths.js, ajv (loads + validates references/ontology.jsonld at import; `VOCABULARY`)
+  outbound-url.js            (no deps beyond node: — the one validator + pinned, redirect-free transport
+                               for every outbound request to a client-supplied URL: callbacks, LLM base URLs)
+  safe-text.js               (no deps — quoteForMessage / boundText: client text bounded and escaped on
+                               its way into a message, a log line or a response)
   geometry.js                (straight-segment clip maths: clipStraight, clipToRect — shared by
                                bpmn/coordinates.js and dmn/coordinates.js; the orthogonal clip
                                helpers stay in bpmn/ — see dmn-integration plan's Stage 3 note)
@@ -547,11 +551,13 @@ failing on.
 
 - `BPMN_API_KEY` env var: required in production (`NODE_ENV=production`), optional in dev. Startup fails if production + missing key.
 - `AUDIT_LOG_PATH` env var: where the audit JSONL is written. Default `<os.tmpdir>/bpmn-generator/audit/bpmn-generator.jsonl`.
-- `DEAD_LETTER_PATH` env var: where failed webhook deliveries are written. Default `<os.tmpdir>/bpmn-generator/dead-letter/`.
-- SSRF: callback URLs are validated against IPv4 private/link-local ranges (10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x), IPv6 (::1, fc00::/7, fe80::/10), and the hostname is DNS-resolved with the resolved IP re-checked against the same denylist.
-- Schema-strict gate: every Logic-Core input at the HTTP entry passes through `scripts/bpmn/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw.
+- `DEAD_LETTER_PATH` env var: where failed webhook deliveries are written. Default `<os.tmpdir>/bpmn-generator/dead-letter/`. Files are named `<uuid>.json` by the server (created with `wx`, path asserted inside the directory) — never from `correlationId`, which the HTTP entry accepts only as `^[A-Za-z0-9_-]{1,64}$`.
+- SSRF: every outbound request to a client-supplied URL goes through `scripts/shared/outbound-url.js` — http/https only, no credentials, `localhost` names refused, every resolved address checked against the IPv4/IPv6 special-purpose ranges (IPv6 forms embedding an IPv4 address checked as that address), the connection pinned to the checked addresses (`pinnedRequest`), redirects never followed. Never call `fetch` on a client-supplied URL directly.
+- `LLM_BASE_URL_ALLOWLIST` env var: comma-separated origins a client may name as `llmConfig.baseUrl`; empty (default) = a client `baseUrl` is a `400`. Allowlisted URLs still pass the validator above. Without `baseUrl` the server's endpoint (`OPENAI_BASE_URL`) is used. Provider failures are `502 llm_error`; the upstream body is never returned to a client.
+- Client strings into the audit log or a response go through `boundText` (`scripts/shared/safe-text.js`): 128 characters for identifiers, 500 for messages, control/format characters escaped. Telemetry `details` above 8 KiB is a `400`. A non-object JSON body is a `400`.
+- Schema-strict gate: every Logic-Core input at the HTTP entry and on every MCP tool that takes one (`generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn`) passes through `scripts/bpmn/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw.
 - Rule profiles: every profile (inline, by name, or from a file) passes `references/rule-profile-schema.json` (ajv strict) after a size/depth bound (64 KiB, 4 levels, a walk that stops at the limit). HTTP (untrusted) takes an inline object only (a string is a `400 profile_error`, no file is read) and refuses a profile that disables the soundness layer or sets a soundness rule below its ontology default severity — it may only raise one. MCP is a trusted local user like the CLI and may relax soundness, but its arguments come from an LLM, so it takes a profile *name* only, resolved inside the repository's `rules/` (`rulesDirPath` in `resource-paths.js`; none in an npm install, where names are refused). Profile files must be regular files of at most 256 KiB, opened non-blocking. Messages: client tokens through `quoteForMessage`, at most 20 warnings, no file content, no server path to a remote caller.
-- Body size cap: 10 MB. Rate limit: 30 req/min per IP. Both in `scripts/http-server.js`.
+- Body size cap: 10 MB. Rate limit: 30 req/min per client, keyed on the socket address, or with `TRUST_PROXY_HOPS=<n>` on the address the outermost of `n` trusted proxies recorded in `X-Forwarded-For`; expired buckets are evicted. The API key is compared in constant time. All in `scripts/http-server.js`.
 
 See `SECURITY.md` for the threat model and deployment guidance.
 

@@ -977,6 +977,12 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 - **A profile file that is not valid JSON now aborts** instead of falling back to the defaults — see Changed, "Rule profiles are checked".
 - **An unknown severity, or `ADVISORY` on a BPMN rule outside the optimization layer, refuses the profile** — see Changed, "Rule profiles are checked".
 - **Inline profiles over HTTP may only raise soundness rules**, never disable the layer or lower a rule's default severity — see the same Security entry.
+- **`correlationId` must be 1–64 characters from `[A-Za-z0-9_-]`** on every HTTP endpoint; anything else (other characters, other types, an empty string) is a `400` and is not echoed. A UUID passes. See Security, "HTTP API hardening".
+- **A client `llmConfig.baseUrl` is refused by default** (`400`) on `/api/v1/orchestrate` and `/api/v1/chat`. Omit it to use the server-configured endpoint (`OPENAI_BASE_URL`, else the OpenAI default), or have the operator allowlist the origin in `LLM_BASE_URL_ALLOWLIST`. `llmConfig` now requires only `apiKey` and `model`.
+- **LLM provider failures are `502 { correlationId, status: "llm_error" }`** instead of a `500` whose message carried the provider's response; the upstream detail is logged server-side only.
+- **Callback URLs are refused for more address ranges** (CGNAT, `0.0.0.0/8`, benchmarking, multicast, reserved, IPv6 forms embedding an internal IPv4 address, `*.localhost`) and for URLs with credentials, and a callback that answers with a redirect is a failed delivery (it used to be followed).
+- **Dead-letter files are named `<uuid>.json`** instead of `<correlationId>.json`; the correlation id is inside the file.
+- **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
 
 ### Security
 - **Rule profiles are treated as untrusted input on every channel.** Every profile — inline, by
@@ -1003,6 +1009,23 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   traversal in an MCP transport this project never loads) is retired: its advisory no longer matches
   and its review trigger fired. `SECURITY.md` now lists no accepted risks; one moderate `js-yaml`
   advisory inside jest's coverage tooling stays a non-blocking warning.
+
+- **HTTP API hardening.** One outbound-URL validator (`scripts/shared/outbound-url.js`) now
+  guards every request to a client-supplied URL: http/https only, no credentials, `localhost`
+  names refused, and every resolved address checked against the IPv4 and IPv6 special-purpose
+  ranges, including IPv6 forms that embed an IPv4 address. Callback deliveries connect only to the
+  addresses that passed the check and no longer follow redirects. A client `llmConfig.baseUrl` is
+  accepted only for origins the operator lists in `LLM_BASE_URL_ALLOWLIST` and then passes the same
+  validator and pinned transport; an LLM provider's response body is never returned to the client
+  (generic `502 llm_error`, detail logged server-side, truncated and escaped). Dead-letter files
+  are named by a server-generated UUID, created exclusively and kept inside the dead-letter
+  directory; `correlationId` is accepted only as a short identifier. Client strings that reach the
+  audit log or a response (`clientId`, telemetry fields, error messages) are length-bounded with
+  control and format characters escaped, through one helper (`scripts/shared/safe-text.js`). A
+  non-object JSON body is refused at once. The API key is compared in constant time; the rate
+  limiter evicts expired buckets and can key on the client address recorded by trusted reverse
+  proxies (`TRUST_PROXY_HOPS`). The MCP `orchestrate_bpmn` tool runs the Logic-Core schema gate
+  like the other tools.
 
 ## [3.6.0] - 2026-08-01
 

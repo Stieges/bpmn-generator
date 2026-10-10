@@ -6,10 +6,11 @@ Complete reference for the BPMN Generator HTTP API. For a high-level overview se
 
 - **Base URL:** `http://<host>:<PORT>` (default `PORT=3000`). Start with `PORT=3000 node scripts/http-server.js`.
 - **Auth:** When `BPMN_API_KEY` is set on the server, all endpoints except `GET /health` and `GET /api/v1/config` require the header `X-API-Key: <key>`. In dev mode (no `BPMN_API_KEY`) no auth is required. Missing/wrong key → `401 { "error": "Invalid API key" }`.
-- **Rate limit:** 30 requests/minute per IP (except `/health` and `/config`, which are checked before the limiter). Exceeding → `429 { "error": "Rate limit exceeded" }`.
+- **Rate limit:** 30 requests/minute per client (except `/health` and `/config`, which are checked before the limiter), keyed on the connection's address — or, when the operator sets `TRUST_PROXY_HOPS=<n>` behind `n` reverse proxies, on the address the outermost trusted proxy recorded in `X-Forwarded-For`. Exceeding → `429 { "error": "Rate limit exceeded" }`.
 - **Body size cap:** 10 MB. Larger → the request is destroyed and rejected `400 { "error": "Invalid JSON body" }`.
-- **Content type:** POST endpoints expect `Content-Type: application/json`. Non-JSON body → `400 { "error": "Invalid JSON body" }`.
-- **Correlation:** All POST endpoints accept optional `correlationId` (echoed back; generated if absent) and `clientId` (recorded in the audit log).
+- **Content type:** POST endpoints expect `Content-Type: application/json`. Non-JSON body → `400 { "error": "Invalid JSON body" }`. A JSON body that is not an object (`null`, an array, a number, a string) → `400 { "error": "Request body must be a JSON object" }`.
+- **Correlation:** All POST endpoints accept optional `correlationId` (echoed back; generated if absent) and `clientId` (recorded in the audit log). `correlationId` must be 1–64 characters from `A–Z a–z 0–9 _ -` (a UUID qualifies); anything else, including another type → `400 { "error": "correlationId must be …" }`, not echoed. `clientId` is recorded cut to 128 characters with control and format characters escaped (a non-string is recorded as its JSON text).
+- **Error messages:** the `error` of a `500 internal_error` (and its audit line) is cut to 500 characters with control and format characters escaped.
 - **Method:** A non-`POST` request to any API path (known or unknown) other than `GET /health` and `GET /api/v1/config` → `405 { "error": "Method Not Allowed" }`. A `POST` to a path that isn't one of the six POST endpoints below → `404 { "error": "Not Found" }`.
 
 ---
@@ -43,7 +44,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 - `pool` — present only for multi-pool Logic-Core, names the owning pool
 
 None of this is applied automatically; turning an advisory into an actual model change means calling the named `transform` in the redesign toolbox yourself (see `SKILL.md` → "Redesign Toolbox").
-- `callbackUrl` (optional, string) — if present, the result is also POSTed there asynchronously; the URL is SSRF-validated (rejects internal/link-local hosts, DNS-resolves and re-checks).
+- `callbackUrl` (optional, string) — if present, the result is also POSTed there asynchronously. The URL must be http/https without credentials; `localhost` names and every special-purpose address range are refused (private, loopback, link-local, CGNAT, multicast, reserved, and IPv6 forms that embed such an IPv4 address), checked for every address the host name resolves to. The delivery connects only to the addresses that passed and does not follow redirects (a 3xx counts as a failed attempt). After three failed attempts the payload is written to the dead-letter directory as `<uuid>.json`.
 
 **Response 200:**
 ```json
@@ -61,7 +62,7 @@ None of this is applied automatically; turning an advisory into an actual model 
 
 **Errors:**
 - `400 { correlationId, status: "schema_error", errors: [...] }` — Logic-Core failed the schema gate.
-- `400 { error: "callbackUrl ..." }` — invalid or internal callback URL.
+- `400 { error: "callbackUrl ..." }` — invalid or internal callback URL, credentials in it, or a failed DNS lookup.
 - `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused; see "Rule profiles over HTTP" below.
 - `500 { correlationId, status: "internal_error", error }` — pipeline threw.
 
@@ -349,7 +350,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 {
   "userText": "Order processing with manager approval",
   "logicCore": { ... },
-  "llmConfig": { "baseUrl": "https://api.openai.com/v1", "apiKey": "sk-...", "model": "gpt-4o-mini", "timeout": 120000 },
+  "llmConfig": { "apiKey": "sk-...", "model": "gpt-4o-mini", "timeout": 120000 },
   "ruleProfile": { "profile": "strict-ish", "overrides": { "M01": { "severity": "ERROR" } } },
   "mode": "optimize",
   "correlationId": "uuid",
@@ -359,7 +360,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 - One of `userText` or `logicCore` is required.
 - `mode` (optional) — `"document"` (default) or `"optimize"`/`"soll"`; optimize mode adds `validation.advisories` + `metrics.optimization` to the response.
 - `ruleProfile` (optional) — an inline profile object, as for `/api/v1/generate`; it applies in the compliance phase.
-- `llmConfig` is required when `userText` is given; if omitted, the server falls back to `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` env vars when present.
+- `llmConfig` is required when `userText` is given; if omitted, the server falls back to `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` env vars when present. A client `llmConfig` needs `apiKey` and `model`; **omit `baseUrl`** to use the server-configured endpoint (`OPENAI_BASE_URL`, else `https://api.openai.com/v1`). A client `baseUrl` is accepted only when the operator lists its origin in `LLM_BASE_URL_ALLOWLIST` (comma-separated, empty by default) and it then passes the same address check as `callbackUrl`.
 - `timeout` optional, clamped to (0, 300000], default 120000.
 
 **Response 200:**
@@ -381,16 +382,18 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 
 **Errors:**
 - `400 { error: "Provide userText (string) or logicCore (object)" }` — neither given.
-- `400 { error: "llmConfig requires baseUrl, apiKey, model" }` — incomplete `llmConfig`.
+- `400 { error: "llmConfig requires apiKey and model" }` — incomplete `llmConfig`.
+- `400 { error: "llmConfig.baseUrl ..." }` — a client `baseUrl` whose origin is not allowlisted, or that targets an internal address.
 - `400 { correlationId, status: "schema_error", errors }` — provided `logicCore` failed the schema gate.
 - `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused (see `/api/v1/generate`).
+- `502 { correlationId, status: "llm_error", error: "LLM provider request failed" }` — the LLM endpoint failed (unreachable, non-2xx, unusable answer). The provider's response is never passed through; the server logs the detail.
 - `500 { correlationId, status: "internal_error", error }`.
 
 **Example:**
 ```bash
 curl -X POST http://localhost:3000/api/v1/orchestrate \
   -H 'Content-Type: application/json' \
-  -d '{"userText":"Approval process","llmConfig":{"baseUrl":"https://api.openai.com/v1","apiKey":"sk-...","model":"gpt-4o-mini"}}'
+  -d '{"userText":"Approval process","llmConfig":{"apiKey":"sk-...","model":"gpt-4o-mini"}}'
 ```
 
 ---
@@ -408,11 +411,11 @@ Discovery conversation before generation. Multi-turn; the LLM decides when enoug
     { "role": "user", "content": "Two: customer and clerk" }
   ],
   "correlationId": "uuid",
-  "llmConfig": { "baseUrl": "...", "apiKey": "...", "model": "..." }
+  "llmConfig": { "apiKey": "...", "model": "..." }
 }
 ```
 - `messages` (required, non-empty array of `{role, content}`).
-- `llmConfig` optional — falls back to `OPENAI_API_KEY` env vars when omitted.
+- `llmConfig` optional — falls back to `OPENAI_API_KEY` env vars when omitted. `baseUrl` rules as for `/api/v1/orchestrate`.
 - `correlationId` should be a client-generated UUID, persisted across the conversation and re-sent every turn.
 
 **Response 200:**
@@ -429,14 +432,16 @@ When the LLM has enough context: `readyToGenerate: true` and `suggestedSummary` 
 **Errors:**
 - `400 { error: "messages must be a non-empty array" }`.
 - `400 { error: "llmConfig is required (or set OPENAI_API_KEY on the server)" }`.
-- `400 { error: "llmConfig requires baseUrl, apiKey, model" }`.
-- `500 { correlationId, status: "internal_error", error }` — LLM call or JSON parse failed.
+- `400 { error: "llmConfig requires apiKey and model" }`.
+- `400 { error: "llmConfig.baseUrl ..." }` — see `/api/v1/orchestrate`.
+- `502 { correlationId, status: "llm_error", error }` — the LLM endpoint failed; the provider's response is not passed through.
+- `500 { correlationId, status: "internal_error", error }` — the LLM's answer could not be parsed.
 
 **Example:**
 ```bash
 curl -X POST http://localhost:3000/api/v1/chat \
   -H 'Content-Type: application/json' \
-  -d '{"messages":[{"role":"user","content":"I need an approval process"}],"llmConfig":{"baseUrl":"https://api.openai.com/v1","apiKey":"sk-...","model":"gpt-4o-mini"}}'
+  -d '{"messages":[{"role":"user","content":"I need an approval process"}],"llmConfig":{"apiKey":"sk-...","model":"gpt-4o-mini"}}'
 ```
 
 ---
@@ -457,7 +462,9 @@ Best-effort frontend event log. No schema gate — loose by design. Appends one 
 
 **Response 200:** `{ "status": "ok" }`
 
-**Errors:** `400 { error }` — only on a genuinely malformed request.
+`event` and `diagramId` are recorded cut to 128 characters, every key and string inside `details` is bounded (128 / 500 characters) and control and format characters are escaped.
+
+**Errors:** `400 { error }` — a malformed request, including `details` whose JSON exceeds 8 KiB, or an invalid `correlationId`.
 
 **Example:**
 ```bash
