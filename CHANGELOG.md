@@ -933,6 +933,18 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   thinner than either the schema or the type vocabulary implies on their own.
 
 ### Security
+- **Rule profiles are treated as untrusted input on every channel.** Every profile — inline, by
+  name or from a file — now passes a JSON Schema gate (`references/rule-profile-schema.json`)
+  after a 64 KiB size bound, before any rule logic reads it; unknown top-level keys, including the
+  loader's own internal markers, are refused. Over HTTP, `ruleProfile` is an inline object on all
+  three endpoints (`/orchestrate` used to accept a string and read it as a server-side path) and
+  may not relax the soundness layer. Over MCP it is a profile name resolved inside the repository's
+  `rules/` directory, located from the module rather than the working directory — which also
+  fixes the documented `rules/strict-profile.json` silently running the defaults. Profile files
+  are read only when they are regular files of at most 256 KiB. Refusal messages no longer quote
+  file content or name server paths to remote callers; client-supplied names in messages are
+  escaped, warning lists are capped, and the audit line for a refused profile is bounded. An inline
+  profile on `/orchestrate` and `orchestrate_bpmn` now actually applies in the compliance phase.
 - **Five high/critical dependency advisories cleared; the audit gate is green again.** `proxy-addr`
   (critical), `@modelcontextprotocol/sdk` 1.29.0 → 1.32.1, `fast-uri` (reached through `ajv`, on the
   untrusted-input path), and the dev-only `brace-expansion` and `js-yaml` — all in-range lockfile
