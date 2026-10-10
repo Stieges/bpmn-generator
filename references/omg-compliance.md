@@ -89,19 +89,22 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 | §10.2.2 | Loop / Multi-Instance Characteristics | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.3.1 | Sequence Flow with conditionExpression (child element) | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.3.1 | incoming/outgoing references on FlowNodes | Implemented | bpmn-xml.js:generateBpmnXml |
-| §10.4.2 | Start Event (at least 1 per process) | Implemented | rules.js:S01 |
-| §10.4.2 | End Event (at least 1 per process) | Implemented | rules.js:S02 |
-| §10.4.4 | Boundary Event (attachedToRef, cancelActivity) — at every nesting level | Implemented | bpmn-xml.js:buildFlowNode, rules.js:S08, rules.js:S13 |
+| Start Event (§10.4.2) | Start Event (at least 1 per process) | Implemented | rules.js:S01 |
+| End Event (§10.4.2) | End Event (at least 1 per process) | Implemented | rules.js:S02 |
+| Intermediate Catch Event | Intermediate event, catch side | Implemented | bpmn-xml.js:buildFlowNode |
+| Intermediate Throw Event | Intermediate event, throw side | Implemented | bpmn-xml.js:buildFlowNode |
+| Boundary Event (§10.4.4) | Boundary Event (attachedToRef, cancelActivity) — at every nesting level | Implemented | bpmn-xml.js:buildFlowNode, rules.js:S08, rules.js:S13 |
 | §10.2.1 | SubProcess `flowElements` are content, `isExpanded` is presentation (DI only) | Implemented | bpmn-xml.js:buildFlowNode |
 | §10.5 | LaneSet (one laneSet per Process) | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.5.1 | gatewayDirection attribute (Diverging/Converging/Mixed) | Implemented | topology.js:inferGatewayDirections |
 | §10.5.1 | Default Flow on XOR/Inclusive Gateway | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.5.1 | conditionExpression on non-default outgoing flows | Implemented | bpmn-xml.js:generateBpmnXml |
-| §10.6 | Data Objects, Data Stores | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact |
+| Data Object Reference (§10.6) | Data Objects, Data Stores |
+| Data Store Reference (§10.6) | Data Stores | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact |
 | §10.7 | Artifacts in `<artifacts>`, not `<flowElements>` (tProcess sequence) | Implemented | bpmn-xml.js:buildProcess |
 | §10.7.1 | Association (sourceRef, targetRef, associationDirection) | Implemented | bpmn-xml.js:generateBpmnXml |
-| §10.7.2 | Group label via categoryValueRef → Category/CategoryValue | Implemented | bpmn-xml.js:buildCategoryForGroup |
-| §10.7.3 | TextAnnotation content in a `<text>` child, not `name` | Implemented | bpmn-xml.js:buildNodeAttrs |
+| Group (§10.7.2) | Group label via categoryValueRef → Category/CategoryValue | Implemented | bpmn-xml.js:buildCategoryForGroup |
+| Text Annotation (§10.7.3) | TextAnnotation content in a `<text>` child, not `name` | Implemented | bpmn-xml.js:buildNodeAttrs |
 
 > Artifacts extend `tArtifact` → `tBaseElement`, which declares only `id`; `name` is introduced by
 > `tFlowElement`. It is therefore illegal on TextAnnotation, Group and Association, and each keeps
@@ -144,11 +147,11 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 
 | Gateway Type | Rendering | Direction | Validation | File |
 |--------------|-----------|-----------|------------|------|
-| Exclusive (XOR) | Implemented | Implemented | S05 (Deadlock) | svg.js, topology.js, rules.js |
-| Parallel (AND) | Implemented | Implemented | S05 (Join) | svg.js, topology.js |
-| Inclusive (OR) | Implemented | Implemented | S06 (Deadlock) | svg.js, topology.js, rules.js |
-| Event-Based | Implemented | Implemented | — | svg.js, topology.js |
-| Complex | Implemented | Implemented | — | svg.js, topology.js |
+| Exclusive Gateway (XOR) | Implemented | Implemented | S05 (Deadlock) | svg.js, topology.js, rules.js |
+| Parallel Gateway (AND) | Implemented | Implemented | S05 (Join) | svg.js, topology.js |
+| Inclusive Gateway (OR) | Implemented | Implemented | S06 (Deadlock) | svg.js, topology.js, rules.js |
+| Event-Based Gateway | Implemented | Implemented | — | svg.js, topology.js |
+| Complex Gateway | Implemented | Implemented | — | svg.js, topology.js |
 
 ## Activity Types (OMG §10.2)
 
