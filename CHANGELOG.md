@@ -312,6 +312,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **The robustness CLI no longer silently ignores flags (#41).** `--strategy`/`--category` were
+  accepted and dropped, so a run looked targeted and was not. The cells carry no `category`, and
+  `sampleCells` has no strategy besides uniform, so there is nothing sound to wire through; each
+  command now rejects a flag it does not read (exit 2, naming it). Targeted sampling stays
+  programmatic (`sampleCells(cells, { filter })`); `docs/ROBUSTNESS-STACK.md` example corrected.
 - **`/health` and the MCP `serverInfo` report the real version (#40).** Both hard-coded `2.0.0`;
   `scripts/shared/version.js` reads `scripts/package.json` once (it ships in the npm package and the
   skill bundle). `references/api-reference.md` no longer presents `2.0.0` as the response.
