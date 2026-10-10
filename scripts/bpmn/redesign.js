@@ -15,7 +15,7 @@
  */
 
 import { cloneLc, checkGate, nextId, isProtected, refusal, resolveLaneId, warningsDelta } from './redesign-core.js';
-import { TASK_TYPES, isActivity } from './types.js';
+import { TASK_TYPES, isActivity, MARKER_GROUPS } from './types.js';
 
 const procOf = (lc) => (lc.pools ? lc.pools[0] : lc);
 
@@ -481,7 +481,7 @@ export function applyRelane(lc, params = {}) {
  * ausgehende Kante eines Gateways die "Weiter"-Kante ist — siehe
  * continuationEdges().
  */
-const EXCEPTION_END_MARKERS = new Set(['error', 'terminate', 'escalation', 'cancel']);
+const EXCEPTION_END_MARKERS = MARKER_GROUPS.exception;
 const EXCEPTION_END_NAME_RE = /fehler|error|abbruch|abgebroch|eskal|storn|ablehn|abgelehnt|reject|cancel|verwerf|verworf/i;
 
 function buildNodeMap(proc) {
@@ -645,8 +645,7 @@ export function applyReorderKnockouts(lc, params = {}) {
  * Boundary-Events zulaessig (Timer, Error, Message, Signal, Escalation,
  * Compensation, Cancel, Conditional).
  */
-const BOUNDARY_MARKERS = new Set(['timer', 'error', 'message', 'signal', 'escalation',
-                                  'compensation', 'cancel', 'conditional']);
+const BOUNDARY_MARKERS = MARKER_GROUPS.boundary;
 
 /**
  * Eingriff „Ausnahme herausnehmen" (isolateException). Der heikelste Eingriff im

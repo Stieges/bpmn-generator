@@ -14,7 +14,7 @@
 
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
 import {
-  isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES,
+  isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES, TASK_TYPES,
   isActivity, isInteractionNode, isSequenceFlowExempt,
   OMG_NODE_FIELD_SCOPE, isFieldOutOfScope, isFieldWrongType,
 } from './types.js';
@@ -886,11 +886,9 @@ const STYLE_RULES = [
     ref: { silver: 'Ch.3', pmg: 'G5' },
     scope: 'process',
     check: (proc) => {
-      const taskTypes = ['task', 'userTask', 'serviceTask', 'scriptTask', 'manualTask',
-                         'businessRuleTask', 'sendTask', 'receiveTask'];
       const msgs = [];
       for (const n of (proc.nodes || [])) {
-        if (taskTypes.includes(n.type) && n.name && violatesVerbObject(n.name))
+        if (TASK_TYPES.has(n.type) && n.name && violatesVerbObject(n.name))
           msgs.push(`Task "${n.name}" folgt nicht der Objekt+Verb-Konvention (z.B. "Antrag prüfen"). Heuristik — exakte Wortartprüfung: M05/M06.`);
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
@@ -1114,8 +1112,7 @@ const PRAGMATICS_RULES = [
       const threshold = config?.overrides?.P02?.threshold || 3;
       const nodes = proc.nodes || [], edges = proc.edges || [];
       const outgoing = buildAdjacency(edges, 'source', 'target');
-      const gwTypes = new Set(['exclusiveGateway','parallelGateway','inclusiveGateway','eventBasedGateway','complexGateway']);
-      const isGw = id => { const nd = nodes.find(x => x.id === id); return nd && gwTypes.has(nd.type); };
+      const isGw = id => { const nd = nodes.find(x => x.id === id); return nd && isGateway(nd.type); };
       let maxDepth = 0;
       function dfs(nodeId, depth, visited) {
         if (visited.has(nodeId)) return;

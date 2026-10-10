@@ -175,3 +175,11 @@ describe('fields — one source', () => {
     for (const row of T.OMG_EDGE_FIELD_SCOPE) expect([...row.allowed].sort()).toEqual([...SNAP.edgeAllowed[row.field]].sort());
   });
 });
+
+test('net-check.js keeps its own artifact list, equal to the ontology\'s Artifact class', () => {
+  const src = readFileSync(join(__dirname, 'net-check.js'), 'utf8');
+  const m = /const ARTIFACT_TYPES = new Set\(\[([^\]]+)\]\)/.exec(src);
+  const own = [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
+  expect(own.sort()).toEqual([...VOCABULARY.classMembers('Artifact')].sort());
+  expect(src).not.toMatch(/^import /m);
+});

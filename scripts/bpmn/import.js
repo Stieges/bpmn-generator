@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep } from './moddle-import.js';
-import { isBpmnArtifact } from './types.js';
+import { isBpmnArtifact, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -265,13 +265,7 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
 
   // Flow nodes
   const nodes = [];
-  const flowNodeTags = new Set([
-    'startEvent', 'endEvent', 'intermediateCatchEvent', 'intermediateThrowEvent', 'boundaryEvent',
-    'task', 'userTask', 'serviceTask', 'scriptTask', 'sendTask', 'receiveTask',
-    'manualTask', 'businessRuleTask', 'callActivity', 'subProcess', 'transaction',
-    'exclusiveGateway', 'parallelGateway', 'inclusiveGateway', 'eventBasedGateway', 'complexGateway',
-    'dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group',
-  ]);
+  const flowNodeTags = SUPPORTED_NODE_TYPES;
 
   // Every <bpmn:dataObject> in this process, at any depth, keyed by id.
   //
@@ -496,18 +490,8 @@ function parseLanes(laneSet, lanes, nodeLaneMap) {
 }
 
 function detectEventMarkerFull(element) {
-  const markerMap = {
-    'messageEventDefinition': 'message',
-    'timerEventDefinition': 'timer',
-    'errorEventDefinition': 'error',
-    'signalEventDefinition': 'signal',
-    'escalationEventDefinition': 'escalation',
-    'compensateEventDefinition': 'compensation',
-    'conditionalEventDefinition': 'conditional',
-    'linkEventDefinition': 'link',
-    'cancelEventDefinition': 'cancel',
-    'terminateEventDefinition': 'terminate',
-  };
+  const markerMap = Object.fromEntries([...EVENT_DEFINITION_BY_MARKER].map(
+    ([marker, def]) => [def.slice('bpmn:'.length, 'bpmn:'.length + 1).toLowerCase() + def.slice('bpmn:'.length + 1), marker]));
 
   const result = { marker: null };
 
