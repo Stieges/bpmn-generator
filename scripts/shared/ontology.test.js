@@ -319,7 +319,7 @@ describe('DMN vocabulary — Block 4', () => {
   });
 
   test('an rdf:Property on a Decision-Core element validates; an unknown element is still rejected (R10)', () => {
-    for (const element of ['DecisionCore', 'DecisionNode', 'Requirement', 'DecisionTable']) {
+    for (const element of ['DecisionCore', 'Requirement', 'DecisionTable', 'InputClause', 'OutputClause', 'DecisionRule']) {
       const o = raw();
       o['@graph'].push({ '@id': 'bg:probe-field', '@type': 'rdf:Property', name: 'probe', element });
       expect(validateOntology(o)).toEqual([]);
@@ -327,5 +327,14 @@ describe('DMN vocabulary — Block 4', () => {
     const bad = raw();
     bad['@graph'].push({ '@id': 'bg:probe-field', '@type': 'rdf:Property', name: 'probe', element: 'Nonsense' });
     expect(validateOntology(bad).join(' ')).toMatch(/must be equal to one of the allowed values/);
+  });
+
+  test('every non-root DMN rdf:Property element is a $defs key of decision-core-schema.json', () => {
+    const src = readFileSync(new URL('./ontology.js', import.meta.url), 'utf8');
+    const enumSrc = /element: \{ enum: \[([^\]]+)\]/.exec(src)[1];
+    const names = [...enumSrc.matchAll(/'([A-Za-z]+)'/g)].map((m) => m[1]);
+    const dmn = names.slice(names.indexOf('DecisionCore'));
+    expect(dmn.length).toBe(6);
+    for (const n of dmn.filter((v) => v !== 'DecisionCore')) expect(dcSchema.$defs).toHaveProperty(n);
   });
 });
