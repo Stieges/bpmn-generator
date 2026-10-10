@@ -27,9 +27,32 @@ describe('ontology loader', () => {
   test('loadOntology throws on an invalid file instead of returning empty classes', () => {
     const dir = mkdtempSync(join(tmpdir(), 'onto-'));
     const p = join(dir, 'bpmn-ontology.jsonld');
-    const bad = raw(); delete bad.version;
+    const bad = raw(); delete bad['@graph'].find(e => e['@type'] === 'owl:Ontology').version;
     writeFileSync(p, JSON.stringify(bad));
-    expect(() => loadOntology(p)).toThrow(/bpmn-ontology\.jsonld is invalid: .*version/);
+    expect(() => loadOntology(p)).toThrow(/bpmn-ontology\.jsonld is invalid \(.*bpmn-ontology\.jsonld\): .*version/);
+  });
+
+  test('a JSON syntax error names the file path', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'onto-syn-'));
+    const p = join(dir, 'broken.jsonld');
+    writeFileSync(p, '{ "@graph": [ ');
+    expect(() => loadOntology(p)).toThrow(p);
+    expect(() => loadOntology(p)).toThrow(/not valid JSON/);
+  });
+
+  test('a lossy node type without an xmlTag is invalid (it would throw in bpmnXmlTag)', () => {
+    const bad = raw();
+    const t = bad['@graph'].find(e => e['@type'] === 'bg:NodeType' && e.status === 'supported');
+    t.status = 'lossy'; t.reason = 'x'; delete t.xmlTag;
+    expect(validateOntology(bad).join(' ')).toMatch(/xmlTag/);
+  });
+
+  test('the top level holds only @context and @graph, with exactly one owl:Ontology node', () => {
+    const o = raw();
+    expect(Object.keys(o)).toEqual(['@context', '@graph']);
+    expect(o['@graph'].filter(e => e['@type'] === 'owl:Ontology')).toHaveLength(1);
+    const named = { ...o, '@id': 'https://stieges.github.io/bpmn-generator/ontology' };
+    expect(validateOntology(named).length).toBeGreaterThan(0);
   });
 
   test('a lossy entry without a reason is invalid', () => {
@@ -78,7 +101,8 @@ describe('JSON-LD coherence (no RDF tooling)', () => {
   const onto = raw();
   const ctx = onto['@context'];
   const prefixes = Object.entries(ctx).filter(([, v]) => typeof v === 'string' && /^https?:\/\//.test(v)).map(([k]) => k);
-  const ids = onto['@graph'].map(e => e['@id']);
+  const ontologyNode = onto['@graph'].find(e => e['@type'] === 'owl:Ontology');
+  const ids = onto['@graph'].filter(e => e !== ontologyNode).map(e => e['@id']);
 
   test('every compact IRI uses a declared prefix', () => {
     const used = new Set();
@@ -96,6 +120,17 @@ describe('JSON-LD coherence (no RDF tooling)', () => {
     const idSet = new Set(ids);
     const dangling = onto['@graph'].flatMap(e => [...(e.subClassOf || []), ...(e.domain || [])]).filter(t => !idSet.has(t));
     expect(dangling).toEqual([]);
+  });
+  test('no context term maps to an IRI that is also a node, class or marker in the graph', () => {
+    const expand = (t) => { const [pre, rest] = t.split(':'); return ctx[pre] ? ctx[pre] + rest : t; };
+    const predicates = Object.entries(ctx).filter(([k, v]) => !k.startsWith('@') && !(typeof v === 'string' && /^https?:\/\//.test(v)))
+      .map(([k, v]) => [k, expand(typeof v === 'string' ? v : v['@id'])]);
+    const nodeIris = new Set(onto['@graph'].filter(e => e['@type'] !== 'owl:AnnotationProperty' && e !== ontologyNode).map(e => expand(e['@id'])));
+    expect(predicates.filter(([, iri]) => nodeIris.has(iri))).toEqual([]);
+  });
+  test('field domains map to the declared annotation property bg:allowedOn, not rdfs:domain', () => {
+    expect(ctx.domain['@id']).toBe('bg:allowedOn');
+    expect(onto['@graph'].find(e => e['@id'] === 'bg:allowedOn')['@type']).toBe('owl:AnnotationProperty');
   });
   test('external links are hints only: no equivalence, no exactMatch', () => {
     const text = readFileSync(ONTO_FILE, 'utf8');
@@ -145,7 +180,7 @@ describe('characterization — deriving from the ontology changes nothing', () =
     expect([...T.MARKER_GROUPS.boundary].sort()).toEqual([...SNAP.markers.boundary].sort());
     expect(Object.fromEntries(T.EVENT_DEFINITION_BY_MARKER)).toEqual(SNAP.markers.eventDefinition);
   });
-  test('SUPPORTED_NODE_TYPES equals the schema enum, in order', () => {
+  test('SUPPORTED_NODE_TYPES has the same members as the schema enum', () => {
     const schema = JSON.parse(readFileSync(join(__dirname, '..', '..', 'references', 'input-schema.json'), 'utf8'));
     expect([...T.SUPPORTED_NODE_TYPES].sort()).toEqual([...schema.$defs.NodeType.enum].sort());
   });
@@ -319,7 +354,7 @@ describe('a type without a BPMN element fails clearly', () => {
       edges: [{ source: 's', target: 'x' }, { source: 'x', target: 'e' }] };
     await expect(runPipeline(lc)).rejects.toThrow(/"nonsense".*"x"|"x".*"nonsense"/);
   });
-  test('runRules still classifies the announced adHocSubProcess as a container (S14)', () => {
+  test('CONTAINER_TYPES still includes the announced adHocSubProcess (S14 relies on it)', () => {
     expect(T.CONTAINER_TYPES.has('adHocSubProcess')).toBe(true);
   });
 });
@@ -343,6 +378,8 @@ describe('round trip keeps the type', () => {
       for (const reader of [bpmnToLogicCore, bpmnToLogicCoreLegacy]) {
         const back = await reader(r.bpmnXml);
         expect(findNode(back, 'n').type).toBe(t.name);
+        expect(findNode(back, 's').type).toBe('startEvent');
+        expect(findNode(back, 'e').type).toBe('endEvent');
       }
     });
   }
@@ -405,6 +442,8 @@ describe('format and ontology agree', () => {
     expect(validateLogicCoreSchema(lc('1.0')).valid).toBe(true);
     expect(validateLogicCoreSchema(lc('1.7')).valid).toBe(true);
     expect(validateLogicCoreSchema(lc('2.0')).valid).toBe(false);
+    expect(validateLogicCoreSchema(lc('1.')).valid).toBe(false);
+    expect(validateLogicCoreSchema(lc('1.01')).valid).toBe(false);
   });
 });
 

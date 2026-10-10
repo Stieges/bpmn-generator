@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import { ontologyPath } from '../shared/resource-paths.js';
 
+const ONTOLOGY_IRI = 'https://stieges.github.io/bpmn-generator/ontology';
 export const ONTOLOGY_NS = 'https://stieges.github.io/bpmn-generator/ontology#';
 
 const STATUS = { enum: ['supported', 'lossy', 'announced'] };
@@ -25,20 +26,26 @@ const BASE = { '@id': ID, '@type': { type: 'string' } };
 
 const ONTOLOGY_SCHEMA = {
   type: 'object',
-  required: ['@context', '@id', '@type', 'version', '@graph'],
+  required: ['@context', '@graph'],
+  additionalProperties: false,       // @id/@type/version beside @graph would make it a NAMED graph in JSON-LD 1.1
   properties: {
     '@context': { type: 'object' },
-    '@id': { const: 'https://stieges.github.io/bpmn-generator/ontology' },
-    '@type': { const: 'owl:Ontology' },
-    version: { type: 'string', pattern: '^1\\.(0|[1-9][0-9]*)$' },
-    label: { type: 'string' },
     '@graph': {
       type: 'array',
       items: {
         type: 'object',
         required: ['@id', '@type'],
-        properties: { '@id': ID, '@type': { enum: ['owl:Class', 'bg:NodeType', 'bg:EventMarker', 'bg:DefinitionKind', 'rdf:Property'] } },
+        properties: { '@id': { type: 'string' }, '@type': { enum: ['owl:Ontology', 'owl:AnnotationProperty', 'owl:Class', 'bg:NodeType', 'bg:EventMarker', 'bg:DefinitionKind', 'rdf:Property'] } },
         allOf: [
+          { if: { properties: { '@type': { const: 'owl:Ontology' } } },
+            then: { required: ['version', 'label'],
+                    properties: { '@id': { const: ONTOLOGY_IRI }, '@type': { type: 'string' },
+                                  version: { type: 'string', pattern: '^1\\.(0|[1-9][0-9]*)$' }, label: { type: 'string' } },
+                    additionalProperties: false } },
+          { if: { properties: { '@type': { const: 'owl:AnnotationProperty' } } },
+            then: { required: ['label', 'comment'],
+                    properties: { '@id': ID, '@type': { type: 'string' }, label: { type: 'string' }, comment: { type: 'string' } },
+                    additionalProperties: false } },
           { if: { properties: { '@type': { const: 'owl:Class' } } },
             then: { required: ['label', 'subClassOf', 'seeAlso'],
                     properties: { ...BASE, label: { type: 'string' }, subClassOf: IDS, seeAlso: LINKS, comment: { type: 'string' } },
@@ -65,7 +72,8 @@ const ONTOLOGY_SCHEMA = {
                     additionalProperties: false } },
           // status rules
           { if: { required: ['status'], properties: { status: { const: 'lossy' } } }, then: { required: ['reason'] } },
-          { if: { required: ['status'], properties: { '@type': { const: 'bg:NodeType' }, status: { const: 'supported' } } }, then: { required: ['xmlTag'] } },
+          // a lossy node type joins SUPPORTED_NODE_TYPES, where bpmnXmlTag must resolve it
+          { if: { required: ['status'], properties: { '@type': { const: 'bg:NodeType' }, status: { enum: ['supported', 'lossy'] } } }, then: { required: ['xmlTag'] } },
           { if: { required: ['status'], properties: { '@type': { const: 'bg:EventMarker' }, status: { const: 'supported' } } }, then: { required: ['eventDefinition'] } },
         ],
       },
@@ -82,9 +90,11 @@ export function validateOntology(onto) {
 }
 
 export function loadOntology(path = ontologyPath()) {
-  const onto = JSON.parse(readFileSync(path, 'utf8'));
+  let onto;
+  try { onto = JSON.parse(readFileSync(path, 'utf8')); }
+  catch (err) { throw new Error(`bpmn-ontology.jsonld (${path}) is not valid JSON: ${err.message}`); }
   const messages = validateOntology(onto);
-  if (messages.length) throw new Error('bpmn-ontology.jsonld is invalid: ' + messages.join('; '));
+  if (messages.length) throw new Error(`bpmn-ontology.jsonld is invalid (${path}): ` + messages.join('; '));
   return onto;
 }
 
@@ -111,7 +121,7 @@ export function buildVocabulary(onto) {
   const typeById = new Map(graph.filter(e => e['@type'] === 'bg:NodeType').map(e => [e['@id'], e.name]));
   const ALL = ['supported', 'lossy', 'announced'];
   return {
-    version: onto.version,
+    version: graph.find(e => e['@type'] === 'owl:Ontology').version,
     nodeTypes,
     nodeTypeNames: (statuses = ALL) => nodeTypes.filter(t => statuses.includes(t.status)).map(t => t.name),
     classMembers: (cls) => nodeTypes.filter(t => t.classes.has(cls)).map(t => t.name),
