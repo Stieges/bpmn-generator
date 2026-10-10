@@ -84,7 +84,7 @@ scripts/bpmn/ — Redesign toolbox (opt-in; CLI-driven, not invoked by runPipeli
 
 scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   utils.js                   (reads ../config.json)
-  rule-profile.js            (profile machinery: loadRuleProfile, isRuleEnabled, getEffectiveSeverity)
+  rule-profile.js            (profile machinery: loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile)
   rule-catalog.js            ← ontology.js (buildRuleCatalog: rule registers ⋈ ontology metadata, checked at import)
   resource-paths.js          (no deps — where references/ lives in each layout)
   ontology.js                ← resource-paths.js, ajv (loads + validates references/ontology.jsonld at import; `VOCABULARY`)
@@ -265,7 +265,7 @@ membership instead of coordinates.
 | `scripts/scenarios/pipeline.js` | `runScenarioPipeline(lc, decisionCores, options)` — Orchestrator + CLI + Public API for the scenario-enumeration subsystem, mirroring `dmn/pipeline.js`'s idiom; always routes through `enumerateCollaboration`/`formatCollaborationResult`, even for a pool-less `lc` (the plain single-process `enumerateScenarios`/`formatScenarioResult` pair is never called, since it would silently drop SC06 coverage — see the module's own doc comment), resolves the bridge, analyzes every resolved table, formats, then judges — integration only, no new computation; `runScenarioRules(context)` calls the three scenario rule modules and sorts their findings by rule id (stable), `scenarioJsonText(result)` is the exact CLI JSON |
 | `scripts/bpmn/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
-| `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
+| `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity`, `auditProfile` — what a profile *means*, shared by both rule engines. Nothing here prints or knows about processes or decisions. `loadRuleProfile` returns a `$missing` marker for a file that does not exist (the runner warns) and throws `ProfileRejectedError`, naming file, line and column, for one that is not JSON; `auditProfile` lists unknown rule ids, unknown layers and scenario-rule overrides (warnings) and unknown severities (errors) — the runner reports them. The HTTP API maps `ProfileRejectedError` to `400 profile_error` |
 | `scripts/shared/rule-catalog.js` | `buildRuleCatalog(register)` — joins a rule module's register (`{ module, partition, entries }`, checks only) with the ontology's rule metadata at import, and aborts that module's import on a rule only in code, only in the ontology, in the wrong module, or carrying its own `layer`/`defaultSeverity`; `registerFindings`, `rulesExpectedIn`, `partitionForModule` (path ⇒ rule set + run location). Imports only `ontology.js` |
 | `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
 | `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 19 DMN rules, 3 layers, 2 modes (17 run here, SC04/SC05 in the scenario pipeline). **Counted separately from the BPMN rule set** — see the DMN section under Rule Engine. Layer and default severity come from `references/ontology.jsonld` via `buildRuleCatalog` (`RULE_REGISTER`), not from literals in code |
@@ -495,7 +495,7 @@ rule sets — one per notation plus one across notations — and every count bel
 | Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Petri-Net soundness |
 | Optimization | ADVISORY | O01-O04 | Redesign advisories — `optimize`/`soll` mode only (opt-in); Reijers 2005 + BABOK Lean. Emits `validation.advisories` + `metrics.optimization` |
 
-Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/bpmn/optimize.js`.
+Profiles in `rules/*.json` override severities or disable layers. Mode: `document` (default, faithful IST) vs. `optimize`/`soll` (enables the Optimization layer). See `scripts/bpmn/optimize.js`. A profile entry its rule set cannot honour — an unknown rule id or layer, an override of a scenario rule, a profile file that does not exist — is reported as a `⚠ rule profile …` warning on stderr by the runner; an unknown severity, or `ADVISORY` on a BPMN rule outside the optimization layer, refuses the profile; a profile file that is not JSON aborts, naming file, line and column.
 
 ### DMN rule set — 19 DMN rules, 3 layers
 

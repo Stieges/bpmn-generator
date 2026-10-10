@@ -21,6 +21,7 @@ import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
+import { ProfileRejectedError } from './shared/rule-profile.js';
 
 export async function orchestrate(input, options = {}) {
   const maxReviewIterations = options.maxReviewIterations ?? 3;
@@ -156,6 +157,8 @@ export async function orchestrate(input, options = {}) {
       ts: new Date().toISOString(),
     });
   } catch (err) {
+    // A refused rule profile is the caller's input, not a compliance verdict on the model.
+    if (err instanceof ProfileRejectedError) throw err;
     state.history.push({ agent: 'compliance', error: err.message, ts: new Date().toISOString() });
     state.compliance = { isCompliant: false, errors: [`Compliance check failed: ${err.message}`], warnings: [] };
   }

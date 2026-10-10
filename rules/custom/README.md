@@ -75,3 +75,7 @@ The authoritative per-rule catalog, with the source behind each rule, is
 Files here are ordinary tracked files. If a profile encodes something about a
 client engagement, it does not belong in this repository — keep it outside and
 pass an absolute path.
+
+A profile is checked when a runner uses it: an unknown rule id or layer, or an override of SC01–SC06
+(scenario-pipeline rules, not profile-switchable yet), prints a `⚠ rule profile …` warning; an
+unknown severity is refused; a file that is not valid JSON aborts with its line and column.
