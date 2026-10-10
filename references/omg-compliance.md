@@ -37,7 +37,7 @@ having no `name`.
 
 Retrieved 2026-07-30 for the feasibility analysis in
 [2026-07-30-dmn-feasibility-design.md](../docs/superpowers/specs/2026-07-30-dmn-feasibility-design.md).
-Nothing in this project implements DMN — these are reference material only. Keep them in the `dmn/`
+The DMN generator (`scripts/dmn/`) and importer (`scripts/dmn/import.js`) are built against these files, which are reference material only. Keep them in the `dmn/`
 subdirectory: the DMN `DI.xsd`/`DC.xsd` belong to a **different namespace** than the BPMN files of the
 same name, and the schemas reference each other by relative `schemaLocation`.
 
