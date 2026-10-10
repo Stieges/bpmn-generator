@@ -312,8 +312,9 @@ export function normalizeLaneAssignments(proc) {
  * run, `_2`, `_3`, ... in document order. An id the author gave is never touched. Edges whose
  * source/target are not strings are left alone for validation to report.
  *
- * Idempotent. This is the ONLY place an edge id is invented: layout, serialisation and rendering
- * all read `edge.id` as-is, so a missing id downstream is a bug, not a case to handle (#64).
+ * Idempotent. This is the only fallback for a MISSING edge id (other code mints ids for edges it
+ * creates itself): layout, serialisation and rendering all read `edge.id` as-is, so a missing id
+ * downstream is a bug, not a case to handle (#64).
  * Message flows and associations require an `id` in the schema and need no such step.
  */
 export function assignEdgeIds(lc) {

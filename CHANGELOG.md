@@ -300,7 +300,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `topology.js`; on a collision with any id in the document `_2`, `_3`, … in document order;
   author ids are never touched; the caller's object is not mutated). The direct entries
   `logicCoreToElk`, `buildCoordinateMap`, `generateBpmnXml` and `generateSvg` complete id-less
-  edges in place the same way, and every downstream fallback is gone. Message flows and
+  edges in place the same way (they fill missing ids on the caller's object — in place, idempotent,
+  deterministic — whereas `runPipeline` works on a copy), and every downstream fallback is gone. Message flows and
   associations already require an `id`.
 - **DMN importer: `lossless: true` no longer comes with a Decision-Core that fails its own schema.**
   A value the schema requires and the file omits (definitions `@namespace`, a DRG element, parameter

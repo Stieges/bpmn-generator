@@ -9,6 +9,10 @@ import { CFG } from '../shared/utils.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { preprocessLogicCore, assignEdgeIds } from './topology.js';
 
+/**
+ * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
+ * `assignEdgeIds`); `runPipeline` instead works on a copy.
+ */
 function logicCoreToElk(lc, opts = {}) {
   // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
   assignEdgeIds(lc);
