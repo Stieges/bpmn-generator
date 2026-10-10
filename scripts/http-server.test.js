@@ -7,7 +7,8 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { server, resolveEnvLlmConfig, _resetRateLimit } from './http-server.js';
+import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile } from './http-server.js';
+import { ProfileRejectedError } from './shared/rule-profile.js';
 import { getAuditPath } from './audit.js';
 
 let baseUrl;
@@ -364,6 +365,29 @@ describe('rule profiles over HTTP — inline objects only, gated, bounded', () =
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.error).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+  });
+
+  test('clientRuleProfile refuses up front what the rule runner would refuse', () => {
+    const ruleProfile = { profile: 'bad', overrides: { M01: { severity: 'ADVISORY' } } };
+    expect(() => clientRuleProfile({ ruleProfile })).toThrow(ProfileRejectedError);
+    expect(() => clientRuleProfile({ ruleProfile })).toThrow(/ADVISORY/);
+  });
+
+  test('/api/v1/orchestrate: a profile the rule runner would refuse is a 400 before any agent runs', async () => {
+    let providerCalls = 0;
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith(baseUrl)) return realFetch(url, init);
+      providerCalls++;
+      throw new Error('LLM provider must not be reached');
+    };
+    const ruleProfile = { profile: 'bad', overrides: { M01: { severity: 'ADVISORY' } } };
+    const res = await post('/api/v1/orchestrate', {
+      logicCore: styled, ruleProfile, llmConfig: { baseUrl: 'http://llm.invalid/v1', apiKey: 'k', model: 'm' },
+    });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(data)).toMatch(/ADVISORY/);
+    expect(providerCalls).toBe(0);
   });
 
   test('/api/v1/orchestrate: a strict inline profile applies in the compliance phase', async () => {
