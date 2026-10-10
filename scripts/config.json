@@ -60,6 +60,10 @@
       "w": 100,
       "h": 80
     },
+    "transaction": {
+      "w": 100,
+      "h": 80
+    },
     "exclusiveGateway": {
       "w": 50,
       "h": 50
@@ -101,10 +105,6 @@
       "h": 60
     },
     "_expandedSubProcess": {
-      "w": 350,
-      "h": 200
-    },
-    "_transaction": {
       "w": 350,
       "h": 200
     }

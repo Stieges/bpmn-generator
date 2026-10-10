@@ -39,7 +39,7 @@ import { checkNetIntegrity } from './net-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 // Statically imported (not `await import` inside a test) so `describe` bodies can enumerate the
 // table and generate one case per entry — a dynamic import cannot be awaited during collection.
-import { OMG_NODE_FIELD_SCOPE as OMG_FIELD_SPECS, ARTIFACT_TYPES as ARTIFACT_TYPE_SET } from './types.js';
+import { OMG_NODE_FIELD_SCOPE as OMG_FIELD_SPECS, ARTIFACT_TYPES as ARTIFACT_TYPE_SET, SUPPORTED_NODE_TYPES } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = resolve(__dirname, '../../tests/fixtures');
@@ -1672,7 +1672,8 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
       // gains `eventGatewayType` and `instantiate`, which joined the loop in the same stage. The
       // rows this leaves uncovered are Stage 2's subject — see `roundTrip` in `types.js`.
       for (const spec of OMG_FIELD_SPECS.filter(f => f.writeSite === 'fieldLoop')) {
-        for (const type of spec.allowed) {
+        // An announced type (adHocSubProcess) has no BPMN element; bpmnXmlTag refuses it by design.
+        for (const type of [...spec.allowed].filter(t => SUPPORTED_NODE_TYPES.has(t))) {
           test(`${spec.field} on ${type} round-trips without an unknown-attribute warning`, async () => {
             const value = spec.type === 'boolean' ? true : 'x';
             const node = { id: 'n', type, name: 'X', [spec.field]: value };

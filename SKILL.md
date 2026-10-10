@@ -400,6 +400,7 @@ Use prompts from `references/prompt-template.md` for both roles.
 | `intermediateCatchEvent` | ◎ | Wait for event mid-flow |
 | `intermediateThrowEvent` | ◎● | Send event mid-flow |
 | `boundaryEvent` | ◎→ | Timer/error on task |
+| `task` | ▭ | Generic activity, type unspecified |
 | `userTask` | 👤 | Human work item |
 | `serviceTask` | ⚙ | System/API call |
 | `scriptTask` | 📄 | Script execution |
@@ -409,6 +410,7 @@ Use prompts from `references/prompt-template.md` for both roles.
 | `manualTask` | ✋ | Physical work |
 | `subProcess` | [+] | Collapsed complexity |
 | `callActivity` | ▬▬ | Reusable process |
+| `transaction` | ▣ | Sub-process that commits or cancels as a unit |
 | `exclusiveGateway` | ◇✕ | One path (XOR) |
 | `parallelGateway` | ◇+ | All paths (AND) |
 | `inclusiveGateway` | ◇○ | One or more (OR) |
@@ -417,6 +419,7 @@ Use prompts from `references/prompt-template.md` for both roles.
 | `dataObjectReference` | 📋 | Document/data |
 | `dataStoreReference` | 🗄 | Database |
 | `textAnnotation` | [ | Explanatory note |
+| `group` | ┅ | Visual grouping, no execution semantics |
 
 ---
 

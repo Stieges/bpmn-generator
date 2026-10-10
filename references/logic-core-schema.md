@@ -116,6 +116,7 @@ The Logic-Core supports two modes:
 | `manualTask`             | Manual Task             | Physical/offline activity                    |
 | `businessRuleTask`       | Business Rule Task      | DMN decision, rule engine call               |
 | `subProcess`             | Sub-Process (collapsed) | Collapsed activity grouping >3 sub-steps     |
+| `transaction`            | Transaction             | Sub-process that completes or is cancelled as a unit |
 | `callActivity`           | Call Activity           | Reusable called process                      |
 | `exclusiveGateway`       | XOR Gateway             | Exactly one path chosen, name as question    |
 | `parallelGateway`        | AND Gateway             | All paths execute simultaneously             |

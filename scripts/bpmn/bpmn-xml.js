@@ -341,7 +341,10 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     attrs[spec.attr] = value;
   }
 
-  const el = create(moddleType(node.type), attrs);
+  let elType;
+  try { elType = moddleType(node.type); }
+  catch (e) { throw new Error(`${e.message} (node "${node.id}")`); }
+  const el = create(elType, attrs);
 
   // Documentation
   if (node.documentation) {
