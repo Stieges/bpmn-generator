@@ -1,8 +1,11 @@
 /**
  * BPMN Fachliches Regelwerk — Modulare Regel-Engine
  *
- * 3 Schichten: Soundness (ERROR), Style (WARNING), Pragmatik (INFO)
- * Jede Regel hat: id, layer, defaultSeverity, description, ref, check(proc, lc)
+ * The BPMN rule set's `main` partition: S01–S17, M01–M11, P01–P03, WF01–WF03, O01–O04 (SC01/SC06
+ * belong to the same rule set but run in the scenario pipeline, scripts/bpmn/scenario-rules.js).
+ * Each entry here carries id, description, ref, scope and check — never layer or defaultSeverity:
+ * those come from references/ontology.jsonld via buildRuleCatalog (scripts/shared/rule-catalog.js),
+ * which aborts this module's import when code and ontology disagree.
  *
  * Quellen:
  *   - OMG BPMN 2.0.2 (ISO/IEC 19510:2013)
@@ -13,6 +16,7 @@
  */
 
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
+import { buildRuleCatalog } from '../shared/rule-catalog.js';
 import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES, TASK_TYPES,
   isActivity, isInteractionNode, isSequenceFlowExempt,
@@ -280,9 +284,9 @@ function starvedParallelJoins(proc, splitType, label) {
 // Schicht 1 — Strukturelle Soundness (ERROR)
 // ═══════════════════════════════════════════════════════════════════════
 
-const SOUNDNESS_RULES = [
+const SOUNDNESS_CHECKS = [
   {
-    id: 'S01', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S01',
     description: 'Jeder Prozess hat mindestens ein Start-Event',
     ref: { omg: '§10.4.2', pmg: 'G3' },
     scope: 'process',
@@ -294,7 +298,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S02', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S02',
     description: 'Jeder Prozess hat mindestens ein End-Event',
     ref: { omg: '§10.4.2', pmg: 'G3' },
     scope: 'process',
@@ -306,7 +310,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S03', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S03',
     description: 'Edge referential integrity — alle Quellen und Ziele existieren',
     ref: { omg: '§7.6.1' },
     scope: 'process',
@@ -323,7 +327,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S04', layer: 'soundness', defaultSeverity: 'WARNING',
+    id: 'S04',
     description: 'Every node is reached by an incoming sequence flow — no isolated and no '
       + 'unreachable nodes (Severity WARNING)',
     // The old citation was `{ pmg: 'G2' }`, and it did not survive scrutiny. 7PMG G2 is
@@ -384,7 +388,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S05', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S05',
     description: 'Deadlock: XOR-Split darf keinen AND-Join auf exklusiven Pfaden speisen',
     ref: {
       omg: '§10.5 Gateways',
@@ -407,7 +411,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S06', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S06',
     description: 'Deadlock: Inclusive-Split darf keinen AND-Join auf exklusiven Pfaden speisen',
     // Same shape as S05: an InclusiveGateway may activate a single outgoing
     // flow, so any branch that can fire alone can starve the join exactly as an
@@ -428,7 +432,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S07', layer: 'soundness', defaultSeverity: 'WARNING',
+    id: 'S07',
     description: 'Pfade terminieren — Nodes ohne ausgehende Kante (außer EndEvents)',
     ref: { omg: '§13.2', pmg: 'G3' },
     scope: 'process',
@@ -458,7 +462,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S08', layer: 'soundness', defaultSeverity: 'WARNING',
+    id: 'S08',
     description: 'Boundary-Event-Pfade müssen ein EndEvent erreichen',
     ref: { silver: 'M14' },
     scope: 'process',
@@ -485,7 +489,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S09', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S09',
     description: 'Message Flows nur zwischen Pools (nie innerhalb)',
     ref: { omg: '§7.6.2' },
     scope: 'global',
@@ -506,7 +510,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S10', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S10',
     description: 'Message Flow referential integrity — the endpoint exists, and (where it is a '
       + 'node) it is an InteractionNode',
     ref: {
@@ -577,7 +581,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S11', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S11',
     description: 'Expanded SubProcess muss Start- und End-Event haben',
     ref: { omg: '§10.2' },
     scope: 'process',
@@ -603,7 +607,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S12', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S12',
     description: 'Message Flow source/target darf kein Gateway sein (OMG §7.6.2 Table 7.4)',
     ref: { omg: '§7.6.2 Table 7.4', cmof: 'MessageFlow.sourceRef/targetRef type=InteractionNode; Gateway extends FlowNode (not InteractionNode)' },
     scope: 'global',
@@ -634,7 +638,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S13', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S13',
     description: 'Boundary Event muss an einer existierenden Aktivität hängen (OMG §10.4.3)',
     ref: { omg: '§10.4.3 Table 10.86', cmof: 'BoundaryEvent.attachedToRef : Activity [1..1]' },
     scope: 'process',
@@ -691,7 +695,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S14', layer: 'soundness', defaultSeverity: 'WARNING',
+    id: 'S14',
     description: 'Message Flow source/target darf kein Container sein — weder der Klasse nach '
       + '(SubProcess/Transaction/AdHocSubProcess/CallActivity) noch der Struktur nach (ein Knoten '
       + 'mit eigenem `nodes`-Array) (OMG §7.6.2 Table 7.4)',
@@ -762,7 +766,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S15', layer: 'soundness', defaultSeverity: 'WARNING',
+    id: 'S15',
     description: 'A per-node field must sit on a node class OMG defines it on — isForCompensation '
       + 'is an Activity attribute, implementation belongs to the five invoking Task types, '
       + 'triggeredByEvent to SubProcess and its Transaction specialization, calledElement to '
@@ -863,7 +867,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S16', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'S16',
     description: 'A definition reference (messageRef, signalRef, errorRef, escalationRef) must name '
       + 'a top-level definition of the matching type, on a node whose marker matches the field '
       + '(messageRef also on sendTask and receiveTask)',
@@ -913,7 +917,7 @@ const SOUNDNESS_RULES = [
     }
   },
   {
-    id: 'S17', layer: 'soundness', defaultSeverity: 'WARNING',
+    id: 'S17',
     description: 'An event with a message, signal, error or escalation marker and no definition '
       + 'reference is ambiguous when several top-level definitions of that type exist — no '
       + 'reference is written',
@@ -980,9 +984,9 @@ function violatesVerbObject(name) {
   return true;
 }
 
-const STYLE_RULES = [
+const STYLE_CHECKS = [
   {
-    id: 'M01', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M01',
     description: 'Activity-Labels: Objekt + Verb (Verb im Infinitiv)',
     ref: { silver: 'Ch.3', pmg: 'G5' },
     scope: 'process',
@@ -996,7 +1000,7 @@ const STYLE_RULES = [
     }
   },
   {
-    id: 'M02', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M02',
     description: 'XOR-Gateway-Labels: Frageform (endet mit ?)',
     ref: { silver: 'Ch.3' },
     scope: 'process',
@@ -1014,7 +1018,7 @@ const STYLE_RULES = [
     }
   },
   {
-    id: 'M03', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M03',
     description: 'Converging Gateway: keine Labels an ausgehenden Kanten',
     ref: { silver: 'Ch.4' },
     scope: 'process',
@@ -1033,7 +1037,7 @@ const STYLE_RULES = [
     }
   },
   {
-    id: 'M04', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M04',
     description: 'XOR-Gateway ausgehende Kanten müssen Labels haben',
     ref: { silver: 'Ch.4' },
     scope: 'process',
@@ -1054,7 +1058,7 @@ const STYLE_RULES = [
     }
   },
   {
-    id: 'M09', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M09',
     description: 'Lane-Node-Zuweisung: Format B (lane.nodeIds) ohne Format A (node.lane)',
     ref: {},
     scope: 'process',
@@ -1076,21 +1080,21 @@ const STYLE_RULES = [
   },
   // Platzhalter für zukünftige Style-Regeln
   {
-    id: 'M05', layer: 'style', defaultSeverity: 'OFF', // NOT_IMPLEMENTED
+    id: 'M05', // NOT_IMPLEMENTED
     description: 'Message-Flow-Labels: nur Substantive',
     ref: { silver: 'Ch.5' },
     scope: 'global',
     check: () => ({ pass: true }),
   },
   {
-    id: 'M06', layer: 'style', defaultSeverity: 'OFF', // NOT_IMPLEMENTED
+    id: 'M06', // NOT_IMPLEMENTED
     description: 'Event-Labels: Partizip/Zustand oder Substantiv',
     ref: { silver: 'Ch.3' },
     scope: 'process',
     check: () => ({ pass: true }),
   },
   {
-    id: 'M07', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M07',
     description: 'Vermeide OR-Gateways (inclusive)',
     ref: { pmg: 'G5' },
     scope: 'process',
@@ -1102,7 +1106,7 @@ const STYLE_RULES = [
     }
   },
   {
-    id: 'M08', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M08',
     description: 'Jeder XOR-Split hat einen Default-Flow',
     ref: { silver: 'Ch.4' },
     scope: 'process',
@@ -1122,7 +1126,7 @@ const STYLE_RULES = [
     }
   },
   {
-    id: 'M10', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M10',
     description: 'Lane and pool names should be ≤ 25 characters for readable swimlane headers',
     ref: { silver: '§4.2' },
     scope: 'global',
@@ -1151,7 +1155,7 @@ const STYLE_RULES = [
     }
   },
   {
-    id: 'M11', layer: 'style', defaultSeverity: 'WARNING',
+    id: 'M11',
     description: 'decisionRef belongs on a businessRuleTask — that is the element that invokes a decision',
     // Our own convention, not Bruce Silver: `decisionRef` is a generator extension
     // (see EXTENSION_NS in utils.js) and BPMN has no attribute for it at all, which
@@ -1190,9 +1194,9 @@ const STYLE_RULES = [
 // Schicht 3 — Pragmatische Qualität (INFO)
 // ═══════════════════════════════════════════════════════════════════════
 
-const PRAGMATICS_RULES = [
+const PRAGMATICS_CHECKS = [
   {
-    id: 'P01', layer: 'pragmatics', defaultSeverity: 'INFO',
+    id: 'P01',
     description: 'Modellgröße ≤ 50 Elemente pro Prozess',
     ref: { pmg: 'G1' },
     scope: 'process',
@@ -1205,7 +1209,7 @@ const PRAGMATICS_RULES = [
     }
   },
   {
-    id: 'P02', layer: 'pragmatics', defaultSeverity: 'INFO',
+    id: 'P02',
     description: 'Gateway-Verschachtelungstiefe ≤ 3',
     ref: {},
     scope: 'process',
@@ -1232,7 +1236,7 @@ const PRAGMATICS_RULES = [
     }
   },
   {
-    id: 'P03', layer: 'pragmatics', defaultSeverity: 'INFO',
+    id: 'P03',
     description: 'Control-Flow Complexity Score (CFC)',
     ref: { pmg: 'Metrik' },
     scope: 'process',
@@ -1259,23 +1263,23 @@ const PRAGMATICS_RULES = [
 // Schicht 4 — Workflow-Net Soundness (opt-in, formal verification)
 // ═══════════════════════════════════════════════════════════════════════
 
-const WORKFLOW_NET_RULES = [
+const WORKFLOW_NET_CHECKS = [
   {
-    id: 'WF01', layer: 'workflow_net', defaultSeverity: 'WARNING',
+    id: 'WF01',
     description: 'Liveness — jede Transition feuert mindestens einmal',
     ref: { vdaalst: 'Soundness Def. 1' },
     scope: 'global',
     check: () => ({ pass: true }), // Handled by runWfNetRules
   },
   {
-    id: 'WF02', layer: 'workflow_net', defaultSeverity: 'WARNING',
+    id: 'WF02',
     description: '1-Boundedness — kein Place akkumuliert mehr als 1 Token',
     ref: { vdaalst: 'Soundness Def. 2' },
     scope: 'global',
     check: () => ({ pass: true }), // Handled by runWfNetRules
   },
   {
-    id: 'WF03', layer: 'workflow_net', defaultSeverity: 'ERROR',
+    id: 'WF03',
     description: 'Proper Completion — keine Deadlocks, Sink erreichbar',
     ref: { vdaalst: 'Soundness Def. 3' },
     scope: 'global',
@@ -1291,27 +1295,27 @@ const WORKFLOW_NET_RULES = [
 // mirroring the Workflow-Net opt-in pattern. Sources: published Reijers &
 // Limam Mansar (2005) + BABOK v3 §10.34 — never internal material.
 
-const OPTIMIZATION_RULES = [
+const OPTIMIZATION_CHECKS = [
   {
-    id: 'O01', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    id: 'O01',
     description: 'Exception isolation — Ausnahmen vom Hauptfluss trennen',
     ref: { reijers: 'exception' }, tradeoff: { quality: '+' },
     scope: 'global', check: () => ({ pass: true }), // handled by runOptimizationAnalysis
   },
   {
-    id: 'O02', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    id: 'O02',
     description: 'Knock-out ordering — Prüfungen nach Aufwand/Wahrscheinlichkeit ordnen',
     ref: { reijers: 'knock-out' }, tradeoff: { cost: '−' },
     scope: 'global', check: () => ({ pass: true }),
   },
   {
-    id: 'O03', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    id: 'O03',
     description: 'Handoffs / task composition — Rollen-Übergaben reduzieren',
     ref: { reijers: 'task-composition', babok: '§10.34' }, tradeoff: { time: '−' },
     scope: 'global', check: () => ({ pass: true }),
   },
   {
-    id: 'O04', layer: 'optimization', defaultSeverity: 'ADVISORY',
+    id: 'O04',
     description: 'Parallelism candidate — sequentielle Aufgaben ggf. parallelisieren',
     ref: { reijers: 'parallelism' }, tradeoff: { time: '−' },
     scope: 'global', check: () => ({ pass: true }),
@@ -1322,7 +1326,21 @@ const OPTIMIZATION_RULES = [
 // Rule Registry + Runner
 // ═══════════════════════════════════════════════════════════════════════
 
-const RULES = [...SOUNDNESS_RULES, ...STYLE_RULES, ...PRAGMATICS_RULES, ...WORKFLOW_NET_RULES, ...OPTIMIZATION_RULES];
+/** What this module implements, for buildRuleCatalog and the parity tests (decision F26). */
+const RULE_REGISTER = {
+  module: 'scripts/bpmn/rules.js',
+  partition: { ruleSet: 'BPMN', runsIn: 'main' },
+  entries: [...SOUNDNESS_CHECKS, ...STYLE_CHECKS, ...PRAGMATICS_CHECKS, ...WORKFLOW_NET_CHECKS, ...OPTIMIZATION_CHECKS],
+};
+
+/** The checks above, each completed with `layer` and `defaultSeverity` from the ontology. */
+const RULES = buildRuleCatalog(RULE_REGISTER);
+const inLayer = (layer) => RULES.filter(r => r.layer === layer);
+const SOUNDNESS_RULES = inLayer('soundness');
+const STYLE_RULES = inLayer('style');
+const PRAGMATICS_RULES = inLayer('pragmatics');
+const WORKFLOW_NET_RULES = inLayer('workflow_net');
+const OPTIMIZATION_RULES = inLayer('optimization');
 
 // loadRuleProfile / isRuleEnabled / getEffectiveSeverity now live in
 // rule-profile.js — nothing about them was BPMN-specific, and the DMN engine
@@ -1349,14 +1367,15 @@ function profileForMode(baseProfile, mode = 'document') {
  * Run all rules against a Logic-Core document.
  * @param {object} lc - Logic-Core JSON
  * @param {object|null} profile - Rule profile (or null for defaults)
+ * @param {object[]} [catalog=RULES] - the rule catalog to walk; tests pass one built from a modified ontology
  * @returns {{ errors: string[], warnings: string[], infos: string[], metrics: object }}
  */
-function runRules(lc, profile = null) {
+function runRules(lc, profile = null, catalog = RULES) {
   const errors = [], warnings = [], infos = [], advisories = [];
   const metrics = {};
   const processes = lc.pools ? lc.pools : [lc];
 
-  for (const rule of RULES) {
+  for (const rule of catalog) {
     if (!isRuleEnabled(rule, profile)) continue;
     const severity = getEffectiveSeverity(rule, profile);
     if (severity === 'OFF') continue;
@@ -1385,7 +1404,7 @@ function runRules(lc, profile = null) {
     const wfResult = checkWorkflowNetSoundness(lc);
     for (const issue of wfResult.issues) {
       // Map WF rule severity through profile overrides
-      const wfRule = WORKFLOW_NET_RULES.find(r => r.id === issue.rule);
+      const wfRule = catalog.find(r => r.id === issue.rule);
       const severity = wfRule ? getEffectiveSeverity(wfRule, profile) : issue.severity;
       if (severity === 'OFF') continue;
       if (severity === 'ERROR') errors.push(issue.message);
@@ -1456,4 +1475,4 @@ function classifyResult(result, severity, errors, warnings, infos, prefix) {
   }
 }
 
-export { RULES, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES, loadRuleProfile, profileForMode, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };
+export { RULES, RULE_REGISTER, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES, loadRuleProfile, profileForMode, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };
