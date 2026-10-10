@@ -178,7 +178,7 @@ that a number here would go stale immediately; CI enforces it stays green.
 shared/utils.js, shared/resource-paths.js ← (no deps)
 shared/rule-profile.js ← shared/utils
 shared/geometry.js ← (no deps)
-bpmn/types.js ← (no deps)
+bpmn/types.js ← bpmn/ontology (loads references/bpmn-ontology.jsonld)
 bpmn/rules.js ← bpmn/types, bpmn/workflow-net, shared/rule-profile
 bpmn/workflow-net.js ← bpmn/types
 bpmn/validate.js ← bpmn/rules
@@ -279,6 +279,20 @@ import { validateLogicCore } from './validate.js';
 import { generateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
+```
+
+### Reading the ontology from another package
+
+The BPMN vocabulary (`references/bpmn-ontology.jsonld`) is exported as `bpmn-generator/ontology`.
+Node cannot `import` a `.jsonld` file (`ERR_UNKNOWN_FILE_EXTENSION`); resolve the path and parse it
+as plain JSON:
+
+```javascript
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const path = fileURLToPath(import.meta.resolve('bpmn-generator/ontology'));
+const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.resolve(...)
 ```
 
 ## Features

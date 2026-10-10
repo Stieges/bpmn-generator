@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`references/bpmn-ontology.jsonld` — the BPMN vocabulary as one JSON-LD file** (classes, node
   types, markers, definition kinds, element fields), loaded and validated at import by
   `scripts/bpmn/ontology.js`; exported as `bpmn-generator/ontology`; linked to the OMG metamodel
-  and BBO via `rdfs:seeAlso` only. Fences: no vocabulary list outside the ontology
+  and BBO via `rdfs:seeAlso` only; a field's allowed node types are `bg:allowedOn` (a declared
+  annotation property, deliberately not `rdfs:domain`, whose several values are conjunctive).
+  The file has a single default graph (the `owl:Ontology` header is a node inside `@graph`).
+  Node cannot `import` a `.jsonld`; read it with
+  `fileURLToPath(import.meta.resolve('bpmn-generator/ontology'))` + `readFileSync` + `JSON.parse`
+  (see README). Fences: no vocabulary list outside the ontology
   (`ontology-audit.js`); schema enums equal it; a type added only to the ontology fails the tests
   at every place that does not know it.
 - **`scripts/bpmn/orthogonal-router.js` — obstacle-aware crossing repair.** `repairCrossings`'s own

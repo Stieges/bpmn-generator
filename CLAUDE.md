@@ -205,7 +205,7 @@ membership instead of coordinates.
 | `scripts/bpmn/redesign-cli.js` | CLI entry to the redesign toolbox (`node bpmn/redesign-cli.js <input.json> <transform> [options] [--apply]`); preview is the default, nothing is written without `--apply`, a refusal exits non-zero and writes nothing |
 | `scripts/bpmn/validate.js` | Thin wrapper around `runRules()` |
 | `scripts/bpmn/ontology.js` | Loader for `references/bpmn-ontology.jsonld` (read as plain JSON, ajv-validated at import — an invalid ontology fails the process, a missing file names both paths tried). `buildVocabulary`/`VOCABULARY`: class members, node types and their status (`supported`/`announced`), markers (incl. lossy ones, which need a reason), definition kinds, per-field domains. Exported as `bpmn-generator/ontology`. `ontology-audit.js` finds vocabulary lists outside it; `ontology.test.js` fences schema enums equal to it |
-| `references/bpmn-ontology.jsonld` | The BPMN vocabulary, one JSON-LD file: classes, 26 node types (announced ones such as `adHocSubProcess` included), 12 markers, 4 definition kinds, one `rdf:Property` per schema field with `rdfs:domain`. Linked to the OMG metamodel (BPMN20.cmof) and BBO via `rdfs:seeAlso` only — no import, no reasoner. Labels are proper element names |
+| `references/bpmn-ontology.jsonld` | The BPMN vocabulary, one JSON-LD file: classes, 26 node types (announced ones such as `adHocSubProcess` included), 12 markers, 4 definition kinds, one `rdf:Property` per schema field with `allowedOn` (`bg:allowedOn`, not `rdfs:domain`). Linked to the OMG metamodel (BPMN20.cmof) and BBO via `rdfs:seeAlso` only — no import, no reasoner. Labels are proper element names |
 | `scripts/bpmn/types.js` | `isEvent`, `isGateway` (all type sets derive from `references/bpmn-ontology.jsonld` via `ontology.js` — no list of its own), `isArtifact` (layout sense — kept out of the ELK graph; wider than the BPMN class, includes data references), `isBpmnArtifact` (the actual OMG Artifact class — TextAnnotation, Group; use this one for anything that has to be right against the XSD), `bpmnXmlTag` (strict: an unknown or announced type throws), plus `OMG_NODE_FIELD_SCOPE`/`isFieldOutOfScope` — the single table of which node classes may carry which OMG-scoped per-node field (`isCompensation`, `implementation`, `isEventSubProcess`, `calledElement`, `scriptFormat`, `isCollection`). Read by **both** `bpmn-xml.js`'s `buildFlowNode` (drops an out-of-scope field, so the XML stays valid) and `rules.js`'s S15 (reports the drop, so it is not silent). Add a scoped field here, never inline in either consumer — the two disagreeing is the defect the table exists to prevent. Note `implementation`'s scope is narrower than `Activity` (five invoking Task types only), which is why the table is per-field rather than one `isActivity` test |
 | `scripts/shared/utils.js` | `loadConfig`, `CFG`, `esc`, `wrapText`, `EXTENSION_NS` (our own `extensionElements` namespace — always create those via `moddle.createAny(name, EXTENSION_NS, …)`; setting a prefixed attribute in `$attrs` without a matching `xmlns:` declaration makes moddle **drop the value silently**, logging to stderr while `warnings` stays empty). Carries only what both `bpmn/` and `dmn/` use — the 13 BPMN-only layout constants live in `scripts/bpmn/constants.js` |
 | `scripts/bpmn/constants.js` | The 13 BPMN-only layout constants (`SHAPE`, `SW`, `CLR`, `LANE_HEADER_W`, `LANE_PADDING`, `LABEL_DISTANCE`, `TASK_RX`, `INNER_OUTER_GAP`, `EXTERNAL_LABEL_H`, `POOL_GAP`, `COLLAB_PADDING`, `MESSAGE_FLOW_FAN`, `ARTIFACT_GAP`), derived from `CFG` (`../shared/utils.js`) — never imported by `dmn/` |
@@ -308,6 +308,9 @@ After every change: `npm test` must pass.
    is the primary path, `import.js` the fallback — fixing only one leaves the round trip lossy)
 7. `references/omg-compliance.md` — update OMG mapping
 8. `references/input-schema.json` — extend schema
+9. Raise the minor `version` of the `owl:Ontology` node in `references/bpmn-ontology.jsonld` and the
+   `default` of both `$schemaVersion` blocks in `references/input-schema.json` (the version tests
+   enforce that they agree)
 
 ### Adding a per-node field
 
@@ -323,7 +326,7 @@ The failure mode is invisible: bpmn-moddle reports attributes it does not *know*
 that never arrived, so an omission produces no warning and `validation.errors` stays empty.
 
 **So the procedure is: add the property to `references/input-schema.json` and an `rdf:Property`
-with its `rdfs:domain` to `references/bpmn-ontology.jsonld`, then add a row to
+with its `domain` (JSON key; `bg:allowedOn` in RDF) to `references/bpmn-ontology.jsonld`, then add a row to
 `OMG_NODE_FIELD_SCOPE` (or `OMG_EDGE_FIELD_SCOPE`) in `scripts/bpmn/types.js` (its `allowed` now
 comes from that domain), then let `scripts/bpmn/field-fidelity.test.js` name every place you
 missed.** Adding the property to `references/input-schema.json` without a row fails CI naming the
