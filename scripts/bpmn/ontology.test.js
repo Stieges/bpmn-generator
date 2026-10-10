@@ -382,3 +382,28 @@ describe('round trip keeps the type', () => {
     }
   });
 });
+
+import { validateLogicCoreSchema } from './schema-gate.js';
+
+describe('format and ontology agree', () => {
+  const s = JSON.parse(readFileSync(join(__dirname, '..', '..', 'references', 'input-schema.json'), 'utf8'));
+  test('NodeType enum equals the supported node types', () => {
+    expect([...s.$defs.NodeType.enum].sort()).toEqual(VOCABULARY.nodeTypeNames(['supported', 'lossy']).sort());
+  });
+  test('EventMarker enum equals the ontology markers', () => {
+    expect([...s.$defs.EventMarker.enum].sort()).toEqual(VOCABULARY.markerNames(['supported', 'lossy']).sort());
+  });
+  test('TopLevelDefinition kinds equal the ontology definition kinds', () => {
+    expect([...s.$defs.TopLevelDefinition.properties.type.enum].sort()).toEqual([...VOCABULARY.definitionKinds].sort());
+  });
+  test('both $schemaVersion declarations default to the ontology version', () => {
+    expect(s.$defs.SingleProcess.properties.$schemaVersion.default).toBe(VOCABULARY.version);
+    expect(s.$defs.Collaboration.properties.$schemaVersion.default).toBe(VOCABULARY.version);
+  });
+  test('a Logic-Core written for 1.0 stays valid after a minor bump; 2.0 does not', () => {
+    const lc = (v) => ({ $schemaVersion: v, id: 'p', nodes: [{ id: 's', type: 'startEvent' }], edges: [] });
+    expect(validateLogicCoreSchema(lc('1.0')).valid).toBe(true);
+    expect(validateLogicCoreSchema(lc('1.7')).valid).toBe(true);
+    expect(validateLogicCoreSchema(lc('2.0')).valid).toBe(false);
+  });
+});
