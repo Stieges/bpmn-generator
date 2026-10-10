@@ -144,3 +144,27 @@ describe('import graph — no cycle', () => {
     expect(importsOf('shared/rule-catalog.js')).toEqual(['./ontology.js']);
   });
 });
+
+import { RULE_REGISTER as DMN_MAIN, DMN_RULES } from '../dmn/rules.js';
+import { readdirSync } from 'node:fs';
+
+describe('the DMN main catalog — Block 2', () => {
+  test('the real register matches the ontology', () => {
+    expect(registerFindings(DMN_MAIN)).toEqual([]);
+    expect(DMN_RULES.find((r) => r.id === 'D06')).toMatchObject({ layer: 'semantics', defaultSeverity: 'WARNING' });
+    expect(readFileSync(join(__dirname, '..', 'dmn', 'rules.js'), 'utf8')).not.toMatch(/defaultSeverity: '|layer: '/);
+  });
+
+  test('a DMN gap names D99 for dmn/rules.js and leaves the BPMN catalog untouched (F26)', () => {
+    const v = buildVocabulary(withRule(raw(), 'D99', 'DMN', 'soundness'));
+    expect(registerFindings(DMN_MAIN, v)).toEqual(['D99: only in the ontology — scripts/dmn/rules.js registers no check for it']);
+    expect(registerFindings(BPMN_MAIN, v)).toEqual([]);
+  });
+
+  test('nothing under scripts/bpmn/ imports dmn/, cross/ or scenarios/ — a DMN gap cannot reach runPipeline', () => {
+    const dir = join(__dirname, '..', 'bpmn');
+    const offenders = readdirSync(dir).filter((f) => f.endsWith('.js') && !f.endsWith('.test.js'))
+      .filter((f) => /from\s+'\.\.\/(dmn|cross|scenarios)\//.test(readFileSync(join(dir, f), 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+});

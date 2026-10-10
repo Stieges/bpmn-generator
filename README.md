@@ -195,7 +195,7 @@ bpmn/svg.js ← bpmn/types, shared/utils, bpmn/icons
 bpmn/dot.js ← bpmn/types
 bpmn/pipeline.js ← all of the above bpmn/ modules
 dmn/schema-gate.js ← shared/resource-paths
-dmn/rules.js ← shared/rule-profile, shared/utils
+dmn/rules.js ← shared/rule-profile, shared/utils, shared/rule-catalog
 dmn/layout.js ← dmn/constants, dmn/requirement-order, shared/utils, elkjs
 dmn/coordinates.js ← dmn/constants, dmn/requirement-order, shared/geometry
 dmn/dmn-xml.js ← shared/utils, dmn/requirement-order, dmn-moddle

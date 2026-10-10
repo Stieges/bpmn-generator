@@ -1,8 +1,9 @@
 /**
  * DMN Rule Engine — structural checks on a Decision-Core document.
  *
- * Same rule-object shape as the BPMN engine (`{ id, layer, defaultSeverity,
- * description, ref, check }`) and the same profile machinery (`rule-profile.js`),
+ * Same rule-entry shape as the BPMN engine (`{ id, description, ref, check }` — layer
+ * and defaultSeverity come from references/ontology.jsonld via buildRuleCatalog,
+ * scripts/shared/rule-catalog.js) and the same profile machinery (`rule-profile.js`),
  * because the frame is format-independent. The rules themselves are not: a
  * decision model is not "sound" in the workflow sense — it has no start, no end
  * and no token. Its questions are different, and so are these.
@@ -18,6 +19,7 @@
 
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
 import { CFG } from '../shared/utils.js';
+import { buildRuleCatalog } from '../shared/rule-catalog.js';
 
 /**
  * DMN 1.3 Table 2, "Requirements connection rules", verbatim minus the two
@@ -55,9 +57,9 @@ const byId = (dc) => new Map((dc.nodes ?? []).map(n => [n.id, n]));
 const requirementsOf = (dc) => dc.requirements ?? [];
 const logicOf = (node) => node.decisionTable ?? (node.expression != null ? { _literal: true } : null);
 
-export const DMN_RULES = [
+const DMN_CHECKS = [
   {
-    id: 'D01', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D01',
     description: 'Every requirement connects two declared nodes',
     ref: { omg: 'DMN 1.3 §6.3.2', xsd: 'tDMNElementReference/@href' },
     check: (dc) => {
@@ -72,7 +74,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D02', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D02',
     description: 'The decision requirement graph is acyclic',
     ref: { omg: 'DMN 1.3 §6.1.2', note: 'A DRG is a directed ACYCLIC graph; a cycle cannot be evaluated' },
     check: (dc) => {
@@ -116,7 +118,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D03', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D03',
     description: 'Requirements connect element types DMN permits, with the type the pair implies',
     ref: { omg: 'DMN 1.3 §6.2.3, Table 2 "Requirements connection rules"' },
     check: (dc) => {
@@ -141,7 +143,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D04', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D04',
     description: 'A decision table has at least one output clause',
     ref: { xsd: 'tDecisionTable/output — no minOccurs, so it defaults to 1' },
     check: (dc) => {
@@ -154,7 +156,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D05', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D05',
     description: 'Every rule has one entry per input, output and annotation column',
     ref: { omg: 'DMN 1.3 §8.2', note: 'Entries are positional — a short row silently shifts meaning' },
     check: (dc) => {
@@ -179,7 +181,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D09', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D09',
     description: 'A Collect operator needs a single output — it is undefined over compound outputs',
     ref: { omg: 'DMN 1.3 §8.2.11', quote: 'compound outputs support ... Collect without operator, because the collect operator is undefined over multiple outputs' },
     check: (dc) => {
@@ -192,7 +194,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D10', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D10',
     description: 'PRIORITY and OUTPUT ORDER need output values — that is where the priority comes from',
     ref: { omg: 'DMN 1.3 §8.2.11', quote: 'Output priorities are specified in the ordered list of output values, in decreasing order of priority' },
     check: (dc) => {
@@ -211,7 +213,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D11', layer: 'soundness', defaultSeverity: 'ERROR',
+    id: 'D11',
     description: 'A CrossTable is always UNIQUE',
     ref: { omg: 'DMN 1.3 §8.1', quote: 'Crosstab tables are always Unique and need no indicator' },
     check: (dc) => {
@@ -225,7 +227,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D06', layer: 'semantics', defaultSeverity: 'WARNING',
+    id: 'D06',
     description: 'A decision should carry decision logic',
     ref: { omg: 'DMN 1.3 §6.3.1', note: 'Legal without — the DRD then documents intent only, which is often deliberate early on' },
     check: (dc) => {
@@ -238,7 +240,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D07', layer: 'semantics', defaultSeverity: 'WARNING',
+    id: 'D07',
     description: 'Every input data element feeds something',
     ref: { note: 'An input nothing requires is either dead or a missing requirement' },
     check: (dc) => {
@@ -252,7 +254,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'D08', layer: 'semantics', defaultSeverity: 'WARNING',
+    id: 'D08',
     description: 'aggregation only means something with hit policy COLLECT',
     ref: { xsd: 'tDecisionTable/@aggregation : tBuiltinAggregator', omg: 'DMN 1.3 §8.2.11' },
     check: (dc) => {
@@ -274,7 +276,7 @@ export const DMN_RULES = [
   // being documented as-is should not be nagged about how it ought to look.
   // ═══════════════════════════════════════════════════════════════════════
   {
-    id: 'B01', layer: 'best_practice', defaultSeverity: 'WARNING',
+    id: 'B01',
     description: 'Avoid the FIRST hit policy',
     // The specification itself takes this position, which is why it is here
     // rather than in a style guide of our own invention.
@@ -289,7 +291,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'B02', layer: 'best_practice', defaultSeverity: 'WARNING',
+    id: 'B02',
     description: 'A decision table should stay small enough to read',
     ref: { note: 'Threshold in config.json → dmn.maxRulesPerTable (default 20)' },
     check: (dc, cfg) => {
@@ -303,7 +305,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'B03', layer: 'best_practice', defaultSeverity: 'WARNING',
+    id: 'B03',
     description: 'A decision should state the question it answers',
     // DMN models `question` and `allowedAnswers` as first-class properties
     // precisely so a decision is self-describing without reading its logic.
@@ -318,7 +320,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'B04', layer: 'best_practice', defaultSeverity: 'WARNING',
+    id: 'B04',
     description: 'Input data should declare its type',
     ref: { note: 'Untyped input makes the unary tests in every table that uses it unverifiable' },
     check: (dc) => {
@@ -331,7 +333,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'B05', layer: 'best_practice', defaultSeverity: 'WARNING',
+    id: 'B05',
     description: 'A knowledge source should say what it is and where it lives',
     ref: { omg: 'DMN 1.3 §6.3.12, Table 19 (KnowledgeSource attributes)' },
     check: (dc) => {
@@ -344,7 +346,7 @@ export const DMN_RULES = [
     },
   },
   {
-    id: 'B06', layer: 'best_practice', defaultSeverity: 'WARNING',
+    id: 'B06',
     description: 'The requirement chain should not run too deep',
     ref: { note: 'Threshold in config.json → dmn.maxDrgDepth (default 5)' },
     check: (dc, cfg) => {
@@ -369,6 +371,16 @@ export const DMN_RULES = [
     },
   },
 ];
+
+/** What this module implements, for buildRuleCatalog and the parity tests (decision F26). */
+export const RULE_REGISTER = {
+  module: 'scripts/dmn/rules.js',
+  partition: { ruleSet: 'DMN', runsIn: 'main' },
+  entries: DMN_CHECKS,
+};
+
+/** The checks above, each completed with `layer` and `defaultSeverity` from the ontology. */
+export const DMN_RULES = buildRuleCatalog(RULE_REGISTER);
 
 /** The layers a mode turns on, beyond what the base profile already says. */
 const MODES = {
