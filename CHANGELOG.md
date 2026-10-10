@@ -312,6 +312,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **DMN import: the `mapsTo` values are fenced against the Decision-Core schema (#61).** F1b fenced
+  the keys only, so a row could claim a slot that `references/decision-core-schema.json` does not
+  have. Fence F1c resolves each value's leading slot (`Type.property`, `Type{type:"x"}` or a root
+  property) and every other `Type.property` token in it against the schema's `$defs`; the three
+  genuinely multi-target values carry an explicit `multiTarget` opt-out with a reason (their
+  embedded tokens are still resolved). Renaming a schema property now fails the fence naming the
+  row. It proves the slot exists, not that the importer writes it. The `mapsTo` doc comment in
+  `import-scope.js`, which said values are never parsed, is rewritten.
 - **A single-process Logic-Core without an `id` no longer emits `undefined` (#37).** The schema's
   `SingleProcess` branch makes `id` optional; the process, `Participant_undefined`/`processRef`, the
   plane's `bpmnElement`, the lane DI, `dot.js` (a `TypeError` with lanes), the re-imported phantom
