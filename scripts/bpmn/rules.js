@@ -16,7 +16,7 @@ import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/
 import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES, TASK_TYPES,
   isActivity, isInteractionNode, isSequenceFlowExempt,
-  OMG_NODE_FIELD_SCOPE, isFieldOutOfScope, isFieldWrongType,
+  OMG_NODE_FIELD_SCOPE, isFieldOutOfScope, isFieldWrongType, resolveDefinitionRef,
 } from './types.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
@@ -901,11 +901,11 @@ const SOUNDNESS_RULES = [
               continue;
             }
           }
-          const target = defs.find((d) => d.id === value);
-          if (!target) {
+          const { reason, found } = resolveDefinitionRef(n, spec.kind, defs);
+          if (reason === 'dangling') {
             msgs.push(`${label} carries "${spec.field}" = "${value}", but no top-level definition has that id. Declare it in \`definitions\` (type "${spec.kind}") or correct the id.`);
-          } else if (target.type !== spec.kind) {
-            msgs.push(`${label} carries "${spec.field}" = "${value}", but that is a ${target.type} definition, not a ${spec.kind} definition.`);
+          } else if (reason === 'wrong-type') {
+            msgs.push(`${label} carries "${spec.field}" = "${value}", but that is a ${found.type} definition, not a ${spec.kind} definition.`);
           }
         }
       }
@@ -927,8 +927,7 @@ const SOUNDNESS_RULES = [
     // WARNING: the file is valid and generates; what is lost is the link the author presumably
     // wanted. Before #53 the writer picked the LAST definition here, silently; it now refuses to
     // guess, and this rule is the place that says so. A single definition of the type is
-    // unambiguous (it is referenced implicitly) and stays quiet. `rules/strict-profile.json`
-    // escalates it.
+    // unambiguous (it is referenced implicitly) and stays quiet. The CLI's `--strict` aborts on it.
     check: (_proc, lc) => {
       const defs = lc.definitions || [];
       const msgs = [];
@@ -937,10 +936,8 @@ const SOUNDNESS_RULES = [
         const marker = n.marker || inferEventMarker(n.name || '');
         const spec = DEFINITION_REF_ROWS.find((r) => r.kind === marker);
         if (!spec) continue;
-        const v = n[spec.field];
-        if (v !== undefined && v !== null && v !== '') continue;   // chosen (S16 judges the choice)
+        if (resolveDefinitionRef(n, marker, defs).reason !== 'ambiguous') continue;   // a chosen ref is S16's to judge
         const candidates = defs.filter((d) => d.type === marker);
-        if (candidates.length < 2) continue;
         msgs.push(`Event "${n.id}" (${n.name || ''}) has marker "${marker}" but no ${spec.field}, and ${candidates.length} ${marker} definitions exist (${candidates.map((d) => d.id).join(', ')}). No reference is written — set ${spec.field} to one of them.`);
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };

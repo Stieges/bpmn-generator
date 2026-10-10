@@ -9,6 +9,7 @@
 import { describe, test, expect } from '@jest/globals';
 import { runPipeline } from './pipeline.js';
 import { runRules } from './rules.js';
+import { resolveDefinitionRef } from './types.js';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 
 const proc = (nodes, definitions, extraEdges = []) => ({
@@ -124,16 +125,16 @@ describe('S16 — a *Ref that cannot be honoured is an ERROR', () => {
 describe('send/receive tasks carry messageRef as an attribute', () => {
   const model = (type) => proc([
     { id: 's', type: 'startEvent', name: 'Start' },
-    { id: 't', type, name: 'Task', messageRef: 'Msg_Pay' },
+    { id: 't', type, name: 'Task', messageRef: 'Msg_Order' },
     { id: 'e', type: 'endEvent', name: 'End' },
   ], TWO_MSG);
 
   test.each(['sendTask', 'receiveTask'])('%s: written and read back by both importers', async (type) => {
     const r = await runPipeline(model(type));
     expect(r.validation.errors).toEqual([]);
-    expect(r.bpmnXml).toMatch(new RegExp(`<bpmn:${type}[^>]* messageRef="Msg_Pay"`));
+    expect(r.bpmnXml).toMatch(new RegExp(`<bpmn:${type}[^>]* messageRef="Msg_Order"`));
     for (const lc of [await bpmnToLogicCore(r.bpmnXml), bpmnToLogicCoreLegacy(r.bpmnXml)]) {
-      expect(lc.nodes.find((n) => n.id === 't').messageRef).toBe('Msg_Pay');
+      expect(lc.nodes.find((n) => n.id === 't').messageRef).toBe('Msg_Order');
     }
   });
 
@@ -154,10 +155,10 @@ describe('every definition kind — explicit reference round-trips through both 
     ['escalation', 'escalationRef', 'endEvent'],
   ];
   test.each(KINDS)('%s via %s', async (kind, field, eventType) => {
-    const defs = [{ type: kind, id: `${kind}_A`, name: 'A' }, { type: kind, id: `${kind}_B`, name: 'B' }];
+    const defs = [{ type: kind, id: `${kind}_A`, name: 'A' }, { type: kind, id: `${kind}_A`, name: 'B' }];
     const mid = eventType === 'endEvent'
-      ? { id: 'x', type: 'endEvent', marker: kind, name: 'X', [field]: `${kind}_B` }
-      : { id: 'x', type: eventType, marker: kind, name: 'X', [field]: `${kind}_B` };
+      ? { id: 'x', type: 'endEvent', marker: kind, name: 'X', [field]: `${kind}_A` }
+      : { id: 'x', type: eventType, marker: kind, name: 'X', [field]: `${kind}_A` };
     const lc = eventType === 'endEvent'
       ? { id: 'p', name: 'P', definitions: defs,
           nodes: [{ id: 's', type: 'startEvent', name: 'S' }, { id: 't', type: 'userTask', name: 'T' }, mid],
@@ -165,10 +166,37 @@ describe('every definition kind — explicit reference round-trips through both 
       : proc([{ id: 's', type: 'startEvent', name: 'S' }, mid, { id: 'e', type: 'endEvent', name: 'E' }], defs);
     const r = await runPipeline(lc);
     expect(r.validation.errors).toEqual([]);
-    expect(refsIn(r.bpmnXml, field)).toEqual([`${kind}_B`]);
+    expect(refsIn(r.bpmnXml, field)).toEqual([`${kind}_A`]);
     for (const out of [await bpmnToLogicCore(r.bpmnXml), bpmnToLogicCoreLegacy(r.bpmnXml)]) {
-      expect(out.nodes.find((n) => n.id === 'x')[field]).toBe(`${kind}_B`);
+      expect(out.nodes.find((n) => n.id === 'x')[field]).toBe(`${kind}_A`);
     }
+  });
+});
+
+describe('duplicate definition ids resolve to the first, in writer and rules alike', () => {
+  test('writer references the first; S16 agrees; resolveDefinitionRef pins it', async () => {
+    const defs = [{ type: 'message', id: 'Dup', name: 'First' }, { type: 'message', id: 'Dup', name: 'Second' }];
+    expect(resolveDefinitionRef({ messageRef: 'Dup' }, 'message', defs).def).toBe(defs[0]);
+    const lc = proc([
+      { id: 's', type: 'startEvent', marker: 'message', name: 'S', messageRef: 'Dup' },
+      { id: 'w', type: 'intermediateCatchEvent', marker: 'message', name: 'W', messageRef: 'Dup' },
+      { id: 'e', type: 'endEvent', name: 'E' },
+    ], defs);
+    expect(runRules(lc, null).errors).toEqual([]);
+    const r = await runPipeline(lc);
+    const first = r.bpmnXml.match(/<bpmn:message id="Dup" name="([^"]*)"/);
+    expect(first[1]).toBe('First');
+    expect(refsIn(r.bpmnXml, 'messageRef')).toEqual(['Dup', 'Dup']);
+  });
+
+  test('resolveDefinitionRef reasons', () => {
+    const defs = [{ type: 'message', id: 'M1' }, { type: 'message', id: 'M2' }, { type: 'signal', id: 'S1' }];
+    expect(resolveDefinitionRef({}, 'message', defs).reason).toBe('ambiguous');
+    expect(resolveDefinitionRef({}, 'signal', defs)).toEqual({ def: defs[2], reason: 'implicit' });
+    expect(resolveDefinitionRef({}, 'error', defs)).toEqual({ def: null, reason: 'none' });
+    expect(resolveDefinitionRef({ messageRef: 'X' }, 'message', defs).reason).toBe('dangling');
+    expect(resolveDefinitionRef({ messageRef: 'S1' }, 'message', defs).reason).toBe('wrong-type');
+    expect(resolveDefinitionRef({ messageRef: 'M2' }, 'message', defs)).toEqual({ def: defs[1], reason: 'explicit' });
   });
 });
 

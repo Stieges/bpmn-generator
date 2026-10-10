@@ -42,10 +42,10 @@ Notiz über der Regel-Tabelle unten).
 
 ---
 
-## Schicht 1: Soundness (ERROR, fuenf Regeln WARNING)
+## Schicht 1: Soundness (ERROR, sechs Regeln WARNING)
 
 Strukturelle Korrektheit. Blockiert die Pipeline bei Verletzung — mit Ausnahme von S04, S07, S08,
-S14 und S15, die per Default `WARNING` sind und daher melden, ohne die Generierung zu stoppen. Die
+S14, S15 und S17, die per Default `WARNING` sind und daher melden, ohne die Generierung zu stoppen. Die
 Severity steht pro Regel in `defaultSeverity` (`scripts/bpmn/rules.js`) und ist ueber Profile
 ueberschreibbar; `rules/strict-profile.json` hebt S14 auf `ERROR`.
 
@@ -737,7 +737,7 @@ referenced the **last** definition of the type, so two message events could not 
 messages and nothing reported it.
 
 **Why WARNING.** An event definition without `messageRef` etc. is valid (multiplicity 0..1); what is
-lost is the link the author presumably wanted. `rules/strict-profile.json` escalates it. A single
+lost is the link the author presumably wanted. The CLI's `--strict` aborts on it. A single
 definition is unambiguous and stays silent. A field naming something unusable is S16's finding, not
 S17's.
 

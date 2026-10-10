@@ -11,6 +11,7 @@ import {
   isEvent, isGateway, isBoundaryEvent, isBpmnArtifact,
   OMG_NODE_FIELD_SCOPE, nodeFieldSpec, matchesFieldType, bpmnXmlTag,
   EVENT_DEFINITION_BY_MARKER, FLOW_NODE_TYPES,
+  resolveDefinitionRef,
 } from './types.js';
 
 import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
@@ -116,34 +117,6 @@ const DEFINITION_REF_FIELD = {
   message: 'messageRef', error: 'errorRef', signal: 'signalRef', escalation: 'escalationRef',
 };
 
-const DEFINITION_MODDLE_TYPE = {
-  message: 'bpmn:Message', error: 'bpmn:Error', signal: 'bpmn:Signal', escalation: 'bpmn:Escalation',
-};
-
-/**
- * Which top-level definition of `type` does `node` reference?
- *
- *   1. its own `<type>Ref` field, if it names a definition of that type;
- *   2. else, when exactly one definition of the type exists, that one;
- *   3. else none. Several candidates and no choice made is ambiguity, and picking one (this used
- *      to be "the last") emits a reference the author never expressed. An event definition
- *      without a `*Ref` is valid XSD; S17 tells the author about it.
- *
- * A field that names nothing usable (dangling id, wrong type) is NOT replaced by the single
- * definition either: S16 reports it, and substituting would hide the mistake.
- * With no definition of the type at all the lookup is empty and the behaviour is unchanged.
- * `topLevelDefsMap` is `{ byType: Map<type, element[]>, byId: Map<id, element> }`.
- */
-function resolveDefinition(node, type, topLevelDefsMap) {
-  const named = node[DEFINITION_REF_FIELD[type]];
-  if (named !== undefined && named !== null && named !== '') {
-    const el = topLevelDefsMap.byId.get(named);
-    return el && el.$type === DEFINITION_MODDLE_TYPE[type] ? el : null;
-  }
-  const candidates = topLevelDefsMap.byType.get(type) || [];
-  return candidates.length === 1 ? candidates[0] : null;
-}
-
 /**
  * Build event definition moddle element for a node.
  */
@@ -160,8 +133,8 @@ function buildEventDefinition(node, topLevelDefsMap) {
   // type's only definition, if there is exactly one; otherwise none (see resolveDefinition).
   const refProp = DEFINITION_REF_FIELD[marker];
   if (refProp) {
-    const topDef = resolveDefinition(node, marker, topLevelDefsMap);
-    if (topDef) attrs[refProp] = topDef;
+    const topDef = resolveDefinitionRef(node, marker, topLevelDefsMap.defs).def;
+    if (topDef) attrs[refProp] = topDef.el;
   }
 
   // Timer expressions
@@ -187,17 +160,13 @@ function buildEventDefinition(node, topLevelDefsMap) {
 
 /**
  * Collect top-level definitions (message, signal, error, escalation)
- * and return the moddle elements array plus a lookup: `markerMap` is
- * `{ byType: Map<type, element[]>, byId: Map<id, element> }`.
+ * and return the moddle elements array plus a lookup: `markerMap` is `{ defs }`, a list of
+ * `{ type, id, el }` in declaration order, resolved by `resolveDefinitionRef` (types.js).
  */
 function buildTopLevelDefinitions(processes, explicitDefs) {
   const elements = [];
-  const markerMap = { byType: new Map(), byId: new Map() };
-  const register = (type, el) => {
-    if (!markerMap.byType.has(type)) markerMap.byType.set(type, []);
-    markerMap.byType.get(type).push(el);
-    markerMap.byId.set(el.id, el);
-  };
+  const markerMap = { defs: [] };
+  const register = (type, el) => { markerMap.defs.push({ type, id: el.id, el }); };
 
   if (explicitDefs && explicitDefs.length > 0) {
     for (const d of explicitDefs) {
@@ -382,8 +351,8 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   // not of an event definition. Only an explicit field is written: a task has no marker to infer
   // from, so "the only message" would be a guess about intent, not a default.
   if ((node.type === 'sendTask' || node.type === 'receiveTask') && node.messageRef) {
-    const msg = resolveDefinition(node, 'message', topLevelDefsMap);
-    if (msg) attrs.messageRef = msg;
+    const msg = resolveDefinitionRef(node, 'message', topLevelDefsMap.defs).def;
+    if (msg) attrs.messageRef = msg.el;
   }
 
   let elType;
