@@ -149,6 +149,21 @@ Set `marker` on event nodes to specify the trigger type:
 
 If `marker` is not set, the pipeline infers it from the event name (e.g. "Frist abgelaufen" → timer).
 
+### Referencing a definition: `messageRef`, `signalRef`, `errorRef`, `escalationRef`
+
+Message, signal, error and escalation events can point at a specific top-level definition (the
+`definitions` array on the document) by id. The field is named after the OMG attribute and must match
+the marker: `messageRef` on a `message` event, `signalRef` on `signal`, `errorRef` on `error`,
+`escalationRef` on `escalation`. `messageRef` is also valid on `sendTask` and `receiveTask`.
+
+```json
+{ "id": "w", "type": "intermediateCatchEvent", "marker": "message", "name": "Payment confirmed", "messageRef": "Msg_Pay" }
+```
+
+Without the field: exactly one definition of the type is referenced implicitly; with several, no
+reference is written and rule S17 warns. A reference to an unknown id, to a definition of another
+type, or on a node whose marker does not match is rule S16 (ERROR).
+
 ---
 
 ## EdgeObject

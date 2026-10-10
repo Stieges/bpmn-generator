@@ -298,6 +298,12 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
     if (markerInfo.linkName) node.linkName = markerInfo.linkName;
     if (markerInfo.conditionExpression) node.conditionExpression = markerInfo.conditionExpression;
     if (markerInfo.timerExpression) node.timerExpression = markerInfo.timerExpression;
+    // Definition reference (issue #53): the event definition's own IDREF, or — on a send/receive
+    // task — the task's. bpmn-moddle resolves the IDREF into the definition element.
+    if (markerInfo.definitionRef) node[markerInfo.definitionRef.field] = markerInfo.definitionRef.id;
+    if ((type === 'sendTask' || type === 'receiveTask') && el.messageRef) {
+      node.messageRef = el.messageRef.id || el.messageRef;
+    }
 
     // isForCompensation
     if (el.isForCompensation === true) node.isCompensation = true;
@@ -480,6 +486,11 @@ function detectEventMarkerModdle(element) {
   if (!marker) return result;
 
   result.marker = marker;
+
+  // Message / signal / error / escalation: the referenced top-level definition
+  const refField = { message: 'messageRef', signal: 'signalRef', error: 'errorRef', escalation: 'escalationRef' }[marker];
+  const refTarget = refField && def[refField];
+  if (refTarget) result.definitionRef = { field: refField, id: refTarget.id || refTarget };
 
   // Link event: extract name
   if (def.$type === 'bpmn:LinkEventDefinition' && def.name) {

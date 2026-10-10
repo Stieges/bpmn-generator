@@ -325,6 +325,12 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     if (markerInfo.linkName) node.linkName = markerInfo.linkName;
     if (markerInfo.conditionExpression) node.conditionExpression = markerInfo.conditionExpression;
     if (markerInfo.timerExpression) node.timerExpression = markerInfo.timerExpression;
+    // Definition reference (issue #53): the event definition's own IDREF, or — on a send/receive
+    // task — the task's attribute.
+    if (markerInfo.definitionRef) node[markerInfo.definitionRef.field] = markerInfo.definitionRef.id;
+    if ((tag === 'sendTask' || tag === 'receiveTask') && child.attrs.messageRef) {
+      node.messageRef = child.attrs.messageRef;
+    }
 
     // isForCompensation (OMG spec §10.2.1)
     if (child.attrs.isForCompensation === 'true') node.isCompensation = true;
@@ -499,6 +505,10 @@ function detectEventMarkerFull(element) {
     const tag = stripNs(child.tag);
     if (!markerMap[tag]) continue;
     result.marker = markerMap[tag];
+
+    // Message / signal / error / escalation: the referenced top-level definition
+    const refField = { message: 'messageRef', signal: 'signalRef', error: 'errorRef', escalation: 'escalationRef' }[result.marker];
+    if (refField && child.attrs[refField]) result.definitionRef = { field: refField, id: child.attrs[refField] };
 
     // Link event: extract name
     if (tag === 'linkEventDefinition' && child.attrs.name) {

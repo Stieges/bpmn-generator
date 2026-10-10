@@ -141,6 +141,10 @@
         "eventGatewayType": { "enum": ["Exclusive", "Parallel"], "description": "For eventBasedGateway" },
         "instantiate": { "type": "boolean", "description": "For eventBasedGateway or receiveTask: instantiate process. OMG grants `instantiate` to both classes (BPMN 2.0.2 \u00a710.2.4) \u2014 an instantiating Receive Task starts a process on an incoming message without a message start event" },
         "linkName": { "type": "string", "description": "For link events: linkEventDefinition name" },
+        "messageRef": { "type": "string", "description": "For events with marker message, and for sendTask/receiveTask: id of the top-level message definition this node references (OMG messageRef). Absent with exactly one message definition: that one is referenced; absent with several: no reference is written (rule S17)" },
+        "signalRef": { "type": "string", "description": "For events with marker signal: id of the top-level signal definition this node references (OMG signalRef). Resolution as for messageRef" },
+        "errorRef": { "type": "string", "description": "For events with marker error: id of the top-level error definition this node references (OMG errorRef). Resolution as for messageRef" },
+        "escalationRef": { "type": "string", "description": "For events with marker escalation: id of the top-level escalation definition this node references (OMG escalationRef). Resolution as for messageRef" },
         "conditionExpression": { "type": "string", "description": "For conditional events: condition body" },
         "timerExpression": {
           "type": "object",

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Events and send/receive tasks name their top-level definition (#53).** New per-node fields
+  `messageRef`, `signalRef`, `errorRef`, `escalationRef` (the OMG attribute names) select the
+  definition an event definition references; `messageRef` also applies to `sendTask`/`receiveTask`
+  and is written as the task's attribute. Resolution: the field, else the type's only definition,
+  else **no reference** — it used to be the last definition of the type, so two message events could
+  not point at two messages. Both importers read the reference back. New rules: `S16` (ERROR, a
+  reference naming no/wrong-typed definition or sitting on a mismatching node) and `S17` (WARNING,
+  several candidates and no reference chosen).
 - **DMN XML importer — `scripts/dmn/import.js` (DMN 1.3 XML → Decision-Core).** `dmnToDecisionCore`
   returns `{ dc, report }`: the model plus a structured loss report (`IM01`–`IM09`, positional paths),
   with `report.lossless` as the one bit a caller branches on; a failure is a shaped result, never a

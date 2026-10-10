@@ -695,6 +695,56 @@ that nothing legitimate trips it, is a reasonable later step.
 
 ---
 
+## Rule S16: a definition reference must name a definition of the right type
+
+**Severity:** ERROR (Soundness). **Scope:** whole document.
+
+`messageRef`, `signalRef`, `errorRef` and `escalationRef` are per-node fields (issue #53) that name,
+by id, the top-level definition (`definitions[]`) an event definition or a send/receive task refers
+to. They are named after the OMG attributes (`MessageEventDefinition.messageRef`,
+`SignalEventDefinition.signalRef`, `ErrorEventDefinition.errorRef`,
+`EscalationEventDefinition.escalationRef`, `SendTask.messageRef`, `ReceiveTask.messageRef`).
+
+S16 reports a reference the serialiser cannot honour. One finding per node and field:
+
+| Case | Example |
+|------|---------|
+| id names no top-level definition | `messageRef: "Msg_Nope"` with no such entry in `definitions` |
+| id names a definition of another type | `messageRef: "Sig_1"` where `Sig_1` is a signal |
+| the node's marker does not match the field | `messageRef` on an event with marker `signal`, or with no marker |
+| the node class cannot carry the field | `messageRef` on a `userTask` (the domain is in `OMG_NODE_FIELD_SCOPE`: events, plus `sendTask`/`receiveTask` for `messageRef`) |
+| the value is not a non-empty string | `messageRef: 42` |
+
+**Why ERROR.** The author pointed a node at a specific definition; the file would say something else
+(no reference). Nothing is guessed in its place, so the model is wrong rather than merely verbose.
+The marker check applies to events only; a task has no marker. Subprocess children are walked.
+
+**Reference:** OMG BPMN 2.0.2 §8.4 (Message, Signal), §10.5 (Error, Escalation), §10.2.4 (SendTask,
+ReceiveTask); the IDREF properties named above in `bpmn-moddle`'s `bpmn.json`.
+
+## Rule S17: an event with several candidate definitions and no reference is ambiguous
+
+**Severity:** WARNING (Soundness). **Scope:** whole document.
+
+An event with marker `message`, `signal`, `error` or `escalation` and no matching `*Ref` field, in a
+document with **two or more** definitions of that type, gets **no** reference in the XML. S17 says
+so once per event and names the candidates.
+
+The writer resolves a reference in this order: (1) the node's own field; (2) no field and exactly
+one definition of the type: that one; (3) no field and several: none; (4) no definition of the type
+at all: the implicit definition the generator has always created. Before #53, case (3) silently
+referenced the **last** definition of the type, so two message events could not point to two
+messages and nothing reported it.
+
+**Why WARNING.** An event definition without `messageRef` etc. is valid (multiplicity 0..1); what is
+lost is the link the author presumably wanted. `rules/strict-profile.json` escalates it. A single
+definition is unambiguous and stays silent. A field naming something unusable is S16's finding, not
+S17's.
+
+**Reference:** OMG BPMN 2.0.2 §8.4, §10.5 (the `*Ref` of an EventDefinition is `[0..1]`).
+
+---
+
 ## DMN Rules — a separate engine, three layers, two modes
 
 > Written in English, like M11 above. These rules live in `scripts/dmn/rules.js` and run against
@@ -703,7 +753,7 @@ that nothing legitimate trips it, is a reasonable later step.
 > engine only when its line says "DMN".
 
 A decision model is not "sound" in the workflow sense — it has no start, no end and no token, so
-S01–S15 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the
+S01–S17 and the WF-Net layer have no counterpart. What a DRG can be wrong about is its graph, the
 shape of its tables, and whether the two agree with the specification.
 
 ### Layers and modes

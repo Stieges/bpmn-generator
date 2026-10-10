@@ -385,6 +385,36 @@
       "intermediateThrowEvent",
       "boundaryEvent"
     ],
+    "messageRef": [
+      "startEvent",
+      "endEvent",
+      "intermediateCatchEvent",
+      "intermediateThrowEvent",
+      "boundaryEvent",
+      "sendTask",
+      "receiveTask"
+    ],
+    "signalRef": [
+      "startEvent",
+      "endEvent",
+      "intermediateCatchEvent",
+      "intermediateThrowEvent",
+      "boundaryEvent"
+    ],
+    "errorRef": [
+      "startEvent",
+      "endEvent",
+      "intermediateCatchEvent",
+      "intermediateThrowEvent",
+      "boundaryEvent"
+    ],
+    "escalationRef": [
+      "startEvent",
+      "endEvent",
+      "intermediateCatchEvent",
+      "intermediateThrowEvent",
+      "boundaryEvent"
+    ],
     "decisionRef": [
       "businessRuleTask"
     ],

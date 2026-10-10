@@ -21,6 +21,7 @@ import {
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
+import { inferEventMarker } from './icons.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Helpers (internal)
@@ -77,6 +78,25 @@ function nodesById(lc) {
   };
   for (const p of (lc.pools || [lc])) collectFrom(p);
   return byId;
+}
+
+/**
+ * The four definition-reference rows of `OMG_NODE_FIELD_SCOPE`, with the definition kind each one
+ * points at. Derived from the table, so S16/S17 and the serialiser cannot disagree about which
+ * classes may carry which reference.
+ */
+const DEFINITION_REF_ROWS = OMG_NODE_FIELD_SCOPE
+  .filter((f) => f.shape === 'eventDefinition' && /^\w+Ref$/.test(f.field))
+  .map((spec) => ({
+    kind: spec.field.replace(/Ref$/, ''), field: spec.field, attr: spec.attr, allowed: spec.allowed, scope: spec.scope,
+  }));
+
+/** Every node of the document in document order, at every nesting level, across all pools. */
+function everyNode(lc) {
+  const out = [];
+  const walk = (nodes) => { for (const n of (nodes || [])) { out.push(n); walk(n.nodes); } };
+  for (const p of (lc.pools || [lc])) walk(p.nodes);
+  return out;
 }
 
 function traceReachable(startId, outgoing, nodeMap, maxDepth = 50) {
@@ -839,6 +859,90 @@ const SOUNDNESS_RULES = [
         }
       };
       walk(proc.nodes);
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
+    }
+  },
+  {
+    id: 'S16', layer: 'soundness', defaultSeverity: 'ERROR',
+    description: 'A definition reference (messageRef, signalRef, errorRef, escalationRef) must name '
+      + 'a top-level definition of the matching type, on a node whose marker matches the field '
+      + '(messageRef also on sendTask and receiveTask)',
+    ref: {
+      omg: '§8.4.3 (Message), §8.4.4 (Signal), §10.5.3 (Error, Escalation), §10.2.4 (SendTask, ReceiveTask)',
+      cmof: 'MessageEventDefinition.messageRef, SignalEventDefinition.signalRef, '
+        + 'ErrorEventDefinition.errorRef and EscalationEventDefinition.escalationRef are IDREFs to '
+        + 'the matching root element; SendTask.messageRef and ReceiveTask.messageRef likewise '
+        + '(bpmn-moddle bpmn.json). The domains live once in `OMG_NODE_FIELD_SCOPE` (types.js).',
+    },
+    scope: 'global',
+    // ERROR, unlike S15: a reference the writer cannot honour is not "ignored but harmless" — the
+    // author pointed an event at a specific message and the file would say something else (no
+    // reference at all). Nothing is guessed in its place, so the model is wrong, not merely verbose.
+    check: (_proc, lc) => {
+      const msgs = [];
+      const defs = lc.definitions || [];
+      for (const n of everyNode(lc)) {
+        for (const spec of DEFINITION_REF_ROWS) {
+          const value = n[spec.field];
+          if (value === undefined || value === null) continue;
+          const label = `Node "${n.id}" (${n.name || ''})`;
+          if (typeof value !== 'string' || value === '') {
+            msgs.push(`${label} carries "${spec.field}" as ${JSON.stringify(value)}, but it must be the id of a top-level ${spec.kind} definition.`);
+            continue;
+          }
+          if (!spec.allowed.has(n.type)) {
+            msgs.push(`${label} is a ${n.type} and carries "${spec.field}", but OMG defines ${spec.attr} only on ${spec.scope}. The reference is not written — remove it, or move it to a node that can carry it.`);
+            continue;
+          }
+          if (isEvent(n.type)) {
+            const marker = n.marker || inferEventMarker(n.name || '');
+            if (marker !== spec.kind) {
+              msgs.push(`${label} carries "${spec.field}" ("${value}"), but its marker is ${marker ? `"${marker}"` : 'absent'}, not "${spec.kind}". The reference is not written — set marker "${spec.kind}" or remove the field.`);
+              continue;
+            }
+          }
+          const target = defs.find((d) => d.id === value);
+          if (!target) {
+            msgs.push(`${label} carries "${spec.field}" = "${value}", but no top-level definition has that id. Declare it in \`definitions\` (type "${spec.kind}") or correct the id.`);
+          } else if (target.type !== spec.kind) {
+            msgs.push(`${label} carries "${spec.field}" = "${value}", but that is a ${target.type} definition, not a ${spec.kind} definition.`);
+          }
+        }
+      }
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
+    }
+  },
+  {
+    id: 'S17', layer: 'soundness', defaultSeverity: 'WARNING',
+    description: 'An event with a message, signal, error or escalation marker and no definition '
+      + 'reference is ambiguous when several top-level definitions of that type exist — no '
+      + 'reference is written',
+    ref: {
+      omg: '§8.4.3, §8.4.4, §10.5.3 (the *Ref of an EventDefinition is optional, [0..1])',
+      cmof: 'MessageEventDefinition.messageRef, SignalEventDefinition.signalRef, '
+        + 'ErrorEventDefinition.errorRef, EscalationEventDefinition.escalationRef (multiplicity '
+        + '0..1) — which is why the XML stays valid and the finding is a WARNING.',
+    },
+    scope: 'global',
+    // WARNING: the file is valid and generates; what is lost is the link the author presumably
+    // wanted. Before #53 the writer picked the LAST definition here, silently; it now refuses to
+    // guess, and this rule is the place that says so. A single definition of the type is
+    // unambiguous (it is referenced implicitly) and stays quiet. `rules/strict-profile.json`
+    // escalates it.
+    check: (_proc, lc) => {
+      const defs = lc.definitions || [];
+      const msgs = [];
+      for (const n of everyNode(lc)) {
+        if (!isEvent(n.type)) continue;
+        const marker = n.marker || inferEventMarker(n.name || '');
+        const spec = DEFINITION_REF_ROWS.find((r) => r.kind === marker);
+        if (!spec) continue;
+        const v = n[spec.field];
+        if (v !== undefined && v !== null && v !== '') continue;   // chosen (S16 judges the choice)
+        const candidates = defs.filter((d) => d.type === marker);
+        if (candidates.length < 2) continue;
+        msgs.push(`Event "${n.id}" (${n.name || ''}) has marker "${marker}" but no ${spec.field}, and ${candidates.length} ${marker} definitions exist (${candidates.map((d) => d.id).join(', ')}). No reference is written — set ${spec.field} to one of them.`);
+      }
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },

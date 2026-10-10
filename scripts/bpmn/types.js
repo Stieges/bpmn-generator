@@ -646,6 +646,33 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'properties and the importers invert that choice. An unrecognised `type` falls through to '
       + '`timeDuration`, so it comes back as a duration.' },
 
+  // The four definition references (issue #53). Each names the id of a TOP-LEVEL definition
+  // (`definitions[]` on the document) and becomes the `*Ref` IDREF of the matching
+  // `<bpmn:*EventDefinition>`. `on` names that element; the metamodel fence checks the class
+  // really carries the attribute (bpmn.json: MessageEventDefinition.messageRef,
+  // SignalEventDefinition.signalRef, ErrorEventDefinition.errorRef,
+  // EscalationEventDefinition.escalationRef).
+  //
+  // `allowed` is the ontology domain, `bg:Event` for all four: OMG's XSD accepts any
+  // EventDefinition on every event class (start, end, intermediate throw/catch, boundary), and the
+  // `marker` field's own domain is `bg:Event` for the same reason. Which MARKER a given reference
+  // pairs with is not a class question, so S16 reports a mismatch and the writer drops it.
+  // `messageRef` additionally grants SendTask and ReceiveTask (bpmn.json: SendTask.messageRef,
+  // ReceiveTask.messageRef; BPMN 2.0.2 §10.2.4) — there it is an attribute of the TASK, written in
+  // `buildFlowNode` rather than in `buildEventDefinition`.
+  //
+  // roundTrip is exact for the EXPLICIT field. The reverse is not claimed: an event authored
+  // without a reference comes back carrying one whenever exactly one definition of its type existed
+  // (the writer then references it, and the importers read what the XML says).
+  { field: 'messageRef', attr: 'messageRef', type: 'string', on: 'messageEventDefinition', allowed: domain('Node', 'messageRef'), scope: 'an Event carrying a message marker, or a sendTask / receiveTask',
+    shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'exact' },
+  { field: 'signalRef', attr: 'signalRef', type: 'string', on: 'signalEventDefinition', allowed: domain('Node', 'signalRef'), scope: 'an Event carrying a signal marker',
+    shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'exact' },
+  { field: 'errorRef', attr: 'errorRef', type: 'string', on: 'errorEventDefinition', allowed: domain('Node', 'errorRef'), scope: 'an Event carrying an error marker',
+    shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'exact' },
+  { field: 'escalationRef', attr: 'escalationRef', type: 'string', on: 'escalationEventDefinition', allowed: domain('Node', 'escalationRef'), scope: 'an Event carrying an escalation marker',
+    shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'exact' },
+
   // ── shape: 'extension' ─────────────────────────────────────────────────────────────────────────
   // No OMG counterpart exists, so `attr` names our own element and the metamodel fence exempts the
   // row by shape rather than by an allowlist entry.

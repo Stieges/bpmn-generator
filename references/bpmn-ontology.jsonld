@@ -1077,6 +1077,44 @@
       ]
     },
     {
+      "@id": "bg:field-Node-messageRef",
+      "@type": "rdf:Property",
+      "name": "messageRef",
+      "element": "Node",
+      "domain": [
+        "bg:Event",
+        "bg:sendTask",
+        "bg:receiveTask"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-signalRef",
+      "@type": "rdf:Property",
+      "name": "signalRef",
+      "element": "Node",
+      "domain": [
+        "bg:Event"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-errorRef",
+      "@type": "rdf:Property",
+      "name": "errorRef",
+      "element": "Node",
+      "domain": [
+        "bg:Event"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-escalationRef",
+      "@type": "rdf:Property",
+      "name": "escalationRef",
+      "element": "Node",
+      "domain": [
+        "bg:Event"
+      ]
+    },
+    {
       "@id": "bg:field-Node-linkName",
       "@type": "rdf:Property",
       "name": "linkName",
