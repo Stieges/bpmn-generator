@@ -13,7 +13,7 @@
 
 import { DmnModdle } from 'dmn-moddle';
 import { rn } from '../shared/utils.js';
-import { requirementKey, orderedRequirements } from './coordinates.js';
+import { requirementKey, orderedRequirements } from './requirement-order.js';
 
 const moddle = new DmnModdle();
 

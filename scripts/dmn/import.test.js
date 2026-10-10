@@ -675,6 +675,11 @@ describe('the parse/convert split', () => {
  * fixture added later is covered the day it lands rather than the day someone remembers this file.
  * Every `.dmn` in the directory qualifies, our own `.expected.dmn` golden included: "our writer made
  * it" is not a reason to exempt a file from the claim that reading it produces valid input.
+ *
+ * Opt-out, in the idiom of `bpmn/net-check.test.js`: the scan is deliberately NOT recursive, so a
+ * fixture that exists to be dirty (a foreign file that legitimately imports into something the gate
+ * refuses) lives in `tests/fixtures/dmn/negative/` and is outside this claim. That directory is the
+ * whole exclusion list; there is no per-file skip list in this test.
  */
 describe('every .dmn fixture imports into a Decision-Core that passes the schema gate', () => {
   const FIXTURE_FILES = readdirSync(FIXTURES).filter((f) => f.endsWith('.dmn')).sort();
@@ -683,6 +688,11 @@ describe('every .dmn fixture imports into a Decision-Core that passes the schema
   // while iterating nothing at all.
   test('the directory scan finds at least one .dmn fixture', () => {
     expect(FIXTURE_FILES.length).toBeGreaterThan(0);
+  });
+
+  test('the opt-out directory is outside the scan: nothing under negative/ is listed', () => {
+    expect(FIXTURE_FILES.filter((f) => f.includes('negative'))).toEqual([]);
+    expect(FIXTURE_FILES.every((f) => !f.includes('/'))).toBe(true);
   });
 
   test.each(FIXTURE_FILES)('%s', async (file) => {

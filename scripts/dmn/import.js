@@ -60,7 +60,7 @@ import {
   DMN_ELEMENT_COVERAGE, DMN_NESTED_TYPE_COVERAGE, DMN_ELEMENT_BASE, DMN_XSD_DEFAULTS, IMPORT_CODES,
   IMPORT_CODE_KINDS, coverageForModdleType,
 } from './import-scope.js';
-import { requirementKey } from './coordinates.js';
+import { requirementKey } from './requirement-order.js';
 import { decisionCoreSchemaPath } from '../shared/resource-paths.js';
 
 const moddle = new DmnModdle();
