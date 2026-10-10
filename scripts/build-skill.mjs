@@ -23,7 +23,7 @@ const includes = [
   }).map(f => relative(repoRoot, f)),
   ...walk(join(repoRoot, 'references'), (full, name) => {
     if (full.includes('/omg-spec/') || full.includes('/review-set/')) return false;
-    return name.endsWith('.md') || name.endsWith('.json');
+    return name.endsWith('.md') || name.endsWith('.json') || name.endsWith('.jsonld');
   }).map(f => relative(repoRoot, f)),
 ];
 
