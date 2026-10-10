@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`scripts/bpmn/orthogonal-router.js` — obstacle-aware crossing repair.** `repairCrossings`'s own
+  candidate search tries only a fixed, small set of shapes around the direct source-target line;
+  in a congested cluster every one of them can be blocked while a path around the cluster still
+  exists. The router (an obstacle-aware Dijkstra over a sparse "trellis"/extended-lines grid, fixed
+  endpoints, per-bend and soft-crossing cost penalties) is now tried as a fallback exactly when
+  that happens, subject to the same strict-improvement guard as every other candidate. Both
+  fixtures the layout-quality analysis found still crossing after the earlier repair pass —
+  `bpmn-generator-pipeline` (`visualRefinement: false`) and `realistic-collaboration`
+  (`visualRefinement: true`) — now measure 0 crossings, down from 2 each. Two layout items stay
+  deliberately out of scope for this pass: closing lane gaps and pool gaps.
+- **`--refine` CLI flag.** 14 of the 28 golden fixtures (`*.refined.*`, visual refinement enabled)
+  had no documented way to regenerate them — `pipeline.js` parsed `--dot`/`--doc`/`--drill-down`/
+  `--strict`/`--optimize` but nothing for `visualRefinement`, and `CONTRIBUTING.md`'s regeneration
+  loop covered only the other 14 (`.expected.*`). `node bpmn/pipeline.js input.json out --refine`
+  closes that gap; omitting the flag leaves the pipeline's own default unaffected.
+- **DI07 — a sequence-flow endpoint not on its own node's shape.** The exact class of defect
+  `compactLanes` had (below) now has a permanent runtime guard in `scripts/bpmn/di-check.js`,
+  checked on every pipeline run rather than only where a test happened to look. Message flows and
+  associations are intentionally out of scope — DI05 and the geometry-contract tests already cover
+  those.
 - **`scripts/bpmn/field-fidelity.test.js` — the spanning fence, whose oracle is execution.** Every
   field `references/input-schema.json` declares is driven through the real `runPipeline` and read
   back through **both** importers (`bpmnToLogicCore` and `bpmnToLogicCoreLegacy`), for every class
@@ -176,6 +196,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   positions; DI checks containment, not artifact overlap, so nothing reported it).
   `tests/fixtures/subprocess-child-fidelity.json` had carried five such ERRORs since it gained its
   nested data objects; no test checked its diagram integrity until now. No golden file changed.
+- **`compactLanes` shifted every edge in the collaboration, not just its own — the largest defect
+  this project's layout-quality analysis found.** It shrinks a lane and moves everything below it up
+  by the freed space; that shift was scoped to the pool being compacted for nodes, but walked every
+  edge in the whole collaboration for waypoints. Compacting one participant's lane therefore dragged
+  every *other* participant's edges upward without moving their nodes. Measured with
+  `visualRefinement: true` before the fix: 34 detached edge ends in `realistic-collaboration`, 16 in
+  `multi-pool-collaboration`, 34 in `bpmn-generator-pipeline`, 0 in every single-pool fixture — the
+  single-pool zero is the control that pins the cause to cross-pool scope. Edge and label ownership
+  is now resolved per pool, and every participant positioned below the one being compacted shifts as
+  a rigid body — box, lanes, every node (recursively, so a subprocess child no longer gets left
+  behind by its own parent), and every owned edge's waypoints and label — mirroring
+  `coordinates.js`'s `shiftParticipant`. `multi-pool-collaboration.refined.{bpmn,svg}` — the one
+  golden pair this touches — was regenerated with a reviewed diff; every other golden is untouched.
+- **A boundary event's flow could leave through its own host.** A boundary event straddles its host's
+  outline, so half of it sits inside the host; the exit side was chosen purely from where the target
+  lies, which for a target on the far side routed the flow through the host's body — it then reads as
+  if the flow came out of the activity itself. The route is now rebuilt outward whenever the default
+  would enter the host's *interior*, tested strictly so that a flow running along the outline stays
+  untouched. That distinction is load-bearing: artifacts are stacked directly below their anchor, so
+  forcing every boundary flow downward would have driven `all-element-classes`'s flow straight through
+  the data object under the same host. Clearance is `layout.boundaryExitClearance` and must stay below
+  `visual-refinement.js`'s lane-compaction padding, or compaction strands the corridor waypoint.
+  Measured: `realistic-collaboration` drops from two sequence-flow crossings to none.
+- **A boundary event inside a subprocess kept its host-anchored route.** The pass that discards ELK's
+  boundary routes and rebuilds them from the event walked only top-level `proc.edges`, so a boundary
+  event nested in an expanded subprocess was never corrected and its arrow visibly started at the host
+  shape (`tests/fixtures/subprocess-child-fidelity.json`, edge `c_f10`). Both the discard and the
+  re-route now use `flattenProcessEdges`. Same failure mode CLAUDE.md documents under "Adding a
+  per-node field": a recursive structure handled at one level only.
+- The three identical copies of the from-scratch orthogonal route construction (§5.0e, §5.2, §5.5 in
+  `scripts/bpmn/coordinates.js`) are now one `orthogonalConnect` helper. §5.2's long-standing
+  asymmetry — always exiting right and entering left — is preserved behind a flag rather than
+  silently "fixed", since changing it would move edges in fixtures that have golden files.
+- **A rebuilt edge route could cross where ELK's route did not.** `coordinates.js` discards a route
+  whenever the lane-band shift moves its endpoints by different deltas (§5.0a) or its source is a
+  boundary event (§5.0-), and rebuilds it as a fixed 4-point Z whose axis is picked from
+  `|dy| > |dx|` alone — no obstacle test, no crossing test. A new `repairCrossings` pass in
+  `scripts/bpmn/edge-simplify.js` looks for the crossings that produces and tries alternative
+  orthogonal routes for the edges involved, keeping the clipped endpoints and the side of the shape
+  they attach to. It is a no-op unless a crossing actually exists, so crossing-free diagrams —
+  every golden fixture among them — are untouched. Opt out with `layout.crossingRepair: false`.
+  Measured: the rework loop in `tests/fixtures/bpmn-generator-pipeline.json` goes from three
+  crossings to two. The remaining two, and the two in `realistic-collaboration.json`, sit where
+  every candidate corridor runs through a node; clearing those needs real pathfinding, which this
+  pass deliberately is not.
+- **The layout-quality metric counted correct behaviour as a defect.**
+  `scripts/bench/layout-metrics.mjs` asked whether a link's endpoints share a center-y without
+  asking whether they structurally could, so cross-lane links, row folds in a wrapped layout, and
+  nodes ELK had placed on their branches' barycenter all registered as misalignment. It reported
+  40% alignment on `sparse-lanes` where in truth every alignable link was already exact. Alignment
+  is now decided by an explicit alignability rule that names why each excluded class is not a
+  defect, and area gained an aspect-ratio column plus a note that it is not comparable between raw
+  ELK and the pipeline.
 - **Three nesting losses the spanning fence found are closed.** All three sat at nesting depth ≥ 1
   and none was visible before the fence existed. (1) **`color` at depth ≥ 1**, on both importer
   paths: the write was already correct — the nested node's `<bpmndi:BPMNShape>` carried

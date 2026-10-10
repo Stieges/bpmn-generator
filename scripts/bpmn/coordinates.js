@@ -112,16 +112,19 @@ function buildCoordinateMap(elkResult, lc) {
   //        out is right; what was missing is putting them back. Without this,
   //        an element ends up semantically in the XML but without any DI, i.e.
   //        invisible in every BPMN tool.
-  const boundaryIds = placeBoundaryEvents(coords, allProcesses);
+  const boundaryHosts = placeBoundaryEvents(coords, allProcesses);
   placeArtifacts(coords, allProcesses, lc, artifactBands);
 
   //        Their sequence flows were routed by ELK from the HOST, so the stored
   //        route starts at the wrong shape and keeps a backtracking bend.
   //        Drop it — §5.2 re-routes them cleanly from the boundary event.
-  if (boundaryIds.size > 0) {
+  //        flattenProcessEdges, not proc.edges: a boundary event inside an
+  //        expanded subprocess is just as attached to its host, and walking only
+  //        the top level left those flows starting at the host shape.
+  if (boundaryHosts.size > 0) {
     for (const proc of allProcesses) {
-      for (const e of (proc.edges || [])) {
-        if (boundaryIds.has(e.source)) delete edgeCoords[e.id];
+      for (const e of flattenProcessEdges(proc)) {
+        if (boundaryHosts.has(e.source)) delete edgeCoords[e.id];
       }
     }
   }
@@ -387,28 +390,9 @@ function buildCoordinateMap(elkResult, lc) {
       const tgtC = coords[edge.target];
       if (!srcC || !tgtC) continue;
 
-      const srcCx = srcC.x + srcC.w / 2;
-      const srcCy = srcC.y + srcC.h / 2;
-      const tgtCx = tgtC.x + tgtC.w / 2;
-      const tgtCy = tgtC.y + tgtC.h / 2;
-
-      const dx = Math.abs(tgtCx - srcCx);
-      const dy = Math.abs(tgtCy - srcCy);
-
-      if (dy > dx) {
-        // Primarily vertical connection
-        const srcExit  = { x: srcCx, y: srcCy > tgtCy ? srcC.y : srcC.y + srcC.h };
-        const tgtEntry = { x: tgtCx, y: srcCy > tgtCy ? tgtC.y + tgtC.h : tgtC.y };
-        const midY = (srcExit.y + tgtEntry.y) / 2;
-        edgeCoords[edge.id] = [srcExit, { x: srcCx, y: midY }, { x: tgtCx, y: midY }, tgtEntry];
-      } else {
-        // Primarily horizontal connection
-        const goRight = tgtCx > srcCx;
-        const srcExit  = { x: goRight ? srcC.x + srcC.w : srcC.x, y: srcCy };
-        const tgtEntry = { x: goRight ? tgtC.x : tgtC.x + tgtC.w, y: tgtCy };
-        const midX = (srcExit.x + tgtEntry.x) / 2;
-        edgeCoords[edge.id] = [srcExit, { x: midX, y: srcCy }, { x: midX, y: tgtCy }, tgtEntry];
-      }
+      edgeCoords[edge.id] = orthogonalConnect(srcC, tgtC, {
+        hostC: coords[boundaryHosts.get(edge.source)],
+      });
     }
   }
 
@@ -482,7 +466,11 @@ function buildCoordinateMap(elkResult, lc) {
   // then project the endpoint onto the shape boundary along that axis only.
   //
   const allProcessNodes = allProcesses.flatMap(p => p.nodes || []);
-  const allProcessEdges = allProcesses.flatMap(p => p.edges || []);
+  // Flattened, so that §5.2 can also re-route a boundary flow nested inside an
+  // expanded subprocess. Edges that already carry an ELK route are skipped
+  // there, so widening this set is a no-op for everything except the routes
+  // §5.0- just deleted.
+  const allProcessEdges = allProcesses.flatMap(p => flattenProcessEdges(p));
   for (const edge of allProcessEdges) {
     const eid = edge.id;
     const pts = edgeCoords[eid];
@@ -513,37 +501,12 @@ function buildCoordinateMap(elkResult, lc) {
     const tgtC = coords[edge.target];
     if (!srcC || !tgtC) continue;
 
-    const srcCx = srcC.x + srcC.w / 2;
-    const srcCy = srcC.y + srcC.h / 2;
-    const tgtCx = tgtC.x + tgtC.w / 2;
-    const tgtCy = tgtC.y + tgtC.h / 2;
-
-    const dx = Math.abs(tgtCx - srcCx);
-    const dy = Math.abs(tgtCy - srcCy);
-
-    if (dy > dx) {
-      // Primarily vertical (cross-lane): go down from source bottom, horizontal, up to target
-      const srcExit = { x: srcCx, y: srcCy > tgtCy ? srcC.y : srcC.y + srcC.h };
-      const tgtEntry = { x: tgtCx, y: srcCy > tgtCy ? tgtC.y + tgtC.h : tgtC.y };
-      const midY = (srcExit.y + tgtEntry.y) / 2;
-      edgeCoords[eid] = [
-        srcExit,
-        { x: srcCx, y: midY },
-        { x: tgtCx, y: midY },
-        tgtEntry,
-      ];
-    } else {
-      // Primarily horizontal: right side → horizontal → up/down → horizontal → left side
-      const srcExit = { x: srcC.x + srcC.w, y: srcCy };
-      const tgtEntry = { x: tgtC.x, y: tgtCy };
-      const midX = (srcExit.x + tgtEntry.x) / 2;
-      edgeCoords[eid] = [
-        srcExit,
-        { x: midX, y: srcCy },
-        { x: midX, y: tgtCy },
-        tgtEntry,
-      ];
-    }
+    edgeCoords[eid] = orthogonalConnect(srcC, tgtC, {
+      hostC: coords[boundaryHosts.get(edge.source)],
+      // This section has always exited right and entered left, whatever the
+      // direction — see orthogonalConnect's doc for why that is preserved.
+      directionalHorizontal: false,
+    });
   }
 
   // §5.3  Force orthogonal: any remaining diagonal segments get converted
@@ -573,9 +536,14 @@ function buildCoordinateMap(elkResult, lc) {
   //        steps can introduce zigzags when ELK routes start far from the source node
   //        (common for cross-lane edges).
   //        Skip happy-path edges — ELK's layout for these is usually correct.
+  //        Skip boundary flows too: leaving away from the host and coming back
+  //        round is long with a wide Y-range by construction, which is exactly
+  //        what the zigzag test looks for, so this section would undo the
+  //        detour that keeps the flow out of its own host.
   for (const proc of allProcesses) {
     for (const edge of (proc.edges || [])) {
       if (edge.isHappyPath) continue;
+      if (boundaryHosts.has(edge.source)) continue;
 
       const pts = edgeCoords[edge.id];
       if (!pts || pts.length < 3) continue;
@@ -607,22 +575,7 @@ function buildCoordinateMap(elkResult, lc) {
 
       if (!isZigzag) continue;
 
-      // Replace with clean orthogonal route
-      const dx = Math.abs(tgtCx - srcCx);
-      const dy = Math.abs(tgtCy - srcCy);
-
-      if (dy > dx) {
-        const srcExit  = { x: srcCx, y: srcCy > tgtCy ? srcC.y : srcC.y + srcC.h };
-        const tgtEntry = { x: tgtCx, y: srcCy > tgtCy ? tgtC.y + tgtC.h : tgtC.y };
-        const midY = (srcExit.y + tgtEntry.y) / 2;
-        edgeCoords[edge.id] = [srcExit, { x: srcCx, y: midY }, { x: tgtCx, y: midY }, tgtEntry];
-      } else {
-        const goRight = tgtCx > srcCx;
-        const srcExit  = { x: goRight ? srcC.x + srcC.w : srcC.x, y: srcCy };
-        const tgtEntry = { x: goRight ? tgtC.x : tgtC.x + tgtC.w, y: tgtCy };
-        const midX = (srcExit.x + tgtEntry.x) / 2;
-        edgeCoords[edge.id] = [srcExit, { x: midX, y: srcCy }, { x: midX, y: tgtCy }, tgtEntry];
-      }
+      edgeCoords[edge.id] = orthogonalConnect(srcC, tgtC);
     }
   }
 
@@ -635,39 +588,8 @@ function buildCoordinateMap(elkResult, lc) {
   // Sequence-flow labels
   for (const proc of allProcesses) {
     for (const e of (proc.edges || [])) {
-      if (!e.label) continue;
-      const eid = e.id;
-      const pts = edgeCoords[eid];
-      if (!pts || pts.length < 2) {
-        // Fallback: midpoint between source and target node centers
-        const s = coords[e.source], t = coords[e.target];
-        if (!s || !t) continue;
-        edgeLabels[eid] = {
-          text: e.label,
-          x: (s.x + s.w / 2 + t.x + t.w / 2) / 2,
-          y: (s.y + s.h / 2 + t.y + t.h / 2) / 2,
-        };
-        continue;
-      }
-      // Find first horizontal segment (dy < 1) — mirrors svg.js renderSequenceFlow
-      let labelX = null, labelY = null;
-      let placed = false;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const dy = Math.abs(pts[i + 1].y - pts[i].y);
-        if (dy < 1) {
-          labelX = (pts[i].x + pts[i + 1].x) / 2;
-          labelY = pts[i].y;
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        // No horizontal segment: 30% from source — mirrors svg.js fallback
-        const p0 = pts[0], p1 = pts[pts.length - 1];
-        labelX = p0.x + (p1.x - p0.x) * 0.3;
-        labelY = p0.y + (p1.y - p0.y) * 0.3;
-      }
-      edgeLabels[eid] = { text: e.label, x: labelX, y: labelY };
+      const label = computeSequenceFlowLabel(e, edgeCoords[e.id], coords);
+      if (label) edgeLabels[e.id] = label;
     }
   }
 
@@ -676,6 +598,44 @@ function buildCoordinateMap(elkResult, lc) {
   // geometry.
 
   return { coords, laneCoords, poolCoords, edgeCoords, edgeLabels };
+}
+
+/**
+ * Where a sequence flow's label sits, given its route. Returns null when the
+ * edge has no label (or the fallback has nothing to work with).
+ *
+ * Extracted from §5.6 so that a pass which re-routes an edge after
+ * buildCoordinateMap has returned can refresh that edge's label instead of
+ * leaving it stranded on a segment the route no longer has — see
+ * pipeline.js's crossing-repair step. Behaviour is unchanged; the algorithm
+ * still mirrors svg.js renderSequenceFlow exactly, which is what keeps the
+ * two renderers in agreement.
+ */
+function computeSequenceFlowLabel(edge, pts, coords) {
+  if (!edge.label) return null;
+  if (!pts || pts.length < 2) {
+    // Fallback: midpoint between source and target node centers
+    const s = coords[edge.source], t = coords[edge.target];
+    if (!s || !t) return null;
+    return {
+      text: edge.label,
+      x: (s.x + s.w / 2 + t.x + t.w / 2) / 2,
+      y: (s.y + s.h / 2 + t.y + t.h / 2) / 2,
+    };
+  }
+  // Find first horizontal segment (dy < 1) — mirrors svg.js renderSequenceFlow
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (Math.abs(pts[i + 1].y - pts[i].y) < 1) {
+      return { text: edge.label, x: (pts[i].x + pts[i + 1].x) / 2, y: pts[i].y };
+    }
+  }
+  // No horizontal segment: 30% from source — mirrors svg.js fallback
+  const p0 = pts[0], p1 = pts[pts.length - 1];
+  return {
+    text: edge.label,
+    x: p0.x + (p1.x - p0.x) * 0.3,
+    y: p0.y + (p1.y - p0.y) * 0.3,
+  };
 }
 
 /**
@@ -926,6 +886,160 @@ function flattenProcessEdges(proc) {
   return out;
 }
 
+/**
+ * Does this polyline pass through the OPEN interior of a box?
+ *
+ * Strict on purpose: a segment lying exactly on an edge of the box only touches
+ * it. That distinction is what lets a boundary event's flow run along its
+ * host's outline (fine, and the common case) while catching a flow that cuts
+ * across the host's body (not fine — see orthogonalConnect).
+ */
+function entersInterior(pts, box) {
+  if (!box) return false;
+  const EPS = 1e-9;
+  // Does [lo,hi] reach into the OPEN interval (min,max)? A zero-length span —
+  // which is what an axis-aligned segment gives on its constant axis — counts
+  // only when the point itself lies strictly between min and max.
+  const overlapsOpen = (lo, hi, min, max) => (hi - lo < EPS)
+    ? (lo > min + EPS && lo < max - EPS)
+    : (Math.max(lo, min) < Math.min(hi, max) - EPS);
+
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const insideX = overlapsOpen(Math.min(a.x, b.x), Math.max(a.x, b.x), box.x, box.x + box.w);
+    const insideY = overlapsOpen(Math.min(a.y, b.y), Math.max(a.y, b.y), box.y, box.y + box.h);
+    if (insideX && insideY) return true;
+  }
+  return false;
+}
+
+/**
+ * Which way is "away from the host" for a boundary event sitting on its outline?
+ * Derived from the two centers rather than hard-coded to 'down', so that if
+ * placeBoundaryEvents ever stops using the bottom edge the routing follows
+ * instead of silently staying wrong.
+ */
+function outwardFromHost(evC, hostC) {
+  const dx = (evC.x + evC.w / 2) - (hostC.x + hostC.w / 2);
+  const dy = (evC.y + evC.h / 2) - (hostC.y + hostC.h / 2);
+  if (Math.abs(dy) >= Math.abs(dx)) return dy >= 0 ? 'down' : 'up';
+  return dx >= 0 ? 'right' : 'left';
+}
+
+/**
+ * The orthogonal connection used wherever a route has to be built from scratch:
+ * leave the source, cross over on a mid-line, enter the target. Three sections
+ * (§5.0e detour compaction, §5.2 synthetic routing, §5.5 zigzag cleanup) all
+ * need this, and all three used to carry their own copy of it.
+ *
+ * @param {object} srcC   source box {x,y,w,h}
+ * @param {object} tgtC   target box
+ * @param {object} [opts]
+ * @param {object} [opts.hostC]  host box, when the source is a boundary event
+ * @param {number} [opts.clearance]  how far past the event to run before
+ *   turning. Must stay BELOW visual-refinement.js's LANE_COMPACT_PADDING:
+ *   `compactLanes` shrinks a lane to its content plus that padding and pins any
+ *   waypoint caught in the vanishing strip to the new edge, while the nodes
+ *   move by the full delta. A corridor further out than the padding is exactly
+ *   such a waypoint, and the route would be left hanging off its own source.
+ * @param {boolean} [opts.directionalHorizontal=true]  leave from the side that
+ *   faces the target. §5.2 passes false because it has always exited right and
+ *   entered left regardless of direction; that asymmetry predates this helper
+ *   and changing it would move edges in fixtures that have golden files, so it
+ *   is preserved deliberately rather than quietly "fixed" here.
+ */
+function orthogonalConnect(srcC, tgtC, opts = {}) {
+  const {
+    hostC = null,
+    clearance = CFG.layout?.boundaryExitClearance ?? 12,
+    directionalHorizontal = true,
+  } = opts;
+
+  const srcCx = srcC.x + srcC.w / 2;
+  const srcCy = srcC.y + srcC.h / 2;
+  const tgtCx = tgtC.x + tgtC.w / 2;
+  const tgtCy = tgtC.y + tgtC.h / 2;
+
+  const dx = Math.abs(tgtCx - srcCx);
+  const dy = Math.abs(tgtCy - srcCy);
+
+  let route;
+  if (dy > dx) {
+    const srcExit  = { x: srcCx, y: srcCy > tgtCy ? srcC.y : srcC.y + srcC.h };
+    const tgtEntry = { x: tgtCx, y: srcCy > tgtCy ? tgtC.y + tgtC.h : tgtC.y };
+    const midY = (srcExit.y + tgtEntry.y) / 2;
+    route = [srcExit, { x: srcCx, y: midY }, { x: tgtCx, y: midY }, tgtEntry];
+  } else {
+    const goRight = directionalHorizontal ? tgtCx > srcCx : true;
+    const srcExit  = { x: goRight ? srcC.x + srcC.w : srcC.x, y: srcCy };
+    const tgtEntry = { x: goRight ? tgtC.x : tgtC.x + tgtC.w, y: tgtCy };
+    const midX = (srcExit.x + tgtEntry.x) / 2;
+    route = [srcExit, { x: midX, y: srcCy }, { x: midX, y: tgtCy }, tgtEntry];
+  }
+
+  // A boundary event straddles its host's outline, so half of it is inside the
+  // host. The side-choice above only asks where the target is, which for a
+  // target on the far side of the host means leaving through the host's body —
+  // the flow then reads as if it came out of the activity itself. Only rebuild
+  // when that actually happened: running ALONG the outline is normal, and the
+  // space directly outward is often occupied by the host's own artifacts.
+  if (hostC && entersInterior(route, hostC)) {
+    route = boundaryOutwardRoute(srcC, tgtC, hostC, clearance);
+  }
+  return route;
+}
+
+/**
+ * Leave the boundary event on the side facing away from its host, then work
+ * back towards the target.
+ *
+ * Only the vertical case is built out, because `placeBoundaryEvents` puts every
+ * boundary event on its host's bottom edge; `outwardFromHost` still derives the
+ * direction rather than assuming it, so a future change of placement produces a
+ * wrong-but-obvious route here instead of a silently wrong one elsewhere.
+ */
+function boundaryOutwardRoute(srcC, tgtC, hostC, clearance) {
+  const srcCx = srcC.x + srcC.w / 2;
+  const tgtCx = tgtC.x + tgtC.w / 2;
+  const tgtCy = tgtC.y + tgtC.h / 2;
+  const down = outwardFromHost(srcC, hostC) !== 'up';
+
+  const exitY = down ? srcC.y + srcC.h : srcC.y;
+  const corridorY = down ? exitY + clearance : exitY - clearance;
+
+  // Target on the same side we just left towards: one turn is enough.
+  if (down ? tgtCy > corridorY : tgtCy < corridorY) {
+    const entryX = tgtCx >= srcCx ? tgtC.x : tgtC.x + tgtC.w;
+    return [{ x: srcCx, y: exitY }, { x: srcCx, y: tgtCy }, { x: entryX, y: tgtCy }];
+  }
+
+  // Target lies back past the host. Coming straight back up would re-enter the
+  // host — and when the target sits directly above the event the "detour" would
+  // collapse into a line retracing itself. Step clear of the host sideways
+  // first. Only needed while the return column still overlaps the host.
+  const overlapsHost = tgtCx > hostC.x && tgtCx < hostC.x + hostC.w;
+  const entryY = down ? tgtC.y + tgtC.h : tgtC.y;
+  if (!overlapsHost) {
+    return [
+      { x: srcCx, y: exitY },
+      { x: srcCx, y: corridorY },
+      { x: tgtCx, y: corridorY },
+      { x: tgtCx, y: entryY },
+    ];
+  }
+
+  const viaLeft = tgtCx <= hostC.x + hostC.w / 2;
+  const columnX = viaLeft ? hostC.x - clearance : hostC.x + hostC.w + clearance;
+  const entryX = viaLeft ? tgtC.x : tgtC.x + tgtC.w;
+  return [
+    { x: srcCx, y: exitY },
+    { x: srcCx, y: corridorY },
+    { x: columnX, y: corridorY },
+    { x: columnX, y: tgtCy },
+    { x: entryX, y: tgtCy },
+  ];
+}
+
 function findNodeInAllProcesses(nodeId, processes) {
   for (const p of processes) {
     for (const n of (p.nodes || [])) {
@@ -964,7 +1078,10 @@ function placeBoundaryEvents(coords, allProcesses) {
   };
   for (const p of allProcesses) collect(p.nodes);
 
-  const placed = new Set();
+  // Maps each placed event to its host. A Set of ids would be enough to know
+  // WHICH routes to discard, but routing them again also needs to know what to
+  // stay out of, so the host travels with the id.
+  const placed = new Map();
   for (const [hostId, events] of Object.entries(byHost)) {
     const host = coords[hostId];
     if (!host) continue;
@@ -976,7 +1093,7 @@ function placeBoundaryEvents(coords, allProcesses) {
         w: sz.w,
         h: sz.h,
       };
-      placed.add(ev.id);
+      placed.set(ev.id, hostId);
     });
   }
   return placed;
@@ -1189,4 +1306,4 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows };
+export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessNodes, flattenProcessEdges };

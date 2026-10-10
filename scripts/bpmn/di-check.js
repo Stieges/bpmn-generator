@@ -9,7 +9,8 @@
  * This pass closes that gap. It checks the finished coordinate map for the
  * defects that make a diagram unusable regardless of how correct the semantics
  * are: participants stacked on top of each other, pools overlapping, nodes
- * sitting outside the pool they belong to.
+ * sitting outside the pool they belong to, and a sequence-flow arrow that no
+ * longer starts or ends on the shape it's attached to.
  *
  * Findings are diagnostics, not rule violations — they are reported under
  * `diagnostics` in the pipeline result, separate from `validation`.
@@ -130,6 +131,38 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
     }
   }
 
+  // DI07 — a sequence-flow endpoint not sitting on its own node's shape.
+  // This is the invariant a geometry pass has to preserve and the one that
+  // slipped: a pass that moves a node without moving the edge attached to it
+  // (or the reverse) leaves an arrow that visibly starts or ends in mid-air.
+  // Sequence flows only — message flows and associations live outside
+  // proc.edges and are covered by DI05 / the geometry-contract tests instead.
+  for (const proc of (lc.pools || [lc])) {
+    for (const edge of flattenEdges(proc)) {
+      const pts = (coordMap.edgeCoords || {})[edge.id];
+      if (!pts || pts.length < 2) continue;
+      const srcC = coords[edge.source];
+      const tgtC = coords[edge.target];
+      if (srcC && Number.isFinite(srcC.x) && !touchesShape(srcC, pts[0], tol)) {
+        issues.push({
+          code: 'DI07',
+          severity: 'ERROR',
+          message: `Sequence flow "${edge.id}" does not start on its source "${edge.source}".`,
+          elements: [edge.id, edge.source],
+        });
+      }
+      const last = pts[pts.length - 1];
+      if (tgtC && Number.isFinite(tgtC.x) && !touchesShape(tgtC, last, tol)) {
+        issues.push({
+          code: 'DI07',
+          severity: 'ERROR',
+          message: `Sequence flow "${edge.id}" does not end on its target "${edge.target}".`,
+          elements: [edge.id, edge.target],
+        });
+      }
+    }
+  }
+
   // DI05 — a message flow crossing a participant it does not involve.
   // WARNING, not ERROR: with a communication cycle across three or more
   // participants a linear stack cannot avoid it, so this reports rather than
@@ -185,6 +218,21 @@ function flattenNodes(nodes) {
     if (n.nodes) out.push(...flattenNodes(n.nodes));
   }
   return out;
+}
+
+// Sequence flows, including ones nested inside an expanded subprocess.
+// Deliberately local rather than imported from coordinates.js — di-check.js
+// is a dependency-free post-layout sanity pass by design.
+function flattenEdges(proc) {
+  const out = [...(proc.edges || [])];
+  for (const n of flattenNodes(proc.nodes)) {
+    if (n.edges) out.push(...n.edges);
+  }
+  return out;
+}
+
+function touchesShape(box, pt, tol) {
+  return contains(box, { x: pt.x, y: pt.y, w: 0, h: 0 }, tol);
 }
 
 export { checkDiagramIntegrity };

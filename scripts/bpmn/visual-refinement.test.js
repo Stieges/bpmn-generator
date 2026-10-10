@@ -365,3 +365,117 @@ describe('compactLanes — basic shrink', () => {
     }).toEqual(snap1);
   });
 });
+
+describe('compactLanes — multi-pool', () => {
+  // Two pools stacked vertically (p2 below p1, POOL_GAP-style separation).
+  // Compacting p1's only lane must move p2 as a rigid body: its box, its
+  // lane, its node, and its own edge's waypoints — all by the same delta —
+  // so p2's edge stays attached to p2's node. This is the exact defect: the
+  // old code shifted every edgeCoords entry globally but only shifted nodes
+  // within the pool being compacted, so p2's edge moved without p2's node.
+  function twoPoolFixture() {
+    return {
+      cm: {
+        coords: {
+          n1: { x: 50, y: 20,  w: 100, h: 80 },   // p1 / laneA
+          n2: { x: 50, y: 420, w: 100, h: 80 },   // p2 / laneC
+        },
+        poolCoords: {
+          p1: { x: 0, y: 0,   w: 300, h: 200, laneHeaderWidth: 40 },
+          p2: { x: 0, y: 260, w: 300, h: 200, laneHeaderWidth: 40 },
+        },
+        laneCoords: {
+          laneA: { x: 40, y: 0,   w: 260, h: 200 },
+          laneC: { x: 40, y: 260, w: 260, h: 200 },
+        },
+        edgeCoords: {
+          e1: [{ x: 100, y: 60 }, { x: 100, y: 460 }], // owned by p2 (source n2)
+        },
+        edgeLabels: {
+          e1: { text: 'go', x: 100, y: 460 },
+        },
+      },
+      proc: {
+        pools: [
+          { id: 'p1', lanes: [{ id: 'laneA' }], nodes: [{ id: 'n1', lane: 'laneA' }] },
+          { id: 'p2', lanes: [{ id: 'laneC' }], nodes: [{ id: 'n2', lane: 'laneC' }], edges: [{ id: 'e1', source: 'n2', target: 'n3' }] },
+        ],
+      },
+    };
+  }
+
+  test('compacting p1 shifts p2 as a rigid body — box, lane, node, edge, label', () => {
+    const { cm, proc } = twoPoolFixture();
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+
+    // p1/laneA: content 80 + 2*20 = 120 → delta 80 from 200.
+    expect(cm.laneCoords.laneA.h).toBe(120);
+    const delta = 80;
+
+    expect(cm.poolCoords.p2.y).toBe(260 - delta);
+    expect(cm.laneCoords.laneC.y).toBe(260 - delta);
+    expect(cm.coords.n2.y).toBe(420 - delta);
+    // Both of e1's waypoints move by the same delta as n2 — the endpoint on
+    // n2 stays attached to it.
+    expect(cm.edgeCoords.e1[1].y).toBe(460 - delta);
+    expect(cm.edgeLabels.e1.y).toBe(460 - delta);
+  });
+
+  test('an edge not owned by the compacted pool is left untouched', () => {
+    const { cm, proc } = twoPoolFixture();
+    // A stray entry with no owning pool at all (e.g. a message flow, not yet
+    // routed at this point in the pipeline) must not be touched by either
+    // pool's compaction.
+    cm.edgeCoords.stray = [{ x: 900, y: 900 }, { x: 900, y: 950 }];
+    const before = structuredClone(cm.edgeCoords.stray);
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect(cm.edgeCoords.stray).toEqual(before);
+  });
+
+  test('is idempotent across two pools', () => {
+    const { cm, proc } = twoPoolFixture();
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    const snap1 = structuredClone({
+      coords: cm.coords, laneCoords: cm.laneCoords, poolCoords: cm.poolCoords,
+      edgeCoords: cm.edgeCoords, edgeLabels: cm.edgeLabels,
+    });
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect({
+      coords: cm.coords, laneCoords: cm.laneCoords, poolCoords: cm.poolCoords,
+      edgeCoords: cm.edgeCoords, edgeLabels: cm.edgeLabels,
+    }).toEqual(snap1);
+  });
+
+  test('a subprocess child moves with its parent when the lane above shrinks', () => {
+    const cm = {
+      coords: {
+        n1:    { x: 50, y: 20,  w: 100, h: 80 },  // p1 / laneA
+        sub:   { x: 50, y: 420, w: 200, h: 150 }, // p2 / laneC, expanded
+        child: { x: 70, y: 450, w: 100, h: 80 },  // sub's child — must move with it
+      },
+      poolCoords: {
+        p1: { x: 0, y: 0,   w: 300, h: 200, laneHeaderWidth: 40 },
+        p2: { x: 0, y: 260, w: 300, h: 320, laneHeaderWidth: 40 },
+      },
+      laneCoords: {
+        laneA: { x: 40, y: 0,   w: 260, h: 200 },
+        laneC: { x: 40, y: 260, w: 260, h: 320 },
+      },
+      edgeCoords: {},
+      edgeLabels: {},
+    };
+    const proc = {
+      pools: [
+        { id: 'p1', lanes: [{ id: 'laneA' }], nodes: [{ id: 'n1', lane: 'laneA' }] },
+        {
+          id: 'p2', lanes: [{ id: 'laneC' }],
+          nodes: [{ id: 'sub', lane: 'laneC', nodes: [{ id: 'child' }] }],
+        },
+      ],
+    };
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    const delta = 80; // same as the fixture above: 200 - 120
+    expect(cm.coords.sub.y).toBe(420 - delta);
+    expect(cm.coords.child.y).toBe(450 - delta);
+  });
+});
