@@ -1,0 +1,1281 @@
+{
+  "all-element-classes.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Pool One] Task \"Check\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Pool One] Task \"Escalate\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "all-element-classes.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Pool One] Task \"Check\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Pool One] Task \"Escalate\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "all-element-classes.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Pool One] Task \"Check\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Pool One] Task \"Escalate\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "all-element-classes.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Pool One] Task \"Check\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Pool One] Task \"Escalate\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "all-element-classes.json|strict|document": {
+    "errors": [
+      "[Pool One] Task \"Check\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Pool One] Task \"Escalate\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "all-element-classes.json|strict|optimize": {
+    "errors": [
+      "[Pool One] Task \"Check\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Pool One] Task \"Escalate\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "boundary-event-shapes.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Boundary shapes] Task \"Repair and report\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "boundary-event-shapes.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Boundary shapes] Task \"Repair and report\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "boundary-event-shapes.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Boundary shapes] Task \"Repair and report\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "boundary-event-shapes.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Boundary shapes] Task \"Repair and report\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "boundary-event-shapes.json|strict|document": {
+    "errors": [
+      "[Boundary shapes] Task \"Repair and report\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "boundary-event-shapes.json|strict|optimize": {
+    "errors": [
+      "[Boundary shapes] Task \"Repair and report\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "bpmn-generator-pipeline.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Orchestrator (orchestrator.js)\" (30 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Agents — Modeler + Reviewer (modeler.js, rules.js)\" (50 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)\" (77 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Compliance Agent (compliance.js)\" (32 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "bpmn-generator-pipeline.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Orchestrator (orchestrator.js)\" (30 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Agents — Modeler + Reviewer (modeler.js, rules.js)\" (50 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)\" (77 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Compliance Agent (compliance.js)\" (32 chars)"
+    ],
+    "infos": [],
+    "advisories": [
+      {
+        "id": "O04",
+        "transform": "parallelize",
+        "targets": [
+          "t_topo",
+          "t_elk",
+          "t_coords",
+          "t_bpmnxml",
+          "t_roundtrip",
+          "t_svg"
+        ],
+        "message": "Sequenz gleicher Rolle ohne Verzweigung (\"Topologie inferieren\" → \"ELK Sugiyama Layout berechnen\" → \"Koordinaten transformieren\" → \"BPMN 2.0 XML erzeugen\" → \"Round-Trip validieren\" → \"SVG-Vorschau rendern\") — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.",
+        "tradeoff": {
+          "time": "−"
+        },
+        "ref": {
+          "reijers": "parallelism"
+        },
+        "judgment": true,
+        "pool": "BPMN Generator System"
+      }
+    ]
+  },
+  "bpmn-generator-pipeline.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Orchestrator (orchestrator.js)\" (30 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Agents — Modeler + Reviewer (modeler.js, rules.js)\" (50 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)\" (77 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Compliance Agent (compliance.js)\" (32 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "bpmn-generator-pipeline.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Orchestrator (orchestrator.js)\" (30 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Agents — Modeler + Reviewer (modeler.js, rules.js)\" (50 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)\" (77 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Compliance Agent (compliance.js)\" (32 chars)"
+    ],
+    "infos": [],
+    "advisories": [
+      {
+        "id": "O04",
+        "transform": "parallelize",
+        "targets": [
+          "t_topo",
+          "t_elk",
+          "t_coords",
+          "t_bpmnxml",
+          "t_roundtrip",
+          "t_svg"
+        ],
+        "message": "Sequenz gleicher Rolle ohne Verzweigung (\"Topologie inferieren\" → \"ELK Sugiyama Layout berechnen\" → \"Koordinaten transformieren\" → \"BPMN 2.0 XML erzeugen\" → \"Round-Trip validieren\" → \"SVG-Vorschau rendern\") — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.",
+        "tradeoff": {
+          "time": "−"
+        },
+        "ref": {
+          "reijers": "parallelism"
+        },
+        "judgment": true,
+        "pool": "BPMN Generator System"
+      }
+    ]
+  },
+  "bpmn-generator-pipeline.json|strict|document": {
+    "errors": [],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Orchestrator (orchestrator.js)\" (30 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Agents — Modeler + Reviewer (modeler.js, rules.js)\" (50 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)\" (77 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Compliance Agent (compliance.js)\" (32 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "bpmn-generator-pipeline.json|strict|optimize": {
+    "errors": [],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Orchestrator (orchestrator.js)\" (30 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Agents — Modeler + Reviewer (modeler.js, rules.js)\" (50 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Pipeline — Layout + Rendering (topology → ELK → coordinates → bpmn-xml → svg)\" (77 chars)",
+      "Name exceeds 25 chars — shorten for readability: lane \"Compliance Agent (compliance.js)\" (32 chars)"
+    ],
+    "infos": [],
+    "advisories": [
+      {
+        "id": "O04",
+        "transform": "parallelize",
+        "targets": [
+          "t_topo",
+          "t_elk",
+          "t_coords",
+          "t_bpmnxml",
+          "t_roundtrip",
+          "t_svg"
+        ],
+        "message": "Sequenz gleicher Rolle ohne Verzweigung (\"Topologie inferieren\" → \"ELK Sugiyama Layout berechnen\" → \"Koordinaten transformieren\" → \"BPMN 2.0 XML erzeugen\" → \"Round-Trip validieren\" → \"SVG-Vorschau rendern\") — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.",
+        "tradeoff": {
+          "time": "−"
+        },
+        "ref": {
+          "reijers": "parallelism"
+        },
+        "judgment": true,
+        "pool": "BPMN Generator System"
+      }
+    ]
+  },
+  "deadlock-process.json|none|document": {
+    "errors": [
+      "[Deadlock Demo] Deadlock: XOR-split \"xor1\" feeds AND-join \"and1\" on mutually exclusive paths — its branch \"f2\" → \"taskA\" supplies incoming flow \"f4\" but never \"f5\", so the join never receives all its tokens."
+    ],
+    "warnings": [
+      "[Deadlock Demo] Task \"Path A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Path B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Continue\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "deadlock-process.json|none|optimize": {
+    "errors": [
+      "[Deadlock Demo] Deadlock: XOR-split \"xor1\" feeds AND-join \"and1\" on mutually exclusive paths — its branch \"f2\" → \"taskA\" supplies incoming flow \"f4\" but never \"f5\", so the join never receives all its tokens."
+    ],
+    "warnings": [
+      "[Deadlock Demo] Task \"Path A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Path B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Continue\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "deadlock-process.json|default|document": {
+    "errors": [
+      "[Deadlock Demo] Deadlock: XOR-split \"xor1\" feeds AND-join \"and1\" on mutually exclusive paths — its branch \"f2\" → \"taskA\" supplies incoming flow \"f4\" but never \"f5\", so the join never receives all its tokens."
+    ],
+    "warnings": [
+      "[Deadlock Demo] Task \"Path A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Path B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Continue\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "deadlock-process.json|default|optimize": {
+    "errors": [
+      "[Deadlock Demo] Deadlock: XOR-split \"xor1\" feeds AND-join \"and1\" on mutually exclusive paths — its branch \"f2\" → \"taskA\" supplies incoming flow \"f4\" but never \"f5\", so the join never receives all its tokens."
+    ],
+    "warnings": [
+      "[Deadlock Demo] Task \"Path A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Path B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Continue\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "deadlock-process.json|strict|document": {
+    "errors": [
+      "[Deadlock Demo] Deadlock: XOR-split \"xor1\" feeds AND-join \"and1\" on mutually exclusive paths — its branch \"f2\" → \"taskA\" supplies incoming flow \"f4\" but never \"f5\", so the join never receives all its tokens.",
+      "[Deadlock Demo] Task \"Path A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Path B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Continue\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Deadlock state reachable: {p_taskA_and1=1} — no enabled transition, sink not reached.",
+      "[Deadlock Demo] Deadlock state reachable: {p_taskB_and1=1} — no enabled transition, sink not reached.",
+      "[Deadlock Demo] Final marking (sink) is unreachable from initial marking. Process cannot complete."
+    ],
+    "warnings": [
+      "[Deadlock Demo] Dead transition(s) never fire: \"Wait for both\" (and1), \"Continue\" (task3), \"End\" (end1)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "deadlock-process.json|strict|optimize": {
+    "errors": [
+      "[Deadlock Demo] Deadlock: XOR-split \"xor1\" feeds AND-join \"and1\" on mutually exclusive paths — its branch \"f2\" → \"taskA\" supplies incoming flow \"f4\" but never \"f5\", so the join never receives all its tokens.",
+      "[Deadlock Demo] Task \"Path A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Path B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Task \"Continue\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Deadlock Demo] Deadlock state reachable: {p_taskA_and1=1} — no enabled transition, sink not reached.",
+      "[Deadlock Demo] Deadlock state reachable: {p_taskB_and1=1} — no enabled transition, sink not reached.",
+      "[Deadlock Demo] Final marking (sink) is unreachable from initial marking. Process cannot complete."
+    ],
+    "warnings": [
+      "[Deadlock Demo] Dead transition(s) never fire: \"Wait for both\" (and1), \"Continue\" (task3), \"End\" (end1)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "dense-edge-labels.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Dense Edges] Task \"Variante A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante C\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante D\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante E\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] XOR gateway \"gw\" (Welche?) has 5 outgoing flows but no default flow."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "dense-edge-labels.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Dense Edges] Task \"Variante A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante C\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante D\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante E\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] XOR gateway \"gw\" (Welche?) has 5 outgoing flows but no default flow."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "dense-edge-labels.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Dense Edges] Task \"Variante A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante C\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante D\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante E\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] XOR gateway \"gw\" (Welche?) has 5 outgoing flows but no default flow."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "dense-edge-labels.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Dense Edges] Task \"Variante A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante C\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante D\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante E\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] XOR gateway \"gw\" (Welche?) has 5 outgoing flows but no default flow."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "dense-edge-labels.json|strict|document": {
+    "errors": [
+      "[Dense Edges] Task \"Variante A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante C\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante D\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante E\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] XOR gateway \"gw\" (Welche?) has 5 outgoing flows but no default flow."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "dense-edge-labels.json|strict|optimize": {
+    "errors": [
+      "[Dense Edges] Task \"Variante A\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante B\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante C\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante D\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] Task \"Variante E\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Dense Edges] XOR gateway \"gw\" (Welche?) has 5 outgoing flows but no default flow."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "expanded-subprocess.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Hauptprozess] Task \"Vorprüfung\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "expanded-subprocess.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Hauptprozess] Task \"Vorprüfung\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "expanded-subprocess.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Hauptprozess] Task \"Vorprüfung\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "expanded-subprocess.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Hauptprozess] Task \"Vorprüfung\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "expanded-subprocess.json|strict|document": {
+    "errors": [
+      "[Hauptprozess] Task \"Vorprüfung\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "expanded-subprocess.json|strict|optimize": {
+    "errors": [
+      "[Hauptprozess] Task \"Vorprüfung\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "long-lane-names.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Long Names Test] Task \"Erfassen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Prüfen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Freigeben\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "Name exceeds 25 chars — shorten for readability: lane \"Qualitätssicherungsbeauftragter\" (31 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "long-lane-names.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Long Names Test] Task \"Erfassen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Prüfen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Freigeben\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "Name exceeds 25 chars — shorten for readability: lane \"Qualitätssicherungsbeauftragter\" (31 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "long-lane-names.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Long Names Test] Task \"Erfassen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Prüfen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Freigeben\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "Name exceeds 25 chars — shorten for readability: lane \"Qualitätssicherungsbeauftragter\" (31 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "long-lane-names.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Long Names Test] Task \"Erfassen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Prüfen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Freigeben\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "Name exceeds 25 chars — shorten for readability: lane \"Qualitätssicherungsbeauftragter\" (31 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "long-lane-names.json|strict|document": {
+    "errors": [
+      "[Long Names Test] Task \"Erfassen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Prüfen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Freigeben\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Qualitätssicherungsbeauftragter\" (31 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "long-lane-names.json|strict|optimize": {
+    "errors": [
+      "[Long Names Test] Task \"Erfassen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Prüfen\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Long Names Test] Task \"Freigeben\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [
+      "Name exceeds 25 chars — shorten for readability: lane \"Qualitätssicherungsbeauftragter\" (31 chars)"
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "messageflow-to-subprocess.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "MessageFlow \"mf_container\" source \"fulfil\" is a subProcess — not an InteractionNode (BPMN20.cmof: Activity extends FlowNode only, unlike Task and Event). Point the flow at a black-box participant, at a send/receive task inside the container, or at a message start/end event inside it. Collapsing the container does not help — isExpanded is a BPMNShape attribute."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "messageflow-to-subprocess.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "MessageFlow \"mf_container\" source \"fulfil\" is a subProcess — not an InteractionNode (BPMN20.cmof: Activity extends FlowNode only, unlike Task and Event). Point the flow at a black-box participant, at a send/receive task inside the container, or at a message start/end event inside it. Collapsing the container does not help — isExpanded is a BPMNShape attribute."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "messageflow-to-subprocess.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "MessageFlow \"mf_container\" source \"fulfil\" is a subProcess — not an InteractionNode (BPMN20.cmof: Activity extends FlowNode only, unlike Task and Event). Point the flow at a black-box participant, at a send/receive task inside the container, or at a message start/end event inside it. Collapsing the container does not help — isExpanded is a BPMNShape attribute."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "messageflow-to-subprocess.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "MessageFlow \"mf_container\" source \"fulfil\" is a subProcess — not an InteractionNode (BPMN20.cmof: Activity extends FlowNode only, unlike Task and Event). Point the flow at a black-box participant, at a send/receive task inside the container, or at a message start/end event inside it. Collapsing the container does not help — isExpanded is a BPMNShape attribute."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "messageflow-to-subprocess.json|strict|document": {
+    "errors": [
+      "MessageFlow \"mf_container\" source \"fulfil\" is a subProcess — not an InteractionNode (BPMN20.cmof: Activity extends FlowNode only, unlike Task and Event). Point the flow at a black-box participant, at a send/receive task inside the container, or at a message start/end event inside it. Collapsing the container does not help — isExpanded is a BPMNShape attribute."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "messageflow-to-subprocess.json|strict|optimize": {
+    "errors": [
+      "MessageFlow \"mf_container\" source \"fulfil\" is a subProcess — not an InteractionNode (BPMN20.cmof: Activity extends FlowNode only, unlike Task and Event). Point the flow at a black-box participant, at a send/receive task inside the container, or at a message start/end event inside it. Collapsing the container does not help — isExpanded is a BPMNShape attribute."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "multi-pool-collaboration.json|none|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "multi-pool-collaboration.json|none|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "multi-pool-collaboration.json|default|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "multi-pool-collaboration.json|default|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "multi-pool-collaboration.json|strict|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "multi-pool-collaboration.json|strict|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "parallel-split-join.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "parallel-split-join.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "parallel-split-join.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "parallel-split-join.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "parallel-split-join.json|strict|document": {
+    "errors": [
+      "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "parallel-split-join.json|strict|optimize": {
+    "errors": [
+      "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "realistic-collaboration.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "realistic-collaboration.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "realistic-collaboration.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "realistic-collaboration.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "realistic-collaboration.json|strict|document": {
+    "errors": [
+      "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "realistic-collaboration.json|strict|optimize": {
+    "errors": [
+      "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "simple-approval.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Main Pool] Task \"Revise document\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "simple-approval.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Main Pool] Task \"Revise document\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "simple-approval.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Main Pool] Task \"Revise document\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "simple-approval.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Main Pool] Task \"Revise document\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "simple-approval.json|strict|document": {
+    "errors": [
+      "[Main Pool] Task \"Revise document\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "simple-approval.json|strict|optimize": {
+    "errors": [
+      "[Main Pool] Task \"Revise document\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "sparse-lanes.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "sparse-lanes.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "sparse-lanes.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "sparse-lanes.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "sparse-lanes.json|strict|document": {
+    "errors": [
+      "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "sparse-lanes.json|strict|optimize": {
+    "errors": [
+      "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-child-fidelity.json|none|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-child-fidelity.json|none|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-child-fidelity.json|default|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-child-fidelity.json|default|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-child-fidelity.json|strict|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-child-fidelity.json|strict|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-collapsed-children.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-collapsed-children.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-collapsed-children.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-collapsed-children.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-collapsed-children.json|strict|document": {
+    "errors": [
+      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-collapsed-children.json|strict|optimize": {
+    "errors": [
+      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-merge-fanout.json|none|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-merge-fanout.json|none|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-merge-fanout.json|default|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-merge-fanout.json|default|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-merge-fanout.json|strict|document": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "subprocess-merge-fanout.json|strict|optimize": {
+    "errors": [],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "wide-pipeline.json|none|document": {
+    "errors": [],
+    "warnings": [
+      "[Wide Pipeline] Task \"Schritt 1\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 2\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 3\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 4\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 5\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 6\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 7\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 8\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 9\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 10\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 11\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 12\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 13\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 14\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 15\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 16\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 17\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 18\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 19\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 20\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 21\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 22\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 23\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 24\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 25\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "wide-pipeline.json|none|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Wide Pipeline] Task \"Schritt 1\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 2\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 3\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 4\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 5\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 6\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 7\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 8\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 9\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 10\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 11\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 12\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 13\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 14\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 15\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 16\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 17\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 18\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 19\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 20\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 21\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 22\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 23\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 24\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 25\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": [
+      {
+        "id": "O04",
+        "transform": "parallelize",
+        "targets": [
+          "t1",
+          "t2",
+          "t3",
+          "t4",
+          "t5",
+          "t6",
+          "t7",
+          "t8",
+          "t9",
+          "t10",
+          "t11",
+          "t12",
+          "t13",
+          "t14",
+          "t15",
+          "t16",
+          "t17",
+          "t18",
+          "t19",
+          "t20",
+          "t21",
+          "t22",
+          "t23",
+          "t24",
+          "t25"
+        ],
+        "message": "Sequenz gleicher Rolle ohne Verzweigung (\"Schritt 1\" → \"Schritt 2\" → \"Schritt 3\" → \"Schritt 4\" → \"Schritt 5\" → \"Schritt 6\" → \"Schritt 7\" → \"Schritt 8\" → \"Schritt 9\" → \"Schritt 10\" → \"Schritt 11\" → \"Schritt 12\" → \"Schritt 13\" → \"Schritt 14\" → \"Schritt 15\" → \"Schritt 16\" → \"Schritt 17\" → \"Schritt 18\" → \"Schritt 19\" → \"Schritt 20\" → \"Schritt 21\" → \"Schritt 22\" → \"Schritt 23\" → \"Schritt 24\" → \"Schritt 25\") — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.",
+        "tradeoff": {
+          "time": "−"
+        },
+        "ref": {
+          "reijers": "parallelism"
+        },
+        "judgment": true,
+        "pool": "Wide Pipeline"
+      }
+    ]
+  },
+  "wide-pipeline.json|default|document": {
+    "errors": [],
+    "warnings": [
+      "[Wide Pipeline] Task \"Schritt 1\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 2\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 3\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 4\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 5\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 6\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 7\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 8\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 9\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 10\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 11\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 12\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 13\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 14\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 15\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 16\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 17\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 18\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 19\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 20\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 21\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 22\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 23\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 24\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 25\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": []
+  },
+  "wide-pipeline.json|default|optimize": {
+    "errors": [],
+    "warnings": [
+      "[Wide Pipeline] Task \"Schritt 1\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 2\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 3\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 4\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 5\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 6\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 7\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 8\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 9\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 10\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 11\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 12\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 13\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 14\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 15\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 16\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 17\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 18\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 19\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 20\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 21\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 22\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 23\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 24\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 25\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "infos": [],
+    "advisories": [
+      {
+        "id": "O04",
+        "transform": "parallelize",
+        "targets": [
+          "t1",
+          "t2",
+          "t3",
+          "t4",
+          "t5",
+          "t6",
+          "t7",
+          "t8",
+          "t9",
+          "t10",
+          "t11",
+          "t12",
+          "t13",
+          "t14",
+          "t15",
+          "t16",
+          "t17",
+          "t18",
+          "t19",
+          "t20",
+          "t21",
+          "t22",
+          "t23",
+          "t24",
+          "t25"
+        ],
+        "message": "Sequenz gleicher Rolle ohne Verzweigung (\"Schritt 1\" → \"Schritt 2\" → \"Schritt 3\" → \"Schritt 4\" → \"Schritt 5\" → \"Schritt 6\" → \"Schritt 7\" → \"Schritt 8\" → \"Schritt 9\" → \"Schritt 10\" → \"Schritt 11\" → \"Schritt 12\" → \"Schritt 13\" → \"Schritt 14\" → \"Schritt 15\" → \"Schritt 16\" → \"Schritt 17\" → \"Schritt 18\" → \"Schritt 19\" → \"Schritt 20\" → \"Schritt 21\" → \"Schritt 22\" → \"Schritt 23\" → \"Schritt 24\" → \"Schritt 25\") — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.",
+        "tradeoff": {
+          "time": "−"
+        },
+        "ref": {
+          "reijers": "parallelism"
+        },
+        "judgment": true,
+        "pool": "Wide Pipeline"
+      }
+    ]
+  },
+  "wide-pipeline.json|strict|document": {
+    "errors": [
+      "[Wide Pipeline] Task \"Schritt 1\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 2\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 3\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 4\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 5\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 6\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 7\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 8\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 9\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 10\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 11\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 12\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 13\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 14\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 15\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 16\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 17\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 18\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 19\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 20\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 21\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 22\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 23\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 24\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 25\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": []
+  },
+  "wide-pipeline.json|strict|optimize": {
+    "errors": [
+      "[Wide Pipeline] Task \"Schritt 1\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 2\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 3\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 4\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 5\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 6\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 7\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 8\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 9\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 10\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 11\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 12\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 13\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 14\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 15\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 16\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 17\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 18\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 19\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 20\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 21\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 22\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 23\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 24\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
+      "[Wide Pipeline] Task \"Schritt 25\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+    ],
+    "warnings": [],
+    "infos": [],
+    "advisories": [
+      {
+        "id": "O04",
+        "transform": "parallelize",
+        "targets": [
+          "t1",
+          "t2",
+          "t3",
+          "t4",
+          "t5",
+          "t6",
+          "t7",
+          "t8",
+          "t9",
+          "t10",
+          "t11",
+          "t12",
+          "t13",
+          "t14",
+          "t15",
+          "t16",
+          "t17",
+          "t18",
+          "t19",
+          "t20",
+          "t21",
+          "t22",
+          "t23",
+          "t24",
+          "t25"
+        ],
+        "message": "Sequenz gleicher Rolle ohne Verzweigung (\"Schritt 1\" → \"Schritt 2\" → \"Schritt 3\" → \"Schritt 4\" → \"Schritt 5\" → \"Schritt 6\" → \"Schritt 7\" → \"Schritt 8\" → \"Schritt 9\" → \"Schritt 10\" → \"Schritt 11\" → \"Schritt 12\" → \"Schritt 13\" → \"Schritt 14\" → \"Schritt 15\" → \"Schritt 16\" → \"Schritt 17\" → \"Schritt 18\" → \"Schritt 19\" → \"Schritt 20\" → \"Schritt 21\" → \"Schritt 22\" → \"Schritt 23\" → \"Schritt 24\" → \"Schritt 25\") — Parallelisierung prüfen; keine Datenabhängigkeit im Modell erkennbar (Kandidat, prüfen) [Reijers 2005: parallelism]. Trade-off: Zeit ↓.",
+        "tradeoff": {
+          "time": "−"
+        },
+        "ref": {
+          "reijers": "parallelism"
+        },
+        "judgment": true,
+        "pool": "Wide Pipeline"
+      }
+    ]
+  }
+}
