@@ -147,9 +147,9 @@ const AUDIT_MESSAGE_MAX = 500;
 /**
  * The rule profile a client sent, or null. Over HTTP a profile is an inline object only — a string
  * would name a file on the server, so it is refused rather than read — and it passes the profile
- * schema gate before anything else sees it. It may not switch the soundness layer off or move a
- * soundness rule to a severity that hides it (OFF, INFO, ADVISORY), so a remote client can never
- * make a soundness finding vanish from the response.
+ * schema gate before anything else sees it. It may raise a soundness rule but not switch the layer
+ * off or set a rule below its default severity, so a remote client can never demote a soundness
+ * error into a "success". (MCP, a trusted local channel, has no such restriction.)
  * Throws ProfileRejectedError (→ 400 profile_error).
  */
 export function clientRuleProfile(body) {

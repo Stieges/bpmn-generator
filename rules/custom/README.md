@@ -33,17 +33,26 @@ refused (`ProfileRejectedError`).
 
 The MCP tools (`generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn`) take a
 profile **name**, never a path, resolved inside this repository's `rules/`
-directory: `strict`, `strict-profile`, `dmn-default-profile`, or
-`custom/<name>` for a file here (`custom/acme` → `rules/custom/acme.json`).
-Names are lowercase letters, digits and `-`; no other directory, no `..`, and a
-symlink that leaves `rules/` is refused.
+directory: `strict` (also `strict-profile`, `strict-profile.json`,
+`rules/strict-profile.json`), or `custom/<name>` for a file here
+(`custom/acme` → `rules/custom/acme.json`). Names are lowercase letters, digits
+and `-`; no other directory, no `..`, and a symlink that leaves `rules/` is
+refused. The MCP server is a trusted local channel, so a named profile may relax
+any rule, soundness included.
+
+Named profiles need a **repository checkout**. `rules/` is not shipped in the
+npm package, and the server never looks outside the repository for it (in
+`node_modules` the neighbouring `rules/` would belong to some other package), so
+an installed package refuses every name: "named rule profiles need a repository
+checkout; pass none or use the CLI with a file".
 
 ### Over HTTP: inline
 
 The HTTP API takes the profile itself as an inline JSON object in the request
 body (`ruleProfile: { … }`); it reads no profile file at all. See
 `references/api-reference.md` → "Rule profiles over HTTP" for the limits, and
-note that over HTTP a profile may not relax the soundness layer.
+note that over HTTP a profile may only raise a soundness rule — never disable
+the layer or set a rule below its default severity.
 
 ## Format
 
@@ -75,7 +84,7 @@ layer disabled. Layers the profile says nothing about are set by the mode.
 
 | Engine | Layer | Default severity | Contains |
 |---|---|---|---|
-| BPMN | `soundness` | ERROR | S01–S13 |
+| BPMN | `soundness` | ERROR | S01–S17 |
 | BPMN | `style` | WARNING | M01–M11 |
 | BPMN | `pragmatics` | INFO | P01–P03 |
 | BPMN | `workflow_net` | ERROR/WARNING | WF01–WF03 (opt-in) |
@@ -95,9 +104,9 @@ pass an absolute path.
 
 A profile is checked when a runner uses it. First the schema
 (`references/rule-profile-schema.json`): only the keys `profile`, `version`,
-`description`, `layers`, `overrides`; at most 32 layers and 256 overrides; each
-entry `{ enabled, severity }` with a severity of `ERROR`, `WARNING`, `INFO`,
-`ADVISORY`, `OFF` — anything else is refused. Then the rule set: an unknown rule
+`description`, `layers`, `overrides`; at most 32 layers and 256 overrides; a
+layer entry is `{ enabled }`, an override `{ severity }` with a severity of
+`ERROR`, `WARNING`, `INFO`, `ADVISORY`, `OFF` — anything else is refused. Then the rule set: an unknown rule
 id or layer, or an override of SC01–SC06 (scenario-pipeline rules, not
 profile-switchable yet), prints a `⚠ rule profile …` warning (at most 20);
 `ADVISORY` on a BPMN rule outside the optimization layer is refused, because its

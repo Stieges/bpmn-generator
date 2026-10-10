@@ -937,14 +937,18 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   name or from a file — now passes a JSON Schema gate (`references/rule-profile-schema.json`)
   after a 64 KiB size bound, before any rule logic reads it; unknown top-level keys, including the
   loader's own internal markers, are refused. Over HTTP, `ruleProfile` is an inline object on all
-  three endpoints (`/orchestrate` used to accept a string and read it as a server-side path) and
-  may not relax the soundness layer. Over MCP it is a profile name resolved inside the repository's
-  `rules/` directory, located from the module rather than the working directory — which also
-  fixes the documented `rules/strict-profile.json` silently running the defaults. Profile files
-  are read only when they are regular files of at most 256 KiB. Refusal messages no longer quote
-  file content or name server paths to remote callers; client-supplied names in messages are
-  escaped, warning lists are capped, and the audit line for a refused profile is bounded. An inline
-  profile on `/orchestrate` and `orchestrate_bpmn` now actually applies in the compliance phase.
+  three endpoints (`/orchestrate` used to accept a string and read it as a server-side path), and
+  it may only raise a soundness rule, never disable the layer or set a rule below its default
+  severity. Over MCP — a trusted local channel that may still relax any rule — it is a profile
+  name resolved inside the repository's `rules/` directory, located from the module rather than
+  the working directory, which also fixes the documented `rules/strict-profile.json` silently
+  running the defaults; an installed npm package has no `rules/` and refuses names. Profile size
+  and nesting are bounded by a walk that stops at the limit. Profile files are read only when they
+  are regular files of at most 256 KiB. Refusal messages no longer quote file content or name
+  server paths to remote callers; client-supplied names in messages are escaped (control and
+  Unicode format characters), warning lists are capped, and the audit line for a refused profile
+  is bounded. A profile on `/orchestrate` (inline) and `orchestrate_bpmn` (by name) now actually
+  applies in the compliance phase.
 - **Five high/critical dependency advisories cleared; the audit gate is green again.** `proxy-addr`
   (critical), `@modelcontextprotocol/sdk` 1.29.0 → 1.32.1, `fast-uri` (reached through `ajv`, on the
   untrusted-input path), and the dev-only `brace-expansion` and `js-yaml` — all in-range lockfile

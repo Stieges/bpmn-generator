@@ -75,18 +75,20 @@ names. Every profile passes `references/rule-profile-schema.json` before the rul
 | Limit | Value |
 |---|---|
 | serialised size | 64 KiB |
-| `layers` | at most 32, keys `^[a-z_]{1,32}$`, value `{ enabled?: boolean, severity?: … }` |
-| `overrides` | at most 256, keys `^[A-Za-z0-9_]{1,16}$`, value `{ enabled?: boolean, severity?: ERROR \| WARNING \| INFO \| ADVISORY \| OFF }` |
+| nesting | at most 4 levels |
+| `layers` | at most 32, keys `^[a-z_]{1,32}$`, value `{ enabled?: boolean }` — nothing else |
+| `overrides` | at most 256, keys `^[A-Za-z0-9_]{1,16}$`, value `{ severity?: ERROR \| WARNING \| INFO \| ADVISORY \| OFF }` — nothing else (`OFF` disables the rule) |
 | `profile` / `version` / `description` | strings of at most 200 / 32 / 1000 characters |
 | other top-level keys | refused |
 
 Refused with `400 profile_error` (the message names the problem, at most five schema problems,
 never a server path): anything that is not an object; a profile over a limit or failing the
 schema; `ADVISORY` on a rule outside the optimization layer; and — over HTTP only — a profile that
-**relaxes the soundness layer** (disables it, or sets a soundness rule to `OFF`, `INFO` or
-`ADVISORY`), so a soundness finding can never vanish from the response. A soundness rule may
-still be set to `ERROR` or `WARNING` (the finding is reported either way), and every other layer
-may be relaxed. Rule ids and layers the BPMN rule set does
+**relaxes the soundness layer** — disables it, or sets a soundness rule below its default
+severity (`ERROR` > `WARNING` > `INFO` > `ADVISORY` > `OFF`) — so a soundness error can never be
+demoted into a `"success"`. Raising a soundness rule is fine, and every other layer may be
+relaxed. (The MCP server is a trusted local channel and may relax soundness too; it takes a
+profile *name* instead of an object — see `SECURITY.md`.) Rule ids and layers the BPMN rule set does
 not know are not an error; the server logs a warning (at most 20 per request) and ignores them.
 
 ### validation vs. diagnostics
