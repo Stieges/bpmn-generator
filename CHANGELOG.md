@@ -812,13 +812,14 @@ Things this release deliberately leaves open. They are listed here because the C
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
 
 - **The DMN importer's `report.lossless` is never true for DMN this generator wrote.** It reads no
-  DMNDI, so (IM06 for the diagram, IM05 for generated `<variable>`/`<literalExpression>` ids); `--strict` on the
-  import CLI and on `scenarios/pipeline.js --decisions` rejects our own output. Nothing is lost that
-  the next emit would not regenerate.
-- **The BPMN importer side is untouched.** `references/input-schema.json` has the same narrow id pattern Decision-Core dropped, and
-  `scripts/bpmn/import.js` swallows every moddle error with a bare `catch {}`; neither
-  `/api/v1/import` nor the MCP `import_bpmn` tool has a test. Not addressed here.
-
+  DMNDI, so every diagram is an IM06 finding, and the writer's generated `<variable>` and
+  `<literalExpression>` ids are IM05 findings. `--strict` on the import CLI and on
+  `scenarios/pipeline.js --decisions` therefore rejects our own output. Nothing is lost that the
+  next emit would not regenerate.
+- **The BPMN importer side is untouched.** `references/input-schema.json` still has the narrow id
+  pattern Decision-Core dropped, and `scripts/bpmn/import.js` swallows every moddle error with a
+  bare `catch {}`; neither `/api/v1/import` nor the MCP `import_bpmn` tool has a test. Not
+  addressed here.
 
 - **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
   under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
