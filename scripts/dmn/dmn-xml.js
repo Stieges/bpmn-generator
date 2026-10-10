@@ -60,7 +60,7 @@ const MODDLE_TYPE = {
 /**
  * Every xsd:ID already in use across the WHOLE Decision-Core document — node ids,
  * decisionTable.id, every input[]/output[]/rule[] id, and every requirement key (via
- * requirementKey(), reused rather than reimplemented — see its doc comment in coordinates.js).
+ * requirementKey(), reused rather than reimplemented — see its doc comment in requirement-order.js).
  * DMN 1.3's xsd:ID is a single document-wide namespace, not scoped per element type, so a
  * generated id (below) must be checked against all of these, not just node ids.
  */
@@ -235,7 +235,7 @@ function attachRequirements(dc, nodeMap) {
   // element order from ONE function. A no-op for this loop today — the per-target, per-kind nesting
   // below already groups whatever order arrives — which is exactly why it is worth stating: the
   // agreement between the two halves stops being a property of moddle's collections and becomes a
-  // property of the code. See `orderedRequirements`' doc comment in coordinates.js.
+  // property of the code. See `orderedRequirements`' doc comment in requirement-order.js.
   for (const req of orderedRequirements(dc)) {
     const targetEl = nodeMap.get(req.target);
     const sourceNode = nodesById.get(req.source);
