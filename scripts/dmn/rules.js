@@ -17,9 +17,9 @@
  * kept locally under references/omg-spec/normative/dmn/.
  */
 
-import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
+import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, ProfileRejectedError } from '../shared/rule-profile.js';
 import { CFG } from '../shared/utils.js';
-import { buildRuleCatalog } from '../shared/rule-catalog.js';
+import { buildRuleCatalog, profileContext } from '../shared/rule-catalog.js';
 
 /**
  * DMN 1.3 Table 2, "Requirements connection rules", verbatim minus the two
@@ -381,6 +381,7 @@ export const RULE_REGISTER = {
 
 /** The checks above, each completed with `layer` and `defaultSeverity` from the ontology. */
 export const DMN_RULES = buildRuleCatalog(RULE_REGISTER);
+const PROFILE_CONTEXT = profileContext('DMN');
 
 /** The layers a mode turns on, beyond what the base profile already says. */
 const MODES = {
@@ -438,6 +439,10 @@ export function dmnProfileForMode(baseProfile, mode = 'semantic') {
 export function runDmnRules(dc, opts = {}) {
   const { profile: rawProfile = null, mode = 'semantic', config = CFG.dmn } = opts;
   const profile = dmnProfileForMode(rawProfile, mode);
+  // What the profile says that the DMN rule set cannot honour: warn, or refuse.
+  const audit = auditProfile(profile, PROFILE_CONTEXT);
+  if (audit.errors.length) throw new ProfileRejectedError(audit.errors.join('; '));
+  for (const w of audit.warnings) console.warn(`⚠ ${w}`);
   const errors = [], warnings = [], infos = [];
   for (const rule of DMN_RULES) {
     if (!isRuleEnabled(rule, profile)) continue;

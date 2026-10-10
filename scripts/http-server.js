@@ -12,6 +12,7 @@ const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 't
 
 import { runPipeline, validateLogicCore } from './bpmn/pipeline.js';
 import { profileForMode } from './bpmn/rules.js';
+import { ProfileRejectedError } from './shared/rule-profile.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 import { chatAgent } from './agents/chat.js';
@@ -233,7 +234,9 @@ const server = createServer(async (req, res) => {
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       const poolOrder = body.poolOrder === 'declared' ? 'declared' : 'auto';
-      const result = await runPipeline(body.logicCore, { mode, poolOrder });
+      // Over HTTP a profile is an inline object only: a string would be a server-side file path.
+      const ruleProfile = body.ruleProfile && typeof body.ruleProfile === 'object' ? body.ruleProfile : null;
+      const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
       // A green validation says nothing about the layout — the rule engine never
@@ -278,7 +281,8 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
-      const validation = validateLogicCore(body.logicCore, profileForMode(null, mode));
+      const ruleProfile = body.ruleProfile && typeof body.ruleProfile === 'object' ? body.ruleProfile : null;
+      const validation = validateLogicCore(body.logicCore, profileForMode(ruleProfile, mode));
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors: validation.errors.length > 0 });
       return json(res, 200, { correlationId, status: 'success', validation });
@@ -398,6 +402,11 @@ const server = createServer(async (req, res) => {
 
     return json(res, 404, { error: 'Not Found' });
   } catch (err) {
+    // A refused rule profile is the caller's input, not a server fault.
+    if (err instanceof ProfileRejectedError) {
+      auditLog({ event: 'profile_rejected', correlationId, error: err.message });
+      return json(res, 400, { correlationId, status: 'profile_error', error: err.message });
+    }
     auditLog({ event: 'error', correlationId, error: err.message });
     return json(res, 500, { correlationId, status: 'internal_error', error: err.message });
   }

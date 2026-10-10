@@ -4,6 +4,9 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { server, resolveEnvLlmConfig } from './http-server.js';
 
 let baseUrl;
@@ -265,5 +268,33 @@ describe('POST /api/v1/orchestrate — diagnostics', () => {
     expect(res.status).toBe(200);
     expect(data.diagnostics).toBeDefined();
     expect(data.diagnostics.ok).toBe(true);
+  });
+});
+
+describe('POST /api/v1/generate and /validate — refused rule profile', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const typo = { profile: 'typo', overrides: { M03: { severity: 'CRITICAL' } } };
+
+  for (const path of ['/api/v1/generate', '/api/v1/validate']) {
+    test(`${path}: an unknown severity is a 400 naming rule and severity, not a 500`, async () => {
+      const res = await post(path, { logicCore: lc, ruleProfile: typo });
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.status).toBe('profile_error');
+      expect(data.error).toBe('rule profile "typo": unknown severity CRITICAL (M03)');
+    });
+  }
+
+  test('/api/v1/orchestrate: a profile file that is not JSON is a 400 with the message', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'profile-'));
+    const bad = join(dir, 'kaputt.json');
+    writeFileSync(bad, '{');
+    const res = await post('/api/v1/orchestrate', { logicCore: lc, ruleProfile: bad });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.error).toMatch(/kaputt\.json is not valid JSON at line 1, column \d+/);
   });
 });

@@ -61,6 +61,7 @@ None of this is applied automatically; turning an advisory into an actual model 
 **Errors:**
 - `400 { correlationId, status: "schema_error", errors: [...] }` — Logic-Core failed the schema gate.
 - `400 { error: "callbackUrl ..." }` — invalid or internal callback URL.
+- `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused (unknown severity, `ADVISORY` outside the optimization layer, or a profile file that is not JSON). `/generate` and `/validate` take an inline profile object only.
 - `500 { correlationId, status: "internal_error", error }` — pipeline threw.
 
 ### validation vs. diagnostics

@@ -15,8 +15,8 @@
  *   - BEF4LLM (Kourani et al., 2025)
  */
 
-import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity } from '../shared/rule-profile.js';
-import { buildRuleCatalog } from '../shared/rule-catalog.js';
+import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, ProfileRejectedError } from '../shared/rule-profile.js';
+import { buildRuleCatalog, profileContext } from '../shared/rule-catalog.js';
 import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES, TASK_TYPES,
   isActivity, isInteractionNode, isSequenceFlowExempt,
@@ -1342,6 +1342,18 @@ const PRAGMATICS_RULES = inLayer('pragmatics');
 const WORKFLOW_NET_RULES = inLayer('workflow_net');
 const OPTIMIZATION_RULES = inLayer('optimization');
 
+// classifyResult routes ERROR/WARNING/INFO only; ADVISORY exists for the optimization layer, whose
+// findings travel through validation.advisories. An ADVISORY override on any other rule would drop
+// its findings silently, so the profile is refused instead.
+const PROFILE_CONTEXT = { ...profileContext('BPMN'), severityOnlyFor: { ADVISORY: new Set(['optimization']) } };
+
+/** Report what a profile says that the BPMN rule set cannot honour: warn, or refuse. */
+function reportProfile(profile) {
+  const { warnings, errors } = auditProfile(profile, PROFILE_CONTEXT);
+  if (errors.length) throw new ProfileRejectedError(errors.join('; '));
+  for (const w of warnings) console.warn(`⚠ ${w}`);
+}
+
 // loadRuleProfile / isRuleEnabled / getEffectiveSeverity now live in
 // rule-profile.js — nothing about them was BPMN-specific, and the DMN engine
 // needs exactly the same three. They are re-exported below so every existing
@@ -1371,6 +1383,7 @@ function profileForMode(baseProfile, mode = 'document') {
  * @returns {{ errors: string[], warnings: string[], infos: string[], metrics: object }}
  */
 function runRules(lc, profile = null, catalog = RULES) {
+  reportProfile(profile);
   const errors = [], warnings = [], infos = [], advisories = [];
   const metrics = {};
   const processes = lc.pools ? lc.pools : [lc];
