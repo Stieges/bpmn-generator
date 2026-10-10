@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reference naming no/wrong-typed definition or sitting on a mismatching node) and `S17` (WARNING,
   several candidates and no reference chosen). Round trip is exact for an explicit reference only:
   an event authored without one, in a document with exactly one definition of its type, is written
-  with that reference and re-imports carrying it explicitly.
+  with that reference, so re-importing it yields a node that now has the field — the implicit form
+  does not survive as implicit.
 - **DMN XML importer — `scripts/dmn/import.js` (DMN 1.3 XML → Decision-Core).** `dmnToDecisionCore`
   returns `{ dc, report }`: the model plus a structured loss report (`IM01`–`IM09`, positional paths),
   with `report.lossless` as the one bit a caller branches on; a failure is a shaped result, never a
