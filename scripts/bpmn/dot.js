@@ -142,8 +142,43 @@ function escapeDot(s) {
  * @param {string} dotString - DOT format string
  * @returns {object} Logic-Core JSON
  */
+/**
+ * Split a DOT body into statements: at newlines and `;`, after `{` and around `}`, but never
+ * inside a quoted string or an attribute list. So `digraph { a -> b; a -> c; }` on one line and
+ * the same graph over six lines produce the same statements (#66).
+ */
+function splitDotStatements(text) {
+  const out = [];
+  let cur = '';
+  let quote = false;
+  let depth = 0;
+  const flush = () => { const t = cur.trim(); if (t) out.push(t); cur = ''; };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      cur += c;
+      if (c === '\\' && i + 1 < text.length) cur += text[++i];
+      else if (c === '"') quote = false;
+      continue;
+    }
+    if (c === '"') { quote = true; cur += c; }
+    else if (c === '[') { depth++; cur += c; }
+    else if (c === ']') { depth = Math.max(0, depth - 1); cur += c; }
+    else if (depth > 0) cur += c === '\n' ? ' ' : c;
+    else if (c === '\n' || c === ';') flush();
+    else if (c === '{') { cur += c; flush(); }
+    else if (c === '}') { flush(); out.push('}'); }
+    else cur += c;
+  }
+  flush();
+  return out;
+}
+
 function dotToLogicCore(dotString) {
-  const lines = dotString.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//'));
+  const withoutComments = dotString.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+  const lines = splitDotStatements(withoutComments);
+  let unrecognized = 0;
+  let recognized = 0; // node and edge statements, wherever they landed
 
   const nodes = [];
   const edges = [];
@@ -206,6 +241,7 @@ function dotToLogicCore(dotString) {
     // id minted from source+target collided for parallel edges (#66).
     const edgeMatch = line.match(/^((?:(?!->)[^\s;,[\]])+)\s*->\s*((?:(?!->)[^\s;,[\]])+)\s*(?:\[([^\]]*)\])?\s*;?$/);
     if (edgeMatch) {
+      recognized++;
       const edge = {
         source: edgeMatch[1],
         target: edgeMatch[2],
@@ -229,6 +265,7 @@ function dotToLogicCore(dotString) {
     // Node declaration: id [attrs];
     const nodeMatch = line.match(/^([^\s;,[\]]+)\s*\[([^\]]*)\]\s*;?$/);
     if (nodeMatch) {
+      recognized++;
       const nodeId = nodeMatch[1];
       const attrs = nodeMatch[2];
       const labelM = attrs.match(/label="([^"]*)"/);
@@ -250,6 +287,13 @@ function dotToLogicCore(dotString) {
       nodeSet.add(nodeId);
       continue;
     }
+
+    unrecognized++;
+  }
+
+  if (unrecognized > 0 && recognized === 0) {
+    throw new Error(`DOT import: ${unrecognized} statement(s) found, none recognised as a node or an edge — `
+      + 'only the output of logicCoreToDot is guaranteed to parse');
   }
 
   // Collect closed pools

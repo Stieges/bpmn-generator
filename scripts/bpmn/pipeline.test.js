@@ -3636,6 +3636,26 @@ describe('DOT format', () => {
       expect(lc.edges.map((e) => [e.source, e.target, e.label])).toEqual([['s', 'b', 'x'], ['b', 'e', undefined]]);
     });
 
+    test("the issue's one-line examples parse", () => {
+      expect(dotToLogicCore('digraph { a -> b ; a -> b ; }').edges.map((e) => [e.source, e.target])).toEqual([['a', 'b'], ['a', 'b']]);
+      expect(dotToLogicCore('digraph { a -> b; }').edges.map((e) => [e.source, e.target])).toEqual([['a', 'b']]);
+      const two = dotToLogicCore('digraph { a -> b; a -> c; }');
+      expect(two.edges.map((e) => [e.source, e.target])).toEqual([['a', 'b'], ['a', 'c']]);
+    });
+
+    test('one line and many lines give the same Logic-Core; quotes and attribute lists are not split', () => {
+      const many = dotToLogicCore(wrap('  a [label="x; y", shape=box];', '  a -> b [label="p;q"];'));
+      const one = dotToLogicCore('digraph G { a [label="x; y", shape=box]; a -> b [label="p;q"]; }');
+      expect(one).toEqual(many);
+      expect(one.nodes[0].name).toBe('x; y');
+      expect(one.edges[0].label).toBe('p;q');
+    });
+
+    test('a body with statements but no node or edge is an error, not an empty success', () => {
+      expect(() => dotToLogicCore('digraph { this is not dot }')).toThrow(/none recognised/);
+      expect(() => dotToLogicCore('digraph { rankdir=LR; }')).not.toThrow();
+    });
+
     test('logicCoreToDot -> dotToLogicCore keeps node ids and edge endpoints', () => {
       const src = {
         id: 'p', name: 'P',

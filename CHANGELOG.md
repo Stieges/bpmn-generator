@@ -336,6 +336,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for every edge, so parallel edges collided (and, since #64, the pipeline keeps an id it is given);
   it now leaves `id` unset and `normalizeEdgeIds` assigns unique ones. The edge and node statement
   patterns stop at whitespace, `;`, `,`, `[` and `]`, so `a -> b;` no longer yields target `b;`.
+  Statements are split at newlines and `;` outside quotes and attribute lists, so the one-line forms
+  (`digraph { a -> b; a -> c; }`) parse; a body with statements but no recognisable node or edge
+  now throws instead of returning an empty graph.
 - **The robustness CLI no longer silently ignores flags (#41).** `--strategy`/`--category` were
   accepted and dropped, so a run looked targeted and was not. The cells carry no `category`, and
   `sampleCells` has no strategy besides uniform, so there is nothing sound to wire through; each
@@ -348,7 +351,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `import.meta.url` with `` `file://${process.argv[1]}` ``, false for `file:///C:/…` vs `C:\…`, so the
   server never connected and exited 0. `scripts/shared/entry-point.js` (`isMainModule`) compares
   file-system paths with the platform's own path rules; `http-server.js`, `orchestrator.js` and
-  `robustness/cli.js`, which had the same pattern, use it too. Unit-tested with Windows paths.
+  `robustness/cli.js`, which had the same pattern, use it too, as does every other CLI entry (the
+  helper resolves symlinks, as `import.meta.url` is the real path). Unit-tested with Windows paths.
 - **WF03's improper-completion issue carried WARNING** in `checkWorkflowNetSoundness`'s own output while
   the rule is ERROR; it now says ERROR. `runRules` already reported it as ERROR.
 - **Edges without an `id` no longer fail the CLI with DI07 (#64).** The schema requires only
