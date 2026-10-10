@@ -200,6 +200,11 @@ const LANES = { lanes: [{ id: LANE_ID, name: 'Sachbearbeitung' }, { id: 'lane_b'
 // reasons name the escaping loss assert it explicitly, with a value chosen for it.
 const PLAIN = 'Antrag vollstaendig';
 
+const DEFS = (kind) => {
+  const pre = { message: 'Msg', signal: 'Sig', error: 'Err', escalation: 'Esc' }[kind];
+  return [{ type: kind, id: `${pre}_Order`, name: 'Order' }, { type: kind, id: `${pre}_Pay`, name: 'Pay' }];
+};
+
 const SAMPLES = {
   // ── node fields ────────────────────────────────────────────────────────────────────────────
   // Booleans are sampled with `true` only, except where the row's own mechanism is about the other
@@ -317,6 +322,15 @@ const SAMPLES = {
     { label: 'an unrecognised type, with marker timer', value: { type: 'bogus', value: 'PT2H' }, extra: { marker: 'timer' } },
     { label: 'with marker message', value: { type: 'duration', value: 'PT1H' }, extra: { marker: 'message' } },
   ],
+  // The four definition references (issue #53). Two definitions of the TYPE per sample, the subject
+  // naming the SECOND: with the old "last one wins" lookup a reference to the first would be the
+  // bug, and with a single definition the implicit fallback would pass without reading the field.
+  // `extra.marker` is harmless on the two task classes `messageRef` also covers (a task has no
+  // eventDefinitions; S16 checks the marker only on events).
+  messageRef: [{ label: 'the second of two messages', value: 'Msg_Pay', extra: { marker: 'message' }, model: { definitions: DEFS('message') } }],
+  signalRef: [{ label: 'the second of two signals', value: 'Sig_Pay', extra: { marker: 'signal' }, model: { definitions: DEFS('signal') } }],
+  errorRef: [{ label: 'the second of two errors', value: 'Err_Pay', extra: { marker: 'error' }, model: { definitions: DEFS('error') } }],
+  escalationRef: [{ label: 'the second of two escalations', value: 'Esc_Pay', extra: { marker: 'escalation' }, model: { definitions: DEFS('escalation') } }],
   decisionRef: [{ label: 'a decision id', value: 'dec_bonitaet' }],
   isAdHoc: [{ label: 'true', value: true }],
   isInterrupting: [{ label: 'true', value: true }],
