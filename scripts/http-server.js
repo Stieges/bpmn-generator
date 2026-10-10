@@ -141,6 +141,14 @@ function checkRateLimit(req, res) {
   return true;
 }
 
+const CORRELATION_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const CORRELATION_ID_ERROR = 'correlationId must be 1-64 characters from A-Z, a-z, 0-9, "_" and "-"';
+
+/** A client correlation id is accepted only as a short identifier. */
+export function isValidCorrelationId(value) {
+  return typeof value === 'string' && CORRELATION_ID.test(value);
+}
+
 const BPMN_PROFILE_CONTEXT = profileContext('BPMN');
 const AUDIT_MESSAGE_MAX = 500;
 
@@ -250,6 +258,11 @@ const server = createServer(async (req, res) => {
   try { body = await parseBody(req); }
   catch { return json(res, 400, { error: 'Invalid JSON body' }); }
 
+  // The correlation id is echoed, logged and was once part of a file name: accept it only as a
+  // short identifier, never as a path or an arbitrary value.
+  if (body.correlationId !== undefined && body.correlationId !== null && !isValidCorrelationId(body.correlationId)) {
+    return json(res, 400, { error: CORRELATION_ID_ERROR });
+  }
   const correlationId = body.correlationId || crypto.randomUUID();
   const clientId = body.clientId || 'anonymous';
   const t0 = Date.now();
