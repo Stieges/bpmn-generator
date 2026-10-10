@@ -1021,7 +1021,8 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   are named by a server-generated UUID, created exclusively and kept inside the dead-letter
   directory; `correlationId` is accepted only as a short identifier. Client strings that reach the
   audit log or a response (`clientId`, telemetry fields, error messages) are length-bounded with
-  control and format characters escaped, through one helper (`scripts/shared/safe-text.js`). A
+  control and format characters escaped, through one helper (`scripts/shared/safe-text.js`). Schema-gate
+  errors in a response are capped at 20 (plus a count) with their strings bounded. A
   non-object JSON body is refused at once. The API key is compared in constant time; the rate
   limiter evicts expired buckets and can key on the client address recorded by trusted reverse
   proxies (`TRUST_PROXY_HOPS`). The MCP `orchestrate_bpmn` tool runs the Logic-Core schema gate
