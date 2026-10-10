@@ -33,14 +33,30 @@
     "groups": {
       "@id": "bg:markerGroup",
       "@container": "@set"
-    }
+    },
+    "sh": "http://www.w3.org/ns/shacl#",
+    "notation": {
+      "@id": "bg:notation",
+      "@type": "@id",
+      "@container": "@set"
+    },
+    "kind": "bg:ruleKind",
+    "layer": {
+      "@id": "bg:layer",
+      "@type": "@id"
+    },
+    "defaultSeverity": {
+      "@id": "bg:defaultSeverity",
+      "@type": "@id"
+    },
+    "runsIn": "bg:runsIn"
   },
   "@graph": [
     {
       "@id": "https://stieges.github.io/bpmn-generator/ontology",
       "@type": "owl:Ontology",
-      "version": "1.0",
-      "label": "bpmn-generator BPMN vocabulary"
+      "version": "1.1",
+      "label": "bpmn-generator vocabulary and rule catalog"
     },
     {
       "@id": "bg:allowedOn",
@@ -1484,6 +1500,893 @@
       "@type": "rdf:Property",
       "name": "escalationCode",
       "element": "TopLevelDefinition"
+    },
+    {
+      "@id": "bg:notation-BPMN",
+      "@type": "bg:Notation",
+      "name": "BPMN",
+      "label": "BPMN 2.0.2 process model",
+      "status": "supported"
+    },
+    {
+      "@id": "bg:notation-DMN",
+      "@type": "bg:Notation",
+      "name": "DMN",
+      "label": "DMN 1.3 decision model",
+      "status": "supported"
+    },
+    {
+      "@id": "bg:notation-ArchiMate",
+      "@type": "bg:Notation",
+      "name": "ArchiMate",
+      "label": "ArchiMate enterprise architecture model",
+      "status": "announced"
+    },
+    {
+      "@id": "bg:severity-ERROR",
+      "@type": "bg:Severity",
+      "name": "ERROR",
+      "label": "Error",
+      "seeAlso": [
+        "sh:Violation"
+      ]
+    },
+    {
+      "@id": "bg:severity-WARNING",
+      "@type": "bg:Severity",
+      "name": "WARNING",
+      "label": "Warning",
+      "seeAlso": [
+        "sh:Warning"
+      ]
+    },
+    {
+      "@id": "bg:severity-INFO",
+      "@type": "bg:Severity",
+      "name": "INFO",
+      "label": "Info",
+      "seeAlso": [
+        "sh:Info"
+      ]
+    },
+    {
+      "@id": "bg:severity-ADVISORY",
+      "@type": "bg:Severity",
+      "name": "ADVISORY",
+      "label": "Advisory",
+      "comment": "A redesign suggestion, reported apart from errors, warnings and infos; never blocks. No SHACL counterpart."
+    },
+    {
+      "@id": "bg:severity-OFF",
+      "@type": "bg:Severity",
+      "name": "OFF",
+      "label": "Off",
+      "comment": "Registered but not reported unless a profile raises it. No SHACL counterpart."
+    },
+    {
+      "@id": "bg:layer-BPMN-soundness",
+      "@type": "bg:Layer",
+      "name": "soundness",
+      "label": "Soundness",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-BPMN-style",
+      "@type": "bg:Layer",
+      "name": "style",
+      "label": "Style",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-BPMN-pragmatics",
+      "@type": "bg:Layer",
+      "name": "pragmatics",
+      "label": "Pragmatics",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-BPMN-workflow_net",
+      "@type": "bg:Layer",
+      "name": "workflow_net",
+      "label": "Workflow-Net soundness",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-BPMN-optimization",
+      "@type": "bg:Layer",
+      "name": "optimization",
+      "label": "Optimization advisory",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-DMN-soundness",
+      "@type": "bg:Layer",
+      "name": "soundness",
+      "label": "Soundness",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-DMN-semantics",
+      "@type": "bg:Layer",
+      "name": "semantics",
+      "label": "Semantics",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-DMN-best_practice",
+      "@type": "bg:Layer",
+      "name": "best_practice",
+      "label": "Best practice",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ]
+    },
+    {
+      "@id": "bg:layer-cross-consistency",
+      "@type": "bg:Layer",
+      "name": "consistency",
+      "label": "Consistency between notations",
+      "kind": "crossNotation",
+      "notation": [
+        "bg:notation-BPMN",
+        "bg:notation-DMN"
+      ]
+    },
+    {
+      "@id": "bg:rule-S01",
+      "@type": "bg:Rule",
+      "name": "S01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S02",
+      "@type": "bg:Rule",
+      "name": "S02",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S03",
+      "@type": "bg:Rule",
+      "name": "S03",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S04",
+      "@type": "bg:Rule",
+      "name": "S04",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S05",
+      "@type": "bg:Rule",
+      "name": "S05",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S06",
+      "@type": "bg:Rule",
+      "name": "S06",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S07",
+      "@type": "bg:Rule",
+      "name": "S07",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S08",
+      "@type": "bg:Rule",
+      "name": "S08",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S09",
+      "@type": "bg:Rule",
+      "name": "S09",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S10",
+      "@type": "bg:Rule",
+      "name": "S10",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S11",
+      "@type": "bg:Rule",
+      "name": "S11",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S12",
+      "@type": "bg:Rule",
+      "name": "S12",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S13",
+      "@type": "bg:Rule",
+      "name": "S13",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S14",
+      "@type": "bg:Rule",
+      "name": "S14",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S15",
+      "@type": "bg:Rule",
+      "name": "S15",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S16",
+      "@type": "bg:Rule",
+      "name": "S16",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-S17",
+      "@type": "bg:Rule",
+      "name": "S17",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-soundness",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M01",
+      "@type": "bg:Rule",
+      "name": "M01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M02",
+      "@type": "bg:Rule",
+      "name": "M02",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M03",
+      "@type": "bg:Rule",
+      "name": "M03",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M04",
+      "@type": "bg:Rule",
+      "name": "M04",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M09",
+      "@type": "bg:Rule",
+      "name": "M09",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M05",
+      "@type": "bg:Rule",
+      "name": "M05",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-OFF",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M06",
+      "@type": "bg:Rule",
+      "name": "M06",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-OFF",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M07",
+      "@type": "bg:Rule",
+      "name": "M07",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M08",
+      "@type": "bg:Rule",
+      "name": "M08",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M10",
+      "@type": "bg:Rule",
+      "name": "M10",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-M11",
+      "@type": "bg:Rule",
+      "name": "M11",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-P01",
+      "@type": "bg:Rule",
+      "name": "P01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-pragmatics",
+      "defaultSeverity": "bg:severity-INFO",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-P02",
+      "@type": "bg:Rule",
+      "name": "P02",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-pragmatics",
+      "defaultSeverity": "bg:severity-INFO",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-P03",
+      "@type": "bg:Rule",
+      "name": "P03",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-pragmatics",
+      "defaultSeverity": "bg:severity-INFO",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-WF01",
+      "@type": "bg:Rule",
+      "name": "WF01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-workflow_net",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-WF02",
+      "@type": "bg:Rule",
+      "name": "WF02",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-workflow_net",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-WF03",
+      "@type": "bg:Rule",
+      "name": "WF03",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-workflow_net",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-O01",
+      "@type": "bg:Rule",
+      "name": "O01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-optimization",
+      "defaultSeverity": "bg:severity-ADVISORY",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-O02",
+      "@type": "bg:Rule",
+      "name": "O02",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-optimization",
+      "defaultSeverity": "bg:severity-ADVISORY",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-O03",
+      "@type": "bg:Rule",
+      "name": "O03",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-optimization",
+      "defaultSeverity": "bg:severity-ADVISORY",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-O04",
+      "@type": "bg:Rule",
+      "name": "O04",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-optimization",
+      "defaultSeverity": "bg:severity-ADVISORY",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D01",
+      "@type": "bg:Rule",
+      "name": "D01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D02",
+      "@type": "bg:Rule",
+      "name": "D02",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D03",
+      "@type": "bg:Rule",
+      "name": "D03",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D04",
+      "@type": "bg:Rule",
+      "name": "D04",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D05",
+      "@type": "bg:Rule",
+      "name": "D05",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D09",
+      "@type": "bg:Rule",
+      "name": "D09",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D10",
+      "@type": "bg:Rule",
+      "name": "D10",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D11",
+      "@type": "bg:Rule",
+      "name": "D11",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-soundness",
+      "defaultSeverity": "bg:severity-ERROR",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D06",
+      "@type": "bg:Rule",
+      "name": "D06",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-semantics",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D07",
+      "@type": "bg:Rule",
+      "name": "D07",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-semantics",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-D08",
+      "@type": "bg:Rule",
+      "name": "D08",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-semantics",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-B01",
+      "@type": "bg:Rule",
+      "name": "B01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-best_practice",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-B02",
+      "@type": "bg:Rule",
+      "name": "B02",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-best_practice",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-B03",
+      "@type": "bg:Rule",
+      "name": "B03",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-best_practice",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-B04",
+      "@type": "bg:Rule",
+      "name": "B04",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-best_practice",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-B05",
+      "@type": "bg:Rule",
+      "name": "B05",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-best_practice",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-B06",
+      "@type": "bg:Rule",
+      "name": "B06",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-best_practice",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+    {
+      "@id": "bg:rule-SC01",
+      "@type": "bg:Rule",
+      "name": "SC01",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-workflow_net",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "scenario"
+    },
+    {
+      "@id": "bg:rule-SC02",
+      "@type": "bg:Rule",
+      "name": "SC02",
+      "kind": "crossNotation",
+      "notation": [
+        "bg:notation-BPMN",
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-cross-consistency",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "scenario"
+    },
+    {
+      "@id": "bg:rule-SC03",
+      "@type": "bg:Rule",
+      "name": "SC03",
+      "kind": "crossNotation",
+      "notation": [
+        "bg:notation-BPMN",
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-cross-consistency",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "scenario"
+    },
+    {
+      "@id": "bg:rule-SC04",
+      "@type": "bg:Rule",
+      "name": "SC04",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-semantics",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "scenario"
+    },
+    {
+      "@id": "bg:rule-SC05",
+      "@type": "bg:Rule",
+      "name": "SC05",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "layer": "bg:layer-DMN-semantics",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "scenario"
+    },
+    {
+      "@id": "bg:rule-SC06",
+      "@type": "bg:Rule",
+      "name": "SC06",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-workflow_net",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "scenario"
     }
   ]
 }
