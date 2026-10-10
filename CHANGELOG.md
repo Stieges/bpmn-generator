@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`references/bpmn-ontology.jsonld` — the BPMN vocabulary as one JSON-LD file** (classes, node
+  types, markers, definition kinds, element fields), loaded and validated at import by
+  `scripts/bpmn/ontology.js`; exported as `bpmn-generator/ontology`; linked to the OMG metamodel
+  and BBO via `rdfs:seeAlso` only. Fences: no vocabulary list outside the ontology
+  (`ontology-audit.js`); schema enums equal it; a type added only to the ontology fails the tests
+  at every place that does not know it.
 - **`scripts/bpmn/orthogonal-router.js` — obstacle-aware crossing repair.** `repairCrossings`'s own
   candidate search tries only a fixed, small set of shapes around the direct source-target line;
   in a congested cluster every one of them can be blocked while a path around the cluster still
@@ -184,6 +190,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **An unknown or announced node type was silently serialised as `<bpmn:task>`.** It now fails
+  with the type and node id. `transaction` had no shape size of its own (no visible change: the
+  fallback gave the same 100x80); `artifactSize` no longer falls back to a non-existent key;
+  SKILL.md, logic-core-schema.md and the skill template listed an incomplete set of types.
 - **An artifact declared inside an expanded subprocess was placed outside it (#56).** Two gaps,
   both from artifacts being kept out of the ELK graph. An unassociated one was stacked below the
   whole collaboration, ignoring which container declared it — outside the subprocess *and* the
@@ -651,6 +661,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **Type sets derive from the ontology; `$schemaVersion` accepts any `1.x`.** Every type set, the
+  field tables' allowed classes, `bpmnXmlTag` and the marker maps now come from the ontology;
+  eight private copies (importers, `bpmn-xml.js`, `rules.js` M01/P02, `workflow-net.js`,
+  `optimize.js`, `redesign.js`) are removed.
 - **S15's coverage grew from 6 fields to 12.** It now also reports `cancelActivity`,
   `eventGatewayType`, `instantiate`, `script`, `loopType` and `multiInstance` on a class OMG does
   not define them on. The rule walks exactly the rows the serialiser guards from the same table —
