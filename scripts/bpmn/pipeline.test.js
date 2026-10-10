@@ -5088,6 +5088,36 @@ describe('artifacts inside an expanded subprocess stay inside it', () => {
     expect(errorsOf(r)).toEqual([]);
   });
 
+  // The band is shared: an associated artifact hangs below its anchor, and an anchor near the
+  // container's bottom puts it right into the band where the unassociated ones go. Measured before
+  // the fix: anchored to the start event it sat exactly on an unassociated data object, anchored
+  // to the task it covered an unassociated annotation. DI checks containment, not artifact overlap,
+  // so nothing reported either.
+  for (const anchor of ['i_s', 'i_t', 'i_e']) {
+    test(`associated and unassociated artifacts in one subprocess do not overlap (anchor ${anchor})`, async () => {
+      const lc = nested([{ id: 'a1', source: 'i_data', target: anchor }]);
+      const inner = lc.pools[0].nodes[1].nodes[2];
+      inner.nodes.push(
+        { id: 'i_orphan', type: 'dataObjectReference', name: 'Unassociated data' },
+        { id: 'i_note', type: 'textAnnotation', text: 'Unassociated note' },
+      );
+      const r = await runPipeline(lc);
+      expect(errorsOf(r)).toEqual([]);
+      const c = r.coordMap.coords;
+      const ids = ['i_data', 'i_orphan', 'i_note'];
+      const overlaps = [];
+      for (let a = 0; a < ids.length; a++) {
+        for (let b = a + 1; b < ids.length; b++) {
+          const p = c[ids[a]], q = c[ids[b]];
+          if (p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h) {
+            overlaps.push(`${ids[a]} × ${ids[b]}`);
+          }
+        }
+      }
+      expect(overlaps).toEqual([]);
+    });
+  }
+
   test('the fidelity fixture, which carries two unassociated nested data objects, is clean', async () => {
     for (const visualRefinement of [false, true]) {
       const r = await runPipeline(loadFixture('subprocess-child-fidelity.json'), { visualRefinement });

@@ -170,7 +170,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   participant (`DI03` + `DI06`). And ELK sized the subprocess without its artifacts, so even an
   associated one, hung below its anchor, overflowed whenever that anchor sat near the bottom. An
   expanded subprocess now reserves a band at its bottom for the artifacts it declares, sized for the
-  worst case (all stacked under one anchor), and unassociated ones are placed into it.
+  worst case (all stacked under one anchor), and unassociated ones are placed into it — after every
+  associated one, onto free slots only: an anchor near the bottom hangs its artifact into the same
+  band, and placing blindly put two shapes on top of each other (measured for two of three anchor
+  positions; DI checks containment, not artifact overlap, so nothing reported it).
   `tests/fixtures/subprocess-child-fidelity.json` had carried five such ERRORs since it gained its
   nested data objects; no test checked its diagram integrity until now. No golden file changed.
 - **Three nesting losses the spanning fence found are closed.** All three sat at nesting depth ≥ 1
