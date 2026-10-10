@@ -192,8 +192,8 @@ export function ruleClaimPatterns(ruleSetNames) {
   const de = [...ruleSetNames, ...Object.keys(GERMAN_RULE_SET_WORDS)].map(escapeRe).join('|');
   return {
     qualified: [
-      new RegExp(`(\\d+)\\s+(${en})\\s+rules,?\\s*(?:in\\s+|across\\s+)?(\\d+)\\s+layers?\\b`, 'g'),
-      new RegExp(`(\\d+)\\s+(${de})[-\\s]Regeln\\s+in\\s+(\\d+)\\s+Schicht(?:en)?\\b`, 'g'),
+      new RegExp(`(\\d+)\\s+(${en})\\s+rules,?\\s*(?:in\\s+|across\\s+)?(\\d+)\\s+layers?\\b`, 'gi'),
+      new RegExp(`(\\d+)\\s+(${de})[-\\s]Regeln\\s+in\\s+(\\d+)\\s+Schicht(?:en)?\\b`, 'gi'),
     ],
     unqualified: [
       /(\d+)\s+rules,?\s*(?:in\s+|across\s+)?(\d+)\s+layers?\b/gi,
@@ -296,7 +296,9 @@ export function checkNumbers({ readmeText, claudeMdText, apiReferenceText,
   for (const [file, text] of numberSources) {
     for (const pattern of qualified) {
       for (const m of text.matchAll(pattern)) {
-        const ruleSet = GERMAN_RULE_SET_WORDS[m[2]] ?? m[2];
+        const word = m[2].toLowerCase();
+        const ruleSet = GERMAN_RULE_SET_WORDS[word] ??
+          Object.keys(ruleSets).find((k) => k.toLowerCase() === word);
         const actual = ruleSets[ruleSet];
         if (Number(m[1]) !== actual.rules) {
           findings.push({ check: 'rule-count', detail:

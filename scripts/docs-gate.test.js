@@ -139,6 +139,15 @@ describe('docs-gate — checkNumbers', () => {
     expect(findings[0].detail).toContain('without naming its rule set at the number');
   });
 
+  test('a lowercase notation word is still checked against its rule set', () => {
+    const ok = checkNumbers(base({ readmeText: 'See 33 bpmn rules, 5 layers.' }));
+    expect(ok).toEqual([]);
+    const bad = checkNumbers(base({ readmeText: 'See 41 bpmn rules, 5 layers.' }));
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toMatchObject({ check: 'rule-count' });
+    expect(bad[0].detail).toContain('33 BPMN rules');
+  });
+
   test('a wrong number names file, claim, rule set and the ontology count', () => {
     const findings = checkNumbers(base({ readmeText: 'The rule engine has 37 BPMN rules, 5 layers.' }));
     expect(findings).toEqual([{ check: 'rule-count',
