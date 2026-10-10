@@ -312,6 +312,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **`/health` and the MCP `serverInfo` report the real version (#40).** Both hard-coded `2.0.0`;
+  `scripts/shared/version.js` reads `scripts/package.json` once (it ships in the npm package and the
+  skill bundle). `references/api-reference.md` no longer presents `2.0.0` as the response.
 - **The "run as main" guard no longer fails on Windows (#51).** `mcp-bpmn-server.js` compared
   `import.meta.url` with `` `file://${process.argv[1]}` ``, false for `file:///C:/…` vs `C:\…`, so the
   server never connected and exited 0. `scripts/shared/entry-point.js` (`isMainModule`) compares

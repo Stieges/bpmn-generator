@@ -24,6 +24,7 @@ import { profileForMode } from './bpmn/rules.js';
 import { loadNamedRuleProfile, ProfileRejectedError } from './shared/rule-profile.js';
 import { rulesDirPath } from './shared/resource-paths.js';
 import { isMainModule } from './shared/entry-point.js';
+import { PACKAGE_VERSION } from './shared/version.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -37,7 +38,7 @@ const PROFILE_PARAM = {
 };
 
 const server = new Server(
-  { name: 'bpmn-generator', version: '2.0.0' },
+  { name: 'bpmn-generator', version: PACKAGE_VERSION },
   { capabilities: { tools: {} } }
 );
 
