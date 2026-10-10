@@ -32,11 +32,11 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows } from './coordinates.js';
+import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges } from './coordinates.js';
 import { checkDiagramIntegrity } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
-import { simplifyAllEdges } from './edge-simplify.js';
+import { simplifyAllEdges, repairCrossings } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
@@ -152,14 +152,37 @@ async function runPipeline(logicCore, opts = {}) {
 
   // Edge simplification: collapse ELK's layer-column jogs into clean L-shapes
   // where node-bbox collision allows it. Reduces cross-lane zigzag.
-  const allEdges = [
-    ...(lc.edges || []),
-    ...((lc.pools || []).flatMap(p => p.edges || [])),
-  ];
+  // flattenProcessEdges, not proc.edges: a subprocess child's edges must reach
+  // simplifyAllEdges/repairCrossings too, or a nested crossing is invisible to
+  // both passes (see the coordinates.js §5.0- comment for the same pattern).
+  const allEdges = allProcesses.flatMap(p => flattenProcessEdges(p));
   // Associations are already clipped to both shapes (coordinates.js §5.4) and
   // must not be simplified — clearance here is checked against nodes only.
   const skipSimplify = new Set((lc.associations || []).map(a => a.id));
   coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges, skipSimplify);
+
+  // Crossing repair: the routes coordinates.js deletes and rebuilds (§5.0a,
+  // §5.2, §5.0e, §5.5) pick their axis by |dy| > |dx| alone, so they can cross
+  // an edge that ELK had routed around. Runs after simplifyAllEdges because
+  // that pass rewrites routes too. A no-op unless a crossing actually exists.
+  if (CFG.layout?.crossingRepair !== false) {
+    const beforeRepair = coordMap.edgeCoords;
+    coordMap.edgeCoords = repairCrossings(beforeRepair, coordMap.coords, allEdges, skipSimplify, {
+      maxPasses: CFG.layout?.crossingRepairMaxPasses ?? 2,
+      orthogonalRouter: CFG.layout?.orthogonalRouterEnabled !== false,
+      orthogonalRouterMaxGridPoints: CFG.layout?.orthogonalRouterMaxGridPoints,
+    });
+    // Labels were placed on the pre-repair geometry (coordinates.js §5.6).
+    // Refresh only the ones whose route actually moved — repairCrossings keeps
+    // the original array reference for everything it left alone.
+    if (coordMap.edgeCoords !== beforeRepair) {
+      for (const e of allEdges) {
+        if (beforeRepair[e.id] === coordMap.edgeCoords[e.id]) continue;
+        const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
+        if (label) coordMap.edgeLabels[e.id] = label;
+      }
+    }
+  }
 
   // Visual Refinement (post-layout coordinate transforms)
   if (refineOn) {
@@ -391,8 +414,9 @@ async function main() {
   const drillDown  = flags.includes('--drill-down');
   const strict     = flags.includes('--strict');
   const optimize   = flags.includes('--optimize') || flags.includes('--mode=soll') || flags.includes('--mode=optimize');
+  const refine     = flags.includes('--refine');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine]');
     process.exit(1);
   }
 
@@ -427,9 +451,16 @@ async function main() {
     process.exit(1);
   }
 
+  // --refine only ever turns visual refinement ON explicitly; omitting the flag
+  // leaves opts.visualRefinement undefined so runPipeline's own
+  // `opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false` fallback
+  // still decides — passing `false` here would pin today's default and quietly
+  // survive a future flip of that default in config.json.
+  const refineOpts = refine ? { visualRefinement: true } : {};
+
   // Drill-down mode: generate parent + per-subprocess diagrams
   if (drillDown) {
-    const diagramSet = await generateDiagramSet(parsedInput);
+    const diagramSet = await generateDiagramSet(parsedInput, refineOpts);
     if (!diagramSet.parent.bpmnXml) {
       console.error('\n✗ Errors (pipeline blocked):');
       diagramSet.parent.validation.errors.forEach(e => console.error('  · ' + e));
@@ -466,7 +497,7 @@ async function main() {
     return;
   }
 
-  const result = await runPipeline(parsedInput, { mode: optimize ? 'optimize' : 'document' });
+  const result = await runPipeline(parsedInput, { mode: optimize ? 'optimize' : 'document', ...refineOpts });
 
   if (result.validation.warnings.length) {
     console.warn('\n⚠ Warnings:');

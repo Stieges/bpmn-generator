@@ -40,7 +40,12 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     ├── coordinates.js       ← types.js, ../shared/utils.js, constants.js, topology.js
     ├── di-check.js          (no deps — post-layout DI integrity pass, see below)
     ├── visual-refinement.js ← coordinates.js, constants.js (opt-in compaction passes)
-    ├── edge-simplify.js     ← types.js (post-process ELK waypoints, reduce zigzag)
+    ├── edge-simplify.js     ← types.js, orthogonal-router.js (post-process ELK waypoints, reduce zigzag;
+    │                          repairCrossings falls back to the router when its own fixed-shape
+    │                          candidate search finds nothing admissible)
+    ├── orthogonal-router.js (no deps — obstacle-aware Dijkstra pathfinder, called only from
+    │                          edge-simplify.js; duplicates its own segment/box clearance test to
+    │                          avoid a circular import)
     ├── bpmn-xml.js          ← types.js, ../shared/utils.js, constants.js, topology.js, icons.js
     ├── svg.js               ← types.js, ../shared/utils.js, constants.js, icons.js
     ├── icons.js             ← ../shared/utils.js, constants.js
@@ -203,7 +208,7 @@ membership instead of coordinates.
 | `scripts/bpmn/topology.js` | `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `identifyHappyPathNodes` (which nodes an `isHappyPath` edge chain touches — also read by `scripts/scenarios/format.js`), `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/bpmn/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
 | `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
-| `scripts/bpmn/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
+| `scripts/bpmn/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess, DI07 sequence-flow endpoint off its own shape (all ERROR); DI05 message flow crossing an uninvolved participant (WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
 | `scripts/bpmn/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
 | `scripts/bpmn/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
 | `scripts/bpmn/svg.js` | `generateSvg` — SVG rendering of all BPMN elements |
@@ -212,7 +217,8 @@ membership instead of coordinates.
 | `scripts/bpmn/workflow-net.js` | WF-Net soundness checks (used by WF01–WF03 rules). `bpmnToPN` also owns the translation itself: a container becomes its own subnet (`buildContainer`) and a boundary event becomes an XOR alternative to its host, consuming exactly the places the host consumes — one transition per host transition, so a container's multi-entry split and an implicit-merge host are both mirrored rather than AND-joined (`wireBoundaryEvents`). What the translation under-models rather than skips is listed on `pn.approximations` (today: a non-interrupting boundary event, and a boundary event on a container) |
 | `scripts/bpmn/net-check.js` | `checkNetIntegrity` — post-translation sanity pass on the net `bpmnToPN` produces, the same role `di-check.js` plays for geometry: checks whether the *translation* is faithful (every node has a transition, every place is produced and consumed, every id is unique), never whether the *model* is sound — a legitimately unsound process must come out clean, `checkSoundness`/WF01–WF03's job. NC01 node with no transition, NC02 transition that can never fire, NC02b/NC03a/NC03b/NC06 the same class of drop applied to arcs/places/ids (all ERROR — NC02 became ERROR once boundary events got a translation, its one legitimate cause). NC02/NC02b are scoped to the translation by that same doctrine: they fire only when the Logic-Core gives the node an input (resp. output) the net does not have, so a node nothing routes to is WF01's finding and not theirs — plus S04's, but only where the node has no edges at all; a node with an outgoing flow but no incoming one (a stranded `parallelGateway`, say) passes S04 and S07 both and is caught only by the opt-in WF01 (see CHANGELOG's Known limitations) — and a boundary event's `attachedTo` host counts as an input source, without which the narrowing would blind NC02 to the very defect its promotion was for; NC04 (two distinct edges assigned the same place) is ERROR since every flow got a place of its own, but note it reads `pn.placeOfEdge` rather than re-deriving the id, so it asserts `namePlaces`' invariant against `namePlaces`' output — a regression fence that cannot fire under the current naming rule, not a check of the net against the Logic-Core; NC05 (multiple start events sharing one source place) is INFO — disclosure, not a defect. `ok` means "no ERROR". Wired into `runPipeline` as `result.netDiagnostics` (`{ ok, issues }`, `null` on the early-return path, one call per pool, findings prefixed `[pool] ` and carrying `process`) — **computed before `logicCoreToElk`**, because `preprocessLogicCore` rebuilds `proc.nodes` from an id-keyed map in place and would erase a duplicate-id defect before a later check could see it. A separate key from `diagnostics`, whose `code` is a closed DI enum in `references/api-schema.json`. The CLI gates on it as it gates on DI, with one difference: **INFO is printed and never fatal**, not even under `--strict` — NC05 says in its own message that it is not a defect. Both gates sit on the ordinary generate path; `--drill-down` bypasses NC exactly as it already bypasses DI. Not surfaced over HTTP or MCP. NC06 is scoped to duplicate **node** ids — two edges sharing an id are translated faithfully (places are keyed by node pair, `placeOfEdge` by edge identity), so that half belongs to the serialisation round-trip, where a `duplicate ID <…>` warning in `validation.xmlWarnings` is unconditionally fatal on the CLI (exit 1, no files written, `--strict` or not); the rest of that channel stays non-fatal outside `--strict`. Also fenced over every top-level fixture in `tests/fixtures/` by `net-check.test.js` |
 | `scripts/bpmn/visual-refinement.js` | Optional compaction/refinement passes P1–P7.1 (off by default) |
-| `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends |
+| `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends; `repairCrossings` re-routes edges that cross another, falling back to `orthogonal-router.js` when its own fixed-shape candidate search finds nothing admissible |
+| `scripts/bpmn/orthogonal-router.js` | `routeAroundObstacles` — obstacle-aware orthogonal Dijkstra pathfinder ("trellis"/extended-lines grid + per-bend cost penalty + soft crossing penalty), used only as `repairCrossings`' fallback candidate source; endpoints are always fixed, never re-derived |
 | `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API |
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |
@@ -377,7 +383,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 1. **Never blind-regenerate.** First inspect the diff:
    - `diff -u tests/fixtures/<name>.expected.bpmn /tmp/output.bpmn`
 2. Decide: is the change intended (then the golden is stale and must be regenerated) or unintended (then the code is broken)?
-3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node bpmn/pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`).
+3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node bpmn/pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`). The `.refined.*` goldens (visual refinement) need the `--refine` flag: `node bpmn/pipeline.js <fixture> <out>.refined --refine`.
 4. Commit golden updates in their own commit, separate from code changes.
 
 ### Extend the rule engine
@@ -532,6 +538,9 @@ node bpmn/pipeline.js input.json output --strict
 # Enable the opt-in Optimization Advisory layer (soll/optimize mode):
 node bpmn/pipeline.js input.json output --optimize
 
+# Enable visual refinement (P1-P7.1 passes; off by default, see config.json):
+node bpmn/pipeline.js input.json output --refine
+
 # Start MCP server:
 node mcp-bpmn-server.js
 ```
@@ -560,7 +569,7 @@ node dmn/pipeline.js input.json output --best-practice
 - Boundary events are placed deterministically on the bottom edge of their host and their outgoing flow is re-routed there (`coordinates.js` §5.0-). ELK does not lay them out; a host carrying many of them will spread them evenly rather than optimally
 - Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right. Because ELK therefore sizes an expanded subprocess without its artifacts, `layout.js` reserves a band at the subprocess's bottom for the artifacts it declares (`artifactReserveHeight`, sized for the worst case — every artifact stacked under one anchor), and `placeArtifacts` puts unassociated ones into that band — last, onto free slots, because an anchor near the bottom hangs its own artifact into the same band; without it they landed below the whole collaboration, outside both subprocess and participant (#56). Over-reserving costs whitespace, under-reserving a DI06
 - Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, which is why DI05 is a WARNING
-- The DI check (`di-check.js`) covers participants, lane bands, node containment and message flow crossings. It says nothing about sequence-flow crossings, label collisions or readability
+- The DI check (`di-check.js`) covers participants, lane bands, node containment, message flow crossings, and (DI07) that a sequence flow starts and ends on its own node. It says nothing about sequence-flow *crossings*, label collisions or readability
 - A single-process Logic-Core (no `pools`) may omit `id` — `input-schema.json`'s `SingleProcess`
   branch doesn't require it, unlike `Pool`. `bpmn-xml.js` has no fallback for that case, and the
   result is a `bpmnElement="undefined"` reference in the DI, plus (with lanes present) a phantom

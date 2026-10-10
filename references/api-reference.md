@@ -83,6 +83,7 @@ reported but do not flip `status` to `"diagram_error"`.
 | DI04 | ERROR | Lane bands overlapping inside a participant |
 | DI05 | WARNING | A message flow crossing a participant it does not involve |
 | DI06 | ERROR | A child outside its expanded subprocess |
+| DI07 | ERROR | A sequence flow that does not start or end on its own node's shape |
 
 DI05 is a warning rather than an error because a communication cycle across three or
 more participants cannot be linearised into a single vertical stack — some crossings
@@ -112,7 +113,7 @@ adds the tool surface); today it is `runDmnPipeline(dc).diagnostics`, called dir
 | DD02 | ERROR | A shape outside the diagram's declared bounds |
 | DD03 | ERROR | A requirement-connection endpoint that does not sit on its shape's boundary |
 
-`diagnostics.ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI06 above.
+`diagnostics.ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI07 above.
 
 ---
 

@@ -41,7 +41,7 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 | Round-Trip Fidelity | Import + export of all execution attributes (25 OMG examples + 13 unit tests) | Done |
 | bpmn-moddle Import | Standards-compliant BPMN parser via bpmn-moddle (CMOF descriptors, all ~200 BPMN types) | Done |
 | Nested Lane Export | childLaneSet correct in XML, recursive lane emission | Done |
-| Extension Attribute Preservation | Unknown attributes (camunda:, zeebe:) survive round-trip via extensions.$attrs | Done |
+| Extension Attribute Preservation | Unknown attributes (camunda:, zeebe:) are **kept on import** in `extensions.$attrs`, but nothing writes them back, so they do not survive a round trip; `extensionElements` children (e.g. `zeebe:taskDefinition`) are not read at all — see the `extensions` row in `OMG_NODE_FIELD_SCOPE` (`scripts/bpmn/types.js`, `roundTrip: 'none'`) | Partial |
 
 ### 1.2 Module Architecture
 
