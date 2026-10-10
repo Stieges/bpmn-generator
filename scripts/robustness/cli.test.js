@@ -28,4 +28,17 @@ describe('robustness CLI rejects flags it does not read (#41)', () => {
     expect(r.stderr).toMatch(/--strategy/);
     expect(r.stderr).toMatch(/not supported/i);
   });
+
+  test('a bare boolean flag does not swallow a following flag', () => {
+    const { command, flags } = parseArgs(['run', '--with-mad', '--strategy=x']);
+    expect(flags['with-mad']).toBe('true');
+    expect(unknownFlags(command, flags)).toEqual(['strategy']);
+    const r = spawnSync(process.execPath, [CLI, 'run', '--with-mad', '--strategy=x'], { encoding: 'utf8' });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/--strategy/);
+  });
+
+  test('a flag still takes a following plain value', () => {
+    expect(parseArgs(['run', '--n', '5']).flags.n).toBe('5');
+  });
 });

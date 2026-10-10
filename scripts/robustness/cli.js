@@ -22,7 +22,10 @@ export function parseArgs(argv = process.argv.slice(2)) {
       if (eq > 0) {
         flags[arg.slice(2, eq)] = arg.slice(eq + 1);
       } else {
-        flags[arg.slice(2)] = argv[++i] || 'true';
+        // A bare flag (--with-mad) takes the next argument as its value only when that is not
+        // itself a flag, so it cannot swallow `--strategy=x` and hide it from unknownFlags().
+        const next = argv[i + 1];
+        flags[arg.slice(2)] = next !== undefined && !next.startsWith('--') ? argv[++i] : 'true';
       }
     }
   }
