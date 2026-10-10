@@ -432,7 +432,7 @@ export function dmnProfileForMode(baseProfile, mode = 'semantic') {
  *
  * @param {object} dc - Decision-Core JSON
  * @param {object} [opts={}]
- * @param {object|null} [opts.profile] - Rule profile (or a path, via loadRuleProfile)
+ * @param {object|null} [opts.profile] - Rule profile object (a loaded profile; a path or name is rejected)
  * @param {string} [opts.mode='semantic'] - 'semantic' (default) or 'best-practice'
  * @param {object} [opts.config] - Thresholds; defaults come from config.json → dmn
  * @returns {{ errors: string[], warnings: string[], infos: string[], mode: string }}
