@@ -5027,6 +5027,75 @@ describe('geometry contract — every drawable has coordinates', () => {
   });
 });
 
+// Artifacts are kept out of the ELK graph, so ELK sizes an expanded subprocess
+// without them. Two ways that put an artifact outside its own container:
+// an unassociated one was stacked below the whole collaboration, ignoring which
+// container declared it; and an associated one hangs below its anchor, which
+// overflows the container whenever the anchor sits near the container's bottom.
+describe('artifacts inside an expanded subprocess stay inside it', () => {
+  const errorsOf = r => r.diagnostics.issues
+    .filter(i => i.severity === 'ERROR')
+    .map(i => `${i.code} ${i.message}`);
+
+  const nested = (associations) => ({
+    pools: [{
+      id: 'P', name: 'P',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        {
+          id: 'outer', type: 'subProcess', name: 'Outer', isExpanded: true,
+          nodes: [
+            { id: 'o_s', type: 'startEvent' },
+            { id: 'o_t', type: 'task', name: 'Outer task' },
+            {
+              id: 'inner', type: 'subProcess', name: 'Inner', isExpanded: true,
+              nodes: [
+                { id: 'i_s', type: 'startEvent' },
+                { id: 'i_t', type: 'task', name: 'Inner task' },
+                { id: 'i_e', type: 'endEvent' },
+                { id: 'i_data', type: 'dataObjectReference', name: 'Inner data' },
+              ],
+              edges: [{ id: 'if1', source: 'i_s', target: 'i_t' }, { id: 'if2', source: 'i_t', target: 'i_e' }],
+            },
+            { id: 'o_e', type: 'endEvent' },
+            { id: 'o_data', type: 'dataObjectReference', name: 'Outer data' },
+            { id: 'o_note', type: 'textAnnotation', text: 'Outer note' },
+          ],
+          edges: [
+            { id: 'of1', source: 'o_s', target: 'o_t' },
+            { id: 'of2', source: 'o_t', target: 'inner' },
+            { id: 'of3', source: 'inner', target: 'o_e' },
+          ],
+        },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [{ id: 'f1', source: 's', target: 'outer' }, { id: 'f2', source: 'outer', target: 'e' }],
+    }],
+    ...(associations ? { associations } : {}),
+  });
+
+  test('unassociated artifacts at depth 1 and 2 are placed inside their own subprocess', async () => {
+    const r = await runPipeline(nested());
+    expect(errorsOf(r)).toEqual([]);
+  });
+
+  test('an associated artifact whose anchor sits at the bottom of its subprocess stays inside it', async () => {
+    const r = await runPipeline(nested([
+      { id: 'a1', source: 'i_data', target: 'i_t' },
+      { id: 'a2', source: 'o_data', target: 'o_t' },
+      { id: 'a3', source: 'o_note', target: 'o_t' },
+    ]));
+    expect(errorsOf(r)).toEqual([]);
+  });
+
+  test('the fidelity fixture, which carries two unassociated nested data objects, is clean', async () => {
+    for (const visualRefinement of [false, true]) {
+      const r = await runPipeline(loadFixture('subprocess-child-fidelity.json'), { visualRefinement });
+      expect(errorsOf(r)).toEqual([]);
+    }
+  });
+});
+
 // A shape can carry perfect geometry and still be empty: an annotation whose
 // text never reached the XML draws an empty box in every BPMN tool. These pin
 // the CONTENT half of the same contract.
