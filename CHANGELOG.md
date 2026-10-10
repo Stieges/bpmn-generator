@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **DMN XML importer — `scripts/dmn/import.js` (DMN 1.3 XML → Decision-Core).** `dmnToDecisionCore`
-  returns `{ dc, report }`: the model plus a structured loss report (`IM01`–`IM08`, positional paths),
+  returns `{ dc, report }`: the model plus a structured loss report (`IM01`–`IM09`, positional paths),
   with `report.lossless` as the one bit a caller branches on; a failure is a shaped result, never a
   throw. What is mapped, reported or invisible to the parser is one table,
   `scripts/dmn/import-scope.js`, fenced against `DMN13.xsd`/`DMNDI13.xsd`. The importer reads no
@@ -281,6 +281,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **DMN importer: `lossless: true` no longer comes with a Decision-Core that fails its own schema.**
+  A value the schema requires and the file omits (definitions `@namespace`, a DRG element, parameter
+  or annotation `name`, an input clause's expression, a rule's output entry, or a model with no DRG
+  element at all) is now an IM09 finding, so `--strict` catches it. The import CLI prints the report
+  before the schema gate, and `scenarios/pipeline.js --decisions` gates imported DMN with the schema
+  and names the file in the error. A BOM-prefixed JSON decisions file loads; malformed JSON names the file.
 - **DMN XML no longer depends on the order of `dc.requirements`.** Layout, coordinates, serialisation
   and import each derived requirement order on their own; `scripts/dmn/requirement-order.js`
   (`requirementKey`, `orderedRequirements`) is now the single source, so permuting the array no
