@@ -195,7 +195,10 @@ dmn/rules.js ← shared/rule-profile, shared/utils
 dmn/layout.js ← dmn/constants, shared/utils, elkjs
 dmn/coordinates.js ← dmn/constants, shared/geometry
 dmn/dmn-xml.js ← shared/utils, dmn/coordinates, dmn-moddle
-dmn/pipeline.js ← all of the above dmn/ modules
+dmn/requirement-order.js ← (no deps)
+dmn/import.js ← dmn/import-scope, dmn/requirement-order, shared/resource-paths, dmn-moddle
+dmn/pipeline.js ← all of the above dmn/ modules except import
+scenarios/pipeline.js ← scenarios/*, bpmn/workflow-net, dmn/import
 ```
 
 ## Repo Structure
@@ -463,10 +466,15 @@ node dmn/pipeline.js input.json output --best-practice
 
 # Abort (no files written) on any unresolved warning
 node dmn/pipeline.js input.json output --strict
+
+# DMN 1.3 XML -> Decision-Core JSON (loss report on stderr; --strict aborts on a lossy import)
+node dmn/import.js input.dmn output.json
 ```
 
 Currently covers Decision-Core validation, DRD layout, and DMN 1.3 serialization (Stages 1-4 of
-the DMN integration). Round-trip import (DMN XML → Decision-Core) and SVG rendering are not yet
+the DMN integration), plus import of DMN XML back to Decision-Core with a structured loss report.
+The importer reads no DMNDI, so every diagram is reported (IM06) and even a file this generator
+wrote imports as not lossless; `--strict` therefore suits foreign files. SVG rendering is not yet
 implemented — see `docs/superpowers/plans/2026-07-30-dmn-integration.md` for what's still open.
 
 ## OMG Compliance
