@@ -1,0 +1,195 @@
+{
+  "happyPath": {
+    "derived": true,
+    "found": true,
+    "decisions": [
+      {
+        "kind": "bpmn-gateway",
+        "gatewayId": "gw1",
+        "poolId": "Process_Main",
+        "choiceIndex": null,
+        "edgeId": "f3",
+        "label": "Yes"
+      }
+    ],
+    "perPool": [
+      {
+        "poolId": "Process_Main",
+        "derived": true,
+        "found": true,
+        "edges": [
+          {
+            "id": "f1",
+            "source": "start1",
+            "target": "task1"
+          },
+          {
+            "id": "f2",
+            "source": "task1",
+            "target": "gw1"
+          },
+          {
+            "id": "f3",
+            "source": "gw1",
+            "target": "task2",
+            "label": "Yes"
+          },
+          {
+            "id": "f6",
+            "source": "task2",
+            "target": "end1"
+          }
+        ],
+        "decisions": [
+          {
+            "kind": "bpmn-gateway",
+            "gatewayId": "gw1",
+            "poolId": "Process_Main",
+            "choiceIndex": null,
+            "edgeId": "f3",
+            "label": "Yes"
+          }
+        ]
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "index": 0,
+      "transitions": [
+        "Process_Main::t_start1",
+        "Process_Main::t_task1_merge_0",
+        "Process_Main::t_gw1_choice_0",
+        "Process_Main::t_task2",
+        "Process_Main::t_end1"
+      ],
+      "nodes": [
+        "start1",
+        "task1",
+        "gw1",
+        "task2",
+        "end1"
+      ],
+      "interleavingCount": 1,
+      "cycleUseCounts": {
+        "Process_Main::p_task3_task1": 0
+      },
+      "poolIds": [
+        "Process_Main",
+        "Process_Main",
+        "Process_Main",
+        "Process_Main",
+        "Process_Main"
+      ],
+      "messagesSent": [],
+      "messagesReceived": [],
+      "residualPlaces": [],
+      "sinkTokens": {
+        "Process_Main": 1
+      },
+      "decisions": [
+        {
+          "kind": "bpmn-gateway",
+          "gatewayId": "gw1",
+          "poolId": "Process_Main",
+          "choiceIndex": 0,
+          "edgeId": "f3",
+          "label": "Yes"
+        }
+      ],
+      "groupKey": "[[\"Process_Main::gw1\",\"f3\"]]",
+      "happyPathDistance": 0
+    },
+    {
+      "index": 1,
+      "transitions": [
+        "Process_Main::t_start1",
+        "Process_Main::t_task1_merge_0",
+        "Process_Main::t_gw1_choice_1",
+        "Process_Main::t_task3",
+        "Process_Main::t_task1_merge_1",
+        "Process_Main::t_gw1_choice_0",
+        "Process_Main::t_task2",
+        "Process_Main::t_end1"
+      ],
+      "nodes": [
+        "start1",
+        "task1",
+        "gw1",
+        "task3",
+        "task1",
+        "gw1",
+        "task2",
+        "end1"
+      ],
+      "interleavingCount": 1,
+      "cycleUseCounts": {
+        "Process_Main::p_task3_task1": 1
+      },
+      "poolIds": [
+        "Process_Main",
+        "Process_Main",
+        "Process_Main",
+        "Process_Main",
+        "Process_Main",
+        "Process_Main",
+        "Process_Main",
+        "Process_Main"
+      ],
+      "messagesSent": [],
+      "messagesReceived": [],
+      "residualPlaces": [],
+      "sinkTokens": {
+        "Process_Main": 1
+      },
+      "decisions": [
+        {
+          "kind": "bpmn-gateway",
+          "gatewayId": "gw1",
+          "poolId": "Process_Main",
+          "choiceIndex": 1,
+          "edgeId": "f4",
+          "label": "No"
+        },
+        {
+          "kind": "bpmn-gateway",
+          "gatewayId": "gw1",
+          "poolId": "Process_Main",
+          "choiceIndex": 0,
+          "edgeId": "f3",
+          "label": "Yes"
+        }
+      ],
+      "groupKey": "[[\"Process_Main::gw1\",\"f4\"],[\"Process_Main::gw1\",\"f3\"]]",
+      "happyPathDistance": 1
+    }
+  ],
+  "groupCount": 2,
+  "truncated": false,
+  "stats": {
+    "backwardEdges": [
+      {
+        "id": "f5",
+        "source": "task3",
+        "target": "task1",
+        "placeId": "Process_Main::p_task3_task1",
+        "poolId": "Process_Main"
+      }
+    ],
+    "cycleBound": 1,
+    "scenarioCount": 2,
+    "cappedPaths": 1,
+    "deadEndPaths": 0,
+    "lengthTruncatedPaths": 0,
+    "statesExplored": 13,
+    "orGateways": [],
+    "skipped": [],
+    "approximations": [],
+    "messageFlows": [],
+    "ungatedMessageFlows": [],
+    "unconsumedMessagePlaces": [],
+    "unresolvedEndpoints": []
+  },
+  "issues": [],
+  "skippedTableAnalyses": 0
+}

@@ -132,6 +132,22 @@ export function runScenarioPipeline(lc, decisionCores = [], options = {}) {
   return { enumerationResult, bridgeResult, tableAnalyses, formatted, issues, skippedTableAnalyses };
 }
 
+/**
+ * The exact text the CLI writes to `<basename>.scenarios.json`: `formatted.json` plus `issues` and
+ * `skippedTableAnalyses`, which `FormattedView` has no slot for. One function so the CLI and the
+ * byte-equality goldens (tests/fixtures/scenarios/golden/) can never serialise differently.
+ *
+ * @param {ScenarioPipelineResult} result
+ * @returns {string}
+ */
+export function scenarioJsonText(result) {
+  return JSON.stringify({
+    ...result.formatted.json,
+    issues: result.issues,
+    skippedTableAnalyses: result.skippedTableAnalyses,
+  }, null, 2);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // CLI ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════════
@@ -297,12 +313,7 @@ async function main() {
   // `FormattedView`); `issues`/`skippedTableAnalyses` are added because they are the one thing
   // `formatted.json` never had a slot for and a caller reading only the file would otherwise
   // never see them.
-  const jsonOutput = {
-    ...result.formatted.json,
-    issues: result.issues,
-    skippedTableAnalyses: result.skippedTableAnalyses,
-  };
-  writeFileSync(jsonPath, JSON.stringify(jsonOutput, null, 2), 'utf8');
+  writeFileSync(jsonPath, scenarioJsonText(result), 'utf8');
   writeFileSync(mdPath, result.formatted.markdown, 'utf8');
   console.log(`✓ JSON  → ${jsonPath}`);
   console.log(`✓ Markdown → ${mdPath}`);

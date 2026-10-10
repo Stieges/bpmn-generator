@@ -1,0 +1,117 @@
+{
+  "happyPath": {
+    "derived": true,
+    "found": true,
+    "decisions": [],
+    "perPool": [
+      {
+        "poolId": "P_tables",
+        "derived": true,
+        "found": true,
+        "edges": [
+          {
+            "id": "f1",
+            "source": "s",
+            "target": "rule1"
+          },
+          {
+            "id": "f2",
+            "source": "rule1",
+            "target": "rule2"
+          },
+          {
+            "id": "f3",
+            "source": "rule2",
+            "target": "e"
+          }
+        ],
+        "decisions": []
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "index": 0,
+      "transitions": [
+        "P_tables::t_s",
+        "P_tables::t_rule1",
+        "P_tables::t_rule2",
+        "P_tables::t_e"
+      ],
+      "nodes": [
+        "s",
+        "rule1",
+        "rule2",
+        "e"
+      ],
+      "interleavingCount": 1,
+      "cycleUseCounts": {},
+      "poolIds": [
+        "P_tables",
+        "P_tables",
+        "P_tables",
+        "P_tables"
+      ],
+      "messagesSent": [],
+      "messagesReceived": [],
+      "residualPlaces": [],
+      "sinkTokens": {
+        "P_tables": 1
+      },
+      "decisions": [],
+      "groupKey": "[]",
+      "happyPathDistance": 0
+    }
+  ],
+  "groupCount": 1,
+  "truncated": false,
+  "stats": {
+    "backwardEdges": [],
+    "cycleBound": 1,
+    "scenarioCount": 1,
+    "cappedPaths": 0,
+    "deadEndPaths": 0,
+    "lengthTruncatedPaths": 0,
+    "statesExplored": 5,
+    "orGateways": [],
+    "skipped": [],
+    "approximations": [],
+    "messageFlows": [],
+    "ungatedMessageFlows": [],
+    "unconsumedMessagePlaces": [],
+    "unresolvedEndpoints": []
+  },
+  "issues": [
+    {
+      "rule": "SC04",
+      "severity": "WARNING",
+      "nodeId": "rule1",
+      "poolId": "P_tables",
+      "tableId": "table_gap",
+      "gap": "[100..500)",
+      "message": "business rule task \"rule1\" (pool \"P_tables\") invokes table \"table_gap\", which has a coverage gap: [100..500)"
+    },
+    {
+      "rule": "SC04",
+      "severity": "WARNING",
+      "nodeId": "rule2",
+      "poolId": "P_tables",
+      "tableId": "table_overlap",
+      "gap": "(-∞..100)",
+      "message": "business rule task \"rule2\" (pool \"P_tables\") invokes table \"table_overlap\", which has a coverage gap: (-∞..100)"
+    },
+    {
+      "rule": "SC05",
+      "severity": "WARNING",
+      "nodeId": "rule2",
+      "poolId": "P_tables",
+      "tableId": "table_overlap",
+      "ruleIds": [
+        "r1",
+        "r2"
+      ],
+      "message": "business rule task \"rule2\" (pool \"P_tables\") invokes table \"table_overlap\" (hitPolicy UNIQUE), where rules \"r1\" and \"r2\" overlap — UNIQUE forbids overlap"
+    }
+  ],
+  "skippedTableAnalyses": 0
+}

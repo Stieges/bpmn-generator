@@ -1,0 +1,220 @@
+{
+  "happyPath": {
+    "derived": true,
+    "found": true,
+    "decisions": [
+      {
+        "kind": "bpmn-gateway",
+        "gatewayId": "gw",
+        "poolId": "P_loop",
+        "choiceIndex": null,
+        "edgeId": "f2",
+        "label": "yes"
+      }
+    ],
+    "perPool": [
+      {
+        "poolId": "P_loop",
+        "derived": true,
+        "found": true,
+        "edges": [
+          {
+            "id": "f1",
+            "source": "s1",
+            "target": "gw"
+          },
+          {
+            "id": "f2",
+            "source": "gw",
+            "target": "a",
+            "label": "yes"
+          },
+          {
+            "id": "f4",
+            "source": "a",
+            "target": "end1"
+          }
+        ],
+        "decisions": [
+          {
+            "kind": "bpmn-gateway",
+            "gatewayId": "gw",
+            "poolId": "P_loop",
+            "choiceIndex": null,
+            "edgeId": "f2",
+            "label": "yes"
+          }
+        ]
+      },
+      {
+        "poolId": "P_ref",
+        "derived": true,
+        "found": true,
+        "edges": [
+          {
+            "id": "g1",
+            "source": "s2",
+            "target": "rule"
+          },
+          {
+            "id": "g2",
+            "source": "rule",
+            "target": "end2"
+          }
+        ],
+        "decisions": []
+      },
+      {
+        "poolId": "P_fork",
+        "derived": true,
+        "found": true,
+        "edges": [
+          {
+            "id": "h1",
+            "source": "s3",
+            "target": "fork"
+          },
+          {
+            "id": "h2",
+            "source": "fork",
+            "target": "x"
+          },
+          {
+            "id": "h4",
+            "source": "x",
+            "target": "e3"
+          }
+        ],
+        "decisions": []
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "index": 0,
+      "transitions": [
+        "P_fork::t_s3",
+        "P_fork::t_fork",
+        "P_fork::t_x",
+        "P_fork::t_e3",
+        "P_fork::t_y",
+        "P_fork::t_e4",
+        "P_loop::t_s1",
+        "P_loop::t_gw_choice_0",
+        "P_loop::t_a",
+        "P_loop::t_end1",
+        "P_ref::t_s2",
+        "P_ref::t_rule",
+        "P_ref::t_end2"
+      ],
+      "nodes": [
+        "s3",
+        "fork",
+        "x",
+        "e3",
+        "y",
+        "e4",
+        "s1",
+        "gw",
+        "a",
+        "end1",
+        "s2",
+        "rule",
+        "end2"
+      ],
+      "interleavingCount": 360360,
+      "cycleUseCounts": {
+        "P_loop::p_c_b": 0
+      },
+      "poolIds": [
+        "P_fork",
+        "P_fork",
+        "P_fork",
+        "P_fork",
+        "P_fork",
+        "P_fork",
+        "P_loop",
+        "P_loop",
+        "P_loop",
+        "P_loop",
+        "P_ref",
+        "P_ref",
+        "P_ref"
+      ],
+      "messagesSent": [],
+      "messagesReceived": [],
+      "residualPlaces": [],
+      "sinkTokens": {
+        "P_loop": 1,
+        "P_ref": 1,
+        "P_fork": 2
+      },
+      "decisions": [
+        {
+          "kind": "bpmn-gateway",
+          "gatewayId": "gw",
+          "poolId": "P_loop",
+          "choiceIndex": 0,
+          "edgeId": "f2",
+          "label": "yes"
+        }
+      ],
+      "groupKey": "[[\"P_loop::gw\",\"f2\"]]",
+      "happyPathDistance": 0
+    }
+  ],
+  "groupCount": 1,
+  "truncated": false,
+  "stats": {
+    "backwardEdges": [
+      {
+        "id": "f6",
+        "source": "c",
+        "target": "b",
+        "placeId": "P_loop::p_c_b",
+        "poolId": "P_loop"
+      }
+    ],
+    "cycleBound": 1,
+    "scenarioCount": 1,
+    "cappedPaths": 4,
+    "deadEndPaths": 0,
+    "lengthTruncatedPaths": 0,
+    "statesExplored": 21,
+    "orGateways": [],
+    "skipped": [],
+    "approximations": [],
+    "messageFlows": [],
+    "ungatedMessageFlows": [],
+    "unconsumedMessagePlaces": [],
+    "unresolvedEndpoints": []
+  },
+  "issues": [
+    {
+      "rule": "SC01",
+      "severity": "WARNING",
+      "gatewayId": "gw",
+      "poolId": "P_loop",
+      "edgeId": "f3",
+      "message": "gateway \"gw\" (pool \"P_loop\"), branch \"f3\" (\"no\"), is never taken by any enumerated scenario"
+    },
+    {
+      "rule": "SC02",
+      "severity": "WARNING",
+      "nodeId": "rule",
+      "poolId": "P_ref",
+      "decisionRef": "NoSuchDecision",
+      "message": "node \"rule\" (pool \"P_ref\") references decisionRef \"NoSuchDecision\", which resolves to no decision in any of the given Decision-Core documents"
+    },
+    {
+      "rule": "SC06",
+      "severity": "WARNING",
+      "scenarioIndex": 0,
+      "pools": [
+        "P_fork"
+      ],
+      "message": "scenario #0 completes improperly: pool(s) \"P_fork\" (2 tokens) left more than one token on the shared sink — an AND fork whose branches did not all reach their own end event before the scenario was recorded complete"
+    }
+  ],
+  "skippedTableAnalyses": 0
+}
