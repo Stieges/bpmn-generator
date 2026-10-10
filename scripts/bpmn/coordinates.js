@@ -751,7 +751,7 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
 
   const placedBelow = {};   // anchorId → how many artifacts already sit below it
   const orphans = [];
-  const bandCursor = {};    // containerId → { x, y, rowH } of the next free slot in its band
+  const bandOrphans = [];   // unassociated artifacts that go into their container's band
 
   // Which expanded subprocess, if any, directly declares each node.
   const containerOf = {};
@@ -768,19 +768,8 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
       if (!isArtifact(node.type) || coords[node.id]) continue;
       const sz = artifactSize(node.type);
       const anchor = coords[partnerOf[node.id]];
-      const band = artifactBands[containerOf[node.id]];
-      if (!anchor && band) {
-        // Row by row, left to right; the band holds one row per artifact, so wrapping never
-        // runs out of it.
-        const cur = bandCursor[containerOf[node.id]] ??= { x: band.x, y: band.y + ARTIFACT_GAP, rowH: 0 };
-        if (cur.x > band.x && cur.x + sz.w > band.x + band.w) {
-          cur.x = band.x; cur.y += cur.rowH + ARTIFACT_GAP; cur.rowH = 0;
-        }
-        coords[node.id] = { x: cur.x, y: cur.y, w: sz.w, h: sz.h };
-        cur.x += sz.w + ARTIFACT_GAP;
-        cur.rowH = Math.max(cur.rowH, sz.h);
-        continue;
-      }
+      const containerId = containerOf[node.id];
+      if (!anchor && artifactBands[containerId]) { bandOrphans.push({ node, sz, containerId }); continue; }
       if (!anchor) { orphans.push({ node, sz }); continue; }
 
       const anchorId = partnerOf[node.id];
@@ -797,6 +786,32 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
         h: sz.h,
       };
     }
+  }
+
+  // Band artifacts last: an associated artifact whose anchor sits near the container's bottom
+  // hangs into the band, so the band's free slots are only known once every anchored one is down.
+  // Row by row, left to right, skipping anything already there. The band holds one row per
+  // artifact the container declares, so it has room for every one of them.
+  const cursor = {};        // containerId → { x, y, rowH }
+  const collides = (r) => Object.values(coords).some(c =>
+    r.x < c.x + c.w && c.x < r.x + r.w && r.y < c.y + c.h && c.y < r.y + r.h
+    // a container (the band's own subprocess and its ancestors) encloses the slot — not a collision
+    && !(c.x <= r.x && c.y <= r.y && c.x + c.w >= r.x + r.w && c.y + c.h >= r.y + r.h));
+  for (const { node, sz, containerId } of bandOrphans) {
+    const band = artifactBands[containerId];
+    const cur = cursor[containerId] ??= { x: band.x, y: band.y + ARTIFACT_GAP, rowH: 0 };
+    let slot;
+    for (let guard = 0; guard < 1000; guard++) {
+      if (cur.x > band.x && cur.x + sz.w > band.x + band.w) {
+        cur.x = band.x; cur.y += Math.max(cur.rowH, sz.h) + ARTIFACT_GAP; cur.rowH = 0;
+      }
+      const candidate = { x: cur.x, y: cur.y, w: sz.w, h: sz.h };
+      if (!collides(candidate)) { slot = candidate; break; }
+      cur.x += ARTIFACT_GAP;
+    }
+    coords[node.id] = slot ?? { x: cur.x, y: cur.y, w: sz.w, h: sz.h };
+    cur.x += sz.w + ARTIFACT_GAP;
+    cur.rowH = Math.max(cur.rowH, sz.h);
   }
 
   if (orphans.length === 0) return;
