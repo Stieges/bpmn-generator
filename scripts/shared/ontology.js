@@ -1,5 +1,5 @@
 /**
- * The BPMN vocabulary — loaded from references/bpmn-ontology.jsonld, the single source of which
+ * The BPMN vocabulary — loaded from references/ontology.jsonld, the single source of which
  * node types, event markers and definition kinds exist, which classes they belong to, and which
  * Logic-Core fields each element may carry.
  *
@@ -11,7 +11,7 @@
  */
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
-import { ontologyPath } from '../shared/resource-paths.js';
+import { ontologyPath } from './resource-paths.js';
 
 const ONTOLOGY_IRI = 'https://stieges.github.io/bpmn-generator/ontology';
 export const ONTOLOGY_NS = 'https://stieges.github.io/bpmn-generator/ontology#';
@@ -92,9 +92,9 @@ export function validateOntology(onto) {
 export function loadOntology(path = ontologyPath()) {
   let onto;
   try { onto = JSON.parse(readFileSync(path, 'utf8')); }
-  catch (err) { throw new Error(`bpmn-ontology.jsonld (${path}) is not valid JSON: ${err.message}`); }
+  catch (err) { throw new Error(`ontology.jsonld (${path}) is not valid JSON: ${err.message}`); }
   const messages = validateOntology(onto);
-  if (messages.length) throw new Error(`bpmn-ontology.jsonld is invalid (${path}): ` + messages.join('; '));
+  if (messages.length) throw new Error(`ontology.jsonld is invalid (${path}): ` + messages.join('; '));
   return onto;
 }
 

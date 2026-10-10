@@ -460,10 +460,23 @@ describe('docs-gate — checkPackageIntegrity', () => {
        'references/input-schema.json',
        'references/prompt-template.md',
        'references/decision-core-schema.json',
-       'references/bpmn-ontology.jsonld'],
+       'references/ontology.jsonld'],
       new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
     expect(findings).toEqual([]);
+  });
+
+  test('a half-done rename — resolver on the new name, package still on the old — names the missing file', () => {
+    const findings = checkPackageIntegrity(
+      ['shared/resource-paths.js',
+       'references/input-schema.json',
+       'references/prompt-template.md',
+       'references/decision-core-schema.json',
+       'references/bpmn-ontology.jsonld'],
+      new Set([join(__dirname, 'shared', 'resource-paths.js')]),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('"references/ontology.jsonld"');
   });
 
   test('reproduces the original publish-blocker: primary target missing, only the escaping fallback resolves', () => {

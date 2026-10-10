@@ -4,10 +4,10 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { resolveWithFallback, ontologyPath } from '../shared/resource-paths.js';
-import { loadOntology, validateOntology, buildVocabulary, VOCABULARY, ONTOLOGY_NS } from './ontology.js';
+import { loadOntology, validateOntology, buildVocabulary, VOCABULARY, ONTOLOGY_NS } from '../shared/ontology.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ONTO_FILE = join(__dirname, '..', '..', 'references', 'bpmn-ontology.jsonld');
+const ONTO_FILE = join(__dirname, '..', '..', 'references', 'ontology.jsonld');
 const raw = () => JSON.parse(readFileSync(ONTO_FILE, 'utf8'));
 
 describe('ontology loader', () => {
@@ -26,10 +26,10 @@ describe('ontology loader', () => {
 
   test('loadOntology throws on an invalid file instead of returning empty classes', () => {
     const dir = mkdtempSync(join(tmpdir(), 'onto-'));
-    const p = join(dir, 'bpmn-ontology.jsonld');
+    const p = join(dir, 'ontology.jsonld');
     const bad = raw(); delete bad['@graph'].find(e => e['@type'] === 'owl:Ontology').version;
     writeFileSync(p, JSON.stringify(bad));
-    expect(() => loadOntology(p)).toThrow(/bpmn-ontology\.jsonld is invalid \(.*bpmn-ontology\.jsonld\): .*version/);
+    expect(() => loadOntology(p)).toThrow(/ontology\.jsonld is invalid \(.*ontology\.jsonld\): .*version/);
   });
 
   test('a JSON syntax error names the file path', () => {
@@ -66,11 +66,11 @@ describe('ontology loader', () => {
     const dir = mkdtempSync(join(tmpdir(), 'onto-prec-'));
     const src = join(dir, 'source.jsonld'); const pkg = join(dir, 'packaged.jsonld');
     writeFileSync(src, '{}'); writeFileSync(pkg, '{}');
-    expect(resolveWithFallback(src, pkg, 'bpmn-ontology.jsonld')).toBe(src);
+    expect(resolveWithFallback(src, pkg, 'ontology.jsonld')).toBe(src);
   });
 
   test('a missing ontology names both searched paths', () => {
-    expect(() => resolveWithFallback('/nope/a.jsonld', '/nope/b.jsonld', 'bpmn-ontology.jsonld'))
+    expect(() => resolveWithFallback('/nope/a.jsonld', '/nope/b.jsonld', 'ontology.jsonld'))
       .toThrow(/\/nope\/a\.jsonld.*\/nope\/b\.jsonld/);
   });
 
@@ -146,11 +146,19 @@ describe('JSON-LD coherence (no RDF tooling)', () => {
 describe('ontology packaging', () => {
   const pkgJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
   test('the package exports the ontology under ./ontology', () => {
-    expect(pkgJson.exports['./ontology']).toBe('./references/bpmn-ontology.jsonld');
+    expect(pkgJson.exports['./ontology']).toBe('./references/ontology.jsonld');
   });
   test('prepack copies it into the package', () => {
     const prepack = readFileSync(join(__dirname, '..', 'prepack-copy-references.mjs'), 'utf8');
-    expect(prepack).toMatch(/'bpmn-ontology\.jsonld'/);
+    expect(prepack).toMatch(/'ontology\.jsonld'/);
+  });
+  test('prepack no longer knows the old name', () => {
+    const prepack = readFileSync(join(__dirname, '..', 'prepack-copy-references.mjs'), 'utf8');
+    expect(prepack).not.toMatch(/bpmn-ontology/);
+  });
+  test('a consumer of the export that filters @type "bg:NodeType" gets the same node types as before', () => {
+    const names = raw()['@graph'].filter(e => e['@type'] === 'bg:NodeType').map(e => e.name);
+    expect(names.sort()).toEqual([...SNAP.sets.ALL_NODE_TYPES].sort());
   });
   test('the skill bundle filter accepts .jsonld', () => {
     const build = readFileSync(join(__dirname, '..', 'build-skill.mjs'), 'utf8');

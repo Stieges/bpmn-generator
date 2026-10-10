@@ -42,7 +42,7 @@
     "./import": "./bpmn/import.js",
     "./validate": "./bpmn/validate.js",
     "./orchestrator": "./orchestrator.js",
-    "./ontology": "./references/bpmn-ontology.jsonld"
+    "./ontology": "./references/ontology.jsonld"
   },
   "scripts": {
     "generate": "node bpmn/pipeline.js",
