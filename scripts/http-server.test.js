@@ -4,10 +4,11 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { server, resolveEnvLlmConfig } from './http-server.js';
+import { server, resolveEnvLlmConfig, _resetRateLimit } from './http-server.js';
+import { getAuditPath } from './audit.js';
 
 let baseUrl;
 
@@ -271,30 +272,108 @@ describe('POST /api/v1/orchestrate — diagnostics', () => {
   });
 });
 
-describe('POST /api/v1/generate and /validate — refused rule profile', () => {
+describe('rule profiles over HTTP — inline objects only, gated, bounded', () => {
   const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const styled = JSON.parse(readFileSync(new URL('../tests/fixtures/boundary-event-shapes.json', import.meta.url), 'utf8'));
+  const strict = JSON.parse(readFileSync(new URL('../rules/strict-profile.json', import.meta.url), 'utf8'));
   const post = (path, body) => realFetch(`${baseUrl}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
-  const typo = { profile: 'typo', overrides: { M03: { severity: 'CRITICAL' } } };
+  const ENDPOINTS = ['/api/v1/generate', '/api/v1/validate', '/api/v1/orchestrate'];
+  beforeEach(() => _resetRateLimit());
+  const auditLines = (correlationId) => readFileSync(getAuditPath(), 'utf8').split('\n')
+    .filter((l) => l.includes(correlationId));
 
-  for (const path of ['/api/v1/generate', '/api/v1/validate']) {
-    test(`${path}: an unknown severity is a 400 naming rule and severity, not a 500`, async () => {
-      const res = await post(path, { logicCore: lc, ruleProfile: typo });
+  for (const path of ENDPOINTS) {
+    test(`${path}: an unknown severity is a 400 naming the place, not a 500`, async () => {
+      const res = await post(path, { logicCore: lc, ruleProfile: { profile: 'typo', overrides: { M03: { severity: 'CRITICAL' } } } });
       const data = await res.json();
       expect(res.status).toBe(400);
       expect(data.status).toBe('profile_error');
       expect(data.error).toBe('rule profile "typo" does not match the profile schema: "/overrides/M03/severity" must be one of ERROR, WARNING, INFO, ADVISORY, OFF');
     });
+
+    test(`${path}: a string profile is refused — no file is read, no path or content comes back`, async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'profile-'));
+      const secret = join(dir, 'secret.json');
+      writeFileSync(secret, 'SECRET_TOKEN=abc123');
+      for (const ruleProfile of [secret, '/etc/passwd', 'rules/strict-profile.json', 'strict']) {
+        const res = await post(path, { logicCore: lc, ruleProfile });
+        const text = await res.text();
+        expect(res.status).toBe(400);
+        expect(JSON.parse(text).status).toBe('profile_error');
+        expect(text).not.toMatch(/SECRET|abc123|root:|\/etc|secret\.json|rules\//);
+      }
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    test(`${path}: an array, a number or a boolean is not a profile`, async () => {
+      for (const ruleProfile of [[], [{ overrides: {} }], 7, true, false, '']) {
+        const res = await post(path, { logicCore: lc, ruleProfile });
+        expect(res.status).toBe(400);
+        expect((await res.json()).status).toBe('profile_error');
+      }
+    });
+
+    test(`${path}: client-supplied internal markers are refused`, async () => {
+      const res = await post(path, { logicCore: lc, ruleProfile: { $source: '/forged\n[ERROR] admin login ok', $missing: true } });
+      const text = await res.text();
+      expect(res.status).toBe(400);
+      expect(text).not.toContain('admin login');
+    });
+
+    test(`${path}: a profile may not switch soundness off or below a failing severity`, async () => {
+      for (const ruleProfile of [{ layers: { soundness: { enabled: false } } }, { overrides: { S01: { severity: 'OFF' } } }, { overrides: { S02: { severity: 'INFO' } } }]) {
+        const res = await post(path, { logicCore: lc, ruleProfile });
+        expect(res.status).toBe(400);
+        expect((await res.json()).error).toMatch(/not accepted from a client/);
+      }
+    });
   }
 
-  test('/api/v1/orchestrate: a profile file that is not JSON is a 400 with the message', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'profile-'));
-    const bad = join(dir, 'kaputt.json');
-    writeFileSync(bad, '{');
-    const res = await post('/api/v1/orchestrate', { logicCore: lc, ruleProfile: bad });
+  test('an oversized inline profile is refused quickly, with a short answer and a short audit line', async () => {
+    const correlationId = `oversized-${Date.now()}`;
+    const ruleProfile = { profile: 'A'.repeat(200000), overrides: Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`X${i}`, { severity: 'X' }])) };
+    const t0 = Date.now();
+    const res = await post('/api/v1/validate', { logicCore: lc, ruleProfile, correlationId });
+    const text = await res.text();
+    expect(res.status).toBe(400);
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(text.length).toBeLessThan(1000);
+    const lines = auditLines(correlationId).filter((l) => l.includes('profile_rejected'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].length).toBeLessThan(800);
+  });
+
+  test.each([
+    [10000, /larger than 64 KiB/],
+    [1000, /does not match the profile schema: "\/overrides" must NOT have more than 256 properties/],
+  ])('%i unknown overrides are one refusal, not one warning each', async (count, expected) => {
+    const correlationId = `many-overrides-${count}-${Date.now()}`;
+    const overrides = Object.fromEntries(Array.from({ length: count }, (_, i) => [`Q${i}`, {}]));
+    const res = await post('/api/v1/validate', { logicCore: lc, ruleProfile: { overrides }, correlationId });
     const data = await res.json();
     expect(res.status).toBe(400);
-    expect(data.error).toMatch(/kaputt\.json" is not valid JSON at line 1, column \d+$/);
+    expect(data.error).toMatch(expected);
+    expect(JSON.stringify(data).length).toBeLessThan(1000);
+    for (const l of auditLines(correlationId)) expect(l.length).toBeLessThan(800);
+  });
+
+  test('a profile id carrying a newline or an ANSI escape comes back escaped', async () => {
+    const res = await post('/api/v1/validate', { logicCore: lc, ruleProfile: { profile: 'p', overrides: { 'S9\n[ERROR] x\u001b[31m': { severity: 'ERROR' } } } });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.error).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+  });
+
+  test('/api/v1/orchestrate: a strict inline profile applies in the compliance phase', async () => {
+    const plain = await (await post('/api/v1/orchestrate', { logicCore: styled })).json();
+    expect(plain.compliance.isCompliant).toBe(true);
+    const res = await post('/api/v1/orchestrate', { logicCore: styled, ruleProfile: strict });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.compliance.isCompliant).toBe(false);
+    expect(data.compliance.errors.join('\n')).toMatch(/Objekt\+Verb/);
+    expect(data.compliance.errors.join('\n')).not.toMatch(/Compliance check failed/);
   });
 });
