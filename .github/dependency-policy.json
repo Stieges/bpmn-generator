@@ -15,30 +15,5 @@
     "extensions": [".js", ".mjs"]
   },
 
-  "exceptions": [
-    {
-      "id": "mcp-sdk-http-transport-dead-code-2026-07",
-      "packages": ["@hono/node-server", "@modelcontextprotocol/sdk"],
-      "maxSeverity": "moderate",
-      "scope": "prod",
-      "advisories": ["GHSA-frvp-7c67-39w9"],
-      "acceptNewAdvisories": true,
-      "reason": "Path traversal in serve-static via encoded backslash, Windows only. Pulled in solely by @modelcontextprotocol/sdk's HTTP/SSE transports, which this project never loads: scripts/mcp-bpmn-server.js imports StdioServerTransport only, and scripts/http-server.js uses node:http directly rather than express. serveStatic is never called and there is no Windows deployment path. @modelcontextprotocol/sdk is listed alongside @hono/node-server because npm reports it as a separate finding via the effects chain (`via: [\"@hono/node-server\"]`) — it is the same single advisory, not a second risk.",
-      "whyNotFixed": "The fix requires @hono/node-server >=2.0.5, but @modelcontextprotocol/sdk@1.29.0 declares \"@hono/node-server\": \"^1.19.9\" as a non-optional runtime dependency. npm's only proposed remedy is a semver-major *downgrade* of the SDK to 1.24.3 (`fixAvailable: {\"name\":\"@modelcontextprotocol/sdk\",\"version\":\"1.24.3\",\"isSemVerMajor\":true}`) — there is no forward fix. An override to 2.x would run the SDK outside its declared and tested range in order to patch a code path we never execute.",
-      "reviewTrigger": "@modelcontextprotocol/sdk widens its @hono/node-server range to admit >=2.0.5 (`npm view @modelcontextprotocol/sdk dependencies`), or this project adopts an HTTP/SSE MCP transport — the latter is caught automatically by voidIf below.",
-      "voidIf": {
-        "importsFound": [
-          "StreamableHTTPServerTransport",
-          "SSEServerTransport",
-          "@hono/node-server",
-          "serveStatic",
-          "from 'hono'",
-          "from 'express'"
-        ]
-      },
-      "owner": "Stieges",
-      "opened": "2026-07-25",
-      "expires": "2027-01-21"
-    }
-  ]
+  "exceptions": []
 }
