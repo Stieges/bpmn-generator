@@ -23,3 +23,14 @@ export function findVocabularyLists(source, names, minCount = 3) {
   }
   return out;
 }
+
+export function checkCompleteness(vocabulary, probes) {
+  const out = [];
+  for (const name of vocabulary.nodeTypeNames(['supported', 'lossy'])) {
+    for (const [place, knows] of Object.entries(probes.nodeType)) if (!knows(name)) out.push({ place, name });
+  }
+  for (const name of vocabulary.markerNames(['supported'])) {
+    for (const [place, knows] of Object.entries(probes.marker)) if (!knows(name)) out.push({ place, name });
+  }
+  return out;
+}

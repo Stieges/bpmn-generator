@@ -914,5 +914,7 @@ export function isDataArtifact(type) {
 
 const XML_TAG = new Map(VOCABULARY.nodeTypes.filter(t => t.xmlTag).map(t => [t.name, t.xmlTag]));
 export function bpmnXmlTag(type) {
-  return XML_TAG.get(type) || 'task';
+  const tag = XML_TAG.get(type);
+  if (!tag) throw new Error(`no BPMN element for node type "${type}" — it is not a supported type in bpmn-ontology.jsonld`);
+  return tag;
 }

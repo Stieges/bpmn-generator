@@ -27,5 +27,7 @@ export const ARTIFACT_GAP = CFG.layout.artifactGap;
  * they are placed). One function, so the reserved band and the placed shapes cannot disagree.
  */
 export function artifactSize(type) {
-  return SHAPE[type] || SHAPE._textAnnotation || { w: 100, h: 80 };
+  const size = SHAPE[type];
+  if (!size) throw new Error(`no shape size for artifact type "${type}" in config.json`);
+  return size;
 }

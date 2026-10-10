@@ -251,3 +251,134 @@ describe('no vocabulary list outside the ontology', () => {
     }
   });
 });
+
+import { checkCompleteness } from './ontology-audit.js';
+import { renderTaskIcon, renderEventMarker } from './icons.js';
+import { SHAPE } from './constants.js';
+
+const schemaJson = JSON.parse(readFileSync(join(__dirname, '..', '..', 'references', 'input-schema.json'), 'utf8'));
+const svgSrc = readFileSync(join(__dirname, 'svg.js'), 'utf8');
+const read = (p) => readFileSync(join(__dirname, '..', '..', p), 'utf8');
+
+// One probe per place a new type must reach. Order = the order a failure lists them in.
+const PROBES = (v) => ({
+  nodeType: {
+    'input-schema.json NodeType': (t) => schemaJson.$defs.NodeType.enum.includes(t),
+    'BPMN element (bpmnXmlTag)': (t) => { try { return !!T.bpmnXmlTag(t); } catch { return false; } },
+    'shape size (config.json)': (t) => !!SHAPE[t],
+    'task icon (icons.js)': (t) => !v.nodeTypes.find(n => n.name === t).classes.has('Task') || t === 'task' || renderTaskIcon(t, 0, 0) !== null,
+    'rendering (svg.js)': (t) => {
+      const cls = v.nodeTypes.find(n => n.name === t).classes;
+      return !(cls.has('Gateway') || cls.has('Artifact')) || svgSrc.includes(`'${t}'`);
+    },
+    'import, both paths': (t) => T.SUPPORTED_NODE_TYPES.has(t),
+    'prompt-template.md': (t) => read('references/prompt-template.md').includes(t),
+    'SKILL.md': (t) => read('SKILL.md').includes('`' + t + '`'),
+    'logic-core-schema.md': (t) => read('references/logic-core-schema.md').includes('`' + t + '`'),
+  },
+  marker: {
+    'input-schema.json EventMarker': (m) => schemaJson.$defs.EventMarker.enum.includes(m),
+    'event definition': (m) => T.EVENT_DEFINITION_BY_MARKER.has(m),
+    'marker icon (icons.js / svg.js)': (m) => m === 'terminate' || renderEventMarker(m, 0, 0, 10, false) !== '',
+  },
+});
+
+describe('completeness — a new type cannot slip past any place', () => {
+  test('the real vocabulary is complete everywhere', () => {
+    expect(checkCompleteness(VOCABULARY, PROBES(VOCABULARY))).toEqual([]);
+  });
+
+  test('a type added only to the ontology is reported at every place', () => {
+    const onto = raw();
+    onto['@graph'].push({ '@id': 'bg:fooTask', '@type': 'bg:NodeType', name: 'fooTask', label: 'Foo Task',
+      subClassOf: ['bg:Task'], status: 'supported', xmlTag: 'fooTask', seeAlso: ['omg:Task'] });
+    const v = buildVocabulary(onto);
+    const places = checkCompleteness(v, PROBES(v)).filter(f => f.name === 'fooTask').map(f => f.place);
+    expect(places).toEqual(expect.arrayContaining(['input-schema.json NodeType', 'shape size (config.json)',
+      'task icon (icons.js)', 'import, both paths', 'prompt-template.md', 'SKILL.md', 'logic-core-schema.md']));
+  });
+
+  test('a marker added only to the ontology is reported at every place', () => {
+    const onto = raw();
+    onto['@graph'].push({ '@id': 'bg:marker-foo', '@type': 'bg:EventMarker', name: 'foo', label: 'Foo', status: 'supported',
+      eventDefinition: 'bpmn:FooEventDefinition', groups: [] });
+    const v = buildVocabulary(onto);
+    const places = checkCompleteness(v, PROBES(v)).filter(f => f.name === 'foo').map(f => f.place);
+    expect(places).toEqual(expect.arrayContaining(['input-schema.json EventMarker', 'event definition', 'marker icon (icons.js / svg.js)']));
+  });
+});
+
+import { runPipeline } from './pipeline.js';
+describe('a type without a BPMN element fails clearly', () => {
+  test('bpmnXmlTag refuses an announced or unknown type', () => {
+    expect(() => T.bpmnXmlTag('adHocSubProcess')).toThrow(/no BPMN element for node type "adHocSubProcess"/);
+    expect(() => T.bpmnXmlTag('nonsense')).toThrow(/"nonsense"/);
+  });
+  test('runPipeline names the type and the node instead of emitting a plain task', async () => {
+    const lc = { id: 'p', nodes: [{ id: 's', type: 'startEvent' }, { id: 'x', type: 'nonsense' }, { id: 'e', type: 'endEvent' }],
+      edges: [{ source: 's', target: 'x' }, { source: 'x', target: 'e' }] };
+    await expect(runPipeline(lc)).rejects.toThrow(/"nonsense".*"x"|"x".*"nonsense"/);
+  });
+  test('runRules still classifies the announced adHocSubProcess as a container (S14)', () => {
+    expect(T.CONTAINER_TYPES.has('adHocSubProcess')).toBe(true);
+  });
+});
+
+// import.js exports both paths: bpmnToLogicCore (async, the primary bpmn-moddle path) and
+// bpmnToLogicCoreLegacy (sync, the DOM fallback).
+// Boundary events and artifacts are covered by field-fidelity.test.js and subprocess-child-fidelity.
+import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
+
+const findNode = (lc, id) => (lc.pools?.flatMap(p => p.nodes) ?? lc.nodes).find(n => n.id === id);
+const one = (node, extra = []) => ({ id: 'p', name: 'P',
+  nodes: [{ id: 's', type: 'startEvent' }, node, ...extra, { id: 'e', type: 'endEvent' }],
+  edges: [{ source: 's', target: node.id }, { source: node.id, target: 'e' }] });
+
+describe('round trip keeps the type', () => {
+  const plain = VOCABULARY.nodeTypes.filter(t => ['supported', 'lossy'].includes(t.status)
+    && !t.classes.has('Artifact') && !['startEvent', 'endEvent', 'boundaryEvent'].includes(t.name));
+  for (const t of plain) {
+    test(`${t.name} survives both importers as ${t.name}`, async () => {
+      const r = await runPipeline(one({ id: 'n', type: t.name, name: 'N' }));
+      for (const reader of [bpmnToLogicCore, bpmnToLogicCoreLegacy]) {
+        const back = await reader(r.bpmnXml);
+        expect(findNode(back, 'n').type).toBe(t.name);
+      }
+    });
+  }
+  for (const m of VOCABULARY.markerNames(['supported']).filter(m => !['terminate', 'cancel', 'link', 'compensation'].includes(m))) {
+    test(`marker ${m} survives both importers`, async () => {
+      const r = await runPipeline(one({ id: 'n', type: 'intermediateCatchEvent', marker: m, name: 'N' }));
+      for (const reader of [bpmnToLogicCore, bpmnToLogicCoreLegacy]) {
+        const back = await reader(r.bpmnXml);
+        expect(findNode(back, 'n').marker).toBe(m);
+      }
+    });
+  }
+  const markerCases = {
+    terminate: () => one({ id: 'n', type: 'endEvent', marker: 'terminate', name: 'N' }),
+    cancel: () => one({ id: 'n', type: 'endEvent', marker: 'cancel', name: 'N' }),
+    compensation: () => one({ id: 'n', type: 'intermediateThrowEvent', marker: 'compensation', name: 'N' }),
+  };
+  for (const [m, mk] of Object.entries(markerCases)) {
+    test(`marker ${m} survives both importers on its legal host`, async () => {
+      const r = await runPipeline(mk());
+      for (const reader of [bpmnToLogicCore, bpmnToLogicCoreLegacy]) {
+        const back = await reader(r.bpmnXml);
+        expect(findNode(back, 'n').marker).toBe(m);
+      }
+    });
+  }
+  test('marker link survives both importers as a throw/catch pair', async () => {
+    const lc = { id: 'p', name: 'P',
+      nodes: [{ id: 's', type: 'startEvent' }, { id: 'n', type: 'intermediateThrowEvent', marker: 'link', linkName: 'L', name: 'T' },
+        { id: 'c', type: 'intermediateCatchEvent', marker: 'link', linkName: 'L', name: 'C' }, { id: 'e', type: 'endEvent' }],
+      edges: [{ source: 's', target: 'n' }, { source: 'c', target: 'e' }] };
+    const r = await runPipeline(lc);
+    for (const reader of [bpmnToLogicCore, bpmnToLogicCoreLegacy]) {
+      const back = await reader(r.bpmnXml);
+      expect(findNode(back, 'n').marker).toBe('link');
+      expect(findNode(back, 'c').marker).toBe('link');
+    }
+  });
+});

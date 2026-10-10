@@ -36,6 +36,10 @@ Extract a structured Logic-Core JSON from the process description below.
 - Physical/offline work → manualTask
 - Decision/branching → exclusiveGateway (XOR), parallelGateway (AND), inclusiveGateway (OR)
 - Wait for first event → eventBasedGateway
+- Complex merge/split condition → complexGateway
+- Document/data object → dataObjectReference
+- Database/data store → dataStoreReference
+- Visual grouping of elements → group
 - Start of process → startEvent
 - End of process → endEvent
 - Waiting for message/timer → intermediateCatchEvent (set marker: "message"/"timer")
