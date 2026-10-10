@@ -174,7 +174,7 @@ export function checkResponseContract(responses, schema, ajv) {
 
 // ==================================================================== 2. numbers
 
-// Rule-count claims must name their rule set right at the number (decisions F20, F28): "40 BPMN
+// Rule-count claims must name their rule set right at the number: "40 BPMN
 // rules, 5 layers", "19 DMN rules in 3 layers", "40 BPMN rules across 5 layers", "2 cross-notation
 // rules, 1 layer", German "40 BPMN-Regeln in 5 Schichten" / "2 übergreifende Regeln in 1 Schicht".
 // The actual counts come from the ontology (references/ontology.jsonld, via scripts/shared/ontology.js),

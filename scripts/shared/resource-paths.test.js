@@ -98,7 +98,7 @@ describe('the renamed ontology (references/ontology.jsonld)', () => {
     expect(ontologyPath()).toBe(join(REPO_REFERENCES, 'ontology.jsonld'));
   });
 
-  test('a stale packaged copy under the OLD name is never read (F19)', () => {
+  test('a stale packaged copy under the OLD name is never read', () => {
     mkdirSync(PACKAGED_DIR, { recursive: true });
     writeFileSync(join(PACKAGED_DIR, 'bpmn-ontology.jsonld'), '{ "stale": ');   // not even JSON
     expect(ontologyPath()).toBe(join(REPO_REFERENCES, 'ontology.jsonld'));

@@ -1326,7 +1326,7 @@ const OPTIMIZATION_CHECKS = [
 // Rule Registry + Runner
 // ═══════════════════════════════════════════════════════════════════════
 
-/** What this module implements, for buildRuleCatalog and the parity tests (decision F26). */
+/** What this module implements, for buildRuleCatalog and the parity tests. */
 const RULE_REGISTER = {
   module: 'scripts/bpmn/rules.js',
   partition: { ruleSet: 'BPMN', runsIn: 'main' },

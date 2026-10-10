@@ -17,7 +17,7 @@ const withRule = (o, id, ruleSet, layer, runsIn = 'main') => {
   return o;
 };
 
-describe('partitionForModule — path ⇒ rule set and run location (F11)', () => {
+describe('partitionForModule — path ⇒ rule set and run location', () => {
   test.each([
     ['scripts/bpmn/rules.js', 'BPMN', 'main'], ['scripts/bpmn/scenario-rules.js', 'BPMN', 'scenario'],
     ['scripts/dmn/rules.js', 'DMN', 'main'], ['scripts/dmn/scenario-rules.js', 'DMN', 'scenario'],
@@ -30,7 +30,7 @@ describe('partitionForModule — path ⇒ rule set and run location (F11)', () =
   });
 });
 
-describe('the BPMN main catalog — Block 2', () => {
+describe('the BPMN main catalog', () => {
   test('the real register matches the ontology', () => {
     expect(registerFindings(BPMN_MAIN)).toEqual([]);
   });
@@ -80,7 +80,7 @@ describe('the BPMN main catalog — Block 2', () => {
     expect(registerFindings({ ...BPMN_MAIN, entries })).toEqual(['S04: carries its own defaultSeverity literal — that belongs to references/ontology.jsonld']);
   });
 
-  test('a rule in the wrong module names the rule and the module\'s rule set (F11)', () => {
+  test('a rule in the wrong module names the rule and the module\'s rule set', () => {
     const register = { module: 'scripts/bpmn/scenario-rules.js', partition: { ruleSet: 'BPMN', runsIn: 'scenario' },
       entries: [{ id: 'SC01', check: () => [] }, { id: 'SC06', check: () => [] }, { id: 'SC04', check: () => [] }] };
     expect(registerFindings(register)).toEqual([
@@ -104,7 +104,7 @@ describe('the BPMN main catalog — Block 2', () => {
     expect(RULES.filter((r) => r.defaultSeverity === 'ADVISORY').map((r) => r.id)).toEqual(['O01', 'O02', 'O03', 'O04']);
   });
 
-  test('rules of an announced notation are never expected in code (F6); unannounced, they would be', () => {
+  test('rules of an announced notation are never expected in code; unannounced, they would be', () => {
     const o = raw();
     o['@graph'].push({ '@id': 'bg:layer-ArchiMate-structure', '@type': 'bg:Layer', name: 'structure', label: 'Structure', kind: 'specific', notation: ['bg:notation-ArchiMate'] });
     withRule(o, 'A01', 'ArchiMate', 'structure');
@@ -118,7 +118,7 @@ describe('the BPMN main catalog — Block 2', () => {
   });
 });
 
-describe('WF03 (F4)', () => {
+describe('WF03 improper-completion severity', () => {
   const twoEnds = { id: 'P_TwoEnds', name: 'Two ends', nodes: [
     { id: 's', type: 'startEvent', name: 'Start' }, { id: 'fork', type: 'parallelGateway' },
     { id: 'x', type: 'userTask', name: 'Check order' }, { id: 'y', type: 'userTask', name: 'Ship order' },
@@ -148,14 +148,14 @@ describe('import graph — no cycle', () => {
 import { RULE_REGISTER as DMN_MAIN, DMN_RULES } from '../dmn/rules.js';
 import { readdirSync } from 'node:fs';
 
-describe('the DMN main catalog — Block 2', () => {
+describe('the DMN main catalog', () => {
   test('the real register matches the ontology', () => {
     expect(registerFindings(DMN_MAIN)).toEqual([]);
     expect(DMN_RULES.find((r) => r.id === 'D06')).toMatchObject({ layer: 'semantics', defaultSeverity: 'WARNING' });
     expect(readFileSync(join(__dirname, '..', 'dmn', 'rules.js'), 'utf8')).not.toMatch(/defaultSeverity: '|layer: '/);
   });
 
-  test('a DMN gap names D99 for dmn/rules.js and leaves the BPMN catalog untouched (F26)', () => {
+  test('a DMN gap names D99 for dmn/rules.js and leaves the BPMN catalog untouched', () => {
     const v = buildVocabulary(withRule(raw(), 'D99', 'DMN', 'soundness'));
     expect(registerFindings(DMN_MAIN, v)).toEqual(['D99: only in the ontology — scripts/dmn/rules.js registers no check for it']);
     expect(registerFindings(BPMN_MAIN, v)).toEqual([]);

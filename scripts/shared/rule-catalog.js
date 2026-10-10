@@ -10,16 +10,16 @@
  *
  * A gap in either direction (a rule only in code, a rule only in the ontology), a rule in the wrong
  * module, or an entry still carrying its own metadata literal aborts the build of THAT module only
- * (decisions F5, F26): bpmn/ never imports dmn/, so a DMN gap can never break the BPMN pipeline.
+ *: bpmn/ never imports dmn/, so a DMN gap can never break the BPMN pipeline.
  * The ontology loader knows nothing of this module (no import cycle).
  */
 import { VOCABULARY, CROSS_NOTATION } from './ontology.js';
 
-/** Metadata the ontology owns. A rule entry in code must not carry any of these (record M10). */
+/** Metadata the ontology owns. A rule entry in code must not carry any of these. */
 export const RULE_METADATA_FIELDS = Object.freeze(['layer', 'defaultSeverity', 'notation', 'notations', 'kind', 'runsIn', 'ruleSet']);
 
 /**
- * The partition a rule-module path stands for (decision F11): `bpmn/` ⇒ BPMN, `dmn/` ⇒ DMN,
+ * The partition a rule-module path stands for: `bpmn/` ⇒ BPMN, `dmn/` ⇒ DMN,
  * `cross/` ⇒ cross-notation; `scenario-rules.js` and `cross/rules.js` ⇒ runs in `scenario`,
  * `rules.js` in bpmn/ or dmn/ ⇒ runs in `main`.
  * @param {string} module repo-relative path, e.g. 'scripts/bpmn/rules.js'
@@ -37,7 +37,7 @@ const describe = (p) => `rule set ${p.ruleSet}, runs in ${p.runsIn}`;
 
 /**
  * Ontology rules a module with this partition must implement. Rules of an announced notation
- * (ArchiMate) are never expected in code (decision F6).
+ * (ArchiMate) are never expected in code.
  */
 export function rulesExpectedIn(partition, vocabulary = VOCABULARY) {
   const status = new Map(vocabulary.notations.map((n) => [n.name, n.status]));

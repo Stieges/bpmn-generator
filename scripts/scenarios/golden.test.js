@@ -1,5 +1,5 @@
 /**
- * Byte-equality fence for the scenario pipeline (decisions F9, F27; record M22). The goldens in
+ * Byte-equality fence for the scenario pipeline. The goldens in
  * tests/fixtures/scenarios/golden/ were captured BEFORE SC01–SC06 moved out of scripts/scenarios/rules.js
  * into the BPMN, DMN and cross-notation rule modules; the move must not change one byte of the JSON
  * (findings, their order, skippedTableAnalyses) or the Markdown. A diff here is a defect, never a
@@ -41,7 +41,7 @@ describe('scenario pipeline output is byte-identical to the goldens', () => {
     expect(c).toBeDefined();
   });
 
-  test('findings come out sorted by rule id, ties in emission order (F27)', () => {
+  test('findings come out sorted by rule id, ties in emission order', () => {
     const issues = JSON.parse(golden('combined', 'json')).issues.map((i) => i.rule);
     expect(issues).toEqual(['SC01', 'SC02', 'SC06']);
     const tables = JSON.parse(golden('tables', 'json')).issues;

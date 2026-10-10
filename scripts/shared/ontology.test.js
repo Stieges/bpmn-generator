@@ -14,7 +14,7 @@ const entry = (o, id) => o['@graph'].find((e) => e['@id'] === id);
 const rule = (id) => VOCABULARY.rules.find((r) => r.id === id);
 const problems = (o) => [...validateOntology(o), ...checkReferences(o)];
 
-describe('rules in the ontology — Block 1', () => {
+describe('rules in the ontology', () => {
   test.each([
     ['S01', 'specific', ['BPMN']], ['D01', 'specific', ['DMN']],
     ['SC01', 'specific', ['BPMN']], ['SC06', 'specific', ['BPMN']],
@@ -42,7 +42,7 @@ describe('rules in the ontology — Block 1', () => {
     expect(entry(o, 'bg:rule-D01').layer).toBe('bg:layer-DMN-soundness');
   });
 
-  test('layers are named by purpose — none says where a rule runs (F1′)', () => {
+  test('layers are named by purpose — none says where a rule runs', () => {
     expect(VOCABULARY.ruleSets.BPMN.layers).toEqual(['soundness', 'style', 'pragmatics', 'workflow_net', 'optimization']);
     expect(VOCABULARY.ruleSets.DMN.layers).toEqual(['soundness', 'semantics', 'best_practice']);
     expect(VOCABULARY.ruleSets[CROSS_NOTATION].layers).toEqual(['consistency']);
@@ -78,7 +78,7 @@ describe('rules in the ontology — Block 1', () => {
     expect(problems(o)).toEqual([]);
   });
 
-  test('a rule has no field for checked element types (E4 parked) — adding one is invalid', () => {
+  test('a rule has no field for checked element types — adding one is invalid', () => {
     const o = raw();
     entry(o, 'bg:rule-S01').checks = ['bg:startEvent'];
     expect(validateOntology(o).join(' ')).toMatch(/additional properties.*\[bg:rule-S01\]/);
@@ -98,19 +98,19 @@ describe('rules in the ontology — Block 1', () => {
     expect(VOCABULARY.rules.filter((r) => /^(DI|NC|DD|IM)\d/.test(r.id) || r.id === 'WF_OR')).toEqual([]);
   });
 
-  test('WF03 defaults to ERROR (F4)', () => {
+  test('WF03 defaults to ERROR', () => {
     expect(rule('WF03').defaultSeverity).toBe('ERROR');
   });
 });
 
 describe('rules in the ontology — the negation axis', () => {
-  test('a cross-notation rule naming one notation aborts the load and names the rule (F2)', () => {
+  test('a cross-notation rule naming one notation aborts the load and names the rule', () => {
     const o = raw();
     entry(o, 'bg:rule-SC02').notation = ['bg:notation-BPMN'];
     expect(checkReferences(o).join(' ')).toMatch(/rule SC02 .* is cross-notation but names only bg:notation-BPMN/);
   });
 
-  test('a specific rule naming two notations aborts the load and names the rule (F2)', () => {
+  test('a specific rule naming two notations aborts the load and names the rule', () => {
     const o = raw();
     entry(o, 'bg:rule-S01').notation = ['bg:notation-BPMN', 'bg:notation-DMN'];
     expect(checkReferences(o).join(' ')).toMatch(/rule S01 .* is specific but names 2 notations/);
@@ -137,19 +137,19 @@ describe('rules in the ontology — the negation axis', () => {
     expect(checkReferences(o).join(' ')).toMatch(/rule S01 .* has notation bg:notation-BPMN, but layer bg:layer-DMN-semantics belongs to bg:notation-DMN/);
   });
 
-  test('a cross-notation rule in a single-notation layer names rule and layer (F3)', () => {
+  test('a cross-notation rule in a single-notation layer names rule and layer', () => {
     const o = raw();
     entry(o, 'bg:rule-SC02').layer = 'bg:layer-BPMN-workflow_net';
     expect(checkReferences(o).join(' ')).toMatch(/rule SC02 .* is cross-notation, but layer bg:layer-BPMN-workflow_net belongs to bg:notation-BPMN only/);
   });
 
-  test('a cross-notation layer naming only one notation names the layer (F2)', () => {
+  test('a cross-notation layer naming only one notation names the layer', () => {
     const o = raw();
     entry(o, 'bg:layer-cross-consistency').notation = ['bg:notation-BPMN'];
     expect(checkReferences(o).join(' ')).toMatch(/layer consistency .* is cross-notation but names only/);
   });
 
-  test('a specific layer naming two notations names the layer (F2)', () => {
+  test('a specific layer naming two notations names the layer', () => {
     const o = raw();
     entry(o, 'bg:layer-BPMN-soundness').notation = ['bg:notation-BPMN', 'bg:notation-DMN'];
     expect(checkReferences(o).join(' ')).toMatch(/layer soundness .* is specific but names 2 notations/);
@@ -229,7 +229,7 @@ import { DMN_ELEMENT_COVERAGE } from '../dmn/import-scope.js';
 import { decisionCoreSchemaPath } from './resource-paths.js';
 import { DMN_TERM_TYPES } from './ontology.js';
 
-describe('DMN vocabulary — Block 4', () => {
+describe('DMN vocabulary', () => {
   const dcSchema = JSON.parse(readFileSync(decisionCoreSchemaPath(), 'utf8'));
   const live = ['supported', 'lossy'];
   const SCHEMA_ENUMS = {
@@ -248,11 +248,11 @@ describe('DMN vocabulary — Block 4', () => {
     expect(VOCABULARY.dmn.orientations()).toEqual(['Rule-as-Row', 'Rule-as-Column', 'CrossTable']);
   });
 
-  test.each(Object.keys(SCHEMA_ENUMS))('decision-core-schema.json %s equals the ontology (F14)', (kind) => {
+  test.each(Object.keys(SCHEMA_ENUMS))('decision-core-schema.json %s equals the ontology', (kind) => {
     expect(enumDrift(SCHEMA_ENUMS[kind], VOCABULARY.dmn[kind](live))).toEqual([]);
   });
 
-  test('every DMN term carries a status from the BPMN scale; schema terms are supported, importer-only ones announced (F13)', () => {
+  test('every DMN term carries a status from the BPMN scale; schema terms are supported, importer-only ones announced', () => {
     for (const t of VOCABULARY.dmnTerms) expect(['supported', 'lossy', 'announced']).toContain(t.status);
     for (const [kind, values] of Object.entries(SCHEMA_ENUMS)) {
       for (const v of values) expect(VOCABULARY.dmnTerms.find((t) => t.kind === kind && t.name === v).status).toBe('supported');
@@ -275,7 +275,7 @@ describe('DMN vocabulary — Block 4', () => {
     expect(enumDrift([...SCHEMA_ENUMS.hitPolicies, 'COLLECT_ALL'], VOCABULARY.dmn.hitPolicies(live))).toEqual(['COLLECT_ALL only in the schema']);
   });
 
-  test('a supported value only in the ontology is named (AVG); announced it is no finding (F16)', () => {
+  test('a supported value only in the ontology is named (AVG); announced it is no finding', () => {
     const o = raw();
     const avg = { '@id': 'bg:dmn-aggregation-AVG', '@type': 'bg:Aggregation', name: 'AVG', label: 'Average',
       status: 'supported', notation: ['bg:notation-DMN'], seeAlso: ['dmn:tBuiltinAggregator'] };
@@ -318,7 +318,7 @@ describe('DMN vocabulary — Block 4', () => {
     expect(VOCABULARY.nodeTypeNames().filter((n) => dmnNames.has(n))).toEqual([]);
   });
 
-  test('an rdf:Property on a Decision-Core element validates; an unknown element is still rejected (R10)', () => {
+  test('an rdf:Property on a Decision-Core element validates; an unknown element is still rejected', () => {
     for (const element of ['DecisionCore', 'Requirement', 'DecisionTable', 'InputClause', 'OutputClause', 'DecisionRule']) {
       const o = raw();
       o['@graph'].push({ '@id': 'bg:probe-field', '@type': 'rdf:Property', name: 'probe', element });

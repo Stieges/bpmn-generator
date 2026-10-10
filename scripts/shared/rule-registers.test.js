@@ -47,8 +47,7 @@ describe('every rule has a code entry and an ontology entry, in the right module
     expect(missing).toEqual(['A01']);
   });
 
-
-  test('the SC rules live where their notation lives ', () => {
+  test('the SC rules live where their notation lives', () => {
     expect(BPMN_SCENARIO.entries.map((e) => e.id)).toEqual(['SC01', 'SC06']);
     expect(DMN_SCENARIO.entries.map((e) => e.id)).toEqual(['SC04', 'SC05']);
     expect(CROSS.entries.map((e) => e.id)).toEqual(['SC02', 'SC03']);
@@ -61,7 +60,7 @@ describe('every rule has a code entry and an ontology entry, in the right module
   });
 });
 
-describe('import graph — the move adds no cycle (Block 3)', () => {
+describe('import graph — the move adds no cycle', () => {
   const sources = (dir) => readdirSync(join(SCRIPTS, dir)).filter((f) => f.endsWith('.js') && !f.endsWith('.test.js'))
     .map((f) => ({ file: `${dir}/${f}`, specifiers: [...readFileSync(join(SCRIPTS, dir, f), 'utf8').matchAll(/^\s*(?:import|export)\s[^;]*?from\s+'([^']+)'/gm)].map((m) => m[1]) }));
   const offenders = (dir, forbidden) => sources(dir).filter((s) => s.specifiers.some((p) => forbidden.test(p))).map((s) => s.file);
