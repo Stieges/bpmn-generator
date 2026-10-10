@@ -93,7 +93,8 @@ export function buildRuleCatalog(register, vocabulary = VOCABULARY) {
 /**
  * What a profile may name for one rule set, for auditProfile (scripts/shared/rule-profile.js): the
  * rule set's `main` rules (the only ones a runner can switch), its layers, every severity, the
- * scenario rules (named, so a profile touching one gets a precise warning), and each rule's layer.
+ * scenario rules (named, so a profile touching one gets a precise warning), and each rule's layer
+ * and default severity.
  */
 export function profileContext(ruleSet, vocabulary = VOCABULARY) {
   const own = vocabulary.rules.filter((r) => r.ruleSet === ruleSet);
@@ -104,5 +105,6 @@ export function profileContext(ruleSet, vocabulary = VOCABULARY) {
     severities: new Set(vocabulary.severities.map((s) => s.name)),
     scenarioRuleIds: new Set(vocabulary.rules.filter((r) => r.runsIn === 'scenario').map((r) => r.id)),
     ruleLayer: new Map(own.map((r) => [r.id, r.layer])),
+    ruleDefaultSeverity: new Map(own.map((r) => [r.id, r.defaultSeverity])),
   };
 }

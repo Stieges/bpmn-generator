@@ -40,7 +40,7 @@
  * leaves at the package root regardless of which scripts/ subdirectory reads it.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -98,4 +98,29 @@ export function ontologyPath() {
 /** Absolute path to references/rule-profile-schema.json. */
 export function ruleProfileSchemaPath() {
   return resolveWithFallback(SOURCE_PROFILE_SCHEMA, PACKAGED_PROFILE_SCHEMA, 'rule-profile-schema.json');
+}
+
+/**
+ * The repository's rules/ directory as seen from a module in `moduleDir` (a direct subdirectory of
+ * scripts/), or null when there is none. Rule profiles are not shipped in the npm package, so there
+ * is no packaged fallback: in an installed package `../../rules` would be node_modules/rules — some
+ * other package's directory — which is why the parent of `moduleDir` must BE the repository's
+ * scripts/ directory before its sibling rules/ counts. Takes the directory as a parameter so both
+ * layouts can be tested; `rulesDirPath()` is the call for this checkout.
+ */
+export function rulesDirFor(moduleDir) {
+  const packageDir = dirname(moduleDir);
+  const repoRoot = dirname(packageDir);
+  const rules = join(repoRoot, 'rules');
+  try {
+    if (realpathSync(join(repoRoot, 'scripts')) !== realpathSync(packageDir)) return null;
+    return statSync(rules).isDirectory() ? rules : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Absolute path to the repository's rules/ directory, or null outside a repository checkout. */
+export function rulesDirPath() {
+  return rulesDirFor(__dirname);
 }

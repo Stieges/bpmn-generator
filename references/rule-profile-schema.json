@@ -13,24 +13,28 @@
       "type": "object",
       "maxProperties": 32,
       "propertyNames": { "pattern": "^[a-z_]{1,32}$" },
-      "additionalProperties": { "$ref": "#/$defs/entry" }
+      "additionalProperties": { "$ref": "#/$defs/layerEntry" }
     },
     "overrides": {
       "type": "object",
       "maxProperties": 256,
       "propertyNames": { "pattern": "^[A-Za-z0-9_]{1,16}$" },
-      "additionalProperties": { "$ref": "#/$defs/entry" }
+      "additionalProperties": { "$ref": "#/$defs/overrideEntry" }
     }
   },
   "$defs": {
     "severity": { "enum": ["ERROR", "WARNING", "INFO", "ADVISORY", "OFF"] },
-    "entry": {
+    "layerEntry": {
+      "$comment": "A layer is switched on or off; nothing else about a layer is read by either runner.",
       "type": "object",
       "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "severity": { "$ref": "#/$defs/severity" }
-      }
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "overrideEntry": {
+      "$comment": "An override changes one rule's severity (OFF also disables it); nothing else is read.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "severity": { "$ref": "#/$defs/severity" } }
     }
   }
 }

@@ -45,6 +45,7 @@ export const PROFILE_LIMITS = Object.freeze({
   messages: 20,           // warnings / refusal reasons listed before "… and N more"
   schemaErrors: 5,        // schema problems listed in one refusal
   token: 80,              // characters of one client-derived token in a message
+  depth: 4,               // object/array nesting; a profile is three levels deep
 });
 
 /**
@@ -63,13 +64,14 @@ export class ProfileRejectedError extends Error {
 /**
  * The one way a client-derived token (a rule id, a layer, a profile name, a path) enters a message:
  * truncated to `max` characters, JSON-quoted (which escapes newlines and every other C0 control character), and with
- * C1 controls and Unicode line separators removed — so it cannot start a new log line or drive a
- * terminal.
+ * C1 controls, Unicode line separators and format characters (bidi overrides and isolates,
+ * zero-width characters, BOM) removed — so it can neither start a new log line, drive a terminal,
+ * nor reorder what a reader sees.
  */
 export function quoteForMessage(value, max = PROFILE_LIMITS.token) {
   const text = String(value);
   const cut = text.length > max ? `${text.slice(0, max)}…` : text;
-  return JSON.stringify(cut).replace(/[\u0080-\u009f\u2028\u2029]/g, '');
+  return JSON.stringify(cut).replace(/[\u0080-\u009f\u2028\u2029\p{Cf}]/gu, '');
 }
 
 /** At most `PROFILE_LIMITS.messages` entries, then one line counting the rest. */
@@ -126,9 +128,39 @@ function describeSchemaError(e) {
 }
 
 /**
- * Refuse anything that is not a profile: not a plain object, larger than `PROFILE_LIMITS.inlineBytes`
- * once serialised (checked before the schema runs, so a huge object costs one stringify), or not
- * matching references/rule-profile-schema.json. `null`/`undefined` mean "no profile" and pass.
+ * Is a profile too deep or too large? An iterative walk that estimates the serialised size (keys and
+ * strings at their length plus quotes, a few characters per other value) and stops at the first
+ * node beyond `PROFILE_LIMITS.depth` or once the estimate passes `PROFILE_LIMITS.inlineBytes` — so
+ * its cost is bounded by the limits, not by the input. (A full JSON.stringify walked a profile
+ * nested millions of levels deep for seconds before the bound could say no.)
+ * Returns the reason, or null.
+ */
+function exceedsBounds(root) {
+  const tooLarge = `larger than ${PROFILE_LIMITS.inlineBytes / 1024} KiB`;
+  const stack = [[root, 1]];
+  let size = 0;
+  while (stack.length) {
+    const [value, depth] = stack.pop();
+    if (value !== null && typeof value === 'object') {
+      if (depth > PROFILE_LIMITS.depth) return `nested deeper than ${PROFILE_LIMITS.depth} levels`;
+      size += 2;
+      for (const key of Object.keys(value)) {
+        size += key.length + 4;
+        if (size > PROFILE_LIMITS.inlineBytes) return tooLarge;
+        stack.push([value[key], depth + 1]);
+      }
+    } else {
+      size += typeof value === 'string' ? value.length + 2 : 5;
+    }
+    if (size > PROFILE_LIMITS.inlineBytes) return tooLarge;
+  }
+  return null;
+}
+
+/**
+ * Refuse anything that is not a profile: not a plain object, nested deeper or larger than
+ * `PROFILE_LIMITS` allows (checked first, by a walk whose cost the limits bound), or not matching
+ * references/rule-profile-schema.json. `null`/`undefined` mean "no profile" and pass.
  */
 export function assertRuleProfile(profile, label) {
   if (profile === null || profile === undefined) return;
@@ -136,16 +168,9 @@ export function assertRuleProfile(profile, label) {
     const kind = Array.isArray(profile) ? 'an array' : typeof profile === 'object' ? 'a non-plain object' : `a ${typeof profile}`;
     throw new ProfileRejectedError(`a rule profile must be a JSON object, not ${kind}`);
   }
-  let size;
-  try {
-    size = JSON.stringify(profile).length;
-  } catch {
-    throw new ProfileRejectedError('a rule profile must be plain JSON');
-  }
   const name = label ?? profileLabel(profile); // quoteForMessage bounds an unchecked `profile` field
-  if (size > PROFILE_LIMITS.inlineBytes) {
-    throw new ProfileRejectedError(`rule profile ${name} is larger than ${PROFILE_LIMITS.inlineBytes / 1024} KiB`);
-  }
+  const bound = exceedsBounds(profile);
+  if (bound) throw new ProfileRejectedError(`rule profile ${name} is ${bound}`);
   if (!validateSchema(profile)) {
     const errors = validateSchema.errors ?? [];
     const listed = errors.slice(0, PROFILE_LIMITS.schemaErrors).map(describeSchemaError);
@@ -154,19 +179,24 @@ export function assertRuleProfile(profile, label) {
   }
 }
 
+const SEVERITY_RANK = { OFF: 0, ADVISORY: 1, INFO: 2, WARNING: 3, ERROR: 4 };
+
 /**
- * Refuse a profile that switches `layer` off, or sets one of its rules to a severity that stops it
- * from being reported as an error or a warning (OFF, INFO, ADVISORY). For profiles from a remote
- * client, so that it can never make a soundness finding vanish from the response.
- * `context` is profileContext() from rule-catalog.js (its `ruleLayer`).
+ * Refuse a profile that switches `layer` off, or sets one of its rules below the rule's ontology
+ * default severity (ERROR > WARNING > INFO > ADVISORY > OFF). Raising is fine. For profiles from a
+ * remote client, so that a client can neither hide a finding of that layer nor demote it — a
+ * soundness error demoted to a warning would turn a structurally broken model into a "success".
+ * `context` is profileContext() from rule-catalog.js (its `ruleLayer` and `ruleDefaultSeverity`).
  */
 export function assertLayerNotWeakened(profile, layer, context) {
   if (!profile) return;
   const reasons = [];
   if (profile.layers?.[layer]?.enabled === false) reasons.push(`it disables the ${layer} layer`);
   for (const [id, override] of Object.entries(profile.overrides ?? {})) {
-    if (context.ruleLayer.get(id) === layer && ['OFF', 'INFO', 'ADVISORY'].includes(override?.severity)) {
-      reasons.push(`it sets ${layer} rule ${quoteForMessage(id)} to ${override.severity}`);
+    if (context.ruleLayer.get(id) !== layer || override?.severity === undefined) continue;
+    const def = context.ruleDefaultSeverity.get(id);
+    if ((SEVERITY_RANK[override.severity] ?? -1) < SEVERITY_RANK[def]) {
+      reasons.push(`it sets ${layer} rule ${quoteForMessage(id)} to ${quoteForMessage(override.severity).slice(1, -1)}, below its default ${def}`);
     }
   }
   if (reasons.length) {
@@ -261,7 +291,8 @@ export function loadRuleProfile(profilePath) {
 const PROFILE_NAME = /^(custom\/)?[a-z0-9][a-z0-9-]{0,63}(\.json)?$/;
 
 /**
- * Read a profile by NAME from `rulesDir` — for remote callers (the MCP server). Accepted:
+ * Read a profile by NAME from `rulesDir` (resource-paths.js `rulesDirPath()`; null outside a
+ * repository checkout, which refuses every name) — for the MCP server. Accepted:
  * `strict`, `strict-profile`, `strict-profile.json`, `rules/strict-profile.json` (the documented
  * form; the leading `rules/` names the directory this already is), and `custom/<name>`.
  * Anything else — an absolute path, `..`, another directory — is refused before the file system is
@@ -273,6 +304,9 @@ export function loadNamedRuleProfile(name, rulesDir) {
   if (!PROFILE_NAME.test(bare)) {
     throw new ProfileRejectedError(`rule profile name ${shown} is not valid — use a name such as "strict" or "custom/my-team"`);
   }
+  if (!rulesDir) {
+    throw new ProfileRejectedError('named rule profiles need a repository checkout; pass none or use the CLI with a file');
+  }
   const base = bare.replace(/\.json$/, '');
   const candidates = [`${base}.json`, ...(base.endsWith('-profile') ? [] : [`${base}-profile.json`])];
   let root;
@@ -281,7 +315,7 @@ export function loadNamedRuleProfile(name, rulesDir) {
   } catch {
     throw new ProfileRejectedError(`unknown rule profile ${shown}`);
   }
-  const label = `profile ${shown}`;
+  const label = shown;
   for (const file of candidates) {
     let real;
     try {
