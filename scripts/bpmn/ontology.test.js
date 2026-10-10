@@ -183,3 +183,71 @@ test('net-check.js keeps its own artifact list, equal to the ontology\'s Artifac
   expect(own.sort()).toEqual([...VOCABULARY.classMembers('Artifact')].sort());
   expect(src).not.toMatch(/^import /m);
 });
+
+import { findVocabularyLists } from './ontology-audit.js';
+import { readdirSync, statSync } from 'node:fs';
+import { relative } from 'node:path';
+const NAMES = new Set(['userTask', 'serviceTask', 'task', 'timer', 'message', 'error']);
+
+describe('findVocabularyLists', () => {
+  test('reports an injected list with its line', () => {
+    const src = "const a = 1;\nconst X = new Set(['userTask', 'serviceTask', 'task']);\n";
+    expect(findVocabularyLists(src, NAMES)).toEqual([{ line: 2, names: ['userTask', 'serviceTask', 'task'] }]);
+  });
+  test('reports a multi-line array', () => {
+    const src = "const M = [\n  'timer',\n  'message',\n  'error',\n];";
+    expect(findVocabularyLists(src, NAMES)).toEqual([{ line: 1, names: ['timer', 'message', 'error'] }]);
+  });
+  test('ignores a per-type switch', () => {
+    const src = "switch (t) { case 'userTask': a(); break; case 'serviceTask': b(); break; case 'task': c(); }";
+    expect(findVocabularyLists(src, NAMES)).toEqual([]);
+  });
+  test('ignores an object keyed by type', () => {
+    expect(findVocabularyLists("const m = { userTask: 1, serviceTask: 2, task: 3 };", NAMES)).toEqual([]);
+  });
+  test('ignores lists inside comments', () => {
+    expect(findVocabularyLists("// ['userTask', 'serviceTask', 'task']\n/* ['timer','message','error'] */", NAMES)).toEqual([]);
+  });
+  test('ignores pairs below the threshold', () => {
+    expect(findVocabularyLists("x(['userTask', 'task'])", NAMES)).toEqual([]);
+  });
+  test('ignores arrays that mix non-literal elements', () => {
+    expect(findVocabularyLists("[...A, 'userTask', 'serviceTask', 'task']", NAMES)).toEqual([]);
+  });
+  test('reports the bpmn-moddle spelling when those names are passed in', () => {
+    const moddle = new Set(['bpmn:UserTask', 'bpmn:ServiceTask', 'bpmn:Task']);
+    const src = "const X = new Set(['bpmn:UserTask', 'bpmn:ServiceTask', 'bpmn:Task']);";
+    expect(findVocabularyLists(src, moddle)).toEqual([{ line: 1, names: ['bpmn:UserTask', 'bpmn:ServiceTask', 'bpmn:Task'] }]);
+  });
+});
+
+// Every exception names its file and why the copy is deliberate. Kept small on purpose.
+const LIST_ALLOWLIST = new Map([
+  ['scripts/bpmn/net-check.js', 'Deliberately independent of types.js: a checker that shares predicates with the code it checks cannot see a bug in them. Fenced by equality above.'],
+]);
+
+describe('no vocabulary list outside the ontology', () => {
+  const root = join(__dirname, '..', '..');
+  const plain = [...VOCABULARY.nodeTypeNames(), ...VOCABULARY.markerNames()];
+  // Both spellings: Logic-Core ('userTask') and bpmn-moddle ('bpmn:UserTask').
+  const vocab = new Set([...plain, ...plain.map(n => 'bpmn:' + n[0].toUpperCase() + n.slice(1))]);
+  const files = [];
+  const walk = (dir) => { for (const n of readdirSync(dir)) { const p = join(dir, n);
+    if (n === 'node_modules' || n === 'references') continue;
+    if (statSync(p).isDirectory()) walk(p);
+    else if (/\.(m?js)$/.test(n) && !/\.test\.js$/.test(n)) files.push(p); } };
+  walk(join(root, 'scripts'));
+
+  const findings = files.flatMap(f => findVocabularyLists(readFileSync(f, 'utf8'), vocab)
+    .map(x => ({ file: relative(root, f), ...x })));
+
+  test('no list of three or more vocabulary names outside the allowlist', () => {
+    expect(findings.filter(f => !LIST_ALLOWLIST.has(f.file))).toEqual([]);
+  });
+  test('every allowlist entry has a reason and is still needed', () => {
+    for (const [file, reason] of LIST_ALLOWLIST) {
+      expect(reason.length).toBeGreaterThan(20);
+      expect(findings.some(f => f.file === file)).toBe(true);
+    }
+  });
+});
