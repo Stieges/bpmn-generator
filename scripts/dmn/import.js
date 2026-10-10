@@ -65,6 +65,7 @@ import {
 import { requirementKey } from './requirement-order.js';
 import { validateDecisionCoreSchema } from './schema-gate.js';
 import { decisionCoreSchemaPath } from '../shared/resource-paths.js';
+import { isMainModule } from '../shared/entry-point.js';
 
 const moddle = new DmnModdle();
 
@@ -1292,7 +1293,7 @@ async function main() {
 }
 
 // Only run CLI when executed directly (not imported) — same idiom as scripts/dmn/pipeline.js.
-const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isDirectRun = isMainModule(import.meta.url, process.argv[1]);
 if (isDirectRun) {
   main().catch((err) => { console.error('Import error:', err); process.exit(1); });
 }

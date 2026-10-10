@@ -22,6 +22,7 @@ import { decisionCoreToElk, runDmnElkLayout } from './layout.js';
 import { buildDmnDiagrams } from './coordinates.js';
 import { checkDmnDiagramIntegrity } from './di-check.js';
 import { generateDmnXml, validateDmnXml } from './dmn-xml.js';
+import { isMainModule } from '../shared/entry-point.js';
 
 /**
  * @param {object} dc - Decision-Core JSON
@@ -167,7 +168,7 @@ async function main() {
 }
 
 // Only run CLI when executed directly (not imported) — same idiom as scripts/bpmn/pipeline.js.
-const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isDirectRun = isMainModule(import.meta.url, process.argv[1]);
 if (isDirectRun) {
   main().catch((err) => { console.error('Pipeline error:', err); process.exit(1); });
 }

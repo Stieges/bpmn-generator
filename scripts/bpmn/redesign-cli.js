@@ -23,6 +23,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { isMainModule } from '../shared/entry-point.js';
 import {
   previewParallelize, applyParallelize,
   previewMergeTasks, applyMergeTasks,
@@ -212,7 +213,7 @@ export function main(argv = process.argv.slice(2)) {
   }
 }
 
-const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isDirectRun = isMainModule(import.meta.url, process.argv[1]);
 if (isDirectRun) {
   main();
 }

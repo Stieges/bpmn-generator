@@ -7,6 +7,7 @@
  * path rules of the platform in question.
  */
 import path from 'node:path';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -19,7 +20,13 @@ export function isMainModule(metaUrl, argv1, { windows = process.platform === 'w
   const p = windows ? path.win32 : path.posix;
   const norm = (s) => (windows ? s.toLowerCase() : s);
   try {
-    return norm(p.resolve(fileURLToPath(metaUrl, { windows }))) === norm(p.resolve(argv1));
+    // import.meta.url is the REAL path; argv[1] is as typed, so a symlink (macOS /tmp ->
+    // /private/tmp, an npm bin link) would never match. Only resolvable on the host platform.
+    let actual = argv1;
+    if (windows === (process.platform === 'win32')) {
+      try { actual = realpathSync(argv1); } catch { /* fall back to the path as given */ }
+    }
+    return norm(p.resolve(fileURLToPath(metaUrl, { windows }))) === norm(p.resolve(actual));
   } catch {
     return false;
   }

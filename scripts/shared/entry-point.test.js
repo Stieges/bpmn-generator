@@ -1,4 +1,8 @@
 import { describe, test, expect } from '@jest/globals';
+import { mkdtempSync, writeFileSync, symlinkSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { isMainModule } from './entry-point.js';
 
 describe('isMainModule', () => {
@@ -22,5 +26,19 @@ describe('isMainModule', () => {
   });
   test('the old template-string comparison fails on Windows (documents the defect)', () => {
     expect('file:///C:/a/s.js' === `file://${'C:\\a\\s.js'}`).toBe(false);
+  });
+
+  test('a script started through a symlink is still main (import.meta.url is the real path)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'entry-'));
+    try {
+      const real = join(realpathSync(dir), 'real.js');
+      const link = join(dir, 'link.js');
+      writeFileSync(real, '');
+      symlinkSync(real, link);
+      expect(isMainModule(pathToFileURL(real).href, link)).toBe(true);
+      expect(isMainModule(pathToFileURL(real).href, join(dir, 'missing.js'))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
