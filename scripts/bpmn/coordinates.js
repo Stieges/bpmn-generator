@@ -4,7 +4,7 @@
  */
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP } from './constants.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, artifactSize } from './constants.js';
 import { CFG } from '../shared/utils.js';
 import { identifyHappyPathNodes, resolveLaneId } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
@@ -24,6 +24,10 @@ function buildCoordinateMap(elkResult, lc) {
     for (const l of (p.lanes || [])) allLaneIds.add(l.id);
   }
   for (const cp of allCollapsedPools) allPoolIds.add(cp.id);
+
+  // containerId → the band at the bottom of an expanded subprocess that layout.js kept free for
+  // the artifacts it declares (see artifactReserveHeight there). placeArtifacts fills it.
+  const artifactBands = {};
 
   const collectNodes = (node, offX = 0, offY = 0) => {
     const ax = (node.x || 0) + offX;
@@ -61,6 +65,13 @@ function buildCoordinateMap(elkResult, lc) {
     // (ELK sizes compound nodes to encompass their children)
     if (node._isExpanded) {
       coords[node.id] = { x: ax, y: ay, w: node.width, h: node.height };
+      if (node._artifactReserve > 0) {
+        // 20 = the container's left/right/bottom ELK padding in layout.js, outside the band.
+        artifactBands[node.id] = {
+          x: ax + 20, y: ay + node.height - 20 - node._artifactReserve,
+          w: node.width - 40, h: node._artifactReserve,
+        };
+      }
     } else {
       const shapeH = node._shapeH || node.height;
       const lcNode = findNodeInAllProcesses(node.id, allProcesses);
@@ -102,7 +113,7 @@ function buildCoordinateMap(elkResult, lc) {
   //        an element ends up semantically in the XML but without any DI, i.e.
   //        invisible in every BPMN tool.
   const boundaryIds = placeBoundaryEvents(coords, allProcesses);
-  placeArtifacts(coords, allProcesses, lc);
+  placeArtifacts(coords, allProcesses, lc, artifactBands);
 
   //        Their sequence flows were routed by ELK from the HOST, so the stored
   //        route starts at the wrong shape and keeps a backtracking bend.
@@ -722,9 +733,13 @@ function enforceOrthogonal(pts) {
  * because §5.0 derives the lane band from node positions afterwards and grows
  * it downwards — placing an artifact above its anchor would push it out of the
  * top of the pool. Artifacts without any association go below the process,
- * left-aligned, in declaration order.
+ * left-aligned, in declaration order — unless an expanded subprocess declares
+ * them: then they go into the band layout.js kept free at that subprocess's
+ * bottom, so they stay inside the container that owns them (DI06). Stacking
+ * below the whole collaboration put them outside both the subprocess and the
+ * participant.
  */
-function placeArtifacts(coords, allProcesses, lc) {
+function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
   const associations = lc.associations || [];
   const partnerOf = {};
   for (const a of associations) {
@@ -736,12 +751,36 @@ function placeArtifacts(coords, allProcesses, lc) {
 
   const placedBelow = {};   // anchorId → how many artifacts already sit below it
   const orphans = [];
+  const bandCursor = {};    // containerId → { x, y, rowH } of the next free slot in its band
+
+  // Which expanded subprocess, if any, directly declares each node.
+  const containerOf = {};
+  const indexContainers = (nodes, containerId) => {
+    for (const n of nodes || []) {
+      if (containerId) containerOf[n.id] = containerId;
+      if (n.nodes?.length) indexContainers(n.nodes, n.id);
+    }
+  };
+  for (const proc of allProcesses) indexContainers(proc.nodes, null);
 
   for (const proc of allProcesses) {
     for (const node of flattenProcessNodes(proc.nodes)) {
       if (!isArtifact(node.type) || coords[node.id]) continue;
-      const sz = SHAPE[node.type] || SHAPE._textAnnotation || { w: 100, h: 80 };
+      const sz = artifactSize(node.type);
       const anchor = coords[partnerOf[node.id]];
+      const band = artifactBands[containerOf[node.id]];
+      if (!anchor && band) {
+        // Row by row, left to right; the band holds one row per artifact, so wrapping never
+        // runs out of it.
+        const cur = bandCursor[containerOf[node.id]] ??= { x: band.x, y: band.y + ARTIFACT_GAP, rowH: 0 };
+        if (cur.x > band.x && cur.x + sz.w > band.x + band.w) {
+          cur.x = band.x; cur.y += cur.rowH + ARTIFACT_GAP; cur.rowH = 0;
+        }
+        coords[node.id] = { x: cur.x, y: cur.y, w: sz.w, h: sz.h };
+        cur.x += sz.w + ARTIFACT_GAP;
+        cur.rowH = Math.max(cur.rowH, sz.h);
+        continue;
+      }
       if (!anchor) { orphans.push({ node, sz }); continue; }
 
       const anchorId = partnerOf[node.id];

@@ -20,3 +20,12 @@ export const POOL_GAP       = CFG.layout.poolGap;
 export const COLLAB_PADDING = CFG.layout.collabPadding;
 export const MESSAGE_FLOW_FAN = CFG.layout.messageFlowFan;
 export const ARTIFACT_GAP = CFG.layout.artifactGap;
+
+/**
+ * Shape size of an artifact. Artifacts are kept out of the ELK graph, so two places have to size
+ * them: layout.js (the band an expanded subprocess keeps free for them) and coordinates.js (where
+ * they are placed). One function, so the reserved band and the placed shapes cannot disagree.
+ */
+export function artifactSize(type) {
+  return SHAPE[type] || SHAPE._textAnnotation || { w: 100, h: 80 };
+}

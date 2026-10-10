@@ -4,7 +4,7 @@
  */
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING } from './constants.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING, ARTIFACT_GAP, artifactSize } from './constants.js';
 import { CFG } from '../shared/utils.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { preprocessLogicCore } from './topology.js';
@@ -231,6 +231,7 @@ function buildElkNode(node) {
     const childNodes = node.nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
                                  .map(n => buildElkNode(n));
     const childEdges = buildElkEdges(node.nodes, node.edges || []);
+    const artifactReserve = artifactReserveHeight(node.nodes);
     return {
       id: node.id,
       width: minSz.w,
@@ -239,12 +240,13 @@ function buildElkNode(node) {
       properties: {
         ...props,
         ...elkDefaults(),
-        'elk.padding': '[top=40,left=20,bottom=20,right=20]',
+        'elk.padding': `[top=40,left=20,bottom=${20 + artifactReserve},right=20]`,
       },
       children: childNodes,
       edges: childEdges,
       _shapeH: minSz.h,
       _isExpanded: true,
+      _artifactReserve: artifactReserve,
     };
   }
 
@@ -257,6 +259,24 @@ function buildElkNode(node) {
     properties: props,
     _shapeH: sz.h,
   };
+}
+
+/**
+ * Height an expanded subprocess keeps free below its children for the artifacts it declares
+ * directly (nested containers reserve for their own).
+ *
+ * Artifacts are not in the ELK graph, so without this ELK sizes the container as if they did not
+ * exist, and coordinates.js then has nowhere inside it to put them: an unassociated one has no anchor
+ * at all, and an associated one hangs below its anchor and overflows whenever that anchor sits near
+ * the bottom. The band is sized for the worst case — every artifact stacked under one anchor — rather
+ * than from the associations, which are a collaboration-level list that buildElkNode never sees.
+ * Over-reserving costs whitespace; under-reserving puts a shape outside its container (DI06).
+ */
+function artifactReserveHeight(nodes) {
+  const artifacts = nodes.filter(n => isArtifact(n.type));
+  if (artifacts.length === 0) return 0;
+  const tallest = Math.max(...artifacts.map(n => artifactSize(n.type).h));
+  return artifacts.length * (tallest + ARTIFACT_GAP);
 }
 
 function buildElkEdge(edge, idx) {
