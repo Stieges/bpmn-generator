@@ -267,13 +267,16 @@ describe('findVocabularyLists', () => {
 // Every exception names its file and why the copy is deliberate. Kept small on purpose.
 const LIST_ALLOWLIST = new Map([
   ['scripts/bpmn/net-check.js', 'Deliberately independent of types.js: a checker that shares predicates with the code it checks cannot see a bug in them. Fenced by equality above.'],
+  ['scripts/dmn/requirement-order.js', 'Deliberately dependency-free, and the list is an ORDER (the DMN13.xsd sequence the writer emits), not a membership set. Fenced by equality, in order, below.'],
+  ['scripts/scenarios/decision-table.js', 'Two hit-policy CATEGORIES (one branch per rule vs. aggregated), not the vocabulary itself. Fenced below: together they are exactly the ontology hit policies.'],
 ]);
 
 describe('no vocabulary list outside the ontology', () => {
   const root = join(__dirname, '..', '..');
   const plain = [...VOCABULARY.nodeTypeNames(), ...VOCABULARY.markerNames()];
-  // Both spellings: Logic-Core ('userTask') and bpmn-moddle ('bpmn:UserTask').
-  const vocab = new Set([...plain, ...plain.map(n => 'bpmn:' + n[0].toUpperCase() + n.slice(1))]);
+  // Both spellings: Logic-Core ('userTask') and bpmn-moddle ('bpmn:UserTask'); plus every DMN term (F17).
+  const vocab = new Set([...plain, ...plain.map(n => 'bpmn:' + n[0].toUpperCase() + n.slice(1)),
+    ...VOCABULARY.dmnTerms.map(t => t.name)]);
   const files = [];
   const walk = (dir) => { for (const n of readdirSync(dir)) { const p = join(dir, n);
     if (n === 'node_modules' || n === 'references') continue;
@@ -292,6 +295,25 @@ describe('no vocabulary list outside the ontology', () => {
       expect(reason.length).toBeGreaterThan(20);
       expect(findings.some(f => f.file === file)).toBe(true);
     }
+  });
+  test('a private copy of the seven hit policies is caught; a list of rule ids is not', () => {
+    const dmnVocab = new Set(VOCABULARY.dmnTerms.map(t => t.name));
+    const copy = "const H = ['UNIQUE', 'FIRST', 'PRIORITY', 'ANY', 'COLLECT', 'RULE ORDER', 'OUTPUT ORDER'];";
+    expect(findVocabularyLists(copy, dmnVocab)).toEqual([{ line: 1, names: VOCABULARY.dmn.hitPolicies() }]);
+    expect(findVocabularyLists("const R = ['S01', 'S02', 'S03'];", vocab)).toEqual([]);
+  });
+  test('requirement-order.js emits the ontology requirement kinds, in order', () => {
+    const src = readFileSync(join(__dirname, '..', 'dmn', 'requirement-order.js'), 'utf8');
+    const m = /const REQUIREMENT_EMIT_KINDS = \[([^\]]+)\]/.exec(src);
+    expect([...m[1].matchAll(/'([^']+)'/g)].map(x => x[1])).toEqual(VOCABULARY.dmn.requirementKinds());
+  });
+  test('decision-table.js partitions exactly the ontology hit policies', () => {
+    const src = readFileSync(join(__dirname, '..', 'scenarios', 'decision-table.js'), 'utf8');
+    const set = (name) => [...new RegExp(`const ${name} = new Set\\(\\[([^\\]]+)\\]\\)`).exec(src)[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
+    const perRule = set('PER_RULE_POLICIES');
+    const aggregating = set('AGGREGATING_POLICIES');
+    expect(perRule.filter(p => aggregating.includes(p))).toEqual([]);
+    expect([...perRule, ...aggregating].sort()).toEqual([...VOCABULARY.dmn.hitPolicies(['supported'])].sort());
   });
 });
 

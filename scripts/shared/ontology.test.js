@@ -223,3 +223,109 @@ describe('the loader knows no rule module', () => {
     expect(specifiers.sort()).toEqual(['./resource-paths.js', 'ajv', 'node:fs']);
   });
 });
+
+import { enumDrift } from '../bpmn/ontology-audit.js';
+import { DMN_ELEMENT_COVERAGE } from '../dmn/import-scope.js';
+import { decisionCoreSchemaPath } from './resource-paths.js';
+import { DMN_TERM_TYPES } from './ontology.js';
+
+describe('DMN vocabulary — Block 4', () => {
+  const dcSchema = JSON.parse(readFileSync(decisionCoreSchemaPath(), 'utf8'));
+  const live = ['supported', 'lossy'];
+  const SCHEMA_ENUMS = {
+    nodeKinds: dcSchema.$defs.Node.properties.type.enum,
+    requirementKinds: dcSchema.$defs.Requirement.properties.type.enum,
+    hitPolicies: dcSchema.$defs.DecisionTable.properties.hitPolicy.enum,
+    aggregations: dcSchema.$defs.DecisionTable.properties.aggregation.enum,
+    orientations: dcSchema.$defs.DecisionTable.properties.preferredOrientation.enum,
+  };
+
+  test('the four node kinds, three requirement kinds, seven hit policies, four aggregations, three orientations', () => {
+    expect(VOCABULARY.dmn.nodeKinds()).toEqual(['decision', 'inputData', 'knowledgeSource', 'businessKnowledgeModel']);
+    expect(VOCABULARY.dmn.requirementKinds()).toEqual(['information', 'knowledge', 'authority']);
+    expect(VOCABULARY.dmn.hitPolicies()).toEqual(['UNIQUE', 'FIRST', 'PRIORITY', 'ANY', 'COLLECT', 'RULE ORDER', 'OUTPUT ORDER']);
+    expect(VOCABULARY.dmn.aggregations()).toEqual(['SUM', 'COUNT', 'MIN', 'MAX']);
+    expect(VOCABULARY.dmn.orientations()).toEqual(['Rule-as-Row', 'Rule-as-Column', 'CrossTable']);
+  });
+
+  test.each(Object.keys(SCHEMA_ENUMS))('decision-core-schema.json %s equals the ontology (F14)', (kind) => {
+    expect(enumDrift(SCHEMA_ENUMS[kind], VOCABULARY.dmn[kind](live))).toEqual([]);
+  });
+
+  test('every DMN term carries a status from the BPMN scale; schema terms are supported, importer-only ones announced (F13)', () => {
+    for (const t of VOCABULARY.dmnTerms) expect(['supported', 'lossy', 'announced']).toContain(t.status);
+    for (const [kind, values] of Object.entries(SCHEMA_ENUMS)) {
+      for (const v of values) expect(VOCABULARY.dmnTerms.find((t) => t.kind === kind && t.name === v).status).toBe('supported');
+    }
+    expect(VOCABULARY.dmnTerms.find((t) => t.name === 'context').status).toBe('announced');
+  });
+
+  test('supported expression kinds are the two logic carriers of a Decision-Core node', () => {
+    const CARRIER = { decisionTable: 'decisionTable', literalExpression: 'expression' };
+    expect(VOCABULARY.dmn.expressionKinds(live)).toEqual(Object.keys(CARRIER));
+    for (const prop of Object.values(CARRIER)) expect(dcSchema.$defs.Node.properties).toHaveProperty(prop);
+  });
+
+  test('announced expression kinds are exactly what the importer reports and Decision-Core cannot hold', () => {
+    const reported = new Set(DMN_ELEMENT_COVERAGE.filter((r) => r.disposition === 'reported').map((r) => r.xsdElement));
+    for (const name of VOCABULARY.dmn.expressionKinds(['announced'])) expect(reported.has(name)).toBe(true);
+  });
+
+  test('a value only in the schema is named (COLLECT_ALL)', () => {
+    expect(enumDrift([...SCHEMA_ENUMS.hitPolicies, 'COLLECT_ALL'], VOCABULARY.dmn.hitPolicies(live))).toEqual(['COLLECT_ALL only in the schema']);
+  });
+
+  test('a supported value only in the ontology is named (AVG); announced it is no finding (F16)', () => {
+    const o = raw();
+    const avg = { '@id': 'bg:dmn-aggregation-AVG', '@type': 'bg:Aggregation', name: 'AVG', label: 'Average',
+      status: 'supported', notation: ['bg:notation-DMN'], seeAlso: ['dmn:tBuiltinAggregator'] };
+    o['@graph'].push(avg);
+    expect(enumDrift(SCHEMA_ENUMS.aggregations, buildVocabulary(o).dmn.aggregations(live))).toEqual(['AVG only in the ontology']);
+    avg.status = 'announced';
+    expect(enumDrift(SCHEMA_ENUMS.aggregations, buildVocabulary(o).dmn.aggregations(live))).toEqual([]);
+  });
+
+  test('DMN terms link the DMN 1.3 XSD namespace only, as hints', () => {
+    const o = raw();
+    expect(o['@context'].dmn).toBe('https://www.omg.org/spec/DMN/20191111/MODEL/');
+    const terms = o['@graph'].filter((e) => DMN_TERM_TYPES[e['@type']]);
+    expect(terms).toHaveLength(27);
+    for (const t of terms) expect(t.seeAlso.every((s) => s.startsWith('dmn:'))).toBe(true);
+  });
+
+  test('the loader validates every DMN class with its own block: an unknown field is rejected', () => {
+    for (const type of Object.keys(DMN_TERM_TYPES)) {
+      const o = raw();
+      o['@graph'].find((e) => e['@type'] === type).xmlTag = 'x';
+      expect(validateOntology(o).join(' ')).toMatch(/must NOT have additional properties/);
+    }
+  });
+
+  test('a DMN term pointing at the BPMN notation, or a BPMN node type pointing at DMN, is rejected', () => {
+    const a = raw();
+    a['@graph'].find((e) => e['@type'] === 'bg:HitPolicy').notation = ['bg:notation-BPMN'];
+    expect(validateOntology(a).join(' ')).toMatch(/must be equal to constant \(got "bg:notation-BPMN"\)/);
+    const b = raw();
+    entry(b, 'bg:userTask').notation = ['bg:notation-DMN'];
+    expect(validateOntology(b).join(' ')).toMatch(/must be equal to constant \(got "bg:notation-DMN"\) \[bg:userTask\]/);
+  });
+
+  test('the BPMN views are unchanged by the DMN vocabulary', () => {
+    expect(VOCABULARY.nodeTypeNames()).toHaveLength(26);
+    expect(VOCABULARY.markerNames()).toHaveLength(12);
+    expect(VOCABULARY.definitionKinds).toHaveLength(4);
+    const dmnNames = new Set(VOCABULARY.dmnTerms.map((t) => t.name));
+    expect(VOCABULARY.nodeTypeNames().filter((n) => dmnNames.has(n))).toEqual([]);
+  });
+
+  test('an rdf:Property on a Decision-Core element validates; an unknown element is still rejected (R10)', () => {
+    for (const element of ['DecisionCore', 'DecisionNode', 'Requirement', 'DecisionTable']) {
+      const o = raw();
+      o['@graph'].push({ '@id': 'bg:probe-field', '@type': 'rdf:Property', name: 'probe', element });
+      expect(validateOntology(o)).toEqual([]);
+    }
+    const bad = raw();
+    bad['@graph'].push({ '@id': 'bg:probe-field', '@type': 'rdf:Property', name: 'probe', element: 'Nonsense' });
+    expect(validateOntology(bad).join(' ')).toMatch(/must be equal to one of the allowed values/);
+  });
+});

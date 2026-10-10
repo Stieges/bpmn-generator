@@ -49,7 +49,8 @@
       "@id": "bg:defaultSeverity",
       "@type": "@id"
     },
-    "runsIn": "bg:runsIn"
+    "runsIn": "bg:runsIn",
+    "dmn": "https://www.omg.org/spec/DMN/20191111/MODEL/"
   },
   "@graph": [
     {
@@ -2387,6 +2388,357 @@
       "layer": "bg:layer-BPMN-workflow_net",
       "defaultSeverity": "bg:severity-WARNING",
       "runsIn": "scenario"
+    },
+    {
+      "@id": "bg:dmn-decision",
+      "@type": "bg:DecisionNodeKind",
+      "name": "decision",
+      "label": "Decision",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:decision"
+      ]
+    },
+    {
+      "@id": "bg:dmn-inputData",
+      "@type": "bg:DecisionNodeKind",
+      "name": "inputData",
+      "label": "Input Data",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:inputData"
+      ]
+    },
+    {
+      "@id": "bg:dmn-knowledgeSource",
+      "@type": "bg:DecisionNodeKind",
+      "name": "knowledgeSource",
+      "label": "Knowledge Source",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:knowledgeSource"
+      ]
+    },
+    {
+      "@id": "bg:dmn-businessKnowledgeModel",
+      "@type": "bg:DecisionNodeKind",
+      "name": "businessKnowledgeModel",
+      "label": "Business Knowledge Model",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:businessKnowledgeModel"
+      ]
+    },
+    {
+      "@id": "bg:dmn-requirement-information",
+      "@type": "bg:RequirementKind",
+      "name": "information",
+      "label": "Information Requirement",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:informationRequirement"
+      ]
+    },
+    {
+      "@id": "bg:dmn-requirement-knowledge",
+      "@type": "bg:RequirementKind",
+      "name": "knowledge",
+      "label": "Knowledge Requirement",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:knowledgeRequirement"
+      ]
+    },
+    {
+      "@id": "bg:dmn-requirement-authority",
+      "@type": "bg:RequirementKind",
+      "name": "authority",
+      "label": "Authority Requirement",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:authorityRequirement"
+      ]
+    },
+    {
+      "@id": "bg:dmn-hitPolicy-UNIQUE",
+      "@type": "bg:HitPolicy",
+      "name": "UNIQUE",
+      "label": "Unique",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tHitPolicy"
+      ]
+    },
+    {
+      "@id": "bg:dmn-hitPolicy-FIRST",
+      "@type": "bg:HitPolicy",
+      "name": "FIRST",
+      "label": "First",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tHitPolicy"
+      ]
+    },
+    {
+      "@id": "bg:dmn-hitPolicy-PRIORITY",
+      "@type": "bg:HitPolicy",
+      "name": "PRIORITY",
+      "label": "Priority",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tHitPolicy"
+      ]
+    },
+    {
+      "@id": "bg:dmn-hitPolicy-ANY",
+      "@type": "bg:HitPolicy",
+      "name": "ANY",
+      "label": "Any",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tHitPolicy"
+      ]
+    },
+    {
+      "@id": "bg:dmn-hitPolicy-COLLECT",
+      "@type": "bg:HitPolicy",
+      "name": "COLLECT",
+      "label": "Collect",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tHitPolicy"
+      ]
+    },
+    {
+      "@id": "bg:dmn-hitPolicy-RULE-ORDER",
+      "@type": "bg:HitPolicy",
+      "name": "RULE ORDER",
+      "label": "Rule order",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tHitPolicy"
+      ]
+    },
+    {
+      "@id": "bg:dmn-hitPolicy-OUTPUT-ORDER",
+      "@type": "bg:HitPolicy",
+      "name": "OUTPUT ORDER",
+      "label": "Output order",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tHitPolicy"
+      ]
+    },
+    {
+      "@id": "bg:dmn-aggregation-SUM",
+      "@type": "bg:Aggregation",
+      "name": "SUM",
+      "label": "Sum",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tBuiltinAggregator"
+      ]
+    },
+    {
+      "@id": "bg:dmn-aggregation-COUNT",
+      "@type": "bg:Aggregation",
+      "name": "COUNT",
+      "label": "Count",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tBuiltinAggregator"
+      ]
+    },
+    {
+      "@id": "bg:dmn-aggregation-MIN",
+      "@type": "bg:Aggregation",
+      "name": "MIN",
+      "label": "Minimum",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tBuiltinAggregator"
+      ]
+    },
+    {
+      "@id": "bg:dmn-aggregation-MAX",
+      "@type": "bg:Aggregation",
+      "name": "MAX",
+      "label": "Maximum",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tBuiltinAggregator"
+      ]
+    },
+    {
+      "@id": "bg:dmn-orientation-Rule-as-Row",
+      "@type": "bg:TableOrientation",
+      "name": "Rule-as-Row",
+      "label": "Rule as row",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tDecisionTableOrientation"
+      ]
+    },
+    {
+      "@id": "bg:dmn-orientation-Rule-as-Column",
+      "@type": "bg:TableOrientation",
+      "name": "Rule-as-Column",
+      "label": "Rule as column",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tDecisionTableOrientation"
+      ]
+    },
+    {
+      "@id": "bg:dmn-orientation-CrossTable",
+      "@type": "bg:TableOrientation",
+      "name": "CrossTable",
+      "label": "Crosstab",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:tDecisionTableOrientation"
+      ]
+    },
+    {
+      "@id": "bg:dmn-expression-decisionTable",
+      "@type": "bg:ExpressionKind",
+      "name": "decisionTable",
+      "label": "Decision Table",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:decisionTable"
+      ]
+    },
+    {
+      "@id": "bg:dmn-expression-literalExpression",
+      "@type": "bg:ExpressionKind",
+      "name": "literalExpression",
+      "label": "Literal Expression",
+      "status": "supported",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:literalExpression"
+      ]
+    },
+    {
+      "@id": "bg:dmn-expression-context",
+      "@type": "bg:ExpressionKind",
+      "name": "context",
+      "label": "Context",
+      "status": "announced",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:context"
+      ]
+    },
+    {
+      "@id": "bg:dmn-expression-invocation",
+      "@type": "bg:ExpressionKind",
+      "name": "invocation",
+      "label": "Invocation",
+      "status": "announced",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:invocation"
+      ]
+    },
+    {
+      "@id": "bg:dmn-expression-list",
+      "@type": "bg:ExpressionKind",
+      "name": "list",
+      "label": "List",
+      "status": "announced",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:list"
+      ]
+    },
+    {
+      "@id": "bg:dmn-expression-relation",
+      "@type": "bg:ExpressionKind",
+      "name": "relation",
+      "label": "Relation",
+      "status": "announced",
+      "notation": [
+        "bg:notation-DMN"
+      ],
+      "seeAlso": [
+        "dmn:relation"
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 /**
  * The vocabulary of every notation this generator speaks — loaded from references/ontology.jsonld,
- * the single source of the BPMN node types, event markers, definition kinds and element fields, and
+ * the single source of the BPMN node types, event markers, definition kinds and element fields, the DMN terms, and
  * of the rule catalog: which rules exist, which notation(s) and layer each belongs to, its default
  * severity and where it runs (`main` pipeline or `scenario` pipeline).
  *
@@ -30,6 +30,13 @@ const LINKS = { type: 'array', items: { type: 'string', pattern: '^(omg|bbo|dmn|
 const REF = (kind) => ({ type: 'string', pattern: `^bg:${kind}-[A-Za-z0-9_-]+$` });
 const NOTATION_REFS = { type: 'array', minItems: 1, items: REF('notation') };
 const KIND = { enum: ['specific', 'crossNotation'] };
+/** The six DMN term classes and the VOCABULARY.dmn view each one feeds. */
+export const DMN_TERM_TYPES = Object.freeze({
+  'bg:DecisionNodeKind': 'nodeKinds', 'bg:RequirementKind': 'requirementKinds', 'bg:HitPolicy': 'hitPolicies',
+  'bg:Aggregation': 'aggregations', 'bg:TableOrientation': 'orientations', 'bg:ExpressionKind': 'expressionKinds',
+});
+const ONLY = (notationId) => ({ type: 'array', minItems: 1, maxItems: 1, items: { const: notationId } });
+const DMN_LINKS = { type: 'array', minItems: 1, items: { type: 'string', pattern: '^dmn:[A-Za-z]+$' } };
 // Every `then` block closes its property list with additionalProperties: false, which only counts
 // properties named in the SAME schema object — so each one must name @id and @type itself.
 const BASE = { '@id': ID, '@type': { type: 'string' } };
@@ -46,7 +53,7 @@ const ONTOLOGY_SCHEMA = {
         type: 'object',
         required: ['@id', '@type'],
         properties: { '@id': { type: 'string' }, '@type': { enum: ['owl:Ontology', 'owl:AnnotationProperty', 'owl:Class', 'bg:NodeType', 'bg:EventMarker', 'bg:DefinitionKind', 'rdf:Property',
-          'bg:Notation', 'bg:Severity', 'bg:Layer', 'bg:Rule'] } },
+          'bg:Notation', 'bg:Severity', 'bg:Layer', 'bg:Rule', ...Object.keys(DMN_TERM_TYPES)] } },
         allOf: [
           { if: { properties: { '@type': { const: 'owl:Ontology' } } },
             then: { required: ['version', 'label'],
@@ -64,7 +71,8 @@ const ONTOLOGY_SCHEMA = {
           { if: { properties: { '@type': { const: 'bg:NodeType' } } },
             then: { required: ['name', 'label', 'subClassOf', 'status', 'seeAlso'],
                     properties: { ...BASE, name: { type: 'string' }, label: { type: 'string' }, subClassOf: IDS, status: STATUS,
-                                  xmlTag: { type: 'string' }, reason: { type: 'string' }, seeAlso: LINKS },
+                                  xmlTag: { type: 'string' }, reason: { type: 'string' }, seeAlso: LINKS,
+                                  notation: ONLY('bg:notation-BPMN') },
                     additionalProperties: false } },
           { if: { properties: { '@type': { const: 'bg:EventMarker' } } },
             then: { required: ['name', 'label', 'status', 'groups'],
@@ -78,7 +86,8 @@ const ONTOLOGY_SCHEMA = {
           { if: { properties: { '@type': { const: 'rdf:Property' } } },
             then: { required: ['name', 'element'],
                     properties: { ...BASE, name: { type: 'string' },
-                                  element: { enum: ['Process', 'Collaboration', 'Pool', 'CollapsedPool', 'Node', 'Edge', 'Lane', 'MessageFlow', 'Association', 'TopLevelDefinition'] },
+                                  element: { enum: ['Process', 'Collaboration', 'Pool', 'CollapsedPool', 'Node', 'Edge', 'Lane', 'MessageFlow', 'Association', 'TopLevelDefinition',
+                                                   'DecisionCore', 'DecisionNode', 'Requirement', 'DecisionTable'] },
                                   domain: IDS },
                     additionalProperties: false } },
           // A notation is an open class: a new one is a new entry, never a schema change (E3).
@@ -103,6 +112,13 @@ const ONTOLOGY_SCHEMA = {
                     properties: { ...BASE, name: { type: 'string', pattern: '^[A-Z]+[0-9]+$' }, kind: KIND, notation: NOTATION_REFS,
                                   layer: REF('layer'), defaultSeverity: REF('severity'), runsIn: { enum: ['main', 'scenario'] } },
                     additionalProperties: false } },
+          // DMN terms: one block per class (same shape), each tied to the DMN notation and linked to
+          // the DMN 1.3 XSD namespace only (F15).
+          ...Object.keys(DMN_TERM_TYPES).map((type) => ({ if: { properties: { '@type': { const: type } } },
+            then: { required: ['name', 'label', 'status', 'notation', 'seeAlso'],
+                    properties: { ...BASE, name: { type: 'string' }, label: { type: 'string' }, status: STATUS,
+                                  reason: { type: 'string' }, notation: ONLY('bg:notation-DMN'), seeAlso: DMN_LINKS },
+                    additionalProperties: false } })),
           // status rules
           { if: { required: ['status'], properties: { status: { const: 'lossy' } } }, then: { required: ['reason'] } },
           // a lossy node type joins SUPPORTED_NODE_TYPES, where bpmnXmlTag must resolve it
@@ -244,6 +260,11 @@ export function buildVocabulary(onto) {
     id: e.name, kind: e.kind, notations: e.notation.map(n => notationName.get(n)), ruleSet: ruleSetOf(e),
     layer: layerById.get(e.layer).name, defaultSeverity: severityName.get(e.defaultSeverity), runsIn: e.runsIn,
   }));
+  const dmnTerms = graph.filter(e => DMN_TERM_TYPES[e['@type']]).map(e => ({
+    kind: DMN_TERM_TYPES[e['@type']], name: e.name, label: e.label, status: e.status,
+  }));
+  const dmn = Object.fromEntries(Object.values(DMN_TERM_TYPES).map(kind => [kind,
+    (statuses = ALL) => dmnTerms.filter(t => t.kind === kind && statuses.includes(t.status)).map(t => t.name)]));
   const ruleSets = {};
   for (const n of notations) ruleSets[n.name] = { rules: [], layers: [] };
   ruleSets[CROSS_NOTATION] = { rules: [], layers: [] };
@@ -275,6 +296,8 @@ export function buildVocabulary(onto) {
     layers,
     rules,
     ruleSets,
+    dmnTerms,
+    dmn,
   };
 }
 
