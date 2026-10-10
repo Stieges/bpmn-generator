@@ -429,7 +429,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 ### Extend the rule engine
 
 1. Declare the rule in `references/ontology.jsonld` (`bg:Rule`: notation, kind, layer, default severity, run location).
-2. Add its check to the `RULES` register of `scripts/bpmn/rules.js` (`id`, `description`, `ref`, `scope`, `check(proc) → { pass: true } | { pass: false, message }`) — never `layer` or `defaultSeverity`.
+2. Add its check to the matching `*_CHECKS` array of `scripts/bpmn/rules.js` (collected in `RULE_REGISTER`; `RULES` is the catalog built from it) (`id`, `description`, `ref`, `scope`, `check(proc) → { pass: true } | { pass: false, message }`) — never `layer` or `defaultSeverity`.
 3. Document the rule in `references/fachliches-regelwerk.md` with source citation.
 4. Add a positive and a negative fixture under `tests/fixtures/` and assertions in `pipeline.test.js`.
 5. Verify: `npm test -- --testPathPatterns=pipeline`.
