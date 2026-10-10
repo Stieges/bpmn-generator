@@ -177,13 +177,14 @@ describe('#64 direct public entries complete id-less edges', () => {
 
 describe('#64 no downstream fallback for a missing sequence-flow id', () => {
   const dir = path.dirname(fileURLToPath(import.meta.url));
-  test('layout, bpmn-xml, svg and coordinates carry no `.id || ` fallback for edges', () => {
+  test('layout, bpmn-xml, svg and coordinates carry no `.id ||`/`.id ??` fallback for edges', () => {
     for (const f of ['layout.js', 'bpmn-xml.js', 'svg.js', 'coordinates.js']) {
       const lines = readFileSync(path.join(dir, f), 'utf8').split('\n');
       lines.forEach((line, i) => {
-        if (!/\.id\s*\|\|\s*`/.test(line)) return;
-        // Allowed: message flows, whose ids the schema requires (mf_<source>_<target>).
-        if (/mf\.id\s*\|\|\s*`mf_/.test(line)) return;
+        // Sequence-flow receivers only (`e`, `edge`, `subEdge`, `defaultEdge`, …). Not matched on
+        // purpose: `mf.id || `mf_…`` (message flows, whose ids the schema requires) and
+        // `proc.id || '1'` (the single-process fallback tracked in #37).
+        if (!/\b(e|se|edge|\w*Edge)\.id\s*(\|\||\?\?)\s*[`'"(]/.test(line)) return;
         throw new Error(`${f}:${i + 1} reintroduces an id fallback: ${line.trim()}`);
       });
     }
