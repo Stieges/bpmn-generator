@@ -561,3 +561,79 @@ describe('LLM provider failures are not reflected to the client', () => {
     });
   }
 });
+
+describe('a JSON body that is not an object', () => {
+  beforeEach(() => _resetRateLimit());
+  test.each(['null', '[]', '[1,2]', '7', '"text"', 'true'])('%s is a 400 at once, never a hanging connection', async (raw) => {
+    const res = await realFetch(`${baseUrl}/api/v1/generate`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: raw, signal: AbortSignal.timeout(2000),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/JSON object/);
+  });
+});
+
+describe('client strings reaching the audit log and responses are bounded and escaped', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const auditEntries = (correlationId) => readFileSync(getAuditPath(), 'utf8').split('\n')
+    .filter((l) => l.includes(correlationId));
+  const UNSAFE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
+  beforeEach(() => _resetRateLimit());
+
+  test('a huge clientId is cut to a short audit field', async () => {
+    const correlationId = `big-client-${Date.now()}`;
+    const res = await post('/api/v1/validate', { logicCore: lc, correlationId, clientId: 'C'.repeat(1_000_000) });
+    expect(res.status).toBe(200);
+    const lines = auditEntries(correlationId);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) expect(l.length).toBeLessThan(1000);
+  });
+
+  test('a clientId of another type is not logged as a structure', async () => {
+    const correlationId = `obj-client-${Date.now()}`;
+    await post('/api/v1/validate', { logicCore: lc, correlationId, clientId: { nested: 'x'.repeat(100000) } });
+    const request = auditEntries(correlationId).map((l) => JSON.parse(l)).find((e) => e.event === 'request');
+    expect(typeof request.clientId).toBe('string');
+    expect(request.clientId.length).toBeLessThanOrEqual(129);
+  });
+
+  test('control and format characters in clientId are escaped in the audit log', async () => {
+    const correlationId = `ctl-client-${Date.now()}`;
+    await post('/api/v1/validate', { logicCore: lc, correlationId, clientId: 'app\u001b[31m\u202eevil\u2028x\u0085' });
+    const request = auditEntries(correlationId).map((l) => JSON.parse(l)).find((e) => e.event === 'request');
+    expect(request.clientId).not.toMatch(UNSAFE);
+    expect(request.clientId).toContain('\\u001b');
+  });
+
+  test('telemetry: event, diagramId and details are bounded; oversized details are a 400', async () => {
+    const correlationId = `tel-${Date.now()}`;
+    const ok = await post('/api/v1/telemetry', {
+      event: 'e'.repeat(10000) + '\u202e', diagramId: 'd'.repeat(10000), correlationId,
+      details: { note: 'line\u2028two\u202e', ['k'.repeat(1000)]: 1 },
+    });
+    expect(ok.status).toBe(200);
+    const [line] = auditEntries(correlationId);
+    expect(line.length).toBeLessThan(2000);
+    const entry = JSON.parse(line);
+    expect(entry.frontendEvent.length).toBeLessThanOrEqual(129);
+    expect(entry.diagramId.length).toBeLessThanOrEqual(129);
+    expect(JSON.stringify(entry)).not.toMatch(UNSAFE);
+    expect(entry.details.note).toContain('\\u2028');
+
+    const big = await post('/api/v1/telemetry', { event: 'x', correlationId: `tel-big-${Date.now()}`, details: { blob: 'b'.repeat(9000) } });
+    expect(big.status).toBe(400);
+    expect((await big.json()).error).toMatch(/details/);
+  });
+
+  test('an internal error message is bounded in the response and in the audit line', async () => {
+    const correlationId = `err-${Date.now()}`;
+    const res = await post('/api/v1/import', { bpmnXml: { not: 'a string' }, correlationId });
+    const data = await res.json();
+    expect(res.status).toBe(500);
+    expect(data.error.length).toBeLessThanOrEqual(501);
+    for (const l of auditEntries(correlationId)) expect(l.length).toBeLessThan(1000);
+  });
+});
