@@ -24,8 +24,8 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 26 bpmn-pipeline + 8 dmn (growing) + 4 shared + 7 agent +
-9 robustness + 7 scenarios (growing) modules under `scripts/`. Verify current inventory with
+7 top-level scripts (standalone tooling) + 27 bpmn-pipeline + 12 dmn (growing) + 6 shared + 1 cross-notation + 7 agent +
+9 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
