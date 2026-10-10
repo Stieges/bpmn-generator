@@ -33,7 +33,7 @@ const DEST_DIR = join(__dirname, 'references');
 // Keep in step with resource-paths.js — every file resolved there must be packed
 // here, or the published package throws on first import. The docs gate's
 // package-integrity check is what catches a mismatch.
-const FILES = ['input-schema.json', 'prompt-template.md', 'decision-core-schema.json'];
+const FILES = ['input-schema.json', 'prompt-template.md', 'decision-core-schema.json', 'bpmn-ontology.jsonld'];
 
 mkdirSync(DEST_DIR, { recursive: true });
 for (const name of FILES) {

@@ -52,6 +52,8 @@ const SOURCE_PROMPT   = join(__dirname, '..', '..', 'references', 'prompt-templa
 const PACKAGED_PROMPT = join(__dirname, '..', 'references', 'prompt-template.md');
 const SOURCE_DECISION   = join(__dirname, '..', '..', 'references', 'decision-core-schema.json');
 const PACKAGED_DECISION = join(__dirname, '..', 'references', 'decision-core-schema.json');
+const SOURCE_ONTOLOGY   = join(__dirname, '..', '..', 'references', 'bpmn-ontology.jsonld');
+const PACKAGED_ONTOLOGY = join(__dirname, '..', 'references', 'bpmn-ontology.jsonld');
 
 /**
  * Source first, packaged copy second, loud failure last. Exported because it is
@@ -84,4 +86,9 @@ export function promptTemplatePath() {
 /** Absolute path to references/decision-core-schema.json. */
 export function decisionCoreSchemaPath() {
   return resolveWithFallback(SOURCE_DECISION, PACKAGED_DECISION, 'decision-core-schema.json');
+}
+
+/** Absolute path to references/bpmn-ontology.jsonld. */
+export function ontologyPath() {
+  return resolveWithFallback(SOURCE_ONTOLOGY, PACKAGED_ONTOLOGY, 'bpmn-ontology.jsonld');
 }

@@ -1,0 +1,1443 @@
+{
+  "@context": {
+    "bg": "https://stieges.github.io/bpmn-generator/ontology#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "omg": "https://www.omg.org/spec/BPMN/20100501/BPMN20.cmof#",
+    "bbo": "https://www.irit.fr/recherches/MELODI/ontologies/BBO#",
+    "label": "rdfs:label",
+    "comment": "rdfs:comment",
+    "version": "owl:versionInfo",
+    "subClassOf": {
+      "@id": "rdfs:subClassOf",
+      "@type": "@id",
+      "@container": "@set"
+    },
+    "seeAlso": {
+      "@id": "rdfs:seeAlso",
+      "@type": "@id",
+      "@container": "@set"
+    },
+    "domain": {
+      "@id": "rdfs:domain",
+      "@type": "@id",
+      "@container": "@set"
+    },
+    "name": "bg:name",
+    "status": "bg:status",
+    "xmlTag": "bg:xmlTag",
+    "reason": "bg:reason",
+    "element": "bg:element",
+    "eventDefinition": "bg:eventDefinition",
+    "groups": {
+      "@id": "bg:group",
+      "@container": "@set"
+    }
+  },
+  "@id": "https://stieges.github.io/bpmn-generator/ontology",
+  "@type": "owl:Ontology",
+  "version": "1.0",
+  "label": "bpmn-generator BPMN vocabulary",
+  "@graph": [
+    {
+      "@id": "bg:FlowNode",
+      "@type": "owl:Class",
+      "label": "FlowNode",
+      "subClassOf": [],
+      "seeAlso": [
+        "omg:FlowNode",
+        "bbo:FlowNode"
+      ]
+    },
+    {
+      "@id": "bg:Activity",
+      "@type": "owl:Class",
+      "label": "Activity",
+      "subClassOf": [
+        "bg:FlowNode"
+      ],
+      "seeAlso": [
+        "omg:Activity",
+        "bbo:Activity"
+      ]
+    },
+    {
+      "@id": "bg:Task",
+      "@type": "owl:Class",
+      "label": "Task",
+      "subClassOf": [
+        "bg:Activity"
+      ],
+      "seeAlso": [
+        "omg:Task",
+        "bbo:Task"
+      ]
+    },
+    {
+      "@id": "bg:Container",
+      "@type": "owl:Class",
+      "label": "Container",
+      "subClassOf": [
+        "bg:Activity"
+      ],
+      "seeAlso": [],
+      "comment": "Activity subclasses that carry or call a scope of their own (project class)."
+    },
+    {
+      "@id": "bg:Event",
+      "@type": "owl:Class",
+      "label": "Event",
+      "subClassOf": [
+        "bg:FlowNode"
+      ],
+      "seeAlso": [
+        "omg:Event",
+        "bbo:Event"
+      ]
+    },
+    {
+      "@id": "bg:Gateway",
+      "@type": "owl:Class",
+      "label": "Gateway",
+      "subClassOf": [
+        "bg:FlowNode"
+      ],
+      "seeAlso": [
+        "omg:Gateway",
+        "bbo:Gateway"
+      ]
+    },
+    {
+      "@id": "bg:Artifact",
+      "@type": "owl:Class",
+      "label": "Artifact",
+      "subClassOf": [],
+      "seeAlso": [],
+      "comment": "Layout sense: drawable but kept out of the ELK graph (wider than the OMG Artifact class)."
+    },
+    {
+      "@id": "bg:BpmnArtifact",
+      "@type": "owl:Class",
+      "label": "BpmnArtifact",
+      "subClassOf": [
+        "bg:Artifact"
+      ],
+      "seeAlso": [
+        "omg:Artifact"
+      ],
+      "comment": "The OMG Artifact class proper."
+    },
+    {
+      "@id": "bg:DataReference",
+      "@type": "owl:Class",
+      "label": "DataReference",
+      "subClassOf": [
+        "bg:Artifact"
+      ],
+      "seeAlso": []
+    },
+    {
+      "@id": "bg:task",
+      "@type": "bg:NodeType",
+      "name": "task",
+      "label": "Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "task",
+      "seeAlso": [
+        "omg:Task",
+        "bbo:Task"
+      ]
+    },
+    {
+      "@id": "bg:userTask",
+      "@type": "bg:NodeType",
+      "name": "userTask",
+      "label": "User Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "userTask",
+      "seeAlso": [
+        "omg:UserTask",
+        "bbo:UserTask"
+      ]
+    },
+    {
+      "@id": "bg:serviceTask",
+      "@type": "bg:NodeType",
+      "name": "serviceTask",
+      "label": "Service Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "serviceTask",
+      "seeAlso": [
+        "omg:ServiceTask",
+        "bbo:ServiceTask"
+      ]
+    },
+    {
+      "@id": "bg:scriptTask",
+      "@type": "bg:NodeType",
+      "name": "scriptTask",
+      "label": "Script Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "scriptTask",
+      "seeAlso": [
+        "omg:ScriptTask",
+        "bbo:ScriptTask"
+      ]
+    },
+    {
+      "@id": "bg:sendTask",
+      "@type": "bg:NodeType",
+      "name": "sendTask",
+      "label": "Send Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "sendTask",
+      "seeAlso": [
+        "omg:SendTask",
+        "bbo:SendTask"
+      ]
+    },
+    {
+      "@id": "bg:receiveTask",
+      "@type": "bg:NodeType",
+      "name": "receiveTask",
+      "label": "Receive Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "receiveTask",
+      "seeAlso": [
+        "omg:ReceiveTask",
+        "bbo:ReceiveTask"
+      ]
+    },
+    {
+      "@id": "bg:manualTask",
+      "@type": "bg:NodeType",
+      "name": "manualTask",
+      "label": "Manual Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "manualTask",
+      "seeAlso": [
+        "omg:ManualTask",
+        "bbo:ManualTask"
+      ]
+    },
+    {
+      "@id": "bg:businessRuleTask",
+      "@type": "bg:NodeType",
+      "name": "businessRuleTask",
+      "label": "Business Rule Task",
+      "subClassOf": [
+        "bg:Task"
+      ],
+      "status": "supported",
+      "xmlTag": "businessRuleTask",
+      "seeAlso": [
+        "omg:BusinessRuleTask",
+        "bbo:BusinessRuleTask"
+      ]
+    },
+    {
+      "@id": "bg:subProcess",
+      "@type": "bg:NodeType",
+      "name": "subProcess",
+      "label": "Sub Process",
+      "subClassOf": [
+        "bg:Container"
+      ],
+      "status": "supported",
+      "xmlTag": "subProcess",
+      "seeAlso": [
+        "omg:SubProcess",
+        "bbo:SubProcess"
+      ]
+    },
+    {
+      "@id": "bg:transaction",
+      "@type": "bg:NodeType",
+      "name": "transaction",
+      "label": "Transaction",
+      "subClassOf": [
+        "bg:Container"
+      ],
+      "status": "supported",
+      "xmlTag": "transaction",
+      "seeAlso": [
+        "omg:Transaction",
+        "bbo:Transaction"
+      ]
+    },
+    {
+      "@id": "bg:adHocSubProcess",
+      "@type": "bg:NodeType",
+      "name": "adHocSubProcess",
+      "label": "Ad Hoc Sub Process",
+      "subClassOf": [
+        "bg:Container"
+      ],
+      "status": "announced",
+      "seeAlso": [
+        "omg:AdHocSubProcess",
+        "bbo:AdHocSubProcess"
+      ]
+    },
+    {
+      "@id": "bg:callActivity",
+      "@type": "bg:NodeType",
+      "name": "callActivity",
+      "label": "Call Activity",
+      "subClassOf": [
+        "bg:Container"
+      ],
+      "status": "supported",
+      "xmlTag": "callActivity",
+      "seeAlso": [
+        "omg:CallActivity",
+        "bbo:CallActivity"
+      ]
+    },
+    {
+      "@id": "bg:startEvent",
+      "@type": "bg:NodeType",
+      "name": "startEvent",
+      "label": "Start Event",
+      "subClassOf": [
+        "bg:Event"
+      ],
+      "status": "supported",
+      "xmlTag": "startEvent",
+      "seeAlso": [
+        "omg:StartEvent",
+        "bbo:StartEvent"
+      ]
+    },
+    {
+      "@id": "bg:endEvent",
+      "@type": "bg:NodeType",
+      "name": "endEvent",
+      "label": "End Event",
+      "subClassOf": [
+        "bg:Event"
+      ],
+      "status": "supported",
+      "xmlTag": "endEvent",
+      "seeAlso": [
+        "omg:EndEvent",
+        "bbo:EndEvent"
+      ]
+    },
+    {
+      "@id": "bg:intermediateCatchEvent",
+      "@type": "bg:NodeType",
+      "name": "intermediateCatchEvent",
+      "label": "Intermediate Catch Event",
+      "subClassOf": [
+        "bg:Event"
+      ],
+      "status": "supported",
+      "xmlTag": "intermediateCatchEvent",
+      "seeAlso": [
+        "omg:IntermediateCatchEvent",
+        "bbo:IntermediateCatchEvent"
+      ]
+    },
+    {
+      "@id": "bg:intermediateThrowEvent",
+      "@type": "bg:NodeType",
+      "name": "intermediateThrowEvent",
+      "label": "Intermediate Throw Event",
+      "subClassOf": [
+        "bg:Event"
+      ],
+      "status": "supported",
+      "xmlTag": "intermediateThrowEvent",
+      "seeAlso": [
+        "omg:IntermediateThrowEvent",
+        "bbo:IntermediateThrowEvent"
+      ]
+    },
+    {
+      "@id": "bg:boundaryEvent",
+      "@type": "bg:NodeType",
+      "name": "boundaryEvent",
+      "label": "Boundary Event",
+      "subClassOf": [
+        "bg:Event"
+      ],
+      "status": "supported",
+      "xmlTag": "boundaryEvent",
+      "seeAlso": [
+        "omg:BoundaryEvent",
+        "bbo:BoundaryEvent"
+      ]
+    },
+    {
+      "@id": "bg:exclusiveGateway",
+      "@type": "bg:NodeType",
+      "name": "exclusiveGateway",
+      "label": "Exclusive Gateway",
+      "subClassOf": [
+        "bg:Gateway"
+      ],
+      "status": "supported",
+      "xmlTag": "exclusiveGateway",
+      "seeAlso": [
+        "omg:ExclusiveGateway",
+        "bbo:ExclusiveGateway"
+      ]
+    },
+    {
+      "@id": "bg:parallelGateway",
+      "@type": "bg:NodeType",
+      "name": "parallelGateway",
+      "label": "Parallel Gateway",
+      "subClassOf": [
+        "bg:Gateway"
+      ],
+      "status": "supported",
+      "xmlTag": "parallelGateway",
+      "seeAlso": [
+        "omg:ParallelGateway",
+        "bbo:ParallelGateway"
+      ]
+    },
+    {
+      "@id": "bg:inclusiveGateway",
+      "@type": "bg:NodeType",
+      "name": "inclusiveGateway",
+      "label": "Inclusive Gateway",
+      "subClassOf": [
+        "bg:Gateway"
+      ],
+      "status": "supported",
+      "xmlTag": "inclusiveGateway",
+      "seeAlso": [
+        "omg:InclusiveGateway",
+        "bbo:InclusiveGateway"
+      ]
+    },
+    {
+      "@id": "bg:eventBasedGateway",
+      "@type": "bg:NodeType",
+      "name": "eventBasedGateway",
+      "label": "Event Based Gateway",
+      "subClassOf": [
+        "bg:Gateway"
+      ],
+      "status": "supported",
+      "xmlTag": "eventBasedGateway",
+      "seeAlso": [
+        "omg:EventBasedGateway",
+        "bbo:EventBasedGateway"
+      ]
+    },
+    {
+      "@id": "bg:complexGateway",
+      "@type": "bg:NodeType",
+      "name": "complexGateway",
+      "label": "Complex Gateway",
+      "subClassOf": [
+        "bg:Gateway"
+      ],
+      "status": "supported",
+      "xmlTag": "complexGateway",
+      "seeAlso": [
+        "omg:ComplexGateway",
+        "bbo:ComplexGateway"
+      ]
+    },
+    {
+      "@id": "bg:dataObjectReference",
+      "@type": "bg:NodeType",
+      "name": "dataObjectReference",
+      "label": "Data Object Reference",
+      "subClassOf": [
+        "bg:DataReference"
+      ],
+      "status": "supported",
+      "xmlTag": "dataObjectReference",
+      "seeAlso": [
+        "omg:DataObjectReference"
+      ]
+    },
+    {
+      "@id": "bg:dataStoreReference",
+      "@type": "bg:NodeType",
+      "name": "dataStoreReference",
+      "label": "Data Store Reference",
+      "subClassOf": [
+        "bg:DataReference"
+      ],
+      "status": "supported",
+      "xmlTag": "dataStoreReference",
+      "seeAlso": [
+        "omg:DataStoreReference"
+      ]
+    },
+    {
+      "@id": "bg:textAnnotation",
+      "@type": "bg:NodeType",
+      "name": "textAnnotation",
+      "label": "Text Annotation",
+      "subClassOf": [
+        "bg:BpmnArtifact"
+      ],
+      "status": "supported",
+      "xmlTag": "textAnnotation",
+      "seeAlso": [
+        "omg:TextAnnotation"
+      ]
+    },
+    {
+      "@id": "bg:group",
+      "@type": "bg:NodeType",
+      "name": "group",
+      "label": "Group",
+      "subClassOf": [
+        "bg:BpmnArtifact"
+      ],
+      "status": "supported",
+      "xmlTag": "group",
+      "seeAlso": [
+        "omg:Group",
+        "bbo:Group"
+      ]
+    },
+    {
+      "@id": "bg:marker-message",
+      "@type": "bg:EventMarker",
+      "name": "message",
+      "label": "Message",
+      "status": "supported",
+      "eventDefinition": "bpmn:MessageEventDefinition",
+      "seeAlso": [
+        "omg:MessageEventDefinition"
+      ],
+      "groups": [
+        "wait",
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-timer",
+      "@type": "bg:EventMarker",
+      "name": "timer",
+      "label": "Timer",
+      "status": "supported",
+      "eventDefinition": "bpmn:TimerEventDefinition",
+      "seeAlso": [
+        "omg:TimerEventDefinition"
+      ],
+      "groups": [
+        "wait",
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-error",
+      "@type": "bg:EventMarker",
+      "name": "error",
+      "label": "Error",
+      "status": "supported",
+      "eventDefinition": "bpmn:ErrorEventDefinition",
+      "seeAlso": [
+        "omg:ErrorEventDefinition"
+      ],
+      "groups": [
+        "exception",
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-signal",
+      "@type": "bg:EventMarker",
+      "name": "signal",
+      "label": "Signal",
+      "status": "supported",
+      "eventDefinition": "bpmn:SignalEventDefinition",
+      "seeAlso": [
+        "omg:SignalEventDefinition"
+      ],
+      "groups": [
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-escalation",
+      "@type": "bg:EventMarker",
+      "name": "escalation",
+      "label": "Escalation",
+      "status": "supported",
+      "eventDefinition": "bpmn:EscalationEventDefinition",
+      "seeAlso": [
+        "omg:EscalationEventDefinition"
+      ],
+      "groups": [
+        "exception",
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-compensation",
+      "@type": "bg:EventMarker",
+      "name": "compensation",
+      "label": "Compensation",
+      "status": "supported",
+      "eventDefinition": "bpmn:CompensateEventDefinition",
+      "seeAlso": [
+        "omg:CompensateEventDefinition"
+      ],
+      "groups": [
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-conditional",
+      "@type": "bg:EventMarker",
+      "name": "conditional",
+      "label": "Conditional",
+      "status": "supported",
+      "eventDefinition": "bpmn:ConditionalEventDefinition",
+      "seeAlso": [
+        "omg:ConditionalEventDefinition"
+      ],
+      "groups": [
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-link",
+      "@type": "bg:EventMarker",
+      "name": "link",
+      "label": "Link",
+      "status": "supported",
+      "eventDefinition": "bpmn:LinkEventDefinition",
+      "seeAlso": [
+        "omg:LinkEventDefinition"
+      ],
+      "groups": []
+    },
+    {
+      "@id": "bg:marker-cancel",
+      "@type": "bg:EventMarker",
+      "name": "cancel",
+      "label": "Cancel",
+      "status": "supported",
+      "eventDefinition": "bpmn:CancelEventDefinition",
+      "seeAlso": [
+        "omg:CancelEventDefinition"
+      ],
+      "groups": [
+        "exception",
+        "boundary"
+      ]
+    },
+    {
+      "@id": "bg:marker-terminate",
+      "@type": "bg:EventMarker",
+      "name": "terminate",
+      "label": "Terminate",
+      "status": "supported",
+      "eventDefinition": "bpmn:TerminateEventDefinition",
+      "seeAlso": [
+        "omg:TerminateEventDefinition"
+      ],
+      "groups": [
+        "exception"
+      ]
+    },
+    {
+      "@id": "bg:marker-multiple",
+      "@type": "bg:EventMarker",
+      "name": "multiple",
+      "label": "Multiple",
+      "status": "lossy",
+      "reason": "No single OMG EventDefinition expresses it; the serialiser writes none and both importers read it back as no marker (see the marker row in OMG_NODE_FIELD_SCOPE and field-fidelity.test.js).",
+      "groups": []
+    },
+    {
+      "@id": "bg:marker-parallelMultiple",
+      "@type": "bg:EventMarker",
+      "name": "parallelMultiple",
+      "label": "Parallel Multiple",
+      "status": "lossy",
+      "reason": "No single OMG EventDefinition expresses it; the serialiser writes none and both importers read it back as no marker (see the marker row in OMG_NODE_FIELD_SCOPE and field-fidelity.test.js).",
+      "groups": []
+    },
+    {
+      "@id": "bg:definition-error",
+      "@type": "bg:DefinitionKind",
+      "name": "error",
+      "label": "Error"
+    },
+    {
+      "@id": "bg:definition-message",
+      "@type": "bg:DefinitionKind",
+      "name": "message",
+      "label": "Message"
+    },
+    {
+      "@id": "bg:definition-signal",
+      "@type": "bg:DefinitionKind",
+      "name": "signal",
+      "label": "Signal"
+    },
+    {
+      "@id": "bg:definition-escalation",
+      "@type": "bg:DefinitionKind",
+      "name": "escalation",
+      "label": "Escalation"
+    },
+    {
+      "@id": "bg:field-Process-schemaVersion",
+      "@type": "rdf:Property",
+      "name": "$schemaVersion",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-name",
+      "@type": "rdf:Property",
+      "name": "name",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-documentation",
+      "@type": "rdf:Property",
+      "name": "documentation",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-nodes",
+      "@type": "rdf:Property",
+      "name": "nodes",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-edges",
+      "@type": "rdf:Property",
+      "name": "edges",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-lanes",
+      "@type": "rdf:Property",
+      "name": "lanes",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-associations",
+      "@type": "rdf:Property",
+      "name": "associations",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Process-definitions",
+      "@type": "rdf:Property",
+      "name": "definitions",
+      "element": "Process"
+    },
+    {
+      "@id": "bg:field-Collaboration-schemaVersion",
+      "@type": "rdf:Property",
+      "name": "$schemaVersion",
+      "element": "Collaboration"
+    },
+    {
+      "@id": "bg:field-Collaboration-pools",
+      "@type": "rdf:Property",
+      "name": "pools",
+      "element": "Collaboration"
+    },
+    {
+      "@id": "bg:field-Collaboration-collapsedPools",
+      "@type": "rdf:Property",
+      "name": "collapsedPools",
+      "element": "Collaboration"
+    },
+    {
+      "@id": "bg:field-Collaboration-messageFlows",
+      "@type": "rdf:Property",
+      "name": "messageFlows",
+      "element": "Collaboration"
+    },
+    {
+      "@id": "bg:field-Collaboration-associations",
+      "@type": "rdf:Property",
+      "name": "associations",
+      "element": "Collaboration"
+    },
+    {
+      "@id": "bg:field-Collaboration-definitions",
+      "@type": "rdf:Property",
+      "name": "definitions",
+      "element": "Collaboration"
+    },
+    {
+      "@id": "bg:field-Pool-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "Pool"
+    },
+    {
+      "@id": "bg:field-Pool-name",
+      "@type": "rdf:Property",
+      "name": "name",
+      "element": "Pool"
+    },
+    {
+      "@id": "bg:field-Pool-documentation",
+      "@type": "rdf:Property",
+      "name": "documentation",
+      "element": "Pool"
+    },
+    {
+      "@id": "bg:field-Pool-nodes",
+      "@type": "rdf:Property",
+      "name": "nodes",
+      "element": "Pool"
+    },
+    {
+      "@id": "bg:field-Pool-edges",
+      "@type": "rdf:Property",
+      "name": "edges",
+      "element": "Pool"
+    },
+    {
+      "@id": "bg:field-Pool-lanes",
+      "@type": "rdf:Property",
+      "name": "lanes",
+      "element": "Pool"
+    },
+    {
+      "@id": "bg:field-CollapsedPool-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "CollapsedPool"
+    },
+    {
+      "@id": "bg:field-CollapsedPool-name",
+      "@type": "rdf:Property",
+      "name": "name",
+      "element": "CollapsedPool"
+    },
+    {
+      "@id": "bg:field-Node-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "Node"
+    },
+    {
+      "@id": "bg:field-Node-type",
+      "@type": "rdf:Property",
+      "name": "type",
+      "element": "Node"
+    },
+    {
+      "@id": "bg:field-Node-name",
+      "@type": "rdf:Property",
+      "name": "name",
+      "element": "Node",
+      "domain": [
+        "bg:task",
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:scriptTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:manualTask",
+        "bg:businessRuleTask",
+        "bg:subProcess",
+        "bg:transaction",
+        "bg:adHocSubProcess",
+        "bg:callActivity",
+        "bg:startEvent",
+        "bg:endEvent",
+        "bg:intermediateCatchEvent",
+        "bg:intermediateThrowEvent",
+        "bg:boundaryEvent",
+        "bg:exclusiveGateway",
+        "bg:parallelGateway",
+        "bg:inclusiveGateway",
+        "bg:eventBasedGateway",
+        "bg:complexGateway",
+        "bg:dataObjectReference",
+        "bg:dataStoreReference"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-lane",
+      "@type": "rdf:Property",
+      "name": "lane",
+      "element": "Node",
+      "domain": [
+        "bg:FlowNode"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-marker",
+      "@type": "rdf:Property",
+      "name": "marker",
+      "element": "Node",
+      "domain": [
+        "bg:Event"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-attachedTo",
+      "@type": "rdf:Property",
+      "name": "attachedTo",
+      "element": "Node",
+      "domain": [
+        "bg:boundaryEvent"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-cancelActivity",
+      "@type": "rdf:Property",
+      "name": "cancelActivity",
+      "element": "Node",
+      "domain": [
+        "bg:boundaryEvent"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-isInterrupting",
+      "@type": "rdf:Property",
+      "name": "isInterrupting",
+      "element": "Node",
+      "domain": [
+        "bg:startEvent"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-isExpanded",
+      "@type": "rdf:Property",
+      "name": "isExpanded",
+      "element": "Node",
+      "domain": [
+        "bg:subProcess",
+        "bg:transaction"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-isEventSubProcess",
+      "@type": "rdf:Property",
+      "name": "isEventSubProcess",
+      "element": "Node",
+      "domain": [
+        "bg:subProcess",
+        "bg:transaction"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-isAdHoc",
+      "@type": "rdf:Property",
+      "name": "isAdHoc",
+      "element": "Node",
+      "domain": [
+        "bg:subProcess"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-isCompensation",
+      "@type": "rdf:Property",
+      "name": "isCompensation",
+      "element": "Node",
+      "domain": [
+        "bg:Activity"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-isCollection",
+      "@type": "rdf:Property",
+      "name": "isCollection",
+      "element": "Node",
+      "domain": [
+        "bg:dataObjectReference"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-loopType",
+      "@type": "rdf:Property",
+      "name": "loopType",
+      "element": "Node",
+      "domain": [
+        "bg:Activity"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-multiInstance",
+      "@type": "rdf:Property",
+      "name": "multiInstance",
+      "element": "Node",
+      "domain": [
+        "bg:Activity"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-calledElement",
+      "@type": "rdf:Property",
+      "name": "calledElement",
+      "element": "Node",
+      "domain": [
+        "bg:callActivity"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-scriptFormat",
+      "@type": "rdf:Property",
+      "name": "scriptFormat",
+      "element": "Node",
+      "domain": [
+        "bg:scriptTask"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-script",
+      "@type": "rdf:Property",
+      "name": "script",
+      "element": "Node",
+      "domain": [
+        "bg:scriptTask"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-implementation",
+      "@type": "rdf:Property",
+      "name": "implementation",
+      "element": "Node",
+      "domain": [
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:businessRuleTask"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-decisionRef",
+      "@type": "rdf:Property",
+      "name": "decisionRef",
+      "element": "Node",
+      "domain": [
+        "bg:businessRuleTask"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-eventGatewayType",
+      "@type": "rdf:Property",
+      "name": "eventGatewayType",
+      "element": "Node",
+      "domain": [
+        "bg:eventBasedGateway"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-instantiate",
+      "@type": "rdf:Property",
+      "name": "instantiate",
+      "element": "Node",
+      "domain": [
+        "bg:receiveTask",
+        "bg:eventBasedGateway"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-linkName",
+      "@type": "rdf:Property",
+      "name": "linkName",
+      "element": "Node",
+      "domain": [
+        "bg:Event"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-conditionExpression",
+      "@type": "rdf:Property",
+      "name": "conditionExpression",
+      "element": "Node",
+      "domain": [
+        "bg:Event"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-timerExpression",
+      "@type": "rdf:Property",
+      "name": "timerExpression",
+      "element": "Node",
+      "domain": [
+        "bg:Event"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-documentation",
+      "@type": "rdf:Property",
+      "name": "documentation",
+      "element": "Node",
+      "domain": [
+        "bg:task",
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:scriptTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:manualTask",
+        "bg:businessRuleTask",
+        "bg:subProcess",
+        "bg:transaction",
+        "bg:adHocSubProcess",
+        "bg:callActivity",
+        "bg:startEvent",
+        "bg:endEvent",
+        "bg:intermediateCatchEvent",
+        "bg:intermediateThrowEvent",
+        "bg:boundaryEvent",
+        "bg:exclusiveGateway",
+        "bg:parallelGateway",
+        "bg:inclusiveGateway",
+        "bg:eventBasedGateway",
+        "bg:complexGateway",
+        "bg:dataObjectReference",
+        "bg:dataStoreReference",
+        "bg:textAnnotation",
+        "bg:group"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-has_join",
+      "@type": "rdf:Property",
+      "name": "has_join",
+      "element": "Node",
+      "domain": [
+        "bg:Gateway"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-color",
+      "@type": "rdf:Property",
+      "name": "color",
+      "element": "Node",
+      "domain": [
+        "bg:task",
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:scriptTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:manualTask",
+        "bg:businessRuleTask",
+        "bg:subProcess",
+        "bg:transaction",
+        "bg:adHocSubProcess",
+        "bg:callActivity",
+        "bg:startEvent",
+        "bg:endEvent",
+        "bg:intermediateCatchEvent",
+        "bg:intermediateThrowEvent",
+        "bg:boundaryEvent",
+        "bg:exclusiveGateway",
+        "bg:parallelGateway",
+        "bg:inclusiveGateway",
+        "bg:eventBasedGateway",
+        "bg:complexGateway",
+        "bg:dataObjectReference",
+        "bg:dataStoreReference",
+        "bg:textAnnotation",
+        "bg:group"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-nodes",
+      "@type": "rdf:Property",
+      "name": "nodes",
+      "element": "Node",
+      "domain": [
+        "bg:subProcess",
+        "bg:transaction"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-edges",
+      "@type": "rdf:Property",
+      "name": "edges",
+      "element": "Node",
+      "domain": [
+        "bg:subProcess",
+        "bg:transaction"
+      ]
+    },
+    {
+      "@id": "bg:field-Node-extensions",
+      "@type": "rdf:Property",
+      "name": "extensions",
+      "element": "Node",
+      "domain": [
+        "bg:task",
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:scriptTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:manualTask",
+        "bg:businessRuleTask",
+        "bg:subProcess",
+        "bg:transaction",
+        "bg:adHocSubProcess",
+        "bg:callActivity",
+        "bg:startEvent",
+        "bg:endEvent",
+        "bg:intermediateCatchEvent",
+        "bg:intermediateThrowEvent",
+        "bg:boundaryEvent",
+        "bg:exclusiveGateway",
+        "bg:parallelGateway",
+        "bg:inclusiveGateway",
+        "bg:eventBasedGateway",
+        "bg:complexGateway",
+        "bg:dataObjectReference",
+        "bg:dataStoreReference",
+        "bg:textAnnotation",
+        "bg:group"
+      ]
+    },
+    {
+      "@id": "bg:field-Edge-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "Edge"
+    },
+    {
+      "@id": "bg:field-Edge-source",
+      "@type": "rdf:Property",
+      "name": "source",
+      "element": "Edge",
+      "domain": [
+        "bg:FlowNode"
+      ]
+    },
+    {
+      "@id": "bg:field-Edge-target",
+      "@type": "rdf:Property",
+      "name": "target",
+      "element": "Edge",
+      "domain": [
+        "bg:FlowNode"
+      ]
+    },
+    {
+      "@id": "bg:field-Edge-label",
+      "@type": "rdf:Property",
+      "name": "label",
+      "element": "Edge",
+      "domain": [
+        "bg:FlowNode"
+      ]
+    },
+    {
+      "@id": "bg:field-Edge-condition",
+      "@type": "rdf:Property",
+      "name": "condition",
+      "element": "Edge",
+      "domain": [
+        "bg:task",
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:scriptTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:manualTask",
+        "bg:businessRuleTask",
+        "bg:subProcess",
+        "bg:transaction",
+        "bg:adHocSubProcess",
+        "bg:callActivity",
+        "bg:exclusiveGateway",
+        "bg:inclusiveGateway",
+        "bg:complexGateway"
+      ]
+    },
+    {
+      "@id": "bg:field-Edge-isHappyPath",
+      "@type": "rdf:Property",
+      "name": "isHappyPath",
+      "element": "Edge",
+      "domain": [
+        "bg:FlowNode"
+      ]
+    },
+    {
+      "@id": "bg:field-Edge-isDefault",
+      "@type": "rdf:Property",
+      "name": "isDefault",
+      "element": "Edge",
+      "domain": [
+        "bg:task",
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:scriptTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:manualTask",
+        "bg:businessRuleTask",
+        "bg:subProcess",
+        "bg:transaction",
+        "bg:adHocSubProcess",
+        "bg:callActivity",
+        "bg:exclusiveGateway",
+        "bg:inclusiveGateway",
+        "bg:complexGateway"
+      ]
+    },
+    {
+      "@id": "bg:field-Edge-isConditional",
+      "@type": "rdf:Property",
+      "name": "isConditional",
+      "element": "Edge",
+      "domain": [
+        "bg:task",
+        "bg:userTask",
+        "bg:serviceTask",
+        "bg:scriptTask",
+        "bg:sendTask",
+        "bg:receiveTask",
+        "bg:manualTask",
+        "bg:businessRuleTask",
+        "bg:subProcess",
+        "bg:transaction",
+        "bg:adHocSubProcess",
+        "bg:callActivity",
+        "bg:exclusiveGateway",
+        "bg:inclusiveGateway",
+        "bg:complexGateway"
+      ]
+    },
+    {
+      "@id": "bg:field-Lane-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "Lane"
+    },
+    {
+      "@id": "bg:field-Lane-name",
+      "@type": "rdf:Property",
+      "name": "name",
+      "element": "Lane"
+    },
+    {
+      "@id": "bg:field-Lane-nodeIds",
+      "@type": "rdf:Property",
+      "name": "nodeIds",
+      "element": "Lane"
+    },
+    {
+      "@id": "bg:field-Lane-children",
+      "@type": "rdf:Property",
+      "name": "children",
+      "element": "Lane"
+    },
+    {
+      "@id": "bg:field-MessageFlow-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "MessageFlow"
+    },
+    {
+      "@id": "bg:field-MessageFlow-source",
+      "@type": "rdf:Property",
+      "name": "source",
+      "element": "MessageFlow"
+    },
+    {
+      "@id": "bg:field-MessageFlow-target",
+      "@type": "rdf:Property",
+      "name": "target",
+      "element": "MessageFlow"
+    },
+    {
+      "@id": "bg:field-MessageFlow-name",
+      "@type": "rdf:Property",
+      "name": "name",
+      "element": "MessageFlow"
+    },
+    {
+      "@id": "bg:field-Association-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "Association"
+    },
+    {
+      "@id": "bg:field-Association-source",
+      "@type": "rdf:Property",
+      "name": "source",
+      "element": "Association"
+    },
+    {
+      "@id": "bg:field-Association-target",
+      "@type": "rdf:Property",
+      "name": "target",
+      "element": "Association"
+    },
+    {
+      "@id": "bg:field-Association-directed",
+      "@type": "rdf:Property",
+      "name": "directed",
+      "element": "Association"
+    },
+    {
+      "@id": "bg:field-TopLevelDefinition-type",
+      "@type": "rdf:Property",
+      "name": "type",
+      "element": "TopLevelDefinition"
+    },
+    {
+      "@id": "bg:field-TopLevelDefinition-id",
+      "@type": "rdf:Property",
+      "name": "id",
+      "element": "TopLevelDefinition"
+    },
+    {
+      "@id": "bg:field-TopLevelDefinition-name",
+      "@type": "rdf:Property",
+      "name": "name",
+      "element": "TopLevelDefinition"
+    },
+    {
+      "@id": "bg:field-TopLevelDefinition-errorCode",
+      "@type": "rdf:Property",
+      "name": "errorCode",
+      "element": "TopLevelDefinition"
+    },
+    {
+      "@id": "bg:field-TopLevelDefinition-escalationCode",
+      "@type": "rdf:Property",
+      "name": "escalationCode",
+      "element": "TopLevelDefinition"
+    }
+  ]
+}
