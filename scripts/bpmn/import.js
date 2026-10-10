@@ -16,6 +16,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep } from './moddle-import.js';
 import { isBpmnArtifact, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
+import { isMainModule } from '../shared/entry-point.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -625,7 +626,7 @@ export { bpmnToLogicCore, bpmnToLogicCoreLegacy, parseXml };
 
 // Only run CLI when executed directly (not imported)
 const __filename = fileURLToPath(import.meta.url);
-const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(__filename);
+const isDirectRun = isMainModule(import.meta.url, process.argv[1]);
 if (isDirectRun) {
   main().catch(err => { console.error('Import error:', err); process.exit(1); });
 }

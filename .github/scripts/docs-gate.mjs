@@ -69,6 +69,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { isMainModule } from '../../scripts/shared/entry-point.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -835,7 +836,7 @@ async function main(argv) {
   return violations.length > 0 ? 1 : 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (err) => {

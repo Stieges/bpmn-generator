@@ -25,6 +25,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from '../../scripts/shared/entry-point.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_POLICY = resolve(HERE, '..', 'dependency-policy.json');
@@ -438,7 +439,7 @@ function main(argv) {
   return result.violations.length > 0 ? 1 : 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   try {
     process.exit(main(process.argv.slice(2)));
   } catch (err) {

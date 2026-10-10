@@ -41,6 +41,7 @@ import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels } from './visual-refinement.js';
+import { isMainModule } from '../shared/entry-point.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // PUBLIC API — programmatic usage via import
@@ -665,7 +666,7 @@ async function main() {
 }
 
 // Only run CLI when executed directly (not imported)
-const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isDirectRun = isMainModule(import.meta.url, process.argv[1]);
 if (isDirectRun) {
   main().catch(err => { console.error('Pipeline error:', err); process.exit(1); });
 }
