@@ -19,7 +19,7 @@ import { chatAgent } from './agents/chat.js';
 import { createLlmProvider, LlmProviderError } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
-import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, boundSchemaErrors } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
 import { quoteForMessage, boundText } from './shared/safe-text.js';
 
@@ -364,7 +364,7 @@ const server = createServer(async (req, res) => {
       const schemaCheck = validateLogicCoreSchema(body.logicCore);
       if (!schemaCheck.valid) {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: schemaCheck.errors.length });
-        return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       const poolOrder = body.poolOrder === 'declared' ? 'declared' : 'auto';
@@ -411,7 +411,7 @@ const server = createServer(async (req, res) => {
       const schemaCheck = validateLogicCoreSchema(body.logicCore);
       if (!schemaCheck.valid) {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/validate', errorCount: schemaCheck.errors.length });
-        return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       const ruleProfile = clientRuleProfile(body);
@@ -462,7 +462,7 @@ const server = createServer(async (req, res) => {
         const schemaCheck = validateLogicCoreSchema(body.logicCore);
         if (!schemaCheck.valid) {
           auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: schemaCheck.errors.length });
-          return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
+          return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
         }
       }
 

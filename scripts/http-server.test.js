@@ -688,3 +688,32 @@ describe('rate limiting', () => {
     expect(_rateBucketCount()).toBe(1);
   });
 });
+
+describe('schema-gate errors in responses are capped and bounded', () => {
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  beforeEach(() => _resetRateLimit());
+
+  for (const path of ['/api/v1/generate', '/api/v1/validate', '/api/v1/orchestrate']) {
+    test(`${path}: thousands of schema errors come back as at most 20 plus a count`, async () => {
+      const nodes = Array.from({ length: 5000 }, (_, i) => ({ id: `9bad id ${i}`, type: 'task' }));
+      const res = await post(path, { logicCore: { nodes, edges: [] } });
+      const text = await res.text();
+      const data = JSON.parse(text);
+      expect(res.status).toBe(400);
+      expect(data.status).toBe('schema_error');
+      expect(data.errors.length).toBe(21);
+      expect(data.errors[20].message).toMatch(/^… and \d+ more$/);
+      expect(text.length).toBeLessThan(20_000);
+    });
+
+    test(`${path}: a huge unknown key is not echoed at full length`, async () => {
+      const logicCore = { nodes: [], edges: [], ['k'.repeat(100_000)]: 1 };
+      const res = await post(path, { logicCore });
+      const text = await res.text();
+      expect(res.status).toBe(400);
+      expect(text.length).toBeLessThan(5_000);
+    });
+  }
+});
