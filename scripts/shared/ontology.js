@@ -150,8 +150,10 @@ export function checkReferences(onto) {
   const severities = new Set(of('bg:Severity').map(({ e }) => e['@id']));
   const layers = new Map(of('bg:Layer').map(({ e }) => [e['@id'], e]));
   const out = [];
+  if (!graph.some((e) => e?.['@type'] === 'owl:Ontology')) out.push('missing owl:Ontology head — the version cannot be read');
   const notationsOf = (what, e) => {
     const ns = Array.isArray(e.notation) ? e.notation : [];
+    if (e.kind !== 'specific' && e.kind !== 'crossNotation') out.push(`${what} has unknown kind ${JSON.stringify(e.kind)} — expected specific or crossNotation`);
     for (const n of ns) if (!notations.has(n)) out.push(`${what} names unknown notation ${n}`);
     if (e.kind === 'specific' && ns.length !== 1) out.push(`${what} is specific but names ${ns.length} notations (${ns.join(', ')}) — a specific entry names exactly one`);
     if (e.kind === 'crossNotation' && ns.length < 2) out.push(`${what} is cross-notation but names only ${ns.join(', ') || 'no notation'} — a cross-notation entry names at least two`);

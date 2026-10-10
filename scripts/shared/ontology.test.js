@@ -143,6 +143,38 @@ describe('rules in the ontology — the negation axis', () => {
     expect(checkReferences(o).join(' ')).toMatch(/rule SC02 .* is cross-notation, but layer bg:layer-BPMN-workflow_net belongs to bg:notation-BPMN only/);
   });
 
+  test('a cross-notation layer naming only one notation names the layer (F2)', () => {
+    const o = raw();
+    entry(o, 'bg:layer-cross-consistency').notation = ['bg:notation-BPMN'];
+    expect(checkReferences(o).join(' ')).toMatch(/layer consistency .* is cross-notation but names only/);
+  });
+
+  test('a specific layer naming two notations names the layer (F2)', () => {
+    const o = raw();
+    entry(o, 'bg:layer-BPMN-soundness').notation = ['bg:notation-BPMN', 'bg:notation-DMN'];
+    expect(checkReferences(o).join(' ')).toMatch(/layer soundness .* is specific but names 2 notations/);
+  });
+
+  test('a specific rule in a cross-notation layer names rule and layer', () => {
+    const o = raw();
+    entry(o, 'bg:rule-S01').layer = 'bg:layer-cross-consistency';
+    expect(checkReferences(o).join(' ')).toMatch(/rule S01 .* has notation bg:notation-BPMN, but layer bg:layer-cross-consistency belongs to/);
+  });
+
+  test('an unknown kind is reported on an unvalidated ontology', () => {
+    const o = raw();
+    entry(o, 'bg:rule-S01').kind = 'weird';
+    expect(checkReferences(o).join(' ')).toMatch(/rule S01 .* has unknown kind "weird"/);
+    expect(() => buildVocabulary(o)).toThrow(/unknown kind "weird"/);
+  });
+
+  test('an ontology without an owl:Ontology head is reported by name, not as a TypeError', () => {
+    const o = raw();
+    o['@graph'] = o['@graph'].filter((e) => e['@type'] !== 'owl:Ontology');
+    expect(checkReferences(o).join(' ')).toMatch(/missing owl:Ontology head/);
+    expect(() => buildVocabulary(o)).toThrow(/missing owl:Ontology head/);
+  });
+
   test('an unknown run location names rule and value', () => {
     const o = raw();
     entry(o, 'bg:rule-S01').runsIn = 'batch';
