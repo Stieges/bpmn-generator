@@ -1,6 +1,5 @@
 import { createServer } from 'node:http';
 import crypto from 'node:crypto';
-import { lookup as dnsLookup } from 'node:dns/promises';
 import { readFileSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +20,7 @@ import { createLlmProvider } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
+import { checkUrlShape, resolveOutboundUrl, _setResolver } from './shared/outbound-url.js';
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.BPMN_API_KEY || null; // null = no auth (dev mode)
@@ -61,57 +61,24 @@ export function parseBody(req) {
   });
 }
 
+/**
+ * Synchronous part of the callback check (scheme, credentials, IP literals, `localhost` names);
+ * returns an error message or null. Throws on a string that is not a URL. The single validator
+ * lives in `shared/outbound-url.js`; `deliver` re-runs the full check and connects only to the
+ * addresses it validated.
+ */
 export function validateCallbackUrl(url) {
-  const u = new URL(url); // throws on invalid URL
-  if (!['http:', 'https:'].includes(u.protocol)) {
-    return 'callbackUrl must use http or https';
-  }
-  if (isInternalHost(u.hostname)) {
-    return 'callbackUrl must not target internal networks';
-  }
-  return null; // valid
+  return checkUrlShape(url, 'callbackUrl').error || null;
 }
 
-export function isInternalHost(host) {
-  // IPv4
-  if (host === 'localhost' || host === '127.0.0.1') return true;
-  if (host.startsWith('10.') || host.startsWith('192.168.')) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
-  if (/^169\.254\./.test(host)) return true; // link-local + AWS metadata
-  // IPv6
-  if (host === '::1') return true;
-  // Strip brackets if URL passed them through (e.g., [fc00::1] → fc00::1)
-  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
-  if (h === '::1') return true;
-  if (/^f[cd][0-9a-f]{0,2}:/.test(h)) return true;  // fc00::/7 (ULA)
-  if (/^fe[89ab][0-9a-f]?:/.test(h)) return true;   // fe80::/10 (link-local)
-  return false;
-}
-
-// Swappable DNS lookup (overridable in tests via _setDnsLookup).
-let _lookup = dnsLookup;
-export function _setDnsLookup(fn) { _lookup = fn || dnsLookup; }
-
+/** Full callback check including DNS: every resolved address must be public. */
 export async function validateCallbackUrlAsync(url) {
-  const sync = validateCallbackUrl(url);
-  if (sync) return sync;
-  const { hostname } = new URL(url);
-  // Strip brackets for IPv6 hostnames
-  const h = hostname.replace(/^\[|\]$/g, '');
-  // If hostname is already an IP, the sync check already covered it.
-  if (/^[\d.]+$/.test(h) || /:/.test(h)) return null;
-  try {
-    const addrs = await _lookup(hostname, { all: true });
-    for (const { address } of addrs) {
-      if (isInternalHost(address)) {
-        return 'callbackUrl resolves to internal network';
-      }
-    }
-  } catch (err) {
-    return `callbackUrl DNS lookup failed: ${err.code || err.message}`;
-  }
-  return null;
+  const check = await resolveOutboundUrl(url, { label: 'callbackUrl' });
+  return check.ok ? null : check.error;
 }
+
+/** Test hook: stub DNS resolution for every outbound URL check. `null` restores the default. */
+export function _setDnsLookup(fn) { _setResolver(fn); }
 
 function checkAuth(req, res) {
   if (!API_KEY) return true;

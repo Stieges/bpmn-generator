@@ -7,7 +7,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile } from './http-server.js';
+import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup } from './http-server.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { getAuditPath } from './audit.js';
 
@@ -433,5 +433,37 @@ describe('correlationId is an identifier, never a path or a blob', () => {
   test('a UUID, as the frontend sends, is accepted', async () => {
     const res = await post('/api/v1/validate', { logicCore: lc, correlationId: '0f8fad5b-d9cb-469f-a165-70867728950e' });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('callbackUrl is checked against every internal address form', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const post = (body) => realFetch(`${baseUrl}/api/v1/generate`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  beforeEach(() => _resetRateLimit());
+  afterEach(() => _setDnsLookup(null));
+
+  test.each([
+    'http://[::ffff:127.0.0.1]:9/a', 'http://[::ffff:7f00:1]:9/b', 'http://0.0.0.0:9/c', 'http://[::]:9/d',
+    'http://100.64.0.1/', 'http://198.18.0.1/', 'http://224.0.0.1/', 'http://255.255.255.255/',
+    'http://[64:ff9b::7f00:1]/', 'http://[2002:7f00:1::]/', 'http://2130706433/', 'http://app.localhost/',
+  ])('%s is a 400 and nothing is delivered', async (callbackUrl) => {
+    const res = await post({ logicCore: lc, callbackUrl });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/internal/);
+  });
+
+  test('a host name resolving to an internal address (stubbed DNS) is a 400', async () => {
+    _setDnsLookup(async () => [{ address: '::ffff:169.254.169.254', family: 6 }]);
+    const res = await post({ logicCore: lc, callbackUrl: 'https://hooks.example.test/x' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/internal/);
+  });
+
+  test('credentials in the callback URL are a 400', async () => {
+    const res = await post({ logicCore: lc, callbackUrl: 'https://u:p@hooks.example.test/x' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/credentials/);
   });
 });
