@@ -81,9 +81,9 @@ export function isBpmnArtifact(type) {
  * `adHocSubProcess` is deliberately kept despite NOT being a member of `references/
  * input-schema.json`'s `NodeType` enum — that schema instead expresses ad-hoc as `isAdHoc: true`
  * on a plain `subProcess` node, and neither importer (`import.js`, `moddle-import.js`) ever
- * produces the string `'adHocSubProcess'`, nor does `bpmnXmlTag` map it to anything but the
- * `task` fallback. So this is a real class (`AdHocSubProcess`, BPMN20.cmof:1222) the schema does
- * not yet expose, not a dead list entry: `pipeline.test.js`'s "S14 accepts the legal endpoint
+ * produces the string `'adHocSubProcess'`, and as an announced type it has no `xmlTag` in the
+ * ontology, so `bpmnXmlTag` throws for it rather than serialising it. So this is a real class
+ * (`AdHocSubProcess`, BPMN20.cmof:1222) the schema does not yet expose, not a dead list entry: `pipeline.test.js`'s "S14 accepts the legal endpoint
  * classes and rejects every container class" test already builds a hand-written Logic-Core node
  * with this exact type string (bypassing the schema gate, which only runs at the HTTP boundary)
  * and relies on `CONTAINER_TYPES` classifying it correctly. Removing it here would silently
@@ -151,6 +151,13 @@ export function isActivity(type) {
   return ACTIVITY_TYPES.has(type);
 }
 
+// Fails loudly if the ontology loses a field's domain — an empty Set would silently grant nothing.
+const domain = (element, field) => {
+  const d = VOCABULARY.fieldDomain(element, field);
+  if (!d) throw new Error(`bpmn-ontology.jsonld: no domain for ${element}.${field}`);
+  return new Set(d);
+};
+
 /**
  * The node types that may carry OMG's `implementation` attribute.
  *
@@ -163,7 +170,7 @@ export function isActivity(type) {
  * attribute to every node type and recording which ones round-tripped without an
  * `unknown attribute <implementation>` warning.
  */
-export const IMPLEMENTATION_TYPES = new Set(VOCABULARY.fieldDomain('Node', 'implementation'));
+export const IMPLEMENTATION_TYPES = domain('Node', 'implementation');
 
 /**
  * Every OMG `FlowNode` subclass in the NodeType enum: activities, events and gateways — everything
@@ -171,7 +178,7 @@ export const IMPLEMENTATION_TYPES = new Set(VOCABULARY.fieldDomain('Node', 'impl
  *
  * Named for the OMG class because that is what the two questions it answers turn on:
  *   - `Lane#flowNodeRef` is typed `FlowNode`, so lane membership is expressible for exactly these
- *     (`bpmn-xml.js`'s `buildLane` already filters on this, by hand, one type at a time);
+ *     (`bpmn-xml.js`'s `buildLane` filters on this);
  *   - `SequenceFlow#sourceRef`/`targetRef` are typed `FlowNode` too, which is what the `source`
  *     and `target` rows of `OMG_EDGE_FIELD_SCOPE` below need.
  * Derived from the ontology class `FlowNode`, for the same anti-drift reason as `ACTIVITY_TYPES`.
@@ -206,7 +213,7 @@ export const MARKER_GROUPS = {
  * `Group` extend `BaseElement`, which declares only `id` — see `isBpmnArtifact`. Their labels do
  * survive, by a different mechanism; the `name` row below says which.
  */
-export const NAMED_NODE_TYPES = new Set(VOCABULARY.fieldDomain('Node', 'name'));
+export const NAMED_NODE_TYPES = domain('Node', 'name');
 
 /**
  * The classes OMG grants the `default` attribute to: every `Activity`, plus the three gateways
@@ -220,15 +227,10 @@ export const NAMED_NODE_TYPES = new Set(VOCABULARY.fieldDomain('Node', 'name'));
  * (`buildDefaultFlowMap` records it from any source, `buildProcess` then writes `gwEl.default`
  * regardless of class, so this set is the honest statement of where that is legal).
  */
-export const DEFAULT_FLOW_SOURCE_TYPES = new Set(VOCABULARY.fieldDomain('Edge', 'isDefault'));
+export const DEFAULT_FLOW_SOURCE_TYPES = domain('Edge', 'isDefault');
 
-// A field's allowed classes come from the ontology (rdfs:domain); this table keeps only what is
+// A field's allowed classes come from the ontology (`bg:allowedOn`); this table keeps only what is
 // code knowledge — where it is written, who enforces it, what survives a round trip, and why.
-const domain = (element, field) => {
-  const d = VOCABULARY.fieldDomain(element, field);
-  if (!d) throw new Error(`bpmn-ontology.jsonld: no domain for ${element}.${field}`);
-  return new Set(d);
-};
 
 /**
  * Which node classes may carry each OMG-scoped per-node field — the single source of truth for a
@@ -378,8 +380,8 @@ const domain = (element, field) => {
  *    `types.test.js`'s metamodel fence checks `allowed` against bpmn-moddle for EVERY row whose
  *    `on` is `'self'` and whose `attr` resolves to a real metamodel property — regardless of
  *    `shape`. That covers `marker`, `loopType`, `multiInstance`, `script`, `documentation` and
- *    `has_join` as strictly as it covers the plain attributes. Every `allowed` comes from the ontology; the metamodel cannot check it only where
- *    the mechanism has no BPMN-semantic counterpart to check against — `decisionRef` (our own
+ *    `has_join` as strictly as it covers the plain attributes. Every `allowed` comes from the ontology. The metamodel cannot check a row only
+ *    where the mechanism has no BPMN-semantic counterpart to check against — `decisionRef` (our own
  *    extension namespace), `color`/`isExpanded` (BPMNDI, checked against `bpmndi.json` on the `on`
  *    side instead), `lane` (`flowNodeRef` is typed `FlowNode`, a constraint the JSON metamodel
  *    expresses as a type name and not as a per-class property), and the rows nothing implements
@@ -417,9 +419,9 @@ export const OMG_NODE_FIELD_SCOPE = [
   //
   // `adHocSubProcess` is deliberately NOT granted it, and this is the one place the fence's
   // enum-scoped policy has teeth: that class is outside `references/input-schema.json`'s `NodeType`
-  // enum (see CONTAINER_TYPES's comment), and `bpmnXmlTag` consequently falls back to `'task'` for
-  // it. Granting the field would therefore emit `<bpmn:task triggeredByEvent="true">` — and
-  // `triggeredByEvent` is NOT a Task attribute, so that is XSD-invalid output. Reconciling the
+  // enum (see CONTAINER_TYPES's comment), and the ontology gives it no `xmlTag`, so it cannot be
+  // serialised at all. Granting the field would widen the domain to a type nothing can emit, so
+  // the fence would assert on a class no pipeline path produces. Reconciling the
   // schema, the importers and `bpmnXmlTag` with this class is the separate decision CONTAINER_TYPES
   // already defers; until it is taken, the narrow set is the correct one and the fence says nothing
   // about types the schema does not expose.
@@ -674,7 +676,7 @@ export const OMG_NODE_FIELD_SCOPE = [
     reason: 'Render-only: `svg.js` draws the ad-hoc tilde marker and nothing serialises it, so the '
       + 'preview is right and every real tool sees a plain subProcess. OMG expresses ad-hoc as a '
       + 'CLASS (`bpmn:adHocSubProcess`), not an attribute, so implementing it means emitting that '
-      + 'class — which also means ending `bpmnXmlTag`\'s silent `|| \'task\'` fallback for it. '
+      + 'class — which also means giving it an `xmlTag` in the ontology (`bpmnXmlTag` now throws for it). '
       + 'Decided and queued (plan "Root fix", backlog items 5 and 6).' },
   { field: 'isInterrupting', attr: null, type: 'boolean', on: 'self', allowed: domain('Node', 'isInterrupting'), scope: 'a startEvent',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
