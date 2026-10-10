@@ -23,6 +23,7 @@ import { runPipeline, validateLogicCore, generateDiagramSet } from './bpmn/pipel
 import { profileForMode } from './bpmn/rules.js';
 import { loadNamedRuleProfile, ProfileRejectedError } from './shared/rule-profile.js';
 import { rulesDirPath } from './shared/resource-paths.js';
+import { isMainModule } from './shared/entry-point.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -209,7 +210,7 @@ server.setRequestHandler(CallToolRequestSchema, handleToolCall);
 
 // Same entry-point guard as http-server.js: importing this module (tests) must
 // not open a stdio transport.
-const isEntryPoint = import.meta.url === `file://${process.argv[1]}`;
+const isEntryPoint = isMainModule(import.meta.url, process.argv[1]);
 if (isEntryPoint) {
   const transport = new StdioServerTransport();
   await server.connect(transport);

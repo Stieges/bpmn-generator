@@ -21,6 +21,7 @@ import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
 import { validateLogicCoreSchema, boundSchemaErrors } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
+import { isMainModule } from './shared/entry-point.js';
 import { quoteForMessage, boundText } from './shared/safe-text.js';
 
 const PORT = process.env.PORT || 3000;
@@ -551,7 +552,7 @@ const server = createServer(async (req, res) => {
 
 // Only listen when this module is the entry point. When imported by tests
 // (or other modules) it stays inert — prevents EADDRINUSE under Jest workers.
-const isEntryPoint = import.meta.url === `file://${process.argv[1]}`;
+const isEntryPoint = isMainModule(import.meta.url, process.argv[1]);
 if (isEntryPoint) {
   startupCheck(process.env);
   server.listen(PORT, () => {
