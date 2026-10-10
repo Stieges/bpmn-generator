@@ -81,28 +81,69 @@ export async function validateCallbackUrlAsync(url) {
 /** Test hook: stub DNS resolution for every outbound URL check. `null` restores the default. */
 export function _setDnsLookup(fn) { _setResolver(fn); }
 
+/**
+ * Constant-time API key comparison: both sides are hashed to equal-length SHA-256 digests first,
+ * so neither the content nor the length of the configured key leaks through response timing.
+ */
+export function apiKeyMatches(given, expected) {
+  if (typeof given !== 'string' || typeof expected !== 'string' || !given) return false;
+  const digest = (v) => crypto.createHash('sha256').update(v, 'utf8').digest();
+  return crypto.timingSafeEqual(digest(given), digest(expected));
+}
+
 function checkAuth(req, res) {
   if (!API_KEY) return true;
-  if (req.headers['x-api-key'] !== API_KEY) {
+  if (!apiKeyMatches(req.headers['x-api-key'], API_KEY)) {
     json(res, 401, { error: 'Invalid API key' });
     return false;
   }
   return true;
 }
 
-// Test hook: forget every rate-limit bucket (the suite sends more than one window's worth).
-export function _resetRateLimit() { rateBuckets.clear(); }
+let lastSweep = 0;
 
-function checkRateLimit(req, res) {
-  const ip = req.socket.remoteAddress;
-  const now = Date.now();
-  const bucket = rateBuckets.get(ip) || { count: 0, start: now };
+// Test hook: forget every rate-limit bucket (the suite sends more than one window's worth).
+export function _resetRateLimit() { rateBuckets.clear(); lastSweep = 0; }
+/** Test hook: how many rate-limit buckets are held. */
+export function _rateBucketCount() { return rateBuckets.size; }
+
+/**
+ * The rate-limit key of a request: the socket's peer address. Behind reverse proxies the operator
+ * sets `TRUST_PROXY_HOPS` to the number of proxies in front of the server; the key is then the
+ * address the outermost trusted proxy recorded in `X-Forwarded-For` — counted from the right, so
+ * entries a client prepends itself are never used.
+ */
+export function rateLimitKey(req, env = process.env) {
+  const peer = req.socket?.remoteAddress || 'unknown';
+  const hops = Number.parseInt(env.TRUST_PROXY_HOPS, 10);
+  if (!Number.isInteger(hops) || hops < 1) return peer;
+  const header = req.headers?.['x-forwarded-for'];
+  if (typeof header !== 'string' || !header.trim()) return peer;
+  const chain = header.split(',').map((h) => h.trim()).filter(Boolean);
+  if (chain.length === 0) return peer;
+  return chain[Math.max(0, chain.length - hops)];
+}
+
+/**
+ * Counts one request for `key` at `now`; false once the window's budget is spent. Expired buckets
+ * are swept at most once per window, so the table holds only the sources of the current window.
+ */
+export function rateLimitAllows(key, now = Date.now()) {
+  if (now - lastSweep > RATE_LIMIT.windowMs) {
+    for (const [k, b] of rateBuckets) if (now - b.start > RATE_LIMIT.windowMs) rateBuckets.delete(k);
+    lastSweep = now;
+  }
+  const bucket = rateBuckets.get(key) || { count: 0, start: now };
   if (now - bucket.start > RATE_LIMIT.windowMs) {
     bucket.count = 0; bucket.start = now;
   }
   bucket.count++;
-  rateBuckets.set(ip, bucket);
-  if (bucket.count > RATE_LIMIT.max) {
+  rateBuckets.set(key, bucket);
+  return bucket.count <= RATE_LIMIT.max;
+}
+
+function checkRateLimit(req, res) {
+  if (!rateLimitAllows(rateLimitKey(req))) {
     json(res, 429, { error: 'Rate limit exceeded' });
     return false;
   }
