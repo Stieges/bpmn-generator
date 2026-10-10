@@ -153,6 +153,7 @@ scripts/
 ├── shared/             Format-independent core, used by both bpmn/ and dmn/
 │   ├── utils.js          Config loader, visual constants, helpers
 │   ├── rule-profile.js    Profile machinery shared by both rule engines
+│   ├── rule-catalog.js    Rule registers joined with the ontology's rule metadata
 │   ├── resource-paths.js  Where references/ lives in each layout
 │   ├── ontology.js        Loads + validates references/ontology.jsonld (VOCABULARY)
 │   └── geometry.js        Straight-segment clip maths (clipStraight, clipToRect)
@@ -178,10 +179,11 @@ that a number here would go stale immediately; CI enforces it stays green.
 ```
 shared/utils.js, shared/resource-paths.js ← (no deps)
 shared/rule-profile.js ← shared/utils
+shared/rule-catalog.js ← shared/ontology
 shared/geometry.js ← (no deps)
 shared/ontology.js ← shared/resource-paths, ajv (loads references/ontology.jsonld)
 bpmn/types.js ← shared/ontology
-bpmn/rules.js ← bpmn/types, bpmn/workflow-net, shared/rule-profile
+bpmn/rules.js ← bpmn/types, bpmn/workflow-net, shared/rule-profile, shared/rule-catalog
 bpmn/workflow-net.js ← bpmn/types
 bpmn/validate.js ← bpmn/rules
 bpmn/topology.js ← bpmn/types

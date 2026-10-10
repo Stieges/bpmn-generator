@@ -915,7 +915,7 @@ function checkSoundness(pn, options = {}) {
         }
         issues.push({
           rule: 'WF03',
-          severity: 'WARNING',
+          severity: 'ERROR',
           message: `Improper completion: sink reached but tokens remain at: ${remaining.slice(0, 3).join(', ')}`,
         });
       }

@@ -84,6 +84,7 @@ scripts/bpmn/ — Redesign toolbox (opt-in; CLI-driven, not invoked by runPipeli
 scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   utils.js                   (reads ../config.json)
   rule-profile.js            (profile machinery: loadRuleProfile, isRuleEnabled, getEffectiveSeverity)
+  rule-catalog.js            ← ontology.js (buildRuleCatalog: rule registers ⋈ ontology metadata, checked at import)
   resource-paths.js          (no deps — where references/ lives in each layout)
   ontology.js                ← resource-paths.js, ajv (loads + validates references/ontology.jsonld at import; `VOCABULARY`)
   geometry.js                (straight-segment clip maths: clipStraight, clipToRect — shared by
@@ -218,7 +219,7 @@ membership instead of coordinates.
 | File | Purpose |
 |------|---------|
 | `scripts/bpmn/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/bpmn/rules.js` | Rule engine of the BPMN rule set: 40 BPMN rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in) — 38 run here, SC01/SC06 in the scenario pipeline; M05/M06 severity=OFF. Counts per rule set: `VOCABULARY.ruleSets` (`scripts/shared/ontology.js`) |
+| `scripts/bpmn/rules.js` | Rule engine of the BPMN rule set: 40 BPMN rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in) — 38 run here, SC01/SC06 in the scenario pipeline; M05/M06 severity=OFF. Counts per rule set: `VOCABULARY.ruleSets` (`scripts/shared/ontology.js`). Layer and default severity of every rule come from `references/ontology.jsonld` via `buildRuleCatalog`; the code keeps only the checks (`RULE_REGISTER`). |
 | `scripts/bpmn/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
 | `scripts/bpmn/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
 | `scripts/bpmn/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
@@ -263,6 +264,7 @@ membership instead of coordinates.
 | `scripts/bpmn/import.js` | BPMN XML Parser → Logic-Core JSON |
 | `scripts/config.json` | Externalized constants (shapes, colors, spacing) |
 | `scripts/shared/rule-profile.js` | `loadRuleProfile`, `isRuleEnabled`, `getEffectiveSeverity` — what a profile *means*, shared by both rule engines. Nothing here knows about processes or decisions; only the runner is format-specific |
+| `scripts/shared/rule-catalog.js` | `buildRuleCatalog(register)` — joins a rule module's register (`{ module, partition, entries }`, checks only) with the ontology's rule metadata at import, and aborts that module's import on a rule only in code, only in the ontology, in the wrong module, or carrying its own `layer`/`defaultSeverity`; `registerFindings`, `rulesExpectedIn`, `partitionForModule` (path ⇒ rule set + run location). Imports only `ontology.js` |
 | `scripts/dmn/schema-gate.js` | `validateDecisionCoreSchema` — ajv gate for `references/decision-core-schema.json` |
 | `scripts/dmn/rules.js` | `DMN_RULES`, `runDmnRules`, `dmnProfileForMode` — 19 DMN rules, 3 layers, 2 modes (17 run here, SC04/SC05 in the scenario pipeline). **Counted separately from the BPMN rule set** — see the DMN section under Rule Engine |
 | `scripts/dmn/dmn-xml.js` | `generateDmnXml`, `validateDmnXml` — DMN 1.3 XML + DMNDI via dmn-moddle, mirroring `bpmn-xml.js` |
@@ -311,8 +313,14 @@ After every change: `npm test` must pass.
 
 ### Adding a New Rule
 
-1. Insert rule object into `scripts/bpmn/rules.js` → `RULES` array
-2. Fields: `id`, `layer`, `defaultSeverity`, `description`, `ref`, `check(proc)`
+1. Add a `bg:Rule` to `references/ontology.jsonld`: `name` (the id), `kind` (`specific`), `notation`
+   (`["bg:notation-BPMN"]`), `layer` (a `bg:Layer` of that notation, e.g. `bg:layer-BPMN-style`),
+   `defaultSeverity` (`bg:severity-ERROR` … `bg:severity-OFF`) and `runsIn` (`main`, or `scenario`
+   for a rule of the scenario pipeline)
+2. Add the check to the matching array in `scripts/bpmn/rules.js`: `id`, `description`, `ref`,
+   `scope`, `check(proc, lc)` — **no** `layer`, **no** `defaultSeverity`; `buildRuleCatalog`
+   (`scripts/shared/rule-catalog.js`) takes them from the ontology and refuses the import while the
+   two sides disagree
 3. `check` returns `{ pass: true }`, or `{ pass: false, message: '...' }` for exactly **one**
    finding, or `{ pass: false, messages: ['...', '...'] }` for **several**. `message` is taken
    verbatim as a single finding — never join several findings into one string, which is what
@@ -420,8 +428,8 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ### Extend the rule engine
 
-1. Insert the rule object into the `RULES` array in `scripts/bpmn/rules.js`.
-2. Fields: `id`, `layer`, `defaultSeverity`, `description`, `ref`, `check(proc) → { pass: true } | { pass: false, message }`.
+1. Declare the rule in `references/ontology.jsonld` (`bg:Rule`: notation, kind, layer, default severity, run location).
+2. Add its check to the `RULES` register of `scripts/bpmn/rules.js` (`id`, `description`, `ref`, `scope`, `check(proc) → { pass: true } | { pass: false, message }`) — never `layer` or `defaultSeverity`.
 3. Document the rule in `references/fachliches-regelwerk.md` with source citation.
 4. Add a positive and a negative fixture under `tests/fixtures/` and assertions in `pipeline.test.js`.
 5. Verify: `npm test -- --testPathPatterns=pipeline`.
