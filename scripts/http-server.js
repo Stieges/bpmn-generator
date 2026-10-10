@@ -12,7 +12,8 @@ const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 't
 
 import { runPipeline, validateLogicCore } from './bpmn/pipeline.js';
 import { profileForMode } from './bpmn/rules.js';
-import { ProfileRejectedError } from './shared/rule-profile.js';
+import { ProfileRejectedError, assertRuleProfile, assertLayerNotWeakened } from './shared/rule-profile.js';
+import { profileContext } from './shared/rule-catalog.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 import { chatAgent } from './agents/chat.js';
@@ -121,6 +122,9 @@ function checkAuth(req, res) {
   return true;
 }
 
+// Test hook: forget every rate-limit bucket (the suite sends more than one window's worth).
+export function _resetRateLimit() { rateBuckets.clear(); }
+
 function checkRateLimit(req, res) {
   const ip = req.socket.remoteAddress;
   const now = Date.now();
@@ -135,6 +139,32 @@ function checkRateLimit(req, res) {
     return false;
   }
   return true;
+}
+
+const BPMN_PROFILE_CONTEXT = profileContext('BPMN');
+const AUDIT_MESSAGE_MAX = 500;
+
+/**
+ * The rule profile a client sent, or null. Over HTTP a profile is an inline object only — a string
+ * would name a file on the server, so it is refused rather than read — and it passes the profile
+ * schema gate before anything else sees it. It may tighten the soundness layer but not relax it:
+ * a "success" from this API keeps meaning the model is structurally sound.
+ * Throws ProfileRejectedError (→ 400 profile_error).
+ */
+export function clientRuleProfile(body) {
+  const profile = body.ruleProfile;
+  if (profile === undefined || profile === null) return null;
+  if (typeof profile !== 'object' || Array.isArray(profile)) {
+    throw new ProfileRejectedError('ruleProfile must be an inline JSON object; profile names and file paths are not accepted over HTTP');
+  }
+  assertRuleProfile(profile);
+  assertLayerNotWeakened(profile, 'soundness', BPMN_PROFILE_CONTEXT);
+  return profile;
+}
+
+function truncateForAudit(message) {
+  const text = String(message);
+  return text.length > AUDIT_MESSAGE_MAX ? `${text.slice(0, AUDIT_MESSAGE_MAX)}…` : text;
 }
 
 function json(res, status, data) {
@@ -234,8 +264,7 @@ const server = createServer(async (req, res) => {
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       const poolOrder = body.poolOrder === 'declared' ? 'declared' : 'auto';
-      // Over HTTP a profile is an inline object only: a string would be a server-side file path.
-      const ruleProfile = body.ruleProfile && typeof body.ruleProfile === 'object' ? body.ruleProfile : null;
+      const ruleProfile = clientRuleProfile(body);
       const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
@@ -281,7 +310,7 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { correlationId, status: 'schema_error', errors: schemaCheck.errors });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
-      const ruleProfile = body.ruleProfile && typeof body.ruleProfile === 'object' ? body.ruleProfile : null;
+      const ruleProfile = clientRuleProfile(body);
       const validation = validateLogicCore(body.logicCore, profileForMode(ruleProfile, mode));
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors: validation.errors.length > 0 });
@@ -302,7 +331,7 @@ const server = createServer(async (req, res) => {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/orchestrate' });
 
       const options = {
-        ruleProfile: body.ruleProfile || null,
+        ruleProfile: clientRuleProfile(body),
         mode: (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document',
       };
 
@@ -404,7 +433,7 @@ const server = createServer(async (req, res) => {
   } catch (err) {
     // A refused rule profile is the caller's input, not a server fault.
     if (err instanceof ProfileRejectedError) {
-      auditLog({ event: 'profile_rejected', correlationId, error: err.message });
+      auditLog({ event: 'profile_rejected', correlationId, error: truncateForAudit(err.message) });
       return json(res, 400, { correlationId, status: 'profile_error', error: err.message });
     }
     auditLog({ event: 'error', correlationId, error: err.message });

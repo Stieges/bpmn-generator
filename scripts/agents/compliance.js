@@ -7,8 +7,10 @@
 import { runRules, loadRuleProfile } from '../bpmn/rules.js';
 
 export async function complianceAgent(state) {
-  const profilePath = state.options?.ruleProfile || null;
-  const profile = profilePath ? loadRuleProfile(profilePath) : null;
+  // A path (CLI / library callers) is read through the safe loader; an object (the HTTP API, the
+  // MCP server — both resolve or gate it before it gets here) is used as it is.
+  const given = state.options?.ruleProfile ?? null;
+  const profile = typeof given === 'string' ? loadRuleProfile(given) : given;
   const result = runRules(state.logicCore, profile);
 
   return {
