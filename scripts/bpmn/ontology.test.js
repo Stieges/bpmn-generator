@@ -122,3 +122,31 @@ describe('ontology packaging', () => {
     expect(build).toMatch(/endsWith\('\.jsonld'\)/);
   });
 });
+
+import * as T from './types.js';
+const SNAP = JSON.parse(readFileSync(join(__dirname, '..', '..', 'tests', 'fixtures', 'ontology', 'type-sets.snapshot.json'), 'utf8'));
+
+describe('characterization — deriving from the ontology changes nothing', () => {
+  for (const [name, members] of Object.entries(SNAP.sets)) {
+    test(`${name} has the same members in the same order`, () => {
+      expect([...T[name]]).toEqual(members);
+    });
+  }
+  test('isBpmnArtifact selects the same types', () => {
+    expect([...T.ALL_NODE_TYPES].filter(T.isBpmnArtifact)).toEqual(SNAP.bpmnArtifact);
+  });
+  test('bpmnXmlTag maps every supported type as before', () => {
+    for (const [t, tag] of Object.entries(SNAP.xmlTag)) expect(T.bpmnXmlTag(t)).toBe(tag);
+  });
+  test('marker groups and event-definition maps match the old literals', () => {
+    // Groups are membership sets (only .has() is ever asked), so compare members, not order.
+    expect([...T.MARKER_GROUPS.exception].sort()).toEqual([...SNAP.markers.exception].sort());
+    expect([...T.MARKER_GROUPS.wait].sort()).toEqual([...SNAP.markers.wait].sort());
+    expect([...T.MARKER_GROUPS.boundary].sort()).toEqual([...SNAP.markers.boundary].sort());
+    expect(Object.fromEntries(T.EVENT_DEFINITION_BY_MARKER)).toEqual(SNAP.markers.eventDefinition);
+  });
+  test('SUPPORTED_NODE_TYPES equals the schema enum, in order', () => {
+    const schema = JSON.parse(readFileSync(join(__dirname, '..', '..', 'references', 'input-schema.json'), 'utf8'));
+    expect([...T.SUPPORTED_NODE_TYPES].sort()).toEqual([...schema.$defs.NodeType.enum].sort());
+  });
+});

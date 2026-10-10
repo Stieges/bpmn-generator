@@ -1,24 +1,23 @@
 /**
  * BPMN Type Predicates & Tag Mapping
- * Pure functions, no dependencies.
+ * Every type set below is derived from the vocabulary in references/bpmn-ontology.jsonld
+ * (scripts/bpmn/ontology.js); this module adds no list of its own.
  */
+import { VOCABULARY } from './ontology.js';
 
 // The five OMG Event subclasses this project's NodeType enum carries (references/input-schema.json).
-// Backs isEvent below. Kept explicit rather than a substring test so a future NodeType addition
-// that happens to contain the word "Event" without being one (or the reverse) cannot silently
-// change classification — see the fence in types.test.js, which checks this set against the enum.
+// Backs isEvent below. Derived from the ontology class `Event` rather than a substring test, so a
+// future NodeType addition that happens to contain the word "Event" without being one (or the
+// reverse) cannot silently change classification — see the fence in types.test.js.
 // Exported (not just used locally) so the fence in types.test.js can check the reverse direction
 // too: not only "does every enum member land in some class" but "does every class member
 // actually exist in the enum". A set kept private could accumulate a stray entry with nothing
 // to catch it — see CONTAINER_TYPES's `adHocSubProcess`, below, for exactly that case.
-export const EVENT_TYPES = new Set([
-  'startEvent', 'endEvent', 'intermediateCatchEvent', 'intermediateThrowEvent', 'boundaryEvent',
-]);
+export const EVENT_TYPES = new Set(VOCABULARY.classMembers('Event'));
 
-// The five OMG Gateway subclasses in the NodeType enum. Same rationale as EVENT_TYPES.
-export const GATEWAY_TYPES = new Set([
-  'exclusiveGateway', 'parallelGateway', 'inclusiveGateway', 'eventBasedGateway', 'complexGateway',
-]);
+// The five OMG Gateway subclasses in the NodeType enum. Same rationale as EVENT_TYPES; derived
+// from the ontology class `Gateway`.
+export const GATEWAY_TYPES = new Set(VOCABULARY.classMembers('Gateway'));
 
 export function isEvent(type) {
   return EVENT_TYPES.has(type);
@@ -33,8 +32,8 @@ export function isBoundaryEvent(node) {
 }
 
 // Backs isArtifact below. Exported for the same reverse-direction reason as EVENT_TYPES/
-// GATEWAY_TYPES — see the comment there.
-export const ARTIFACT_TYPES = new Set(['dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group']);
+// GATEWAY_TYPES — see the comment there. Derived from the ontology class `Artifact`.
+export const ARTIFACT_TYPES = new Set(VOCABULARY.classMembers('Artifact'));
 
 /**
  * Layout sense of "artifact": drawable, but kept out of the ELK graph because it
@@ -55,8 +54,9 @@ export function isArtifact(type) {
  * Deliberately excludes dataObjectReference/dataStoreReference: those really are
  * FlowElements and really do carry `name`.
  */
+const BPMN_ARTIFACT_TYPES = new Set(VOCABULARY.classMembers('BpmnArtifact'));
 export function isBpmnArtifact(type) {
-  return ['textAnnotation', 'group'].includes(type);
+  return BPMN_ARTIFACT_TYPES.has(type);
 }
 
 /**
@@ -92,7 +92,8 @@ export function isBpmnArtifact(type) {
  * separate decision; `types.test.js`'s reverse-direction fence allowlists this one entry with
  * this same reasoning rather than either silently passing or wrongly failing on it.
  */
-export const CONTAINER_TYPES = new Set(['subProcess', 'transaction', 'adHocSubProcess', 'callActivity']);
+// Derived from the ontology class `Container`.
+export const CONTAINER_TYPES = new Set(VOCABULARY.classMembers('Container'));
 
 /**
  * Is this node a container — by its declared class, or by carrying a scope?
@@ -128,10 +129,8 @@ export function isContainerNode(node) {
 // instance — must use `isActivity` and include the containers. Keeping both available and named
 // for what they mean is what stops the next caller from picking a list by copying whichever one
 // happened to be nearest.
-export const TASK_TYPES = new Set([
-  'task', 'userTask', 'serviceTask', 'scriptTask', 'sendTask', 'receiveTask',
-  'manualTask', 'businessRuleTask',
-]);
+// Derived from the ontology class `Task`.
+export const TASK_TYPES = new Set(VOCABULARY.classMembers('Task'));
 
 /**
  * The OMG `Activity` subclasses in the NodeType enum: every task type plus every container type.
@@ -139,14 +138,14 @@ export const TASK_TYPES = new Set([
  * specializations) and every `Task` subclass all descend from `Activity` — nothing else in the
  * enum does.
  *
- * Derived from CONTAINER_TYPES rather than restated, so the two lists cannot drift — the failure
+ * Derived from the ontology class `Activity`, so the lists cannot drift — the failure
  * this stage exists to close. This is what S13 (`BoundaryEvent.attachedToRef : Activity [1..1]`),
  * `redesign.js:703`'s "boundary events attach only to activities" refusal, and
  * `optimize.js:42`'s task-type check all actually need: a boundary event legally attaches to a
  * subprocess, not only to a task, and the refusal at redesign.js:703 was wrong for exactly that
  * reason — the previous `TASK_TYPES` (there, private) omitted the container classes.
  */
-export const ACTIVITY_TYPES = new Set([...TASK_TYPES, ...CONTAINER_TYPES]);
+export const ACTIVITY_TYPES = new Set(VOCABULARY.classMembers('Activity'));
 
 export function isActivity(type) {
   return ACTIVITY_TYPES.has(type);
@@ -177,17 +176,32 @@ export const IMPLEMENTATION_TYPES = new Set([
  *     (`bpmn-xml.js`'s `buildLane` already filters on this, by hand, one type at a time);
  *   - `SequenceFlow#sourceRef`/`targetRef` are typed `FlowNode` too, which is what the `source`
  *     and `target` rows of `OMG_EDGE_FIELD_SCOPE` below need.
- * Derived from the three classification sets rather than restated, for the same anti-drift reason
- * `ACTIVITY_TYPES` is derived from `CONTAINER_TYPES`.
+ * Derived from the ontology class `FlowNode`, for the same anti-drift reason as `ACTIVITY_TYPES`.
  */
-export const FLOW_NODE_TYPES = new Set([...ACTIVITY_TYPES, ...EVENT_TYPES, ...GATEWAY_TYPES]);
+export const FLOW_NODE_TYPES = new Set(VOCABULARY.classMembers('FlowNode'));
 
 /**
  * Every NodeType, flow node or artifact. The `allowed` set for the handful of fields OMG puts on
  * `BaseElement`/`FlowElement` and therefore grants to everything we can emit — `documentation` is
- * the one real case, `color` (a BPMNDI concern) the other.
+ * the one real case, `color` (a BPMNDI concern) the other. Derived from the ontology (all statuses).
  */
-export const ALL_NODE_TYPES = new Set([...FLOW_NODE_TYPES, ...ARTIFACT_TYPES]);
+export const ALL_NODE_TYPES = new Set(VOCABULARY.nodeTypeNames());
+
+/** The node types the schema's NodeType enum carries: ontology status `supported` or `lossy`. */
+export const SUPPORTED_NODE_TYPES = new Set(VOCABULARY.nodeTypeNames(['supported', 'lossy']));
+
+/** Event marker -> OMG event-definition element (supported markers), and its inverse. */
+export const EVENT_DEFINITION_BY_MARKER = new Map(
+  VOCABULARY.markers.filter(m => m.eventDefinition).map(m => [m.name, m.eventDefinition]));
+export const MARKER_BY_EVENT_DEFINITION = new Map(
+  [...EVENT_DEFINITION_BY_MARKER].map(([m, d]) => [d, m]));
+
+/** Marker groups from the ontology: which markers are exceptions, waits, or boundary-capable. */
+export const MARKER_GROUPS = {
+  exception: new Set(VOCABULARY.markersInGroup('exception')),
+  wait: new Set(VOCABULARY.markersInGroup('wait')),
+  boundary: new Set(VOCABULARY.markersInGroup('boundary')),
+};
 
 /**
  * The classes OMG grants `name` to. Everything except the two real Artifacts: `TextAnnotation` and
@@ -897,23 +911,7 @@ export function isDataArtifact(type) {
   return isArtifact(type);
 }
 
+const XML_TAG = new Map(VOCABULARY.nodeTypes.filter(t => t.xmlTag).map(t => [t.name, t.xmlTag]));
 export function bpmnXmlTag(type) {
-  const map = {
-    task: 'task', userTask: 'userTask', serviceTask: 'serviceTask',
-    scriptTask: 'scriptTask', sendTask: 'sendTask', receiveTask: 'receiveTask',
-    manualTask: 'manualTask', businessRuleTask: 'businessRuleTask',
-    callActivity: 'callActivity', subProcess: 'subProcess', transaction: 'transaction',
-    startEvent: 'startEvent', endEvent: 'endEvent',
-    intermediateCatchEvent: 'intermediateCatchEvent',
-    intermediateThrowEvent: 'intermediateThrowEvent',
-    boundaryEvent: 'boundaryEvent',
-    exclusiveGateway: 'exclusiveGateway', parallelGateway: 'parallelGateway',
-    inclusiveGateway: 'inclusiveGateway', eventBasedGateway: 'eventBasedGateway',
-    complexGateway: 'complexGateway',
-    dataObjectReference: 'dataObjectReference',
-    dataStoreReference: 'dataStoreReference',
-    textAnnotation: 'textAnnotation',
-    group: 'group',
-  };
-  return map[type] || 'task';
+  return XML_TAG.get(type) || 'task';
 }
