@@ -905,7 +905,7 @@ export function formatCollaborationResult(collabResult, lc, options = {}) {
   // is one unnamed pool, not zero pools. Getting this wrong used to mean a fully flat `lc`
   // silently produced NO per-pool context at all (the loop below never ran), which in turn
   // made every scenario's `decisions` come out empty — not a rendering quirk, a correctness
-  // bug that `../scenarios/rules.js`'s SC01 surfaced downstream as false positives on every branch.
+  // bug that `../bpmn/scenario-rules.js`'s SC01 surfaced downstream as false positives on every branch.
   const pools = lc.pools ? lc.pools : [lc];
   const flatContextByPool = new Map();
   const nameById = new Map();

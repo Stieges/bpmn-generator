@@ -6,7 +6,7 @@
  * a pure orchestrator function plus a thin CLI wrapper around it. This module does ONLY
  * integration — it calls Tasks 1-6's six modules in the right order and assembles their
  * outputs. No new computation, no new judgment: any check that looks like a decision belongs
- * in `rules.js` (the only module in this subsystem allowed to call something wrong), not here.
+ * in the rule modules (scripts/bpmn/scenario-rules.js, scripts/cross/rules.js, scripts/dmn/scenario-rules.js — the only modules allowed to call something wrong), not here.
  *
  * Call order: enumerate (always via the collaboration pair — see `runScenarioPipeline`'s own
  * doc comment for why a pool-less `lc` is not special-cased) -> bridge -> analyze every
@@ -41,7 +41,53 @@ import { resolveBridge } from './bridge.js';
 import { validateDecisionCoreSchema } from '../dmn/schema-gate.js';
 import { dmnToDecisionCore, formatImportReport, NOT_DMN_ROOT } from '../dmn/import.js';
 import { formatCollaborationResult, describeEnumerationCompleteness } from './format.js';
-import { runScenarioRules, tableAnalysisKey } from './rules.js';
+import { runBpmnScenarioRules } from '../bpmn/scenario-rules.js';
+import { runDmnScenarioRules, tableAnalysisKey, countSkippedTableAnalyses } from '../dmn/scenario-rules.js';
+import { runCrossRules } from '../cross/rules.js';
+
+/**
+ * One judged finding.
+ *
+ * @typedef {object} ScenarioRuleIssue
+ * @property {'SC01'|'SC02'|'SC03'|'SC04'|'SC05'|'SC06'} rule
+ * @property {string} severity - the rule's default severity from references/ontology.jsonld
+ *   (WARNING for all six today; see scripts/bpmn/scenario-rules.js for why). Not profile-switchable.
+ * @property {string} message - human-readable, self-contained.
+ * (Structured fields beyond `rule`/`severity`/`message` vary per rule — see each `check*`
+ * function in scripts/bpmn/scenario-rules.js, scripts/cross/rules.js and
+ * scripts/dmn/scenario-rules.js; every one carries enough of node/table/edge/scenario id to act on
+ * without re-parsing `message`.)
+ */
+
+/**
+ * Run SC01–SC06 — the scenario rules of the BPMN, cross-notation and DMN rule sets — over the
+ * outputs of enumeration, formatting, the bridge and the table analyses, and return their findings
+ * sorted by rule id. The sort is stable, so several findings of one rule keep the order their
+ * module emitted them in; together that is exactly the order of the single module these rules
+ * used to share.
+ *
+ * @param {object} context
+ * @param {object} context.lc - the Logic-Core document `context.enumerationResult` /
+ *   `context.formatted` were produced from (with or without `pools`).
+ * @param {object} context.enumerationResult - `EnumerationResult` (enumerate.js) or
+ *   `CollaborationEnumerationResult` (collaboration.js), matching `lc`.
+ * @param {object} context.formatted - the `FormattedView` (format.js) built from the SAME
+ *   `enumerationResult` and `lc`.
+ * @param {object} [context.bridge] - `BridgeResult` (bridge.js). Omit to skip SC02-SC05
+ *   entirely (e.g. a process with no `decisionRef` at all).
+ * @param {Map<string, object>} [context.tableAnalyses] - `tableAnalysisKey(link) →
+ *   DecisionTableAnalysis` (decision-table.js), one entry per resolved bridge link the caller
+ *   wants judged. Omit (or a link missing from the map) to skip SC04/SC05 for that link.
+ * @returns {{issues: ScenarioRuleIssue[], skippedTableAnalyses: number}} `skippedTableAnalyses`
+ *   counts resolved bridge links `tableAnalyses` was supplied for but had no entry matching —
+ *   see `countSkippedTableAnalyses`. Always 0 when `context.tableAnalyses` is omitted.
+ */
+export function runScenarioRules(context) {
+  const ctx = context || {};
+  const issues = [...runBpmnScenarioRules(ctx), ...runCrossRules(ctx), ...runDmnScenarioRules(ctx)];
+  issues.sort((a, b) => (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0));
+  return { issues, skippedTableAnalyses: countSkippedTableAnalyses(ctx.bridge, ctx.tableAnalyses) };
+}
 
 /**
  * The complete, final result of the scenario-enumeration subsystem for one Logic-Core
@@ -64,9 +110,9 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
  *   with `formatCollaborationResult` to match `enumerationResult`. `formatted.json` carries
  *   `enumerationResult`'s `stats`/`truncated` verbatim, so a caller writing only this to disk
  *   still ships the incompleteness signals.
- * @property {import('./rules.js').ScenarioRuleIssue[]} issues - every SC01-SC06 finding, all
- *   WARNING-tier (see `rules.js`'s header) — present findings do not by themselves make this
- *   run a failure; the CLI's `--strict` is what turns them into one.
+ * @property {ScenarioRuleIssue[]} issues - every SC01-SC06 finding, sorted by rule id, all
+ *   WARNING-tier today (see scripts/bpmn/scenario-rules.js's header) — present findings do not by
+ *   themselves make this run a failure; the CLI's `--strict` is what turns them into one.
  * @property {number} skippedTableAnalyses - see `runScenarioRules`'s return value; always 0
  *   here in practice, since `tableAnalyses` is always built from exactly `bridgeResult.resolved`
  *   using the same key function `runScenarioRules` reads with — surfaced anyway because it is
@@ -84,7 +130,7 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
  * `formatScenarioResult` (the plain single-process pair) directly. That silently dropped SC06
  * coverage for every pool-less input: SC06 reads `sinkTokens`, a field `enumerateCollaboration`
  * computes (via `CompositeScenario`) but `enumerateScenarios`'s plain `Scenario` never carries
- * at all — `rules.js`'s own module header names this exact gap and its own recommended fix:
+ * at all — `scripts/bpmn/scenario-rules.js`'s module header names this exact gap and its own recommended fix:
  * "A caller who wants SC06 coverage for a single, non-pooled process should still call the
  * collaboration functions on it: `enumerateCollaboration` accepts an `lc` without `pools`."
  * `composeCollaboration` (`collaboration.js`) documents accepting a pool-less `lc` as exactly
@@ -99,7 +145,7 @@ import { runScenarioRules, tableAnalysisKey } from './rules.js';
  * The bridge is always resolved (never conditionally skipped on empty `decisionCores`) so that
  * a `decisionRef` with no `decisionCores` supplied still surfaces as an SC02 finding rather
  * than silently passing judgment-free — `resolveBridge([], lc)` document its own empty-array
- * input as exactly this case, and `rules.js`'s SC02 reads `bridge.unresolved`, which needs a
+ * input as exactly this case, and `scripts/cross/rules.js`'s SC02 reads `bridge.unresolved`, which needs a
  * real (if empty-handed) `BridgeResult` to be non-empty.
  *
  * @param {object} lc - Logic-Core document, collaboration (`lc.pools`) or flat single-process
@@ -270,7 +316,7 @@ async function main() {
   // Three channels, in the order a reader needs them, mirroring scripts/dmn/pipeline.js's
   // two-tier shape and scripts/bpmn/pipeline.js's non-blocking `💡` advisory channel:
   //
-  //   ⚠ Findings              — SC01-SC06 (WARNING tier, see rules.js's header). --strict blocks.
+  //   ⚠ Findings              — SC01-SC06 (WARNING tier, see scripts/bpmn/scenario-rules.js's header). --strict blocks.
   //   ⚠ Enumeration completeness — the run did not finish the job. --strict blocks.
   //   💡 Enumeration notes    — what the translation structurally cannot see. Never blocks.
   //
