@@ -14,7 +14,7 @@
  * out to be the review's misattribution class — the branch IS taken, its continuation dead-ends —
  * so SC01 now declines on `stats.deadEndPaths > 0` and the block asserts the decline, keeping the
  * positive shape under test through the same flag-flip device the truncation block already used.
- * All six rules' `severity` is `'WARNING'`, not `'ERROR'`; see `rules.js`'s header for why.
+ * All six rules' `severity` is `'WARNING'`, not `'ERROR'`; see `scripts/bpmn/scenario-rules.js`'s header for why.
  */
 
 import { describe, test, expect } from '@jest/globals';

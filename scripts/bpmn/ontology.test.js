@@ -274,7 +274,7 @@ const LIST_ALLOWLIST = new Map([
 describe('no vocabulary list outside the ontology', () => {
   const root = join(__dirname, '..', '..');
   const plain = [...VOCABULARY.nodeTypeNames(), ...VOCABULARY.markerNames()];
-  // Both spellings: Logic-Core ('userTask') and bpmn-moddle ('bpmn:UserTask'); plus every DMN term (F17).
+  // Both spellings: Logic-Core ('userTask') and bpmn-moddle ('bpmn:UserTask'); plus every DMN term.
   const vocab = new Set([...plain, ...plain.map(n => 'bpmn:' + n[0].toUpperCase() + n.slice(1)),
     ...VOCABULARY.dmnTerms.map(t => t.name)]);
   const files = [];

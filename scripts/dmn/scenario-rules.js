@@ -8,10 +8,10 @@
  *
  * ── SC04/SC05's input: pre-computed analyses, not a live call ────────────────────────────────
  * `runScenarioRules` takes `context.tableAnalyses`, a `Map` from `tableAnalysisKey(link)` to
- * an already-computed `DecisionTableAnalysis` (Task 3's `analyzeDecisionTable`) — this module
+ * an already-computed `DecisionTableAnalysis` (`decision-table.js`'s `analyzeDecisionTable`) — this module
  * never calls `analyzeDecisionTable` itself. Two reasons: (1) it keeps this module free of a
  * dependency on `decision-table.js`, mirroring how it already depends on nothing but the
- * shapes Tasks 1-5 hand it; (2) a caller assembling a `FormattedView` for display has very
+ * shapes the earlier pipeline stages (enumeration, bridge, table analysis) hand it; (2) a caller assembling a `FormattedView` for display has very
  * likely already run the analysis for every resolved link (to show gaps/overlaps to a human),
  * and this module recomputing it as a hidden side effect of "judging" would mean the same
  * table gets analyzed twice per request for no benefit. A resolved link with no entry in
@@ -66,7 +66,7 @@ function checkTableGaps(bridge, tableAnalyses, severity) {
   for (const link of bridge?.resolved || []) {
     const analysis = tableAnalyses.get(tableAnalysisKey(link));
     if (!analysis) continue;
-    // `gaps === null` means gap analysis was not attempted at all (Task 3's own honest
+    // `gaps === null` means gap analysis was not attempted at all (`decision-table.js`'s own honest
     // "couldn't check" signal — `analysis.gapAnalysis.attempted === false`); that is NOT an
     // SC04 finding. Only a non-null, non-empty `gaps` array is.
     if (!Array.isArray(analysis.gaps) || analysis.gaps.length === 0) continue;
@@ -92,7 +92,7 @@ function checkTableOverlaps(bridge, tableAnalyses, severity) {
   for (const link of bridge?.resolved || []) {
     const analysis = tableAnalyses.get(tableAnalysisKey(link));
     if (!analysis) continue;
-    // Overlap is only illegal under UNIQUE. FIRST/PRIORITY permit it by design (and Task 3
+    // Overlap is only illegal under UNIQUE. FIRST/PRIORITY permit it by design (and `decision-table.js`
     // already flags those branches `mayOverestimate`); COLLECT/ANY/RULE ORDER/OUTPUT ORDER
     // are aggregating policies where several rules matching at once is the intended
     // semantics, not a defect — "overlap" is structurally meaningless as "wrong" there.

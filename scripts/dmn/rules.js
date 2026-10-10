@@ -372,7 +372,7 @@ const DMN_CHECKS = [
   },
 ];
 
-/** What this module implements, for buildRuleCatalog and the parity tests (decision F26). */
+/** What this module implements, for buildRuleCatalog and the parity tests. */
 export const RULE_REGISTER = {
   module: 'scripts/dmn/rules.js',
   partition: { ruleSet: 'DMN', runsIn: 'main' },

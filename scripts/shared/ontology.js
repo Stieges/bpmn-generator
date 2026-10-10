@@ -20,7 +20,7 @@ import { ontologyPath } from './resource-paths.js';
 
 const ONTOLOGY_IRI = 'https://stieges.github.io/bpmn-generator/ontology';
 export const ONTOLOGY_NS = 'https://stieges.github.io/bpmn-generator/ontology#';
-/** Rule-set name of every rule whose `kind` is `crossNotation` (decision F23: counted only there). */
+/** Rule-set name of every rule whose `kind` is `crossNotation`; counted only in its own rule set. */
 export const CROSS_NOTATION = 'cross-notation';
 
 const STATUS = { enum: ['supported', 'lossy', 'announced'] };
@@ -92,7 +92,7 @@ const ONTOLOGY_SCHEMA = {
                                                    'DecisionCore', 'Requirement', 'DecisionTable', 'InputClause', 'OutputClause', 'DecisionRule'] },
                                   domain: IDS },
                     additionalProperties: false } },
-          // A notation is an open class: a new one is a new entry, never a schema change (E3).
+          // A notation is an open class: a new one is a new entry, never a schema change.
           { if: { properties: { '@type': { const: 'bg:Notation' } } },
             then: { required: ['name', 'label', 'status'],
                     properties: { ...BASE, name: { type: 'string', pattern: '^[A-Za-z][A-Za-z0-9]*$' }, label: { type: 'string' },
@@ -108,14 +108,14 @@ const ONTOLOGY_SCHEMA = {
                     properties: { ...BASE, name: { type: 'string', pattern: '^[a-z][a-z_]*$' }, label: { type: 'string' },
                                   kind: KIND, notation: NOTATION_REFS },
                     additionalProperties: false } },
-          // No description, ref or checked-types field yet: parked (record M8, E4). Their absence is deliberate.
+          // No description, ref or checked-types field yet: parked. Their absence is deliberate.
           { if: { properties: { '@type': { const: 'bg:Rule' } } },
             then: { required: ['name', 'kind', 'notation', 'layer', 'defaultSeverity', 'runsIn'],
                     properties: { ...BASE, name: { type: 'string', pattern: '^[A-Z]+[0-9]+$' }, kind: KIND, notation: NOTATION_REFS,
                                   layer: REF('layer'), defaultSeverity: REF('severity'), runsIn: { enum: ['main', 'scenario'] } },
                     additionalProperties: false } },
           // DMN terms: one block per class (same shape), each tied to the DMN notation and linked to
-          // the DMN 1.3 XSD namespace only (F15).
+          // the DMN 1.3 XSD namespace only.
           ...Object.keys(DMN_TERM_TYPES).map((type) => ({ if: { properties: { '@type': { const: type } } },
             then: { required: ['name', 'label', 'status', 'notation', 'seeAlso'],
                     properties: { ...BASE, name: { type: 'string' }, label: { type: 'string' }, status: STATUS,
@@ -156,9 +156,9 @@ export function validateOntology(onto) {
 /**
  * Reference step — runs after the schema step and checks what JSON Schema cannot: every notation,
  * layer and severity a rule or layer names exists; a specific rule/layer names exactly one notation
- * and a cross-notation one at least two (F2); a specific rule sits in a layer of its own notation
- * and a cross-notation rule in a cross-notation layer (E3, F3); a rule id and a layer name (per
- * rule set) are declared once (M9). Pure; `[]` when clean. Defensive about shape, so it can also
+ * and a cross-notation one at least two; a specific rule sits in a layer of its own notation
+ * and a cross-notation rule in a cross-notation layer; a rule id and a layer name (per
+ * rule set) are declared once. Pure; `[]` when clean. Defensive about shape, so it can also
  * guard `buildVocabulary` on an ontology that never went through `validateOntology`.
  */
 export function checkReferences(onto) {

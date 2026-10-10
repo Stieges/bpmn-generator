@@ -105,7 +105,7 @@ describe('docs-gate — checkNumbers', () => {
     expect(checkNumbers(base())).toEqual([]);
   });
 
-  // Every claim names its rule set right at the number (decisions F20, F28) and is measured
+  // Every claim names its rule set right at the number and is measured
   // against that rule set's count in the ontology — never routed by a word elsewhere in the line.
   test.each([
     ['40 BPMN rules, 5 layers', { BPMN: { rules: 40, layers: 5 } }],
@@ -174,7 +174,7 @@ describe('docs-gate — checkNumbers', () => {
     expect(findings).toEqual([]);
   });
 
-  test('a notation the docs never count is not a finding (F24)', () => {
+  test('a notation the docs never count is not a finding', () => {
     const ruleSets = { ...base().ruleSets, ArchiMate: { rules: 7, layers: 2 } };
     expect(checkNumbers(base({ ruleSets }))).toEqual([]);
   });
@@ -287,7 +287,7 @@ describe('docs-gate — rule counts come from the ontology', () => {
     expect(counts['cross-notation']).toEqual({ rules: 2, layers: 1 });
   });
 
-  test('a cross-notation rule counts only in the cross-notation rule set (F23)', () => {
+  test('a cross-notation rule counts only in the cross-notation rule set', () => {
     const vocabulary = {
       notations: [{ name: 'BPMN', status: 'supported' }, { name: 'DMN', status: 'supported' }],
       ruleSets: { BPMN: { rules: ['S01'], layers: ['soundness'] }, DMN: { rules: ['D01'], layers: ['soundness'] },
@@ -303,7 +303,7 @@ describe('docs-gate — rule counts come from the ontology', () => {
     expect(() => ruleSetCounts(vocabulary)).toThrow(/no BPMN rules — refusing to count 0/);
   });
 
-  test('an announced notation with no rules is fine (F24)', () => {
+  test('an announced notation with no rules is fine', () => {
     const vocabulary = { notations: [{ name: 'ArchiMate', status: 'announced' }], ruleSets: { ArchiMate: { rules: [], layers: [] } } };
     expect(ruleSetCounts(vocabulary)).toEqual({ ArchiMate: { rules: 0, layers: 0 } });
   });
