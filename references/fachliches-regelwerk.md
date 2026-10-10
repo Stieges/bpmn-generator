@@ -900,7 +900,10 @@ evaluates correctly.
 
 ### Not in this set
 
-Completeness ("does every input combination hit a rule?") and overlap ("does `UNIQUE` actually hold?") are not checked by `scripts/dmn/rules.js`: both need interval algebra over the input domains. They are SC04 and SC05 — part of the DMN rule set, run by the scenario pipeline over tables a BPMN `decisionRef` invokes (see "Scenario rules SC01–SC06" above).
+Completeness ("does every input combination hit a rule?") and overlap ("does `UNIQUE` actually
+hold?") are not checked by `scripts/dmn/rules.js`: both need interval algebra over the input
+domains. They are SC04 and SC05 — part of the DMN rule set, run by the scenario pipeline over tables
+a BPMN `decisionRef` invokes (see "Scenario rules SC01–SC06" above).
 
 Also absent, and deliberately: `decisionService` (a grouping construct with four reference lists and
 its own DI divider line), the boxed-expression types beyond decision table and literal expression,
