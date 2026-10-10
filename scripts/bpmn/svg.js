@@ -3,6 +3,7 @@
  * Produces standalone SVG diagrams from coordinate maps.
  */
 
+import { assignEdgeIds } from './topology.js';
 import { isEvent, isGateway, isDataArtifact } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
 import { esc, rn, wrapText } from '../shared/utils.js';
@@ -26,6 +27,8 @@ function laneHeaderW(poolCoords, poolKey) {
 }
 
 function generateSvg(lc, coordMap) {
+  // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
+  assignEdgeIds(lc);
   const { coords, laneCoords, poolCoords, edgeCoords, edgeLabels } = coordMap;
   const processes = lc.pools ? lc.pools : [lc];
   const allNodes  = processes.flatMap(p => p.nodes || []);
@@ -179,7 +182,7 @@ function generateSvg(lc, coordMap) {
 
   // §7.6  Sequence flows
   for (const edge of allEdges) {
-    const eid = edge.id || `flow_${edge.source}_${edge.target}`;
+    const eid = edge.id;
     const pts = edgeCoords[eid] || [];
     renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels);
   }
@@ -239,7 +242,7 @@ function generateSvg(lc, coordMap) {
       }
       // Render internal sequence flows
       for (const subEdge of (node.edges || [])) {
-        const seid = subEdge.id || `flow_${subEdge.source}_${subEdge.target}`;
+        const seid = subEdge.id;
         const pts = edgeCoords[seid] || [];
         renderSequenceFlow(out, subEdge, pts, coords, tx, ty, edgeLabels);
       }

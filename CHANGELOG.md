@@ -292,6 +292,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **Edges without an `id` no longer fail the CLI with DI07 (#64).** The schema requires only
+  `source` and `target`, but layout keyed such an edge `edge_<idx>`, the XML and SVG writers
+  `flow_<source>_<target>`, and the DI check found no geometry under `undefined`; two parallel
+  id-less edges also shared one id, which the CLI treats as fatal. `runPipeline` now gives every
+  id-less sequence flow, at every depth, `flow_<source>_<target>` once, up front (`normalizeEdgeIds`
+  in `topology.js`; on a collision with any id in the document `_2`, `_3`, … in document order;
+  author ids are never touched; the caller's object is not mutated). The direct entries
+  `logicCoreToElk`, `buildCoordinateMap`, `generateBpmnXml` and `generateSvg` complete id-less
+  edges in place the same way, and every downstream fallback is gone. Message flows and
+  associations already require an `id`.
 - **DMN importer: `lossless: true` no longer comes with a Decision-Core that fails its own schema.**
   A value the schema requires and the file omits (definitions `@namespace`, a DRG element, parameter
   or annotation `name`, an input clause's expression, a rule's output entry, or a model with no DRG

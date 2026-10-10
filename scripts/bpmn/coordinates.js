@@ -6,10 +6,12 @@
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, artifactSize } from './constants.js';
 import { CFG } from '../shared/utils.js';
-import { identifyHappyPathNodes, resolveLaneId } from './topology.js';
+import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
 
 function buildCoordinateMap(elkResult, lc) {
+  // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
+  assignEdgeIds(lc);
   const coords     = {};
   const laneCoords = {};
   const poolCoords = {};
