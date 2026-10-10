@@ -129,6 +129,7 @@ scripts/
 │   ├── pipeline.js     Orchestrator + CLI (public API: runPipeline)
 │   ├── validate.js     Validation wrapper → rules.js
 │   ├── rules.js        Rule engine (40 BPMN rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md`
+│   ├── scenario-rules.js SC01/SC06 (BPMN rules of the scenario pipeline)
 │   ├── optimize.js     Optimization Advisory layer (O01-O04, opt-in via optimize/soll mode)
 │   ├── topology.js     Gateway directions, topological sort, lane ordering
 │   ├── layout.js       ELK graph construction + layout execution
@@ -146,6 +147,7 @@ scripts/
 │   ├── pipeline.js      Orchestrator + CLI (public API: runDmnPipeline)
 │   ├── schema-gate.js    ajv gate for Decision-Core input
 │   ├── rules.js          DMN rule engine (19 DMN rules, 3 layers, 2 modes)
+│   ├── scenario-rules.js  SC04/SC05 (DMN rules of the scenario pipeline)
 │   ├── layout.js          DRD ELK layout (decisionCoreToElk, runDmnElkLayout)
 │   ├── coordinates.js      DRD coordinate mapping (buildDmnDiagrams)
 │   ├── di-check.js          Diagram integrity check (DD01-DD03)
@@ -157,6 +159,8 @@ scripts/
 │   ├── resource-paths.js  Where references/ lives in each layout
 │   ├── ontology.js        Loads + validates references/ontology.jsonld (VOCABULARY)
 │   └── geometry.js        Straight-segment clip maths (clipStraight, clipToRect)
+├── cross/              Cross-notation rules (SC02/SC03)
+│   └── rules.js          decisionRef ↔ Decision-Core consistency
 ├── agents/             Multi-agent orchestration
 │   ├── modeler.js       LLM-powered: text→JSON, refine, amend
 │   ├── reviewer.js       Deterministic: validateLogicCore() wrapper
@@ -185,6 +189,7 @@ shared/ontology.js ← shared/resource-paths, ajv (loads references/ontology.jso
 bpmn/types.js ← shared/ontology
 bpmn/rules.js ← bpmn/types, bpmn/workflow-net, shared/rule-profile, shared/rule-catalog
 bpmn/workflow-net.js ← bpmn/types
+bpmn/scenario-rules.js ← bpmn/workflow-net, shared/rule-catalog
 bpmn/validate.js ← bpmn/rules
 bpmn/topology.js ← bpmn/types
 bpmn/layout.js ← bpmn/types, shared/utils, bpmn/topology, elkjs
@@ -200,9 +205,11 @@ dmn/layout.js ← dmn/constants, dmn/requirement-order, shared/utils, elkjs
 dmn/coordinates.js ← dmn/constants, dmn/requirement-order, shared/geometry
 dmn/dmn-xml.js ← shared/utils, dmn/requirement-order, dmn-moddle
 dmn/requirement-order.js ← (no deps)
+dmn/scenario-rules.js ← shared/rule-catalog
+cross/rules.js ← shared/rule-catalog
 dmn/import.js ← dmn/import-scope, dmn/requirement-order, dmn/schema-gate, shared/resource-paths, dmn-moddle
 dmn/pipeline.js ← all of the above dmn/ modules except import
-scenarios/pipeline.js ← scenarios/*, bpmn/workflow-net, dmn/import
+scenarios/pipeline.js ← scenarios/*, bpmn/workflow-net, bpmn/scenario-rules, dmn/scenario-rules, dmn/import, cross/rules
 ```
 
 ## Repo Structure

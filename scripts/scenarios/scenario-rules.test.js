@@ -1,5 +1,5 @@
 /**
- * Phase E — tests for the judging layer (`rules.js`).
+ * Phase E — tests for the judging layer (SC01–SC06 in scripts/bpmn/scenario-rules.js, scripts/cross/rules.js, scripts/dmn/scenario-rules.js, composed by `runScenarioRules` in scripts/scenarios/pipeline.js).
  *
  * Seven cases per the task-6 brief's Verification section: SC01 acyclic, SC01 cyclic exclusion
  * (both directions: coverage holds AND the exclusion holds even with a genuine gap), SC02/SC03
@@ -22,7 +22,9 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-import { runScenarioRules, findAcyclicDecisionGateways, tableAnalysisKey } from './rules.js';
+import { runScenarioRules } from './pipeline.js';
+import { findAcyclicDecisionGateways } from '../bpmn/scenario-rules.js';
+import { tableAnalysisKey } from '../dmn/scenario-rules.js';
 import { enumerateCollaboration } from './collaboration.js';
 import { formatCollaborationResult } from './format.js';
 import { resolveBridge } from './bridge.js';

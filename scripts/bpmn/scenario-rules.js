@@ -1,13 +1,13 @@
 /**
- * Phase E — the judging layer over Tasks 1-5's scenario-enumeration outputs.
+ * BPMN scenario rules — SC01 and SC06, the two rules of the BPMN rule set that run in the scenario
+ * pipeline (scripts/scenarios/pipeline.js) instead of in runRules. Their layer (workflow_net) and
+ * default severity come from references/ontology.jsonld via buildRuleCatalog; they are not
+ * profile-switchable yet, because the scenario pipeline takes no profile. The scenario results
+ * arrive as `context`; nothing here imports from scripts/scenarios/.
  *
- * Every other module in `scripts/scenarios/` computes or presents; this is the one place
- * allowed to say something is wrong. Modeled on `scripts/bpmn/workflow-net.js`'s WF01-WF03
- * pattern (compute over an already-built structure, then a thin rule layer names only what
- * is objectively broken): six rules, each reading a fact Tasks 1-5 already produced, never
- * re-deriving it. Rule-id prefix `SC` (Scenario) — `D`/`B` (DMN, `dmn/rules.js`) and
- * `S`/`M`/`P`/`WF`/`O` (BPMN, `bpmn/rules.js`) are taken; confirmed clear at the time of
- * writing (`grep -c "id: '" bpmn/rules.js dmn/rules.js`).
+ * The rationale below was written for all six SC rules when they lived together in
+ * scripts/scenarios/rules.js. SC02/SC03 now live in scripts/cross/rules.js and SC04/SC05 in
+ * scripts/dmn/scenario-rules.js; the text is kept whole here because most of it is about SC01.
  *
  * ── Severity: WARNING, deliberately ─────────────────────────────────────────────────────────
  * `severity` is always `'WARNING'`. An earlier version declared `'ERROR'` on all six, on the
@@ -177,7 +177,8 @@
  * documents.
  */
 
-import { bpmnToPN } from '../bpmn/workflow-net.js';
+import { bpmnToPN } from './workflow-net.js';
+import { buildRuleCatalog } from '../shared/rule-catalog.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Structural gateway enumeration (SC01) — NOT branch/decision identification
@@ -262,7 +263,7 @@ export function findAcyclicDecisionGateways(lc, backwardEdges, actualPoolIds) {
  * @param {object} formatted - the matching `FormattedView`.
  * @returns {Array<object>} SC01 issues.
  */
-function checkUnreachableBranches(lc, enumerationResult, formatted) {
+function checkUnreachableBranches(lc, enumerationResult, formatted, severity) {
   // Enumeration is a PREFIX, not the complete set, under either count-based cap — see the
   // module header. SC01 declines entirely rather than report an un-enumerated branch as an
   // objective defect.
@@ -296,136 +297,13 @@ function checkUnreachableBranches(lc, enumerationResult, formatted) {
       if (takenEdges.has(key)) continue;
       issues.push({
         rule: 'SC01',
-        severity: 'WARNING',
+        severity,
         gatewayId: gw.gatewayId,
         poolId: gw.poolId,
         edgeId: edge.id,
         message: `gateway "${gw.gatewayId}"${gw.poolId ? ` (pool "${gw.poolId}")` : ''}, branch `
           + `"${edge.id}"${edge.label ? ` (${JSON.stringify(edge.label)})` : ''}, is never taken by `
           + 'any enumerated scenario',
-      });
-    }
-  }
-  return issues;
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// SC02 / SC03 — directly from BridgeResult
-// ═══════════════════════════════════════════════════════════════════════
-
-function checkUnresolvedDecisionRefs(bridge) {
-  return (bridge?.unresolved || []).map((f) => ({
-    rule: 'SC02',
-    severity: 'WARNING',
-    nodeId: f.occurrence.nodeId,
-    poolId: f.occurrence.poolId ?? null,
-    decisionRef: f.occurrence.decisionRef,
-    message: `node "${f.occurrence.nodeId}"${f.occurrence.poolId ? ` (pool "${f.occurrence.poolId}")` : ''} `
-      + `references decisionRef "${f.occurrence.decisionRef}", which resolves to no decision in any `
-      + 'of the given Decision-Core documents',
-  }));
-}
-
-function checkAmbiguousDecisionRefs(bridge) {
-  return (bridge?.ambiguous || []).map((f) => ({
-    rule: 'SC03',
-    severity: 'WARNING',
-    nodeId: f.occurrence.nodeId,
-    poolId: f.occurrence.poolId ?? null,
-    decisionRef: f.occurrence.decisionRef,
-    candidateDecisionCoreIds: f.candidates.map((c) => c.decisionCoreId),
-    message: `node "${f.occurrence.nodeId}"${f.occurrence.poolId ? ` (pool "${f.occurrence.poolId}")` : ''} `
-      + `references decisionRef "${f.occurrence.decisionRef}", which resolves to `
-      + `${f.candidates.length} distinct decisions (${f.candidates.map((c) => c.decisionCoreId).join(', ')}) — `
-      + 'no single answer is possible',
-  }));
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// SC04 / SC05 — decision table gaps and illegal overlaps
-// ═══════════════════════════════════════════════════════════════════════
-
-/**
- * The key `context.tableAnalyses` is expected to be indexed by, for one resolved bridge link.
- * Exported so a caller building the map uses the identical scheme.
- *
- * @param {import('./bridge.js').ResolvedLink} link
- * @returns {string}
- */
-export function tableAnalysisKey(link) {
-  return `${link.decision.decisionCoreId}::${link.decision.decisionId}`;
-}
-
-/**
- * Count resolved bridge links whose table has NO entry in `tableAnalyses` — a link SC04/SC05
- * silently skipped, e.g. because the caller's map was built with a different key scheme than
- * `tableAnalysisKey` produces. Zero when `tableAnalyses` was not supplied at all (that is the
- * documented "skip SC04/SC05 entirely" case, not a mismatch) — this only counts the case
- * where a caller clearly intended those two rules to run but a specific link fell through.
- * Surfaced on the return value of `runScenarioRules` so this failure mode reads as visible
- * ("N links could not be judged") rather than being indistinguishable from "clean".
- *
- * @param {object} bridge - `BridgeResult`, or undefined.
- * @param {Map<string, object>} [tableAnalyses]
- * @returns {number}
- */
-function countSkippedTableAnalyses(bridge, tableAnalyses) {
-  if (!tableAnalyses) return 0;
-  let skipped = 0;
-  for (const link of bridge?.resolved || []) {
-    if (!tableAnalyses.has(tableAnalysisKey(link))) skipped++;
-  }
-  return skipped;
-}
-
-function checkTableGaps(bridge, tableAnalyses) {
-  if (!tableAnalyses) return [];
-  const issues = [];
-  for (const link of bridge?.resolved || []) {
-    const analysis = tableAnalyses.get(tableAnalysisKey(link));
-    if (!analysis) continue;
-    // `gaps === null` means gap analysis was not attempted at all (Task 3's own honest
-    // "couldn't check" signal — `analysis.gapAnalysis.attempted === false`); that is NOT an
-    // SC04 finding. Only a non-null, non-empty `gaps` array is.
-    if (!Array.isArray(analysis.gaps) || analysis.gaps.length === 0) continue;
-    for (const gap of analysis.gaps) {
-      issues.push({
-        rule: 'SC04',
-        severity: 'WARNING',
-        nodeId: link.occurrence.nodeId,
-        poolId: link.occurrence.poolId ?? null,
-        tableId: analysis.tableId,
-        gap: gap.describe,
-        message: `business rule task "${link.occurrence.nodeId}"${link.occurrence.poolId ? ` (pool "${link.occurrence.poolId}")` : ''} `
-          + `invokes table "${analysis.tableId}", which has a coverage gap: ${gap.describe}`,
-      });
-    }
-  }
-  return issues;
-}
-
-function checkTableOverlaps(bridge, tableAnalyses) {
-  if (!tableAnalyses) return [];
-  const issues = [];
-  for (const link of bridge?.resolved || []) {
-    const analysis = tableAnalyses.get(tableAnalysisKey(link));
-    if (!analysis) continue;
-    // Overlap is only illegal under UNIQUE. FIRST/PRIORITY permit it by design (and Task 3
-    // already flags those branches `mayOverestimate`); COLLECT/ANY/RULE ORDER/OUTPUT ORDER
-    // are aggregating policies where several rules matching at once is the intended
-    // semantics, not a defect — "overlap" is structurally meaningless as "wrong" there.
-    if (analysis.hitPolicy !== 'UNIQUE') continue;
-    for (const overlap of analysis.overlaps || []) {
-      issues.push({
-        rule: 'SC05',
-        severity: 'WARNING',
-        nodeId: link.occurrence.nodeId,
-        poolId: link.occurrence.poolId ?? null,
-        tableId: analysis.tableId,
-        ruleIds: overlap.ruleIds,
-        message: `business rule task "${link.occurrence.nodeId}"${link.occurrence.poolId ? ` (pool "${link.occurrence.poolId}")` : ''} `
-          + `invokes table "${analysis.tableId}" (hitPolicy UNIQUE), where rules `
-          + `${overlap.ruleIds.map((id) => `"${id}"`).join(' and ')} overlap — UNIQUE forbids overlap`,
       });
     }
   }
@@ -452,7 +330,7 @@ function checkTableOverlaps(bridge, tableAnalyses) {
  * `Scenario` (single-process path, `enumerate.js`) carries no `sinkTokens` field at all, so
  * this simply finds nothing for it.
  */
-function checkImproperCompletion(enumerationResult) {
+function checkImproperCompletion(enumerationResult, severity) {
   const issues = [];
   for (const s of enumerationResult?.scenarios || []) {
     if (!s.sinkTokens) continue;
@@ -460,7 +338,7 @@ function checkImproperCompletion(enumerationResult) {
     if (overfull.length === 0) continue;
     issues.push({
       rule: 'SC06',
-      severity: 'WARNING',
+      severity,
       scenarioIndex: s.index,
       pools: overfull.map(([poolId]) => poolId),
       message: `scenario #${s.index} completes improperly: pool(s) `
@@ -473,51 +351,24 @@ function checkImproperCompletion(enumerationResult) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Public API
+// Register + runner
 // ═══════════════════════════════════════════════════════════════════════
 
-/**
- * One judged finding.
- *
- * @typedef {object} ScenarioRuleIssue
- * @property {'SC01'|'SC02'|'SC03'|'SC04'|'SC05'|'SC06'} rule
- * @property {'WARNING'} severity - always WARNING; this module has no ERROR tier. See the
- *   module header's "Severity: WARNING, deliberately" for why, and what `--strict` is for.
- * @property {string} message - human-readable, self-contained.
- * (Structured fields beyond `rule`/`severity`/`message` vary per rule — see each `check*`
- * function above for the exact shape; every one carries enough of node/table/edge/scenario id
- * to act on without re-parsing `message`.)
- */
+/** What this module implements, for buildRuleCatalog and the parity tests. */
+export const RULE_REGISTER = {
+  module: 'scripts/bpmn/scenario-rules.js',
+  partition: { ruleSet: 'BPMN', runsIn: 'scenario' },
+  entries: [
+    { id: 'SC01', description: 'A branch of an acyclic exclusive gateway that no enumerated scenario takes',
+      check: (context, rule) => checkUnreachableBranches(context.lc, context.enumerationResult, context.formatted, rule.defaultSeverity) },
+    { id: 'SC06', description: 'Improper completion: more than one token left on a pool\'s shared sink in one scenario',
+      check: (context, rule) => checkImproperCompletion(context.enumerationResult, rule.defaultSeverity) },
+  ],
+};
 
-/**
- * Run all six Phase-E rules over the outputs of Tasks 1-5.
- *
- * @param {object} context
- * @param {object} context.lc - the Logic-Core document `context.enumerationResult` /
- *   `context.formatted` were produced from (with or without `pools`).
- * @param {object} context.enumerationResult - `EnumerationResult` (enumerate.js) or
- *   `CollaborationEnumerationResult` (collaboration.js), matching `lc`.
- * @param {object} context.formatted - the `FormattedView` (format.js) built from the SAME
- *   `enumerationResult` and `lc`.
- * @param {object} [context.bridge] - `BridgeResult` (bridge.js). Omit to skip SC02-SC05
- *   entirely (e.g. a process with no `decisionRef` at all).
- * @param {Map<string, object>} [context.tableAnalyses] - `tableAnalysisKey(link) →
- *   DecisionTableAnalysis` (decision-table.js), one entry per resolved bridge link the caller
- *   wants judged. This module never calls `analyzeDecisionTable` itself — see the module
- *   header for why. Omit (or a link missing from the map) to skip SC04/SC05 for that link.
- * @returns {{issues: ScenarioRuleIssue[], skippedTableAnalyses: number}} `skippedTableAnalyses`
- *   counts resolved bridge links `tableAnalyses` was supplied for but had no entry matching —
- *   see `countSkippedTableAnalyses`. Always 0 when `context.tableAnalyses` is omitted.
- */
-export function runScenarioRules(context) {
-  const { lc, enumerationResult, formatted, bridge, tableAnalyses } = context || {};
-  const issues = [
-    ...checkUnreachableBranches(lc, enumerationResult, formatted),
-    ...checkUnresolvedDecisionRefs(bridge),
-    ...checkAmbiguousDecisionRefs(bridge),
-    ...checkTableGaps(bridge, tableAnalyses),
-    ...checkTableOverlaps(bridge, tableAnalyses),
-    ...checkImproperCompletion(enumerationResult),
-  ];
-  return { issues, skippedTableAnalyses: countSkippedTableAnalyses(bridge, tableAnalyses) };
+export const BPMN_SCENARIO_RULES = buildRuleCatalog(RULE_REGISTER);
+
+/** SC01 then SC06 findings for one scenario-pipeline context (see scripts/scenarios/pipeline.js). */
+export function runBpmnScenarioRules(context = {}) {
+  return BPMN_SCENARIO_RULES.flatMap((rule) => rule.check(context, rule));
 }
