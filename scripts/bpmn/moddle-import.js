@@ -27,14 +27,6 @@ export const EVENT_SUBPROCESS_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field ===
 // is what found it.
 export const INSTANTIATE_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field === 'instantiate').allowed;
 
-const FLOW_NODE_TYPES = new Set([
-  'bpmn:StartEvent', 'bpmn:EndEvent', 'bpmn:IntermediateCatchEvent', 'bpmn:IntermediateThrowEvent', 'bpmn:BoundaryEvent',
-  'bpmn:Task', 'bpmn:UserTask', 'bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:SendTask', 'bpmn:ReceiveTask',
-  'bpmn:ManualTask', 'bpmn:BusinessRuleTask', 'bpmn:CallActivity', 'bpmn:SubProcess', 'bpmn:Transaction',
-  'bpmn:ExclusiveGateway', 'bpmn:ParallelGateway', 'bpmn:InclusiveGateway', 'bpmn:EventBasedGateway', 'bpmn:ComplexGateway',
-  'bpmn:DataObjectReference', 'bpmn:DataStoreReference', 'bpmn:TextAnnotation', 'bpmn:Group',
-]);
-
 const EVENT_DEF_MAP = Object.fromEntries(MARKER_BY_EVENT_DEFINITION);
 
 /**
