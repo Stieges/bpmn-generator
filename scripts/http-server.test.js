@@ -284,7 +284,7 @@ describe('POST /api/v1/generate and /validate — refused rule profile', () => {
       const data = await res.json();
       expect(res.status).toBe(400);
       expect(data.status).toBe('profile_error');
-      expect(data.error).toBe('rule profile "typo": unknown severity CRITICAL (M03)');
+      expect(data.error).toBe('rule profile "typo" does not match the profile schema: "/overrides/M03/severity" must be one of ERROR, WARNING, INFO, ADVISORY, OFF');
     });
   }
 
@@ -295,6 +295,6 @@ describe('POST /api/v1/generate and /validate — refused rule profile', () => {
     const res = await post('/api/v1/orchestrate', { logicCore: lc, ruleProfile: bad });
     const data = await res.json();
     expect(res.status).toBe(400);
-    expect(data.error).toMatch(/kaputt\.json is not valid JSON at line 1, column \d+/);
+    expect(data.error).toMatch(/kaputt\.json" is not valid JSON at line 1, column \d+$/);
   });
 });

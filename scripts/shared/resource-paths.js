@@ -54,6 +54,8 @@ const SOURCE_DECISION   = join(__dirname, '..', '..', 'references', 'decision-co
 const PACKAGED_DECISION = join(__dirname, '..', 'references', 'decision-core-schema.json');
 const SOURCE_ONTOLOGY   = join(__dirname, '..', '..', 'references', 'ontology.jsonld');
 const PACKAGED_ONTOLOGY = join(__dirname, '..', 'references', 'ontology.jsonld');
+const SOURCE_PROFILE_SCHEMA   = join(__dirname, '..', '..', 'references', 'rule-profile-schema.json');
+const PACKAGED_PROFILE_SCHEMA = join(__dirname, '..', 'references', 'rule-profile-schema.json');
 
 /**
  * Source first, packaged copy second, loud failure last. Exported because it is
@@ -91,4 +93,9 @@ export function decisionCoreSchemaPath() {
 /** Absolute path to references/ontology.jsonld. */
 export function ontologyPath() {
   return resolveWithFallback(SOURCE_ONTOLOGY, PACKAGED_ONTOLOGY, 'ontology.jsonld');
+}
+
+/** Absolute path to references/rule-profile-schema.json. */
+export function ruleProfileSchemaPath() {
+  return resolveWithFallback(SOURCE_PROFILE_SCHEMA, PACKAGED_PROFILE_SCHEMA, 'rule-profile-schema.json');
 }

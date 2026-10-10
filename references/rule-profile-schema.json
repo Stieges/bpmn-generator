@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stieges.github.io/bpmn-generator/rule-profile-schema.json",
+  "title": "Rule profile",
+  "description": "A rule profile for the BPMN or DMN rule engine (scripts/shared/rule-profile.js). Every profile — inline over HTTP, by name over MCP, or from a file — passes this gate before any rule logic reads it. The top-level keys are exactly the ones the committed profiles in rules/ use; the severity enum is the ontology's severity vocabulary (fenced by scripts/shared/rule-profile.test.js). Which layer and rule ids exist is not checked here: that depends on the rule set, and the runner warns about names it does not know.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "profile": { "type": "string", "maxLength": 200 },
+    "version": { "type": "string", "maxLength": 32 },
+    "description": { "type": "string", "maxLength": 1000 },
+    "layers": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": { "pattern": "^[a-z_]{1,32}$" },
+      "additionalProperties": { "$ref": "#/$defs/entry" }
+    },
+    "overrides": {
+      "type": "object",
+      "maxProperties": 256,
+      "propertyNames": { "pattern": "^[A-Za-z0-9_]{1,16}$" },
+      "additionalProperties": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "severity": { "enum": ["ERROR", "WARNING", "INFO", "ADVISORY", "OFF"] },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "severity": { "$ref": "#/$defs/severity" }
+      }
+    }
+  }
+}
