@@ -312,6 +312,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **A single-process Logic-Core without an `id` no longer emits `undefined` (#37).** The schema's
+  `SingleProcess` branch makes `id` optional; the process, `Participant_undefined`/`processRef`, the
+  plane's `bpmnElement`, the lane DI, `dot.js` (a `TypeError` with lanes), the re-imported phantom
+  black-box pool named "undefined" and the scenario pool label `pool_0` all followed from the one
+  missing value. `assignProcessId` (`topology.js`) now gives it `Process_1` (`_2`… on a collision)
+  once at `runPipeline` entry on the pipeline's own copy; `generateBpmnXml`, `logicCoreToDot` and
+  `runScenarioPipeline` apply the pure `withProcessId` to a direct call, so the caller's object is
+  never changed. The `proc.id || '1'` LaneSet fallback is gone. The schema still allows the
+  omission, deliberately: rejecting it would break every existing single-process input.
+  End-to-end tests cover it with and without lanes, both importers, DOT, and the scenario output.
+  The CLI test for a non-fatal serialisation warning, which used this defect as its vehicle,
+  now uses an association with an unresolvable target.
 - **DOT import: parallel edges and a trailing `;` (#66).** `dotToLogicCore` minted `flow_<src>_<tgt>`
   for every edge, so parallel edges collided (and, since #64, the pipeline keeps an id it is given);
   it now leaves `id` unset and `normalizeEdgeIds` assigns unique ones. The edge and node statement

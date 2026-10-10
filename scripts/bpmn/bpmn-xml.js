@@ -16,7 +16,7 @@ import {
 
 import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
-import { inferGatewayDirections, assignEdgeIds } from './topology.js';
+import { inferGatewayDirections, assignEdgeIds, withProcessId } from './topology.js';
 import { inferEventMarker } from './icons.js';
 
 const moddle = new BpmnModdle();
@@ -596,7 +596,7 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
   // LaneSet
   const lanes = proc.lanes || [];
   if (lanes.length > 0) {
-    const laneSet = create('bpmn:LaneSet', { id: `LaneSet_${proc.id || '1'}` });
+    const laneSet = create('bpmn:LaneSet', { id: `LaneSet_${proc.id}` });
     for (const lane of lanes) {
       const laneEl = buildLane(lane, nodes, flowNodeMap);
       laneSet.get('lanes').push(laneEl);
@@ -919,6 +919,8 @@ function resolveMessageFlowRef(ref, processes, collapsedPools, participantMap) {
  * `assignEdgeIds`); `runPipeline` instead works on a copy.
  */
 async function generateBpmnXml(lc, coordMap) {
+  // A single process without an `id` gets the same deterministic one the pipeline gives it (#37).
+  lc = withProcessId(lc);
   // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
   assignEdgeIds(lc);
   const isMultiPool = lc.pools && lc.pools.length > 0;

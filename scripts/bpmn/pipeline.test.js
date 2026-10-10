@@ -3529,6 +3529,81 @@ describe('DOT format', () => {
     expect(rt.edges.length).toBe(lc.edges.length);
   });
 
+  describe('single-process Logic-Core without an id (#37)', () => {
+    const noLanes = () => ({
+      name: 'P',
+      nodes: [{ id: 's', type: 'startEvent', name: 'S' }, { id: 'a', type: 'task', name: 'A' }, { id: 'e', type: 'endEvent', name: 'E' }],
+      edges: [{ source: 's', target: 'a' }, { source: 'a', target: 'e' }],
+    });
+    const withLanes = () => ({
+      ...noLanes(),
+      nodes: [{ id: 's', type: 'startEvent', name: 'S', lane: 'l1' }, { id: 'a', type: 'task', name: 'A', lane: 'l2' }, { id: 'e', type: 'endEvent', name: 'E', lane: 'l2' }],
+      lanes: [{ id: 'l1', name: 'L1' }, { id: 'l2', name: 'L2' }],
+    });
+
+    test.each([['without lanes', noLanes], ['with lanes', withLanes]])('%s: no "undefined" anywhere, no XML warning, caller untouched', async (_, make) => {
+      const lc = make();
+      const before = JSON.stringify(lc);
+      const result = await runPipeline(lc);
+      expect(result.validation.errors).toEqual([]);
+      expect(result.validation.xmlWarnings ?? []).toEqual([]);
+      expect(result.bpmnXml).not.toMatch(/undefined/);
+      expect(result.svg).not.toMatch(/undefined/);
+      expect(JSON.stringify(lc)).toBe(before);
+      expect(lc.id).toBeUndefined();
+    });
+
+    test('without lanes: the plane points at the process', async () => {
+      const { bpmnXml } = await runPipeline(noLanes());
+      const procId = bpmnXml.match(/<bpmn:process id="([^"]+)"/)[1];
+      expect(bpmnXml).toContain(`<bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${procId}"`);
+    });
+
+    test('with lanes: participant/processRef resolve and the lane BPMNShapes are emitted', async () => {
+      const { bpmnXml } = await runPipeline(withLanes());
+      const procId = bpmnXml.match(/<bpmn:process id="([^"]+)"/)[1];
+      expect(bpmnXml).toContain(`processRef="${procId}"`);
+      expect(bpmnXml).toMatch(/<bpmndi:BPMNShape id="l1_di" bpmnElement="l1"/);
+      expect(bpmnXml).toMatch(/<bpmndi:BPMNShape id="l2_di" bpmnElement="l2"/);
+    });
+
+    test('with lanes: re-import yields one pool and no phantom black-box pool (both importers)', async () => {
+      const { bpmnXml } = await runPipeline(withLanes());
+      for (const rt of [await bpmnToLogicCore(bpmnXml), await moddleToLogicCore((await moddleParse(bpmnXml)).rootElement)]) {
+        expect((rt.pools ?? [rt]).length).toBe(1);
+        expect(rt.collapsedPools ?? []).toEqual([]);
+        expect((rt.pools ?? [rt])[0].lanes.map((l) => l.id)).toEqual(['l1', 'l2']);
+        expect(JSON.stringify(rt)).not.toMatch(/undefined/);
+      }
+    });
+
+    test('the id is deterministic and avoids a collision with an existing id', async () => {
+      const a = (await runPipeline(noLanes())).bpmnXml;
+      const b = (await runPipeline(noLanes())).bpmnXml;
+      expect(a).toBe(b);
+      const clash = noLanes();
+      clash.nodes[1].id = 'Process_1';
+      clash.edges = [{ source: 's', target: 'Process_1' }, { source: 'Process_1', target: 'e' }];
+      const ids = [...(await runPipeline(clash)).bpmnXml.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+      expect(ids.filter((i) => i === 'Process_1')).toHaveLength(1);
+    });
+
+    test('logicCoreToDot no longer throws for lanes without a process id', () => {
+      const lc = withLanes();
+      expect(() => logicCoreToDot(lc)).not.toThrow();
+      expect(logicCoreToDot(lc)).not.toMatch(/undefined/);
+      expect(lc.id).toBeUndefined();
+    });
+
+    test('generateBpmnXml called directly handles it too, without touching the caller', async () => {
+      const { coordMap } = await runPipeline(withLanes());
+      const lc = withLanes();
+      const xml = await generateBpmnXml(lc, coordMap);
+      expect(xml).not.toMatch(/undefined/);
+      expect(lc.id).toBeUndefined();
+    });
+  });
+
   describe('dotToLogicCore edge parsing (#66)', () => {
     const wrap = (...body) => ['digraph G {', ...body, '}'].join('\n');
     const nodesDot = ['  s [shape=circle label="S"];', '  b [shape=box label="B"];', '  e [shape=doublecircle label="E"];'];
@@ -4439,13 +4514,12 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
     // non-fatal by default before this change and must stay so; a gate that swallowed the whole
     // channel would turn every serialisation warning into a build break.
     //
-    // The fixture is the single-process-without-`id` case tracked in #37 and named in CLAUDE.md's
-    // Known Limitations: `bpmn-xml.js` has no fallback for it, so the DI ends up referencing
-    // `undefined` and the round trip reports "unresolved reference <undefined>". Chosen precisely
-    // because it is a *documented, tracked, still-open* limitation rather than a gap that might
-    // be closed later — an earlier draft of this test used an unguarded `implementation` on a
-    // gateway, and the S15 work in this same stage closed that gap and broke the test. A
-    // narrowness test needs a warning source with a long life.
+    // The fixture is an association whose target names no element: validation lets it through, the
+    // association is not emitted, and the round trip reports "unresolved reference <undefined>".
+    // It used to be the single-process-without-`id` case (#37) — which is fixed now; an earlier
+    // draft used an unguarded `implementation` on a gateway, closed by S15. A narrowness test
+    // needs a warning source that outlives the gaps it stands in for, and it is one reason to
+    // revisit this fixture whenever that class of warning is closed in turn.
     const { spawnSync } = await import('node:child_process');
     const os = await import('node:os');
     const fs = await import('node:fs');
@@ -4454,7 +4528,8 @@ describe('net-check wired into runPipeline (netDiagnostics)', () => {
     const inPath = path.join(dir, 'in.json');
     const outBase = path.join(dir, 'out');
     fs.writeFileSync(inPath, JSON.stringify({
-      // No `id` — legal per input-schema.json's SingleProcess branch, see #37.
+      id: 'proc',
+      associations: [{ id: 'assoc_ghost', source: 't', target: 'no_such_element' }],
       nodes: [
         { id: 'start', type: 'startEvent', name: 'Antrag eingegangen' },
         { id: 't', type: 'userTask', name: 'Antrag prüfen' },

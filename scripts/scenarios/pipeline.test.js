@@ -536,3 +536,18 @@ describe('CLI (spawned) — --decisions accepts .dmn (content-sniffed)', () => {
     expect(r.stderr).not.toMatch(/\n\s+at /);
   });
 });
+
+describe('single-process Logic-Core without an id (#37)', () => {
+  test('the pool label is the deterministic process id, not a synthesized pool_0', () => {
+    const lc = {
+      nodes: [{ id: 's', type: 'startEvent', name: 'S' }, { id: 'g', type: 'exclusiveGateway', name: 'G' }, { id: 'a', type: 'task', name: 'A' },
+        { id: 'b', type: 'task', name: 'B' }, { id: 'e', type: 'endEvent', name: 'E' }],
+      edges: [{ source: 's', target: 'g' }, { source: 'g', target: 'a' }, { source: 'g', target: 'b' }, { source: 'a', target: 'e' }, { source: 'b', target: 'e' }],
+    };
+    const before = JSON.stringify(lc);
+    const r = runScenarioPipeline(lc);
+    expect(JSON.stringify(r)).not.toMatch(/pool_0/);
+    expect(r.enumerationResult.poolIds).toEqual(['Process_1']);
+    expect(JSON.stringify(lc)).toBe(before);
+  });
+});
