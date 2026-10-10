@@ -1347,12 +1347,24 @@ const OPTIMIZATION_RULES = inLayer('optimization');
 // its findings silently, so the profile is refused instead.
 const PROFILE_CONTEXT = { ...profileContext('BPMN'), severityOnlyFor: { ADVISORY: new Set(['optimization']) } };
 
-/** Report what a profile says that the BPMN rule set cannot honour: warn, or refuse. */
-function reportProfile(profile) {
+/**
+ * Refuse a profile the BPMN rule set cannot honour; returns the audit warnings, prints nothing.
+ * The same check runRules applies, exported so a caller (the HTTP gate) can refuse before any work.
+ * @param {object|null} profile
+ * @returns {string[]} warnings
+ * @throws {ProfileRejectedError}
+ */
+function checkRuleProfile(profile) {
   assertRuleProfile(profile);
+  if (!profile) return [];
   const { warnings, errors } = auditProfile(profile, PROFILE_CONTEXT);
   if (errors.length) throw new ProfileRejectedError(errors.join('; '));
-  for (const w of warnings) console.warn(`⚠ ${w}`);
+  return warnings;
+}
+
+/** Report what a profile says that the BPMN rule set cannot honour: warn, or refuse. */
+function reportProfile(profile) {
+  for (const w of checkRuleProfile(profile)) console.warn(`⚠ ${w}`);
 }
 
 // loadRuleProfile / isRuleEnabled / getEffectiveSeverity now live in
@@ -1490,4 +1502,4 @@ function classifyResult(result, severity, errors, warnings, infos, prefix) {
   }
 }
 
-export { RULES, RULE_REGISTER, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES, loadRuleProfile, profileForMode, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };
+export { checkRuleProfile, RULES, RULE_REGISTER, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES, loadRuleProfile, profileForMode, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };

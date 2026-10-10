@@ -11,8 +11,8 @@ const frontendDir = join(__dirname, '..', 'frontend');
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
 import { runPipeline, validateLogicCore } from './bpmn/pipeline.js';
-import { profileForMode } from './bpmn/rules.js';
-import { ProfileRejectedError, assertRuleProfile, assertLayerNotWeakened } from './shared/rule-profile.js';
+import { profileForMode, checkRuleProfile } from './bpmn/rules.js';
+import { ProfileRejectedError, assertLayerNotWeakened } from './shared/rule-profile.js';
 import { profileContext } from './shared/rule-catalog.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -158,7 +158,7 @@ export function clientRuleProfile(body) {
   if (typeof profile !== 'object' || Array.isArray(profile)) {
     throw new ProfileRejectedError('ruleProfile must be an inline JSON object; profile names and file paths are not accepted over HTTP');
   }
-  assertRuleProfile(profile);
+  checkRuleProfile(profile);
   assertLayerNotWeakened(profile, 'soundness', BPMN_PROFILE_CONTEXT);
   return profile;
 }
