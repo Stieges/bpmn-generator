@@ -22,10 +22,12 @@ export class LlmProviderError extends Error {
   }
 }
 
-// The default transport: global fetch, looked up per call (tests replace it). A caller that
-// targets a client-supplied URL passes a pinned transport instead (shared/outbound-url.js).
+// The default transport: global fetch, looked up per call (tests replace it). It never follows a
+// redirect — a 3xx from the endpoint is a provider error, not a hop to wherever it points. A
+// caller that targets a client-supplied URL passes a pinned transport instead
+// (shared/outbound-url.js), which does not follow redirects either.
 const fetchRequest = (url, { method, headers, body, timeoutMs }) =>
-  fetch(url, { method, headers, body, signal: AbortSignal.timeout(timeoutMs) });
+  fetch(url, { method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
 
 export function createLlmProvider({ baseUrl, apiKey, model, timeout = 120_000, request = fetchRequest }) {
   const normalizedBase = baseUrl.replace(/\/$/, '');
