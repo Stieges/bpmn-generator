@@ -8,13 +8,19 @@ Expect an initial response within 7 days. Confirmed issues: fix or coordinated d
 
 ## Threat model
 
-The BPMN Generator runs in three deployment shapes with different trust boundaries:
+The BPMN Generator runs in four deployment shapes with different trust boundaries:
 
 1. **Library** (Node module via `npm install`): caller is trusted. No special handling.
 2. **CLI** (`node bpmn/pipeline.js ...`): local user is trusted. Same as library mode. (A rule
    profile path given here still goes through the same safe reader and schema gate as every
    other profile; only the soundness restriction of the HTTP API does not apply.)
-3. **HTTP API / MCP server**: network is untrusted. **This is the surface that needs hardening.**
+3. **HTTP API**: network is untrusted. **This is the surface that needs hardening.**
+4. **MCP server** (stdio, started by the local user's MCP client): a **trusted local user**, the
+   same trust level as the CLI — it may relax any rule, the soundness layer included, because the
+   user who runs it could run the CLI with any profile file anyway. What it does not get is
+   filesystem reach: the tool arguments are written by an LLM, which a prompt injection in the
+   modelled text can steer, so a profile is a *name* inside the repository's `rules/` directory,
+   never a path, and every input still passes the same schema gates as over HTTP.
 
 ### HTTP API threats and mitigations
 
@@ -24,7 +30,7 @@ The BPMN Generator runs in three deployment shapes with different trust boundari
 | Unauthorized access | API key required in production (`BPMN_API_KEY` env), fail-fast startup if missing while `NODE_ENV=production` | `scripts/http-server.js` — `startupCheck` |
 | Resource exhaustion | Body size cap (10 MB), per-IP rate limit (30 req/min) | `scripts/http-server.js` |
 | Malformed input crashing the pipeline | Strict JSON Schema validation at `/api/v1/generate`, `/api/v1/validate`, and `/api/v1/orchestrate` (when `body.logicCore` is provided), against `references/input-schema.json` | `scripts/bpmn/schema-gate.js` (wired in `http-server.js`) |
-| Rule profile as an attack vector (file read through a profile path, oversized or deeply keyed profiles, forged log lines) | **HTTP:** `ruleProfile` is an inline object only — a string is refused, no file a client names is ever read. **MCP:** `ruleProfile` is a profile *name* resolved inside the repository's `rules/` directory (found from the module's location, not the working directory); paths, `..` and symlinks leaving `rules/` are refused. **Every profile**, inline or from a file, passes `references/rule-profile-schema.json` after a 64 KiB size bound. Files (MCP names, CLI paths) are opened non-blocking and must be regular files of at most 256 KiB. Messages quote client tokens JSON-escaped without control characters, list at most 20 warnings / 5 schema problems, never include file content, and name no server path for an HTTP or MCP caller; the audit line of a refusal is capped at 500 characters. Over HTTP a profile may not disable the soundness layer or set a soundness rule to `OFF`/`INFO`/`ADVISORY` | `scripts/shared/rule-profile.js` (wired in `http-server.js`, `mcp-bpmn-server.js`) |
+| Rule profile as an attack vector (file read through a profile path, oversized or deeply keyed profiles, forged log lines) | **HTTP:** `ruleProfile` is an inline object only — a string is refused, no file a client names is ever read. **MCP:** `ruleProfile` is a profile *name* resolved inside the repository's `rules/` directory (located once, in `scripts/shared/resource-paths.js`, from the module's location — never the working directory, never `node_modules/rules`); paths, `..` and symlinks leaving `rules/` are refused. Named profiles need a repository checkout: `rules/` is not shipped in the npm package, so an installed package refuses every name ("named rule profiles need a repository checkout; pass none or use the CLI with a file"). **Every profile**, inline or from a file, passes `references/rule-profile-schema.json` after a size/depth bound (64 KiB, 4 levels) checked by a walk that stops at the limit. Files (MCP names, CLI paths) are opened non-blocking and must be regular files of at most 256 KiB. Messages quote client tokens JSON-escaped without control or Unicode format characters, list at most 20 warnings / 5 schema problems, never include file content, and name no server path for an HTTP or MCP caller; the audit line of a refusal is capped at 500 characters. Over HTTP a profile may not disable the soundness layer or set a soundness rule below its default severity (it may only raise one); MCP, a trusted local channel, may |  `scripts/shared/rule-profile.js` (wired in `http-server.js`, `mcp-bpmn-server.js`) |
 | LLM output injection | LLM output flows through the same schema gate before reaching the pipeline; the LLM never writes to disk directly | `scripts/orchestrator.js` → schema-gate → `runPipeline` |
 | Sensitive data in audit log | Audit log path is configurable via `AUDIT_LOG_PATH` for secure storage (encrypted volumes, append-only filesystems) | `scripts/audit.js` |
 
