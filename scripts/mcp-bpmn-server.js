@@ -20,23 +20,19 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { runPipeline, validateLogicCore, generateDiagramSet } from './bpmn/pipeline.js';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { profileForMode } from './bpmn/rules.js';
 import { loadNamedRuleProfile, ProfileRejectedError } from './shared/rule-profile.js';
+import { rulesDirPath } from './shared/resource-paths.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 
-// The repository's rules/ directory, found from this module's location — never from the process
-// working directory, which made the documented "rules/strict-profile.json" resolve to a file that
-// does not exist and silently run every rule at its default severity.
-const RULES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'rules');
-
 const PROFILE_PARAM = {
   type: 'string',
-  description: 'Name of a rule profile in the repository\'s rules/ directory (optional): "strict", "strict-profile", ' +
-    '"dmn-default-profile", or "custom/<name>" for a project profile. Names only — no directories, no "..".',
+  description: 'Name of a BPMN rule profile in the repository\'s rules/ directory (optional): "strict" ' +
+    '(also "strict-profile", "strict-profile.json" or "rules/strict-profile.json"), or "custom/<name>" for a ' +
+    'project profile in rules/custom/. Names only — no other directory, no "..". Needs a repository checkout; ' +
+    'an installed npm package has no rules/ directory and refuses every name.',
 };
 
 const server = new Server(
@@ -125,7 +121,10 @@ function ruleProfileOf(args) {
   if (typeof name !== 'string') {
     throw new ProfileRejectedError('ruleProfile must be a profile name such as "strict"');
   }
-  return loadNamedRuleProfile(name, RULES_DIR);
+  // rules/ is found from the module's location (resource-paths.js), never from the working
+  // directory — which made the documented "rules/strict-profile.json" miss and silently run every
+  // rule at its default severity — and never outside the repository (null in an npm install).
+  return loadNamedRuleProfile(name, rulesDirPath());
 }
 
 async function handleToolCall(request) {

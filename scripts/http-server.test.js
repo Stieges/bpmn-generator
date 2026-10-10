@@ -323,7 +323,7 @@ describe('rule profiles over HTTP — inline objects only, gated, bounded', () =
     });
 
     test(`${path}: a profile may not switch soundness off or below a failing severity`, async () => {
-      for (const ruleProfile of [{ layers: { soundness: { enabled: false } } }, { overrides: { S01: { severity: 'OFF' } } }, { overrides: { S02: { severity: 'INFO' } } }]) {
+      for (const ruleProfile of [{ layers: { soundness: { enabled: false } } }, { overrides: { S01: { severity: 'OFF' } } }, { overrides: { S02: { severity: 'INFO' } } }, { overrides: { S01: { severity: 'WARNING' } } }]) {
         const res = await post(path, { logicCore: lc, ruleProfile });
         expect(res.status).toBe(400);
         expect((await res.json()).error).toMatch(/not accepted from a client/);

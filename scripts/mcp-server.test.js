@@ -174,9 +174,13 @@ describe('rule profiles over MCP are names inside rules/, never paths', () => {
       await expect(call(name, { logicCore: styled, ruleProfile: { overrides: {} } })).rejects.toThrow(/profile name/);
     });
 
-    test(`${name} describes ruleProfile as a name`, () => {
-      expect(tool(name).inputSchema.properties.ruleProfile.description).toMatch(/name/i);
-      expect(tool(name).inputSchema.properties.ruleProfile.description).not.toMatch(/path/i);
+    test(`${name} describes ruleProfile as a BPMN profile name, including the rules/ form`, () => {
+      const d = tool(name).inputSchema.properties.ruleProfile.description;
+      expect(d).toMatch(/name/i);
+      expect(d).not.toMatch(/path/i);
+      expect(d).toContain('rules/strict-profile.json');
+      expect(d).not.toMatch(/dmn/i);
+      expect(d).toMatch(/repository checkout/);
     });
   }
 });

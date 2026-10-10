@@ -321,7 +321,7 @@ describe('profiles by name, resolved inside rules/ only', () => {
   });
 
   test('a named profile is labelled by its name, never its path', () => {
-    expect(profileProvenance(loadNamedRuleProfile('strict', RULES_DIR)).label).toBe('profile "strict"');
+    expect(profileProvenance(loadNamedRuleProfile('strict', RULES_DIR)).label).toBe('"strict"');
   });
 
   test.each(['../../etc/passwd', '/etc/passwd', 'custom/../../x', 'Strict', 'strict/../x', 'a'.repeat(80), ''])('%s is refused, naming only the name', (name) => {
@@ -360,5 +360,95 @@ describe('a client may not weaken the soundness layer', () => {
   });
   test('raising a soundness rule or relaxing a style rule is fine', () => {
     expect(() => assertLayerNotWeakened({ layers: { soundness: { enabled: true } }, overrides: { S01: { severity: 'ERROR' }, M01: { severity: 'OFF' } } }, 'soundness', ctx)).not.toThrow();
+  });
+});
+
+// ─── Second hardening pass ───
+
+import { rulesDirFor } from './resource-paths.js';
+
+describe('the size bound is a bounded walk, not a full serialisation', () => {
+  test('a profile nested millions of levels deep is refused in well under 200 ms', () => {
+    let deep = {};
+    for (let i = 0; i < 4_500_000; i++) deep = { a: deep };
+    const t0 = performance.now();
+    expect(() => assertRuleProfile({ layers: deep })).toThrow(/nested deeper than 4 levels/);
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+
+  test('a wide profile over the bound is refused by size, before the schema', () => {
+    const layers = Object.fromEntries(Array.from({ length: 20000 }, (_, i) => [`l${i}`, { enabled: true }]));
+    expect(() => assertRuleProfile({ layers })).toThrow(/larger than 64 KiB/);
+  });
+
+  test('every committed profile is within depth and size', () => {
+    for (const f of committedProfiles()) expect(() => assertRuleProfile(JSON.parse(readFileSync(f, 'utf8')))).not.toThrow();
+  });
+});
+
+describe('a layer entry and an override entry accept only what the runner honours', () => {
+  test('severity on a layer is refused', () => {
+    expect(() => assertRuleProfile({ layers: { style: { severity: 'ERROR' } } })).toThrow(/unknown key "severity"/);
+  });
+  test('enabled on an override is refused', () => {
+    expect(() => assertRuleProfile({ overrides: { S01: { enabled: false } } })).toThrow(/unknown key "enabled"/);
+  });
+  test('the schema says so', () => {
+    expect(Object.keys(schemaFile.$defs.layerEntry.properties)).toEqual(['enabled']);
+    expect(Object.keys(schemaFile.$defs.overrideEntry.properties)).toEqual(['severity']);
+  });
+});
+
+describe('a client may only raise a soundness rule, never lower it below its default', () => {
+  const ctx = profileContext('BPMN');
+  test('S01 → WARNING is refused (default ERROR)', () => {
+    expect(() => assertLayerNotWeakened({ overrides: { S01: { severity: 'WARNING' } } }, 'soundness', ctx))
+      .toThrow(/sets soundness rule "S01" to WARNING, below its default ERROR/);
+  });
+  test('a soundness rule whose default is WARNING may stay WARNING or rise to ERROR, not drop to INFO', () => {
+    const warningRule = [...ctx.ruleLayer].find(([id, layer]) => layer === 'soundness' && ctx.ruleDefaultSeverity.get(id) === 'WARNING')?.[0];
+    expect(warningRule).toBeDefined();
+    expect(() => assertLayerNotWeakened({ overrides: { [warningRule]: { severity: 'WARNING' } } }, 'soundness', ctx)).not.toThrow();
+    expect(() => assertLayerNotWeakened({ overrides: { [warningRule]: { severity: 'ERROR' } } }, 'soundness', ctx)).not.toThrow();
+    expect(() => assertLayerNotWeakened({ overrides: { [warningRule]: { severity: 'INFO' } } }, 'soundness', ctx)).toThrow(ProfileRejectedError);
+  });
+});
+
+describe('format characters cannot spoof a message', () => {
+  test('bidi overrides and isolates, zero-width characters and BOM are removed', () => {
+    const q = quoteForMessage('a‮b⁦c​d﻿e‏f');
+    expect(q).toBe('"abcdef"');
+    expect(q).not.toMatch(/\p{Cf}/u);
+  });
+});
+
+describe('named profiles need the repository rules/ directory', () => {
+  test('a checkout: the rules/ next to this package', () => {
+    expect(rulesDirFor(__dirname)).toBe(RULES_DIR);
+  });
+
+  test('an installed package: no rules/ directory, and never node_modules/rules', () => {
+    const root = tmp();
+    const pkgShared = join(root, 'node_modules', 'bpmn-generator', 'shared');
+    mkdirSync(pkgShared, { recursive: true });
+    mkdirSync(join(root, 'node_modules', 'rules'));
+    writeFileSync(join(root, 'node_modules', 'rules', 'strict-profile.json'), '{}');
+    expect(rulesDirFor(pkgShared)).toBeNull();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test('without it a name is refused with a clear message', () => {
+    expect(() => loadNamedRuleProfile('strict', null))
+      .toThrow('named rule profiles need a repository checkout; pass none or use the CLI with a file');
+  });
+
+  test('a named profile message says "rule profile "strict"", once', () => {
+    const dir = tmp();
+    writeFileSync(join(dir, 'broken.json'), '{');
+    let err;
+    try { loadNamedRuleProfile('broken', dir); } catch (e) { err = e; }
+    expect(err.message).toBe('rule profile "broken" is not valid JSON at line 1, column 2');
+    expect(profileProvenance(loadNamedRuleProfile('strict', RULES_DIR)).label).toBe('"strict"');
+    rmSync(dir, { recursive: true, force: true });
   });
 });
