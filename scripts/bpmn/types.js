@@ -163,9 +163,7 @@ export function isActivity(type) {
  * attribute to every node type and recording which ones round-tripped without an
  * `unknown attribute <implementation>` warning.
  */
-export const IMPLEMENTATION_TYPES = new Set([
-  'userTask', 'serviceTask', 'sendTask', 'receiveTask', 'businessRuleTask',
-]);
+export const IMPLEMENTATION_TYPES = new Set(VOCABULARY.fieldDomain('Node', 'implementation'));
 
 /**
  * Every OMG `FlowNode` subclass in the NodeType enum: activities, events and gateways — everything
@@ -208,9 +206,7 @@ export const MARKER_GROUPS = {
  * `Group` extend `BaseElement`, which declares only `id` — see `isBpmnArtifact`. Their labels do
  * survive, by a different mechanism; the `name` row below says which.
  */
-export const NAMED_NODE_TYPES = new Set([
-  ...FLOW_NODE_TYPES, 'dataObjectReference', 'dataStoreReference',
-]);
+export const NAMED_NODE_TYPES = new Set(VOCABULARY.fieldDomain('Node', 'name'));
 
 /**
  * The classes OMG grants the `default` attribute to: every `Activity`, plus the three gateways
@@ -224,9 +220,15 @@ export const NAMED_NODE_TYPES = new Set([
  * (`buildDefaultFlowMap` records it from any source, `buildProcess` then writes `gwEl.default`
  * regardless of class, so this set is the honest statement of where that is legal).
  */
-export const DEFAULT_FLOW_SOURCE_TYPES = new Set([
-  ...ACTIVITY_TYPES, 'exclusiveGateway', 'inclusiveGateway', 'complexGateway',
-]);
+export const DEFAULT_FLOW_SOURCE_TYPES = new Set(VOCABULARY.fieldDomain('Edge', 'isDefault'));
+
+// A field's allowed classes come from the ontology (rdfs:domain); this table keeps only what is
+// code knowledge — where it is written, who enforces it, what survives a round trip, and why.
+const domain = (element, field) => {
+  const d = VOCABULARY.fieldDomain(element, field);
+  if (!d) throw new Error(`bpmn-ontology.jsonld: no domain for ${element}.${field}`);
+  return new Set(d);
+};
 
 /**
  * Which node classes may carry each OMG-scoped per-node field — the single source of truth for a
@@ -376,12 +378,12 @@ export const DEFAULT_FLOW_SOURCE_TYPES = new Set([
  *    `types.test.js`'s metamodel fence checks `allowed` against bpmn-moddle for EVERY row whose
  *    `on` is `'self'` and whose `attr` resolves to a real metamodel property — regardless of
  *    `shape`. That covers `marker`, `loopType`, `multiInstance`, `script`, `documentation` and
- *    `has_join` as strictly as it covers the plain attributes. `allowed` is hand-stated only where
+ *    `has_join` as strictly as it covers the plain attributes. Every `allowed` comes from the ontology; the metamodel cannot check it only where
  *    the mechanism has no BPMN-semantic counterpart to check against — `decisionRef` (our own
  *    extension namespace), `color`/`isExpanded` (BPMNDI, checked against `bpmndi.json` on the `on`
  *    side instead), `lane` (`flowNodeRef` is typed `FlowNode`, a constraint the JSON metamodel
  *    expresses as a type name and not as a per-class property), and the rows nothing implements
- *    yet. Those hand-stated sets are not unfenced: they are fenced BEHAVIOURALLY, by the round trip
+ *    yet. Those sets are not unfenced: they are fenced BEHAVIOURALLY, by the round trip
  *    `field-fidelity.test.js` runs per row — a class that cannot really carry the field fails to
  *    round-trip it, and the row's `roundTrip` contract is what fails.
  *
@@ -398,9 +400,9 @@ export const OMG_NODE_FIELD_SCOPE = [
   // The loop's contract: write `attrs[attr] = value` when the value is truthy, the node's class is
   // in `allowed`, and `typeof value === type`. A field that needs anything else does not belong
   // here — see `cancelActivity` below.
-  { field: 'isCompensation', attr: 'isForCompensation', type: 'boolean', on: 'self', allowed: ACTIVITY_TYPES, scope: 'an Activity',
+  { field: 'isCompensation', attr: 'isForCompensation', type: 'boolean', on: 'self', allowed: domain('Node', 'isCompensation'), scope: 'an Activity',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'exact' },
-  { field: 'implementation', attr: 'implementation', type: 'string', on: 'self', allowed: IMPLEMENTATION_TYPES, scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask',
+  { field: 'implementation', attr: 'implementation', type: 'string', on: 'self', allowed: domain('Node', 'implementation'), scope: 'a userTask, serviceTask, sendTask, receiveTask or businessRuleTask',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'lossy',
     reason: 'OMG\'s two default values are deliberately not read back: both importers drop '
       + '`##WebService` and `##unspecified` rather than materialise a field the author never wrote '
@@ -421,13 +423,13 @@ export const OMG_NODE_FIELD_SCOPE = [
   // schema, the importers and `bpmnXmlTag` with this class is the separate decision CONTAINER_TYPES
   // already defers; until it is taken, the narrow set is the correct one and the fence says nothing
   // about types the schema does not expose.
-  { field: 'isEventSubProcess', attr: 'triggeredByEvent', type: 'boolean', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
+  { field: 'isEventSubProcess', attr: 'triggeredByEvent', type: 'boolean', on: 'self', allowed: domain('Node', 'isEventSubProcess'), scope: 'a subProcess or a transaction',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'exact' },
-  { field: 'calledElement', attr: 'calledElement', type: 'string', on: 'self', allowed: new Set(['callActivity']), scope: 'a callActivity',
+  { field: 'calledElement', attr: 'calledElement', type: 'string', on: 'self', allowed: domain('Node', 'calledElement'), scope: 'a callActivity',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'exact' },
-  { field: 'scriptFormat', attr: 'scriptFormat', type: 'string', on: 'self', allowed: new Set(['scriptTask']), scope: 'a scriptTask',
+  { field: 'scriptFormat', attr: 'scriptFormat', type: 'string', on: 'self', allowed: domain('Node', 'scriptFormat'), scope: 'a scriptTask',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'exact' },
-  { field: 'eventGatewayType', attr: 'eventGatewayType', type: 'string', on: 'self', allowed: new Set(['eventBasedGateway']), scope: 'an eventBasedGateway',
+  { field: 'eventGatewayType', attr: 'eventGatewayType', type: 'string', on: 'self', allowed: domain('Node', 'eventGatewayType'), scope: 'an eventBasedGateway',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'lossy',
     reason: '`Exclusive` is OMG\'s default for eventGatewayType and both importers drop it on the '
       + 'way back in (import.js:378, moddle-import.js:287), so an explicitly written '
@@ -440,7 +442,7 @@ export const OMG_NODE_FIELD_SCOPE = [
   // silence on the way out and could never be read back in — a schema-valid, OMG-legal model this
   // pipeline could not express. Widening the metamodel fence to every `shape: 'attr'` row is what
   // made that visible; it failed on this row first, before any of the widening below was written.
-  { field: 'instantiate', attr: 'instantiate', type: 'boolean', on: 'self', allowed: new Set(['eventBasedGateway', 'receiveTask']), scope: 'an eventBasedGateway or a receiveTask',
+  { field: 'instantiate', attr: 'instantiate', type: 'boolean', on: 'self', allowed: domain('Node', 'instantiate'), scope: 'an eventBasedGateway or a receiveTask',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'exact' },
 
   // ── shape: 'attr', written at their own site ───────────────────────────────────────────────────
@@ -455,9 +457,9 @@ export const OMG_NODE_FIELD_SCOPE = [
   // right reading of this row is "the OMG `name` attribute is legal on these 23 classes", not "the
   // Logic-Core field `name` is lost on the other two". `enforcedBy: 'writeSite'` is what keeps S15
   // from making the second, wrong claim.
-  { field: 'name', attr: 'name', type: 'string', on: 'self', allowed: NAMED_NODE_TYPES, scope: 'any node except a textAnnotation or a group',
+  { field: 'name', attr: 'name', type: 'string', on: 'self', allowed: domain('Node', 'name'), scope: 'any node except a textAnnotation or a group',
     shape: 'attr', writeSite: 'buildNodeAttrs', enforcedBy: 'writeSite', roundTrip: 'exact' },
-  { field: 'attachedTo', attr: 'attachedToRef', type: 'string', on: 'self', allowed: new Set(['boundaryEvent']), scope: 'a boundaryEvent',
+  { field: 'attachedTo', attr: 'attachedToRef', type: 'string', on: 'self', allowed: domain('Node', 'attachedTo'), scope: 'a boundaryEvent',
     shape: 'attr', writeSite: 'buildFlowNode', enforcedBy: 'writeSite', roundTrip: 'exact',
     // Written in a second pass (`bpmn-xml.js`'s attachedToRef resolution loop), because the target
     // must exist as a moddle element before it can be referenced — which is why it cannot join the
@@ -468,7 +470,7 @@ export const OMG_NODE_FIELD_SCOPE = [
   // generic loop — the loop skips falsy values, which is right for every other attribute and
   // exactly wrong for this one. The class guard is this row's `allowed`; only the emission
   // condition stays at the write site.
-  { field: 'cancelActivity', attr: 'cancelActivity', type: 'boolean', on: 'self', allowed: new Set(['boundaryEvent']), scope: 'a boundaryEvent',
+  { field: 'cancelActivity', attr: 'cancelActivity', type: 'boolean', on: 'self', allowed: domain('Node', 'cancelActivity'), scope: 'a boundaryEvent',
     shape: 'attr', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
     reason: 'Only `cancelActivity: false` is serialised — `true` is the XSD default and is left '
       + 'implicit, so a literal `cancelActivity: true` comes back absent. The semantics survive '
@@ -477,7 +479,7 @@ export const OMG_NODE_FIELD_SCOPE = [
   // recomputed from the graph by `inferGatewayDirections`, and the value actually written comes
   // from that inference (`node._direction`), not from `has_join` itself. Meaning survives; the
   // literal field does not.
-  { field: 'has_join', attr: 'gatewayDirection', type: 'boolean', on: 'self', allowed: GATEWAY_TYPES, scope: 'a Gateway',
+  { field: 'has_join', attr: 'gatewayDirection', type: 'boolean', on: 'self', allowed: domain('Node', 'has_join'), scope: 'a Gateway',
     shape: 'attr', writeSite: 'buildFlowNode', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'gatewayDirection is recomputed by inferGatewayDirections from the graph, so the '
       + 'attribute written is `node._direction` and not this field. Only `Converging` maps back to '
@@ -488,12 +490,12 @@ export const OMG_NODE_FIELD_SCOPE = [
   // `on` records the indirection. For these rows the metamodel fence checks the OMG side of the
   // indirection — that the class named by `on` really carries `attr` — because `allowed` names the
   // Logic-Core AUTHORING node, which has no metamodel counterpart to be checked against.
-  { field: 'isCollection', attr: 'isCollection', type: 'boolean', on: 'dataObject', allowed: new Set(['dataObjectReference']), scope: 'a dataObjectReference',
+  { field: 'isCollection', attr: 'isCollection', type: 'boolean', on: 'dataObject', allowed: domain('Node', 'isCollection'), scope: 'a dataObjectReference',
     shape: 'attr', writeSite: 'fieldLoop', enforcedBy: 'table', roundTrip: 'exact' },
   // A BPMNDI concern, not a semantic one: whether a container is drawn open is `BPMNShape#isExpanded`
   // (bpmndi.json), and the file's semantics are identical either way — which is why `buildFlowNode`
   // deliberately does NOT gate a subprocess's children on it.
-  { field: 'isExpanded', attr: 'isExpanded', type: 'boolean', on: 'bpmnShape', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
+  { field: 'isExpanded', attr: 'isExpanded', type: 'boolean', on: 'bpmnShape', allowed: domain('Node', 'isExpanded'), scope: 'a subProcess or a transaction',
     shape: 'di', writeSite: 'buildDiagram', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Exact at EVERY depth for a container that carries children — the top-level-only DI '
       + 'walk that dropped it at depth >= 1 is closed (`buildNodeShapeDI` recurses). What remains '
@@ -515,15 +517,15 @@ export const OMG_NODE_FIELD_SCOPE = [
   // recognise — and it recognises these, because it ships the bpmn.io colour package as a
   // registered extension. So the primary importer returned the node with no `color` at all while
   // `import.js`'s DOM parser recovered it. See that read's own comment.
-  { field: 'color', attr: ['bioc:stroke', 'bioc:fill'], type: 'object', on: 'bpmnShape', allowed: ALL_NODE_TYPES, scope: 'any node',
+  { field: 'color', attr: ['bioc:stroke', 'bioc:fill'], type: 'object', on: 'bpmnShape', allowed: domain('Node', 'color'), scope: 'any node',
     shape: 'di', writeSite: 'buildDiagram', enforcedBy: 'none', roundTrip: 'exact',
     reason: 'enforcedBy none: every drawable node gets a BPMNShape, so there is no class to '
       + 'restrict — `allowed` is the whole enum and nothing needs to consult it.' },
 
   // ── shape: 'childElement' ──────────────────────────────────────────────────────────────────────
-  { field: 'documentation', attr: 'documentation', type: 'string', on: 'self', allowed: ALL_NODE_TYPES, scope: 'any node',
+  { field: 'documentation', attr: 'documentation', type: 'string', on: 'self', allowed: domain('Node', 'documentation'), scope: 'any node',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'writeSite', roundTrip: 'exact' },
-  { field: 'lane', attr: 'flowNodeRef', type: 'string', on: 'lane', allowed: FLOW_NODE_TYPES, scope: 'a FlowNode (not an artifact or a data reference)',
+  { field: 'lane', attr: 'flowNodeRef', type: 'string', on: 'lane', allowed: domain('Node', 'lane'), scope: 'a FlowNode (not an artifact or a data reference)',
     shape: 'childElement', writeSite: 'buildLane', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Exact at depth 0, on all 21 FlowNode classes. NOT WRITTEN AT ALL at depth >= 1: '
       + '`buildLane` filters the process\'s OWN node list, so a `lane` on a node inside a subProcess '
@@ -534,19 +536,19 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'reference from the outer one, and the pipeline has no notion of a per-container laneSet '
       + 'today. Found by `field-fidelity.test.js`; the modelling question is stated here, not '
       + 'decided.',
-    // `allowed` is hand-stated because `Lane#flowNodeRef` expresses its restriction as a TYPE
+    // The ontology's domain is class-restricted because `Lane#flowNodeRef` expresses its restriction as a TYPE
     // (`FlowNode`) rather than as a per-class property, which is the one shape the metamodel fence's
     // `carries()` resolver cannot read. An artifact or data reference carrying `lane` is therefore
     // outside `allowed` on purpose: it is legal Logic-Core, it is drawn in that lane (coordMap
     // answers that), and it is correctly absent from `<bpmn:flowNodeRef>` — see `buildLane`.
   },
-  { field: 'script', attr: 'script', type: 'string', on: 'self', allowed: new Set(['scriptTask']), scope: 'a scriptTask',
+  { field: 'script', attr: 'script', type: 'string', on: 'self', allowed: domain('Node', 'script'), scope: 'a scriptTask',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'exact' },
   // `loopType` and `multiInstance` both become the ONE `loopCharacteristics` property, which is why
   // they share an `attr` and why `buildFlowNode` writes them with an `else if`. Both were unguarded
   // until this stage: a `loopType` on a `startEvent` produced no element and no moddle warning,
   // because moddle drops a property it has no descriptor for in silence.
-  { field: 'loopType', attr: 'loopCharacteristics', type: 'mixed', on: 'self', allowed: ACTIVITY_TYPES, scope: 'an Activity',
+  { field: 'loopType', attr: 'loopCharacteristics', type: 'mixed', on: 'self', allowed: domain('Node', 'loopType'), scope: 'an Activity',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
     reason: 'Two distinct losses, both measured on both importer paths. (1) An object whose only '
       + 'sub-properties are false collapses to the string shorthand: `{ testBefore: false }` comes '
@@ -560,14 +562,14 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'this field — see `conditionExpression`\'s reason for the same asymmetry and the list of '
       + 'other fields it touches. A node carrying BOTH loopType and multiInstance keeps only '
       + 'loopType — OMG has one loopCharacteristics slot, not two.' },
-  { field: 'multiInstance', attr: 'loopCharacteristics', type: 'mixed', on: 'self', allowed: ACTIVITY_TYPES, scope: 'an Activity',
+  { field: 'multiInstance', attr: 'loopCharacteristics', type: 'mixed', on: 'self', allowed: domain('Node', 'multiInstance'), scope: 'an Activity',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
     reason: 'The object form collapses to the string shorthand when it carries nothing else: '
       + '`{ type: "parallel" }` comes back as `"parallel"`, because the importers only build an '
       + 'object when a loopCardinality or completionCondition is present. Both are equivalent '
       + 'input, so no meaning is lost — but the value is not deep-equal. Dropped entirely when the '
       + 'same node also carries `loopType` (one loopCharacteristics slot).' },
-  { field: 'nodes', attr: 'flowElements', type: 'array', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
+  { field: 'nodes', attr: 'flowElements', type: 'array', on: 'self', allowed: domain('Node', 'nodes'), scope: 'a subProcess or a transaction',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'A flow-node child, a data reference and a `textAnnotation` child all round-trip '
       + 'exactly, at any depth. The `textAnnotation` half was NOT true until the nested-artifact '
@@ -594,7 +596,7 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'Gating the recursion on this row and reporting the dropped children is '
       + 'a decided, queued change (plan "Root fix", Stage 3); it is not made here because it is a '
       + 'behaviour change that needs its own red-first test.' },
-  { field: 'edges', attr: 'flowElements', type: 'array', on: 'self', allowed: new Set(['subProcess', 'transaction']), scope: 'a subProcess or a transaction',
+  { field: 'edges', attr: 'flowElements', type: 'array', on: 'self', allowed: domain('Node', 'edges'), scope: 'a subProcess or a transaction',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'A nested sequence flow is written with id, name, sourceRef and targetRef only — the '
       + 'child-edge branch of `buildFlowNode` has no conditionExpression and no per-container '
@@ -608,21 +610,21 @@ export const OMG_NODE_FIELD_SCOPE = [
   // each is therefore written only when `marker` has the matching value. That conditionality is
   // what their `roundTrip: 'lossy'` reasons record — none of them is lost for the marker it belongs
   // to, and all of them are lost for every other marker.
-  { field: 'marker', attr: 'eventDefinitions', type: 'string', on: 'self', allowed: EVENT_TYPES, scope: 'an Event',
+  { field: 'marker', attr: 'eventDefinitions', type: 'string', on: 'self', allowed: domain('Node', 'marker'), scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'moddle', roundTrip: 'lossy',
     reason: '`references/input-schema.json`\'s EventMarker enum has 12 members; '
       + '`buildEventDefinition`\'s typeMap covers 10. `multiple` and `parallelMultiple` have no '
       + 'single `<bpmn:*EventDefinition>` class — OMG expresses them as two or more '
       + 'eventDefinitions on one event — so both are dropped without an element and without a '
       + 'warning. Every other marker round-trips exactly.' },
-  { field: 'linkName', attr: 'name', type: 'string', on: 'linkEventDefinition', allowed: EVENT_TYPES, scope: 'an Event',
+  { field: 'linkName', attr: 'name', type: 'string', on: 'linkEventDefinition', allowed: domain('Node', 'linkName'), scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Written only when `marker === "link"`; on any other marker the field is silently '
       + 'ignored. In the other direction the link event GAINS one: when `linkName` is absent, '
       + '`buildEventDefinition` writes the node\'s `name` into the LinkEventDefinition and the '
       + 'importers read it straight back out as `linkName`, so the field appears on re-import '
       + 'where the author wrote none.' },
-  { field: 'conditionExpression', attr: 'condition', type: 'string', on: 'conditionalEventDefinition', allowed: EVENT_TYPES, scope: 'an Event',
+  { field: 'conditionExpression', attr: 'condition', type: 'string', on: 'conditionalEventDefinition', allowed: domain('Node', 'conditionExpression'), scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Written only when `marker === "conditional"`; on any other marker the field is '
       + 'silently ignored. With that marker it is exact through `moddle-import.js` (the primary '
@@ -635,7 +637,7 @@ export const OMG_NODE_FIELD_SCOPE = [
       + '`edge.condition`, a timer expression, a textAnnotation\'s name). Fixing it is a change to '
       + 'the shared parser affecting ~10 fields and belongs in its own stage; stated here rather '
       + 'than claimed away, because this row would otherwise assert more than holds.' },
-  { field: 'timerExpression', attr: ['timeDate', 'timeDuration', 'timeCycle'], type: 'object', on: 'timerEventDefinition', allowed: EVENT_TYPES, scope: 'an Event',
+  { field: 'timerExpression', attr: ['timeDate', 'timeDuration', 'timeCycle'], type: 'object', on: 'timerEventDefinition', allowed: domain('Node', 'timerExpression'), scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Written only when `marker === "timer"`; on any other marker the field is silently '
       + 'ignored. With that marker it round-trips exactly — `type` selects one of the three `attr` '
@@ -645,7 +647,7 @@ export const OMG_NODE_FIELD_SCOPE = [
   // ── shape: 'extension' ─────────────────────────────────────────────────────────────────────────
   // No OMG counterpart exists, so `attr` names our own element and the metamodel fence exempts the
   // row by shape rather than by an allowlist entry.
-  { field: 'decisionRef', attr: 'decisionRef', type: 'string', on: 'self', allowed: new Set(['businessRuleTask']), scope: 'a businessRuleTask',
+  { field: 'decisionRef', attr: 'decisionRef', type: 'string', on: 'self', allowed: domain('Node', 'decisionRef'), scope: 'a businessRuleTask',
     shape: 'extension', writeSite: 'buildFlowNode', enforcedBy: 'convention', roundTrip: 'exact',
     // `'convention'`, not `'table'`, and the one word is load-bearing. The write site DOES consult
     // `allowed` — the field is dropped off a businessRuleTask exactly like a `'table'` row — but
@@ -655,8 +657,7 @@ export const OMG_NODE_FIELD_SCOPE = [
     // already owns this field in the layer that owns OUR conventions — so S15 skips this row and
     // M11 reports it. Without the distinction both rules fired on one field on one node, which is
     // the two-sentences-about-one-field problem `isFieldWrongType`'s own doc argues against.
-    // `allowed` is hand-stated, and `references/input-schema.json` is the authority it is stated
-    // from: the property's own description reads "For businessRuleTask: id of the decision this
+    // The ontology's domain is stated from `references/input-schema.json`, the authority for it: the property's own description reads "For businessRuleTask: id of the decision this
     // task invokes". BPMN 2.0 has no standard attribute here (the DMN side of the link,
     // Decision#usingTask, points the other way), so there is nothing in the metamodel to derive it
     // from. Until this stage the write was unguarded, and a `decisionRef` on a userTask was
@@ -668,20 +669,20 @@ export const OMG_NODE_FIELD_SCOPE = [
   // `attr` is null for every row here, and the fences assert that: a row that names a target it
   // does not write is exactly the kind of claim this table exists to stop. What each field WOULD
   // serialise to, if implemented, is in its reason.
-  { field: 'isAdHoc', attr: null, type: 'boolean', on: 'self', allowed: new Set(['subProcess']), scope: 'a subProcess',
+  { field: 'isAdHoc', attr: null, type: 'boolean', on: 'self', allowed: domain('Node', 'isAdHoc'), scope: 'a subProcess',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Render-only: `svg.js` draws the ad-hoc tilde marker and nothing serialises it, so the '
       + 'preview is right and every real tool sees a plain subProcess. OMG expresses ad-hoc as a '
       + 'CLASS (`bpmn:adHocSubProcess`), not an attribute, so implementing it means emitting that '
       + 'class — which also means ending `bpmnXmlTag`\'s silent `|| \'task\'` fallback for it. '
       + 'Decided and queued (plan "Root fix", backlog items 5 and 6).' },
-  { field: 'isInterrupting', attr: null, type: 'boolean', on: 'self', allowed: new Set(['startEvent']), scope: 'a startEvent',
+  { field: 'isInterrupting', attr: null, type: 'boolean', on: 'self', allowed: domain('Node', 'isInterrupting'), scope: 'a startEvent',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Render-only: `svg.js` draws the dashed ring of a non-interrupting event-subprocess '
       + 'start event and nothing serialises it. OMG has the attribute ready — `StartEvent'
       + '#isInterrupting`, default true — so this is a write plus two reads, not a design question. '
       + 'Decided and queued (plan "Root fix", backlog item 6).' },
-  { field: 'extensions', attr: null, type: 'object', on: 'self', allowed: ALL_NODE_TYPES, scope: 'any node',
+  { field: 'extensions', attr: null, type: 'object', on: 'self', allowed: domain('Node', 'extensions'), scope: 'any node',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Import-side preservation only: `moddle-import.js` copies a foreign element\'s `$attrs` '
       + 'into this field so a round trip can SHOW what was there, but no write-back exists, so the '
@@ -710,7 +711,7 @@ export function nodeFieldSpec(field) {
  *
  * `on` therefore does more work than on a node row:
  *   - `'sequenceFlow'` — the property lands on the edge's own element. `allowed` is the set of
- *     source node types for which authoring the field makes sense, hand-stated, and it is the
+ *     source node types for which authoring the field makes sense, from the ontology, and it is the
  *     metamodel-checkable claim `carries('SequenceFlow', attr)` that the fence enforces instead.
  *   - `'sourceGateway'` — the structural case the node table has no shape for: `isDefault` is
  *     authored on the EDGE and serialised as the `default` attribute of the edge's SOURCE element.
@@ -723,11 +724,11 @@ export function nodeFieldSpec(field) {
  * 2's spanning fence, which is what the `roundTrip` column is for.
  */
 export const OMG_EDGE_FIELD_SCOPE = [
-  { field: 'source', attr: 'sourceRef', type: 'string', on: 'sequenceFlow', allowed: FLOW_NODE_TYPES, scope: 'a FlowNode',
+  { field: 'source', attr: 'sourceRef', type: 'string', on: 'sequenceFlow', allowed: domain('Edge', 'source'), scope: 'a FlowNode',
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'writeSite', roundTrip: 'exact' },
-  { field: 'target', attr: 'targetRef', type: 'string', on: 'sequenceFlow', allowed: FLOW_NODE_TYPES, scope: 'a FlowNode',
+  { field: 'target', attr: 'targetRef', type: 'string', on: 'sequenceFlow', allowed: domain('Edge', 'target'), scope: 'a FlowNode',
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'writeSite', roundTrip: 'exact' },
-  { field: 'label', attr: 'name', type: 'string', on: 'sequenceFlow', allowed: FLOW_NODE_TYPES, scope: 'a FlowNode',
+  { field: 'label', attr: 'name', type: 'string', on: 'sequenceFlow', allowed: domain('Edge', 'label'), scope: 'a FlowNode',
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'The label is also FABRICATED INTO `condition`: when the source is a diverging XOR or '
       + 'OR gateway and the edge is not the default, `buildProcess` copies `label` into a '
@@ -738,13 +739,13 @@ export const OMG_EDGE_FIELD_SCOPE = [
       + 'conditionExpression at all — the neighbouring `condition` row records that loss from '
       + 'the other side. Removal is decided and '
       + 'queued (plan "Root fix", backlog item 7); three goldens move when it lands.' },
-  { field: 'condition', attr: 'conditionExpression', type: 'string', on: 'sequenceFlow', allowed: DEFAULT_FLOW_SOURCE_TYPES, scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
+  { field: 'condition', attr: 'conditionExpression', type: 'string', on: 'sequenceFlow', allowed: domain('Edge', 'condition'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'childElement', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'Exact at depth 0. Lost at depth >= 1: the child-edge branch of `buildFlowNode` writes '
       + 'id, name, sourceRef and targetRef only, so a condition on an edge inside a subProcess or '
       + 'transaction never reaches the XML. Decided and queued (plan "Root fix", Stage 6). '
       + 'enforcedBy none: `buildProcess` writes a conditionExpression from any source class.' },
-  { field: 'isDefault', attr: 'default', type: 'boolean', on: 'sourceGateway', allowed: DEFAULT_FLOW_SOURCE_TYPES, scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
+  { field: 'isDefault', attr: 'default', type: 'boolean', on: 'sourceGateway', allowed: domain('Edge', 'isDefault'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'The serialiser FABRICATES it: when a diverging XOR or OR gateway has more than one '
       + 'outgoing flow and none is marked, `buildDefaultFlowMap` makes the LAST one the default. So '
@@ -756,14 +757,14 @@ export const OMG_EDGE_FIELD_SCOPE = [
       + 'queued (plan "Root fix", backlog item 7); three goldens move when it lands. enforcedBy '
       + 'none: `buildDefaultFlowMap` records `isDefault` from a source of any class, and '
       + '`buildProcess` then writes `default` onto that element whatever it is.' },
-  { field: 'isConditional', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: DEFAULT_FLOW_SOURCE_TYPES, scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
+  { field: 'isConditional', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: domain('Edge', 'isConditional'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Render-only: `svg.js` draws the conditional-flow diamond at the source end and '
       + 'nothing serialises it, so the preview is right and every real tool sees an ordinary flow. '
       + 'OMG expresses it as the PRESENCE of a conditionExpression on a flow leaving an Activity, '
       + 'so implementing it means emitting one. Decided and queued (plan "Root fix", backlog '
       + 'item 6).' },
-  { field: 'isHappyPath', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: FLOW_NODE_TYPES, scope: 'a FlowNode',
+  { field: 'isHappyPath', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: domain('Edge', 'isHappyPath'), scope: 'a FlowNode',
     shape: 'layoutOnly', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Layout input, not model content: `topology.js`\'s `identifyHappyPathNodes` reads it to '
       + 'decide which chain to keep straight, and `scripts/scenarios/format.js` reads it to pick '

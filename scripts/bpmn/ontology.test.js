@@ -150,3 +150,28 @@ describe('characterization — deriving from the ontology changes nothing', () =
     expect([...T.SUPPORTED_NODE_TYPES].sort()).toEqual([...schema.$defs.NodeType.enum].sort());
   });
 });
+
+describe('fields — one source', () => {
+  const schema = JSON.parse(readFileSync(join(__dirname, '..', '..', 'references', 'input-schema.json'), 'utf8'));
+  const ELEMENTS = { Process: 'SingleProcess', Collaboration: 'Collaboration', Pool: 'Pool', CollapsedPool: 'CollapsedPool',
+    Node: 'Node', Edge: 'Edge', Lane: 'Lane', MessageFlow: 'MessageFlow', Association: 'Association', TopLevelDefinition: 'TopLevelDefinition' };
+  for (const [element, def] of Object.entries(ELEMENTS)) {
+    test(`${element}: the ontology lists exactly the schema's fields`, () => {
+      expect([...VOCABULARY.fieldsOf(element)].sort()).toEqual(Object.keys(schema.$defs[def].properties).sort());
+    });
+  }
+  test('every node-table row takes its allowed set from the ontology', () => {
+    for (const row of T.OMG_NODE_FIELD_SCOPE) {
+      expect([...row.allowed]).toEqual(VOCABULARY.fieldDomain('Node', row.field));
+    }
+  });
+  test('every edge-table row takes its allowed set from the ontology', () => {
+    for (const row of T.OMG_EDGE_FIELD_SCOPE) {
+      expect([...row.allowed]).toEqual(VOCABULARY.fieldDomain('Edge', row.field));
+    }
+  });
+  test('…and those sets are what they were before (characterization)', () => {
+    for (const row of T.OMG_NODE_FIELD_SCOPE) expect([...row.allowed].sort()).toEqual([...SNAP.nodeAllowed[row.field]].sort());
+    for (const row of T.OMG_EDGE_FIELD_SCOPE) expect([...row.allowed].sort()).toEqual([...SNAP.edgeAllowed[row.field]].sort());
+  });
+});
