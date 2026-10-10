@@ -162,7 +162,9 @@ the marker: `messageRef` on a `message` event, `signalRef` on `signal`, `errorRe
 
 Without the field: exactly one definition of the type is referenced implicitly; with several, no
 reference is written and rule S17 warns. A reference to an unknown id, to a definition of another
-type, or on a node whose marker does not match is rule S16 (ERROR).
+type, or on a node whose marker does not match is rule S16 (ERROR). An event without the field and
+with exactly one definition of its type is written with that reference, so it re-imports with the
+field set explicitly.
 
 ---
 

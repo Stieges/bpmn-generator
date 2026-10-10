@@ -720,6 +720,35 @@ export const OMG_NODE_FIELD_SCOPE = [
 ];
 
 /**
+ * Which top-level definition does `node` reference as `kind` (message, signal, error, escalation)?
+ * The ONE place that decides — the serialiser and rules S16/S17 all call it, so they cannot
+ * disagree (duplicate definition ids resolve to the FIRST in all of them).
+ *
+ *   explicit    the node's `<kind>Ref` names a definition of that kind
+ *   dangling    the field names no definition                       (def null)
+ *   wrong-type  the field names a definition of another kind        (def null, `found` = it)
+ *   implicit    no field, exactly one definition of the kind         (def = it)
+ *   ambiguous   no field, several definitions of the kind            (def null)
+ *   none        no field, no definition of the kind                  (def null)
+ *
+ * A field naming something unusable is never replaced by the single definition: that would hide
+ * the mistake S16 reports. `definitions` is any list of `{ type, id }`; the result's `def` is the
+ * list's own element, so a caller may carry extra properties on it.
+ */
+export function resolveDefinitionRef(node, kind, definitions) {
+  const named = node[`${kind}Ref`];
+  if (named !== undefined && named !== null && named !== '') {
+    const found = definitions.find((d) => d.id === named);
+    if (!found) return { def: null, reason: 'dangling' };
+    if (found.type !== kind) return { def: null, reason: 'wrong-type', found };
+    return { def: found, reason: 'explicit' };
+  }
+  const candidates = definitions.filter((d) => d.type === kind);
+  if (candidates.length === 1) return { def: candidates[0], reason: 'implicit' };
+  return { def: null, reason: candidates.length > 1 ? 'ambiguous' : 'none' };
+}
+
+/**
  * The one row for `field`, or `undefined`. A named lookup rather than a `.find()` at each call
  * site: the write sites that consult `allowed` (`buildFlowNode`'s loopCharacteristics, script and
  * decisionRef branches) each need exactly one row, and a mistyped field name should fail loudly at
