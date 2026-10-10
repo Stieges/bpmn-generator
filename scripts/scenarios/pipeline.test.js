@@ -395,3 +395,107 @@ describe('CLI (spawned) — main() wiring', () => {
     expect(fs.existsSync(`${outBase}.scenarios.md`)).toBe(false);
   });
 });
+
+describe('CLI (spawned) — --decisions accepts .dmn (content-sniffed)', () => {
+  const FIX = resolve(__dirname, '../../tests/fixtures/dmn');
+  const lcFor = (ref) => JSON.parse(
+    JSON.stringify(fixture('subprocess-child-fidelity')).replaceAll('RatingDecision', ref));
+
+  const run = async (lc, decisionsPaths, extra = []) => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scenarios-cli-dmn-'));
+    const inPath = path.join(dir, 'in.json');
+    fs.writeFileSync(inPath, JSON.stringify(lc), 'utf8');
+    const outBase = path.join(dir, 'out');
+    const res = spawnSync('node',
+      ['pipeline.js', inPath, outBase, '--decisions', decisionsPaths.join(','), ...extra],
+      { cwd: __dirname, encoding: 'utf8' });
+    const jsonPath = `${outBase}.scenarios.json`;
+    return {
+      status: res.status, stdout: res.stdout || '', stderr: res.stderr || '', dir,
+      written: fs.existsSync(jsonPath) ? JSON.parse(readFileSync(jsonPath, 'utf8')) : null,
+    };
+  };
+  const write = async (name, content) => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scenarios-cli-dmnf-'));
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, content, 'utf8');
+    return p;
+  };
+
+  test('a .dmn file resolves the decisionRef exactly as the equivalent JSON does', async () => {
+    const lc = lcFor('dec_discountLevel');
+    const viaJson = await run(lc, [resolve(FIX, 'discount-decision.json')]);
+    const viaDmn = await run(lc, [resolve(FIX, 'discount-decision.expected.dmn')]);
+    expect(viaJson.status).toBe(0);
+    expect(viaDmn.status).toBe(0);
+    expect(viaDmn.stderr).not.toMatch(/\[SC02\]/);
+    expect(viaDmn.written).toEqual(viaJson.written);
+  });
+
+  test('sniffing, not extension: JSON content in a .dmn-named file is read as JSON', async () => {
+    const json = readFileSync(resolve(FIX, 'discount-decision.json'), 'utf8');
+    const p = await write('actually-json.dmn', json);
+    const r = await run(lcFor('dec_discountLevel'), [p]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toMatch(/\[SC02\]/);
+    expect(r.stderr).not.toMatch(/DMN import/);
+  });
+
+  test('sniffing, not extension: XML content in a .json-named file (leading whitespace) is imported', async () => {
+    const xml = readFileSync(resolve(FIX, 'discount-decision.expected.dmn'), 'utf8');
+    const p = await write('actually-xml.json', `\n  ${xml}`);
+    const r = await run(lcFor('dec_discountLevel'), [p]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toMatch(/\[SC02\]/);
+  });
+
+  test('a lossy foreign .dmn without --strict: exit 0 and the import report on stderr (the reported defect)', async () => {
+    const r = await run(lcFor('dec_triageLevel'), [resolve(FIX, 'foreign-kitchen-sink.dmn')]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toMatch(/Unexpected token/);
+    expect(r.stderr).toMatch(/DMN import/);
+    expect(r.stderr).toMatch(/foreign-kitchen-sink\.dmn/);
+    expect(r.written).not.toBeNull();
+  });
+
+  test('a lossy foreign .dmn with --strict: exit ≠ 0, report printed, no files written', async () => {
+    const r = await run(lcFor('dec_triageLevel'), [resolve(FIX, 'foreign-kitchen-sink.dmn')], ['--strict']);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/DMN import/);
+    expect(r.stderr).toMatch(/--strict/);
+    expect(r.written).toBeNull();
+  });
+
+  test('--strict counts the import findings: the message names them, even with no SC finding', async () => {
+    // discount-decision.expected.dmn is our own output, yet the importer reports its DMNDI and
+    // variable ids as unrepresented — so it is "lossy" by the importer's definition.
+    const r = await run(lcFor('dec_discountLevel'), [resolve(FIX, 'discount-decision.expected.dmn')], ['--strict']);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/--strict: 0 finding\(s\), 0 completeness warning\(s\), [1-9]\d* DMN import finding/);
+  });
+
+  test('a broken .dmn (not XML) → one clean line naming the file, exit ≠ 0, no stack', async () => {
+    const p = await write('broken.dmn', '<definitions><decision></definitions');
+    const r = await run(lcFor('dec_discountLevel'), [p]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/✗ .*broken\.dmn/);
+    expect(r.stderr).not.toMatch(/\n\s+at /);
+    expect(r.stderr.trim().split('\n')).toHaveLength(1);
+    expect(r.written).toBeNull();
+  });
+
+  test('well-formed XML that is not DMN → clean error naming the file, no stack', async () => {
+    const p = await write('other.xml', '<?xml version="1.0"?><foo/>');
+    const r = await run(lcFor('dec_discountLevel'), [p]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/✗ .*other\.xml.*not a DMN/);
+    expect(r.stderr).not.toMatch(/\n\s+at /);
+  });
+});

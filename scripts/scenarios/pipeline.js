@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { enumerateCollaboration } from './collaboration.js';
 import { analyzeDecisionTable } from './decision-table.js';
 import { resolveBridge } from './bridge.js';
+import { dmnToDecisionCore, formatImportReport, NOT_DMN_ROOT } from '../dmn/import.js';
 import { formatCollaborationResult, describeEnumerationCompleteness } from './format.js';
 import { runScenarioRules, tableAnalysisKey } from './rules.js';
 
@@ -156,6 +157,29 @@ async function readJsonInput(arg, { allowStdin = true } = {}) {
   return JSON.parse(raw);
 }
 
+/**
+ * Load one `--decisions` entry. The format is decided by the CONTENT — first non-whitespace
+ * character `<` means XML, anything else JSON — never by the extension, which lies in both
+ * directions. A DMN import prints its report unconditionally (stderr) and hands its finding count
+ * back so `--strict` can fold it in.
+ *
+ * @returns {Promise<{ dc: object, importFindings: number }>}
+ */
+async function loadDecisionFile(p) {
+  const raw = readFileSync(resolve(p), 'utf8');
+  if (!raw.trimStart().startsWith('<')) return { dc: JSON.parse(raw), importFindings: 0 };
+
+  const { dc, report } = await dmnToDecisionCore(raw);
+  if (!dc) {
+    const first = report.parserWarnings[0] ?? '';
+    throw new Error(NOT_DMN_ROOT.test(first)
+      ? `${p} is not a DMN document (well-formed XML, but the root is not DMN 1.3 <definitions>)`
+      : `${p} is not XML (${first.split('\n').pop().trim() || 'parse failed'})`);
+  }
+  console.error(formatImportReport(report, { file: p }));
+  return { dc, importFindings: report.lossless ? 0 : Math.max(1, report.counts.unrepresented) };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const positional = [];
@@ -197,11 +221,14 @@ async function main() {
   }
 
   const decisionCores = [];
+  let importFindings = 0;
   if (decisionsArg) {
     const paths = decisionsArg.split(',').map((p) => p.trim()).filter(Boolean);
     for (const p of paths) {
       try {
-        decisionCores.push(await readJsonInput(p, { allowStdin: false }));
+        const loaded = await loadDecisionFile(p);
+        decisionCores.push(loaded.dc);
+        importFindings += loaded.importFindings;
       } catch (e) {
         console.error(`✗ ${e.message}`);
         process.exit(1);
@@ -240,10 +267,11 @@ async function main() {
   // "the enumeration produced nothing" is precisely the class of failure --strict exists to
   // stop from reaching delivery, and leaving it out would mean a totally failed run still
   // passes --strict as long as no SC0x rule happens to fire.
-  const blocking = result.issues.length + completeness.warnings.length;
+  const blocking = result.issues.length + completeness.warnings.length + importFindings;
   if (strict && blocking) {
     console.error(`\n✗ --strict: ${result.issues.length} finding(s), `
-      + `${completeness.warnings.length} completeness warning(s). No files written.`);
+      + `${completeness.warnings.length} completeness warning(s), `
+      + `${importFindings} DMN import finding(s). No files written.`);
     process.exit(1);
   }
   console.log(`✓ Scenarios enumerated: ${result.formatted.json.scenarios.length}`);

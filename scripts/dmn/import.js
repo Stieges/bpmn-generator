@@ -1189,7 +1189,7 @@ export function formatImportReport(report, { file } = {}) {
  * folds into the report: dmn-moddle says `failed to parse document as <dmn:Definitions>` only for
  * well-formed XML whose root is not DMN; every other parse failure is malformed XML.
  */
-const NOT_DMN_ROOT = /^failed to parse document as </;
+export const NOT_DMN_ROOT = /^failed to parse document as </;
 
 async function main() {
   const args = process.argv.slice(2);
