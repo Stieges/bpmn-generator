@@ -1,0 +1,122 @@
+{
+  "dmn/discount-decision.json|none|semantic": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/discount-decision.json|none|best-practice": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/discount-decision.json|dmn-default|semantic": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/discount-decision.json|dmn-default|best-practice": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/discount-decision.json|dmn-best-practice|semantic": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/discount-decision.json|dmn-best-practice|best-practice": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/roundtrip-all-fields.json|none|semantic": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/roundtrip-all-fields.json|none|best-practice": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/roundtrip-all-fields.json|dmn-default|semantic": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/roundtrip-all-fields.json|dmn-default|best-practice": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/roundtrip-all-fields.json|dmn-best-practice|semantic": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "dmn/roundtrip-all-fields.json|dmn-best-practice|best-practice": {
+    "errors": [],
+    "warnings": [],
+    "infos": []
+  },
+  "rules-characterization/dmn/dirty-discount.json|none|semantic": {
+    "errors": [
+      "[D01] Requirement in_nowhere -> dec_discountLevel has source \"in_nowhere\", which is not a declared node."
+    ],
+    "warnings": [
+      "[D06] Decision without logic (no decision table, no expression): \"Final percentage\"."
+    ],
+    "infos": []
+  },
+  "rules-characterization/dmn/dirty-discount.json|none|best-practice": {
+    "errors": [
+      "[D01] Requirement in_nowhere -> dec_discountLevel has source \"in_nowhere\", which is not a declared node."
+    ],
+    "warnings": [
+      "[D06] Decision without logic (no decision table, no expression): \"Final percentage\".",
+      "[B03] Decision without a question: \"Final percentage\". The name says what it is called, the question says what it decides.",
+      "[B05] Knowledge source with neither sourceType nor locationURI: \"Discount policy\". It names an authority nobody can look up."
+    ],
+    "infos": []
+  },
+  "rules-characterization/dmn/dirty-discount.json|dmn-default|semantic": {
+    "errors": [
+      "[D01] Requirement in_nowhere -> dec_discountLevel has source \"in_nowhere\", which is not a declared node."
+    ],
+    "warnings": [
+      "[D06] Decision without logic (no decision table, no expression): \"Final percentage\"."
+    ],
+    "infos": []
+  },
+  "rules-characterization/dmn/dirty-discount.json|dmn-default|best-practice": {
+    "errors": [
+      "[D01] Requirement in_nowhere -> dec_discountLevel has source \"in_nowhere\", which is not a declared node."
+    ],
+    "warnings": [
+      "[D06] Decision without logic (no decision table, no expression): \"Final percentage\"."
+    ],
+    "infos": []
+  },
+  "rules-characterization/dmn/dirty-discount.json|dmn-best-practice|semantic": {
+    "errors": [
+      "[D01] Requirement in_nowhere -> dec_discountLevel has source \"in_nowhere\", which is not a declared node."
+    ],
+    "warnings": [
+      "[D06] Decision without logic (no decision table, no expression): \"Final percentage\".",
+      "[B03] Decision without a question: \"Final percentage\". The name says what it is called, the question says what it decides.",
+      "[B05] Knowledge source with neither sourceType nor locationURI: \"Discount policy\". It names an authority nobody can look up."
+    ],
+    "infos": []
+  },
+  "rules-characterization/dmn/dirty-discount.json|dmn-best-practice|best-practice": {
+    "errors": [
+      "[D01] Requirement in_nowhere -> dec_discountLevel has source \"in_nowhere\", which is not a declared node."
+    ],
+    "warnings": [
+      "[D06] Decision without logic (no decision table, no expression): \"Final percentage\".",
+      "[B03] Decision without a question: \"Final percentage\". The name says what it is called, the question says what it decides.",
+      "[B05] Knowledge source with neither sourceType nor locationURI: \"Discount policy\". It names an authority nobody can look up."
+    ],
+    "infos": []
+  }
+}
