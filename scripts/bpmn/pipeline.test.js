@@ -3529,6 +3529,51 @@ describe('DOT format', () => {
     expect(rt.edges.length).toBe(lc.edges.length);
   });
 
+  describe('dotToLogicCore edge parsing (#66)', () => {
+    const wrap = (...body) => ['digraph G {', ...body, '}'].join('\n');
+    const nodesDot = ['  s [shape=circle label="S"];', '  b [shape=box label="B"];', '  e [shape=doublecircle label="E"];'];
+
+    test('mints no edge ids: the pipeline assigns them', () => {
+      const lc = dotToLogicCore(wrap(...nodesDot, '  s -> b;', '  b -> e;'));
+      expect(lc.edges.every((e) => e.id === undefined)).toBe(true);
+    });
+
+    test('parallel edges get distinct ids after the pipeline', async () => {
+      const lc = dotToLogicCore(wrap(...nodesDot, '  s -> b ;', '  s -> b ;', '  b -> e ;'));
+      expect(lc.edges).toHaveLength(3);
+      const result = await runPipeline(lc);
+      expect(result.validation.errors).toEqual([]);
+      expect(result.validation.xmlWarnings ?? []).toEqual([]);
+      const ids = [...result.bpmnXml.matchAll(/<bpmn:sequenceFlow id="([^"]+)"/g)].map((m) => m[1]);
+      expect(ids).toHaveLength(3);
+      expect(new Set(ids).size).toBe(3);
+    });
+
+    test('`a -> b;` and `a -> b ;` parse identically, with no semicolon in the target', () => {
+      const tight = dotToLogicCore(wrap(...nodesDot, '  s -> b;', '  b -> e;'));
+      const loose = dotToLogicCore(wrap(...nodesDot, '  s -> b ;', '  b -> e ;'));
+      expect(tight).toEqual(loose);
+      expect(tight.edges.map((e) => [e.source, e.target])).toEqual([['s', 'b'], ['b', 'e']]);
+    });
+
+    test('attributes directly after the target, and `a->b` without spaces, do not leak either', () => {
+      const lc = dotToLogicCore(wrap(...nodesDot, '  s -> b[label="x"];', '  b->e;'));
+      expect(lc.edges.map((e) => [e.source, e.target, e.label])).toEqual([['s', 'b', 'x'], ['b', 'e', undefined]]);
+    });
+
+    test('logicCoreToDot -> dotToLogicCore keeps node ids and edge endpoints', () => {
+      const src = {
+        id: 'p', name: 'P',
+        nodes: [{ id: 'start', type: 'startEvent', name: 'S' }, { id: 'work', type: 'task', name: 'W' }, { id: 'end', type: 'endEvent', name: 'E' }],
+        edges: [{ id: 'f1', source: 'start', target: 'work' }, { id: 'f2', source: 'work', target: 'end', label: 'ok' }],
+        lanes: [],
+      };
+      const rt = dotToLogicCore(logicCoreToDot(src));
+      expect(rt.nodes.map((n) => n.id)).toEqual(['start', 'work', 'end']);
+      expect(rt.edges.map((e) => [e.source, e.target, e.label])).toEqual([['start', 'work', undefined], ['work', 'end', 'ok']]);
+    });
+  });
+
   test('multi-pool export contains subgraph clusters', () => {
     const lc = {
       pools: [

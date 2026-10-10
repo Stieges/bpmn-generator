@@ -199,10 +199,12 @@ function dotToLogicCore(dotString) {
     if (line.match(/^(style|color|fillcolor)=/)) continue;
 
     // Edge: source -> target [attrs];
-    const edgeMatch = line.match(/^(\S+)\s*->\s*(\S+)\s*(?:\[([^\]]*)\])?\s*;?$/);
+    // An id stops at whitespace, `;`, `,`, `[` and `]` (and at `->`, so `a->b` splits). The edge
+    // gets NO id here: the pipeline assigns unique deterministic ones (normalizeEdgeIds), and an
+    // id minted from source+target collided for parallel edges (#66).
+    const edgeMatch = line.match(/^((?:(?!->)[^\s;,[\]])+)\s*->\s*((?:(?!->)[^\s;,[\]])+)\s*(?:\[([^\]]*)\])?\s*;?$/);
     if (edgeMatch) {
       const edge = {
-        id: `flow_${edgeMatch[1]}_${edgeMatch[2]}`,
         source: edgeMatch[1],
         target: edgeMatch[2],
       };
@@ -223,7 +225,7 @@ function dotToLogicCore(dotString) {
     }
 
     // Node declaration: id [attrs];
-    const nodeMatch = line.match(/^(\S+)\s*\[([^\]]*)\]\s*;?$/);
+    const nodeMatch = line.match(/^([^\s;,[\]]+)\s*\[([^\]]*)\]\s*;?$/);
     if (nodeMatch) {
       const nodeId = nodeMatch[1];
       const attrs = nodeMatch[2];

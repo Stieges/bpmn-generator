@@ -312,6 +312,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **DOT import: parallel edges and a trailing `;` (#66).** `dotToLogicCore` minted `flow_<src>_<tgt>`
+  for every edge, so parallel edges collided (and, since #64, the pipeline keeps an id it is given);
+  it now leaves `id` unset and `normalizeEdgeIds` assigns unique ones. The edge and node statement
+  patterns stop at whitespace, `;`, `,`, `[` and `]`, so `a -> b;` no longer yields target `b;`.
 - **The robustness CLI no longer silently ignores flags (#41).** `--strategy`/`--category` were
   accepted and dropped, so a run looked targeted and was not. The cells carry no `category`, and
   `sampleCells` has no strategy besides uniform, so there is nothing sound to wire through; each
