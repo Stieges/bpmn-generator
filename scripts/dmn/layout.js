@@ -10,6 +10,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { CFG } from '../shared/utils.js';
 import { DRD_SHAPE, DRD_SPACING } from './constants.js';
+import { orderedRequirements } from './requirement-order.js';
 
 /**
  * Decision-Core → ELK graph (plain object, not yet laid out).
@@ -26,7 +27,6 @@ import { DRD_SHAPE, DRD_SPACING } from './constants.js';
  */
 function decisionCoreToElk(dc) {
   const nodes = dc.nodes ?? [];
-  const requirements = dc.requirements ?? [];
 
   return {
     id: 'root',
@@ -40,17 +40,16 @@ function decisionCoreToElk(dc) {
       const sz = DRD_SHAPE[n.type] || DRD_SHAPE.decision;
       return { id: n.id, width: sz.w, height: sz.h };
     }),
-    // `r.id || `req_${i}`` is deliberately a DIFFERENT fallback formula from Global Constraint 8's
-    // requirementKey (`req.id || `req_${req.source}_${req.target}``, defined later in Task 3's
-    // coordinates.js and used to key edgeCoords/the DMNDI element map). That divergence would be
-    // exactly the #36-shaped bug Constraint 8 exists to prevent if anything downstream joined on
-    // this id — nothing does. ELK's own edge routes (`result.edges[].sections`) are discarded by
-    // runDmnElkLayout's caller (see that function's doc comment); this id only has to be unique
-    // within one ELK graph for ELK's internal bookkeeping, never compared against requirementKey's
-    // output. Do not "fix" this to import requirementKey — coordinates.js does not exist yet at
-    // this point in the plan, and layout.js must not depend on it either way (Task 3 depends on
-    // Task 2, not the reverse).
-    edges: requirements.map((r, i) => ({
+    // Edges are built from `orderedRequirements(dc)`, not `dc.requirements`: ELK's layered algorithm is
+    // sensitive to edge order, so the array order would otherwise leak into the GEOMETRY (and from
+    // there into the emitted bytes). `requirement-order.js` is dependency-free precisely so that this
+    // module and `coordinates.js` can share the one ordering.
+    //
+    // `r.id || `req_${i}`` is deliberately a DIFFERENT fallback from `requirementKey`
+    // (`req.id || `req_${req.source}_${req.target}``, which keys edgeCoords and the DMNDI element
+    // map). Nothing joins on this id: ELK's own edge routes (`result.edges[].sections`) are
+    // discarded by runDmnElkLayout's caller; the id only has to be unique within one ELK graph.
+    edges: orderedRequirements(dc).map((r, i) => ({
       id: r.id || `req_${i}`,
       sources: [r.source],
       targets: [r.target],

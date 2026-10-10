@@ -104,17 +104,21 @@ DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
     ├── schema-gate.js       ← ../shared/resource-paths.js (ajv gate for Decision-Core)
     ├── rules.js             ← ../shared/rule-profile.js, ../shared/utils.js (D01–D11 + B01–B06,
     │                          3 layers, 2 modes; own runner `runDmnRules`)
-    ├── layout.js            ← constants.js, ../shared/utils.js, elkjs (decisionCoreToElk, runDmnElkLayout)
-    ├── coordinates.js       ← constants.js, ../shared/geometry.js (buildDmnDiagrams, per-diagram coordMap)
+    ├── requirement-order.js (no deps — `requirementKey` and `orderedRequirements`, the one place a
+    │                          requirement's identity and emitted order are derived; shared by layout,
+    │                          coordinates, dmn-xml and import so geometry and bytes depend on the
+    │                          model, not on the `requirements` array order)
+    ├── layout.js            ← constants.js, requirement-order.js, ../shared/utils.js, elkjs (decisionCoreToElk, runDmnElkLayout)
+    ├── coordinates.js       ← constants.js, requirement-order.js, ../shared/geometry.js (buildDmnDiagrams, per-diagram coordMap)
     ├── di-check.js          (checkDmnDiagramIntegrity — DD01–DD03, mirrors bpmn/di-check.js)
-    ├── dmn-xml.js           ← ../shared/utils.js, coordinates.js (requirementKey), dmn-moddle
+    ├── dmn-xml.js           ← ../shared/utils.js, requirement-order.js, dmn-moddle
     │                          (generateDmnXml, validateDmnXml)
     └── constants.js         ← ../shared/utils.js (DRD shape sizes, spacing, edge markers, from CFG.dmn)
   import-scope.js            (no deps — the coverage table: one row per non-abstract global element
                                in DMN13.xsd/DMNDI13.xsd, disposition `mapped`/`reported`/
                                `parser-blind`, plus DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS and
                                IMPORT_CODES IM01–IM08. The importer's ONLY exclusion list)
-  import.js                  ← import-scope.js, coordinates.js (requirementKey),
+  import.js                  ← import-scope.js, requirement-order.js,
                                ../shared/resource-paths.js, dmn-moddle
                                (DMN XML → Decision-Core + a structured loss report. `parseDmnXml`
                                async/throwing, `moddleToDecisionCore` pure+sync, `dmnToDecisionCore`

@@ -50,3 +50,10 @@ per-attribute special-casing in dmn-moddle; it is the same one rule ("skip a val
 default") applied to two attributes whose descriptors happen to differ on whether a default is
 declared at all. Setting `hitPolicy: 'UNIQUE'` explicitly therefore always serialises as absent —
 only a non-default hit policy (e.g. `'FIRST'`, `'PRIORITY'`) would survive the round trip.
+
+## `negative/` — fixtures that exist to be dirty
+
+`import.test.js`'s directory-driven schema-gate guard scans this directory non-recursively and
+asserts every `.dmn` imports into a Decision-Core the gate accepts. A fixture that must NOT satisfy
+that claim goes in `tests/fixtures/dmn/negative/` (create it when the first one arrives); that
+directory is the guard's whole opt-out.

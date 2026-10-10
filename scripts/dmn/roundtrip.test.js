@@ -34,8 +34,8 @@
  *     documents were byte-identical up to `<dmndi:DMNDI>` and differed only in the ORDER of
  *     `<dmndi:DMNEdge>` children, because `buildDmnDiagrams` keyed `edgeCoords` in `dc.requirements`
  *     array order while the importer rebuilds that array grouped by target. Stage 5b closed it by
- *     making the emitted order a function of the MODEL — `orderedRequirements` in `coordinates.js`,
- *     shared by the DI half and the DRG half — so the identity is asserted directly below and the
+ *     making the emitted order a function of the MODEL — `orderedRequirements` in `requirement-order.js`,
+ *     shared by the layout, the DI half and the DRG half — so the identity is asserted directly below and the
  *     fixed point one step later is now a consequence rather than the strongest available claim.
  *   - `$schemaVersion` does not survive at all. It is a finding, kept in the fixture and asserted AS
  *     A LOSS in its own test.
@@ -53,7 +53,7 @@ import path from 'node:path';
 import { runDmnPipeline } from './pipeline.js';
 import { dmnToDecisionCore, applyDecisionCoreDefaults, canonicalizeDecisionCore } from './import.js';
 import { validateDecisionCoreSchema } from './schema-gate.js';
-import { requirementKey } from './coordinates.js';
+import { requirementKey } from './requirement-order.js';
 import { decisionCoreSchemaPath } from '../shared/resource-paths.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -337,9 +337,12 @@ describe('roundtrip-all-fields.json — completeness against decision-core-schem
  * model, and it belongs where the comparison is.
  *
  * Note what changed in Stage 5b and what did not. The array order used to control one visible thing
- * — the emission order of `<dmndi:DMNEdge>` — and now controls nothing: `orderedRequirements` derives
- * the emitted order from `dc.nodes` and the requirement kinds. So the permutation this sort absorbs
- * is now genuinely invisible in the artefact, which is the strongest form of the argument for
+ * — the emission order of `<dmndi:DMNEdge>`, and through ELK's edge-order sensitivity the geometry —
+ * and now controls neither: `orderedRequirements` derives the order from `dc.nodes` and the
+ * requirement kinds, for the layout and for both XML halves. The one exception is siblings that share
+ * target AND kind, whose array order is the author's and is preserved; the importer rebuilds those
+ * in document order, so this sort leaves them as the document had them. The permutation it absorbs
+ * is therefore invisible in the artefact, which is the strongest form of the argument for
  * absorbing it, and `xml₁ === xml₂` below is the proof.
  */
 const sortRequirements = (dc) => (dc.requirements
@@ -511,8 +514,10 @@ describe('the XML is the artefact', () => {
     // `<dmndi:DMNEdge>` in that key order — so the importer's target-grouped rebuild of the array
     // permuted the DI edge list (same edges, same waypoints, different order). Both halves now go
     // through `orderedRequirements`, which derives the order from `dc.nodes` and the XSD's kind
-    // sequence, so two Decision-Cores describing the same model emit the same bytes whatever order
-    // their `requirements` array happens to be in.
+    // sequence (the layout goes through it too), so two Decision-Cores describing the same model
+    // emit the same bytes whatever order their `requirements` array is in — except that siblings
+    // sharing target AND kind keep the author's relative order, which is deliberately preserved.
+    // The permutation test at the end of this file pins that claim over every arrangement.
     expect(xml2).toBe(xml1);
   });
 
@@ -555,5 +560,42 @@ describeIfXmllint('the field-complete fixture against the normative XSD', () => 
     expect(() => execFileSync('xmllint', ['--noout', '--schema', xsdPath, '-'], {
       input: xml, stdio: ['pipe', 'pipe', 'pipe'],
     })).not.toThrow();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// The emitted document is a function of the model, not of the `requirements` array order
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Pins the third consumer of that order. `layout.js` hands `dc.requirements` to ELK as its edge list
+// and ELK's layered algorithm is sensitive to edge order, so the GEOMETRY — not just the DI edge
+// sequence — depended on how the array happened to be arranged: 100 of the 120 permutations of the
+// five requirements below used to emit different bytes. The two committed fixtures happened to sit
+// in orders that survive, so the round-trip fence passed by luck.
+//
+// `ir_2` and `ir_3` share target AND kind, so their relative order is the author's and is preserved
+// on purpose (see `orderedRequirements`). The permutations therefore keep `ir_2` before `ir_3`:
+// 60 of the 120, each of which must emit identical bytes.
+describe('the emitted document does not depend on the order of dc.requirements', () => {
+  const permutations = (items) => (items.length <= 1
+    ? [items]
+    : items.flatMap((item, i) => permutations([...items.slice(0, i), ...items.slice(i + 1)])
+      .map((rest) => [item, ...rest])));
+
+  test('every permutation of the requirements emits byte-identical XML', async () => {
+    const dc = JSON.parse(readFileSync(path.join(HERE, '..', '..', 'tests', 'fixtures', 'dmn', 'discount-decision.json'), 'utf8'));
+    expect(dc.requirements).toHaveLength(5);
+    const baseline = (await runDmnPipeline(dc)).xml;
+
+    const idx = (perm, id) => perm.findIndex((r) => r.id === id);
+    const perms = permutations(dc.requirements).filter((p) => idx(p, 'ir_2') < idx(p, 'ir_3'));
+    expect(perms).toHaveLength(60);
+
+    const differing = [];
+    for (const perm of perms) {
+      const { xml } = await runDmnPipeline({ ...dc, requirements: perm });
+      if (xml !== baseline) differing.push(perm.map((r) => r.id).join(','));
+    }
+    expect(differing).toEqual([]);
   });
 });
