@@ -125,8 +125,7 @@ DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
                                diagram is an IM06 finding. Not yet reached by runDmnPipeline)
   (produces a real .dmn file, XSD-validated — see
    docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: SVG rendering and
-   the tool surface, Stages 6–7; the importer is
-   docs/superpowers/plans/2026-08-04-dmn-xml-importer.md, whose Stage 6 adds its CLI.)
+   the tool surface, Stages 6–7. The importer has no CLI yet.)
 
 Agent subsystem (scripts/agents/)
   chat.js, compliance.js, layout.js, llm-provider.js, modeler.js, prompt-sections.js, reviewer.js
