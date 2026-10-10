@@ -21,7 +21,7 @@ import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
 import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
-import { quoteForMessage } from './shared/rule-profile.js';
+import { quoteForMessage, boundText } from './shared/safe-text.js';
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.BPMN_API_KEY || null; // null = no auth (dev mode)
@@ -139,9 +139,32 @@ export function clientRuleProfile(body) {
   return profile;
 }
 
+const AUDIT_ID_MAX = 128;
+const TELEMETRY_DETAILS_MAX = 8 * 1024;
+const TELEMETRY_DEPTH_MAX = 6;
+
+/** A client message on its way into the audit log or a response: bounded, controls escaped. */
 function truncateForAudit(message) {
-  const text = String(message);
-  return text.length > AUDIT_MESSAGE_MAX ? `${text.slice(0, AUDIT_MESSAGE_MAX)}…` : text;
+  return boundText(message, AUDIT_MESSAGE_MAX);
+}
+
+/** A client identifier-like field (clientId, telemetry event, diagramId): a bounded string. */
+function boundField(value) {
+  if (typeof value === 'string') return boundText(value, AUDIT_ID_MAX);
+  // Not a structure in the log: a non-string is logged as its (bounded) JSON text.
+  let text;
+  try { text = JSON.stringify(value); } catch { text = String(value); }
+  return boundText(text ?? String(value), AUDIT_ID_MAX);
+}
+
+/** Telemetry `details`, every key and string bounded and escaped, nesting cut at a fixed depth. */
+function sanitizeDetails(value, depth = 0) {
+  if (typeof value === 'string') return boundText(value, AUDIT_MESSAGE_MAX);
+  if (value === null || typeof value !== 'object') return value;
+  if (depth >= TELEMETRY_DEPTH_MAX) return '[nested too deep]';
+  if (Array.isArray(value)) return value.map((v) => sanitizeDetails(v, depth + 1));
+  return Object.fromEntries(Object.entries(value)
+    .map(([k, v]) => [boundText(k, AUDIT_ID_MAX), sanitizeDetails(v, depth + 1)]));
 }
 
 function json(res, status, data) {
@@ -276,6 +299,9 @@ const server = createServer(async (req, res) => {
   let body;
   try { body = await parseBody(req); }
   catch { return json(res, 400, { error: 'Invalid JSON body' }); }
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return json(res, 400, { error: 'Request body must be a JSON object' });
+  }
 
   // The correlation id is echoed, logged and was once part of a file name: accept it only as a
   // short identifier, never as a path or an arbitrary value.
@@ -283,7 +309,8 @@ const server = createServer(async (req, res) => {
     return json(res, 400, { error: CORRELATION_ID_ERROR });
   }
   const correlationId = body.correlationId || crypto.randomUUID();
-  const clientId = body.clientId || 'anonymous';
+  const clientId = body.clientId === undefined || body.clientId === null || body.clientId === ''
+    ? 'anonymous' : boundField(body.clientId);
   const t0 = Date.now();
 
   try {
@@ -326,7 +353,7 @@ const server = createServer(async (req, res) => {
         }
         if (urlError) return json(res, 400, { error: urlError });
         deliver(body.callbackUrl, payload).catch(err => {
-          auditLog({ event: 'delivery_failed', correlationId, error: err.message });
+          auditLog({ event: 'delivery_failed', correlationId, error: truncateForAudit(err.message) });
         });
         callbackStatus = 'pending';
       }
@@ -442,19 +469,20 @@ const server = createServer(async (req, res) => {
 
     // Telemetry
     if (url === '/api/v1/telemetry') {
-      try {
-        auditLog({
-          ts: new Date().toISOString(),
-          event: 'frontend_event',
-          frontendEvent: body.event,
-          diagramId: body.diagramId,
-          correlationId: body.correlationId,
-          details: body.details,
-        });
-        return json(res, 200, { status: 'ok' });
-      } catch (err) {
-        return json(res, 400, { error: err.message });
+      let detailsText;
+      try { detailsText = JSON.stringify(body.details ?? null); } catch { detailsText = null; }
+      if (detailsText === null || detailsText.length > TELEMETRY_DETAILS_MAX) {
+        return json(res, 400, { error: `details must be JSON of at most ${TELEMETRY_DETAILS_MAX} bytes` });
       }
+      auditLog({
+        ts: new Date().toISOString(),
+        event: 'frontend_event',
+        frontendEvent: body.event === undefined ? undefined : boundField(body.event),
+        diagramId: body.diagramId === undefined ? undefined : boundField(body.diagramId),
+        correlationId: body.correlationId,
+        details: sanitizeDetails(body.details),
+      });
+      return json(res, 200, { status: 'ok' });
     }
 
     return json(res, 404, { error: 'Not Found' });
@@ -471,8 +499,9 @@ const server = createServer(async (req, res) => {
       auditLog({ event: 'llm_error', correlationId, upstreamStatus: llmFailure.status });
       return json(res, 502, { correlationId, status: 'llm_error', error: 'LLM provider request failed' });
     }
-    auditLog({ event: 'error', correlationId, error: err.message });
-    return json(res, 500, { correlationId, status: 'internal_error', error: err.message });
+    const message = truncateForAudit(err.message);
+    auditLog({ event: 'error', correlationId, error: message });
+    return json(res, 500, { correlationId, status: 'internal_error', error: message });
   }
 });
 

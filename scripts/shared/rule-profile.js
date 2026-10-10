@@ -33,6 +33,7 @@
  * profile itself, so a client cannot forge it.
  */
 
+import { quoteForMessage as quoteText } from './safe-text.js';
 import { openSync, fstatSync, readSync, closeSync, realpathSync, readFileSync, constants as FS } from 'node:fs';
 import { resolve, join, sep } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -63,15 +64,10 @@ export class ProfileRejectedError extends Error {
 
 /**
  * The one way a client-derived token (a rule id, a layer, a profile name, a path) enters a message:
- * truncated to `max` characters, JSON-quoted (which escapes newlines and every other C0 control character), and with
- * C1 controls, Unicode line separators and format characters (bidi overrides and isolates,
- * zero-width characters, BOM) removed — so it can neither start a new log line, drive a terminal,
- * nor reorder what a reader sees.
+ * `shared/safe-text.js`'s `quoteForMessage`, with the profile token limit as default length.
  */
 export function quoteForMessage(value, max = PROFILE_LIMITS.token) {
-  const text = String(value);
-  const cut = text.length > max ? `${text.slice(0, max)}…` : text;
-  return JSON.stringify(cut).replace(/[\u0080-\u009f\u2028\u2029\p{Cf}]/gu, '');
+  return quoteText(value, max);
 }
 
 /** At most `PROFILE_LIMITS.messages` entries, then one line counting the rest. */
