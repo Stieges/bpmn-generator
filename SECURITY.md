@@ -77,12 +77,15 @@ Worth weighting the decision by reachability: a package this project never loads
 
 Exceptions live in `.github/dependency-policy.json`. Each requires `reason`, `whyNotFixed`, `reviewTrigger`, `opened` and `expires`; the gate refuses to run against a policy missing any of them. **`expires` is mandatory and capped at 180 days, and an expired entry fails the build** — an accepted risk that nobody re-examines is not an accepted risk, it is a forgotten one. Where an exception rests on a claim that some code path is never reached, `voidIf.importsFound` names the specifiers that would disprove it; the gate greps first-party product code for them on every run, so the claim is machine-checked rather than asserted in a comment.
 
-| Package | Severity | Why it is not exploitable here | Re-review | Expires |
-|---|---|---|---|---|
-| `brace-expansion` | high | DoS via brace expansion. Dev-tree only — absent from `npm audit --omit=dev`. Reached solely through jest's `minimatch`; the patterns expanded come from jest config and repo file names, never from untrusted input, and no shipped artifact contains it. | jest's tree reaches `minimatch>=10` | 2026-10-23 |
-| `@hono/node-server`, `@modelcontextprotocol/sdk` | moderate | Path traversal in `serve-static`, Windows only. Belongs to the MCP SDK's HTTP/SSE transports, which this project never loads — `mcp-bpmn-server.js` uses `StdioServerTransport` only and `http-server.js` uses `node:http` directly. One advisory, two findings, because npm reports the SDK separately through the effects chain. | the SDK admits `@hono/node-server >= 2.0.5` | 2027-01-21 |
+There are currently **no accepted risks** — `exceptions` in the policy file is empty. The last two
+were closed by in-range upgrades in October 2026: `brace-expansion` (high, dev-only) now resolves to
+patched 1.x/2.x releases, and the `@hono/node-server` path-traversal advisory (moderate) no longer
+matches the installed version, while `@modelcontextprotocol/sdk` 1.32 widened its range to admit
+`@hono/node-server >= 2.0.5` — the review trigger the exception was waiting for.
 
-Neither is fixable by upgrading: `brace-expansion` is affected in every version except 5.0.8, and 5.0.8 dropped the default export that both pinned `minimatch` copies consume; for `@hono/node-server`, npm's only proposed remedy is a semver-major *downgrade* of the MCP SDK. The full reasoning, including the measured failure modes, is in the policy file.
+What remains is non-blocking: a moderate `js-yaml` advisory deep in jest's coverage tooling
+(dev-only). npm's only proposed remedy is a semver-major *downgrade* of jest, so it stays a warning
+until jest's own tree moves.
 
 To report a vulnerability in a dependency, use the same address and timeline as above.
 
