@@ -107,7 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   need (both consumers already default it). Two deref rules live in one file on purpose — a
   requirement's `@href` is `#`-stripped and refused when it reaches into another document (IM03),
   while `usingTask`/`usingProcess` keep theirs verbatim, because the writer emits a bare id there
-  for a reason. No CLI yet (Stage 6).
+  for a reason.
 - **`references/decision-core-schema.json`'s id pattern widened to ASCII NCName
   (dmn-xml-importer plan, Stage 2).** All seven sites repeating the id pattern (root `id`, `Node`,
   `Requirement`, `DecisionTable`, `InputClause`, `OutputClause`, `DecisionRule`) moved from
@@ -808,15 +808,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   true and has been corrected.
 
 ### Known limitations
-- The DMN importer reads no DMNDI, so `report.lossless` is never true for DMN this generator wrote
-  (IM06 for the diagram, IM05 for generated `<variable>`/`<literalExpression>` ids); `--strict` on the
-  import CLI and on `scenarios/pipeline.js --decisions` rejects our own output. Nothing is lost that
-  the next emit would not regenerate.
-- `references/input-schema.json` has the same narrow id pattern Decision-Core dropped, and
-  `scripts/bpmn/import.js` swallows every moddle error with a bare `catch {}`; neither
-  `/api/v1/import` nor the MCP `import_bpmn` tool has a test. Not addressed here.
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
+
+- **The DMN importer's `report.lossless` is never true for DMN this generator wrote.** It reads no
+  DMNDI, so (IM06 for the diagram, IM05 for generated `<variable>`/`<literalExpression>` ids); `--strict` on the
+  import CLI and on `scenarios/pipeline.js --decisions` rejects our own output. Nothing is lost that
+  the next emit would not regenerate.
+- **The BPMN importer side is untouched.** `references/input-schema.json` has the same narrow id pattern Decision-Core dropped, and
+  `scripts/bpmn/import.js` swallows every moddle error with a bare `catch {}`; neither
+  `/api/v1/import` nor the MCP `import_bpmn` tool has a test. Not addressed here.
+
 
 - **`S05`/`S06`'s remaining missed-deadlock cases are disclosed, not closed** — see the S05/S06 entry
   under *Fixed* above. `references/fachliches-regelwerk.md` names two of them and names them as
