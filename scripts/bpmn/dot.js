@@ -4,6 +4,7 @@
  */
 
 import { isEvent, isGateway, isArtifact } from './types.js';
+import { withProcessId } from './topology.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // EXPORT: Logic-Core → DOT
@@ -15,6 +16,7 @@ import { isEvent, isGateway, isArtifact } from './types.js';
  * @returns {string} DOT string
  */
 function logicCoreToDot(lc) {
+  lc = withProcessId(lc);
   const lines = [];
   const isMultiPool = lc.pools && lc.pools.length > 0;
 

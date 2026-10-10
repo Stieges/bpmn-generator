@@ -349,6 +349,44 @@ export function assignEdgeIds(lc) {
   return lc;
 }
 
+/**
+ * Give a single-process Logic-Core (no `pools`) that has no `id` a deterministic one, in place.
+ *
+ * The schema's `SingleProcess` branch makes `id` optional, unlike `Pool`; everything downstream
+ * (the process element, `Participant_<id>`/`processRef`, the plane's `bpmnElement`, lane
+ * coordinates, DOT cluster names, the scenario pool label) reads `proc.id` as-is, and a missing
+ * one surfaced as the string "undefined" in six places (#37). `Process_1`, then `Process_2`, ...
+ * on a collision with any id in the document. A pooled document is left alone (a `Pool`
+ * requires its id). Idempotent; like `assignEdgeIds` the only fallback — downstream code has none.
+ */
+export function assignProcessId(lc) {
+  if (!lc || typeof lc !== 'object' || lc.pools) return lc;
+  if (typeof lc.id === 'string' && lc.id !== '') return lc;
+  const used = new Set();
+  const collect = (v) => {
+    if (Array.isArray(v)) { v.forEach(collect); return; }
+    if (v && typeof v === 'object') {
+      if (typeof v.id === 'string') used.add(v.id);
+      for (const k of Object.keys(v)) collect(v[k]);
+    }
+  };
+  collect(lc);
+  let id = 'Process_1';
+  for (let n = 2; used.has(id); n++) id = `Process_${n}`;
+  lc.id = id;
+  return lc;
+}
+
+/**
+ * Pure form of `assignProcessId` for the public entries that take a Logic-Core directly
+ * (`generateBpmnXml`, `logicCoreToDot`): the caller's object is returned untouched when it needs
+ * nothing, and otherwise a shallow copy carries the id.
+ */
+export function withProcessId(lc) {
+  if (!lc || typeof lc !== 'object' || lc.pools || (typeof lc.id === 'string' && lc.id !== '')) return lc;
+  return assignProcessId({ ...lc });
+}
+
 /** Pure form of `assignEdgeIds`: returns a deep copy, the caller's object is not touched. */
 export function normalizeEdgeIds(lc) {
   return assignEdgeIds(JSON.parse(JSON.stringify(lc)));

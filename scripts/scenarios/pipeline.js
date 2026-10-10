@@ -41,6 +41,7 @@ import { resolveBridge } from './bridge.js';
 import { validateDecisionCoreSchema } from '../dmn/schema-gate.js';
 import { dmnToDecisionCore, formatImportReport, NOT_DMN_ROOT } from '../dmn/import.js';
 import { formatCollaborationResult, describeEnumerationCompleteness } from './format.js';
+import { withProcessId } from '../bpmn/topology.js';
 import { runBpmnScenarioRules } from '../bpmn/scenario-rules.js';
 import { runDmnScenarioRules, tableAnalysisKey, countSkippedTableAnalyses } from '../dmn/scenario-rules.js';
 import { runCrossRules } from '../cross/rules.js';
@@ -161,6 +162,10 @@ export function runScenarioRules(context) {
  * @returns {ScenarioPipelineResult}
  */
 export function runScenarioPipeline(lc, decisionCores = [], options = {}) {
+  // A single-process document without an `id` gets the pipeline's deterministic one here, so the
+  // pool label in the output is that id and not a `pool_0` that composeCollaboration synthesizes
+  // as a last resort (#37). A copy: the caller's object is not touched.
+  lc = withProcessId(lc);
   const enumerationResult = enumerateCollaboration(lc, options);
   const formatted = formatCollaborationResult(enumerationResult, lc, options);
 
