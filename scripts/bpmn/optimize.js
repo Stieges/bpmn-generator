@@ -16,14 +16,14 @@
  * so nothing is asserted as certain and nothing is reordered automatically.
  */
 
-import { isGateway, TASK_TYPES } from './types.js';
+import { isGateway, TASK_TYPES, MARKER_GROUPS } from './types.js';
 import { resolveLaneId } from './topology.js';
 
-const EXCEPTION_MARKERS = new Set(['error', 'terminate', 'escalation', 'cancel']);
+const EXCEPTION_MARKERS = MARKER_GROUPS.exception;
 // German-first exception stems (match inflected forms: eskaliert/eskalation,
 // storniert/storno, ablehnung/abgelehnt, verworfen/verwerfen, abgebrochen/abbruch).
 const EXCEPTION_NAME_RE = /fehler|error|abbruch|abgebroch|eskal|storn|ablehn|abgelehnt|reject|cancel|verwerf|verworf/i;
-const WAIT_MARKERS = new Set(['timer', 'message']);
+const WAIT_MARKERS = MARKER_GROUPS.wait;
 
 const DEFAULTS = {
   minParallelChain: 3,   // O04: linear same-lane task run length to flag

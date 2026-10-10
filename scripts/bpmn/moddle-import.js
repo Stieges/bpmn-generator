@@ -7,7 +7,7 @@
  */
 
 import { BpmnModdle } from 'bpmn-moddle';
-import { OMG_NODE_FIELD_SCOPE } from './types.js';
+import { OMG_NODE_FIELD_SCOPE, SUPPORTED_NODE_TYPES, MARKER_BY_EVENT_DEFINITION } from './types.js';
 
 const moddle = new BpmnModdle();
 
@@ -35,18 +35,7 @@ const FLOW_NODE_TYPES = new Set([
   'bpmn:DataObjectReference', 'bpmn:DataStoreReference', 'bpmn:TextAnnotation', 'bpmn:Group',
 ]);
 
-const EVENT_DEF_MAP = {
-  'bpmn:MessageEventDefinition': 'message',
-  'bpmn:TimerEventDefinition': 'timer',
-  'bpmn:ErrorEventDefinition': 'error',
-  'bpmn:SignalEventDefinition': 'signal',
-  'bpmn:EscalationEventDefinition': 'escalation',
-  'bpmn:CompensateEventDefinition': 'compensation',
-  'bpmn:ConditionalEventDefinition': 'conditional',
-  'bpmn:LinkEventDefinition': 'link',
-  'bpmn:CancelEventDefinition': 'cancel',
-  'bpmn:TerminateEventDefinition': 'terminate',
-};
+const EVENT_DEF_MAP = Object.fromEntries(MARKER_BY_EVENT_DEFINITION);
 
 /**
  * Find a converted Logic-Core node by id ANYWHERE in a node tree, not only at the top level.
@@ -270,13 +259,7 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
 
   // Flow nodes
   const nodes = [];
-  const flowNodeTags = new Set([
-    'startEvent', 'endEvent', 'intermediateCatchEvent', 'intermediateThrowEvent', 'boundaryEvent',
-    'task', 'userTask', 'serviceTask', 'scriptTask', 'sendTask', 'receiveTask',
-    'manualTask', 'businessRuleTask', 'callActivity', 'subProcess', 'transaction',
-    'exclusiveGateway', 'parallelGateway', 'inclusiveGateway', 'eventBasedGateway', 'complexGateway',
-    'dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group',
-  ]);
+  const flowNodeTags = SUPPORTED_NODE_TYPES;
 
   // Every DataObject in this process, at any depth, keyed by id — the fallback path for a file
   // that carries no `dataObjectRef`. See the twin index in import.js.

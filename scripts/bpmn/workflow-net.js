@@ -22,7 +22,7 @@
  * Reference: van der Aalst, "Workflow Nets" (1998), "Soundness of WF-Nets" (2011)
  */
 
-import { isGateway, isBoundaryEvent } from './types.js';
+import { isGateway, isBoundaryEvent, isArtifact } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // BPMN → Petri-Net Conversion
@@ -313,8 +313,7 @@ function buildScope(container, scopeSource, scopeSink, ctx) {
 
   for (const node of container.nodes || []) {
     // Skip elements that don't participate in control flow
-    if (node.type === 'dataObjectReference' || node.type === 'dataStoreReference' ||
-        node.type === 'textAnnotation' || node.type === 'group') {
+    if (isArtifact(node.type)) {
       skipped.push({ id: node.id, reason: 'artifact' });
       continue;
     }

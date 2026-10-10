@@ -10,6 +10,7 @@ import { BpmnModdle } from 'bpmn-moddle';
 import {
   isEvent, isGateway, isBoundaryEvent, isBpmnArtifact,
   OMG_NODE_FIELD_SCOPE, nodeFieldSpec, matchesFieldType, bpmnXmlTag,
+  EVENT_DEFINITION_BY_MARKER, FLOW_NODE_TYPES,
 } from './types.js';
 
 import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
@@ -117,20 +118,7 @@ function buildEventDefinition(node, topLevelDefsMap) {
   const marker = node.marker || inferEventMarker(node.name || '');
   if (!marker) return null;
 
-  const typeMap = {
-    message: 'bpmn:MessageEventDefinition',
-    timer: 'bpmn:TimerEventDefinition',
-    error: 'bpmn:ErrorEventDefinition',
-    signal: 'bpmn:SignalEventDefinition',
-    escalation: 'bpmn:EscalationEventDefinition',
-    compensation: 'bpmn:CompensateEventDefinition',
-    conditional: 'bpmn:ConditionalEventDefinition',
-    link: 'bpmn:LinkEventDefinition',
-    cancel: 'bpmn:CancelEventDefinition',
-    terminate: 'bpmn:TerminateEventDefinition',
-  };
-
-  const bpmnType = typeMap[marker];
+  const bpmnType = EVENT_DEFINITION_BY_MARKER.get(marker);
   if (!bpmnType) return null;
 
   const attrs = {};
@@ -620,8 +608,7 @@ function buildLane(lane, nodes, flowNodeMap) {
   // annotation sits in visually is a geometry question, and geometry lives in
   // coordMap, not here.
   const refs = nodes
-    .filter(n => n.lane === lane.id && !isBpmnArtifact(n.type)
-      && n.type !== 'dataObjectReference' && n.type !== 'dataStoreReference')
+    .filter(n => n.lane === lane.id && FLOW_NODE_TYPES.has(n.type))
     .map(n => flowNodeMap.get(n.id)).filter(Boolean);
   for (const ref of refs) {
     laneEl.get('flowNodeRef').push(ref);
