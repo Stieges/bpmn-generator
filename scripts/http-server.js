@@ -111,7 +111,8 @@ export function _rateBucketCount() { return rateBuckets.size; }
  * The rate-limit key of a request: the socket's peer address. Behind reverse proxies the operator
  * sets `TRUST_PROXY_HOPS` to the number of proxies in front of the server; the key is then the
  * address the outermost trusted proxy recorded in `X-Forwarded-For` — counted from the right, so
- * entries a client prepends itself are never used.
+ * entries a client prepends itself are never used. Only safe when the server is reachable
+ * exclusively through those proxies: a client connecting directly controls the whole header.
  */
 export function rateLimitKey(req, env = process.env) {
   const peer = req.socket?.remoteAddress || 'unknown';
@@ -120,8 +121,10 @@ export function rateLimitKey(req, env = process.env) {
   const header = req.headers?.['x-forwarded-for'];
   if (typeof header !== 'string' || !header.trim()) return peer;
   const chain = header.split(',').map((h) => h.trim()).filter(Boolean);
-  if (chain.length === 0) return peer;
-  return chain[Math.max(0, chain.length - hops)];
+  // Fewer entries than trusted proxies: the request did not pass through all of them, so no
+  // entry in the chain is trustworthy.
+  if (chain.length < hops) return peer;
+  return chain[chain.length - hops];
 }
 
 /**

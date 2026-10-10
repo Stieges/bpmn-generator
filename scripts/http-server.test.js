@@ -667,6 +667,12 @@ describe('rate limiting', () => {
     expect(rateLimitKey(req('10.0.0.9'), { TRUST_PROXY_HOPS: '1' })).toBe('10.0.0.9');
   });
 
+  test('a chain shorter than the trusted hops did not pass all proxies: the socket address is the key', () => {
+    expect(rateLimitKey(req('10.0.0.9', '198.51.100.1'), { TRUST_PROXY_HOPS: '2' })).toBe('10.0.0.9');
+    expect(rateLimitKey(req('10.0.0.9', 'a, b'), { TRUST_PROXY_HOPS: '3' })).toBe('10.0.0.9');
+    expect(rateLimitKey(req('10.0.0.9', 'a, b, c, d'), { TRUST_PROXY_HOPS: '3' })).toBe('b');
+  });
+
   test('allows the configured number of requests per window, then refuses', () => {
     const now = 1_000_000;
     for (let i = 0; i < 30; i++) expect(rateLimitAllows('a', now)).toBe(true);
