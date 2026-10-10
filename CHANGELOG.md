@@ -661,6 +661,16 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   `scripts/bpmn/types.test.js`), which is a second, adjacent way this release's ad-hoc support is
   thinner than either the schema or the type vocabulary implies on their own.
 
+### Security
+- **Five high/critical dependency advisories cleared; the audit gate is green again.** `proxy-addr`
+  (critical), `@modelcontextprotocol/sdk` 1.29.0 → 1.32.1, `fast-uri` (reached through `ajv`, on the
+  untrusted-input path), and the dev-only `brace-expansion` and `js-yaml` — all in-range lockfile
+  updates, no range or dependency changes. The gate had failed on every pull request since these
+  advisories were published. The last policy exception (`@hono/node-server`, Windows-only path
+  traversal in an MCP transport this project never loads) is retired: its advisory no longer matches
+  and its review trigger fired. `SECURITY.md` now lists no accepted risks; one moderate `js-yaml`
+  advisory inside jest's coverage tooling stays a non-blocking warning.
+
 ## [3.6.0] - 2026-08-01
 
 ### Added
