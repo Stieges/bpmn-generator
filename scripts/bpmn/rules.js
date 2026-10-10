@@ -27,6 +27,11 @@ import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
 import { inferEventMarker } from './icons.js';
 
+/** How a finding names an edge: its id, or `source→target` for an edge that has none yet. */
+function edgeRef(e) {
+  return e.id || `${e.source}→${e.target}`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Helpers (internal)
 // ═══════════════════════════════════════════════════════════════════════
@@ -318,8 +323,8 @@ const SOUNDNESS_CHECKS = [
       const nodeIds = new Set((proc.nodes || []).map(n => n.id));
       const msgs = [];
       for (const e of (proc.edges || [])) {
-        if (!nodeIds.has(e.source)) msgs.push(`Edge "${e.id || ''}" unknown source: "${e.source}"`);
-        if (!nodeIds.has(e.target)) msgs.push(`Edge "${e.id || ''}" unknown target: "${e.target}"`);
+        if (!nodeIds.has(e.source)) msgs.push(`Edge "${edgeRef(e)}" unknown source: "${e.source}"`);
+        if (!nodeIds.has(e.target)) msgs.push(`Edge "${edgeRef(e)}" unknown target: "${e.target}"`);
       }
       return msgs.length === 0
         ? { pass: true }
@@ -598,8 +603,8 @@ const SOUNDNESS_CHECKS = [
             msgs.push(`${subPrefix}Missing endEvent.`);
           const subIds = new Set(subNodes.map(n => n.id));
           for (const e of subEdges) {
-            if (!subIds.has(e.source)) msgs.push(`${subPrefix}Edge "${e.id || ''}" unknown source: "${e.source}"`);
-            if (!subIds.has(e.target)) msgs.push(`${subPrefix}Edge "${e.id || ''}" unknown target: "${e.target}"`);
+            if (!subIds.has(e.source)) msgs.push(`${subPrefix}Edge "${edgeRef(e)}" unknown source: "${e.source}"`);
+            if (!subIds.has(e.target)) msgs.push(`${subPrefix}Edge "${edgeRef(e)}" unknown target: "${e.target}"`);
           }
         }
       }
@@ -1049,7 +1054,7 @@ const STYLE_CHECKS = [
           const outEdges = edges.filter(e => e.source === n.id);
           if (outEdges.length > 1) {
             for (const e of outEdges) {
-              if (!e.label) msgs.push(`Edge "${e.id || ''}" from XOR gateway "${n.id}" missing label.`);
+              if (!e.label) msgs.push(`Edge "${edgeRef(e)}" from XOR gateway "${n.id}" missing label.`);
             }
           }
         }

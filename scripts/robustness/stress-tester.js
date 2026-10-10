@@ -10,6 +10,7 @@
 import { validateLogicCore } from '../bpmn/validate.js';
 import { runRules } from '../bpmn/rules.js';
 import { runPipeline } from '../bpmn/pipeline.js';
+import { normalizeEdgeIds } from '../bpmn/topology.js';
 import { bpmnToLogicCore } from '../bpmn/import.js';
 import { isStructurallyEqual } from './graph-isomorphism.js';
 
@@ -26,6 +27,9 @@ export async function runRoundtripCheck(originalLc, bpmnXml) {
 
 export async function preFilter(lc) {
   // Phase A.1: schema validation
+  // A DOT-imported Logic-Core carries id-less edges; the pipeline assigns ids at entry, so this
+  // direct caller does the same before validating (the caller's object is not touched).
+  lc = normalizeEdgeIds(lc);
   const schemaResult = validateLogicCore(lc);
   if (schemaResult.errors && schemaResult.errors.length > 0) {
     return {
