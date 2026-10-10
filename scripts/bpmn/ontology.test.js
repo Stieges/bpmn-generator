@@ -13,7 +13,7 @@ const raw = () => JSON.parse(readFileSync(ONTO_FILE, 'utf8'));
 describe('ontology loader', () => {
   test('the committed ontology is valid and loads', () => {
     expect(validateOntology(raw())).toEqual([]);
-    expect(VOCABULARY.version).toBe('1.0');
+    expect(VOCABULARY.version).toBe('1.1');
   });
 
   test('an invalid ontology is rejected with the failing location', () => {
