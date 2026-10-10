@@ -34,3 +34,17 @@ export function checkCompleteness(vocabulary, probes) {
   }
   return out;
 }
+
+/**
+ * Drift between a schema enum and the ontology's names for the same thing, both directions.
+ * `ontologyNames` should be the supported (and lossy) names only — an announced term is allowed to be
+ * absent from the schema (decision F16). Returns messages; `[]` when the two agree.
+ */
+export function enumDrift(schemaValues, ontologyNames) {
+  const inSchema = new Set(schemaValues);
+  const inOntology = new Set(ontologyNames);
+  return [
+    ...[...inSchema].filter((v) => !inOntology.has(v)).map((v) => `${v} only in the schema`),
+    ...[...inOntology].filter((v) => !inSchema.has(v)).map((v) => `${v} only in the ontology`),
+  ];
+}
