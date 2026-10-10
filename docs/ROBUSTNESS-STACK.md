@@ -516,11 +516,11 @@ node scripts/robustness/cli.js run --n=50 --target=dot
 # Both targets, 200 samples total, with MaD sanity check appended
 node scripts/robustness/cli.js run --n=200 --target=both --with-mad
 
-# Targeted run: only sample cells matching a predicate — programmatic only, the CLI
-# has no --strategy/--category flags (synthetic-generator.js's sampleCells() takes
-# { strategy, filter } directly, but cli.js never wires CLI arguments through to them)
+# Targeted run: only sample cells matching a predicate — programmatic only. The CLI has no
+# --strategy/--category flags and rejects them (exit 2) rather than ignoring them.
+# Cells carry domain / complexity / pattern / stress_mode:
 # import { sampleCells } from './synthetic-generator.js';
-# sampleCells(cells, { n: 20, filter: c => c.category === 'elk-error' })
+# sampleCells(cells, { n: 20, filter: c => c.stress_mode === '<a stress mode of seed-catalog.json>' })
 
 # Enable LLM-signal persistence for future SLM training data collection
 node scripts/robustness/cli.js run --n=100 --persist-llm-signal

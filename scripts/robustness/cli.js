@@ -29,6 +29,25 @@ export function parseArgs(argv = process.argv.slice(2)) {
   return { command, flags };
 }
 
+// The flags each command actually reads. Anything else used to be accepted and ignored, so a
+// typo'd or unsupported flag (--strategy, --category) read as "it worked" (#41). Targeted
+// sampling stays programmatic: sampleCells(cells, { filter }) in synthetic-generator.js.
+const ENDPOINT_FLAGS = ['api-url', 'api-key', 'model'];
+const COMMAND_FLAGS = {
+  run: [...ENDPOINT_FLAGS, 'n', 'target', 'seed', 'persist-llm-signal', 'with-mad'],
+  'smoke-test': ENDPOINT_FLAGS,
+  'mad-check': ['limit'],
+  triage: [],
+  report: [],
+};
+
+/** Flags given on the command line that `command` does not read, in the order given. */
+export function unknownFlags(command, flags) {
+  const known = COMMAND_FLAGS[command];
+  if (!known) return [];
+  return Object.keys(flags).filter((f) => !known.includes(f));
+}
+
 export function loadConfig() {
   return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
 }
@@ -42,6 +61,13 @@ export function resolveEndpoint(config, flags, env = process.env) {
 
 async function main() {
   const { command, flags } = parseArgs();
+  const unknown = unknownFlags(command, flags);
+  if (unknown.length) {
+    console.error(`Unknown or not supported flag(s) for '${command}': ${unknown.map((f) => `--${f}`).join(', ')}`);
+    console.error(`Supported: ${COMMAND_FLAGS[command].map((f) => `--${f}`).join(', ') || '(none)'}`);
+    console.error('Targeted sampling (--strategy/--category) is programmatic only: see sampleCells() in synthetic-generator.js.');
+    process.exit(2);
+  }
   const config = loadConfig();
 
   switch (command) {
