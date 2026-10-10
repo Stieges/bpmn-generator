@@ -22,6 +22,7 @@ import { auditLog } from './audit.js';
 import { validateLogicCoreSchema, boundSchemaErrors } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
 import { isMainModule } from './shared/entry-point.js';
+import { PACKAGE_VERSION } from './shared/version.js';
 import { quoteForMessage, boundText } from './shared/safe-text.js';
 
 const PORT = process.env.PORT || 3000;
@@ -291,7 +292,7 @@ const server = createServer(async (req, res) => {
     return json(res, 200, {
       status: 'ok',
       uptime: Math.floor((Date.now() - startTime) / 1000),
-      version: '2.0.0',
+      version: PACKAGE_VERSION,
     });
   }
 

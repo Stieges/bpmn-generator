@@ -505,7 +505,7 @@ curl http://localhost:3000/api/v1/config
 
 Liveness probe. Pre-auth, not rate-limited.
 
-**Response 200:** `{ "status": "ok", "uptime": 42, "version": "2.0.0" }` (`uptime` in seconds).
+**Response 200:** `{ "status": "ok", "uptime": 42, "version": "3.6.0" }` (`uptime` in seconds; `version` is the `version` of `scripts/package.json`, read at startup — `3.6.0` is only an example).
 
 **Example:**
 ```bash
