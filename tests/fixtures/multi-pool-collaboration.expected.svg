@@ -52,13 +52,13 @@
 <path d="M 566 150 L 646 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 206 550 L 286 550" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 386 550 L 466.5 550" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 491 574.5 L 491 747 L 706 747" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 491 574.5 L 491 660.8 L 706 660.8 L 706 747" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="584.8" y="647.8" width="27.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="598.5" y="659.8" text-anchor="middle" font-size="10" fill="#000000">Yes</text>
 <path d="M 503.5 562 L 676 562" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <rect x="579.3" y="549" width="21" height="16" rx="2" fill="white" fill-opacity="0.9"/>
 <text x="589.8" y="561" text-anchor="middle" font-size="10" fill="#000000">No</text>
-<path d="M 706 747 L 861 747 L 861 459.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 706 747 L 706 643.3 L 861 643.3 L 861 459.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 776 562 L 848.5 562 L 848.5 447" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 885.5 435 L 966 435" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 1066 435 L 1146 435" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
