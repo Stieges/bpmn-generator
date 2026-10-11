@@ -199,10 +199,10 @@ describe('visualRefinement over MCP', () => {
       expect(tool(name).inputSchema.properties.visualRefinement).toMatchObject(VISUAL_REFINEMENT_OPTION_SCHEMA);
     }
   });
-  test('true is byte-identical to the library call and differs from no option', async () => {
+  test('false is byte-identical to the library call and differs from no option', async () => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    const out = parse(await call('generate_bpmn', { logicCore: fixture('sparse-lanes.json'), visualRefinement: true, include: ['xml'] }));
-    const lib = await runPipeline(fixture('sparse-lanes.json'), { visualRefinement: true });
+    const out = parse(await call('generate_bpmn', { logicCore: fixture('sparse-lanes.json'), visualRefinement: false, include: ['xml'] }));
+    const lib = await runPipeline(fixture('sparse-lanes.json'), { visualRefinement: false });
     const none = await runPipeline(fixture('sparse-lanes.json'), {});
     expect(out.bpmnXml).toBe(lib.bpmnXml);
     expect(out.bpmnXml).not.toBe(none.bpmnXml);

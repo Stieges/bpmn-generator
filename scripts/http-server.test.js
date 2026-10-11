@@ -725,11 +725,11 @@ describe('visualRefinement over HTTP', () => {
   });
   beforeEach(() => _resetRateLimit());
 
-  test('true on /generate is byte-identical to runPipeline(lc, { visualRefinement: true }) and differs from no option', async () => {
+  test('false on /generate is byte-identical to runPipeline(lc, { visualRefinement: false }) and differs from no option', async () => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    const res = await post('/api/v1/generate', { logicCore: lc, visualRefinement: true });
+    const res = await post('/api/v1/generate', { logicCore: lc, visualRefinement: false });
     expect(res.status).toBe(200);
-    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
     const none = await runPipeline(JSON.parse(JSON.stringify(lc)), {});
     const xml = (await res.json()).bpmnXml;
     expect(xml).toBe(lib.bpmnXml);
@@ -749,9 +749,9 @@ describe('visualRefinement over HTTP', () => {
     });
   test('/orchestrate passes it to the layout agent', async () => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    const res = await post('/api/v1/orchestrate', { logicCore: lc, visualRefinement: true });
+    const res = await post('/api/v1/orchestrate', { logicCore: lc, visualRefinement: false });
     expect(res.status).toBe(200);
-    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
     const none = await runPipeline(JSON.parse(JSON.stringify(lc)), {});
     const xml = (await res.json()).bpmnXml;
     expect(xml).toBe(lib.bpmnXml);

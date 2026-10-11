@@ -4096,15 +4096,11 @@ describe('ELK wrapping is independent of visual refinement', () => {
 });
 
 describe('refinement defaults', () => {
-  test('the default call runs label-collision repair only; routes are the unrefined ones', async () => {
-    const lc = () => loadFixture('bpmn-generator-pipeline.json');
-    const { resolveRefinement } = await import('./visual-refinement.js');
-    expect(resolveRefinement()).toEqual({ laneCompaction: false, edgeLabelCollisionRepair: true });
+  test('the default call compacts lanes and repairs labels', async () => {
+    const lc = () => loadFixture('sparse-lanes.json');
     const def = await runPipeline(lc());
-    const labelsOnly = await runPipeline(lc(), { visualRefinement: { laneCompaction: false, edgeLabelCollisionRepair: true } });
-    const off = await runPipeline(lc(), { visualRefinement: false });
-    expect(def.bpmnXml).toBe(labelsOnly.bpmnXml);
-    expect(JSON.stringify(def.coordMap.edgeCoords)).toBe(JSON.stringify(off.coordMap.edgeCoords)); // routes did not
+    const expected = await runPipeline(lc(), { visualRefinement: { laneCompaction: true, edgeLabelCollisionRepair: true } });
+    expect(def.bpmnXml).toBe(expected.bpmnXml);
   });
 });
 

@@ -201,7 +201,7 @@
     }
   },
   "visualRefinement": {
-    "laneCompaction": false,
+    "laneCompaction": true,
     "minLaneHeight": 80,
     "laneLineClearance": 10,
     "laneLabelFloor": true,

@@ -463,7 +463,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ### Run a visual-refinement pass
 
-1. Each pass has its own default in `scripts/config.json → visualRefinement`: `edgeLabelCollisionRepair` on, `laneCompaction` off. Per call: `runPipeline(lc, { visualRefinement: true | false | { laneCompaction: true, … } })`; CLI `--refine` (all on) / `--no-refine` (all off). ELK wrapping is separate (`elkWrapping`, `--wrap`).
+1. Each pass has its own default in `scripts/config.json → visualRefinement`: `edgeLabelCollisionRepair` and `laneCompaction` on. Per call: `runPipeline(lc, { visualRefinement: true | false | { laneCompaction: true, … } })`; CLI `--refine` (all on) / `--no-refine` (all off). ELK wrapping is separate (`elkWrapping`, `--wrap`).
 2. The passes are `laneCompaction`, `edgeLabelCollisionRepair`; `resolveRefinement` turns the option into per-pass switches. See `scripts/bpmn/visual-refinement.js` for the pass implementations.
 3. Verify against goldens: `cd scripts && npm test -- --testPathPatterns=visual-refinement`.
 
@@ -646,7 +646,7 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - Layout, tracked individually: `boundary-event-shapes` still has one sequence-flow crossing
   between boundary-event shapes (#71); a message-flow jog keeps clearance from shapes only, not
   from groups or labels (#72); a sequence flow can run through another edge's label (#73); with
-  `--refine` lane content is not re-centred in its band (#74); `compactLanes` neither compacts nor
+  with lane compaction (default) lane content is not re-centred in its band (#74); `compactLanes` neither compacts nor
   tiles nested `childLanes` (#75); the orthogonal router can produce a U-turn (#76); participant
   ordering is heuristic above 8 participants (#77); layout time roughly doubles on large models
   (122 nodes: ~2x) because of the crossing guard and the router (#78)
