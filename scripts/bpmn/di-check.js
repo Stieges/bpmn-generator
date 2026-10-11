@@ -28,7 +28,7 @@ const DEFAULT_ALONG_MIN_PX = 5; // bpmn-js arrowhead length — see DI08; the pi
  * @param lc        Logic-Core
  * @param opts.tolerance  overlap slack in px (default 1) — abutting edges are fine
  * @param opts.alongOutlineMinPx  DI08 threshold in px (default 5); config `layout.alongOutlineMinPx`,
- *        passed in by pipeline.js so this pass stays dependency-free
+ *        passed in by pipeline.js so this pass reads no config (its only import is types.js)
  * @returns { ok, issues: [{ code, severity, message, elements }] }
  */
 function checkDiagramIntegrity(coordMap, lc, opts = {}) {
@@ -176,7 +176,7 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
   // shape's border and the arrowhead sits on it. Counted only beyond 5 px — bpmn-js's arrowhead
   // length (marker 'M 1 5 L 11 10 L 1 15 Z' at scale 0.5), shorter overlap hides under it — with
   // ±tol collinearity, the same definition as scripts/bench/layout-metrics.mjs's
-  // edgeEndsAlongBorder, restated because this pass is dependency-free by design. For a circle or
+  // edgeEndsAlongBorder, restated here because the bench must not be a runtime dependency. For a circle or
   // a diamond the side is a tangent of its bounds; the line still visibly misses the shape.
   for (const proc of (lc.pools || [lc])) {
     for (const edge of flattenEdges(proc)) {
@@ -202,8 +202,8 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
   // DI09 — a sequence flow running through its own source or target shape (a design decision, 2026-10-11).
   // Every other check exempts an edge's own endpoints; this one is about exactly them. WARNING:
   // the flow is attached, but it visibly starts or ends somewhere else. The shape is the drawn
-  // one — a circle for an event, a rhombus for a gateway (type-name suffix: this pass is
-  // dependency-free by design), the box for everything else; 1 px inset.
+  // one — a circle for an event, a rhombus for a gateway (type-name suffix, kept
+  // from before types.js was imported here), the box for everything else; 1 px inset.
   // Axis-parallel segments only: segmentEntersShape's nearest-point maths holds for those alone (a
   // diagonal would be judged by its bounding box). The pipeline routes every sequence flow
   // orthogonally; a diagonal one is hand-made or detached, and the detached case is DI07's.
@@ -249,6 +249,9 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
       const src = coords[edge.source], tgt = coords[edge.target];
       for (const [nodeId, b] of Object.entries(coords)) {
         if (nodeId === edge.source || nodeId === edge.target) continue;
+        // Artifacts (data references, annotations, groups) are not flow nodes, so a sequence flow
+        // crossing one reads fine. DI10 excludes only groups: a message flow through a data object
+        // is a separate question, left as it was.
         if (!(nodeId in typeOfNode) || isArtifact(typeOfNode[nodeId]) || !Number.isFinite(b.x)) continue;
         if ((src && contains(b, src, 0)) || (tgt && contains(b, tgt, 0))) continue;
         if (!segs.some(s => segmentEntersShape(s, b, shapeOfNode(nodeId)))) continue;
@@ -348,7 +351,7 @@ function flattenNodes(nodes) {
 
 // Sequence flows, including ones nested inside an expanded subprocess.
 // Deliberately local rather than imported from coordinates.js — di-check.js
-// is a dependency-free post-layout sanity pass by design.
+// checks the layout and must not share code with what it checks; its only import is types.js.
 function flattenEdges(proc) {
   const out = [...(proc.edges || [])];
   for (const n of flattenNodes(proc.nodes)) {
