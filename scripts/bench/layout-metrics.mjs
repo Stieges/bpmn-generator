@@ -58,6 +58,7 @@ import { resolveLaneId } from '../bpmn/topology.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { CFG } from '../shared/utils.js';
+import { flowMetrics } from './flow-metrics.mjs';
 import { edgeLabelBox, labelHitsRoute, flattenProcessNodes } from '../bpmn/coordinates.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -606,6 +607,7 @@ export async function measureLayout(lc, opts = {}) {
   if (!r.coordMap) return null;
   const edgeList = collectAllEdges(lc);
   const cm = r.coordMap;
+  const f = flowMetrics(cm, lc);
   const diCodes = {};
   for (const i of r.diagnostics?.issues || []) diCodes[i.code] = (diCodes[i.code] || 0) + 1;
   return {
@@ -616,6 +618,8 @@ export async function measureLayout(lc, opts = {}) {
     seqThroughNodes: seqFlowThroughNodes(cm, edgeList),
     ownThrough: seqThroughOwnShape(cm, lc, edgeList),
     labels: edgeLabelHits(cm, lc),
+    flow: { hug: f.seq.laneLineHug, bendsMax: f.seq.bendsMax, crowd: f.seq.crowd.pairs, mfCrowd: f.mf.crowd.pairs,
+      offOver5: f.seq.endOffOver5 + f.mf.endOffOver5 },
     diCodes,
   };
 }
@@ -630,6 +634,11 @@ export function summarize(m) {
     mfThrough: m.mfThroughNodes.length,
     seqThrough: m.seqThroughNodes.length,
     ownThrough: m.ownThrough.length,
+    hug: m.flow.hug,
+    bendsMax: m.flow.bendsMax,
+    crowd: m.flow.crowd,
+    mfCrowd: m.flow.mfCrowd,
+    offOver5: m.flow.offOver5,
     labelOwnEdge: m.labels.ownEdge.length,
     labelLabel: m.labels.labelLabel.length,
     labelNode: m.labels.labelNode.length,
@@ -647,11 +656,11 @@ async function measureFixture(name) {
     const edgeList = collectAllEdges(lc);
     const alignCtx = buildAlignContext(lc);
   
-    const defaultResult = await runPipeline(lc, { visualRefinement: false });
+    const unrefinedResult = await runPipeline(lc, { visualRefinement: false });
     const refinedResult = await runPipeline(lc, EVERYTHING_ON);
   
-    const defaultMetrics = defaultResult.coordMap
-      ? computeMetrics(defaultResult.coordMap.coords, defaultResult.coordMap.edgeCoords, edgeList, alignCtx)
+    const unrefinedMetrics = unrefinedResult.coordMap
+      ? computeMetrics(unrefinedResult.coordMap.coords, unrefinedResult.coordMap.edgeCoords, edgeList, alignCtx)
       : null;
     const refinedMetrics = refinedResult.coordMap
       ? computeMetrics(refinedResult.coordMap.coords, refinedResult.coordMap.edgeCoords, edgeList, alignCtx)
@@ -660,8 +669,8 @@ async function measureFixture(name) {
   
     const extras = async (opts) =>
       summarize(await measureLayout(JSON.parse(raw), opts));
-    return { name, defaultMetrics, refinedMetrics, rawElkMetrics,
-      defaultExtras: await extras({ visualRefinement: false }), refinedExtras: await extras(EVERYTHING_ON) };
+    return { name, unrefinedMetrics, refinedMetrics, rawElkMetrics,
+      unrefinedExtras: await extras({ visualRefinement: false }), refinedExtras: await extras(EVERYTHING_ON) };
   } catch (err) {
     return { name, error: String(err.message || err) };
   }
@@ -735,11 +744,11 @@ async function main() {
     lines.push('| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |');
     lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     lines.push(fmtRow('ELK raw (pre-postprocess)', r.rawElkMetrics, null));
-    lines.push(fmtRow('default', r.defaultMetrics, r.defaultExtras));
+    lines.push(fmtRow('unrefined', r.unrefinedMetrics, r.unrefinedExtras));
     lines.push(fmtRow('everything on (refine + wrap)', r.refinedMetrics, r.refinedExtras));
     lines.push('');
-    if (r.defaultMetrics) {
-      const delta = r.defaultMetrics.crossings - r.rawElkMetrics.crossings;
+    if (r.unrefinedMetrics) {
+      const delta = r.unrefinedMetrics.crossings - r.rawElkMetrics.crossings;
       if (delta > 0) {
         lines.push(`Crossings introduced by our own post-processing (default − ELK raw): **+${delta}** —`);
         lines.push('ELK routed around these; the routes we delete and rebuild do not.');
@@ -747,9 +756,9 @@ async function main() {
         lines.push('Our post-processing introduces no crossings beyond ELK\'s own result.');
       }
       lines.push('');
-      const worst = r.defaultMetrics.worstGap;
+      const worst = r.unrefinedMetrics.worstGap;
       if (worst > 1) {
-        lines.push(`Worst remaining alignable gap: ${worst.toFixed(1)} px (\`${r.defaultMetrics.worstLink}\`).`);
+        lines.push(`Worst remaining alignable gap: ${worst.toFixed(1)} px (\`${r.unrefinedMetrics.worstLink}\`).`);
         lines.push('');
       }
     }

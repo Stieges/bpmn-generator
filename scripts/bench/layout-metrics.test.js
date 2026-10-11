@@ -13,10 +13,11 @@ import {
   FIXTURES, ALONG_MIN_PX, alongSide, edgeEndsAlongBorder, laneGaps,
   messageFlowThroughNodes, seqFlowThroughNodes, seqThroughOwnShape, edgeLabelHits, measureLayout, summarize,
 } from './layout-metrics.mjs';
+import { flowMetrics, LANE_LINE_HUG_PX } from './flow-metrics.mjs';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
-const MODES = { off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' } };
+const MODES = { default: {}, off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' } };
 
 describe('alongSide', () => {
   const box = { x: 386, y: 131, w: 100, h: 80 };
@@ -146,51 +147,88 @@ describe('edgeLabelHits', () => {
   });
 });
 
-// Exact counts per fixture × mode, measured on master b1dc22c. Keys of each row: crossings
+describe('flowMetrics', () => {
+  const lc = { id: 'P', lanes: [{ id: 'A' }, { id: 'B' }], nodes: [
+    { id: 's', type: 'userTask', lane: 'A' }, { id: 't', type: 'userTask', lane: 'B' }],
+    edges: [{ id: 'e', source: 's', target: 't' }] };
+  const base = {
+    coords: { s: { x: 100, y: 20, w: 100, h: 80 }, t: { x: 300, y: 140, w: 100, h: 80 } },
+    laneCoords: { A: { x: 30, y: 0, w: 500, h: 120 }, B: { x: 30, y: 120, w: 500, h: 120 } },
+    poolCoords: { _singlePool: { x: 0, y: 0, w: 530, h: 240 } },
+  };
+  test(`a horizontal leg within ${LANE_LINE_HUG_PX} px of an inner lane line counts its length as hug`, () => {
+    const cm = { ...base, edgeCoords: { e: [{ x: 150, y: 100 }, { x: 150, y: 119 }, { x: 350, y: 119 }, { x: 350, y: 140 }] } };
+    expect(flowMetrics(cm, lc).seq.laneLineHug).toBe(200);
+  });
+  test('a leg 10 px off the line does not', () => {
+    const cm = { ...base, edgeCoords: { e: [{ x: 150, y: 100 }, { x: 150, y: 110 }, { x: 350, y: 110 }, { x: 350, y: 140 }] } };
+    expect(flowMetrics(cm, lc).seq.laneLineHug).toBe(0);
+  });
+  test('bends count direction changes; a straight route has none', () => {
+    const z = { ...base, edgeCoords: { e: [{ x: 150, y: 100 }, { x: 150, y: 110 }, { x: 350, y: 110 }, { x: 350, y: 140 }] } };
+    expect(flowMetrics(z, lc).seq.bendsMax).toBe(2);
+    const straight = { ...base, edgeCoords: { e: [{ x: 150, y: 100 }, { x: 150, y: 140 }] } };
+    expect(flowMetrics(straight, lc).seq.bendsMax).toBe(0);
+  });
+});
+
+// Exact values per fixture × mode. Modes: default (no option), off (visualRefinement: false),
+// on (every refinement pass + ELK wrapping — the .refined golden set). Keys: crossings
 // (segment-pair crossings between non-adjacent sequence flows), along (#52 ends on their own
-// outline > 5 px), laneGap (largest lane-stack strip, px), mfThrough (message flow × foreign shape),
-// seqThrough (sequence flow × foreign node), ownThrough (sequence flow through its own source or
-// target shape), labelOwnEdge (edge-label box reaching into its own route — must stay 0),
+// outline > 5 px), laneGap (largest lane-stack strip, px), mfThrough (message flow × foreign
+// shape), seqThrough (sequence flow × foreign node), ownThrough (sequence flow through its own
+// source/target), hug (px of horizontal sequence-flow leg within 3 px of an inner lane line),
+// bendsMax (most direction changes on one sequence flow), crowd / mfCrowd (parallel segment
+// pairs of different edges closer than 10 px — sequence flows / message flows; two segments at a
+// shared endpoint node do not count), offOver5 (flow ends more than 5 px from their side's
+// midpoint; deliberate fanning counts too; a boundary event's start and a black-box end are
+// excluded), labelOwnEdge (edge-label box reaching into its own route — must stay 0),
 // labelLabel (edge-label box pairs overlapping), labelNode (edge-label box × node box).
 // null: the pipeline blocks the fixture on purpose.
-const b = (crossings, along, laneGap, mfThrough, seqThrough, ownThrough = 0, labelLabel = 0, labelNode = 0) =>
-  ({ crossings, along, laneGap, mfThrough, seqThrough, ownThrough, labelOwnEdge: 0, labelLabel, labelNode });
-const Z = b(0, 0, 0, 0, 0);
-// No along-outline end and no flow through its own shape remains in any fixture after the endpoint re-clip pass.
+const ZERO = { crossings: 0, along: 0, laneGap: 0, mfThrough: 0, seqThrough: 0, ownThrough: 0,
+  hug: 0, bendsMax: 0, crowd: 0, mfCrowd: 0, offOver5: 0, labelOwnEdge: 0, labelLabel: 0, labelNode: 0 };
+const r = (over = {}) => ({ ...ZERO, ...over });
+const same = (row) => ({ default: row, off: row, on: row });
 // realistic-collaboration on: the 5 remaining message-flow hits are all shapes of the flow's own
 // participant, in another lane — mf1>ap_wait, mf3>as_assess, mf4>as_assess, mf6>de_decide,
 // mf6>ap_submit. No port column clears them; none crosses a participant the flow does not involve.
-// The label overlaps left (bpmn-generator-pipeline on mf6/mf7, realistic-collaboration mf2/mf5) are
+// The label overlaps (bpmn-generator-pipeline on mf6/mf7, realistic-collaboration mf2/mf5) are
 // message-flow label pairs: their labels are placed after the label repair pass, which never sees them
 // (#72).
+// on rows with hug > 0: compactLanes clamps a cross-lane leg onto the lane line it shrank to.
 const BUDGET = {
-  'all-element-classes.json':           { off: Z,                  on: Z },
-  'boundary-event-shapes.json':         { off: b(1, 0, 0, 0, 0),   on: b(1, 0, 0, 0, 0) },
-  'bpmn-generator-pipeline.json':       { off: Z,                  on: b(0, 0, 0, 0, 0, 0, 1) },
-  'deadlock-process.json':              { off: null,               on: null },
-  'dense-edge-labels.json':             { off: Z,                  on: Z },
-  'expanded-subprocess.json':           { off: Z,                  on: Z },
-  'long-lane-names.json':               { off: Z,                  on: Z },
-  'loop-with-join.json':                { off: Z,                  on: Z },
-  'messageflow-to-subprocess.json':     { off: Z,                  on: Z },
-  'multi-pool-collaboration.json':      { off: Z,                  on: Z },
-  'parallel-split-join.json':           { off: Z,                  on: Z },
-  'realistic-collaboration.json':       { off: b(0, 0, 0, 0, 1, 0, 1), on: b(0, 0, 0, 0, 0, 0, 1) },
-  'simple-approval.json':               { off: Z,                  on: Z },
-  'sparse-lanes.json':                  { off: Z,                  on: Z },
-  'subprocess-child-fidelity.json':     { off: Z,                  on: Z },
-  'subprocess-collapsed-children.json': { off: Z,                  on: Z },
-  'subprocess-merge-fanout.json':       { off: Z,                  on: Z },
-  'wide-pipeline.json':                 { off: Z,                  on: Z },
-  'wrapping-back-edge.json':            { off: Z,                  on: Z },
+  'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
+  'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
+  'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }), off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }),
+                                          on: r({ hug: 575, bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1 }) },
+  'deadlock-process.json':              { default: null, off: null, on: null },
+  'dense-edge-labels.json':             same(r({ bendsMax: 1, offOver5: 4 })),
+  'expanded-subprocess.json':           same(r()),
+  'long-lane-names.json':               { default: r({ bendsMax: 2 }), off: r({ bendsMax: 2 }), on: r({ hug: 360, bendsMax: 2 }) },
+  'loop-with-join.json':                same(r({ bendsMax: 2, offOver5: 6 })),
+  'messageflow-to-subprocess.json':     same(r({ mfCrowd: 1 })),
+  'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2 }), off: r({ bendsMax: 2, offOver5: 2 }),
+                                          on: r({ hug: 370, bendsMax: 2, offOver5: 2 }) },
+  'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
+  'realistic-collaboration.json':       { default: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
+                                          off: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
+                                          on: r({ hug: 180, bendsMax: 5, mfCrowd: 10, offOver5: 3, labelLabel: 1 }) },
+  'simple-approval.json':               same(r({ bendsMax: 2, offOver5: 6 })),
+  'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4 }), off: r({ bendsMax: 2, offOver5: 4 }),
+                                          on: r({ hug: 360, bendsMax: 2, offOver5: 4 }) },
+  'subprocess-child-fidelity.json':     same(r({ bendsMax: 2, offOver5: 5 })),
+  'subprocess-collapsed-children.json': same(r()),
+  'subprocess-merge-fanout.json':       same(r({ bendsMax: 2, offOver5: 8 })),
+  'wide-pipeline.json':                 { default: r(), off: r(), on: r({ bendsMax: 4 }) },
+  'wrapping-back-edge.json':            same(r({ bendsMax: 4, offOver5: 4 })),
 };
 
-describe('layout budget — every top-level fixture × both modes', () => {
+describe('layout budget — every top-level fixture × three modes', () => {
   test('every fixture has a budget row (a new fixture must be measured, not skipped)', () => {
     expect(Object.keys(BUDGET).sort()).toEqual(FIXTURES);
   });
   for (const name of FIXTURES) {
-    for (const mode of ['off', 'on']) {
+    for (const mode of Object.keys(MODES)) {
       test(`${name} ${mode}`, async () => {
         const m = await measureLayout(load(name), MODES[mode]);
         // Compared as a string so a failure names the fixture and the full row, and lists the
