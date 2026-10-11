@@ -558,11 +558,8 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'then find an attribute-less `<bpmn:standardLoopCharacteristics>`, which is exactly what '
       + 'the shorthand means. Equivalent input, not a deep-equal value. `{ testBefore: true }`, '
       + '`loopMaximum`, `loopCondition` and the `"standard"` shorthand itself are all exact. '
-      + '(2) `loopCondition` loses XML entity unescaping on the LEGACY `import.js` path only: '
-      + '`x<3` comes back as `x&lt;3`. `moddle-import.js`, the primary path, is exact. That is a '
-      + 'defect in the legacy DOM parser\'s text handling (it never unescapes a text node), not in '
-      + 'this field — see `conditionExpression`\'s reason for the same asymmetry and the list of '
-      + 'other fields it touches. A node carrying BOTH loopType and multiInstance keeps only '
+      + '(2) `loopCondition` is exact through both importers, entities included. '
+      + 'A node carrying BOTH loopType and multiInstance keeps only '
       + 'loopType — OMG has one loopCharacteristics slot, not two.' },
   { field: 'multiInstance', attr: 'loopCharacteristics', type: 'mixed', on: 'self', allowed: domain('Node', 'multiInstance'), scope: 'an Activity',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
@@ -645,16 +642,8 @@ export const OMG_NODE_FIELD_SCOPE = [
   { field: 'conditionExpression', attr: 'condition', type: 'string', on: 'conditionalEventDefinition', allowed: domain('Node', 'conditionExpression'), scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Written only when `marker === "conditional"`; on any other marker the field is '
-      + 'silently ignored. With that marker it is exact through `moddle-import.js` (the primary '
-      + 'path) and NOT through the legacy `import.js`, which returns `x&lt;1` for `x<1`: its DOM '
-      + 'parser accumulates a text node character by character and never unescapes entities '
-      + '(import.js, the `parseXml` text branch). That is one parser-level defect, not a '
-      + 'conditionExpression one — measured, it also hits `loopType.loopCondition`, and by '
-      + 'inspection every other value read out of a text node on that path (`documentation`, '
-      + '`script`, `decisionRef`, `multiInstance.loopCardinality`/`.completionCondition`, '
-      + '`edge.condition`, a timer expression, a textAnnotation\'s name). Fixing it is a change to '
-      + 'the shared parser affecting ~10 fields and belongs in its own stage; stated here rather '
-      + 'than claimed away, because this row would otherwise assert more than holds.' },
+      + 'silently ignored. With that marker it round-trips exactly through both importers, '
+      + 'entities included (`x<1` comes back as `x<1` on the legacy `import.js` too).' },
   { field: 'timerExpression', attr: ['timeDate', 'timeDuration', 'timeCycle'], type: 'object', on: 'timerEventDefinition', allowed: domain('Node', 'timerExpression'), scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'Written only when `marker === "timer"`; on any other marker the field is silently '

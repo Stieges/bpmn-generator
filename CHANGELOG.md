@@ -447,6 +447,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **The legacy importer decodes XML character data like the primary one.** `bpmnToLogicCoreLegacy`
+  (`scripts/bpmn/import.js`) decoded only the five named entities in attributes and nothing in
+  element text, so a name written as `&#38;` came back as `Check A &#38; B` and `x<1` in a
+  condition, loop condition, script or documentation came back as `x&lt;1`. One single-pass
+  `decodeXmlEntities` (five entities, decimal and hex references, an out-of-range reference left as
+  written) now serves attributes and text, so `&amp;lt;` decodes to `&lt;`. The two field-fidelity
+  rows that recorded the loss (`loopType`, `conditionExpression`) no longer state it.
 - **Layout bench names what it compares.** The crossings line of `scripts/bench/layout-metrics.mjs`
   and `tests/bench/layout-metrics-baseline.md` still read "default − ELK raw"; it is the
   `unrefined` row (default layout passes, visual refinement off) minus the ELK raw row. Wording
