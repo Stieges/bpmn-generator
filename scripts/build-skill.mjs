@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readdirSync, statSync, unlinkSync } from 'fs';
+import { readdirSync, statSync, unlinkSync, realpathSync } from 'fs';
 import { join, relative, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
@@ -68,4 +68,6 @@ function main() {
 }
 
 // Build only when run as a script; importing the module (tests) has no side effects.
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+// realpath on both sides: Node resolves symlinks for import.meta.url but not for argv[1].
+const isEntry = () => { try { return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; } };
+if (process.argv[1] && isEntry()) main();
