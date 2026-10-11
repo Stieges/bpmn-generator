@@ -28,7 +28,7 @@ import { fileURLToPath } from 'url';
 // Module imports
 import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
-import { validateLogicCoreSchema } from './schema-gate.js';
+import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
@@ -109,6 +109,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
  * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (true)
+ * @param {boolean} [opts.nodeLabelsAvoidFlows] - event and gateway labels off their flows (placeNodeLabelsAvoidingFlows); default config.json -> layout.nodeLabelsAvoidFlows (true)
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
@@ -169,6 +170,13 @@ async function runPipeline(logicCore, opts = {}) {
 
   // which refinement passes run — see resolveRefinement
   const refine = resolveRefinement(opts.visualRefinement);
+  // The layout switches: omitted means config.json -> layout.<switch>; anything but a boolean throws,
+  // so `"false"` cannot switch a pass on by being truthy (the surfaces gate it as a schema_error).
+  for (const key of LAYOUT_SWITCHES) {
+    if (opts[key] !== undefined && typeof opts[key] !== 'boolean') {
+      throw new TypeError(`${key} must be a boolean (got ${JSON.stringify(opts[key])})`);
+    }
+  }
 
   // poolOrder: 'auto' (default) orders participants so that the ones exchanging
   // messages sit next to each other; 'declared' keeps the input order.
@@ -276,7 +284,8 @@ async function runPipeline(logicCore, opts = {}) {
 
   // Bend rule (bend-rule.js): fewest bends, then enter activities and events from the left. After
   // every pass that moves a shape or a route, so it judges the final geometry and nothing re-routes
-  // its choice; before edge-label repair and routeMessageFlows. Off unless switched on.
+  // its choice; before edge-label repair and routeMessageFlows. On by default (config.json ->
+  // layout.bendRule); per call `bendRule`, CLI --no-bend-rule / --bend-rule.
   if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
     const beforeBend = coordMap.edgeCoords;
     coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
@@ -297,7 +306,8 @@ async function runPipeline(logicCore, opts = {}) {
   // leaves the bottom when a flow leaves or enters the node there. After routeMessageFlows on
   // purpose — a message flow's port is only known now — and that keeps "message flows last": a
   // label box is not route geometry, and from here on only the two renderers read node labels.
-  // Off unless switched on.
+  // On by default (config.json -> layout.nodeLabelsAvoidFlows); per call `nodeLabelsAvoidFlows`,
+  // CLI --no-label-avoidance / --label-avoidance.
   if (opts.nodeLabelsAvoidFlows ?? (CFG.layout?.nodeLabelsAvoidFlows === true)) {
     coordMap.nodeLabels = placeNodeLabelsAvoidingFlows(coordMap, lc);
   }
@@ -512,12 +522,23 @@ async function main() {
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance]');
     process.exit(1);
   }
   if (refine && noRefine) {
     console.error('--refine and --no-refine are mutually exclusive.');
     process.exit(1);
+  }
+  // The layout switches, each forced on or off for this call; with neither flag config.json
+  // (or a BPMN_CONFIG override) decides.
+  const switchOpts = {};
+  for (const [key, on, off] of [['bendRule', '--bend-rule', '--no-bend-rule'], ['nodeLabelsAvoidFlows', '--label-avoidance', '--no-label-avoidance']]) {
+    if (flags.includes(on) && flags.includes(off)) {
+      console.error(`${on} and ${off} are mutually exclusive.`);
+      process.exit(1);
+    }
+    if (flags.includes(on)) switchOpts[key] = true;
+    else if (flags.includes(off)) switchOpts[key] = false;
   }
 
   // Read input
@@ -558,6 +579,7 @@ async function main() {
   const refineOpts = {
     ...(refine ? { visualRefinement: true } : noRefine ? { visualRefinement: false } : {}),
     ...(wrap ? { elkWrapping: 'auto' } : {}),
+    ...switchOpts,
   };
 
   // Drill-down mode: generate parent + per-subprocess diagrams

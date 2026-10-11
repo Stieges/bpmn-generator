@@ -192,6 +192,43 @@ describe('rule profiles over MCP are names inside rules/, never paths', () => {
   }
 });
 
+// simple-approval.json changes when either switch is off, so a dropped forwarding fails `not.toBe`.
+describe('layout switches over MCP', () => {
+  const lib = async (opts) => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    return (await runPipeline(fixture('simple-approval.json'), opts)).bpmnXml;
+  };
+  test('generate_bpmn and orchestrate_bpmn declare both with the shared schema; validate_bpmn does not', async () => {
+    const { LAYOUT_SWITCH_OPTION_SCHEMA } = await import('./bpmn/schema-gate.js');
+    for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
+      for (const key of ['bendRule', 'nodeLabelsAvoidFlows']) {
+        expect(tool(name).inputSchema.properties[key]).toMatchObject(LAYOUT_SWITCH_OPTION_SCHEMA);
+      }
+    }
+    expect(tool('validate_bpmn').inputSchema.properties.bendRule).toBeUndefined();
+  });
+  for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
+    test.each([['bendRule'], ['nodeLabelsAvoidFlows']])(`%s: false on ${name} equals the library call and differs from no option`, async (key) => {
+      const out = parse(await call(name, { logicCore: fixture('simple-approval.json'), [key]: false, include: ['xml'] }));
+      expect(out.bpmnXml).toBe(await lib({ [key]: false }));
+      expect(out.bpmnXml).not.toBe(await lib({}));
+    });
+    test.each([['bendRule', 'false'], ['nodeLabelsAvoidFlows', 1], ['bendRule', null]])(`%s = %j is a schema_error on ${name}`, async (key, value) => {
+      const out = parse(await call(name, { logicCore: fixture('simple-approval.json'), [key]: value }));
+      expect(out.status).toBe('schema_error');
+      expect(out.errors[0].path).toBe(key);
+    });
+  }
+  test('drillDown on generate_bpmn forwards them too', async () => {
+    const { generateDiagramSet } = await import('./bpmn/pipeline.js');
+    const out = parse(await call('generate_bpmn', { logicCore: fixture('simple-approval.json'), bendRule: false, drillDown: true, include: ['xml'] }));
+    const set = await generateDiagramSet(fixture('simple-approval.json'), { bendRule: false });
+    const none = await generateDiagramSet(fixture('simple-approval.json'), {});
+    expect(out.parent.bpmnXml).toBe(set.parent.bpmnXml);
+    expect(out.parent.bpmnXml).not.toBe(none.parent.bpmnXml);
+  });
+});
+
 describe('visualRefinement over MCP', () => {
   test('generate_bpmn and orchestrate_bpmn declare it with the shared schema', async () => {
     const { VISUAL_REFINEMENT_OPTION_SCHEMA } = await import('./bpmn/visual-refinement.js');

@@ -39,6 +39,41 @@ export function validateVisualRefinementOption(value) {
   };
 }
 
+/**
+ * The per-call layout switches every geometry surface takes (runPipeline, CLI, HTTP /generate and
+ * /orchestrate, MCP generate_bpmn and orchestrate_bpmn): the bend rule and node labels that avoid
+ * flows. Omitted, `config.json -> layout.<switch>` decides.
+ */
+export const LAYOUT_SWITCHES = Object.freeze(['bendRule', 'nodeLabelsAvoidFlows']);
+
+/** JSON Schema of one layout switch; mirrored as `$defs/LayoutSwitchOption` in references/api-schema.json. */
+export const LAYOUT_SWITCH_OPTION_SCHEMA = Object.freeze({ type: 'boolean' });
+
+const validateLayoutSwitch = ajv.compile(LAYOUT_SWITCH_OPTION_SCHEMA);
+
+/**
+ * Every per-call layout option of a request (`visualRefinement` plus the layout switches), checked
+ * against the schemas every surface shares. `source` is the request body or the tool arguments; a
+ * key that is absent is not checked.
+ */
+export function validateLayoutOptions(source = {}) {
+  const errors = [...validateVisualRefinementOption(source.visualRefinement).errors];
+  for (const key of LAYOUT_SWITCHES) {
+    if (source[key] === undefined || validateLayoutSwitch(source[key])) continue;
+    errors.push(...(validateLayoutSwitch.errors || []).map(e => ({
+      path: `${key}${e.instancePath}`, message: e.message, params: e.params,
+    })));
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/** The per-call layout options of a request, to hand to runPipeline once `validateLayoutOptions` passed. */
+export function layoutOptionsOf(source = {}) {
+  const opts = { visualRefinement: source.visualRefinement };
+  for (const key of LAYOUT_SWITCHES) opts[key] = source[key];
+  return opts;
+}
+
 const RESPONSE_ERRORS_MAX = 20;
 const RESPONSE_TEXT_MAX = 200;
 

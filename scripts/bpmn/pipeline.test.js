@@ -4111,6 +4111,66 @@ describe('CLI refinement flags', () => {
   });
 });
 
+// The two layout switches on the CLI. simple-approval.json is chosen because switching either one
+// off changes its output, so a flag that is parsed but not forwarded fails the `not.toBe` below.
+describe('CLI layout-switch flags', () => {
+  const FIXTURE = 'simple-approval.json';
+  const cli = async (args, env = {}) => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const { spawnSync } = await import('node:child_process');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'switch-'));
+    const out = path.join(dir, 'out');
+    const res = spawnSync(process.execPath, ['bpmn/pipeline.js', `../tests/fixtures/${FIXTURE}`, out, ...args],
+      { encoding: 'utf8', env: { ...process.env, ...env } });
+    const xml = res.status === 0 ? fs.readFileSync(`${out}.bpmn`, 'utf8') : null;
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { ...res, xml };
+  };
+  const lib = async (opts) => (await runPipeline(loadFixture(FIXTURE), opts)).bpmnXml;
+
+  test.each([
+    ['--no-bend-rule', { bendRule: false }],
+    ['--no-label-avoidance', { nodeLabelsAvoidFlows: false }],
+  ])('%s writes exactly runPipeline(lc, %j), which differs from the default', async (flag, opts) => {
+    const res = await cli([flag]);
+    expect(res.status).toBe(0);
+    expect(res.xml).toBe(await lib(opts));
+    expect(res.xml).not.toBe(await lib({}));
+  }, 30_000);
+
+  // A project config that switched both off (BPMN_CONFIG) is overridden per call by the positive flag.
+  test.each([
+    ['--bend-rule', { bendRule: true, nodeLabelsAvoidFlows: false }],
+    ['--label-avoidance', { bendRule: false, nodeLabelsAvoidFlows: true }],
+  ])('%s switches its pass on over a BPMN_CONFIG that turned both off', async (flag, opts) => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'switch-cfg-'));
+    const cfg = path.join(dir, 'config.json');
+    fs.writeFileSync(cfg, JSON.stringify({ layout: { bendRule: false, nodeLabelsAvoidFlows: false } }));
+    const res = await cli([flag], { BPMN_CONFIG: cfg });
+    const both = await cli([], { BPMN_CONFIG: cfg });
+    fs.rmSync(dir, { recursive: true, force: true });
+    expect(res.status).toBe(0);
+    expect(res.xml).toBe(await lib(opts));
+    expect(both.xml).toBe(await lib({ bendRule: false, nodeLabelsAvoidFlows: false }));
+    expect(res.xml).not.toBe(both.xml);
+  }, 30_000);
+
+  test.each([['--bend-rule', '--no-bend-rule'], ['--label-avoidance', '--no-label-avoidance']])(
+    '%s and %s together are refused', async (on, off) => {
+      const res = await cli([on, off]);
+      expect(res.status).toBe(1);
+      expect(res.stderr).toContain(`${on} and ${off} are mutually exclusive`);
+    });
+});
+
+describe('runPipeline layout switches', () => {
+  test.each([['bendRule', 'false'], ['nodeLabelsAvoidFlows', 1], ['bendRule', null]])(
+    'a non-boolean %s (%j) is a TypeError, not a truthy switch', async (key, value) => {
+      await expect(runPipeline(loadFixture('simple-approval.json'), { [key]: value })).rejects.toThrow(TypeError);
+    });
+});
+
 describe('ELK wrapping fallback', () => {
   const lc = () => JSON.parse(readFileSync('../tests/fixtures/wrapping-back-edge.json', 'utf8'));
 
