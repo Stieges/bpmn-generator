@@ -3881,8 +3881,8 @@ describe('wrapTextByPx', () => {
 describe('long-lane-names matrix', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/long-lane-names.json', 'utf8'));
 
-  test('matches .expected golden with refinement disabled', async () => {
-    const res = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+  test('matches .expected golden (default options)', async () => {
+    const res = await runPipeline(JSON.parse(JSON.stringify(lc)));
     const goldenBpmn = readFileSync('../tests/fixtures/long-lane-names.expected.bpmn', 'utf8');
     const goldenSvg  = readFileSync('../tests/fixtures/long-lane-names.expected.svg',  'utf8');
     expect(res.bpmnXml).toBe(goldenBpmn);
@@ -3935,8 +3935,8 @@ describe('Pass 1 metric assertions', () => {
 describe('dense-edge-labels matrix', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/dense-edge-labels.json', 'utf8'));
 
-  test('matches .expected golden (refinement off)', async () => {
-    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+  test('matches .expected golden (default options)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)));
     expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/dense-edge-labels.expected.bpmn', 'utf8'));
     expect(r.svg).toBe(readFileSync('../tests/fixtures/dense-edge-labels.expected.svg', 'utf8'));
   });
@@ -3966,16 +3966,8 @@ describe('Pass 3 metric assertions', () => {
   for (const fixture of readdirSync('../tests/fixtures').filter(f => f.endsWith('.json')).sort()) {
     test(`${fixture}: label-collision repair never adds a label/label or label/node overlap (refined)`, async () => {
       const { bboxOverlaps } = await import('./visual-refinement.js');
-      const before = CFG.visualRefinement.edgeLabelCollisionRepair;
-      let without, withRepair;
-      try {
-        CFG.visualRefinement.edgeLabelCollisionRepair = false;
-        without = await runPipeline(loadFixture(fixture), ALL_ON);
-        CFG.visualRefinement.edgeLabelCollisionRepair = true;
-        withRepair = await runPipeline(loadFixture(fixture), ALL_ON);
-      } finally {
-        CFG.visualRefinement.edgeLabelCollisionRepair = before;
-      }
+      const without = await runPipeline(loadFixture(fixture), { ...ALL_ON, visualRefinement: { dynamicLaneHeader: true, laneCompaction: true, edgeLabelCollisionRepair: false } });
+      const withRepair = await runPipeline(loadFixture(fixture), ALL_ON);
       if (!without.coordMap) return;   // blocked on purpose
       const a = labelOverlaps(without.coordMap, bboxOverlaps), b = labelOverlaps(withRepair.coordMap, bboxOverlaps);
       expect(b.ll).toBeLessThanOrEqual(a.ll);
@@ -4092,6 +4084,41 @@ describe('ELK wrapping is independent of visual refinement', () => {
   });
 });
 
+describe('refinement defaults', () => {
+  test('the default call runs label-collision repair only; routes are the unrefined ones', async () => {
+    const lc = () => loadFixture('bpmn-generator-pipeline.json');
+    const { resolveRefinement } = await import('./visual-refinement.js');
+    expect(resolveRefinement()).toEqual({ dynamicLaneHeader: false, laneCompaction: false, edgeLabelCollisionRepair: true });
+    const def = await runPipeline(lc());
+    const labelsOnly = await runPipeline(lc(), { visualRefinement: { dynamicLaneHeader: false, laneCompaction: false, edgeLabelCollisionRepair: true } });
+    const off = await runPipeline(lc(), { visualRefinement: false });
+    expect(def.bpmnXml).toBe(labelsOnly.bpmnXml);
+    expect(JSON.stringify(def.coordMap.edgeCoords)).toBe(JSON.stringify(off.coordMap.edgeCoords)); // routes did not
+  });
+});
+
+describe('CLI refinement flags', () => {
+  const run = async (...args) => {
+    const { spawnSync } = await import('node:child_process');
+    return spawnSync(process.execPath, ['bpmn/pipeline.js', '../tests/fixtures/sparse-lanes.json', ...args], { encoding: 'utf8' });
+  };
+  test('--no-refine writes exactly runPipeline(lc, { visualRefinement: false })', async () => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refine-'));
+    const res = await run(path.join(dir, 'out'), '--no-refine');
+    expect(res.status).toBe(0);
+    const lib = await runPipeline(loadFixture('sparse-lanes.json'), { visualRefinement: false });
+    expect(fs.readFileSync(path.join(dir, 'out.bpmn'), 'utf8')).toBe(lib.bpmnXml);
+  });
+  test('--refine and --no-refine together are refused', async () => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refine-'));
+    const res = await run(path.join(dir, 'out'), '--refine', '--no-refine');
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/--refine and --no-refine/);
+  });
+});
+
 describe('ELK wrapping fallback', () => {
   const lc = () => JSON.parse(readFileSync('../tests/fixtures/wrapping-back-edge.json', 'utf8'));
 
@@ -4100,6 +4127,25 @@ describe('ELK wrapping fallback', () => {
     expect(r.bpmnXml).toBeTruthy();
     expect(r.diagnostics.ok).toBe(true);
     expect(r.validation.infos).toEqual([expect.stringContaining('wrapping skipped')]);
+  });
+
+  test('the raw ELK error text in the fallback message is bounded', async () => {
+    const ELK = (await import('elkjs/lib/elk.bundled.js')).default;
+    const orig = ELK.prototype.layout;
+    let calls = 0;
+    ELK.prototype.layout = function (...a) {
+      if (calls++ === 0) return Promise.reject(new Error('x'.repeat(5000) + '\nsecond line'));
+      return orig.apply(this, a);
+    };
+    try {
+      const r = await runPipeline(lc(), { elkWrapping: 'auto' });
+      const info = r.validation.infos.find(i => i.includes('wrapping skipped'));
+      expect(info).toBeDefined();
+      expect(info.length).toBeLessThan(400);
+      expect(info).not.toMatch(/\n/);
+    } finally {
+      ELK.prototype.layout = orig;
+    }
   });
 
   test('--refine --wrap equivalent (ALL_ON) no longer crashes on it', async () => {
@@ -4122,8 +4168,8 @@ describe('ELK wrapping fallback', () => {
 describe('wide-pipeline matrix', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/wide-pipeline.json', 'utf8'));
 
-  test('matches .expected golden (refinement off)', async () => {
-    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+  test('matches .expected golden (default options)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)));
     expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/wide-pipeline.expected.bpmn', 'utf8'));
     expect(r.svg).toBe(readFileSync('../tests/fixtures/wide-pipeline.expected.svg', 'utf8'));
   });
@@ -4181,8 +4227,8 @@ describe('Pass 5 (ELK wrapping) metric assertions', () => {
 describe('sparse-lanes matrix', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/sparse-lanes.json', 'utf8'));
 
-  test('matches .expected golden (refinement off)', async () => {
-    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+  test('matches .expected golden (default options)', async () => {
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)));
     expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/sparse-lanes.expected.bpmn', 'utf8'));
     expect(r.svg).toBe(readFileSync('../tests/fixtures/sparse-lanes.expected.svg', 'utf8'));
   });

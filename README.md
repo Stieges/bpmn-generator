@@ -333,9 +333,9 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **MCP Server** (generate, validate, import as MCP tools)
 - **bpmn.io compatible** (verified with bpmn-js viewer)
 
-### Visual Refinement (opt-in)
+### Visual Refinement
 
-Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Default `enabled: false` — existing pipeline output stays byte-identical.
+Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Each pass has its own switch; edge-label collision repair is on by default (it only moves labels), the other passes are opt-in. `--refine` switches every pass on, `--no-refine` every pass off.
 
 - **Pass 1** — Dynamic per-pool lane-header widths with multi-line wrapping (long lane/pool names no longer clip)
 - **Pass 2** — `compactLanes`: reduces lane padding (~45px per non-empty lane on typical layouts, ~10–20% canvas shrink on multi-lane diagrams)
@@ -347,8 +347,13 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 ```json
 {
   "visualRefinement": {
-    "enabled": true,
-    "minLaneHeight": 80
+    "dynamicLaneHeader": false,
+    "laneHeaderMinWidth": 30,
+    "laneHeaderMaxWidth": 120,
+    "laneCompaction": false,
+    "minLaneHeight": 80,
+    "edgeLabelCollisionRepair": true,
+    "edgeLabelMaxShift": 25
   }
 }
 ```
@@ -356,7 +361,7 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 **Or per-call:**
 
 ```javascript
-const result = await runPipeline(logicCore, { visualRefinement: true });
+const result = await runPipeline(logicCore, { visualRefinement: { laneCompaction: true } });
 ```
 
 Design spec: [`docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md`](docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md)

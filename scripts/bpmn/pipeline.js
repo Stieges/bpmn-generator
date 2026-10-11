@@ -40,7 +40,7 @@ import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds,
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
-import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels } from './visual-refinement.js';
+import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels, resolveRefinement } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -100,7 +100,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes) {
  * Run the full BPMN pipeline programmatically.
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
- * @param {boolean} [opts.visualRefinement] - Enable visual refinement passes (overrides CFG.visualRefinement.enabled)
+ * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { dynamicLaneHeader?, laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
@@ -159,8 +159,8 @@ async function runPipeline(logicCore, opts = {}) {
   // references/api-schema.json, which the docs gate validates a real response against.
   const netDiagnostics = checkNetTranslation(lc);
 
-  // Visual Refinement (opt-in, computed early for layout options)
-  const refineOn = opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false;
+  // which refinement passes run — see resolveRefinement
+  const refine = resolveRefinement(opts.visualRefinement);
 
   // poolOrder: 'auto' (default) orders participants so that the ones exchanging
   // messages sit next to each other; 'declared' keeps the input order.
@@ -226,27 +226,25 @@ async function runPipeline(logicCore, opts = {}) {
   }
 
   // Visual Refinement (post-layout coordinate transforms)
-  if (refineOn) {
-    if (CFG.visualRefinement?.dynamicLaneHeader !== false) {
-      computeDynamicLaneHeaders(coordMap, lc, {
-        minWidth: CFG.visualRefinement?.laneHeaderMinWidth ?? 30,
-        maxWidth: CFG.visualRefinement?.laneHeaderMaxWidth ?? 120,
-      });
-    }
-    if (CFG.visualRefinement?.laneCompaction !== false) {
-      compactLanes(coordMap, lc, {
-        minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80,
-      });
-      // compactLanes moves route points in place and shifts each label on its own, so a route whose
-      // points land in different lanes ends up with its label off its leg — or across it. The
-      // routes are the same arrays, so the reference test cannot see them: refresh every label.
-      refreshMovedLabels(coordMap, allEdges, {});
-    }
-    if (CFG.visualRefinement?.edgeLabelCollisionRepair !== false) {
-      repairEdgeLabels(coordMap, {
-        maxShift: CFG.visualRefinement?.edgeLabelMaxShift ?? 25,
-      });
-    }
+  if (refine.dynamicLaneHeader) {
+    computeDynamicLaneHeaders(coordMap, lc, {
+      minWidth: CFG.visualRefinement?.laneHeaderMinWidth ?? 30,
+      maxWidth: CFG.visualRefinement?.laneHeaderMaxWidth ?? 120,
+    });
+  }
+  if (refine.laneCompaction) {
+    compactLanes(coordMap, lc, {
+      minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80,
+    });
+    // compactLanes moves route points in place and shifts each label on its own, so a route whose
+    // points land in different lanes ends up with its label off its leg — or across it. The
+    // routes are the same arrays, so the reference test cannot see them: refresh every label.
+    refreshMovedLabels(coordMap, allEdges, {});
+  }
+  if (refine.edgeLabelCollisionRepair) {
+    repairEdgeLabels(coordMap, {
+      maxShift: CFG.visualRefinement?.edgeLabelMaxShift ?? 25,
+    });
   }
 
   // Message flows LAST: their horizontal leg has to sit in the gap between two
@@ -460,9 +458,14 @@ async function main() {
   const strict     = flags.includes('--strict');
   const optimize   = flags.includes('--optimize') || flags.includes('--mode=soll') || flags.includes('--mode=optimize');
   const refine     = flags.includes('--refine');
+  const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--wrap]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap]');
+    process.exit(1);
+  }
+  if (refine && noRefine) {
+    console.error('--refine and --no-refine are mutually exclusive.');
     process.exit(1);
   }
 
@@ -497,13 +500,14 @@ async function main() {
     process.exit(1);
   }
 
-  // --refine only ever turns visual refinement ON explicitly; omitting the flag
-  // leaves opts.visualRefinement undefined so runPipeline's own
-  // `opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false` fallback
-  // still decides — passing `false` here would pin today's default and quietly
-  // survive a future flip of that default in config.json.
-  // --wrap likewise only ever asks for wrapping; the config default decides otherwise.
-  const refineOpts = { ...(refine ? { visualRefinement: true } : {}), ...(wrap ? { elkWrapping: 'auto' } : {}) };
+  // --refine switches every refinement pass on, --no-refine every pass off; with neither flag
+  // opts.visualRefinement stays undefined and the per-pass defaults in
+  // config.json -> visualRefinement decide. --wrap likewise only ever asks for wrapping; the
+  // config default (layout.elkWrapping) decides otherwise.
+  const refineOpts = {
+    ...(refine ? { visualRefinement: true } : noRefine ? { visualRefinement: false } : {}),
+    ...(wrap ? { elkWrapping: 'auto' } : {}),
+  };
 
   // Drill-down mode: generate parent + per-subprocess diagrams
   if (drillDown) {

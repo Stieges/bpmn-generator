@@ -1,7 +1,7 @@
 /**
  * Visual Refinement — unit tests
  */
-import { estimateTextWidth, computeDynamicLaneHeaders, estimateTextBBox, bboxOverlaps, repairEdgeLabels, compactLanes } from './visual-refinement.js';
+import { estimateTextWidth, computeDynamicLaneHeaders, estimateTextBBox, bboxOverlaps, repairEdgeLabels, compactLanes, resolveRefinement, REFINEMENT_PASSES } from './visual-refinement.js';
 
 describe('estimateTextWidth', () => {
   test('returns 0 for empty string', () => {
@@ -521,5 +521,27 @@ describe('compactLanes — multi-pool', () => {
     const delta = 80; // same as the fixture above: 200 - 120
     expect(cm.coords.sub.y).toBe(420 - delta);
     expect(cm.coords.child.y).toBe(450 - delta);
+  });
+});
+
+describe('resolveRefinement', () => {
+  const defaults = { dynamicLaneHeader: false, laneCompaction: false, edgeLabelCollisionRepair: true };
+  test('undefined means the per-pass config defaults', () => {
+    expect(resolveRefinement(undefined, defaults)).toEqual(defaults);
+  });
+  test('true and false switch every pass', () => {
+    expect(resolveRefinement(true, defaults)).toEqual({ dynamicLaneHeader: true, laneCompaction: true, edgeLabelCollisionRepair: true });
+    expect(resolveRefinement(false, defaults)).toEqual({ dynamicLaneHeader: false, laneCompaction: false, edgeLabelCollisionRepair: false });
+  });
+  test('an object overrides single passes over the defaults', () => {
+    expect(resolveRefinement({ laneCompaction: true }, defaults)).toEqual({ ...defaults, laneCompaction: true });
+  });
+  test('unknown pass names and non-boolean values are refused', () => {
+    expect(() => resolveRefinement({ laneCompactoin: true }, defaults)).toThrow(TypeError);
+    expect(() => resolveRefinement({ laneCompaction: 'yes' }, defaults)).toThrow(TypeError);
+    expect(() => resolveRefinement('all', defaults)).toThrow(TypeError);
+  });
+  test('the pass list is exactly the three passes', () => {
+    expect([...REFINEMENT_PASSES]).toEqual(['dynamicLaneHeader', 'laneCompaction', 'edgeLabelCollisionRepair']);
   });
 });

@@ -463,8 +463,8 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ### Run a visual-refinement pass
 
-1. Default: `visualRefinement: false`. Opt in per call: `runPipeline(lc, { visualRefinement: true })`.
-2. Sub-flags live in `scripts/config.json` under `CFG.visualRefinement`: `dynamicLaneHeader`, `laneCompaction`, `edgeLabelCollisionRepair` (all on by default when `visualRefinement: true`). See `scripts/bpmn/visual-refinement.js` for the pass implementations.
+1. Each pass has its own default in `scripts/config.json → visualRefinement`: `edgeLabelCollisionRepair` on, `laneCompaction` and `dynamicLaneHeader` off. Per call: `runPipeline(lc, { visualRefinement: true | false | { laneCompaction: true, … } })`; CLI `--refine` (all on) / `--no-refine` (all off). ELK wrapping is separate (`elkWrapping`, `--wrap`).
+2. The passes are `dynamicLaneHeader`, `laneCompaction`, `edgeLabelCollisionRepair`; `resolveRefinement` turns the option into per-pass switches. See `scripts/bpmn/visual-refinement.js` for the pass implementations.
 3. Verify against goldens: `cd scripts && npm test -- --testPathPatterns=visual-refinement`.
 
 ### Change the participant order of a collaboration

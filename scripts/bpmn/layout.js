@@ -6,6 +6,7 @@
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING, ARTIFACT_GAP, artifactSize } from './constants.js';
 import { CFG } from '../shared/utils.js';
+import { boundText } from '../shared/safe-text.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { preprocessLogicCore, assignEdgeIds } from './topology.js';
 
@@ -392,7 +393,7 @@ async function runElkLayout(elkGraph) {
     if (!pristine || stripWrapping(pristine) === 0) throw err;
     // A fresh instance: the one that threw may hold half-built state from the failed run.
     layouted = await new ELK().layout(pristine);
-    fallback = `ELK wrapping skipped: layout failed with wrapping on (${err?.message ?? err}); laid out without it`;
+    fallback = `ELK wrapping skipped: layout failed with wrapping on (${boundText(err?.message ?? err, 200)}); laid out without it`;
   }
   const result = stackCollaborationVertically(layouted);
   if (fallback) result.layoutInfos = [fallback];
