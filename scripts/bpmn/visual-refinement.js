@@ -70,9 +70,9 @@ export function estimateTextWidth(text, fontSize = 11) {
   return text.length * fontSize * CHAR_WIDTH_FACTOR;
 }
 
-const TEXT_BBOX_PADDING = 2;
-
-// Padding on each side of a lane label inside bpmn-js's fixed 30 px header strip.
+// Safety margin on each side of the longest word, our own choice: bpmn-js renders lane labels
+// center-middle in its fixed 30 px strip without any padding, so this only keeps the word clear
+// of the lane edges where the width estimate (CHAR_WIDTH_FACTOR) is a little short.
 const STRIP_PADDING = 8;
 // bpmn-js renders lane labels at 12 px.
 const LANE_LABEL_FONT_SIZE = 12;
@@ -85,17 +85,6 @@ const LANE_LABEL_FONT_SIZE = 12;
 export function laneLabelFloor(name) {
   const longest = String(name ?? '').split(/\s+/).reduce((a, w) => (w.length > a.length ? w : a), '');
   return Math.ceil(estimateTextWidth(longest, LANE_LABEL_FONT_SIZE) + 2 * STRIP_PADDING);
-}
-
-/**
- * Rectangular bbox for a short edge-label rendered centered at (x,y).
- * Width is derived from estimateTextWidth; height is fontSize plus small padding.
- * Returns `{ x, y, w, h }` where (x, y) is the top-left corner.
- */
-export function estimateTextBBox(text, x, y, fontSize = 11) {
-  const w = estimateTextWidth(text, fontSize) + 2 * TEXT_BBOX_PADDING;
-  const h = fontSize + 2 * TEXT_BBOX_PADDING;
-  return { x: x - w / 2, y: y - h / 2, w, h };
 }
 
 /**
