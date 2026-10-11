@@ -224,7 +224,8 @@ layout and rendering. Two rules make it hold:
    External node labels (events incl. boundary events, gateways, data objects and stores) are boxes
    in `coordMap.nodeLabels` (`placeNodeLabels`, `coordinates.js` §5.7), re-derived in `pipeline.js`
    after the last pass that moves a node; `bpmn-xml.js` writes the box as the `BPMNLabel` bounds and
-   `svg.js` draws its `lines` into it.
+   `svg.js` draws its `lines` into it. The SVG canvas is sized to include these boxes, with both layout
+   switches on or off — so a label reaching past the shapes' margin enlarges the canvas in every mode.
 2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant. The one pass after it is
@@ -260,7 +261,7 @@ membership instead of coordinates.
 | `scripts/bpmn/constants.js` | The 13 BPMN-only layout constants (`SHAPE`, `SW`, `CLR`, `LANE_HEADER_W`, `LANE_PADDING`, `LABEL_DISTANCE`, `TASK_RX`, `INNER_OUTER_GAP`, `EXTERNAL_LABEL_H`, `POOL_GAP`, `COLLAB_PADDING`, `MESSAGE_FLOW_FAN`, `ARTIFACT_GAP`), derived from `CFG` (`../shared/utils.js`) — never imported by `dmn/` |
 | `scripts/bpmn/topology.js` | `assignProcessId`/`withProcessId` (the one place a single-process Logic-Core without `id` gets `Process_1`, `_2`… on collision; the public `generateBpmnXml`/`logicCoreToDot`/`runScenarioPipeline`), `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `identifyHappyPathNodes` (which nodes an `isHappyPath` edge chain touches — also read by `scripts/scenarios/format.js`), `normalizeEdgeIds`/`assignEdgeIds` (the one place an id-less sequence-flow edge gets its `flow_<source>_<target>` id, `_2`… on collision — nothing downstream invents one), `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/bpmn/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
-| `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x. Node label boxes: `placeNodeLabels` (default, below the node) and the opt-in `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, default `false`; per call `runPipeline(lc, { nodeLabelsAvoidFlows: true })`): an event's or gateway's label whose own sequence or message flow leaves or enters the node through the bottom, or runs through the label on its way, goes to the first free `nodeLabelCandidates` box — below, above, right-below, left-below; free = no route, shape, node or edge label, lane separator, and inside the participant — else stays below. Runs in `pipeline.js` after `routeMessageFlows` |
+| `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x. Node label boxes: `placeNodeLabels` (default, below the node) `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, default `true`; per call `runPipeline(lc, { nodeLabelsAvoidFlows: false })`): an event's or gateway's label whose own sequence or message flow leaves or enters the node through the bottom, or runs through the label on its way, goes to the first free `nodeLabelCandidates` box — below, above, right-below, left-below; free = no route, shape, node or edge label, lane separator, and inside the participant — else stays below. Runs in `pipeline.js` after `routeMessageFlows` |
 | `scripts/bpmn/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess, DI07 sequence-flow endpoint off its own shape (all ERROR); DI05 message flow crossing an uninvolved participant, DI08 a sequence-flow end segment lying on its own endpoint's outline, DI09 a sequence flow through its own source or target shape, DI10 a message flow through a foreign shape (all WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
 | `scripts/bpmn/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
 | `scripts/bpmn/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
@@ -490,15 +491,19 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 ### Switch the bend rule off (or tune it)
 
-1. On by default (`config.json → layout.bendRule: true`). Per call `runPipeline(lc, { bendRule: false })`;
-   project-wide `layout.bendRule: false`. Limits: `layout.bendRuleLimits` (see `scripts/bpmn/bend-rule.js`).
-2. Verify: the layout ratchet's `bends` mode (`cd scripts && npm test -- --testPathPatterns=layout-metrics`)
+1. On by default (`config.json → layout.bendRule: true`). Per call `runPipeline(lc, { bendRule: false })`,
+   CLI `--no-bend-rule` (`--bend-rule` forces it on), HTTP/MCP `"bendRule": false`; project-wide
+   `layout.bendRule: false` in a file named by `BPMN_CONFIG`. Limits: `layout.bendRuleLimits` (see `scripts/bpmn/bend-rule.js`).
+2. Verify: the layout ratchet (`cd scripts && npm test -- --testPathPatterns=layout-metrics`) — its
+   `default`/`off`/`on` modes run the rule, `plain`/`plain-on` run with both switches off
    and `scripts/bpmn/bend-rule.test.js` (DI07–DI10 clean and idempotent over every fixture).
 
 ### Switch node labels that avoid flows off
 
 1. On by default (`config.json → layout.nodeLabelsAvoidFlows: true`). Per call
-   `runPipeline(lc, { nodeLabelsAvoidFlows: false })`; project-wide `layout.nodeLabelsAvoidFlows: false`.
+   `runPipeline(lc, { nodeLabelsAvoidFlows: false })`, CLI `--no-label-avoidance` (`--label-avoidance`
+   forces it on), HTTP/MCP `"nodeLabelsAvoidFlows": false`; project-wide `layout.nodeLabelsAvoidFlows: false`
+   in a file named by `BPMN_CONFIG`.
    Independent of the bend rule; with both on, the labels follow the bend rule's routes.
 2. Verify: `cd scripts && npm test -- --testPathPatterns=node-labels-avoid-flows` and the renderer-agreement
    test in `scripts/bpmn/pipeline.test.js` ("the two renderers agree on node labels", switch off and on).
@@ -594,7 +599,7 @@ failing on.
 - SSRF: every outbound request to a client-supplied URL goes through `scripts/shared/outbound-url.js` — http/https only, no credentials, `localhost` names refused, every resolved address checked against the IPv4/IPv6 special-purpose ranges (IPv6 forms embedding an IPv4 address checked as that address), the connection pinned to the checked addresses (`pinnedRequest`), redirects never followed. Never call `fetch` on a client-supplied URL directly.
 - `LLM_BASE_URL_ALLOWLIST` env var: comma-separated origins a client may name as `llmConfig.baseUrl`; empty (default) = a client `baseUrl` is a `400`. Allowlisted URLs still pass the validator above. Without `baseUrl` the server's endpoint (`OPENAI_BASE_URL`) is used. Provider failures are `502 llm_error`; the upstream body is never returned to a client.
 - Client strings into the audit log or a response go through `boundText` (`scripts/shared/safe-text.js`): 128 characters for identifiers, 500 for messages, control/format characters escaped. Telemetry `details` above 8 KiB is a `400`. A non-object JSON body is a `400`.
-- Schema-strict gate: every Logic-Core input at the HTTP entry and on every MCP tool that takes one (`generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn`) passes through `scripts/bpmn/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw.
+- Schema-strict gate: every Logic-Core input at the HTTP entry and on every MCP tool that takes one (`generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn`) passes through `scripts/bpmn/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw. The per-call layout options — `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows` — pass `validateLayoutOptions` (same module; schemas mirrored in `references/api-schema.json` `$defs`, fenced by tests) on `/api/v1/generate`, `/api/v1/orchestrate` (before any LLM or callback work), `generate_bpmn` and `orchestrate_bpmn`; an invalid value is a `400 schema_error` resp. `{ status: 'schema_error' }`. `/api/v1/validate` and `validate_bpmn` take none of them.
 - Rule profiles: every profile (inline, by name, or from a file) passes `references/rule-profile-schema.json` (ajv strict) after a size/depth bound (64 KiB, 4 levels, a walk that stops at the limit). HTTP (untrusted) takes an inline object only (a string is a `400 profile_error`, no file is read) and refuses a profile that disables the soundness layer or sets a soundness rule below its ontology default severity — it may only raise one. MCP is a trusted local user like the CLI and may relax soundness, but its arguments come from an LLM, so it takes a profile *name* only, resolved inside the repository's `rules/` (`rulesDirPath` in `resource-paths.js`; none in an npm install, where names are refused). Profile files must be regular files of at most 256 KiB, opened non-blocking. Messages: client tokens through `quoteForMessage`, at most 20 warnings, no file content, no server path to a remote caller.
 - Body size cap: 10 MB. Rate limit: 30 req/min per client, keyed on the socket address, or with `TRUST_PROXY_HOPS=<n>` on the address the outermost of `n` trusted proxies recorded in `X-Forwarded-For` (a shorter chain falls back to the socket address; set it only when the server is reachable exclusively through those proxies, since a direct client controls the header); expired buckets are evicted. The API key is compared in constant time. All in `scripts/http-server.js`.
 
@@ -650,6 +655,13 @@ node bpmn/pipeline.js input.json output --refine
 # Wrap long chains into rows (ELK MULTI_EDGE, > 20 nodes; off by default, independent of --refine):
 node bpmn/pipeline.js input.json output --wrap
 
+# Bend rule / node labels that avoid flows are on by default; switch either off for this call
+# (--bend-rule / --label-avoidance force it on over a project config; each pair is mutually exclusive):
+node bpmn/pipeline.js input.json output --no-bend-rule --no-label-avoidance
+
+# Project-wide config override (merged over scripts/config.json, one level deep):
+BPMN_CONFIG=my-config.json node bpmn/pipeline.js input.json output
+
 # Start MCP server:
 node mcp-bpmn-server.js
 ```
@@ -701,6 +713,10 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   centre line at a message-flow node, above or below it. `routeMessageFlows` runs later and fans several
   flows at one node out by `MESSAGE_FLOW_FAN` px either side of that line; the guard does not model the
   offsets, so a bend-rule route can still end up within the fan of a message flow
+- The bend rule's label refresh places a re-routed flow's label off other sequence flows and
+  associations only: message flows are routed after it, so the label can still land on one. Its
+  guard does not count other flows' edge labels either, so a new route can run through a label that
+  did not move (the class of #73). No check reports either
 - "Output with `layout.bendRule` and `layout.nodeLabelsAvoidFlows` explicitly off is unchanged from before the bend rule" is fenced by
   SHA-256 hashes of BPMN XML and SVG per top-level fixture × four modes
   (`tests/bench/default-output-hashes.json`, written by `node bench/output-hashes.mjs`, compared by
