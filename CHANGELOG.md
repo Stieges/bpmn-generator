@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- **Default output is compacted.** Lane compaction (`visualRefinement.laneCompaction`) is now on by
+  default, together with edge-label collision repair: diagrams with lanes or an expanded subprocess
+  come out up to 29 % smaller in area (10–29 % on the seven golden fixtures; some diagrams are
+  unchanged), and sequence flows between lanes are re-routed off the lane separators. Every
+  `.bpmn`/`.svg` produced with default options changes. To get the pre-4.0 *lane geometry*: CLI
+  `--no-refine`, library `runPipeline(lc, { visualRefinement: false })`, HTTP/MCP
+  `"visualRefinement": false`, or project-wide `config.json -> visualRefinement.laneCompaction: false`
+  and `edgeLabelCollisionRepair: false`. This does **not** restore the 3.6.0 output as a whole:
+  edge-label placement changed in every mode (labels sit beside their flow, message flows carry a
+  `BPMNLabel`, the SVG label backdrop is gone) and no switch brings that back. ELK wrapping stays
+  opt-in.
+- **`visualRefinement.enabled` is removed and silently ignored.** A project that set
+  `config.json -> visualRefinement.enabled: true` now gets lane compaction and label repair (the
+  defaults) but no wrapping. Migration: switch single passes with their own keys
+  (`laneCompaction`, `edgeLabelCollisionRepair`), or use `--refine` / `--no-refine` for all of them.
+- **`--refine` / `visualRefinement: true` no longer enable ELK wrapping.** Wrapping is its own
+  switch: CLI `--wrap`, `runPipeline(lc, { elkWrapping: 'auto' })`, or `config.json ->
+  layout.elkWrapping` (`"off"` default, `"auto"`, `"always"`).
+- **`visualRefinement.elkWrapping` and `visualRefinement.elkWrappingNodeThreshold` moved to
+  `layout.elkWrapping` and `layout.elkWrappingNodeThreshold`.** The old keys are silently ignored.
+- **The `dynamicLaneHeader` refinement pass was removed** (with `laneHeaderMinWidth` and
+  `laneHeaderMaxWidth`): bpmn.io and Camunda Modeler draw lane and participant headers at a fixed
+  width, so a wider header showed as an empty strip. `--refine` / `visualRefinement: true` no longer
+  change the header width; there is no replacement.
+- **The object form of `visualRefinement` is validated.** An unknown pass key (`dynamicLaneHeader`
+  included) or a non-boolean value is a `TypeError` in the library and a `schema_error` over HTTP
+  and MCP. On 3.6.0 any truthy value switched every pass on. Accepted keys: `laneCompaction`,
+  `edgeLabelCollisionRepair`.
+- **`/api/v1/orchestrate` refuses a string `ruleProfile`** (it used to read it as a server-side path); send an inline object — see Security, "Rule profiles are treated as untrusted input".
+- **MCP `ruleProfile` is a profile name, not a path** — see the same Security entry.
+- **A profile file that is not valid JSON now aborts** instead of falling back to the defaults — see Changed, "Rule profiles are checked".
+- **An unknown severity, or `ADVISORY` on a BPMN rule outside the optimization layer, refuses the profile** — see Changed, "Rule profiles are checked".
+- **Inline profiles over HTTP may only raise soundness rules**, never disable the layer or lower a rule's default severity — see the same Security entry.
+- **`correlationId` must be 1–64 characters from `[A-Za-z0-9_-]`** on every HTTP endpoint; anything else (other characters, other types, an empty string) is a `400` and is not echoed. A UUID passes. See Security, "HTTP API hardening".
+- **A client `llmConfig.baseUrl` is refused by default** (`400`) on `/api/v1/orchestrate` and `/api/v1/chat`. Omit it to use the server-configured endpoint (`OPENAI_BASE_URL`, else the OpenAI default), or have the operator allowlist the origin in `LLM_BASE_URL_ALLOWLIST`. `llmConfig` now requires only `apiKey` and `model`.
+- **LLM provider failures are `502 { correlationId, status: "llm_error" }`** instead of a `500` whose message carried the provider's response; the upstream detail is logged server-side only.
+- **Callback URLs are refused for more address ranges** (CGNAT, `0.0.0.0/8`, benchmarking, multicast, reserved, IPv6 forms embedding an internal IPv4 address, `*.localhost`) and for URLs with credentials, and a callback that answers with a redirect is a failed delivery (it used to be followed).
+- **Dead-letter files are named `<uuid>.json`** instead of `<correlationId>.json`; the correlation id is inside the file.
+- **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
+
 ### Added
 - **`visualRefinement` on the HTTP API and MCP.** `POST /api/v1/generate`, `/api/v1/orchestrate` and the MCP tools `generate_bpmn`, `orchestrate_bpmn` take an optional `visualRefinement` (boolean or per-pass object, schema `$defs/VisualRefinementOption`); invalid values are a `schema_error`. Before, these entry points could not switch refinement at all.
 - **Layout readability fence.** `scripts/bench/layout-metrics.mjs` now measures every top-level
@@ -324,18 +365,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `collaboration.js` and rendered as a note — never a warning, the enumeration did finish — by
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
-### Breaking
-- **Default output is compacted.** Lane compaction (`visualRefinement.laneCompaction`) is now on by
-  default, together with edge-label collision repair: every diagram with lanes or an expanded
-  subprocess comes out 10–29 % smaller in area (7 golden fixtures), and sequence flows between lanes are re-routed
-  off the lane separators. Every `.bpmn`/`.svg` produced with default options changes. To get the
-  previous geometry: CLI `--no-refine`, library `runPipeline(lc, { visualRefinement: false })`,
-  HTTP/MCP `"visualRefinement": false`, or project-wide `config.json -> visualRefinement.laneCompaction: false`
-  and `edgeLabelCollisionRepair: false`. ELK wrapping stays opt-in.
-- The `dynamicLaneHeader` refinement pass was removed: bpmn.io and Camunda Modeler draw lane and
-  participant headers at a fixed width, so a wider header showed as an empty strip. `--refine` /
-  `visualRefinement: true` no longer change the header width; passing `dynamicLaneHeader` in a
-  `visualRefinement` object is a TypeError.
 
 ### Fixed
 - **Compacted lanes keep their lane names whole in bpmn.io.** bpmn-js wraps a lane label against
@@ -352,7 +381,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   6 of 20 measured models). The flows it bent are now re-routed on the compacted geometry by the
   same chain as before (simplify, legacy guard, crossing repair, stuck-end re-clip), and their inner
   horizontal legs keep `visualRefinement.laneLineClearance` (10 px) from lane separators. Message
-  flows are still routed last. Compaction's area gains (−13 … −47 %) are unchanged.
+  flows are still routed last. Compaction's area gains are unchanged.
 - **Edge labels no longer lie across lane separators, in every mode** (the lane lines feed label
   placement also with refinement off). A label whose box would cross an inner lane
   line is placed on the other side of its segment (or the next leg), clear of the route, of node
@@ -981,14 +1010,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
-- **Refinement passes have their own switches.** `config.json → visualRefinement.enabled` is gone (a config that still sets it is ignored; only
-  the per-pass keys apply);
-  each pass is switched by its own key (`dynamicLaneHeader`, `laneCompaction`,
-  `edgeLabelCollisionRepair`). `runPipeline`'s `visualRefinement` option takes `true`/`false`
-  (every pass) or an object switching single passes; an unknown pass name throws. The CLI gains
-  `--no-refine` (every pass off) next to `--refine` (every pass on). Edge-label collision repair is
-  now on by default — it only moves labels, never a route. The ELK wrapping fallback message bounds
-  the error text it quotes from elkjs.
+- **Refinement passes have their own switches.** Each pass is switched by its own key
+  (`laneCompaction`, `edgeLabelCollisionRepair`); `config.json → visualRefinement.enabled` is gone
+  (see Breaking). `runPipeline`'s `visualRefinement` option takes `true`/`false` (every pass) or an
+  object switching single passes; an unknown pass name throws. The CLI gains `--no-refine` (every
+  pass off) next to `--refine` (every pass on); the two are mutually exclusive. Edge-label
+  collision repair is now on by default — it only moves labels, never a route. The ELK wrapping
+  fallback message bounds the error text it quotes from elkjs.
 - **ELK wrapping is its own switch.** Row wrapping of long chains (> 20 nodes in the ELK graph) used
   to switch on with visual refinement. It now has `config.json → layout.elkWrapping`
   (`"off"` default, `"auto"`, `"always"`; threshold `layout.elkWrappingNodeThreshold`), the
@@ -1139,19 +1167,6 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   because a hand-written test fixture depends on it — see the allowlist comment in
   `scripts/bpmn/types.test.js`), which is a second, adjacent way this release's ad-hoc support is
   thinner than either the schema or the type vocabulary implies on their own.
-
-### Breaking
-- **`/api/v1/orchestrate` refuses a string `ruleProfile`** (it used to read it as a server-side path); send an inline object — see Security, "Rule profiles are treated as untrusted input".
-- **MCP `ruleProfile` is a profile name, not a path** — see the same Security entry.
-- **A profile file that is not valid JSON now aborts** instead of falling back to the defaults — see Changed, "Rule profiles are checked".
-- **An unknown severity, or `ADVISORY` on a BPMN rule outside the optimization layer, refuses the profile** — see Changed, "Rule profiles are checked".
-- **Inline profiles over HTTP may only raise soundness rules**, never disable the layer or lower a rule's default severity — see the same Security entry.
-- **`correlationId` must be 1–64 characters from `[A-Za-z0-9_-]`** on every HTTP endpoint; anything else (other characters, other types, an empty string) is a `400` and is not echoed. A UUID passes. See Security, "HTTP API hardening".
-- **A client `llmConfig.baseUrl` is refused by default** (`400`) on `/api/v1/orchestrate` and `/api/v1/chat`. Omit it to use the server-configured endpoint (`OPENAI_BASE_URL`, else the OpenAI default), or have the operator allowlist the origin in `LLM_BASE_URL_ALLOWLIST`. `llmConfig` now requires only `apiKey` and `model`.
-- **LLM provider failures are `502 { correlationId, status: "llm_error" }`** instead of a `500` whose message carried the provider's response; the upstream detail is logged server-side only.
-- **Callback URLs are refused for more address ranges** (CGNAT, `0.0.0.0/8`, benchmarking, multicast, reserved, IPv6 forms embedding an internal IPv4 address, `*.localhost`) and for URLs with credentials, and a callback that answers with a redirect is a failed delivery (it used to be followed).
-- **Dead-letter files are named `<uuid>.json`** instead of `<correlationId>.json`; the correlation id is inside the file.
-- **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
 
 ### Security
 - **Rule profiles are treated as untrusted input on every channel.** Every profile — inline, by
