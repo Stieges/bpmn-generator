@@ -6,6 +6,7 @@
  */
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { resolveLaneId } from '../bpmn/topology.js';
+import { bendMetrics } from '../bpmn/bend-rule.js';
 
 /** Horizontal run within this many px of an inner lane boundary counts as lying on the line. */
 export const LANE_LINE_HUG_PX = 3;
@@ -198,4 +199,18 @@ export function flowMetrics(coordMap, lc, ctx = buildFlowContext(lc)) {
     return { pairs: a.pairs + b.pairs, collinear: a.collinear + b.collinear, mfmf: a.pairs, mfseq: b.pairs };
   })();
   return out;
+}
+
+/**
+ * Flow direction per fixture, from the bend rule's own search (bend-rule.js bendMetrics) — the
+ * measure and the rule share one definition of an admissible route, so the two cannot disagree:
+ *  - avoidableBends: over every sequence flow, current bends − the fewest bends of an admissible route;
+ *  - againstFlowEntries: activity/event targets not entered from the left although an admissible
+ *    left entry with no more bends exists.
+ * Both are lower bounds: the search samples corridors, it proves no minimum. Read on the final
+ * coordMap, so the message flows routed after the rule are in edgeCoords but not in the search.
+ */
+export function flowDirectionMetrics(coordMap, lc) {
+  const { avoidableBends, againstFlowEntries } = bendMetrics(coordMap, lc);
+  return { avoidableBends, againstFlowEntries };
 }

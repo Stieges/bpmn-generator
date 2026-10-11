@@ -12,13 +12,17 @@ import { fileURLToPath } from 'node:url';
 import {
   FIXTURES, ALONG_MIN_PX, alongSide, edgeEndsAlongBorder, laneGaps,
   messageFlowThroughNodes, seqFlowThroughNodes, seqThroughOwnShape, edgeLabelHits, LABEL_DISTANCE_TOLERANCE_PX, measureLayout, summarize,
+  summarizeDirection,
 } from './layout-metrics.mjs';
 import { flowMetrics, LANE_LINE_HUG_PX } from './flow-metrics.mjs';
 import { CFG } from '../shared/utils.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
-const MODES = { default: {}, off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' } };
+// bends: the default options with the bend rule switched on (layout.bendRule) — the mode the
+// default would become.
+const MODES = { default: {}, off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' },
+  bends: { bendRule: true } };
 
 describe('alongSide', () => {
   const box = { x: 386, y: 131, w: 100, h: 80 };
@@ -293,9 +297,69 @@ const BUDGET = {
   'wrapping-back-edge.json':            same(r({ bendsMax: 4, offOver5: 4 })),
 };
 
-describe('layout budget — every top-level fixture × three modes', () => {
+// bends mode (bend rule on): the rows of the default mode, except where the rule removed a bend —
+// bendsMax falls in long-lane-names (f2, f3), multi-pool-collaboration (sf3, sf5), simple-approval
+// (f2), sparse-lanes (f3, f4, f5), subprocess-merge-fanout (f5, f7), wrapping-back-edge (frework);
+// offOver5 falls where a moved end now sits on a side midpoint (simple-approval f2,
+// subprocess-child-fidelity c_f4/c_f7, wrapping-back-edge frework).
+const BUDGET_BENDS = {
+  'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
+  'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 9 }),
+  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }),
+  'deadlock-process.json':              null,
+  'dense-edge-labels.json':             r({ bendsMax: 1, offOver5: 4 }),
+  'expanded-subprocess.json':           r(),
+  'long-lane-names.json':               r({ bendsMax: 1 }),
+  'loop-with-join.json':                r({ bendsMax: 2, offOver5: 6 }),
+  'messageflow-to-subprocess.json':     r({ mfCrowd: 1 }),
+  'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 2 }),
+  'parallel-split-join.json':           r({ bendsMax: 1, offOver5: 4 }),
+  'realistic-collaboration.json':       r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
+  'simple-approval.json':               r({ bendsMax: 1, offOver5: 5 }),
+  'sparse-lanes.json':                  r({ bendsMax: 1, offOver5: 4 }),
+  'subprocess-child-fidelity.json':     r({ bendsMax: 2, offOver5: 3 }),
+  'subprocess-collapsed-children.json': r(),
+  'subprocess-merge-fanout.json':       r({ bendsMax: 1, offOver5: 8 }),
+  'wide-pipeline.json':                 r(),
+  'wrapping-back-edge.json':            r({ bendsMax: 2, offOver5: 2 }),
+};
+
+// Flow direction (bend-rule.js bendMetrics, through flow-metrics.mjs flowDirectionMetrics), every
+// mode: [avoidableBends, againstFlowEntries]. avoidableBends sums current − fewest admissible bends
+// over the sequence flows; againstFlowEntries counts activity/event targets not entered from the
+// left although an admissible left entry with no more bends exists. With the rule on (bends) both
+// are 0 by construction — the rule and the measure share one search — so the bends column fences
+// the pass, the other three what the rule would still find.
+const d = (avoidableBends, againstFlowEntries) => ({ avoidableBends, againstFlowEntries });
+const NONE = d(0, 0);
+const dir = (row, on = row) => ({ default: row, off: row, on, bends: NONE });
+const DIRECTION = {
+  'all-element-classes.json':           dir(NONE),
+  'boundary-event-shapes.json':         dir(NONE),
+  'bpmn-generator-pipeline.json':       dir(d(3, 2), d(8, 6)),
+  'deadlock-process.json':              { default: null, off: null, on: null, bends: null },
+  'dense-edge-labels.json':             dir(NONE),
+  'expanded-subprocess.json':           dir(NONE),
+  'long-lane-names.json':               dir(d(2, 2)),
+  'loop-with-join.json':                dir(NONE),
+  'messageflow-to-subprocess.json':     dir(NONE),
+  'multi-pool-collaboration.json':      dir(d(2, 1)),
+  'parallel-split-join.json':           dir(NONE),
+  'realistic-collaboration.json':       dir(d(2, 4), d(1, 1)),
+  'simple-approval.json':               dir(d(1, 0)),
+  'sparse-lanes.json':                  dir(d(3, 3)),
+  'subprocess-child-fidelity.json':     dir(d(2, 0)),
+  'subprocess-collapsed-children.json': dir(NONE),
+  'subprocess-merge-fanout.json':       dir(d(2, 0)),
+  'wide-pipeline.json':                 dir(NONE, d(16, 0)),
+  'wrapping-back-edge.json':            dir(d(2, 0)),
+};
+
+describe('layout budget — every top-level fixture × four modes', () => {
   test('every fixture has a budget row (a new fixture must be measured, not skipped)', () => {
     expect(Object.keys(BUDGET).sort()).toEqual(FIXTURES);
+    expect(Object.keys(BUDGET_BENDS).sort()).toEqual(FIXTURES);
+    expect(Object.keys(DIRECTION).sort()).toEqual(FIXTURES);
   });
   for (const name of FIXTURES) {
     for (const mode of Object.keys(MODES)) {
@@ -305,12 +369,16 @@ describe('layout budget — every top-level fixture × three modes', () => {
         // offending edges, without a debugger.
         const got = summarize(m);
         // `in`, not `??`: a deliberate `null` row (blocked fixture) must not read as "missing".
-        const want = BUDGET[name] && mode in BUDGET[name] ? BUDGET[name][mode] : 'missing';
+        const rows = mode === 'bends' ? { bends: BUDGET_BENDS[name] } : BUDGET[name];
+        const want = rows && mode in rows ? rows[mode] : 'missing';
         const detail = m && JSON.stringify({ along: m.alongBorder, gaps: m.laneGaps,
           mf: m.mfThroughNodes, seq: m.seqThroughNodes, labels: m.labels });
         const differs = JSON.stringify(got) !== JSON.stringify(want);
         expect(`${name} ${mode} ${JSON.stringify(got)}`)
           .toBe(`${name} ${mode} ${JSON.stringify(want)}${differs && detail ? ' | ' + detail : ''}`);
+        const wantDir = DIRECTION[name] && mode in DIRECTION[name] ? DIRECTION[name][mode] : 'missing';
+        expect(`${name} ${mode} direction ${JSON.stringify(summarizeDirection(m))}`)
+          .toBe(`${name} ${mode} direction ${JSON.stringify(wantDir)}`);
       }, 30000);
     }
   }

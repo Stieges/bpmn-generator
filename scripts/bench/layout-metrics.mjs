@@ -62,7 +62,7 @@ import { resolveLaneId } from '../bpmn/topology.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { CFG } from '../shared/utils.js';
-import { flowMetrics } from './flow-metrics.mjs';
+import { flowMetrics, flowDirectionMetrics } from './flow-metrics.mjs';
 import { edgeLabelBox, labelHitsRoute, boxWithin, flattenProcessNodes } from '../bpmn/coordinates.js';
 import { innerLaneLines } from '../bpmn/visual-refinement.js';
 
@@ -644,6 +644,7 @@ export async function measureLayout(lc, opts = {}) {
     labels: edgeLabelHits(cm, lc),
     flow: { hug: f.seq.laneLineHug, bendsMax: f.seq.bendsMax, crowd: f.seq.crowd.pairs, mfCrowd: f.mf.crowd.pairs,
       offOver5: f.seq.endOffOver5 + f.mf.endOffOver5 },
+    direction: flowDirectionMetrics(cm, lc),
     diCodes,
   };
 }
@@ -669,6 +670,12 @@ export function summarize(m) {
     labelLaneLine: m.labels.laneLine.length,
     labelFar: m.labels.farFromEdge.length,
   };
+}
+
+/** The flow-direction counts the fence compares — kept apart from summarize(), whose rows predate them. */
+export function summarizeDirection(m) {
+  if (!m) return null;
+  return { avoidableBends: m.direction.avoidableBends, againstFlowEntries: m.direction.againstFlowEntries };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
