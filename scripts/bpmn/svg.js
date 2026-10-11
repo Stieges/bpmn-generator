@@ -6,8 +6,8 @@
 import { assignEdgeIds } from './topology.js';
 import { isEvent, isGateway, isDataArtifact } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
-import { esc, rn, wrapText, CFG } from '../shared/utils.js';
-import { edgeLabelBox } from './coordinates.js';
+import { esc, rn, wrapText } from '../shared/utils.js';
+import { edgeLabelBox, edgeLabelTextStyle } from './coordinates.js';
 
 import {
   renderEventMarker, inferEventMarker, renderTaskIcon, renderPentagon,
@@ -302,8 +302,8 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels) {
  */
 function renderEdgeLabel(out, label, tx, ty) {
   const b = edgeLabelBox(label);
-  const fontSize = CFG.layout?.edgeLabelText?.fontSize ?? 11;
-  const lineH = fontSize * (CFG.layout?.edgeLabelText?.lineHeight ?? 1.2);
+  const { fontSize, lineHeight } = edgeLabelTextStyle();
+  const lineH = fontSize * lineHeight;
   const cx = rn(tx(b.x + b.w / 2));
   const lines = label.lines ?? [label.text];
   const tspans = lines.map((line, i) =>

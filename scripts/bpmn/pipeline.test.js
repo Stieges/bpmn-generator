@@ -3984,20 +3984,11 @@ describe('Pass 3 metric assertions', () => {
   }
 
   test('refinement ON has fewer or equal label overlaps vs OFF', async () => {
-    const { estimateTextBBox, bboxOverlaps } = await import('./visual-refinement.js');
-    const countOverlaps = (coordMap) => {
-      const bboxes = Object.values(coordMap.edgeLabels ?? {}).map(L => estimateTextBBox(L.text, L.x, L.y, 11));
-      let n = 0;
-      for (let i = 0; i < bboxes.length; i++) {
-        for (let j = i + 1; j < bboxes.length; j++) {
-          if (bboxOverlaps(bboxes[i], bboxes[j])) n++;
-        }
-      }
-      return n;
-    };
+    // Measured on the boxes both renderers draw (edgeLabelBox), not a separate text estimate.
+    const { bboxOverlaps } = await import('./visual-refinement.js');
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
     const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
-    expect(countOverlaps(on.coordMap)).toBeLessThanOrEqual(countOverlaps(off.coordMap));
+    expect(labelOverlaps(on.coordMap, bboxOverlaps).ll).toBeLessThanOrEqual(labelOverlaps(off.coordMap, bboxOverlaps).ll);
   });
 });
 
@@ -6142,10 +6133,15 @@ describe('geometry contract — the two renderers agree', () => {
           .toEqual(new Set(ids.map(id => poly(r.coordMap.edgeCoords[id], dx, dy))));
       });
 
-      test(`${fixture} (refinement: ${visualRefinement}) — the SVG draws each edge label where bpmn-js draws its DI label`, async () => {
-        // bpmn-js keeps a BPMNLabel's centre-x and top, and sets its first baseline 3/4 of a line
-        // (fontSize × lineHeight) below the top. The SVG must put the same lines there, under the
-        // one canvas offset its connections use.
+      test(`${fixture} (refinement: ${visualRefinement}) — the SVG places each edge label's lines by bpmn-js's Text.js rule for its DI box`, async () => {
+        // The rule, from bpmn-js 18.6.2: on import, TextRenderer#getExternalLabelBounds
+        // (lib/draw/TextRenderer.js) keeps a BPMNLabel's centre-x and top and re-sizes it to the
+        // laid-out text; diagram-js Text#layoutText (lib/util/Text.js) sets the first baseline at
+        // lineHeight − lineHeight/4 = 0.75 × (fontSize × lineHeight) below that top, one line height
+        // per further line. The Arial width table in coordinates.js (ARIAL_ASCII_WIDTHS) stands in
+        // for Text.js's DOM measurement — standard Arial advance widths, identical to what Chrome
+        // measures. The SVG must put the same lines there, under the one canvas offset its
+        // connections use.
         const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         const cm = r.coordMap;
         const drawnConn = Object.values(svgConnections(r.svg)).flat();
