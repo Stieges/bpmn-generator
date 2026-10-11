@@ -145,8 +145,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 6 | 20/23 | 0 | 932×1358 (45202/node) | 0.69 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary | 1 | — | — | — |
-| default | 0 | 12 | 18/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 2 |
-| visualRefinement: true | 0 | 16 | 18/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 7 |
+| default | 0 | 12 | 18/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 |
+| visualRefinement: true | 0 | 16 | 18/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 5 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
