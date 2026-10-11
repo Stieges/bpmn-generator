@@ -198,8 +198,11 @@ async function runPipeline(logicCore, opts = {}) {
     // guardAgainstLegacy. Reverts single edges only; a no-op unless the count went up.
     if (CFG.layout?.crossingGuard !== false) {
       const legacyRoutes = simplifyAllEdges(elkRoutes, coordMap.coords, allEdges, skipSimplify, { legacy: true });
-      coordMap.edgeCoords = guardAgainstLegacy(coordMap.edgeCoords, legacyRoutes, coordMap.coords,
+      const preGuard = coordMap.edgeCoords;
+      coordMap.edgeCoords = guardAgainstLegacy(preGuard, legacyRoutes, coordMap.coords,
         allEdges, skipSimplify, repairOpts).routes;
+      // A reverted edge has its legacy route now; its label must follow it.
+      refreshMovedLabels(coordMap, allEdges, preGuard);
     }
     const beforeRepair = coordMap.edgeCoords;
     coordMap.edgeCoords = repairCrossings(beforeRepair, coordMap.coords, allEdges, skipSimplify, repairOpts);
