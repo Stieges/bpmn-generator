@@ -8,7 +8,7 @@
 
 import { BpmnModdle } from 'bpmn-moddle';
 import {
-  isEvent, isGateway, isBoundaryEvent, isBpmnArtifact,
+  isGateway, isBoundaryEvent, isBpmnArtifact,
   OMG_NODE_FIELD_SCOPE, nodeFieldSpec, matchesFieldType, bpmnXmlTag,
   EVENT_DEFINITION_BY_MARKER, FLOW_NODE_TYPES,
   resolveDefinitionRef,
@@ -844,7 +844,7 @@ function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeEleme
     const shape = create('bpmndi:BPMNShape', shapeAttrs);
 
     // External label — coordMap's box, never recomputed here (geometry contract, CLAUDE.md "Do NOT").
-    const L = (isEvent(node.type) || isGateway(node.type)) ? nodeLabels[node.id] : null;
+    const L = nodeLabels[node.id];
     if (L) {
       shape.label = create('bpmndi:BPMNLabel', {
         bounds: create('dc:Bounds', { x: rn(L.x), y: rn(L.y), width: rn(L.w), height: rn(L.h) }),

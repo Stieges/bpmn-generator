@@ -5,7 +5,7 @@
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, artifactSize } from './constants.js';
-import { CFG, wrapText } from '../shared/utils.js';
+import { CFG } from '../shared/utils.js';
 import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
 
@@ -728,18 +728,21 @@ function edgeLabelBox(label) {
 // bounds; svg.js draws `lines` into it. Neither computes a label position (CLAUDE.md, "Never
 // compute geometry in a renderer").
 
-/** The external label box of one node at `c`, or null when it has none. */
+/**
+ * The external label box of one node at `c`, or null when it has none. Laid out like an edge label
+ * (edgeLabelLayout: bpmn-js's own text layout, Arial 11 px, line height 1.2, wrapped at 90 px),
+ * because bpmn-js treats both the same on import: it keeps a BPMNLabel's centre-x and top and
+ * re-sizes the box to its text. So the box is centred below the shape, its top `layout.labelDistance`
+ * px under an event or a gateway and `layout.dataLabelDistance` px under a data object or store.
+ */
 function nodeLabelBox(node, c) {
   if (!node.name) return null;
-  if (isEvent(node.type) || isGateway(node.type)) {
-    const w = Math.min(node.name.length * 6.5 + 10, 90);
-    return { x: c.x + c.w / 2 - w / 2, y: c.y + c.h + LABEL_DISTANCE, w, h: 20, lines: wrapText(node.name, 15) };
-  }
-  if (node.type === 'dataObjectReference' || node.type === 'dataStoreReference') {
-    const w = 70;
-    return { x: c.x + c.w / 2 - w / 2, y: c.y + c.h + 5, w, h: 20, lines: wrapText(node.name, Math.floor(w / 6)) };
-  }
-  return null;
+  let gap;
+  if (isEvent(node.type) || isGateway(node.type)) gap = LABEL_DISTANCE;
+  else if (node.type === 'dataObjectReference' || node.type === 'dataStoreReference') gap = CFG.layout?.dataLabelDistance ?? 5;
+  else return null;
+  const { lines, w, h } = edgeLabelLayout(node.name);
+  return { x: c.x + c.w / 2 - w / 2, y: c.y + c.h + gap, w, h, lines };
 }
 
 /**
