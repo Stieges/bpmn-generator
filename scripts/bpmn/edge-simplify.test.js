@@ -216,6 +216,29 @@ describe('reclipStuckEnds — foreignShapes: a flow through a foreign shape (#91
   });
 });
 
+describe('reclipStuckEnds — foreignShapes: the second sweep', () => {
+  // a leaves the fixed boundary-like event E along its bottom tangent (an end defect). Its only fix
+  // leaves E's bottom point straight down — on top of b, which runs straight through E and M. b
+  // comes later in `edges`, so the first sweep tries a while b still lies there (the candidate would
+  // grow a's collinear overlap and is refused), then re-routes b; only a second sweep fixes a.
+  const coords = { E: { x: 100, y: 100, w: 36, h: 36 }, M: { x: 100, y: 300, w: 36, h: 36 },
+    P: { x: 98, y: 600, w: 40, h: 40 }, Q: { x: 98, y: -200, w: 40, h: 40 } };
+  const edges = [{ id: 'a', source: 'E', target: 'M' }, { id: 'b', source: 'P', target: 'Q' }];
+  const shapeOf = (id) => (id === 'E' || id === 'M' ? 'circle' : 'rect');
+  const routes = () => ({
+    a: [{ x: 118, y: 136 }, { x: 160, y: 136 }, { x: 160, y: 318 }, { x: 136, y: 318 }],
+    b: [{ x: 118, y: 600 }, { x: 118, y: -160 }],
+  });
+
+  test('a stuck edge earlier in order is fixed once a later edge left its way', () => {
+    const out = reclipStuckEnds(routes(), coords, edges, new Set(), { shapeOf, foreignShapes: true, fixedEndpoints: new Set(['E']) });
+    expect(out.b).not.toEqual(routes().b);
+    expect(out.a[0]).toEqual({ x: 118, y: 136 });
+    expect(out.a[1].x).toBe(118);           // leaves E's bottom point downwards, not along the tangent
+    expect(out.a[1].y).toBeGreaterThan(136);
+  });
+});
+
 describe('reclipOptionsFor — what the pipeline hands reclipStuckEnds', () => {
   const nodes = [
     { id: 'task', type: 'userTask' },

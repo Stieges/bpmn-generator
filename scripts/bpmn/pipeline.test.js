@@ -5154,6 +5154,62 @@ describe('B1 — boundary events reach the layout', () => {
     expect(r.diagnostics.issues.filter(i => /^DI(0[789]|1[01])$/.test(i.code))).toEqual([]);
   });
 
+  // Several events on one host, all leading up into the lane above: `ups` lists [event id, target
+  // id, whether the target stands right of the host]. The host is wide (an expanded-looking 300 px
+  // task is not needed: 100 px and three events are enough to show the slots).
+  const manyUp = (ups) => {
+    const lc = twoLanes();
+    lc.nodes = lc.nodes.filter(n => !['up', 'side', 'rem', 'e2', 'fix', 'e3'].includes(n.id));
+    lc.edges = lc.edges.filter(e => ['f1', 'f2'].includes(e.id));
+    // Targets left of the host come before it in the flow (a loop back), targets right after it.
+    for (const [ev, tgt, right] of ups) {
+      lc.nodes.push({ id: ev, type: 'boundaryEvent', marker: 'timer', attachedTo: 't', cancelActivity: false, name: ev, lane: 'L2' });
+      lc.nodes.push({ id: tgt, type: 'userTask', name: tgt, lane: 'L1' });
+      lc.edges.push({ id: `f_${ev}`, source: ev, target: tgt });
+      if (right) lc.edges.push({ id: `g_${tgt}`, source: tgt, target: 'e' });
+      else lc.edges.push({ id: `g_${tgt}`, source: 's', target: tgt });
+    }
+    return lc;
+  };
+  const slot = (r, id) => {
+    const h = r.coordMap.coords.t, c = r.coordMap.coords[id];
+    return Math.round(((c.x + c.w / 2) - h.x) / h.w * 1000) / 1000;
+  };
+
+  test('several events on one top edge: side by side without overlapping, none in the middle', async () => {
+    // Two 36 px events do not fit side by side into half of a 100 px task, so they take the whole
+    // edge, the middle slot left out: 1/4 and 3/4.
+    const r = await runPipeline(manyUp([['u1', 'a1', true], ['u2', 'a2', true]]));
+    const { t: host, u1, u2 } = r.coordMap.coords;
+    for (const ev of [u1, u2]) expect(ev.y + ev.h / 2).toBeCloseTo(host.y, 5);
+    expect([slot(r, 'u1'), slot(r, 'u2')].sort()).toEqual([0.25, 0.75]);
+    expect(Math.abs((u1.x + u1.w / 2) - (u2.x + u2.w / 2))).toBeGreaterThanOrEqual(u1.w + 4);
+    expect(r.diagnostics.issues.filter(i => /^DI(0[789]|1[01])$/.test(i.code)).map(i => i.message)).toEqual([]);
+  });
+
+  test('mixed target directions on one host: the middle of the top edge stays free, ordered by target x', async () => {
+    const r = await runPipeline(manyUp([['u1', 'a1', true], ['u2', 'a2', false], ['u3', 'a3', true]]));
+    const { t: host } = r.coordMap.coords;
+    const ids = ['u1', 'u2', 'u3'];
+    for (const id of ids) expect(r.coordMap.coords[id].y + r.coordMap.coords[id].h / 2).toBeCloseTo(host.y, 5);
+    const slots = ids.map(id => slot(r, id));
+    expect(slots).not.toContain(0.5);
+    // Left to right in the order of their targets, so their flows do not cross on the way up.
+    const tx = (id) => { const c = r.coordMap.coords[{ u1: 'a1', u2: 'a2', u3: 'a3' }[id]]; return c.x + c.w / 2; };
+    const byEvent = [...ids].sort((a, b) => slot(r, a) - slot(r, b));
+    const byTarget = [...ids].sort((a, b) => tx(a) - tx(b));
+    expect(byEvent).toEqual(byTarget);
+  });
+
+  test('a target in a nested child lane cannot be ordered against the host: the event keeps the bottom edge', async () => {
+    const lc = twoLanes();
+    lc.lanes = [{ id: 'L1', name: 'Above', children: [{ id: 'L1a', name: 'Above, nested' }] }, { id: 'L2', name: 'Host lane' }];
+    for (const n of lc.nodes) if (n.lane === 'L1') n.lane = 'L1a';
+    const r = await runPipeline(lc);
+    const { t: host, up } = r.coordMap.coords;
+    expect(up.y + up.h / 2).toBeCloseTo(host.y + host.h, 5);
+  });
+
   test('a top-edge boundary event: the DI label bounds equal coordMap\'s box, above the event', async () => {
     const r = await runPipeline(twoLanes());
     const L = r.coordMap.nodeLabels.up;

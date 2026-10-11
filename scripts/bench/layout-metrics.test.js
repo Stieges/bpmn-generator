@@ -444,7 +444,14 @@ const DIRECTION = {
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
   'parallel-split-join.json':           dir(NONE),
-  'realistic-collaboration.json':       dir(d(3, 5), d(5, 1)),
+  // #91 raised the plain rows (bend rule off) from d(2, 4) / d(1, 1); default, off and on stay 0,
+  // so the shipped output is unaffected — the rule takes the routes below. plain (+1, +1): inf8
+  // leaves its timer, now on the host's top edge, as a Z into "Send reminder"'s bottom where an L
+  // into its left side has one bend less. plain-on (+5, +1): inf3 keeps ELK's 4-bend wrap route
+  // (0 needed) — before #91 the boundary flow crossed it and the crossing repair happened to
+  // straighten it on the way; and inf2 now docks at the middle of "Check completeness"'s top edge,
+  // which the timer leaves free, with a bend and a top entry the rule would trade for a left one.
+  'realistic-collaboration.json':       dir(d(3, 5), d(6, 2)),
   'simple-approval.json':               dir(d(1, 0)),
   'sparse-lanes.json':                  dir(d(3, 3)),
   'subprocess-child-fidelity.json':     dir(d(2, 0)),
