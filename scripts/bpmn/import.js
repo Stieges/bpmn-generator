@@ -332,6 +332,9 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     // Gateway direction → has_join
     if (child.attrs.gatewayDirection === 'Converging') node.has_join = true;
 
+    // Non-interrupting start event (event subprocess) — only `false` is ever written (#83)
+    if (tag === 'startEvent' && child.attrs.isInterrupting === 'false') node.isInterrupting = false;
+
     // Boundary event
     if (child.attrs.attachedToRef) {
       node.attachedTo = child.attrs.attachedToRef;

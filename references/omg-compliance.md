@@ -94,6 +94,7 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 | Intermediate Catch Event | Intermediate event, catch side | Implemented | bpmn-xml.js:buildFlowNode |
 | Intermediate Throw Event | Intermediate event, throw side | Implemented | bpmn-xml.js:buildFlowNode |
 | Boundary Event (§10.4.4) | Boundary Event (attachedToRef, cancelActivity) — at every nesting level | Implemented | bpmn-xml.js:buildFlowNode, rules.js:S08, rules.js:S13 |
+| Start Event (§10.4.2, Table 10.84) | `StartEvent#isInterrupting` — only `false` is written (default true), at every nesting level; read back by both importers | Implemented | bpmn-xml.js:buildFlowNode, import.js, moddle-import.js |
 | §10.2.1 | SubProcess `flowElements` are content, `isExpanded` is presentation (DI only) | Implemented | bpmn-xml.js:buildFlowNode |
 | §10.5 | LaneSet (one laneSet per Process) | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.5.1 | gatewayDirection attribute (Diverging/Converging/Mixed) | Implemented | topology.js:inferGatewayDirections |

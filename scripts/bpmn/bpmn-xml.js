@@ -356,6 +356,11 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   if (isBoundaryEvent(node) && node.cancelActivity === false && fieldAllowedOn(node, 'cancelActivity')) {
     attrs.cancelActivity = false;
   }
+  // `isInterrupting` is the start-event twin of the branch above: default true in the XSD, so only
+  // `false` is written, and the class guard comes from the table row (#83).
+  if (node.isInterrupting === false && fieldAllowedOn(node, 'isInterrupting')) {
+    attrs.isInterrupting = false;
+  }
 
   // Special attributes — every one of them scoped to the node classes OMG defines it on.
   //
