@@ -5,7 +5,7 @@
  * Used by layout-metrics.mjs (measureLayout) and its ratchet fence.
  */
 import { isEvent, isGateway } from '../bpmn/types.js';
-import { resolveLaneId } from '../bpmn/topology.js';
+import { resolveLaneId, normalizeEdgeIds } from '../bpmn/topology.js';
 import { bendMetrics } from '../bpmn/bend-rule.js';
 
 /** Horizontal run within this many px of an inner lane boundary counts as lying on the line. */
@@ -211,6 +211,8 @@ export function flowMetrics(coordMap, lc, ctx = buildFlowContext(lc)) {
  * coordMap, so the message flows routed after the rule are in edgeCoords but not in the search.
  */
 export function flowDirectionMetrics(coordMap, lc) {
-  const { avoidableBends, againstFlowEntries } = bendMetrics(coordMap, lc);
+  // The pipeline's own normalised copy: an id-less edge has no route under its undefined id and
+  // would silently drop out of the measure.
+  const { avoidableBends, againstFlowEntries } = bendMetrics(coordMap, normalizeEdgeIds(lc));
   return { avoidableBends, againstFlowEntries };
 }
