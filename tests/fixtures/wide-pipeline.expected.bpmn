@@ -179,7 +179,7 @@
       <bpmndi:BPMNShape id="s_di" bpmnElement="s">
         <dc:Bounds x="140" y="101.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="136.8" y="147.5" width="42.5" height="20" />
+          <dc:Bounds x="146.4" y="147.5" width="23.2" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t1_di" bpmnElement="t1">
@@ -260,7 +260,7 @@
       <bpmndi:BPMNShape id="e_di" bpmnElement="e">
         <dc:Bounds x="4756" y="101.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="4756" y="147.5" width="36" height="20" />
+          <dc:Bounds x="4761.2" y="147.5" width="25.7" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0">

@@ -93,13 +93,13 @@
       <bpmndi:BPMNShape id="s1_di" bpmnElement="s1">
         <dc:Bounds x="140" y="381.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="136.8" y="427.5" width="42.5" height="20" />
+          <dc:Bounds x="146.4" y="427.5" width="23.2" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true">
         <dc:Bounds x="256" y="374.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="253.3" y="434.5" width="55.5" height="20" />
+          <dc:Bounds x="259.6" y="434.5" width="42.8" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t1_di" bpmnElement="t1">
@@ -123,7 +123,7 @@
       <bpmndi:BPMNShape id="e1_di" bpmnElement="e1">
         <dc:Bounds x="776" y="381.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="776" y="427.5" width="36" height="20" />
+          <dc:Bounds x="781.2" y="427.5" width="25.7" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0">
