@@ -65,15 +65,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   straight into the task beside it — a boundary event's never moves. A route is only replaced by one
   that is no worse in crossings, lane-line hug, length of overlap with other flows (legs closer than
   `collinearPx` count as one line), crowding, external node labels, side
-  conflicts and the later message-flow line, stays clear of shapes and inside its pool/lane stack, and
+  conflicts, shared ports (two flows out of — or into — one gateway or event side, or one point of a
+  task) and the later message-flow line, stays clear of shapes and inside its pool/lane stack, and
   is at most 10 % + 20 px longer. Off by default: `runPipeline(lc, { bendRule: true })` or
   `config.json -> layout.bendRule: true`; limits in `layout.bendRuleLimits`. Switched off, the output
-  is unchanged. Measured over the top-level fixtures with it on: avoidable bends 29 → 0 (default) and
+  is unchanged. A re-routed flow's label is placed off every other route where a spot allows. Measured
+  over the 19 top-level fixtures that predate the `example-*` ones, with it on: avoidable bends 29 → 0 (default) and
   49 → 0 (refinement + wrapping), entries against the flow 13 → 0 resp. 14 → 0, collinear overlap
   953 → 519 px resp. 1772 → 804 px; ends off their side's midpoint rise in three fixtures (projection
   ports), no other layout metric worse. The layout ratchet gains a `bends` mode, two counts per
   fixture, `avoidableBends` and `againstFlowEntries`, measured by the same search, and an `overlapLen`
   column (px two flows run on top of each other) in every mode.
+- **Five realistic example fixtures.** `tests/fixtures/example-*.json` — Kreditantrag, Bestellung
+  und Versand, Urlaubsantrag, Schadenmeldung, Onboarding — at the top level, so every directory-wide
+  fence (net check, DI, renderer agreement, output hashes, layout ratchet) covers them.
 - **`visualRefinement` on the HTTP API and MCP.** `POST /api/v1/generate`, `/api/v1/orchestrate` and the MCP tools `generate_bpmn`, `orchestrate_bpmn` take an optional `visualRefinement` (boolean or per-pass object, schema `$defs/VisualRefinementOption`); invalid values are a `schema_error`. Before, these entry points could not switch refinement at all.
 - **Layout readability fence.** `scripts/bench/layout-metrics.mjs` now measures every top-level
   fixture (it had a fixed list of eight, which is how `boundary-event-shapes`' crossing went
