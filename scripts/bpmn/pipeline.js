@@ -36,11 +36,11 @@ import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlow
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
-import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor } from './edge-simplify.js';
+import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, rerouteAfterCompaction } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
-import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels, resolveRefinement } from './visual-refinement.js';
+import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -87,11 +87,12 @@ function checkNetTranslation(lc) {
  * "moved" test. Labels are placed on a route's first horizontal leg (coordinates.js §5.6); a pass
  * that changes the route without this leaves the label on a leg that no longer exists.
  * A pass that moves route points in place passes `{}` as `beforeRoutes`: every label is refreshed.
+ * `laneLines` (innerLaneLines of the current geometry) keeps a refreshed label off lane separators.
  */
-function refreshMovedLabels(coordMap, edges, beforeRoutes) {
+function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = []) {
   for (const e of edges) {
     if (beforeRoutes[e.id] === coordMap.edgeCoords[e.id]) continue;
-    const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
+    const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords, { laneLines });
     if (label) coordMap.edgeLabels[e.id] = label;
   }
 }
@@ -182,18 +183,20 @@ async function runPipeline(logicCore, opts = {}) {
   const skipSimplify = new Set((lc.associations || []).map(a => a.id));
   const elkRoutes = coordMap.edgeCoords;
   coordMap.edgeCoords = simplifyAllEdges(elkRoutes, coordMap.coords, allEdges, skipSimplify);
-  refreshMovedLabels(coordMap, allEdges, elkRoutes);
+  // Lane separators a refreshed label must not lie across; re-derived once compaction moves them.
+  let laneLines = innerLaneLines(coordMap, lc);
+  refreshMovedLabels(coordMap, allEdges, elkRoutes, laneLines);
 
   // Crossing repair: the routes coordinates.js deletes and rebuilds (§5.0a,
   // §5.2, §5.0e, §5.5) pick their axis by |dy| > |dx| alone, so they can cross
   // an edge that ELK had routed around. Runs after simplifyAllEdges because
   // that pass rewrites routes too. A no-op unless a crossing actually exists.
+  const repairOpts = {
+    maxPasses: CFG.layout?.crossingRepairMaxPasses ?? 2,
+    orthogonalRouter: CFG.layout?.orthogonalRouterEnabled !== false,
+    orthogonalRouterMaxGridPoints: CFG.layout?.orthogonalRouterMaxGridPoints,
+  };
   if (CFG.layout?.crossingRepair !== false) {
-    const repairOpts = {
-      maxPasses: CFG.layout?.crossingRepairMaxPasses ?? 2,
-      orthogonalRouter: CFG.layout?.orthogonalRouterEnabled !== false,
-      orthogonalRouterMaxGridPoints: CFG.layout?.orthogonalRouterMaxGridPoints,
-    };
     // #52 guard: a new route must not cost a crossing the pre-#52 routes did not have — see
     // guardAgainstLegacy. Reverts single edges only; a no-op unless the count went up.
     if (CFG.layout?.crossingGuard !== false) {
@@ -202,7 +205,7 @@ async function runPipeline(logicCore, opts = {}) {
       coordMap.edgeCoords = guardAgainstLegacy(preGuard, legacyRoutes, coordMap.coords,
         allEdges, skipSimplify, repairOpts).routes;
       // A reverted edge has its legacy route now; its label must follow it.
-      refreshMovedLabels(coordMap, allEdges, preGuard);
+      refreshMovedLabels(coordMap, allEdges, preGuard, laneLines);
     }
     const beforeRepair = coordMap.edgeCoords;
     coordMap.edgeCoords = repairCrossings(beforeRepair, coordMap.coords, allEdges, skipSimplify, repairOpts);
@@ -210,7 +213,7 @@ async function runPipeline(logicCore, opts = {}) {
     // Refresh only the ones whose route actually moved — repairCrossings keeps
     // the original array reference for everything it left alone.
     if (coordMap.edgeCoords !== beforeRepair) {
-      refreshMovedLabels(coordMap, allEdges, beforeRepair);
+      refreshMovedLabels(coordMap, allEdges, beforeRepair, laneLines);
     }
   }
 
@@ -222,7 +225,7 @@ async function runPipeline(logicCore, opts = {}) {
     const reclipOpts = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
     const beforeReclip = coordMap.edgeCoords;
     coordMap.edgeCoords = reclipStuckEnds(beforeReclip, coordMap.coords, allEdges, skipSimplify, reclipOpts);
-    refreshMovedLabels(coordMap, allEdges, beforeReclip);
+    refreshMovedLabels(coordMap, allEdges, beforeReclip, laneLines);
   }
 
   // Visual Refinement (post-layout coordinate transforms)
@@ -233,17 +236,34 @@ async function runPipeline(logicCore, opts = {}) {
     });
   }
   if (refine.laneCompaction) {
-    compactLanes(coordMap, lc, {
-      minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80,
-    });
+    const preCompaction = structuredClone(coordMap.edgeCoords);
+    compactLanes(coordMap, lc, { minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80 });
+    laneLines = innerLaneLines(coordMap, lc);
     // compactLanes moves route points in place and shifts each label on its own, so a route whose
     // points land in different lanes ends up with its label off its leg — or across it. The
     // routes are the same arrays, so the reference test cannot see them: refresh every label.
-    refreshMovedLabels(coordMap, allEdges, {});
+    refreshMovedLabels(coordMap, allEdges, {}, laneLines);
+    // compactLanes moves waypoints but never re-routes: re-run the routing chain for the flows it
+    // bent and keep their legs off the lane separators (rerouteAfterCompaction), then the stuck-end
+    // pass again — both on the compacted geometry. Message flows are routed later, as always.
+    const beforeReroute = coordMap.edgeCoords;
+    coordMap.edgeCoords = rerouteAfterCompaction(beforeReroute, preCompaction, coordMap.coords, allEdges, skipSimplify, {
+      laneLines,
+      laneLineClearance: CFG.visualRefinement?.laneLineClearance ?? 10,
+      guard: CFG.layout?.crossingRepair !== false && CFG.layout?.crossingGuard !== false,
+      repair: CFG.layout?.crossingRepair !== false,
+      repairOpts,
+    });
+    if (CFG.layout?.endpointReclip !== false) {
+      const reclipOpts = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
+      coordMap.edgeCoords = reclipStuckEnds(coordMap.edgeCoords, coordMap.coords, allEdges, skipSimplify, reclipOpts);
+    }
+    refreshMovedLabels(coordMap, allEdges, beforeReroute, laneLines);
   }
   if (refine.edgeLabelCollisionRepair) {
     repairEdgeLabels(coordMap, {
       maxShift: CFG.visualRefinement?.edgeLabelMaxShift ?? 25,
+      laneLines,
     });
   }
 

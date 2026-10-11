@@ -628,6 +628,103 @@ export function guardAgainstLegacy(routes, legacyRoutes, coords, edges, skipIds 
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// After lane compaction
+//
+// compactLanes shrinks each lane band around its content and moves every
+// waypoint below the band up with it; a waypoint inside the strip it cut away
+// is clamped to the band's new bottom - 1. A cross-lane Z whose horizontal leg
+// ELK had centred in the gap therefore ends up lying on the lane separator.
+// The edges that were not shifted rigidly go through the same chain as the
+// first time — simplify, legacy guard, crossing repair — on the compacted
+// geometry, and an inner horizontal leg is then kept off the separators.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** True when `after` is `before` with at least one point moved by a different delta than the rest. */
+export function movedNonRigidly(before, after) {
+  if (!before || !after || before.length !== after.length || before.length === 0) return false;
+  const dx = after[0].x - before[0].x;
+  const dy = after[0].y - before[0].y;
+  return before.some((p, i) => Math.abs(after[i].x - p.x - dx) > 0.01 || Math.abs(after[i].y - p.y - dy) > 0.01);
+}
+
+/** Ids of foreign boxes (not the edge's own source/target) the polyline runs through. */
+function foreignHits(points, boxes, sourceId, targetId) {
+  const hits = [];
+  for (const [id, box] of Object.entries(boxes)) {
+    if (id === sourceId || id === targetId) continue;
+    if (!pathClearOfBoxes(points, { [id]: box }, sourceId, targetId)) hits.push(id);
+  }
+  return hits;
+}
+
+/**
+ * Move every inner horizontal leg (never the first or last segment — those are pinned to the
+ * endpoints) that lies closer than `clearance` to an inner lane line to `line ± clearance`,
+ * the nearer side first, as long as the new y stays strictly between the leg's two vertical
+ * neighbours' far ends and is not closer than `clearance` to another line. A candidate is refused
+ * when the three segments it changes run through a foreign box they did not already run through —
+ * judging the whole route instead would refuse every move on a route that already crosses something
+ * (a host's flow leaving through its own boundary event), and leave the leg on the line.
+ * Returns the input array when nothing moved.
+ */
+export function keepOffLaneLines(points, laneLines, clearance, boxes, sourceId, targetId) {
+  if (!points || points.length < 4 || !laneLines.length || clearance <= 0) return points;
+  let out = points;
+  for (let i = 1; i + 2 < out.length; i++) {
+    const a = out[i], b = out[i + 1];
+    if (Math.abs(a.y - b.y) > 0.01) continue;
+    const lo = Math.min(a.x, b.x), hi = Math.max(a.x, b.x);
+    const spans = (L) => hi > L.x0 && lo < L.x1;
+    const near = laneLines.find((L) => spans(L) && Math.abs(L.y - a.y) < clearance);
+    if (!near) continue;
+    const yMin = Math.min(out[i - 1].y, out[i + 2].y), yMax = Math.max(out[i - 1].y, out[i + 2].y);
+    const candidates = [near.y - clearance, near.y + clearance]
+      .filter((y) => y > yMin && y < yMax)
+      .filter((y) => !laneLines.some((L) => spans(L) && Math.abs(L.y - y) < clearance - 0.01))
+      .sort((p, q) => Math.abs(p - a.y) - Math.abs(q - a.y));
+    const before = new Set(foreignHits(out.slice(i - 1, i + 3), boxes, sourceId, targetId));
+    for (const y of candidates) {
+      const cand = out.map((p, k) => (k === i || k === i + 1 ? { x: p.x, y } : p));
+      if (foreignHits(cand.slice(i - 1, i + 3), boxes, sourceId, targetId).every((id) => before.has(id))) { out = cand; break; }
+    }
+  }
+  return out;
+}
+
+/**
+ * Re-route the sequence flows compactLanes did not shift rigidly (see the section comment).
+ * `preEdgeCoords` is edgeCoords as it was just before compactLanes. Message flows are not in
+ * `edges` (routeMessageFlows runs after this); associations are in `skipIds`. A re-routed leg may
+ * not add a crossing: a lane-line move that would is dropped for that edge.
+ * Returns a new map; edges left alone keep their array reference.
+ */
+export function rerouteAfterCompaction(edgeCoords, preEdgeCoords, coords, edges, skipIds = new Set(), opts = {}) {
+  const { laneLines = [], laneLineClearance = 10, guard = true, repair = true, repairOpts = {} } = opts;
+  const affected = (edges || []).filter((e) => !skipIds.has(e.id) && movedNonRigidly(preEdgeCoords[e.id], edgeCoords[e.id]));
+  if (!affected.length) return edgeCoords;
+  let routes = { ...edgeCoords };
+  const legacy = { ...edgeCoords };
+  for (const e of affected) {
+    const pts = withoutCollinear(edgeCoords[e.id]);
+    routes[e.id] = simplifyEdge(pts, coords, e.source, e.target);
+    legacy[e.id] = simplifyEdge(pts, coords, e.source, e.target, { legacy: true });
+  }
+  if (guard) routes = guardAgainstLegacy(routes, legacy, coords, edges, skipIds, repairOpts).routes;
+  if (repair) routes = repairCrossings(routes, coords, edges, skipIds, repairOpts);
+  const entries = (edges || []).filter((e) => !skipIds.has(e.id) && routes[e.id]?.length >= 2)
+    .map((e) => ({ id: e.id, source: e.source, target: e.target, points: routes[e.id] }));
+  for (const e of affected) {
+    const kept = keepOffLaneLines(routes[e.id], laneLines, laneLineClearance, coords, e.source, e.target);
+    if (kept === routes[e.id]) continue;
+    const entry = entries.find((x) => x.id === e.id);
+    if (entry && crossingsAgainstOthers(entry, kept, entries) > crossingsAgainstOthers(entry, routes[e.id], entries)) continue;
+    routes[e.id] = kept;
+    if (entry) entry.points = kept;
+  }
+  return routes;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Stuck ends
 //
 // The one exception to "endpoints are clipped once, in coordinates.js §5.1": an edge that, after

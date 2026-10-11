@@ -11,9 +11,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   FIXTURES, ALONG_MIN_PX, alongSide, edgeEndsAlongBorder, laneGaps,
-  messageFlowThroughNodes, seqFlowThroughNodes, seqThroughOwnShape, edgeLabelHits, measureLayout, summarize,
+  messageFlowThroughNodes, seqFlowThroughNodes, seqThroughOwnShape, edgeLabelHits, LABEL_DISTANCE_TOLERANCE_PX, measureLayout, summarize,
 } from './layout-metrics.mjs';
 import { flowMetrics, LANE_LINE_HUG_PX } from './flow-metrics.mjs';
+import { CFG } from '../shared/utils.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
@@ -147,6 +148,30 @@ describe('edgeLabelHits', () => {
   });
 });
 
+describe('edgeLabelHits — lane separators and distance to the own route', () => {
+  const lc = { id: 'P', lanes: [{ id: 'A' }, { id: 'B' }], nodes: [], edges: [] };
+  const laneCoords = { A: { x: 30, y: 0, w: 500, h: 120 }, B: { x: 30, y: 120, w: 500, h: 120 } };
+  const route = { e: [{ x: 120, y: 150 }, { x: 300, y: 150 }] };
+  const gap = CFG.layout?.edgeLabelGap ?? 4;
+  const label = (x, y) => ({ text: 'x', x, y, w: 40, h: 14 });
+  test('a label box across an inner lane line counts; one clear of it does not', () => {
+    const across = edgeLabelHits({ coords: {}, laneCoords, edgeCoords: route, edgeLabels: { e: label(200, 121) } }, lc);
+    expect(across.laneLine).toEqual(['e']);
+    const clear = edgeLabelHits({ coords: {}, laneCoords, edgeCoords: route, edgeLabels: { e: label(200, 150 - gap - 7) } }, lc);
+    expect(clear.laneLine).toEqual([]);
+  });
+  test('the outer edge of the first band is not a separator', () => {
+    const top = edgeLabelHits({ coords: {}, laneCoords, edgeCoords: route, edgeLabels: { e: label(200, 0) } }, lc);
+    expect(top.laneLine).toEqual([]);
+  });
+  test(`a label more than the configured gap + ${LABEL_DISTANCE_TOLERANCE_PX} px from its own route counts as far`, () => {
+    const beside = edgeLabelHits({ coords: {}, laneCoords, edgeCoords: route, edgeLabels: { e: label(200, 150 - gap - 7) } }, lc);
+    expect(beside.farFromEdge).toEqual([]);
+    const far = edgeLabelHits({ coords: {}, laneCoords, edgeCoords: route, edgeLabels: { e: label(200, 150 - gap - 7 - 15) } }, lc);
+    expect(far.farFromEdge).toEqual(['e']);
+  });
+});
+
 describe('flowMetrics', () => {
   const lc = { id: 'P', lanes: [{ id: 'A' }, { id: 'B' }], nodes: [
     { id: 's', type: 'userTask', lane: 'A' }, { id: 't', type: 'userTask', lane: 'B' }],
@@ -183,10 +208,13 @@ describe('flowMetrics', () => {
 // shared endpoint node do not count), offOver5 (flow ends more than 5 px from their side's
 // midpoint; deliberate fanning counts too; a boundary event's start and a black-box end are
 // excluded), labelOwnEdge (edge-label box reaching into its own route — must stay 0),
-// labelLabel (edge-label box pairs overlapping), labelNode (edge-label box × node box).
+// labelLabel (edge-label box pairs overlapping), labelNode (edge-label box × node box),
+// labelLaneLine (edge-label box across an inner lane separator — must stay 0), labelFar (edge-label
+// box farther than layout.edgeLabelGap + LABEL_DISTANCE_TOLERANCE_PX from its own route — must stay 0).
 // null: the pipeline blocks the fixture on purpose.
 const ZERO = { crossings: 0, along: 0, laneGap: 0, mfThrough: 0, seqThrough: 0, ownThrough: 0,
-  hug: 0, bendsMax: 0, crowd: 0, mfCrowd: 0, offOver5: 0, labelOwnEdge: 0, labelLabel: 0, labelNode: 0 };
+  hug: 0, bendsMax: 0, crowd: 0, mfCrowd: 0, offOver5: 0, labelOwnEdge: 0, labelLabel: 0, labelNode: 0,
+  labelLaneLine: 0, labelFar: 0 };
 const r = (over = {}) => ({ ...ZERO, ...over });
 const same = (row) => ({ default: row, off: row, on: row });
 // realistic-collaboration on: the 5 remaining message-flow hits are all shapes of the flow's own
@@ -195,27 +223,29 @@ const same = (row) => ({ default: row, off: row, on: row });
 // The label overlaps (bpmn-generator-pipeline on mf6/mf7, realistic-collaboration mf2/mf5) are
 // message-flow label pairs: their labels are placed after the label repair pass, which never sees them
 // (#72).
-// on rows with hug > 0: compactLanes clamps a cross-lane leg onto the lane line it shrank to.
+// on rows: compaction's lane-line legs re-routed — bpmn-generator-pipeline fo2, fo3, fo9, fo16,
+// fo17; long-lane-names f2, f3; multi-pool-collaboration sf3, sf5; realistic-collaboration inf8,
+// asf3, def2, def3; sparse-lanes f3, f4, f5.
 const BUDGET = {
   'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
   'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }), off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }),
-                                          on: r({ hug: 575, bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1 }) },
+                                          on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1 }) },
   'deadlock-process.json':              { default: null, off: null, on: null },
   'dense-edge-labels.json':             same(r({ bendsMax: 1, offOver5: 4 })),
   'expanded-subprocess.json':           same(r()),
-  'long-lane-names.json':               { default: r({ bendsMax: 2 }), off: r({ bendsMax: 2 }), on: r({ hug: 360, bendsMax: 2 }) },
+  'long-lane-names.json':               { default: r({ bendsMax: 2 }), off: r({ bendsMax: 2 }), on: r({ bendsMax: 2 }) },
   'loop-with-join.json':                same(r({ bendsMax: 2, offOver5: 6 })),
   'messageflow-to-subprocess.json':     same(r({ mfCrowd: 1 })),
   'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2 }), off: r({ bendsMax: 2, offOver5: 2 }),
-                                          on: r({ hug: 370, bendsMax: 2, offOver5: 2 }) },
+                                          on: r({ bendsMax: 2, offOver5: 2 }) },
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
   'realistic-collaboration.json':       { default: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
                                           off: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
-                                          on: r({ hug: 180, bendsMax: 5, mfCrowd: 10, offOver5: 3, labelLabel: 1 }) },
+                                          on: r({ bendsMax: 5, mfCrowd: 7, offOver5: 3, labelLabel: 1 }) },
   'simple-approval.json':               same(r({ bendsMax: 2, offOver5: 6 })),
   'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4 }), off: r({ bendsMax: 2, offOver5: 4 }),
-                                          on: r({ hug: 360, bendsMax: 2, offOver5: 4 }) },
+                                          on: r({ bendsMax: 2, offOver5: 4 }) },
   'subprocess-child-fidelity.json':     same(r({ bendsMax: 2, offOver5: 5 })),
   'subprocess-collapsed-children.json': same(r()),
   'subprocess-merge-fanout.json':       same(r({ bendsMax: 2, offOver5: 8 })),

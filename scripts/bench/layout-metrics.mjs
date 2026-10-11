@@ -43,7 +43,11 @@
  *                        overlapping a node box. A container the label lies
  *                        wholly inside (an expanded subprocess, a group) is
  *                        where the label belongs, not an overlap. Does NOT
- *                        test a label against a foreign flow's line.
+ *                        test a label against a foreign flow's line. Also:
+ *                        a label box across an inner lane separator, and a
+ *                        label farther from its own route than
+ *                        layout.edgeLabelGap + LABEL_DISTANCE_TOLERANCE_PX
+ *                        (a label that no longer sits beside its flow).
  *
  * Also measures ELK's *raw* output (before coordinates.js post-processing) so
  * that crossings introduced by our own route rebuilding become visible: ELK
@@ -60,6 +64,7 @@ import { isEvent, isGateway } from '../bpmn/types.js';
 import { CFG } from '../shared/utils.js';
 import { flowMetrics } from './flow-metrics.mjs';
 import { edgeLabelBox, labelHitsRoute, flattenProcessNodes } from '../bpmn/coordinates.js';
+import { innerLaneLines } from '../bpmn/visual-refinement.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
@@ -580,18 +585,38 @@ function boxesOverlap(a, b) {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
+/** Slack on top of `layout.edgeLabelGap` before a label counts as detached from its own route. */
+export const LABEL_DISTANCE_TOLERANCE_PX = 2;
+
+/** Distance between a box and an axis-parallel (or any) segment's bounding box; 0 when they touch. */
+function boxSegmentDistance(b, p, q) {
+  const dx = Math.max(0, Math.min(p.x, q.x) - (b.x + b.w), b.x - Math.max(p.x, q.x));
+  const dy = Math.max(0, Math.min(p.y, q.y) - (b.y + b.h), b.y - Math.max(p.y, q.y));
+  return Math.hypot(dx, dy);
+}
+
 /**
- * Edge-label boxes against their own route, each other and node shapes — see the header.
- * `ownEdge`: label ids; `labelLabel`: `a/b` pairs; `labelNode`: `label>node`.
+ * Edge-label boxes against their own route, each other, node shapes and lane separators — see the
+ * header. `ownEdge`, `laneLine`, `farFromEdge`: label ids; `labelLabel`: `a/b` pairs;
+ * `labelNode`: `label>node`.
  */
 export function edgeLabelHits(coordMap, lc) {
   const containers = new Set((lc.pools || [lc]).flatMap((p) => flattenProcessNodes(p.nodes || []))
     .filter((n) => (n.isExpanded && n.nodes?.length) || n.type === 'group').map((n) => n.id));
   const inside = (b, c) => b.x >= c.x && b.y >= c.y && b.x + b.w <= c.x + c.w && b.y + b.h <= c.y + c.h;
   const labels = Object.entries(coordMap.edgeLabels || {}).map(([id, L]) => [id, edgeLabelBox(L)]);
-  const out = { ownEdge: [], labelLabel: [], labelNode: [] };
+  const out = { ownEdge: [], labelLabel: [], labelNode: [], laneLine: [], farFromEdge: [] };
+  const lines = innerLaneLines(coordMap, lc);
+  const maxDistance = (CFG.layout?.edgeLabelGap ?? 4) + LABEL_DISTANCE_TOLERANCE_PX;
   labels.forEach(([id, box], i) => {
-    if (labelHitsRoute(box, coordMap.edgeCoords?.[id])) out.ownEdge.push(id);
+    const route = coordMap.edgeCoords?.[id];
+    if (labelHitsRoute(box, route)) out.ownEdge.push(id);
+    if (lines.some((L) => box.y < L.y && L.y < box.y + box.h && box.x < L.x1 && L.x0 < box.x + box.w)) out.laneLine.push(id);
+    if (route?.length >= 2) {
+      let d = Infinity;
+      for (let k = 0; k + 1 < route.length; k++) d = Math.min(d, boxSegmentDistance(box, route[k], route[k + 1]));
+      if (d > maxDistance) out.farFromEdge.push(id);
+    }
     for (const [other, ob] of labels.slice(i + 1)) if (boxesOverlap(box, ob)) out.labelLabel.push(`${id}/${other}`);
     for (const [node, c] of Object.entries(coordMap.coords || {})) {
       if (containers.has(node) && inside(box, c)) continue;
@@ -642,6 +667,8 @@ export function summarize(m) {
     labelOwnEdge: m.labels.ownEdge.length,
     labelLabel: m.labels.labelLabel.length,
     labelNode: m.labels.labelNode.length,
+    labelLaneLine: m.labels.laneLine.length,
+    labelFar: m.labels.farFromEdge.length,
   };
 }
 

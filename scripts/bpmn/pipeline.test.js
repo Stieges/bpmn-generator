@@ -6871,3 +6871,93 @@ describe('boundary event flows', () => {
     }
   });
 });
+
+describe('lane compaction keeps sequence flows off lane lines', () => {
+  const COMPACT = { visualRefinement: { laneCompaction: true, edgeLabelCollisionRepair: true, dynamicLaneHeader: false } };
+  const minLegDistance = (cm, lc) => {
+    let m = Infinity;
+    for (const p of (lc.pools || [lc])) {
+      const ys = (p.lanes || []).map(l => cm.laneCoords[l.id]).filter(Boolean).sort((a, b) => a.y - b.y).slice(1).map(b => b.y);
+      const edges = [...(p.edges || [])];
+      for (const e of edges) {
+        const pts = cm.edgeCoords[e.id] || [];
+        for (let i = 1; i + 2 < pts.length; i++) {
+          if (Math.abs(pts[i].y - pts[i + 1].y) < 0.01) for (const y of ys) m = Math.min(m, Math.abs(pts[i].y - y));
+        }
+      }
+    }
+    return m;
+  };
+  for (const name of ['sparse-lanes', 'long-lane-names', 'multi-pool-collaboration', 'realistic-collaboration', 'bpmn-generator-pipeline']) {
+    test(`${name}: no inner horizontal leg within the clearance of a lane line`, async () => {
+      const lc = loadFixture(`${name}.json`);
+      const r = await runPipeline(lc, COMPACT);
+      expect(minLegDistance(r.coordMap, lc)).toBeGreaterThanOrEqual(10);
+      expect(r.diagnostics.ok).toBe(true);
+    });
+  }
+
+  test('boundary event on the host\'s exit side: the leg still leaves the lane line', async () => {
+    const lc = { id: 'P', name: 'Claims', lanes: [{ id: 'L1', name: 'Clerk' }, { id: 'L2', name: 'Expert' }, { id: 'L3', name: 'Manager' }],
+      nodes: [
+        { id: 's', type: 'startEvent', name: 'Claim in', lane: 'L1' },
+        { id: 'a', type: 'userTask', name: 'Check claim', lane: 'L1' },
+        { id: 'b', type: 'boundaryEvent', name: '2 days', eventDefinition: 'timer', attachedTo: 'a', cancelActivity: true },
+        { id: 'esc', type: 'userTask', name: 'Escalate', lane: 'L3' },
+        { id: 'x', type: 'userTask', name: 'Assess', lane: 'L2' },
+        { id: 'e1', type: 'endEvent', name: 'Done', lane: 'L2' },
+        { id: 'e2', type: 'endEvent', name: 'Escalated', lane: 'L3' }],
+      edges: [{ id: 'f1', source: 's', target: 'a' }, { id: 'f2', source: 'a', target: 'x' }, { id: 'f3', source: 'x', target: 'e1' },
+        { id: 'f4', source: 'b', target: 'esc' }, { id: 'f5', source: 'esc', target: 'e2' }] };
+    const r = await runPipeline(lc, COMPACT);
+    expect(minLegDistance(r.coordMap, lc)).toBeGreaterThanOrEqual(10);
+    expect(r.diagnostics.issues.filter(i => i.severity === 'ERROR')).toEqual([]);
+  });
+
+  test('realistic-collaboration: message flows unchanged by the re-route', async () => {
+    const { measureLayout } = await import('../bench/layout-metrics.mjs');
+    const m = await measureLayout(loadFixture('realistic-collaboration.json'), COMPACT);
+    expect(m.mfThroughNodes.filter(x => x.relation === 'uninvolved')).toEqual([]);
+    const r = await runPipeline(loadFixture('realistic-collaboration.json'), COMPACT);
+    const off = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement: false });
+    const count = (res, code) => res.diagnostics.issues.filter(i => i.code === code).length;
+    expect(count(r, 'DI05')).toBe(count(off, 'DI05'));
+    expect(r.diagnostics.ok).toBe(true);
+  });
+
+  test('compactLanes twice equals once; two runs are byte-identical', async () => {
+    const { compactLanes } = await import('./visual-refinement.js');
+    for (const name of ['sparse-lanes', 'multi-pool-collaboration', 'realistic-collaboration', 'long-lane-names', 'all-element-classes']) {
+      const lc = loadFixture(`${name}.json`);
+      const a = await runPipeline(lc, COMPACT);
+      const cm = structuredClone(a.coordMap);
+      compactLanes(cm, loadFixture(`${name}.json`), { minLaneHeight: 80 });
+      expect(JSON.stringify(cm)).toBe(JSON.stringify(a.coordMap));
+      const b = await runPipeline(loadFixture(`${name}.json`), COMPACT);
+      expect(b.bpmnXml).toBe(a.bpmnXml);
+    }
+  }, 30000);
+
+  test('a re-routed flow\'s label follows it: beside its own route, off every lane separator', async () => {
+    const { edgeLabelHits } = await import('../bench/layout-metrics.mjs');
+    for (const name of ['multi-pool-collaboration', 'sparse-lanes', 'long-lane-names', 'realistic-collaboration', 'bpmn-generator-pipeline']) {
+      const lc = loadFixture(`${name}.json`);
+      const r = await runPipeline(lc, { visualRefinement: true, elkWrapping: 'auto' });
+      const hits = edgeLabelHits(r.coordMap, lc);
+      expect(`${name} ${hits.laneLine.join(',')}|${hits.farFromEdge.join(',')}`).toBe(`${name} |`);
+    }
+  }, 30000);
+
+  test('nested lanes: compaction neither throws nor adds a DI error', async () => {
+    const lc = () => ({ id: 'P', name: 'Nested', lanes: [
+      { id: 'L1', name: 'Sales', children: [{ id: 'L1a', name: 'Inside', nodeIds: ['s', 'a'] }, { id: 'L1b', name: 'Field', nodeIds: ['b'] }] },
+      { id: 'L2', name: 'Ops', nodeIds: ['c', 'e'] }],
+      nodes: [{ id: 's', type: 'startEvent', name: 'S' }, { id: 'a', type: 'userTask', name: 'A' }, { id: 'b', type: 'userTask', name: 'B' },
+        { id: 'c', type: 'userTask', name: 'C' }, { id: 'e', type: 'endEvent', name: 'E' }],
+      edges: [{ id: 'f1', source: 's', target: 'a' }, { id: 'f2', source: 'a', target: 'b' }, { id: 'f3', source: 'b', target: 'c' }, { id: 'f4', source: 'c', target: 'e' }] });
+    const on = await runPipeline(lc(), COMPACT);
+    const off = await runPipeline(lc(), { visualRefinement: false });
+    expect(on.diagnostics.issues.filter(i => i.severity === 'ERROR')).toEqual(off.diagnostics.issues.filter(i => i.severity === 'ERROR'));
+    expect(Object.keys(on.coordMap.laneCoords).sort()).toEqual(Object.keys(off.coordMap.laneCoords).sort());
+  });
+});

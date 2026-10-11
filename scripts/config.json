@@ -206,6 +206,7 @@
     "laneHeaderMaxWidth": 120,
     "laneCompaction": false,
     "minLaneHeight": 80,
+    "laneLineClearance": 10,
     "edgeLabelCollisionRepair": true,
     "edgeLabelMaxShift": 25
   },
