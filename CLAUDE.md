@@ -234,13 +234,24 @@ layout and rendering. Two rules make it hold:
    writes the box, `svg.js` draws `lines` into it and never re-wraps.
 2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
-   the last pass that can still move a participant. The one pass after it is
-   `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, on by default): it moves an event's or a
-   gateway's label off the bottom when one of its sequence or message flows docks at the bottom,
-   or when an own flow runs through the default label box, and a message flow's port is only known
-   once message flows are routed. It changes label boxes only,
-   never a route, and nothing but the two renderers reads a node label afterwards — so message
-   flows are still the last *routing* step.
+   the last pass that can still move a participant. Two label passes run after it, in this order,
+   and change label boxes only, never a route — so message flows are still the last *routing* step:
+   1. `repairMessageFlowLabels` (`layout.messageFlowLabelRepair`, on by default, #88): a message-flow
+      label that overlaps a route (its own or another flow's), a shape, a node label, another edge
+      label or a participant header, or crosses a lane separator, moves to the nearest clear spot
+      beside one of its own segments (`layout.edgeLabelGap` px off it, the same `besideSegment` rule
+      as every edge label, slid along it in `layout.messageFlowLabelSlidePx` steps). Only message-flow
+      labels move; sequence-flow and node labels are obstacles. The sequence-flow label repair
+      (`repairEdgeLabels`) runs before `routeMessageFlows` and never sees message-flow labels.
+   2. `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, on by default): it moves an
+      event's or a gateway's label off the bottom when one of its sequence or message flows docks at
+      the bottom, or when an own flow runs through the default label box, and a message flow's port is
+      only known once message flows are routed.
+   Why this order: edge labels are settled before node labels choose among their candidates. Each
+   pass treats the other's boxes as obstacles and never moves one, so neither can undo the other —
+   the message-flow repair avoids every node label where it stands, and a node label moved
+   afterwards only goes to a spot clear of every edge label, the repaired ones included. Nothing
+   but the two renderers reads either kind of label afterwards.
 
 This is also why a `Lane`'s `flowNodeRef` in `bpmn-xml.js`'s `buildLane` excludes artifacts and
 data references: `flowNodeRef` is typed `FlowNode` and neither qualifies (an Artifact never
@@ -267,7 +278,7 @@ membership instead of coordinates.
 | `scripts/bpmn/constants.js` | The 13 BPMN-only layout constants (`SHAPE`, `SW`, `CLR`, `LANE_HEADER_W`, `LANE_PADDING`, `LABEL_DISTANCE`, `TASK_RX`, `INNER_OUTER_GAP`, `EXTERNAL_LABEL_H`, `POOL_GAP`, `COLLAB_PADDING`, `MESSAGE_FLOW_FAN`, `ARTIFACT_GAP`), derived from `CFG` (`../shared/utils.js`) — never imported by `dmn/` |
 | `scripts/bpmn/topology.js` | `assignProcessId`/`withProcessId` (the one place a single-process Logic-Core without `id` gets `Process_1`, `_2`… on collision; the public `generateBpmnXml`/`logicCoreToDot`/`runScenarioPipeline`), `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `identifyHappyPathNodes` (which nodes an `isHappyPath` edge chain touches — also read by `scripts/scenarios/format.js`), `normalizeEdgeIds`/`assignEdgeIds` (the one place an id-less sequence-flow edge gets its `flow_<source>_<target>` id, `_2`… on collision — nothing downstream invents one), `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/bpmn/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
-| `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x. Node label boxes: `placeNodeLabels` (default, below the node) `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, default `true`; per call `runPipeline(lc, { nodeLabelsAvoidFlows: false })`): an event's or gateway's label whose own sequence or message flow leaves or enters the node through the bottom, or runs through the label on its way, goes to the first free `nodeLabelCandidates` box — below, above, right-below, left-below; free = no route, shape, node or edge label, lane separator, and inside the participant — else stays below. Runs in `pipeline.js` after `routeMessageFlows` |
+| `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x. Node label boxes: `placeNodeLabels` (default, below the node) `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, default `true`; per call `runPipeline(lc, { nodeLabelsAvoidFlows: false })`): an event's or gateway's label whose own sequence or message flow leaves or enters the node through the bottom, or runs through the label on its way, goes to the first free `nodeLabelCandidates` box — below, above, right-below, left-below; free = no route, shape, node or edge label, lane separator, and inside the participant — else stays below. Runs in `pipeline.js` after `routeMessageFlows` and `repairMessageFlowLabels`. `repairMessageFlowLabels` (`layout.messageFlowLabelRepair`, default `true`; per call `runPipeline(lc, { messageFlowLabelRepair: false })`): a message-flow label on a route, shape, node or edge label, participant header (`participantHeaders`) or lane separator goes to the nearest clear spot beside one of its own segments, else stays; repeated to a fixpoint (idempotent) |
 | `scripts/bpmn/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess, DI07 sequence-flow endpoint off its own shape (all ERROR); DI05 message flow crossing an uninvolved participant, DI08 a sequence-flow end segment lying on its own endpoint's outline, DI09 a sequence flow through its own source or target shape, DI10 a message flow through a foreign shape, DI11 a sequence flow through a shape that is neither its source nor its target (a boundary event of its own source or target included, said in the message; artifacts, groups and boxes holding an endpoint excluded) (all WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
 | `scripts/bpmn/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
 | `scripts/bpmn/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
@@ -726,9 +737,11 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   separator after `keepOffLaneLines` ran: the second `reclipStuckEnds` (it routes through
   `orthogonal-router.js`, which knows nothing of lane lines) and `repairCrossings` on edges that
   were not in `rerouteAfterCompaction`'s affected set. No fixture shows it today (`hug` is 0)
-- Edge-label repair runs before `routeMessageFlows`, so message-flow labels are never repaired:
-  `realistic-collaboration` keeps two overlapping message-flow labels (mf2/mf5) in every mode
-  (#88)
+- `repairMessageFlowLabels` (#88) leaves a message-flow label where it is when no spot beside its
+  own segments is clear — the pass is never worse than without it, and nothing reports a label it
+  could not clear; only the bench (`labelLabel`, `labelNode`, `labelOwnEdge`) counts these. It moves
+  message-flow labels only: a sequence-flow label a message flow runs through stays (the bend rule's
+  label refresh does not see message flows either, see below)
 - The bend rule's message-flow guard (`layout.bendRule`) models a message flow as its single
   centre line at a message-flow node, above or below it. `routeMessageFlows` runs later and fans several
   flows at one node out by `MESSAGE_FLOW_FAN` px either side of that line; the guard does not model the
@@ -737,7 +750,7 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   associations only: message flows are routed after it, so the label can still land on one. Its
   guard does not count other flows' edge labels either, so a new route can run through a label that
   did not move (the class of #73). No check reports either
-- "Output with `layout.bendRule`, `layout.nodeLabelsAvoidFlows` and `layout.foreignShapeRepair` explicitly off does not change unnoticed" is fenced by
+- "Output with `layout.bendRule`, `layout.nodeLabelsAvoidFlows`, `layout.foreignShapeRepair` and `layout.messageFlowLabelRepair` explicitly off does not change unnoticed" is fenced by
   SHA-256 hashes of BPMN XML and SVG per top-level fixture × four modes against current master's output
   (no longer the output from before the bend rule: #91 moved `realistic-collaboration`'s boundary event, which no switch restores)
   (`tests/bench/default-output-hashes.json`, written by `node bench/output-hashes.mjs`, compared by
