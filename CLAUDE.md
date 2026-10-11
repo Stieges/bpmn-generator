@@ -45,7 +45,7 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     │                          repairCrossings falls back to the router when its own fixed-shape
     │                          candidate search finds nothing admissible; reclipStuckEnds routes
     │                          through it between two end stubs)
-    ├── orthogonal-router.js (no deps — obstacle-aware Dijkstra pathfinder, called only from
+    ├── orthogonal-router.js ← ../shared/utils.js (obstacle-aware Dijkstra pathfinder, called only from
     │                          edge-simplify.js, by repairCrossings and reclipStuckEnds; duplicates
     │                          its own segment/box clearance test to avoid a circular import)
     ├── bpmn-xml.js          ← types.js, ../shared/utils.js, constants.js, topology.js, icons.js
