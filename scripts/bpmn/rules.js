@@ -1001,7 +1001,7 @@ const STYLE_CHECKS = [
   {
     id: 'M01',
     description: 'Activity-Labels: Objekt + Verb (Verb im Infinitiv)',
-    ref: { silver: 'Ch.3', pmg: 'G5' },
+    ref: { silver: 'Ch.3', pmg: 'G6' },
     scope: 'process',
     check: (proc) => {
       const msgs = [];

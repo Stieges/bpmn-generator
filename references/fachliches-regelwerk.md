@@ -257,13 +257,13 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 
 | ID | Regel | Referenz | Status |
 |----|-------|----------|--------|
-| M01 | Tasks benennen mit Objekt+Verb-Pattern (Verb im Infinitiv) | 7PMG G7, Silver Ch.3 | implementiert (Heuristik) |
+| M01 | Tasks benennen mit Objekt+Verb-Pattern (Verb im Infinitiv) | 7PMG G6, Silver Ch.3 | implementiert (Heuristik) |
 | M02 | Divergierende XOR-Gateways: Label als Frage formulieren | Silver Ch.5, MG.org | implementiert |
 | M03 | Convergierende Gateways: kein Label an ausgehenden Kanten | Silver Ch.5 | implementiert |
 | M04 | Divergierende XOR-Gateways: Kanten muessen Labels haben | Silver Ch.5, OMG §10.5.1 | implementiert |
-| M05 | Prozessnamen mit Verb+Substantiv-Pattern | 7PMG G7 | Platzhalter |
-| M06 | Keine doppelten Knotennamen im selben Prozess | 7PMG G6 | Platzhalter |
-| M07 | Vermeide OR-Gateways (inclusive) | Silver Ch.5, 7PMG G4 | implementiert |
+| M05 | Message-Flow-Labels: nur Substantive | Silver Ch.5 (POS-Tagger-Problem, siehe ROADMAP) | Platzhalter |
+| M06 | Event-Labels: Partizip/Zustand oder Substantiv | Silver Ch.3 (POS-Tagger-Problem, siehe ROADMAP) | Platzhalter |
+| M07 | Vermeide OR-Gateways (inclusive) | Silver Ch.5, 7PMG G5 | implementiert |
 | M08 | Jeder XOR-Split hat einen Default-Flow | Silver Ch.5 | implementiert |
 | M09 | Lane-Node-Zuweisung: Format B (lane.nodeIds) ohne Format A (node.lane) | OMG §10.5 | implementiert |
 | M10 | Lane- und Pool-Namen: max. 25 Zeichen | Silver §4.2 | implementiert |
@@ -433,7 +433,7 @@ Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvent
 | schlecht | `Pruefung` (Einzelwort) |
 | schlecht | `Vorgang zur Klaerung` (kein Verb) |
 
-**Referenz:** 7PMG G7 (Mendling et al., 2010), Bruce Silver: BPMN Method & Style, Ch.3
+**Referenz:** 7PMG G6 "use verb-object activity labels" (Mendling, Reijers, van der Aalst, 2010), Bruce Silver: BPMN Method & Style, Ch.3
 
 ---
 

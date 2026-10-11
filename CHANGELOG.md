@@ -462,6 +462,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stray top-level `name`, which the collaboration branch of `references/input-schema.json` does not
   allow, so the CLI refused it in every mode (the tests read it past the gate). The key is removed;
   output and every hash are unchanged.
+- **Rule citations for M01, M05, M06 and M07 match what the rules check.** M01 now cites 7PMG G6
+  ("use verb-object activity labels", Mendling et al. 2010) in `scripts/bpmn/rules.js` and in
+  `references/fachliches-regelwerk.md` (was G5 in code, G7 in the docs); M07 cites G5 ("avoid OR
+  routing elements") in the docs as it already did in code (was G4). The M05/M06 rows in the rule
+  table described other rules than the placeholders registered in code; they now read "message flow
+  labels: nouns only" (Silver Ch.5) and "event labels: participle/state or noun" (Silver Ch.3).
+  Thanks to @kndrio.
 - **Node labels have one geometry source (#82).** The external label of an event, a gateway or a
   data object/store was positioned twice — by `bpmn-xml.js` for the `BPMNLabel` bounds and by
   `svg.js` for the drawn text — against the geometry contract. Its box is now computed once, in
