@@ -181,7 +181,7 @@ async function handleToolCall(request) {
   }
 
   if (name === 'validate_bpmn') {
-    const rejected = schemaGate(args.logicCore, args.visualRefinement);
+    const rejected = schemaGate(args.logicCore);
     if (rejected) return rejected;
     // infos and metrics used to be dropped here, which silently killed the
     // whole P layer (complexity metrics) for every MCP caller.

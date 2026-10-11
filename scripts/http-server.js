@@ -441,7 +441,13 @@ const server = createServer(async (req, res) => {
     if (url === '/api/v1/orchestrate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/orchestrate' });
 
+      const refineCheck = validateVisualRefinementOption(body.visualRefinement);
+      if (!refineCheck.valid) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: refineCheck.errors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(refineCheck.errors) });
+      }
       const options = {
+        visualRefinement: body.visualRefinement,
         ruleProfile: clientRuleProfile(body),
         mode: (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document',
       };
@@ -472,13 +478,6 @@ const server = createServer(async (req, res) => {
           return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
         }
       }
-
-      const refineCheck = validateVisualRefinementOption(body.visualRefinement);
-      if (!refineCheck.valid) {
-        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: refineCheck.errors.length });
-        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(refineCheck.errors) });
-      }
-      options.visualRefinement = body.visualRefinement;
 
       const result = await orchestrate(input, options);
       const durationMs = Date.now() - t0;

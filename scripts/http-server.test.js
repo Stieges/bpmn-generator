@@ -725,12 +725,15 @@ describe('visualRefinement over HTTP', () => {
   });
   beforeEach(() => _resetRateLimit());
 
-  test('false on /generate is byte-identical to runPipeline(lc, { visualRefinement: false })', async () => {
+  test('true on /generate is byte-identical to runPipeline(lc, { visualRefinement: true }) and differs from no option', async () => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    const res = await post('/api/v1/generate', { logicCore: lc, visualRefinement: false });
+    const res = await post('/api/v1/generate', { logicCore: lc, visualRefinement: true });
     expect(res.status).toBe(200);
-    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    expect((await res.json()).bpmnXml).toBe(lib.bpmnXml);
+    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const none = await runPipeline(JSON.parse(JSON.stringify(lc)), {});
+    const xml = (await res.json()).bpmnXml;
+    expect(xml).toBe(lib.bpmnXml);
+    expect(xml).not.toBe(none.bpmnXml); // the option is observable, so a dropped forwarding fails
   });
   test('a per-pass object is accepted', async () => {
     const res = await post('/api/v1/generate', { logicCore: lc, visualRefinement: { laneCompaction: false } });
@@ -746,9 +749,12 @@ describe('visualRefinement over HTTP', () => {
     });
   test('/orchestrate passes it to the layout agent', async () => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    const res = await post('/api/v1/orchestrate', { logicCore: lc, visualRefinement: false });
+    const res = await post('/api/v1/orchestrate', { logicCore: lc, visualRefinement: true });
     expect(res.status).toBe(200);
-    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    expect((await res.json()).bpmnXml).toBe(lib.bpmnXml);
+    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const none = await runPipeline(JSON.parse(JSON.stringify(lc)), {});
+    const xml = (await res.json()).bpmnXml;
+    expect(xml).toBe(lib.bpmnXml);
+    expect(xml).not.toBe(none.bpmnXml);
   });
 });
