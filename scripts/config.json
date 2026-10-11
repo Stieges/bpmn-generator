@@ -169,6 +169,7 @@
     "crossingGuard": true,
     "endpointReclip": true,
     "bendRule": false,
+    "nodeLabelsAvoidFlows": false,
     "bendRuleLimits": {
       "shapeClearance": 8,
       "regionInset": 10,

@@ -6250,10 +6250,13 @@ describe('geometry contract — the two renderers agree on node labels', () => {
   const flatNodes = (nodes) => (nodes || []).flatMap(n => [n, ...flatNodes(n.nodes)]);
 
   const fixtures = readdirSync('../tests/fixtures').filter(f => f.endsWith('.json')).sort();
+  // With layout.nodeLabelsAvoidFlows on, a label may sit at another candidate than below
+  // (coordinates.js nodeLabelCandidates) — the renderers must follow it there just the same.
   for (const fixture of fixtures) {
-    for (const visualRefinement of [false, true]) {
-      test(`${fixture} (refinement: ${visualRefinement}) — DI and SVG draw coordMap.nodeLabels`, async () => {
-        const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
+    for (const [visualRefinement, nodeLabelsAvoidFlows] of [[false, false], [true, false], [false, true], [true, true]]) {
+      test(`${fixture} (refinement: ${visualRefinement}, nodeLabelsAvoidFlows: ${nodeLabelsAvoidFlows}) — DI and SVG draw coordMap.nodeLabels`, async () => {
+        const r = await runPipeline(loadFixture(fixture),
+          { ...(visualRefinement ? ALL_ON : { visualRefinement: false }), nodeLabelsAvoidFlows });
         if (!r.coordMap) return;   // blocked on purpose
         const labels = r.coordMap.nodeLabels;
         expect(labels).toBeDefined();
@@ -6265,9 +6268,16 @@ describe('geometry contract — the two renderers agree on node labels', () => {
         expect(Object.keys(labels).sort()).toEqual(labelled);
 
         // Each box hangs centred below its node's FINAL box — a pass that moved the node (lane
-        // compaction) left no label behind.
+        // compaction) left no label behind. With the switch on, an event's or a gateway's box is
+        // one of its candidates at that final box instead.
+        const { nodeLabelCandidates } = await import('./coordinates.js');
+        const nodeOf = Object.fromEntries((lc.pools || [lc]).flatMap(p => flatNodes(p.nodes)).map(n => [n.id, n]));
         for (const [id, L] of Object.entries(labels)) {
           const c = r.coordMap.coords[id];
+          if (nodeLabelsAvoidFlows) {
+            const cands = nodeLabelCandidates(nodeOf[id], c).map(k => box(k.box));
+            if (cands.length) { expect(cands).toContain(box(L)); continue; }
+          }
           expect(`${id}: ${r1(L.x + L.w / 2)}`).toBe(`${id}: ${r1(c.x + c.w / 2)}`);
           const gap = L.y - (c.y + c.h);
           expect(gap >= 0 && gap <= CFG.layout.labelDistance).toBe(true);

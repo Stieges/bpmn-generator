@@ -32,7 +32,7 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, placeNodeLabels, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
+import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
@@ -287,6 +287,15 @@ async function runPipeline(logicCore, opts = {}) {
   // Message flows LAST: their horizontal leg has to sit in the gap between two
   // participants, so every pass that can still move a participant must be done.
   routeMessageFlows(coordMap, lc);
+
+  // Node labels away from flows (placeNodeLabelsAvoidingFlows): an event's or a gateway's label
+  // leaves the bottom when a flow leaves or enters the node there. After routeMessageFlows on
+  // purpose — a message flow's port is only known now — and that keeps "message flows last": a
+  // label box is not route geometry, and from here on only the two renderers read node labels.
+  // Off unless switched on.
+  if (opts.nodeLabelsAvoidFlows ?? (CFG.layout?.nodeLabelsAvoidFlows === true)) {
+    coordMap.nodeLabels = placeNodeLabelsAvoidingFlows(coordMap, lc);
+  }
 
   const bpmnXml   = await generateBpmnXml(lc, coordMap);
   const svg       = generateSvg(lc, coordMap);
