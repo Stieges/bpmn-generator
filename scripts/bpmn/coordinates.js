@@ -585,15 +585,13 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
-  // §5.6  Edge label positions (absolute ELK coordinates, -5px offset stored so
-  //        svg.js can apply ty(L.y) - 5 to preserve the original render position).
-  //        Algorithm mirrors svg.js renderSequenceFlow exactly so existing goldens
-  //        remain byte-identical when visual refinement is OFF.
+  // §5.6  Edge label boxes — see placeEdgeLabel. Every depth: a subprocess child's flow is
+  //        drawn by both renderers too.
   const edgeLabels = {};
 
   // Sequence-flow labels
   for (const proc of allProcesses) {
-    for (const e of (proc.edges || [])) {
+    for (const e of flattenProcessEdges(proc)) {
       const label = computeSequenceFlowLabel(e, edgeCoords[e.id], coords);
       if (label) edgeLabels[e.id] = label;
     }
@@ -606,6 +604,166 @@ function buildCoordinateMap(elkResult, lc) {
   return { coords, laneCoords, poolCoords, edgeCoords, edgeLabels };
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Edge labels — one geometry source for both renderers
+// ─────────────────────────────────────────────────────────────────────
+//
+// An edge label's whole box lives in coordMap.edgeLabels[id] = { text, x, y, w, h, lines, side }:
+// (x, y) is the box centre, `lines` the text broken the way bpmn-js breaks it, `side` where the box
+// sits relative to the segment it labels. bpmn-xml.js writes the box as the BPMNLabel bounds;
+// svg.js draws `lines` into it the way bpmn-js does. Neither computes a label position.
+//
+// Why the text layout copies bpmn-js: on import bpmn-js keeps a BPMNLabel's horizontal centre and
+// its top, and re-sizes the box to its own text layout (Arial 11 px, line height 1.2, wrapped at
+// 90 px). A box sized any other way puts bpmn.io's text somewhere else than ours — and a label
+// that wraps there but not here hangs down across the very flow it names.
+
+/**
+ * Advance widths of Arial (Helvetica-, Liberation Sans- and Arimo-compatible), 1/1000 em, for
+ * printable ASCII 32–126 in code-point order. Identical to what Chrome measures. No kerning, so
+ * the estimate is never narrower than what a browser draws.
+ */
+const ARIAL_ASCII_WIDTHS = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
+  556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+  1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+  667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+  333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+  556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+];
+const ARIAL_EXTRA_WIDTHS = { '\u2192': 1000, '\u2026': 1000, '\u2013': 556, '\u2014': 1000, '\u00DF': 611 };
+
+function arialCharWidth(ch) {
+  const c = ch.codePointAt(0);
+  if (c >= 32 && c <= 126) return ARIAL_ASCII_WIDTHS[c - 32];
+  if (ARIAL_EXTRA_WIDTHS[ch] !== undefined) return ARIAL_EXTRA_WIDTHS[ch];
+  // Accented Latin letters: the base letter's advance (ä = a, Ö = O, …).
+  const b = ch.normalize('NFD').codePointAt(0);
+  if (b >= 32 && b <= 126) return ARIAL_ASCII_WIDTHS[b - 32];
+  return 1000;
+}
+
+function edgeLabelTextStyle() {
+  const t = CFG.layout?.edgeLabelText ?? {};
+  return { fontSize: t.fontSize ?? 11, lineHeight: t.lineHeight ?? 1.2, wrapWidth: t.wrapWidth ?? 90 };
+}
+
+/** Rendered width of one line, px. Leading/trailing blanks collapse in SVG and do not count. */
+function lineWidth(text, fontSize) {
+  let w = 0;
+  for (const ch of text.trim()) w += arialCharWidth(ch);
+  return (w * fontSize) / 1000;
+}
+
+/** bpmn-js Text.js `semanticShorten`: cut a line at a blank, hyphen or soft hyphen. */
+function semanticShorten(line, maxLength) {
+  const parts = line.split(/(\s|-|\u00AD)/g);
+  const kept = [];
+  let length = 0;
+  if (parts.length > 1) {
+    let part;
+    while ((part = parts.shift())) {
+      if (part.length + length < maxLength) {
+        kept.push(part);
+        length += part.length;
+      } else {
+        if (part === '-' || part === '\u00AD') kept.pop();
+        break;
+      }
+    }
+  }
+  if (kept[kept.length - 1] === '\u00AD') kept[kept.length - 1] = '-';
+  return kept.join('');
+}
+
+/**
+ * An edge label's text layout: its lines (broken exactly as bpmn-js Text.js `layoutNext` breaks
+ * them, with Arial widths instead of a DOM measurement) and the box they need, `w` × `h` px.
+ */
+function edgeLabelLayout(text) {
+  const { fontSize, lineHeight, wrapWidth } = edgeLabelTextStyle();
+  const pending = String(text ?? '').split(/\u00AD?\r?\n/);
+  const lines = [];
+  let w = 0;
+  while (pending.length) {
+    const original = pending.shift();
+    let fit = original;
+    for (;;) {
+      const fw = fit ? lineWidth(fit, fontSize) : 0;
+      if (fit === ' ' || fit === '' || fw < Math.round(wrapWidth) || fit.length < 2) {
+        if (fit.length < original.length) pending.unshift(original.slice(fit.length).trim());
+        lines.push(fit.trim());
+        w = Math.max(w, fw);
+        break;
+      }
+      const length = Math.max(fit.length * (wrapWidth / fw), 1);
+      fit = semanticShorten(fit, length) || fit.slice(0, Math.max(Math.round(length - 1), 1));
+    }
+  }
+  return { lines, w, h: Math.ceil(lines.length * fontSize * lineHeight) };
+}
+
+/**
+ * The box an edge label occupies, from its `coordMap.edgeLabels` entry (centre + size). An entry
+ * without a size — a hand-built one in a unit test — gets the size of its text.
+ */
+function edgeLabelBox(label) {
+  const { w, h } = label.w !== undefined && label.h !== undefined ? label : edgeLabelLayout(label.text);
+  return { x: label.x - w / 2, y: label.y - h / 2, w, h };
+}
+
+/** Does a label box reach into its own route? Touching it does not count. */
+function labelHitsRoute(box, pts) {
+  return !!pts && pts.length >= 2 && entersInterior(pts, box);
+}
+
+/**
+ * Place a label beside its route — above a horizontal segment, right of a vertical one, its box
+ * `layout.edgeLabelGap` px clear of the line, never across it.
+ *
+ * Candidates in order: beside `preferred` (a segment `[a, b]`, when the caller knows the leg that
+ * should carry the label), above every horizontal segment, right of every vertical one, then below
+ * resp. left of them. The first whose box stays off the route wins — a short leg next to a
+ * turn can put the box over the route's next segment. A route with neither kind of segment (or
+ * fewer than two points) labels the anchor `fallback` instead, box above it.
+ */
+function placeEdgeLabel(text, pts, { preferred = null, fallback = null } = {}) {
+  const { lines, w, h } = edgeLabelLayout(text);
+  const gap = CFG.layout?.edgeLabelGap ?? 4;
+  const beside = (a, b, side) => {
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    switch (side) {
+      case 'above': return { x: mx, y: a.y - gap - h / 2, side };
+      case 'below': return { x: mx, y: a.y + gap + h / 2, side };
+      case 'right': return { x: a.x + gap + w / 2, y: my, side };
+      default:      return { x: a.x - gap - w / 2, y: my, side };
+    }
+  };
+  const isH = (a, b) => Math.abs(b.y - a.y) < 1 && Math.abs(b.x - a.x) >= 1;
+  const isV = (a, b) => Math.abs(b.x - a.x) < 1 && Math.abs(b.y - a.y) >= 1;
+  const segs = [];
+  for (let i = 0; i < (pts?.length ?? 0) - 1; i++) segs.push([pts[i], pts[i + 1]]);
+
+  const cands = [];
+  if (preferred) {
+    const [a, b] = preferred;
+    if (isH(a, b)) cands.push(beside(a, b, 'above'));
+    else if (isV(a, b)) cands.push(beside(a, b, 'right'));
+  }
+  for (const [a, b] of segs) if (isH(a, b)) cands.push(beside(a, b, 'above'));
+  for (const [a, b] of segs) if (isV(a, b)) cands.push(beside(a, b, 'right'));
+  for (const [a, b] of segs) if (isH(a, b)) cands.push(beside(a, b, 'below'));
+  for (const [a, b] of segs) if (isV(a, b)) cands.push(beside(a, b, 'left'));
+
+  const boxOf = (c) => ({ x: c.x - w / 2, y: c.y - h / 2, w, h });
+  let pick = cands.find(c => !labelHitsRoute(boxOf(c), pts)) ?? cands[0];
+  if (!pick) {
+    if (!fallback) return null;
+    pick = { x: fallback.x, y: fallback.y - gap - h / 2, side: 'above' };
+  }
+  return { text, x: pick.x, y: pick.y, w, h, lines, side: pick.side };
+}
+
 /**
  * Where a sequence flow's label sits, given its route. Returns null when the
  * edge has no label (or the fallback has nothing to work with).
@@ -613,9 +771,7 @@ function buildCoordinateMap(elkResult, lc) {
  * Extracted from §5.6 so that a pass which re-routes an edge after
  * buildCoordinateMap has returned can refresh that edge's label instead of
  * leaving it stranded on a segment the route no longer has — see
- * pipeline.js's crossing-repair step. Behaviour is unchanged; the algorithm
- * still mirrors svg.js renderSequenceFlow exactly, which is what keeps the
- * two renderers in agreement.
+ * pipeline.js's refreshMovedLabels.
  */
 function computeSequenceFlowLabel(edge, pts, coords) {
   if (!edge.label) return null;
@@ -623,25 +779,17 @@ function computeSequenceFlowLabel(edge, pts, coords) {
     // Fallback: midpoint between source and target node centers
     const s = coords[edge.source], t = coords[edge.target];
     if (!s || !t) return null;
-    return {
-      text: edge.label,
+    return placeEdgeLabel(edge.label, null, { fallback: {
       x: (s.x + s.w / 2 + t.x + t.w / 2) / 2,
       y: (s.y + s.h / 2 + t.y + t.h / 2) / 2,
-    };
+    } });
   }
-  // Find first horizontal segment (dy < 1) — mirrors svg.js renderSequenceFlow
-  for (let i = 0; i < pts.length - 1; i++) {
-    if (Math.abs(pts[i + 1].y - pts[i].y) < 1) {
-      return { text: edge.label, x: (pts[i].x + pts[i + 1].x) / 2, y: pts[i].y };
-    }
-  }
-  // No horizontal segment: 30% from source — mirrors svg.js fallback
+  // A route with no axis-parallel segment: 30% from source.
   const p0 = pts[0], p1 = pts[pts.length - 1];
-  return {
-    text: edge.label,
+  return placeEdgeLabel(edge.label, pts, { fallback: {
     x: p0.x + (p1.x - p0.x) * 0.3,
     y: p0.y + (p1.y - p0.y) * 0.3,
-  };
+  } });
 }
 
 /**
@@ -1472,10 +1620,14 @@ function routeMessageFlows(coordMap, lc) {
     const [a, b] = k >= 0
       ? [resolve(plan.points[k], key), resolve(plan.points[k + 1], key)]
       : [pts[0], pts[pts.length - 1]];
-    edgeLabels[key] = { text: mf.name, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const label = placeEdgeLabel(mf.name, pts, {
+      preferred: k >= 0 ? [a, b] : null,
+      fallback: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    });
+    if (label) edgeLabels[key] = label;
   }
 
   return coordMap;
 }
 
-export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelBox, placeEdgeLabel, labelHitsRoute, flattenProcessNodes, flattenProcessEdges };

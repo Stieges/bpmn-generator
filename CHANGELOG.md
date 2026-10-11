@@ -320,6 +320,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **Edge labels now sit beside their flow, and the DI and the SVG agree.** `coordMap.edgeLabels` was
+  computed on ELK's route and never refreshed after `simplifyAllEdges` (or after lane compaction),
+  so the SVG drew labels on legs that no longer existed, while `bpmn-xml.js` computed its own
+  `BPMNLabel` — centred on the line, crossing it by 3 px — and the label repair never reached
+  bpmn.io. Every label is now one box in `coordMap.edgeLabels`, placed beside a segment (above a
+  horizontal one, right of a vertical one, `layout.edgeLabelGap` px clear, never across its own
+  route) and sized and wrapped the way bpmn-js lays out text (`layout.edgeLabelText`). Both
+  renderers read that box: the DI writes it for sequence flows at every depth and, new, for message
+  flows; the SVG draws the text where bpmn-js draws it, without the white backdrop that masked the
+  line. The label repair keeps a label on its side of its line. The layout bench measures label ×
+  own route, label × label and label × node, fenced by the ratchet. Goldens of `simple-approval`,
+  `dense-edge-labels` and `multi-pool-collaboration` change in their labels only.
 - **Sequence-flow ends no longer run along their own shape's outline (#52).** `simplifyAllEdges`
   replaced ELK's Z-shaped routes with an L whenever one cleared the nodes — including the L whose
   last leg lay on the target's border (and the mirror case at the source), so the line covered the

@@ -156,6 +156,12 @@
       "detourReach": 600
     },
     "endStubPx": 15,
+    "edgeLabelGap": 4,
+    "edgeLabelText": {
+      "fontSize": 11,
+      "lineHeight": 1.2,
+      "wrapWidth": 90
+    },
     "alongOutlineMinPx": 5,
     "crossingGuard": true,
     "endpointReclip": true

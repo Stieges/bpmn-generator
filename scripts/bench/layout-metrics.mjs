@@ -37,6 +37,13 @@
  *   - edgeThroughNode   segments whose bounding box overlaps a node box that
  *                        is neither the edge's source nor its target.
  *                        Does NOT test edge-vs-edge or lane/pool-band overlap.
+ *   - edge labels       (measureLayout only) the label box both renderers draw
+ *                        (coordMap.edgeLabels via edgeLabelBox) reaching into
+ *                        its own route, overlapping another label box, or
+ *                        overlapping a node box. A container the label lies
+ *                        wholly inside (an expanded subprocess, a group) is
+ *                        where the label belongs, not an overlap. Does NOT
+ *                        test a label against a foreign flow's line.
  *
  * Also measures ELK's *raw* output (before coordinates.js post-processing) so
  * that crossings introduced by our own route rebuilding become visible: ELK
@@ -51,6 +58,7 @@ import { resolveLaneId } from '../bpmn/topology.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { CFG } from '../shared/utils.js';
+import { edgeLabelBox, labelHitsRoute, flattenProcessNodes } from '../bpmn/coordinates.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
@@ -564,6 +572,32 @@ async function measureRawElk(lc, alignCtx) {
   return computeMetrics(acc.coords, acc.edgeCoords, acc.edgeList, alignCtx);
 }
 
+/** Strict box overlap; touching does not count. */
+function boxesOverlap(a, b) {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/**
+ * Edge-label boxes against their own route, each other and node shapes — see the header.
+ * `ownEdge`: label ids; `labelLabel`: `a/b` pairs; `labelNode`: `label>node`.
+ */
+export function edgeLabelHits(coordMap, lc) {
+  const containers = new Set((lc.pools || [lc]).flatMap((p) => flattenProcessNodes(p.nodes || []))
+    .filter((n) => (n.isExpanded && n.nodes?.length) || n.type === 'group').map((n) => n.id));
+  const inside = (b, c) => b.x >= c.x && b.y >= c.y && b.x + b.w <= c.x + c.w && b.y + b.h <= c.y + c.h;
+  const labels = Object.entries(coordMap.edgeLabels || {}).map(([id, L]) => [id, edgeLabelBox(L)]);
+  const out = { ownEdge: [], labelLabel: [], labelNode: [] };
+  labels.forEach(([id, box], i) => {
+    if (labelHitsRoute(box, coordMap.edgeCoords?.[id])) out.ownEdge.push(id);
+    for (const [other, ob] of labels.slice(i + 1)) if (boxesOverlap(box, ob)) out.labelLabel.push(`${id}/${other}`);
+    for (const [node, c] of Object.entries(coordMap.coords || {})) {
+      if (containers.has(node) && inside(box, c)) continue;
+      if (boxesOverlap(box, c)) out.labelNode.push(`${id}>${node}`);
+    }
+  });
+  return out;
+}
+
 /** One fixture × mode, every readability measure. `null` when the pipeline blocks the model. */
 export async function measureLayout(lc, { visualRefinement }) {
   const r = await runPipeline(lc, { visualRefinement });
@@ -579,6 +613,7 @@ export async function measureLayout(lc, { visualRefinement }) {
     mfThroughNodes: messageFlowThroughNodes(cm, lc),
     seqThroughNodes: seqFlowThroughNodes(cm, edgeList),
     ownThrough: seqThroughOwnShape(cm, lc, edgeList),
+    labels: edgeLabelHits(cm, lc),
     diCodes,
   };
 }
@@ -593,6 +628,9 @@ export function summarize(m) {
     mfThrough: m.mfThroughNodes.length,
     seqThrough: m.seqThroughNodes.length,
     ownThrough: m.ownThrough.length,
+    labelOwnEdge: m.labels.ownEdge.length,
+    labelLabel: m.labels.labelLabel.length,
+    labelNode: m.labels.labelNode.length,
   };
 }
 
@@ -637,10 +675,10 @@ function fmtExcluded(excluded) {
 }
 
 function fmtRow(label, m, x) {
-  if (!m) return `| ${label} | (pipeline errored) | | | | | | | | | | | |`;
+  if (!m) return `| ${label} | (pipeline errored) | | | | | | | | | | | | |`;
   const alignPct = m.plainLinks ? Math.round((100 * m.alignedLinks) / m.plainLinks) : 0;
   const align = `${m.alignedLinks}/${m.plainLinks} (${alignPct}%)`;
-  return `| ${label} | ${m.crossings} | ${m.totalBends} | ${m.edgesWithLeq1Bend}/${m.edgeCount} | ${m.diagonals} | ${m.bboxW}×${m.bboxH} (${m.areaPerNode}/node) | ${m.aspect.toFixed(2)} | ${align} | ${fmtExcluded(m.excluded)} | ${m.edgeThroughNode} | ${x ? x.along : '—'} | ${x ? x.laneGap : '—'} | ${x ? x.mfThrough : '—'} |`;
+  return `| ${label} | ${m.crossings} | ${m.totalBends} | ${m.edgesWithLeq1Bend}/${m.edgeCount} | ${m.diagonals} | ${m.bboxW}×${m.bboxH} (${m.areaPerNode}/node) | ${m.aspect.toFixed(2)} | ${align} | ${fmtExcluded(m.excluded)} | ${m.edgeThroughNode} | ${x ? x.along : '—'} | ${x ? x.laneGap : '—'} | ${x ? x.mfThrough : '—'} | ${x ? `${x.labelOwnEdge}/${x.labelLabel}/${x.labelNode}` : '—'} |`;
 }
 
 async function main() {
@@ -664,7 +702,8 @@ async function main() {
   lines.push('vertical offset is correct for them — see below. *Edge-through-node*: segments crossing a');
   lines.push('foreign node box. *Along outline*: sequence-flow ends lying on their own endpoint\'s outline for more than 5 px (#52).');
   lines.push('*Lane gap max*: largest empty strip in a participant\'s lane stack, px. *MF through node*: message-flow segments');
-  lines.push('through a foreign shape (groups and endpoint containers excluded).');
+  lines.push('through a foreign shape (groups and endpoint containers excluded). *Labels*: edge-label boxes reaching into');
+  lines.push('their own route / overlapping another label / overlapping a node box (a container holding the label excluded).');
   lines.push('');
   lines.push('**Reading the numbers.** Two comparisons are invalid and the table deliberately does not');
   lines.push('invite them. Area must not be compared between "ELK raw" and the pipeline rows: raw ELK has');
@@ -691,8 +730,8 @@ async function main() {
       lines.push('');
       continue;
     }
-    lines.push('| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node |');
-    lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+    lines.push('| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     lines.push(fmtRow('ELK raw (pre-postprocess)', r.rawElkMetrics, null));
     lines.push(fmtRow('default', r.defaultMetrics, r.defaultExtras));
     lines.push(fmtRow('visualRefinement: true', r.refinedMetrics, r.refinedExtras));

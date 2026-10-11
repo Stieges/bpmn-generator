@@ -82,6 +82,21 @@ function checkNetTranslation(lc) {
 }
 
 /**
+ * Re-derive the label of every edge whose route `beforeRoutes` → `coordMap.edgeCoords` replaced.
+ * Route passes return the same array for an edge they left alone, so reference inequality is the
+ * "moved" test. Labels are placed on a route's first horizontal leg (coordinates.js §5.6); a pass
+ * that changes the route without this leaves the label on a leg that no longer exists.
+ * A pass that moves route points in place passes `{}` as `beforeRoutes`: every label is refreshed.
+ */
+function refreshMovedLabels(coordMap, edges, beforeRoutes) {
+  for (const e of edges) {
+    if (beforeRoutes[e.id] === coordMap.edgeCoords[e.id]) continue;
+    const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
+    if (label) coordMap.edgeLabels[e.id] = label;
+  }
+}
+
+/**
  * Run the full BPMN pipeline programmatically.
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
@@ -165,6 +180,7 @@ async function runPipeline(logicCore, opts = {}) {
   const skipSimplify = new Set((lc.associations || []).map(a => a.id));
   const elkRoutes = coordMap.edgeCoords;
   coordMap.edgeCoords = simplifyAllEdges(elkRoutes, coordMap.coords, allEdges, skipSimplify);
+  refreshMovedLabels(coordMap, allEdges, elkRoutes);
 
   // Crossing repair: the routes coordinates.js deletes and rebuilds (§5.0a,
   // §5.2, §5.0e, §5.5) pick their axis by |dy| > |dx| alone, so they can cross
@@ -189,11 +205,7 @@ async function runPipeline(logicCore, opts = {}) {
     // Refresh only the ones whose route actually moved — repairCrossings keeps
     // the original array reference for everything it left alone.
     if (coordMap.edgeCoords !== beforeRepair) {
-      for (const e of allEdges) {
-        if (beforeRepair[e.id] === coordMap.edgeCoords[e.id]) continue;
-        const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
-        if (label) coordMap.edgeLabels[e.id] = label;
-      }
+      refreshMovedLabels(coordMap, allEdges, beforeRepair);
     }
   }
 
@@ -205,11 +217,7 @@ async function runPipeline(logicCore, opts = {}) {
     const reclipOpts = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
     const beforeReclip = coordMap.edgeCoords;
     coordMap.edgeCoords = reclipStuckEnds(beforeReclip, coordMap.coords, allEdges, skipSimplify, reclipOpts);
-    for (const e of allEdges) {
-      if (beforeReclip[e.id] === coordMap.edgeCoords[e.id]) continue;
-      const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
-      if (label) coordMap.edgeLabels[e.id] = label;
-    }
+    refreshMovedLabels(coordMap, allEdges, beforeReclip);
   }
 
   // Visual Refinement (post-layout coordinate transforms)
@@ -224,6 +232,10 @@ async function runPipeline(logicCore, opts = {}) {
       compactLanes(coordMap, lc, {
         minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80,
       });
+      // compactLanes moves route points in place and shifts each label on its own, so a route whose
+      // points land in different lanes ends up with its label off its leg — or across it. The
+      // routes are the same arrays, so the reference test cannot see them: refresh every label.
+      refreshMovedLabels(coordMap, allEdges, {});
     }
     if (CFG.visualRefinement?.edgeLabelCollisionRepair !== false) {
       repairEdgeLabels(coordMap, {

@@ -12,7 +12,7 @@
 
 import { LANE_HEADER_W } from './constants.js';
 import { wrapTextByPx } from '../shared/utils.js';
-import { flattenProcessNodes, flattenProcessEdges } from './coordinates.js';
+import { flattenProcessNodes, flattenProcessEdges, edgeLabelBox, labelHitsRoute } from './coordinates.js';
 
 // Average character-width factors for Arial at fontSize 1 (in px).
 // Calibrated against bpmn.io renderings; accurate to ~±15% which is
@@ -116,7 +116,8 @@ export function bboxOverlaps(a, b) {
 
 /**
  * Nudge edge labels that overlap with nodes or other labels.
- * Tries distances [15, 25, maxShift] × directions [up, down, left, right].
+ * Tries distances [15, 25, maxShift] × directions [up, down, left, right], minus the direction
+ * toward the label's own segment, and rejects a slot whose box reaches into the label's own route.
  * If no collision-free slot is found within maxShift, the label stays at
  * its original position (graceful degradation — we never throw).
  *
@@ -138,10 +139,8 @@ export function repairEdgeLabels(coordMap, opts = {}) {
     x: c.x, y: c.y, w: c.w, h: c.h
   }));
 
-  const labelBboxOf = (id) => {
-    const L = labels[id];
-    return estimateTextBBox(L.text ?? '', L.x, L.y, 11);
-  };
+  // The box both renderers draw (coordinates.js placeEdgeLabel), not a separate estimate.
+  const labelBboxOf = (id) => edgeLabelBox(labels[id]);
 
   const distances = [15, 25, maxShift].filter((d, i, arr) => arr.indexOf(d) === i && d > 0);
   const directions = [
@@ -151,10 +150,15 @@ export function repairEdgeLabels(coordMap, opts = {}) {
     { dx:  1, dy:  0 },  // right
   ];
 
+  // A label stays on its side of its segment: never nudged toward (and so across) its own line.
+  const towardLine = { above: { dx: 0, dy: 1 }, below: { dx: 0, dy: -1 }, right: { dx: -1, dy: 0 }, left: { dx: 1, dy: 0 } };
+
   for (const id of labelIds) {
     const origBB = labelBboxOf(id);
     const otherBboxes = labelIds.filter(o => o !== id).map(labelBboxOf);
     const obstacles = [...nodeBboxes, ...otherBboxes];
+    const ownRoute = coordMap.edgeCoords?.[id];
+    const banned = towardLine[labels[id].side];
 
     const collides = (bb) => obstacles.some(o => bboxOverlaps(bb, o));
     if (!collides(origBB)) continue;
@@ -162,12 +166,13 @@ export function repairEdgeLabels(coordMap, opts = {}) {
     let fixed = false;
     outer: for (const d of distances) {
       for (const dir of directions) {
+        if (banned && dir.dx === banned.dx && dir.dy === banned.dy) continue;
         const tryBB = {
           ...origBB,
           x: origBB.x + dir.dx * d,
           y: origBB.y + dir.dy * d
         };
-        if (!collides(tryBB)) {
+        if (!collides(tryBB) && !labelHitsRoute(tryBB, ownRoute)) {
           labels[id].x += dir.dx * d;
           labels[id].y += dir.dy * d;
           fixed = true;

@@ -6,7 +6,8 @@
 import { assignEdgeIds } from './topology.js';
 import { isEvent, isGateway, isDataArtifact } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
-import { esc, rn, wrapText } from '../shared/utils.js';
+import { esc, rn, wrapText, CFG } from '../shared/utils.js';
+import { edgeLabelBox } from './coordinates.js';
 
 import {
   renderEventMarker, inferEventMarker, renderTaskIcon, renderPentagon,
@@ -205,17 +206,8 @@ function generateSvg(lc, coordMap) {
                     pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
 
       out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
-      if (mf.name) {
-        const L = edgeLabels?.[mfKey];
-        if (L) {
-          renderEdgeLabel(out, L.text, tx(L.x), ty(L.y));
-        } else {
-          // Fallback: midpoint of the route
-          const a = pts[Math.floor((pts.length - 1) / 2)];
-          const b = pts[Math.ceil((pts.length - 1) / 2)];
-          renderEdgeLabel(out, mf.name, rn(tx((a.x + b.x) / 2)), rn(ty((a.y + b.y) / 2)));
-        }
-      }
+      const L = mf.name ? edgeLabels?.[mfKey] : null;
+      if (L) renderEdgeLabel(out, L, tx, ty);
     }
   }
 
@@ -297,20 +289,26 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels) {
 
   out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" ${markerStart} ${markerEnd}/>`);
 
-  // Edge label — read position from coordMap.edgeLabels (computed in coordinates.js)
-  if (edge.label) {
-    const eid = edge.id;
-    const L = edgeLabels?.[eid];
-    if (L) {
-      renderEdgeLabel(out, L.text, tx(L.x), ty(L.y) - 5);
-    }
-  }
+  // Edge label — its box comes from coordMap.edgeLabels (coordinates.js placeEdgeLabel)
+  const L = edge.label ? edgeLabels?.[edge.id] : null;
+  if (L) renderEdgeLabel(out, L, tx, ty);
 }
 
-function renderEdgeLabel(out, label, midX, midY) {
-  const w = label.length * 6.5 + 8;
-  out.push(`<rect x="${rn(midX - w/2)}" y="${rn(midY - 8)}" width="${rn(w)}" height="16" rx="2" fill="white" fill-opacity="0.9"/>`);
-  out.push(`<text x="${rn(midX)}" y="${rn(midY + 4)}" text-anchor="middle" font-size="10" fill="${CLR.label}">${esc(label)}</text>`);
+/**
+ * Draw an edge label into its coordMap box the way bpmn-js draws the same BPMNLabel: Arial (the
+ * root's font-family),
+ * centred on the box, first baseline 3/4 of a line below the box top, no backdrop. Line breaks
+ * and size come from coordMap (`lines`, placeEdgeLabel); nothing is measured here.
+ */
+function renderEdgeLabel(out, label, tx, ty) {
+  const b = edgeLabelBox(label);
+  const fontSize = CFG.layout?.edgeLabelText?.fontSize ?? 11;
+  const lineH = fontSize * (CFG.layout?.edgeLabelText?.lineHeight ?? 1.2);
+  const cx = rn(tx(b.x + b.w / 2));
+  const lines = label.lines ?? [label.text];
+  const tspans = lines.map((line, i) =>
+    `<tspan x="${cx}" y="${rn(ty(b.y) + lineH * (0.75 + i))}">${esc(line)}</tspan>`).join('');
+  out.push(`<text text-anchor="middle" font-size="${fontSize}" fill="${CLR.label}">${tspans}</text>`);
 }
 
 // ─────────────────────────────────────────────────────────────────────
