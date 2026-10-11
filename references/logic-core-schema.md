@@ -97,6 +97,13 @@ The Logic-Core supports two modes:
 | `isEventSubProcess` | No    | `true` for event sub-processes (dashed border)           |
 | `isAdHoc`         | No       | `true` for ad-hoc sub-processes (~ marker)               |
 | `isCompensation`  | No       | `true` for compensation tasks (◁◁ marker)                |
+| `role`            | No       | Who performs an Activity (task, subProcess, transaction, callActivity), e.g. `"Claims handler"`. Written as a `bpmn:humanPerformer` (userTask, manualTask) or `bpmn:performer` pointing at one shared `bpmn:resource` per role name. One role per activity; names compare exactly (`"SAP"` ≠ `"sap"`) |
+| `system`          | No       | Which IT system a task involves (any task type), e.g. `"SAP"`. Written into `extensionElements` under the generator's own namespace (`bg:system`) |
+
+`role` and `system` are data, not drawing: they change nothing in the SVG or the layout. To show
+roles or systems as lanes or pools today, model them that way — see
+[`docs/roles-and-systems.md`](../docs/roles-and-systems.md). A `role` on a non-Activity, or a
+`system` on anything but a task, is dropped from the XML and reported by rule S15.
 
 ### Node Type Values
 
