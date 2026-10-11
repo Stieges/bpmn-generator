@@ -40,20 +40,15 @@
 <text x="95" y="390" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,390)">Team</text>
 <path d="M 206 390 L 286.5 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 311.5 365 L 311.5 110 L 496 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="298.3" y="337" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="341.3" y="349" text-anchor="middle" font-size="10" fill="#000000">Option Alpha</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="403.8" y="101.9">Option Alpha</tspan></text>
 <path d="M 323.5 377 L 323.5 250 L 496 250" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="315.1" y="364" width="79.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="354.8" y="376" text-anchor="middle" font-size="10" fill="#000000">Option Beta</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="409.8" y="241.9">Option Beta</tspan></text>
 <path d="M 335.5 390 L 496 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="397.8" y="377" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="440.8" y="389" text-anchor="middle" font-size="10" fill="#000000">Option Gamma</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="415.8" y="381.9">Option Gamma</tspan></text>
 <path d="M 323.5 402 L 323.5 530 L 496 530" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="311.8" y="389" width="86" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="354.8" y="401" text-anchor="middle" font-size="10" fill="#000000">Option Delta</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="409.8" y="521.9">Option Delta</tspan></text>
 <path d="M 311 414.5 L 311 670 L 496 670" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="291.5" y="416.5" width="99" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="341" y="428.5" text-anchor="middle" font-size="10" fill="#000000">Option Epsilon</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="403.5" y="661.9">Option Epsilon</tspan></text>
 <path d="M 596 110 L 700.5 110 L 700.5 365" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 596 250 L 688.5 250 L 688.5 377" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 596 390 L 676.5 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>

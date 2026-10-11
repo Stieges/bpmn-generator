@@ -41,11 +41,9 @@
 <path d="M 206 290 L 286 290" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 386 277 L 416.3 277 L 416.3 163 L 446.5 163" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 483.5 150 L 656 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="556.1" y="137" width="27.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="569.8" y="149" text-anchor="middle" font-size="10" fill="#000000">Yes</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="569.8" y="141.9">Yes</tspan></text>
 <path d="M 483.5 175 L 483.5 277 L 636 277" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="534.3" y="162" width="21" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="544.8" y="174" text-anchor="middle" font-size="10" fill="#000000">No</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="559.8" y="268.9">No</tspan></text>
 <path d="M 636 303 L 386 303" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 756 150 L 836 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <circle cx="188" cy="289.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>

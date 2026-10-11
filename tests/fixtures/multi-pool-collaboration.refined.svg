@@ -53,21 +53,17 @@
 <path d="M 206 445 L 286 445" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 386 445 L 466.5 445" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 491 469.5 L 491 516 L 706 516 L 706 577" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="584.8" y="503" width="27.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="598.5" y="515" text-anchor="middle" font-size="10" fill="#000000">Yes</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="598.5" y="507.9">Yes</tspan></text>
 <path d="M 503.5 457 L 676 457" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<rect x="579.3" y="444" width="21" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="589.8" y="456" text-anchor="middle" font-size="10" fill="#000000">No</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="589.8" y="448.9">No</tspan></text>
 <path d="M 706 577 L 706 516 L 861 516 L 861 354.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 776 457 L 848.5 457 L 848.5 342" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 885.5 330 L 966 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 1066 330 L 1146 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 336 150 L 336 213 L 188 213 L 188 426.5" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
-<rect x="235.3" y="205" width="53.5" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="262" y="217" text-anchor="middle" font-size="10" fill="#000000">Request</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="262" y="204.9">Request</tspan></text>
 <path d="M 1016 290 L 1016 227 L 516 227 L 516 150" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
-<rect x="736" y="219" width="60" height="16" rx="2" fill="white" fill-opacity="0.9"/>
-<text x="766" y="231" text-anchor="middle" font-size="10" fill="#000000">Response</text>
+<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="766" y="218.9">Response</tspan></text>
 <circle cx="188" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text x="188" y="147.5" text-anchor="middle" font-size="11" fill="#000000">Need identified</text>
 <rect x="286" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
