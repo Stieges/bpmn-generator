@@ -142,7 +142,7 @@ bioc:stroke/bioc:fill attributes on BPMNShape elements, per-node colors in SVG r
 
 ### M7 — Visual Refinement Pass | DONE
 
-Opt-in post-layout polish: dynamic per-pool lane-header widths, edge-label collision repair via bbox-nudge, ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes), and lane padding compaction. Default `visualRefinement.enabled: false` — existing output byte-identical with flag off.
+Opt-in post-layout polish: dynamic per-pool lane-header widths, edge-label collision repair via bbox-nudge, ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes), and lane padding compaction. Default `visualRefinement.enabled: false` — existing output byte-identical with flag off. Wrapping later became its own switch (`layout.elkWrapping`, default off).
 
 **Files:** scripts/bpmn/visual-refinement.js (new), scripts/shared/utils.js (wrapText extension), scripts/bpmn/pipeline.js (flag wiring), scripts/bpmn/layout.js (wrapping hint), scripts/bpmn/coordinates.js (per-pool laneHeaderWidth), config.json. Spec + plan in docs/superpowers/.
 

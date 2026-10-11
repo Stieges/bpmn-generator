@@ -340,7 +340,7 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 - **Pass 1** — Dynamic per-pool lane-header widths with multi-line wrapping (long lane/pool names no longer clip)
 - **Pass 2** — `compactLanes`: reduces lane padding (~45px per non-empty lane on typical layouts, ~10–20% canvas shrink on multi-lane diagrams)
 - **Pass 3** — Edge label collision repair via bbox-nudge
-- **Pass 5** — ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes)
+- **Pass 5** — ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes) — its own switch: `layout.elkWrapping` (`off`/`auto`/`always`), `--wrap`, `runPipeline(lc, { elkWrapping: 'auto' })`; if ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
 
 **Enable via config:**
 

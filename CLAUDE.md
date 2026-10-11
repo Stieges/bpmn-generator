@@ -434,7 +434,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 1. **Never blind-regenerate.** First inspect the diff:
    - `diff -u tests/fixtures/<name>.expected.bpmn /tmp/output.bpmn`
 2. Decide: is the change intended (then the golden is stale and must be regenerated) or unintended (then the code is broken)?
-3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node bpmn/pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`). The `.refined.*` goldens (visual refinement) need the `--refine` flag: `node bpmn/pipeline.js <fixture> <out>.refined --refine`.
+3. Only after the diff is reviewed: regenerate via the fixture's documented procedure (typically `node bpmn/pipeline.js <fixture> <out>` and then `cp <out>.bpmn <fixture>.expected.bpmn`). The `.refined.*` goldens (visual refinement) need the `--refine --wrap` flags: `node bpmn/pipeline.js <fixture> <out>.refined --refine --wrap`.
 4. Commit golden updates in their own commit, separate from code changes.
 
 ### Extend the rule engine
@@ -609,6 +609,9 @@ node bpmn/pipeline.js input.json output --optimize
 
 # Enable visual refinement (P1-P7.1 passes; off by default, see config.json):
 node bpmn/pipeline.js input.json output --refine
+
+# Wrap long chains into rows (ELK MULTI_EDGE, > 20 nodes; off by default, independent of --refine):
+node bpmn/pipeline.js input.json output --wrap
 
 # Start MCP server:
 node mcp-bpmn-server.js

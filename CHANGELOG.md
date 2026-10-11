@@ -320,6 +320,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **ELK wrapping no longer crashes layout (#80).** MULTI_EDGE wrapping made elkjs throw
+  (`Cannot read properties of null`) on models with more than 20 nodes and a back edge. When ELK
+  fails with wrapping properties set, `runElkLayout` now retries once without them, re-throws the
+  original error when there was nothing to remove, and the fallback is reported in
+  `validation.infos` (and printed by the CLI), not only logged. The node threshold now counts only
+  nodes that take part in the ELK graph — artifacts and boundary events no longer push a model over
+  it. Retry approach first implemented in a fork by Sebastian Braun.
 - **Edge labels now sit beside their flow, and the DI and the SVG agree.** `coordMap.edgeLabels` was
   computed on ELK's route and never refreshed after `simplifyAllEdges` (or after lane compaction),
   so the SVG drew labels on legs that no longer existed, while `bpmn-xml.js` computed its own
@@ -931,6 +938,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **ELK wrapping is its own switch.** Row wrapping of long chains (> 20 nodes in the ELK graph) used
+  to switch on with visual refinement. It now has `config.json → layout.elkWrapping`
+  (`"off"` default, `"auto"`, `"always"`; threshold `layout.elkWrappingNodeThreshold`), the
+  `runPipeline` option `elkWrapping` and the CLI flag `--wrap`. Measured on five models above the
+  threshold, wrapping made every one worse in bends, detours and message-flow crowding, so
+  `--refine`/`visualRefinement: true` no longer imply it. `visualRefinement.elkWrapping` and
+  `visualRefinement.elkWrappingNodeThreshold` are gone from `config.json`.
 - **DI05 is readable at high participant counts (#43).** Above `diagnostics.di05GroupThreshold`
   (default 5) the CLI prints DI05 grouped by source participant, one line each with a histogram of
   bands crossed and the worst flows named. Each DI05 message now says how many participants it
