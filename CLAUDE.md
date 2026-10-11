@@ -661,7 +661,7 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   were not in `rerouteAfterCompaction`'s affected set. No fixture shows it today (`hug` is 0)
 - Edge-label repair runs before `routeMessageFlows`, so message-flow labels are never repaired:
   `realistic-collaboration` keeps two overlapping message-flow labels (mf2/mf5) in every mode
-  (issue to be filed)
+  (#88)
 - The DMN importer reads no DMNDI, so every diagram is reported as IM06 and **`report.lossless` is
   never true for a file this generator wrote** — the writer always emits a DMNDI tree (IM06) and
   generates `<variable>`/`<literalExpression>` ids (IM05). `--strict` on `dmn/import.js` and on
