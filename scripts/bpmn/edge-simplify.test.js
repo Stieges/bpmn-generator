@@ -159,6 +159,63 @@ describe('reclipStuckEnds — a boundary event\'s endpoint stays where placeBoun
   });
 });
 
+describe('reclipStuckEnds — foreignShapes: a flow through a foreign shape (#91)', () => {
+  // e runs straight from S to T through X; nothing is wrong at its ends.
+  const coords = { S: { x: 0, y: 0, w: 100, h: 80 }, X: { x: 200, y: 10, w: 60, h: 60 }, T: { x: 400, y: 0, w: 100, h: 80 } };
+  const edges = [{ id: 'e', source: 'S', target: 'T' }];
+  const shapeOf = () => 'rect';
+  const through = () => ({ e: [{ x: 100, y: 40 }, { x: 400, y: 40 }] });
+  const hitsX = (pts) => pts.slice(1).some((b, i) => {
+    const a = pts[i];
+    return Math.max(a.x, b.x) > 201 && Math.min(a.x, b.x) < 259 && Math.max(a.y, b.y) > 11 && Math.min(a.y, b.y) < 69;
+  });
+
+  test('off (the default), a route through a foreign shape is not this pass\'s business', () => {
+    const ec = through();
+    expect(reclipStuckEnds(ec, coords, edges, new Set(), { shapeOf })).toBe(ec);
+  });
+
+  test('on, it is re-routed round the shape, both endpoints kept', () => {
+    const out = reclipStuckEnds(through(), coords, edges, new Set(), { shapeOf, foreignShapes: true }).e;
+    expect(hitsX(out)).toBe(false);
+    expect(out[0]).toEqual({ x: 100, y: 40 });
+    expect(out[out.length - 1]).toEqual({ x: 400, y: 40 });
+  });
+
+  test('an artifact is not a foreign shape: isFlowNode false leaves the route alone', () => {
+    const ec = through();
+    expect(reclipStuckEnds(ec, coords, edges, new Set(), { shapeOf, foreignShapes: true, isFlowNode: (id) => id !== 'X' })).toBe(ec);
+  });
+
+  test('a route through one shape is not traded for two crossings', () => {
+    // X is taller than S and T; two long routes run above and below all three. Any way round X
+    // crosses one of them on the way out and again on the way back — two crossings for one shape.
+    const tall = { ...coords, X: { x: 200, y: -40, w: 60, h: 160 } };
+    const ys = [-45, 125];
+    const fenceCoords = { ...tall, ...Object.fromEntries(ys.flatMap((y, k) => [
+      [`a${k}`, { x: -2120, y: y - 5, w: 10, h: 10 }], [`b${k}`, { x: 2110, y: y - 5, w: 10, h: 10 }]])) };
+    const fenceEdges = [...edges, ...ys.map((_, k) => ({ id: `w${k}`, source: `a${k}`, target: `b${k}` }))];
+    const ec = { ...through(), ...Object.fromEntries(ys.map((y, k) => [`w${k}`, [{ x: -2110, y }, { x: 2110, y }]])) };
+    expect(reclipStuckEnds(ec, fenceCoords, fenceEdges, new Set(), { shapeOf, foreignShapes: true }).e).toBe(ec.e);
+    // Without the lower one, out and back below is free, so the shape goes.
+    const { w1, ...one } = ec;
+    const out = reclipStuckEnds(one, fenceCoords, fenceEdges.filter(e => e.id !== 'w1'), new Set(), { shapeOf, foreignShapes: true }).e;
+    expect(out).not.toBe(ec.e);
+    expect(Math.max(...out.map(p => p.y))).toBeGreaterThan(120);
+  });
+
+  test('a port where another flow of the node ends is given up for a free one', () => {
+    // i enters S at its right midpoint — exactly where e leaves. Leaving there too would read as one
+    // line through S, so e's start moves although keeping it would be fewer moved endpoints.
+    const sharedCoords = { ...coords, Q: { x: 110, y: -160, w: 40, h: 40 } };
+    const sharedEdges = [...edges, { id: 'i', source: 'Q', target: 'S' }];
+    const ec = { ...through(), i: [{ x: 130, y: -120 }, { x: 130, y: 40 }, { x: 100, y: 40 }] };
+    const out = reclipStuckEnds(ec, sharedCoords, sharedEdges, new Set(), { shapeOf, foreignShapes: true }).e;
+    expect(hitsX(out)).toBe(false);
+    expect(out[0]).not.toEqual({ x: 100, y: 40 });
+  });
+});
+
 describe('reclipOptionsFor — what the pipeline hands reclipStuckEnds', () => {
   const nodes = [
     { id: 'task', type: 'userTask' },
@@ -168,6 +225,10 @@ describe('reclipOptionsFor — what the pipeline hands reclipStuckEnds', () => {
   ];
   test('every boundary event is a fixed endpoint, nothing else is', () => {
     expect([...reclipOptionsFor(nodes).fixedEndpoints]).toEqual(['timer']);
+  });
+  test('flow nodes: anything typed that is not an artifact (DI11\'s measure)', () => {
+    const { isFlowNode } = reclipOptionsFor([...nodes, { id: 'doc', type: 'dataObjectReference' }, { id: 'note', type: 'textAnnotation' }]);
+    expect(['task', 'timer', 'gw', 'doc', 'note', 'unknown'].map(isFlowNode)).toEqual([true, true, true, false, false, false]);
   });
   test('shapes: event → circle, gateway → diamond, anything else → rect', () => {
     const { shapeOf } = reclipOptionsFor(nodes);

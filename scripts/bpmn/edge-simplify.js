@@ -22,7 +22,7 @@
 
 import { routeAroundObstacles, ROUTER_PAD } from './orthogonal-router.js';
 import { CFG } from '../shared/utils.js';
-import { isEvent, isGateway } from './types.js';
+import { isEvent, isGateway, isArtifact } from './types.js';
 
 // px buffer around each node bbox for clearance; config.json → layout.shapeClearance, shared with
 // coordinates.js's message-flow routing.
@@ -795,6 +795,81 @@ function lexLess(a, b) {
   return false;
 }
 
+/** Is `p` within half a pixel of `q`? */
+function samePoint(p, q) {
+  return Math.abs(p.x - q.x) < 0.5 && Math.abs(p.y - q.y) < 0.5;
+}
+
+/**
+ * pathClearOfBoxes with a segment exactly on the padded outline counting as clear — the boundary
+ * rule of orthogonal-router.js's segClearOfBox. The router puts grid lines at a box ± its own
+ * padding, and a route it builds there must not be refused here for lying NODE_PADDING px off a
+ * box: pathClearOfBoxes calls that line blocked, the router calls it free.
+ */
+function pathClearOfBoxesInclusive(points, boxes, sourceId, targetId) {
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1];
+    for (const [id, box] of Object.entries(boxes)) {
+      if (id === sourceId || id === targetId) continue;
+      const x1 = box.x - NODE_PADDING, y1 = box.y - NODE_PADDING;
+      const x2 = box.x + box.w + NODE_PADDING, y2 = box.y + box.h + NODE_PADDING;
+      if (Math.max(a.x, b.x) <= x1 || Math.min(a.x, b.x) >= x2) continue;
+      if (Math.max(a.y, b.y) <= y1 || Math.min(a.y, b.y) >= y2) continue;
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Ids of the foreign flow-node shapes an axis-parallel segment of `points` runs through — the
+ * DI11 measure (di-check.js): the drawn shape (shapeOf), 1 px inset; not the edge's own source or
+ * target, not an artifact (isFlowNode false), not a box containing an endpoint (its expanded
+ * subprocess).
+ */
+function foreignShapeHits(points, coords, entry, shapeOf, isFlowNode) {
+  const srcBox = coords[entry.source], tgtBox = coords[entry.target];
+  const contains = (o, i) => o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
+  const segs = segmentsOf(points).filter(([a, z]) => Math.abs(a.x - z.x) < 1e-6 || Math.abs(a.y - z.y) < 1e-6);
+  const hits = [];
+  for (const [id, box] of Object.entries(coords)) {
+    if (id === entry.source || id === entry.target || !isFlowNode(id) || !Number.isFinite(box.x)) continue;
+    if ((srcBox && contains(box, srcBox)) || (tgtBox && contains(box, tgtBox))) continue;
+    if (segs.some(sg => segmentEntersShape(sg, box, shapeOf(id)))) hits.push(id);
+  }
+  return hits;
+}
+
+/** Number of the edge's own two shapes it runs through (the DI09 measure, 0–2). */
+function ownShapeHits(points, srcBox, tgtBox, srcShape, tgtShape) {
+  const segs = segmentsOf(points);
+  return (segs.some(sg => segmentEntersShape(sg, srcBox, srcShape)) ? 1 : 0)
+       + (segs.some(sg => segmentEntersShape(sg, tgtBox, tgtShape)) ? 1 : 0);
+}
+
+/**
+ * Total length (px) along which `points` lies on another route: parallel segments closer than
+ * COLLINEAR_PX, adjacent routes included — two flows of one node drawn on one line read as one.
+ */
+const COLLINEAR_PX = 3;
+function collinearOverlap(points, entry, entries) {
+  let total = 0;
+  const mine = segmentsOf(points);
+  for (const other of entries) {
+    if (other.id === entry.id) continue;
+    for (const [a, b] of mine) {
+      for (const [c, d] of segmentsOf(other.points)) {
+        const ov = (p0, p1, q0, q1) => Math.max(0, Math.min(Math.max(p0, p1), Math.max(q0, q1)) - Math.max(Math.min(p0, p1), Math.min(q0, q1)));
+        const horizontal = Math.abs(a.y - b.y) < 1e-6 && Math.abs(c.y - d.y) < 1e-6;
+        const vertical = Math.abs(a.x - b.x) < 1e-6 && Math.abs(c.x - d.x) < 1e-6;
+        if (horizontal && Math.abs(a.y - c.y) < COLLINEAR_PX) total += ov(a.x, b.x, c.x, d.x);
+        else if (vertical && Math.abs(a.x - c.x) < COLLINEAR_PX) total += ov(a.y, b.y, c.y, d.y);
+      }
+    }
+  }
+  return total;
+}
+
 /**
  * Re-route every edge that still has an end defect (see endDefects), trying each combination of
  * source and target port: the current endpoint (when sideOf identifies its side, and always the
@@ -807,12 +882,32 @@ function lexLess(a, b) {
  * moved endpoints, bends, length — so an endpoint moves only when no fixed-endpoint route does as
  * well. Greedy, one edge at a time in `edges` order; later edges see earlier re-routes.
  *
+ * `foreignShapes` (pipeline: layout.foreignShapeRepair, #91) widens the pass to routes through a
+ * shape — the routes coordinates.js §5.0a/§5.2 rebuild without an obstacle test, which no other
+ * pass is triggered by:
+ *  - an edge running through a foreign flow node (the DI11 measure) is re-routed too;
+ *  - every shape the current route runs through, foreign or its own (DI09), may be traded for one
+ *    crossing: a candidate may cross the others that many times more than the current route;
+ *  - a candidate may not lie on another route (collinearOverlap, adjacent routes included) for
+ *    longer than the current route does;
+ *  - ranked by crossings, then ports shared in/out with another flow of the same node (one flow
+ *    leaving where another enters reads as one line through the node), then moved endpoints,
+ *    bends, ports shared in one direction, length;
+ *  - the router gets grid lines END_STUB_PX either side of both stubs (`endLines`), so a route can
+ *    turn into a stub from just beyond it instead of hooking round the next obstacle line;
+ *  - router candidates are judged with the router's own boundary rule (pathClearOfBoxesInclusive);
+ *  - when the first sweep moved anything, a second one runs: an edge earlier in `edges` order may
+ *    have been stuck only against a later edge's route through a shape.
+ * Off, the pass is exactly the stuck-end pass above.
+ *
  * An edge inside an expanded subprocess is never re-clipped: pathClearOfBoxes skips only the
  * edge's own source and target, so the container around both still counts as an obstacle and
  * rejects every candidate. Deliberate — a nested stuck end has not been measured in any fixture,
  * and the container's own geometry is not this pass's to judge.
  */
-export function reclipStuckEnds(edgeCoords, coords, edges, skipIds = new Set(), { shapeOf = () => 'rect', fixedEndpoints = new Set() } = {}) {
+export function reclipStuckEnds(edgeCoords, coords, edges, skipIds = new Set(), {
+  shapeOf = () => 'rect', fixedEndpoints = new Set(), foreignShapes = false, isFlowNode = () => true,
+} = {}) {
   const entries = [];
   for (const e of edges || []) {
     if (skipIds.has(e.id)) continue;
@@ -823,52 +918,85 @@ export function reclipStuckEnds(edgeCoords, coords, edges, skipIds = new Set(), 
   const contains = (o, i) => o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
   const changed = new Map();
 
-  for (const entry of entries) {
-    const srcBox = coords[entry.source];
-    const tgtBox = coords[entry.target];
-    if (!srcBox || !tgtBox) continue;
-    const srcShape = shapeOf(entry.source);
-    const tgtShape = shapeOf(entry.target);
-    if (!endDefects(entry.points, srcBox, tgtBox, srcShape, tgtShape)) continue;
+  const sweeps = foreignShapes ? 2 : 1;
+  for (let sweep = 0; sweep < sweeps; sweep++) {
+    let movedThisSweep = false;
+    for (const entry of entries) {
+      const srcBox = coords[entry.source];
+      const tgtBox = coords[entry.target];
+      if (!srcBox || !tgtBox) continue;
+      const srcShape = shapeOf(entry.source);
+      const tgtShape = shapeOf(entry.target);
+      const stuck = endDefects(entry.points, srcBox, tgtBox, srcShape, tgtShape) > 0;
+      const foreignNow = foreignShapes ? foreignShapeHits(entry.points, coords, entry, shapeOf, isFlowNode).length : 0;
+      if (!stuck && !foreignNow) continue;
 
-    const crossingsNow = crossingsAgainstOthers(entry, entry.points, entries);
-    const start = entry.points[0];
-    const end = entry.points[entry.points.length - 1];
-    const ports = (box, point, fixed) => {
-      const side = sideOf(point, box);
-      const current = side ? [{ p: point, side, moved: false }] : [];
-      if (fixed) return current;
-      const mids = SIDES.map(s => ({ p: sideMidpoint(box, s), side: s, moved: true }))
-        .filter(m => !current.some(c => c.p.x === m.p.x && c.p.y === m.p.y));
-      return [...current, ...mids];
-    };
-    const obstacles = Object.values(coords).filter(b =>
-      b === srcBox || b === tgtBox || (!contains(b, srcBox) && !contains(b, tgtBox)));
-    const softObstacles = entries.filter(o => o.id !== entry.id && !adjacent(entry, o)).map(o => o.points);
+      const crossingsNow = crossingsAgainstOthers(entry, entry.points, entries);
+      const allowance = foreignShapes ? foreignNow + ownShapeHits(entry.points, srcBox, tgtBox, srcShape, tgtShape) : 0;
+      const overlapNow = foreignShapes ? collinearOverlap(entry.points, entry, entries) : 0;
+      const start = entry.points[0];
+      const end = entry.points[entry.points.length - 1];
+      const ports = (box, point, fixed) => {
+        const side = sideOf(point, box);
+        const current = side ? [{ p: point, side, moved: false }] : [];
+        if (fixed) return current;
+        const mids = SIDES.map(s => ({ p: sideMidpoint(box, s), side: s, moved: true }))
+          .filter(m => !current.some(c => c.p.x === m.p.x && c.p.y === m.p.y));
+        return [...current, ...mids];
+      };
+      const obstacles = Object.values(coords).filter(b =>
+        b === srcBox || b === tgtBox || (!contains(b, srcBox) && !contains(b, tgtBox)));
+      const softObstacles = entries.filter(o => o.id !== entry.id && !adjacent(entry, o)).map(o => o.points);
+      const clear = foreignShapes ? pathClearOfBoxesInclusive : pathClearOfBoxes;
+      // Ports this candidate shares with another flow of the same node: [in/out, same direction].
+      const sharedPorts = (s, t) => {
+        let inOut = 0, sameDir = 0;
+        for (const o of entries) {
+          if (o.id === entry.id) continue;
+          const os = o.points[0], oe = o.points[o.points.length - 1];
+          if (o.source === entry.source && samePoint(os, s.p)) sameDir++;
+          if (o.target === entry.source && samePoint(oe, s.p)) inOut++;
+          if (o.target === entry.target && samePoint(oe, t.p)) sameDir++;
+          if (o.source === entry.target && samePoint(os, t.p)) inOut++;
+        }
+        return [inOut, sameDir];
+      };
 
-    let best = null;
-    for (const s of ports(srcBox, start, fixedEndpoints.has(entry.source))) {
-      for (const t of ports(tgtBox, end, fixedEndpoints.has(entry.target))) {
-        const out = OUTWARD[s.side];
-        const inn = INWARD[t.side];
-        const s1 = { x: s.p.x + out[0] * END_STUB_PX, y: s.p.y + out[1] * END_STUB_PX };
-        const e1 = { x: t.p.x - inn[0] * END_STUB_PX, y: t.p.y - inn[1] * END_STUB_PX };
-        const middle = routeAroundObstacles(s1, OUT_DIR_NAME[s.side], e1, IN_DIR_NAME[t.side], obstacles, { softObstacles });
-        if (!middle) continue;
-        const cand = withoutCollinear([s.p, ...middle, t.p]);
-        if (!isOrthogonal(cand)) continue;
-        if (endDefects(cand, srcBox, tgtBox, srcShape, tgtShape)) continue;
-        if (!pathClearOfBoxes(cand, coords, entry.source, entry.target)) continue;
-        const crossings = crossingsAgainstOthers(entry, cand, entries);
-        if (crossings > crossingsNow) continue;
-        const score = [crossings, (s.moved ? 1 : 0) + (t.moved ? 1 : 0), bendCount(cand), pathLength(cand)];
-        if (!best || lexLess(score, best.score)) best = { cand, score };
+      let best = null;
+      for (const s of ports(srcBox, start, fixedEndpoints.has(entry.source))) {
+        for (const t of ports(tgtBox, end, fixedEndpoints.has(entry.target))) {
+          const out = OUTWARD[s.side];
+          const inn = INWARD[t.side];
+          const s1 = { x: s.p.x + out[0] * END_STUB_PX, y: s.p.y + out[1] * END_STUB_PX };
+          const e1 = { x: t.p.x - inn[0] * END_STUB_PX, y: t.p.y - inn[1] * END_STUB_PX };
+          const middle = routeAroundObstacles(s1, OUT_DIR_NAME[s.side], e1, IN_DIR_NAME[t.side], obstacles,
+            { softObstacles, endLines: foreignShapes ? END_STUB_PX : 0 });
+          if (!middle) continue;
+          const cand = withoutCollinear([s.p, ...middle, t.p]);
+          if (!isOrthogonal(cand)) continue;
+          if (endDefects(cand, srcBox, tgtBox, srcShape, tgtShape)) continue;
+          if (!clear(cand, coords, entry.source, entry.target)) continue;
+          const crossings = crossingsAgainstOthers(entry, cand, entries);
+          if (crossings > crossingsNow + allowance) continue;
+          const moved = (s.moved ? 1 : 0) + (t.moved ? 1 : 0);
+          let score;
+          if (foreignShapes) {
+            if (collinearOverlap(cand, entry, entries) > overlapNow + 0.5) continue;
+            const [inOut, sameDir] = sharedPorts(s, t);
+            score = [crossings, inOut, moved, bendCount(cand), sameDir, pathLength(cand)];
+          } else {
+            score = [crossings, moved, bendCount(cand), pathLength(cand)];
+          }
+          if (!best || lexLess(score, best.score)) best = { cand, score };
+        }
+      }
+      if (best) {
+        entry.points = best.cand;
+        changed.set(entry.id, best.cand);
+        movedThisSweep = true;
       }
     }
-    if (best) {
-      entry.points = best.cand;
-      changed.set(entry.id, best.cand);
-    }
+    if (!movedThisSweep) break;
   }
 
   if (!changed.size) return edgeCoords;
@@ -890,5 +1018,8 @@ export function reclipOptionsFor(nodes) {
     if (n.attachedTo) fixedEndpoints.add(n.id);
   }
   const shapeOf = (id) => (isEvent(typeOf[id]) ? 'circle' : isGateway(typeOf[id]) ? 'diamond' : 'rect');
-  return { shapeOf, fixedEndpoints };
+  // A flow node, for foreignShapes: what DI11 counts — artifacts (data references, annotations,
+  // groups) are not obstacles a sequence flow may not cross.
+  const isFlowNode = (id) => id in typeOf && !isArtifact(typeOf[id]);
+  return { shapeOf, fixedEndpoints, isFlowNode };
 }
