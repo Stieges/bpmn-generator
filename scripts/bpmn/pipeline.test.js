@@ -34,7 +34,7 @@ import { enumerateScenarios } from '../scenarios/enumerate.js';
 import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from '../http-server.js';
-import { checkDiagramIntegrity } from './di-check.js';
+import { checkDiagramIntegrity, groupDi05BySource, formatDiWarnings } from './di-check.js';
 import { routeMessageFlows } from './coordinates.js';
 import { checkNetIntegrity } from './net-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
@@ -4338,6 +4338,30 @@ describe('CLI enforcement (schema-gate + --strict)', () => {
     expect(r.status).toBe(0);
     expect(r.bpmnExists).toBe(true);
   });
+
+  test('more DI05 findings than the threshold print grouped by source participant (#43)', async () => {
+    const n = 9;
+    const nodes = [{ id: 's', type: 'startEvent', name: 'Start' }];
+    const edges = [];
+    let prev = 's';
+    for (let i = 1; i <= n; i++) {
+      nodes.push({ id: `t${i}`, type: 'sendTask', name: `Call system ${i}` });
+      edges.push({ id: `f${i}`, source: prev, target: `t${i}` });
+      prev = `t${i}`;
+    }
+    nodes.push({ id: 'e', type: 'endEvent', name: 'Done' });
+    edges.push({ id: 'fe', source: prev, target: 'e' });
+    const hub = {
+      pools: [{ id: 'Hub', name: 'Hub', nodes, edges }],
+      collapsedPools: Array.from({ length: n }, (_, i) => ({ id: `Sys${i + 1}`, name: `System ${i + 1}` })),
+      messageFlows: Array.from({ length: n }, (_, i) => ({ id: `mf${i + 1}`, source: `t${i + 1}`, target: `Sys${i + 1}`, name: `Request ${i + 1}` })),
+    };
+    const r = await runCli(hub, { strict: false });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/DI05 7 message flows cross uninvolved participants \u2014 by source participant:/);
+    expect(r.stderr).toMatch(/ {4}Hub: 7 flows \(/);
+    expect(r.stderr).not.toMatch(/\u00b7 DI05 Message flow "mf1"/);
+  });
 });
 
 describe('net-check wired into runPipeline (netDiagnostics)', () => {
@@ -5232,6 +5256,50 @@ describe('DI integrity check', () => {
         t: { x: 0, y: 400, w: 100, h: 80 } };
       const r = checkDiagramIntegrity({ coords: boxes, poolCoords: {}, edgeCoords: { mf: [{ x: 50, y: 80 }, { x: 50, y: 400 }] } }, nested);
       expect(r.issues.filter(i => i.code === 'DI10')).toEqual([]);
+    });
+  });
+
+  describe('DI05 presentation (#43)', () => {
+    const lc = {
+      pools: [{ id: 'Hub', nodes: [{ id: 't1' }, { id: 't2' }, { id: 't3' }] }],
+      collapsedPools: [{ id: 'S1' }, { id: 'S2' }, { id: 'S3' }, { id: 'S4' }],
+      messageFlows: [
+        { id: 'mf1', source: 't1', target: 'S4' }, { id: 'mf2', source: 't2', target: 'S3' },
+        { id: 'mf3', source: 't3', target: 'S4' }, { id: 'mf4', source: 'S4', target: 't1' },
+      ],
+    };
+    const issue = (flow, ...crossed) => ({ code: 'DI05', severity: 'WARNING',
+      message: `Message flow "${flow}" crosses ${crossed.length} uninvolved participant(s): ${crossed.join(', ')}.`,
+      elements: [flow, ...crossed] });
+    const issues = [issue('mf1', 'S1', 'S2', 'S3'), issue('mf2', 'S1', 'S2'), issue('mf3', 'S1', 'S2', 'S3'), issue('mf4', 'S1', 'S2', 'S3')];
+
+    test('groups by the participant each flow leaves, largest group first', () => {
+      expect(groupDi05BySource(issues, lc)).toEqual([
+        { participant: 'Hub', flows: [{ flow: 'mf1', crossed: ['S1', 'S2', 'S3'] },
+          { flow: 'mf2', crossed: ['S1', 'S2'] }, { flow: 'mf3', crossed: ['S1', 'S2', 'S3'] }] },
+        { participant: 'S4', flows: [{ flow: 'mf4', crossed: ['S1', 'S2', 'S3'] }] },
+      ]);
+    });
+
+    test('at or under the threshold: one line per flow, as before', () => {
+      expect(formatDiWarnings(issues, lc, { groupThreshold: 4 })).toEqual(issues.map(i => `DI05 ${i.message}`));
+    });
+
+    test('above the threshold: one line per source participant with a band histogram', () => {
+      const other = { code: 'DI08', severity: 'WARNING', message: 'Sequence flow "f" ends along the left side of "x" for 9 px.', elements: ['f', 'x'] };
+      expect(formatDiWarnings([...issues, other], lc, { groupThreshold: 3 })).toEqual([
+        'DI08 Sequence flow "f" ends along the left side of "x" for 9 px.',
+        'DI05 4 message flows cross uninvolved participants \u2014 by source participant:',
+        '    Hub: 3 flows (1\u00d7 2 bands, 2\u00d7 3 bands); most bands (3): mf1, mf3',
+        '    S4: 1 flow (1\u00d7 3 bands); most bands (3): mf4',
+      ]);
+    });
+
+    test('a DI05 message names how many participants it crosses', async () => {
+      const r = await runPipeline(loadFixture('realistic-collaboration.json'), { poolOrder: 'declared' });
+      for (const i of r.diagnostics.issues.filter(x => x.code === 'DI05')) {
+        expect(i.message).toMatch(new RegExp(`crosses ${i.elements.length - 1} uninvolved participant\\(s\\): `));
+      }
     });
   });
 });
