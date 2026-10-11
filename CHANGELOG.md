@@ -61,6 +61,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
 
 ### Added
+- **`role` and `system` on an activity.** Two optional Logic-Core node fields. `role` (any Activity:
+  task, `subProcess`, `transaction`, `callActivity`) is written as BPMN standard — one
+  `<bpmn:resource>` per distinct role name (id derived from the name, collision-safe), referenced
+  by a `<bpmn:humanPerformer>` on a `userTask`/`manualTask` and a `<bpmn:performer>` elsewhere.
+  `system` (any task type) is written as `<bg:system>` in `extensionElements`, beside `decisionRef`.
+  Both importers read both back at every nesting level; of foreign role forms only a single
+  performer/humanPerformer naming a named resource is read (a `resourceAssignmentExpression`,
+  several performers, a `potentialOwner` or a nameless resource are not). On an element out of
+  scope, S15 reports the field and the XML stays valid. The drawing does not change. Ontology
+  version 1.2; both `$schemaVersion` defaults follow (1.0 and 1.1 documents stay valid).
+- **Guide: showing roles and systems** — [`docs/roles-and-systems.md`](docs/roles-and-systems.md)
+  shows responsibility lanes, system lanes, systems as collapsed pools and as expanded pools with
+  the current means, one runnable Logic-Core example each (run by a test), plus the new fields.
 - **Node labels that avoid flows (on by default).** An event's or a gateway's label no longer has to sit
   where a flow leaves or enters the node: when one of its sequence or message flows uses the node's
   bottom or runs through the label, the label moves to the first free spot among below, above, right-below and left-below —

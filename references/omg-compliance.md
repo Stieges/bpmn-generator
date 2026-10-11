@@ -201,7 +201,7 @@ The following gaps were closed during the compliance sprint:
 | A8 | isForCompensation on Tasks | Closed | bpmn-xml.js (isForCompensation attr), import.js (extraction) |
 | A9 | Default Flow (isDefault + default attribute) | Already implemented | bpmn-xml.js:generateBpmnXml |
 | A10 | Loop Characteristics (loopCondition, testBefore, loopMaximum) | Closed | bpmn-xml.js (loop object with child elements), import.js (object extraction), Schema: oneOf [string, object] |
-| A11 | Performer/Resources | Accepted (out-of-scope) | Rarely used, Camunda uses extensions |
+| A11 | Performer/Resources | Closed (4.0, one form) | Logic-Core `role` on any Activity → one `bpmn:resource` (a RootElement; bpmn-moddle `Resource`) per distinct name + `bpmn:humanPerformer` (userTask, manualTask) or `bpmn:performer` (`Activity#resources`, a `ResourceRole` list) with `resourceRef`; bpmn-xml.js:buildResources/buildFlowNode, read back by moddle-import.js:readRole and import.js:readRoleFromDom. Only a single performer/humanPerformer naming a named resource is read; `resourceAssignmentExpression`, several performers, `potentialOwner` and nameless resources are not |
 | A12 | Data State | Accepted (out-of-scope) | Rarely used |
 | A13 | isCollection on dataObjectReference | Closed | bpmn-xml.js (isCollection attr), import.js (extraction) |
 
@@ -238,7 +238,7 @@ All 6 DI gaps were already substantially resolved. Only polishing (edge routing,
 
 ### Schema Extensions (input-schema.json)
 
-New optional fields on Node: `calledElement`, `scriptFormat`, `script`, `implementation`, `eventGatewayType`, `instantiate`, `linkName`, `conditionExpression`, `timerExpression` (object). `loopType` and `multiInstance` now accept both string (backward-compatible) and object (with execution details). Lane: `children` (recursive). SingleProcess/Collaboration: `definitions[]` (TopLevelDefinition).
+New optional fields on Node: `calledElement`, `scriptFormat`, `script`, `implementation`, `eventGatewayType`, `instantiate`, `linkName`, `conditionExpression`, `timerExpression` (object), `role` (→ performer/resource, see A11), `system` (no OMG element: generator extension `bg:system` in `extensionElements`, like `decisionRef`). `loopType` and `multiInstance` now accept both string (backward-compatible) and object (with execution details). Lane: `children` (recursive). SingleProcess/Collaboration: `definitions[]` (TopLevelDefinition).
 
 ---
 
