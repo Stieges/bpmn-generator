@@ -517,6 +517,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   artifact goes below its own process — in the lane of its lowest node — instead of below the whole
   collaboration, i.e. under the last participant. Both raised DI03. New fixture
   `tests/fixtures/artifacts-laneless-pool.json`, fenced by the DI check.
+- **Message-flow labels get collision repair (#88).** The edge-label repair ran before
+  `routeMessageFlows`, so a message-flow label was never checked against anything placed after it:
+  two flows fanned in one corridor put their labels on top of each other, or one label on the other
+  flow's line (`realistic-collaboration` "Assessment request" / "Assessment report" in every mode,
+  `bpmn-generator-pipeline` with `--refine --wrap`). A new pass, `repairMessageFlowLabels`
+  (`scripts/bpmn/coordinates.js`), runs right after `routeMessageFlows` and before node-label
+  avoidance: a message-flow label whose box reaches into a route (its own or any other), a shape, a
+  node label, another edge label or a participant header (pool or lane header strip, a black-box
+  participant whole), or crosses a lane separator, moves to the nearest clear spot beside one of its
+  own segments — `layout.edgeLabelGap` px off it, either side, slid along it in
+  `layout.messageFlowLabelSlidePx` (10) px steps. No clear spot: the label stays. Deterministic and
+  idempotent (a fixpoint: the second run moves nothing); labels only, every route unchanged, and the
+  box stays in `coordMap.edgeLabels`, so DI and SVG keep agreeing. Default output changes for four
+  committed fixtures (`bpmn-generator-pipeline`, `example-kreditantrag`, `example-schadenmeldung`,
+  `realistic-collaboration`); the layout ratchet's `labelLabel` is now 0 for every fixture and mode.
+  Switch: `layout.messageFlowLabelRepair` (default `true`), per call `runPipeline(lc, {
+  messageFlowLabelRepair: false })`; with it off the output is byte-identical to before (the hash
+  fence now names it among the switches it turns off).
 - **The legacy importer decodes XML character data like the primary one.** `bpmnToLogicCoreLegacy`
   (`scripts/bpmn/import.js`) decoded only the five named entities in attributes and nothing in
   element text, so a name written as `&#38;` came back as `Check A &#38; B` and `x<1` in a
