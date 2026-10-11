@@ -193,6 +193,37 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
     }
   }
 
+  // DI09 — a sequence flow running through its own source or target shape (owner decision 3).
+  // Every other check exempts an edge's own endpoints; this one is about exactly them. WARNING:
+  // the flow is attached, but it visibly starts or ends somewhere else. The shape is the drawn
+  // one — a circle for an event, a rhombus for a gateway (type-name suffix: this pass is
+  // dependency-free by design), the box for everything else; 1 px inset.
+  // Axis-parallel segments only: segmentEntersShape's nearest-point maths holds for those alone (a
+  // diagonal would be judged by its bounding box). The pipeline routes every sequence flow
+  // orthogonally; a diagonal one is hand-made or detached, and the detached case is DI07's.
+  const typeOfNode = {};
+  for (const proc of (lc.pools || [lc])) for (const n of flattenNodes(proc.nodes)) typeOfNode[n.id] = n.type;
+  const shapeOfNode = (id) => (/Event$/.test(typeOfNode[id] || '') ? 'circle'
+    : /Gateway$/.test(typeOfNode[id] || '') ? 'diamond' : 'rect');
+  for (const proc of (lc.pools || [lc])) {
+    for (const edge of flattenEdges(proc)) {
+      const segs = nonZeroSegments((coordMap.edgeCoords || {})[edge.id] || [])
+        .filter(([a, z]) => Math.abs(a.x - z.x) < 1e-6 || Math.abs(a.y - z.y) < 1e-6);
+      if (!segs.length) continue;
+      for (const [role, nodeId] of [['source', edge.source], ['target', edge.target]]) {
+        const box = coords[nodeId];
+        if (!box || !Number.isFinite(box.x)) continue;
+        if (!segs.some(s => segmentEntersShape(s, box, shapeOfNode(nodeId)))) continue;
+        issues.push({
+          code: 'DI09',
+          severity: 'WARNING',
+          message: `Sequence flow "${edge.id}" runs through its own ${role} "${nodeId}".`,
+          elements: [edge.id, nodeId],
+        });
+      }
+    }
+  }
+
   // DI05 — a message flow crossing a participant it does not involve.
   // WARNING, not ERROR: with a communication cycle across three or more
   // participants a linear stack cannot avoid it, so this reports rather than
@@ -294,4 +325,18 @@ function alongSide([a, b], box, tol) {
   return best;
 }
 
+/** Does an axis-parallel segment enter the drawn shape's interior? Same maths as
+ *  scripts/bench/layout-metrics.mjs's segmentEntersShape. */
+function segmentEntersShape([a, z], box, shape) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const nx = Math.max(Math.min(a.x, z.x), Math.min(Math.max(a.x, z.x), cx));
+  const ny = Math.max(Math.min(a.y, z.y), Math.min(Math.max(a.y, z.y), cy));
+  if (shape === 'circle') return Math.hypot(nx - cx, ny - cy) < box.w / 2 - 1;
+  if (shape === 'diamond') return Math.abs(nx - cx) / (box.w / 2) + Math.abs(ny - cy) / (box.h / 2) < 1 - 2 / Math.min(box.w, box.h);
+  return Math.max(a.x, z.x) > box.x + 1 && Math.min(a.x, z.x) < box.x + box.w - 1
+      && Math.max(a.y, z.y) > box.y + 1 && Math.min(a.y, z.y) < box.y + box.h - 1;
+}
+
 export { checkDiagramIntegrity };
+

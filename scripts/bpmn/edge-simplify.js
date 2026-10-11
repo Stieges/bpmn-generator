@@ -12,7 +12,8 @@
  * node boxes and crosses both endpoint outlines, use it; if every clear L would
  * lie on an endpoint's outline (#52), try the simplest two/three-bend or stubbed
  * route that does not — see simplifyEdge; guardAgainstLegacy then reverts any
- * single edge whose new route costs a crossing.
+ * single edge whose new route costs a crossing, and reclipStuckEnds re-routes an
+ * edge that still ends along or runs through its own shape.
  *
  * Pure function. Doesn't mutate ELK's coordMap if no simplification is
  * possible. Doesn't touch edges that are already straight (2 waypoints)
@@ -87,6 +88,10 @@ function pathLength(waypoints) {
  *     lesser defect than a line through a shape.
  * `legacy: true` returns the first clear L, as before #52 — the route guardAgainstLegacy reverts to.
  * Returns the original array reference when nothing changes.
+ *
+ * Not idempotent: run on its own output, a 4+-point #52 route is simplified again and may come out
+ * on another corridor. The pipeline calls it exactly once per edge, on ELK's route, and no later
+ * pass (repairCrossings, guardAgainstLegacy, reclipStuckEnds) feeds a route back through it.
  */
 export function simplifyEdge(waypoints, boxes, sourceId, targetId, { legacy = false } = {}) {
   if (!waypoints || waypoints.length <= 3) return waypoints;  // already minimal
@@ -570,8 +575,13 @@ export function repairCrossings(edgeCoords, coords, edges, skipIds = new Set(), 
  * crossings repairCrossings leaves for `routes` and for `legacyRoutes` (simplifyAllEdges with
  * legacy: true). Only if the new routes leave more, revert single edges to their legacy route, in
  * `edges` order, keeping a revert only when it lowers the count, until the count is back at the
- * legacy level. Returns the routes to hand to repairCrossings, and the reverted edge ids.
+ * legacy level. The search is first-improving in `edges` order: the first single revert that lowers
+ * the count is kept, and the next edge is tried against the result — not the best revert overall,
+ * and not every subset. Returns the routes to hand to repairCrossings, and the reverted edge ids.
  * No blanket exception for any class of edge: whatever is reverted was measured to cost a crossing.
+ *
+ * Cost: two extra repairCrossings runs on every call (one for `routes`, one for `legacyRoutes`),
+ * plus one per trial revert — the trials only happen when the new routes left more crossings.
  */
 export function guardAgainstLegacy(routes, legacyRoutes, coords, edges, skipIds = new Set(), repairOpts = {}) {
   const crossingsAfterRepair = (map) => {
@@ -594,4 +604,157 @@ export function guardAgainstLegacy(routes, legacyRoutes, coords, edges, skipIds 
     if (m < n) { current = trial; n = m; reverted.push(e.id); }
   }
   return { routes: current, reverted };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Stuck ends (owner decision 4, 2026-10-11)
+//
+// The one exception to "endpoints are clipped once, in coordinates.js §5.1": an edge that, after
+// simplification and crossing repair, still ends along an outline or runs through its own source
+// or target may have an endpoint moved to the midpoint of another side of its node's bounds. That
+// point lies on the outline for a rectangle, a circle and a rhombus alike, so nothing is clipped a
+// second time. Only taken when no route keeping the endpoint does as well (see the score).
+//
+// This pass never calls simplifyEdge or stubRoutes. simplifyEdge is not idempotent on its own
+// output (a second run over a #52 route may pick another corridor), which is why nothing here
+// feeds a route back through it: the candidates are built from scratch by orthogonal-router.js,
+// and an edge without an end defect is never touched at all.
+// ═══════════════════════════════════════════════════════════════════════
+
+const SIDES = ['left', 'right', 'top', 'bottom'];
+
+function sideMidpoint(box, side) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  if (side === 'left') return { x: box.x, y: cy };
+  if (side === 'right') return { x: box.x + box.w, y: cy };
+  if (side === 'top') return { x: cx, y: box.y };
+  return { x: cx, y: box.y + box.h };
+}
+
+/** Does an axis-parallel segment enter the drawn shape's interior (rect, circle or rhombus)? Same
+ *  maths as scripts/bench/layout-metrics.mjs's segmentEntersShape. */
+function segmentEntersShape([a, z], box, shape) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const nx = Math.max(Math.min(a.x, z.x), Math.min(Math.max(a.x, z.x), cx));
+  const ny = Math.max(Math.min(a.y, z.y), Math.min(Math.max(a.y, z.y), cy));
+  if (shape === 'circle') return Math.hypot(nx - cx, ny - cy) < box.w / 2 - 1;
+  if (shape === 'diamond') return Math.abs(nx - cx) / (box.w / 2) + Math.abs(ny - cy) / (box.h / 2) < 1 - 2 / Math.min(box.w, box.h);
+  return Math.max(a.x, z.x) > box.x + 1 && Math.min(a.x, z.x) < box.x + box.w - 1
+      && Math.max(a.y, z.y) > box.y + 1 && Math.min(a.y, z.y) < box.y + box.h - 1;
+}
+
+/** Longest collinear (±1 px) overlap of a segment with a side of `box`. */
+function alongOutline([a, b], box) {
+  const ov = (a0, a1, b0, b1) => Math.max(0, Math.min(Math.max(a0, a1), b1) - Math.max(Math.min(a0, a1), b0));
+  let best = 0;
+  if (Math.abs(a.x - b.x) <= 1) {
+    for (const x of [box.x, box.x + box.w]) if (Math.abs(a.x - x) <= 1) best = Math.max(best, ov(a.y, b.y, box.y, box.y + box.h));
+  }
+  if (Math.abs(a.y - b.y) <= 1) {
+    for (const y of [box.y, box.y + box.h]) if (Math.abs(a.y - y) <= 1) best = Math.max(best, ov(a.x, b.x, box.x, box.x + box.w));
+  }
+  return best;
+}
+
+/** Number of end defects: an end segment along its outline (> 5 px, bpmn-js's arrowhead length),
+ *  or any segment inside the edge's own source or target shape. */
+function endDefects(points, srcBox, tgtBox, srcShape, tgtShape) {
+  const segs = segmentsOf(points);
+  if (!segs.length) return 0;
+  let n = 0;
+  if (alongOutline(segs[0], srcBox) > 5) n++;
+  if (alongOutline(segs[segs.length - 1], tgtBox) > 5) n++;
+  if (segs.some(s => segmentEntersShape(s, srcBox, srcShape))) n++;
+  if (segs.some(s => segmentEntersShape(s, tgtBox, tgtShape))) n++;
+  return n;
+}
+
+/** Lexicographic "a beats b" over equal-length score arrays. */
+function lexLess(a, b) {
+  for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) return a[k] < b[k];
+  return false;
+}
+
+/**
+ * Re-route every edge that still has an end defect (see endDefects), trying each combination of
+ * source and target port: the current endpoint (when sideOf identifies its side, and always the
+ * only port of an endpoint in `fixedEndpoints`) and the four side midpoints. Between the ports the
+ * route runs from a END_STUB_PX stub to a END_STUB_PX stub through orthogonal-router.js, with every
+ * node box as an obstacle except boxes that contain an endpoint (its expanded subprocess) — the
+ * edge's own two shapes INCLUDED, which is what keeps the route out of them.
+ * A candidate is admissible when it has no end defect, clears every foreign node and crosses the
+ * other (non-adjacent) routes at most as often as the current route. Best by: crossings, number of
+ * moved endpoints, bends, length — so an endpoint moves only when no fixed-endpoint route does as
+ * well. Greedy, one edge at a time in `edges` order; later edges see earlier re-routes.
+ *
+ * An edge inside an expanded subprocess is never re-clipped: pathClearOfBoxes skips only the
+ * edge's own source and target, so the container around both still counts as an obstacle and
+ * rejects every candidate. Deliberate — a nested stuck end has not been measured in any fixture,
+ * and the container's own geometry is not this pass's to judge.
+ */
+export function reclipStuckEnds(edgeCoords, coords, edges, skipIds = new Set(), { shapeOf = () => 'rect', fixedEndpoints = new Set() } = {}) {
+  const entries = [];
+  for (const e of edges || []) {
+    if (skipIds.has(e.id)) continue;
+    const points = edgeCoords[e.id];
+    if (!points || points.length < 2) continue;
+    entries.push({ id: e.id, source: e.source, target: e.target, points });
+  }
+  const contains = (o, i) => o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
+  const changed = new Map();
+
+  for (const entry of entries) {
+    const srcBox = coords[entry.source];
+    const tgtBox = coords[entry.target];
+    if (!srcBox || !tgtBox) continue;
+    const srcShape = shapeOf(entry.source);
+    const tgtShape = shapeOf(entry.target);
+    if (!endDefects(entry.points, srcBox, tgtBox, srcShape, tgtShape)) continue;
+
+    const crossingsNow = crossingsAgainstOthers(entry, entry.points, entries);
+    const start = entry.points[0];
+    const end = entry.points[entry.points.length - 1];
+    const ports = (box, point, fixed) => {
+      const side = sideOf(point, box);
+      const current = side ? [{ p: point, side, moved: false }] : [];
+      if (fixed) return current;
+      const mids = SIDES.map(s => ({ p: sideMidpoint(box, s), side: s, moved: true }))
+        .filter(m => !current.some(c => c.p.x === m.p.x && c.p.y === m.p.y));
+      return [...current, ...mids];
+    };
+    const obstacles = Object.values(coords).filter(b =>
+      b === srcBox || b === tgtBox || (!contains(b, srcBox) && !contains(b, tgtBox)));
+    const softObstacles = entries.filter(o => o.id !== entry.id && !adjacent(entry, o)).map(o => o.points);
+
+    let best = null;
+    for (const s of ports(srcBox, start, fixedEndpoints.has(entry.source))) {
+      for (const t of ports(tgtBox, end, fixedEndpoints.has(entry.target))) {
+        const out = OUTWARD[s.side];
+        const inn = INWARD[t.side];
+        const s1 = { x: s.p.x + out[0] * END_STUB_PX, y: s.p.y + out[1] * END_STUB_PX };
+        const e1 = { x: t.p.x - inn[0] * END_STUB_PX, y: t.p.y - inn[1] * END_STUB_PX };
+        const middle = routeAroundObstacles(s1, OUT_DIR_NAME[s.side], e1, IN_DIR_NAME[t.side], obstacles, { softObstacles });
+        if (!middle) continue;
+        const cand = withoutCollinear([s.p, ...middle, t.p]);
+        if (!isOrthogonal(cand)) continue;
+        if (endDefects(cand, srcBox, tgtBox, srcShape, tgtShape)) continue;
+        if (!pathClearOfBoxes(cand, coords, entry.source, entry.target)) continue;
+        const crossings = crossingsAgainstOthers(entry, cand, entries);
+        if (crossings > crossingsNow) continue;
+        const score = [crossings, (s.moved ? 1 : 0) + (t.moved ? 1 : 0), bendCount(cand), pathLength(cand)];
+        if (!best || lexLess(score, best.score)) best = { cand, score };
+      }
+    }
+    if (best) {
+      entry.points = best.cand;
+      changed.set(entry.id, best.cand);
+    }
+  }
+
+  if (!changed.size) return edgeCoords;
+  const out = { ...edgeCoords };
+  for (const [id, points] of changed) out[id] = points;
+  return out;
 }

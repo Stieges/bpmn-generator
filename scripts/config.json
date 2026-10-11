@@ -150,7 +150,8 @@
     "orthogonalRouterEnabled": true,
     "orthogonalRouterMaxGridPoints": 4000,
     "endStubPx": 15,
-    "crossingGuard": true
+    "crossingGuard": true,
+    "endpointReclip": true
   },
   "elk": {
     "layered": {

@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { simplifyEdge, simplifyAllEdges, guardAgainstLegacy } from './edge-simplify.js';
+import { simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds } from './edge-simplify.js';
 
 describe('simplifyEdge — an L never ends along its endpoint\'s outline (#52)', () => {
   test("Flow_8: the L that runs down the target's left side is replaced by the one arriving horizontally", () => {
@@ -101,5 +101,41 @@ describe('guardAgainstLegacy — per-edge crossing guard', () => {
     const g = guardAgainstLegacy(legacy, legacy, coords, edges, new Set(), noRepair);
     expect(g.reverted).toEqual([]);
     expect(g.routes).toBe(legacy);
+  });
+});
+
+describe('reclipStuckEnds — an end may move to another side when it is stuck (owner decision 4)', () => {
+  // S's flow leaves its right side and runs back through S, then down the left tangent of G.
+  const coords = { S: { x: 100, y: 0, w: 100, h: 80 }, G: { x: 100, y: 200, w: 50, h: 50 } };
+  const edges = [{ id: 'e', source: 'S', target: 'G' }];
+  const shapeOf = (id) => (id === 'G' ? 'diamond' : 'rect');
+  const stuck = () => ({ e: [{ x: 200, y: 27 }, { x: 100.5, y: 27 }, { x: 100.5, y: 225 }] });
+
+  test('re-clips to side midpoints and routes with 15 px stubs, clear of both shapes', () => {
+    const out = reclipStuckEnds(stuck(), coords, edges, new Set(), { shapeOf }).e;
+    expect(out).toEqual([{ x: 150, y: 80 }, { x: 150, y: 95 }, { x: 125, y: 95 }, { x: 125, y: 200 }]);
+  });
+
+  test('an endpoint listed as fixed never moves — here nothing admissible is left, so nothing changes', () => {
+    const ec = stuck();
+    expect(reclipStuckEnds(ec, coords, edges, new Set(), { shapeOf, fixedEndpoints: new Set(['S']) })).toBe(ec);
+  });
+
+  test('a clean edge is left alone (same map back)', () => {
+    const clean = { e: [{ x: 150, y: 80 }, { x: 150, y: 140 }, { x: 125, y: 140 }, { x: 125, y: 200 }] };
+    expect(reclipStuckEnds(clean, coords, edges, new Set(), { shapeOf })).toBe(clean);
+  });
+
+  test('a re-route may not cross another route more often than the stuck route did', () => {
+    // w walls S and G in; the stuck route crosses it once (at (100.5, 90)). The best admissible
+    // re-route keeps S's endpoint, goes round on the right, crosses w once, and enters G at its
+    // right point — one moved endpoint beats two.
+    const wallCoords = { ...coords, A: { x: 400, y: 0, w: 40, h: 40 }, B: { x: 400, y: 400, w: 40, h: 40 } };
+    const wallEdges = [...edges, { id: 'w', source: 'A', target: 'B' }];
+    const ec = { ...stuck(), w: [{ x: 420, y: 40 }, { x: 420, y: 90 }, { x: 60, y: 90 }, { x: 60, y: 300 },
+      { x: 420, y: 300 }, { x: 420, y: 400 }] };
+    const out = reclipStuckEnds(ec, wallCoords, wallEdges, new Set(), { shapeOf });
+    expect(out.e).toEqual([{ x: 200, y: 27 }, { x: 388, y: 27 }, { x: 388, y: 225 }, { x: 150, y: 225 }]);
+    expect(out.w).toBe(ec.w);
   });
 });

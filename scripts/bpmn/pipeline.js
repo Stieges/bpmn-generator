@@ -32,11 +32,12 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges } from './coordinates.js';
+import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
-import { simplifyAllEdges, repairCrossings, guardAgainstLegacy } from './edge-simplify.js';
+import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds } from './edge-simplify.js';
+import { isEvent, isGateway } from './types.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
@@ -93,7 +94,7 @@ function checkNetTranslation(lc) {
  *   svg: string|null,
  *   coordMap: object|null,
  *   diagnostics: {ok: boolean, issues: object[]}|null,
- *     post-layout geometry findings (di-check.js, DI01-DI07); `null` when validation blocked and
+ *     post-layout geometry findings (di-check.js, DI01-DI09); `null` when validation blocked and
  *     no layout ran — "no artefact", which is not the same claim as "clean"
  *   netDiagnostics: {ok: boolean, issues: object[]}|null,
  *     Petri-net translation findings (net-check.js, NC01-NC06), one call per pool, messages
@@ -139,7 +140,7 @@ async function runPipeline(logicCore, opts = {}) {
   // means — which is what lets `main()` gate on it, the HTTP layer turn it into a status and
   // `agents/layout.js` pass it through without retrying. Returning early here instead would make
   // one key a gate in the library and a report over HTTP. Kept as its own key rather than merged
-  // into `diagnostics` because that one's `code` is a closed DI01…DI08 enum in
+  // into `diagnostics` because that one's `code` is a closed DI01…DI09 enum in
   // references/api-schema.json, which the docs gate validates a real response against.
   const netDiagnostics = checkNetTranslation(lc);
 
@@ -194,6 +195,27 @@ async function runPipeline(logicCore, opts = {}) {
         const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
         if (label) coordMap.edgeLabels[e.id] = label;
       }
+    }
+  }
+
+  // Stuck ends (owner decision 4): an edge that still ends along an outline or runs through its
+  // own source/target after simplification and repair may move an endpoint to another side's
+  // midpoint — see reclipStuckEnds. A boundary event's endpoint never moves: its place on the host
+  // is placeBoundaryEvents' contract.
+  if (CFG.layout?.endpointReclip !== false) {
+    const typeOf = {};
+    const fixedEndpoints = new Set();
+    for (const n of allProcesses.flatMap(p => flattenProcessNodes(p.nodes || []))) {
+      typeOf[n.id] = n.type;
+      if (n.attachedTo) fixedEndpoints.add(n.id);
+    }
+    const shapeOf = (id) => (isEvent(typeOf[id]) ? 'circle' : isGateway(typeOf[id]) ? 'diamond' : 'rect');
+    const beforeReclip = coordMap.edgeCoords;
+    coordMap.edgeCoords = reclipStuckEnds(beforeReclip, coordMap.coords, allEdges, skipSimplify, { shapeOf, fixedEndpoints });
+    for (const e of allEdges) {
+      if (beforeReclip[e.id] === coordMap.edgeCoords[e.id]) continue;
+      const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
+      if (label) coordMap.edgeLabels[e.id] = label;
     }
   }
 
