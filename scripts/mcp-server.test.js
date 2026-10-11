@@ -210,7 +210,9 @@ describe('visualRefinement over MCP', () => {
   test('validate_bpmn ignores a bogus visualRefinement', async () => {
     const out = parse(await call('validate_bpmn', { logicCore: fixture('sparse-lanes.json'), visualRefinement: { nope: 1 } }));
     expect(out.status).not.toBe('schema_error');
-    expect(out.valid ?? out.errors ?? out).toBeDefined();
+    // the plain validation result, not a refinement error: the bogus option never reached a gate
+    expect(Object.keys(out)).toEqual(expect.arrayContaining(['errors', 'warnings', 'infos', 'advisories', 'metrics']));
+    expect(out.errors).toEqual([]);
   });
   test.each([[{ nope: true }], [{ dynamicLaneHeader: true }], ['yes']])('%j is a schema_error on both tools', async (value) => {
     for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {

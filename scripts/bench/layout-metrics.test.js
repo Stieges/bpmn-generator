@@ -197,6 +197,46 @@ describe('flowMetrics', () => {
   });
 });
 
+describe('flowMetrics — crowd, endpoint offset, message-flow crowd', () => {
+  const four = { id: 'P', nodes: ['a', 'b', 'c', 'd'].map((id) => ({ id, type: 'userTask' })),
+    edges: [{ id: 'e1', source: 'a', target: 'b' }, { id: 'e2', source: 'c', target: 'd' }] };
+  const crowdOf = (y2) => flowMetrics({ coords: {}, laneCoords: {}, poolCoords: {},
+    edgeCoords: { e1: [{ x: 0, y: 100 }, { x: 200, y: 100 }], e2: [{ x: 50, y: y2 }, { x: 250, y: y2 }] } }, four).seq.crowd;
+  test('crowd: two parallel legs of different edges 5 px apart overlapping 150 px are one pair', () => {
+    expect(crowdOf(105)).toEqual({ pairs: 1, collinear: 0 });
+  });
+  test('crowd: collinear legs are counted as collinear; legs 20 px apart are not crowding', () => {
+    expect(crowdOf(100)).toEqual({ pairs: 1, collinear: 1 });
+    expect(crowdOf(120)).toEqual({ pairs: 0, collinear: 0 });
+  });
+
+  const one = { id: 'P', nodes: [{ id: 's', type: 'userTask' }, { id: 't', type: 'userTask' }], edges: [{ id: 'e', source: 's', target: 't' }] };
+  const offOf = (x) => flowMetrics({ laneCoords: {}, poolCoords: {},
+    coords: { s: { x: 100, y: 20, w: 100, h: 80 }, t: { x: 100, y: 200, w: 100, h: 80 } },
+    edgeCoords: { e: [{ x, y: 100 }, { x, y: 200 }] } }, one).seq;
+  test('offset: an end on a side midpoint is 0 px off; 20 px along the side is reported', () => {
+    const centred = offOf(150);
+    expect(centred.endOffMean).toBe(0);
+    expect(centred.endOffOver5).toBe(0);
+    const shifted = offOf(170);
+    expect(shifted.endOffMean).toBe(20);
+    expect(shifted.endOffOver5).toBe(2);
+  });
+
+  const collab = { pools: [
+    { id: 'P1', nodes: [{ id: 'a1', type: 'userTask' }, { id: 'a2', type: 'userTask' }], edges: [] },
+    { id: 'P2', nodes: [{ id: 'b1', type: 'userTask' }, { id: 'b2', type: 'userTask' }], edges: [] }],
+    messageFlows: [{ id: 'm1', source: 'a1', target: 'b1' }, { id: 'm2', source: 'a2', target: 'b2' }] };
+  const mfCrowdOf = (x2) => flowMetrics({ coords: {}, laneCoords: {}, poolCoords: {},
+    edgeCoords: { m1: [{ x: 100, y: 0 }, { x: 100, y: 200 }], m2: [{ x: x2, y: 50 }, { x: x2, y: 250 }] } }, collab).mf.crowd;
+  test('mfCrowd: two message flows 5 px apart are one message/message pair', () => {
+    expect(mfCrowdOf(105)).toEqual({ pairs: 1, collinear: 0, mfmf: 1, mfseq: 0 });
+  });
+  test('mfCrowd: message flows 40 px apart do not crowd', () => {
+    expect(mfCrowdOf(140)).toEqual({ pairs: 0, collinear: 0, mfmf: 0, mfseq: 0 });
+  });
+});
+
 // Exact values per fixture × mode. Modes: default (no option), off (visualRefinement: false),
 // on (every refinement pass + ELK wrapping — the .refined golden set). Keys: crossings
 // (segment-pair crossings between non-adjacent sequence flows), along (#52 ends on their own
