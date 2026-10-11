@@ -1,12 +1,22 @@
 /**
- * Fence for bend-rule.js. Two parts:
+ * Fence for bend-rule.js. Three parts:
  *  - the rule on hand-built geometry: what it changes, what it leaves alone;
  *  - one test per limit, each on a minimal coordMap the rule WITHOUT that limit breaks — the test
  *    shows the unguarded result first, so a scenario that no longer reaches its guard fails loudly
- *    instead of passing for the wrong reason.
+ *    instead of passing for the wrong reason;
+ *  - the pass in the pipeline: off is byte-identical, on keeps DI07–DI10 clean and is idempotent.
  */
 import { describe, test, expect } from '@jest/globals';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { applyBendRule, bendMetrics, bendCount, entrySide, exitSide, bendRuleLimits } from './bend-rule.js';
+import { runPipeline } from './pipeline.js';
+import { CFG } from '../shared/utils.js';
+
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
+const FIXTURES = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
+const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
 
 /** The edges a call changed, as { id: points }. */
 function changes(cm, lc, opts) {
@@ -84,7 +94,8 @@ describe('applyBendRule — the rule', () => {
     expect(applyBendRule({ ...cm, edgeCoords: once }, lc)).toBe(once);
   });
 
-  test('a limit can be overridden per call', () => {
+  test('the limits come from config.json → layout.bendRuleLimits', () => {
+    expect(bendRuleLimits()).toEqual(CFG.layout.bendRuleLimits);
     expect(bendRuleLimits({ regionInset: 3 }).regionInset).toBe(3);
   });
 });
@@ -170,4 +181,37 @@ describe('bendMetrics', () => {
     const after = { ...cm, edgeCoords: applyBendRule(cm, lc) };
     expect(bendMetrics(after, lc)).toMatchObject({ avoidableBends: 0, againstFlowEntries: 0 });
   });
+});
+
+// `--refine` is not a mode of its own here: with config.json's visualRefinement defaults every pass
+// already runs, so it lays out exactly like `default`.
+const MODES = { default: {}, 'no-refine': { visualRefinement: false }, 'refine+wrap': { visualRefinement: true, elkWrapping: 'auto' } };
+
+describe('the pass in the pipeline', () => {
+  test('layout.bendRule defaults to off', () => {
+    expect(CFG.layout.bendRule).toBe(false);
+  });
+
+  test('off: every fixture comes out byte-identical to a run without the option', async () => {
+    for (const name of FIXTURES) {
+      const plain = await runPipeline(load(name));
+      const off = await runPipeline(load(name), { bendRule: false });
+      expect(`${name} ${off.bpmnXml === plain.bpmnXml && off.svg === plain.svg}`).toBe(`${name} true`);
+    }
+  }, 60000);
+
+  for (const [mode, opts] of Object.entries(MODES)) {
+    test(`on (${mode}): no DI07–DI10 finding, no XML warning, and a second run of the pass changes nothing`, async () => {
+      const bad = [];
+      for (const name of FIXTURES) {
+        const lc = load(name);
+        const r = await runPipeline(lc, { ...opts, bendRule: true });
+        if (!r.coordMap) continue; // blocked on purpose (deadlock-process)
+        for (const i of r.diagnostics.issues) if (['DI07', 'DI08', 'DI09', 'DI10'].includes(i.code)) bad.push(`${name} ${i.code}`);
+        if (r.validation.xmlWarnings?.length) bad.push(`${name} xmlWarnings`);
+        if (applyBendRule(r.coordMap, lc) !== r.coordMap.edgeCoords) bad.push(`${name} not idempotent`);
+      }
+      expect(bad).toEqual([]);
+    }, 60000);
+  }
 });

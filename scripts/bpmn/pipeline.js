@@ -37,6 +37,7 @@ import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
 import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, rerouteAfterCompaction } from './edge-simplify.js';
+import { applyBendRule } from './bend-rule.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
@@ -102,6 +103,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = []) {
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
+ * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (false)
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
@@ -260,18 +262,27 @@ async function runPipeline(logicCore, opts = {}) {
     }
     refreshMovedLabels(coordMap, allEdges, beforeReroute, laneLines);
   }
+
+  // Node labels follow their node: buildCoordinateMap placed them, lane compaction may have moved
+  // nodes since. Re-derived here, after the last pass that moves a node and before anything
+  // reads them (the bend rule; routeMessageFlows moves no node), rather than shifted pass by pass —
+  // placeNodeLabels is a pure function of the final node boxes, so re-deriving cannot drift from them.
+  coordMap.nodeLabels = placeNodeLabels(coordMap.coords, lc);
+
+  // Bend rule (bend-rule.js): fewest bends, then enter activities and events from the left. After
+  // every pass that moves a shape or a route, so it judges the final geometry and nothing re-routes
+  // its choice; before edge-label repair and routeMessageFlows. Off unless switched on.
+  if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
+    const beforeBend = coordMap.edgeCoords;
+    coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
+    refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines);
+  }
   if (refine.edgeLabelCollisionRepair) {
     repairEdgeLabels(coordMap, {
       maxShift: CFG.visualRefinement?.edgeLabelMaxShift ?? 25,
       laneLines,
     });
   }
-
-  // Node labels follow their node: buildCoordinateMap placed them, lane compaction may have moved
-  // nodes since. Re-derived here, after the last pass that moves a node and before anything
-  // reads them (routeMessageFlows moves no node), rather than shifted pass by pass — placeNodeLabels
-  // is a pure function of the final node boxes, so re-deriving cannot drift from them.
-  coordMap.nodeLabels = placeNodeLabels(coordMap.coords, lc);
 
   // Message flows LAST: their horizontal leg has to sit in the gap between two
   // participants, so every pass that can still move a participant must be done.
