@@ -301,16 +301,20 @@ const BUDGET = {
 // bendsMax falls in long-lane-names (f2, f3), multi-pool-collaboration (sf3, sf5), simple-approval
 // (f2), sparse-lanes (f3, f4, f5), subprocess-merge-fanout (f5, f7), wrapping-back-edge (frework);
 // offOver5 falls where a moved end now sits on a side midpoint (simple-approval f2,
-// subprocess-child-fidelity c_f4/c_f7, wrapping-back-edge frework).
+// subprocess-child-fidelity c_f4/c_f7, wrapping-back-edge frework). Projection ports (a port at
+// the counterpart's height, off the midpoint) straighten small Z jogs into lines — boundary-event-
+// shapes f9, bpmn-generator-pipeline fu2/fo4, loop-with-join Flow_6, subprocess-merge-fanout f5/f7 —
+// so bendsMax falls in loop-with-join and offOver5 rises by the off-midpoint ends they leave
+// (boundary-event-shapes +1, bpmn-generator-pipeline +2, loop-with-join +1).
 const BUDGET_BENDS = {
   'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
-  'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 9 }),
-  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }),
+  'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 10 }),
+  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15 }),
   'deadlock-process.json':              null,
   'dense-edge-labels.json':             r({ bendsMax: 1, offOver5: 4 }),
   'expanded-subprocess.json':           r(),
   'long-lane-names.json':               r({ bendsMax: 1 }),
-  'loop-with-join.json':                r({ bendsMax: 2, offOver5: 6 }),
+  'loop-with-join.json':                r({ bendsMax: 1, offOver5: 7 }),
   'messageflow-to-subprocess.json':     r({ mfCrowd: 1 }),
   'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 2 }),
   'parallel-split-join.json':           r({ bendsMax: 1, offOver5: 4 }),
@@ -329,19 +333,22 @@ const BUDGET_BENDS = {
 // over the sequence flows; againstFlowEntries counts activity/event targets not entered from the
 // left although an admissible left entry with no more bends exists. With the rule on (bends) both
 // are 0 by construction — the rule and the measure share one search — so the bends column fences
-// the pass, the other three what the rule would still find.
+// the pass, the other three what the rule would still find. The search includes projection ports
+// and judges overlap with collinearPx, so it finds more than before them: the Z jogs a projection
+// port straightens (boundary-event-shapes, bpmn-generator-pipeline fu2/fo4, loop-with-join,
+// subprocess-merge-fanout f5/f7) and a left entry onto a projection port (wrapping-back-edge).
 const d = (avoidableBends, againstFlowEntries) => ({ avoidableBends, againstFlowEntries });
 const NONE = d(0, 0);
 const dir = (row, on = row) => ({ default: row, off: row, on, bends: NONE });
 const DIRECTION = {
   'all-element-classes.json':           dir(NONE),
-  'boundary-event-shapes.json':         dir(NONE),
-  'bpmn-generator-pipeline.json':       dir(d(3, 2), d(8, 6)),
+  'boundary-event-shapes.json':         dir(d(2, 0)),
+  'bpmn-generator-pipeline.json':       dir(d(7, 2), d(12, 6)),
   'deadlock-process.json':              { default: null, off: null, on: null, bends: null },
   'dense-edge-labels.json':             dir(NONE),
   'expanded-subprocess.json':           dir(NONE),
   'long-lane-names.json':               dir(d(2, 2)),
-  'loop-with-join.json':                dir(NONE),
+  'loop-with-join.json':                dir(d(2, 0)),
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
   'parallel-split-join.json':           dir(NONE),
@@ -350,9 +357,9 @@ const DIRECTION = {
   'sparse-lanes.json':                  dir(d(3, 3)),
   'subprocess-child-fidelity.json':     dir(d(2, 0)),
   'subprocess-collapsed-children.json': dir(NONE),
-  'subprocess-merge-fanout.json':       dir(d(2, 0)),
+  'subprocess-merge-fanout.json':       dir(d(4, 0)),
   'wide-pipeline.json':                 dir(NONE, d(16, 0)),
-  'wrapping-back-edge.json':            dir(d(2, 0)),
+  'wrapping-back-edge.json':            dir(d(2, 1)),
 };
 
 describe('layout budget — every top-level fixture × four modes', () => {

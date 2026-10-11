@@ -228,6 +228,87 @@ describe('applyBendRule — every limit, on a scenario the unguarded rule breaks
   });
 });
 
+describe('applyBendRule — projection ports (condition 8)', () => {
+  // An expanded subprocess, tall, and a task to its right whose centre lies inside the
+  // subprocess's vertical span: the straight line at the task's height needs a port on the
+  // subprocess's right side that is not its midpoint.
+  const tallToTask = (ty) => ({
+    lc: { id: 'P', nodes: [{ id: 'sub', type: 'subProcess', isExpanded: true, nodes: [{ id: 'k', type: 'task' }] },
+      { id: 't', type: 'task' }], edges: [{ id: 'e', source: 'sub', target: 't' }] },
+    cm: { coords: { sub: { x: 0, y: 0, w: 300, h: 240 }, k: { x: 100, y: 80, w: 100, h: 80 }, t: { x: 380, y: ty, w: 100, h: 80 } },
+      edgeCoords: { e: [P(300, 120), P(340, 120), P(340, ty + 40), P(380, ty + 40)] } },
+  });
+
+  test('a rectangle side gets a port at the projection of the counterpart\'s centre: a Z becomes a straight line', () => {
+    const { lc, cm } = tallToTask(140); // t's centre at y = 180, 60 px above the subprocess's bottom corner
+    expect(changes(cm, lc)).toEqual({ e: [P(300, 180), P(380, 180)] });
+  });
+
+  test(`no projection port within bendRuleLimits.portCornerMarginPx of a corner`, () => {
+    const margin = bendRuleLimits().portCornerMarginPx;
+    const { lc, cm } = tallToTask(240 - margin + 1 - 40); // t's centre margin − 1 px above the bottom corner
+    const out = changes(cm, lc).e;
+    expect(out === undefined || bendCount(out) >= 1).toBe(true);
+    const ok = tallToTask(240 - margin - 40); // exactly the margin: allowed
+    expect(changes(ok.cm, ok.lc).e).toEqual([P(300, 240 - margin), P(380, 240 - margin)]);
+  });
+
+  test('the margin is at least the task corner radius and the end stub', () => {
+    expect(bendRuleLimits().portCornerMarginPx).toBeGreaterThanOrEqual(
+      Math.max(CFG.layout.taskBorderRadius, CFG.layout.endStubPx));
+  });
+
+  test('an event or a gateway keeps its midpoints / vertices: no projection port there', () => {
+    const lc = { id: 'P', nodes: [{ id: 'g', type: 'exclusiveGateway' }, { id: 't', type: 'task' }],
+      edges: [{ id: 'e', source: 'g', target: 't' }] };
+    // t's centre (y = 40) projects onto g's right side 5 px above its right vertex — off the diamond
+    const cm = { coords: { g: { x: 0, y: 20, w: 50, h: 50 }, t: { x: 200, y: 0, w: 100, h: 80 } },
+      edgeCoords: { e: [P(50, 45), P(120, 45), P(120, 40), P(200, 40)] } };
+    // The gateway keeps its right vertex; the task, a rectangle, takes the projection of the
+    // gateway's centre on its left side — a straight line.
+    expect(changes(cm, lc)).toEqual({ e: [P(50, 45), P(200, 45)] });
+    // With the task's port pinned (only its midpoint allowed: a target whose centre the gateway's
+    // vertex cannot see), the gateway gets no off-vertex port either.
+    cm.coords.t = { x: 200, y: 0, w: 100, h: 30 }; // t's left side spans y 0–30: 45 is no projection on it
+    const out = changes(cm, lc).e;
+    if (out) expect([P(50, 45), P(25, 20), P(25, 70), P(0, 45)]).toContainEqual(out[0]);
+  });
+});
+
+describe('applyBendRule — collinear overlap by length (sparse-lanes f3)', () => {
+  // The join and the flow that enters it from below at 2.5 px off its centre line (f2d); the
+  // flow leaving the join (f3) runs down a short way on the centre line today. The L the rule
+  // would take runs the whole of f2d's vertical on top of it.
+  const sparse = () => ({
+    lc: { id: 'P', nodes: [{ id: 'join', type: 'parallelGateway' }, { id: 'a4', type: 'task' }, { id: 'b1', type: 'task' }],
+      edges: [{ id: 'f2d', source: 'a4', target: 'join' }, { id: 'f3', source: 'join', target: 'b1' }] },
+    cm: { coords: { join: { x: 566, y: 242.5, w: 50, h: 50 }, a4: { x: 371, y: 500, w: 100, h: 80 }, b1: { x: 696, y: 660, w: 100, h: 80 } },
+      edgeCoords: {
+        f2d: [P(471, 540), P(588.5, 540), P(588.5, 290)],
+        f3: [P(591, 292.5), P(591, 476.25), P(746, 476.25), P(746, 660)],
+      } },
+  });
+  const nearOverlap = (pts, other) => {
+    let t = 0;
+    for (const [a, z] of segmentsOf(pts)) for (const [b, w] of segmentsOf(other)) {
+      if (a.x === z.x && b.x === w.x && Math.abs(a.x - b.x) < bendRuleLimits().collinearPx) {
+        t += Math.max(0, Math.min(Math.max(a.y, z.y), Math.max(b.y, w.y)) - Math.max(Math.min(a.y, z.y), Math.min(b.y, w.y)));
+      }
+    }
+    return t;
+  };
+
+  test('lines closer than collinearPx count as one: the new route adds no length on top of another flow', () => {
+    const { lc, cm } = sparse();
+    const before = nearOverlap(cm.edgeCoords.f3, cm.edgeCoords.f2d);
+    const unguarded = changes(cm, lc, { limits: { collinearPx: 1 } }).f3;
+    expect(unguarded).toEqual([P(591, 292.5), P(591, 700), P(696, 700)]); // 247.5 px beside f2d, 2.5 px off
+    expect(nearOverlap(unguarded, cm.edgeCoords.f2d)).toBeGreaterThan(before);
+    const guarded = changes(cm, lc).f3 ?? cm.edgeCoords.f3;
+    expect(nearOverlap(guarded, cm.edgeCoords.f2d)).toBeLessThanOrEqual(before);
+  });
+});
+
 describe('bendMetrics', () => {
   test('a Z with an admissible L: one avoidable bend; entered from the left, so not against the flow', () => {
     const { lc, cm } = gatewayToTask();
