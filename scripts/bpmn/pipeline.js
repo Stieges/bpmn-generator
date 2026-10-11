@@ -36,8 +36,7 @@ import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlow
 import { checkDiagramIntegrity } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
-import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds } from './edge-simplify.js';
-import { isEvent, isGateway } from './types.js';
+import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
@@ -203,15 +202,9 @@ async function runPipeline(logicCore, opts = {}) {
   // midpoint — see reclipStuckEnds. A boundary event's endpoint never moves: its place on the host
   // is placeBoundaryEvents' contract.
   if (CFG.layout?.endpointReclip !== false) {
-    const typeOf = {};
-    const fixedEndpoints = new Set();
-    for (const n of allProcesses.flatMap(p => flattenProcessNodes(p.nodes || []))) {
-      typeOf[n.id] = n.type;
-      if (n.attachedTo) fixedEndpoints.add(n.id);
-    }
-    const shapeOf = (id) => (isEvent(typeOf[id]) ? 'circle' : isGateway(typeOf[id]) ? 'diamond' : 'rect');
+    const reclipOpts = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
     const beforeReclip = coordMap.edgeCoords;
-    coordMap.edgeCoords = reclipStuckEnds(beforeReclip, coordMap.coords, allEdges, skipSimplify, { shapeOf, fixedEndpoints });
+    coordMap.edgeCoords = reclipStuckEnds(beforeReclip, coordMap.coords, allEdges, skipSimplify, reclipOpts);
     for (const e of allEdges) {
       if (beforeReclip[e.id] === coordMap.edgeCoords[e.id]) continue;
       const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords);
