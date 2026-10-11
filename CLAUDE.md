@@ -692,6 +692,14 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - Edge-label repair runs before `routeMessageFlows`, so message-flow labels are never repaired:
   `realistic-collaboration` keeps two overlapping message-flow labels (mf2/mf5) in every mode
   (#88)
+- The bend rule's message-flow guard (`layout.bendRule`, opt-in) models a message flow as its single
+  centre line at a message-flow node, above or below it. `routeMessageFlows` runs later and fans several
+  flows at one node out by `MESSAGE_FLOW_FAN` px either side of that line; the guard does not model the
+  offsets, so a bend-rule route can still end up within the fan of a message flow
+- "Default output unchanged with `layout.bendRule` and `layout.nodeLabelsAvoidFlows` off" is fenced by
+  SHA-256 hashes of BPMN XML and SVG per top-level fixture × four modes
+  (`tests/bench/default-output-hashes.json`, written by `node bench/output-hashes.mjs`, compared by
+  `scripts/bench/output-hashes.test.js`); regenerate it only for an intended change of the default output
 - The DMN importer reads no DMNDI, so every diagram is reported as IM06 and **`report.lossless` is
   never true for a file this generator wrote** — the writer always emits a DMNDI tree (IM06) and
   generates `<variable>`/`<literalExpression>` ids (IM05). `--strict` on `dmn/import.js` and on
