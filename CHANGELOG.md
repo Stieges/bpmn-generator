@@ -320,6 +320,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **Message flows step round the next lane's task.** When a shape of the flow's own participant blocks every column, the flow jogs inside that participant; new diagnostic **DI10** (WARNING) reports any message flow still running through a foreign shape.
 - **Message flows no longer run through the shapes of participants they pass.** A flow whose straight leg crossed a task or event of another participant now detours through a clear column, with both horizontal legs in participant gaps; inside a rectangular endpoint the port moves along the edge when that clears the leg. DI05 is unchanged: avoiding a shape is not avoiding a participant's band.
 - **No empty strip between lanes with `--refine`.** `compactLanes` re-derived each band from its content, which left up to 40 px between a band and the one above (5 of 10 laned fixtures); bpmn.io draws that as an extra empty band. Each band below the first now grows up to the band above. No node, edge or participant moves.
 - **Sequence-flow ends no longer run along their own shape's outline (#52).** `simplifyAllEdges`

@@ -1235,14 +1235,14 @@ export function messageFlowPorts(srcCoord, tgtCoord) {
 }
 
 // ─── Message flows and the shapes they pass ────────────────────────────────
-// Tunables in config.json → layout.messageFlowAvoidance. The 4 px clearance is the one
-// edge-simplify.js keeps for sequence flows (NODE_PADDING).
+// Tunables in config.json → layout.messageFlowAvoidance. The clearance is config.json →
+// layout.shapeClearance, the same one edge-simplify.js keeps for sequence flows (NODE_PADDING).
 const MF_AVOID = {
   portInset: CFG.layout?.messageFlowAvoidance?.portInset ?? 10,
   columnStep: CFG.layout?.messageFlowAvoidance?.columnStep ?? 10,
   detourReach: CFG.layout?.messageFlowAvoidance?.detourReach ?? 600,
 };
-const MF_CLEARANCE = 4;
+const MF_CLEARANCE = CFG.layout?.shapeClearance ?? 4;
 
 /**
  * Shapes a message flow must not run through: every node box but its own two endpoints, except a
@@ -1291,6 +1291,37 @@ function nearestClearColumn(x0, y0, y1, obstacles) {
   return null;
 }
 
+function horizontalClear(y, x0, x1, obstacles) {
+  const lo = Math.min(x0, x1), hi = Math.max(x0, x1);
+  return obstacles.every(b =>
+    y <= b.y - MF_CLEARANCE || y >= b.y + b.h + MF_CLEARANCE || hi <= b.x || lo >= b.x + b.w);
+}
+
+/**
+ * A leg from a port at (px, py) to farY that no port column clears, because a shape of the flow's
+ * own participant sits in every column (the task in the next lane below the sender). Step to
+ * halfway between the port and that shape, across to the nearest column clear from there to
+ * farY, then on. Returns the leg's points (the last one at farY) or null. The jog lies inside the
+ * endpoint's own participant by construction: the first blocking shape is the nearest one.
+ */
+function jogLeg(px, py, farY, obstacles) {
+  const dir = Math.sign(farY - py);
+  const blockers = obstacles.filter(b => px > b.x - MF_CLEARANCE && px < b.x + b.w + MF_CLEARANCE
+    && Math.max(py, farY) > b.y && Math.min(py, farY) < b.y + b.h);
+  if (!blockers.length) return null;
+  const first = dir > 0 ? Math.min(...blockers.map(b => b.y)) : Math.max(...blockers.map(b => b.y + b.h));
+  const jogY = (py + first) / 2;
+  if ((jogY - py) * dir <= 0 || !verticalClear(px, py, jogY, obstacles)) return null;
+  for (let d = MF_AVOID.columnStep; d <= MF_AVOID.detourReach; d += MF_AVOID.columnStep) {
+    for (const x of [px - d, px + d]) {
+      if (horizontalClear(jogY, px, x, obstacles) && verticalClear(x, jogY, farY, obstacles)) {
+        return [{ x: px, y: py }, { x: px, y: jogY }, { x, y: jogY }, { x, y: farY }];
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Where a message flow's legs go, before fan-out. A point on a corridor carries `corridor`
  * (its un-fanned y) instead of `y`; routeMessageFlows resolves it once every flow's corridors are
@@ -1302,6 +1333,8 @@ function nearestClearColumn(x0, y0, y1, obstacles) {
  *  - if no target column clears it, the leg crosses a shape of a participant in between: detour —
  *    across to the nearest clear column, down to the corridor next to the TARGET's participant,
  *    across, and in. Both horizontal legs lie in participant gaps, never in a pool body;
+ *  - a leg that no column clears because of a shape in the endpoint's OWN participant jogs inside
+ *    that participant (jogLeg) — the one place a horizontal leg may lie in a pool body;
  *  - a leg nothing clears keeps today's centre column (not made worse; the bench reports it).
  */
 function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable) {
@@ -1310,12 +1343,23 @@ function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable)
     return { corridors: [], points: [{ x: sx, y: sy }, { x: ex, y: ey }] };
   }
   const c = participantGapY(sy, ey, poolCoords);
-  const sCol = portColumns(sx, srcCoord, movable.source).find(x => verticalClear(x, sy, c, obstacles)) ?? sx;
-  const head = [{ x: sCol, y: sy }, { x: sCol, corridor: c }];
+  const sCols = portColumns(sx, srcCoord, movable.source);
+  const sCol = sCols.find(x => verticalClear(x, sy, c, obstacles));
+  let head;
+  if (sCol !== undefined) head = [{ x: sCol, y: sy }, { x: sCol, corridor: c }];
+  else {
+    const jog = sCols.map(x => jogLeg(x, sy, c, obstacles)).find(Boolean);
+    head = jog
+      ? [...jog.slice(0, -1), { x: jog[jog.length - 1].x, corridor: c }]
+      : [{ x: sx, y: sy }, { x: sx, corridor: c }];
+  }
   const tCols = portColumns(ex, tgtCoord, movable.target);
   const direct = tCols.find(x => verticalClear(x, c, ey, obstacles));
   if (direct !== undefined) {
-    return { corridors: [c], points: [...head, { x: direct, corridor: c }, { x: direct, y: ey }] };
+    // Down one column (a centre-aligned pair that a shifted port column clears): the corridor
+    // point is collinear and drops out, so the flow takes no fan slot in the corridor.
+    const straight = Math.abs(head[head.length - 1].x - direct) < 1e-6;
+    return { corridors: straight ? [] : [c], points: [...head, { x: direct, corridor: c }, { x: direct, y: ey }] };
   }
   const t = participantGapY(ey, sy, poolCoords);
   if (Math.abs(t - c) > 1) {
@@ -1324,6 +1368,20 @@ function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable)
     if (dx !== null) {
       return { corridors: [c, t], points: [...head,
         { x: dx, corridor: c }, { x: dx, corridor: t }, { x: tCol, corridor: t }, { x: tCol, y: ey }] };
+    }
+  }
+  // The target's own participant blocks every column between the corridor next to the source and
+  // the target (or the detour corridor and the target): jog inside the target's participant.
+  const t2 = participantGapY(ey, sy, poolCoords);
+  const jogFrom = Math.abs(t2 - c) > 1 ? t2 : c;
+  const tailJog = tCols.map(x => jogLeg(x, ey, jogFrom, obstacles)).find(Boolean);
+  if (tailJog) {
+    const back = tailJog.slice().reverse();                      // from jogFrom down to the port
+    const entry = { x: back[0].x, corridor: jogFrom };
+    if (jogFrom === c) return { corridors: [c], points: [...head, entry, ...back.slice(1)] };
+    const dx = nearestClearColumn(back[0].x, c, jogFrom, obstacles);
+    if (dx !== null) {
+      return { corridors: [c, jogFrom], points: [...head, { x: dx, corridor: c }, { x: dx, corridor: jogFrom }, entry, ...back.slice(1)] };
     }
   }
   return { corridors: [c], points: [...head, { x: ex, corridor: c }, { x: ex, y: ey }] };

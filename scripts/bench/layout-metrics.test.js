@@ -141,9 +141,9 @@ const Z = b(0, 0, 0, 0, 0);
 // participant, in another lane — mf1>ap_wait, mf3>as_assess, mf4>as_assess, mf6>de_decide,
 // mf6>ap_submit. No port column clears them; none crosses a participant the flow does not involve.
 const BUDGET = {
-  'all-element-classes.json':           { off: b(0, 0, 0, 3, 0),   on: b(0, 0, 0, 3, 0) },
+  'all-element-classes.json':           { off: Z,                  on: Z },
   'boundary-event-shapes.json':         { off: b(1, 0, 0, 0, 0),   on: b(1, 0, 0, 0, 0) },
-  'bpmn-generator-pipeline.json':       { off: Z,                  on: b(0, 0, 0, 1, 0) },
+  'bpmn-generator-pipeline.json':       { off: Z,                  on: Z },
   'deadlock-process.json':              { off: null,               on: null },
   'dense-edge-labels.json':             { off: Z,                  on: Z },
   'expanded-subprocess.json':           { off: Z,                  on: Z },
@@ -152,7 +152,7 @@ const BUDGET = {
   'messageflow-to-subprocess.json':     { off: Z,                  on: Z },
   'multi-pool-collaboration.json':      { off: Z,                  on: Z },
   'parallel-split-join.json':           { off: Z,                  on: Z },
-  'realistic-collaboration.json':       { off: b(0, 0, 0, 0, 1),   on: b(0, 0, 0, 5, 0) },
+  'realistic-collaboration.json':       { off: b(0, 0, 0, 0, 1),   on: Z },
   'simple-approval.json':               { off: Z,                  on: Z },
   'sparse-lanes.json':                  { off: Z,                  on: Z },
   'subprocess-child-fidelity.json':     { off: Z,                  on: Z },
