@@ -933,8 +933,14 @@ function innerLaneLines(coordMap, process) {
  * candidates in order; each must stay off the route, off every line and off every box in
  * `obstacles` (node shapes). If none does, the winner stays — the line rule never trades a
  * separator for a label across its own route or over a shape.
+ *
+ * `avoidRoutes` (other flows' routes, empty by default): when given, the first candidate off its own
+ * route AND off every one of them wins, and the lane-line retry keeps that too; only when no
+ * candidate is off all of them does the choice fall back to "off its own route". The bend rule's
+ * label refresh passes it — a re-routed flow's label lands beside its new leg, where a sibling
+ * flow out of the same gateway may run (urlaubsantrag, "Resturlaub ausreichend?").
  */
-function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLines = [], obstacles = [] } = {}) {
+function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLines = [], obstacles = [], avoidRoutes = [] } = {}) {
   const { lines, w, h } = edgeLabelLayout(text);
   const gap = CFG.layout?.edgeLabelGap ?? 4;
   const beside = (a, b, side) => {
@@ -964,7 +970,10 @@ function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLin
   for (const [a, b] of segs) if (isV(a, b)) cands.push(beside(a, b, 'left'));
 
   const boxOf = (c) => ({ x: c.x - w / 2, y: c.y - h / 2, w, h });
-  const offRoute = (c) => !labelHitsRoute(boxOf(c), pts);
+  const offOwn = (c) => !labelHitsRoute(boxOf(c), pts);
+  const offOthers = (c) => !avoidRoutes.some(r => labelHitsRoute(boxOf(c), r));
+  const allClear = avoidRoutes.length > 0 && cands.some(c => offOwn(c) && offOthers(c));
+  const offRoute = allClear ? (c) => offOwn(c) && offOthers(c) : offOwn;
   let pick = cands.find(offRoute) ?? cands[0];
   if (pick && avoidLines.length && boxCrossesLines(boxOf(pick), avoidLines)) {
     // A container (expanded subprocess, group) that wraps the whole box is not in its way — the same
@@ -990,7 +999,7 @@ function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLin
  * leaving it stranded on a segment the route no longer has — see
  * pipeline.js's refreshMovedLabels.
  */
-function computeSequenceFlowLabel(edge, pts, coords, { laneLines = [] } = {}) {
+function computeSequenceFlowLabel(edge, pts, coords, { laneLines = [], avoidRoutes = [] } = {}) {
   const obstacles = laneLines.length ? Object.values(coords) : [];
   if (!edge.label) return null;
   if (!pts || pts.length < 2) {
@@ -1004,7 +1013,7 @@ function computeSequenceFlowLabel(edge, pts, coords, { laneLines = [] } = {}) {
   }
   // A route with no axis-parallel segment: 30% from source.
   const p0 = pts[0], p1 = pts[pts.length - 1];
-  return placeEdgeLabel(edge.label, pts, { avoidLines: laneLines, obstacles, fallback: {
+  return placeEdgeLabel(edge.label, pts, { avoidLines: laneLines, obstacles, avoidRoutes, fallback: {
     x: p0.x + (p1.x - p0.x) * 0.3,
     y: p0.y + (p1.y - p0.y) * 0.3,
   } });

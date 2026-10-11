@@ -31,7 +31,8 @@
  *     the crowding measure below skips legs at a shared node and a 2.5 px offset still reads as
  *     one stroke (sparse-lanes f3) — parallel crowding
  *     (crowdingPx, as scripts/bench/flow-metrics.mjs counts it), hits on external node labels
- *     (coordMap.nodeLabels), side conflicts (in and out on the same side of a node), and overlap
+ *     (coordMap.nodeLabels), side conflicts (in and out on the same side of a node), shared ports
+ *     (two flows out of — or into — one gateway/event side, or one rectangle point), and overlap
  *     with the line a message flow will take at a message-flow node's centre;
  *  7. length at most lengthFactor × the current length + lengthSlackPx;
  *  8. at a node carrying a message flow, no NEW port on top or bottom — routeMessageFlows runs after
@@ -81,6 +82,7 @@ const DEFAULT_LIMITS = Object.freeze({
  */
 const DEFAULT_GUARDS = Object.freeze({
   nodeLabels: true, messageFlowPorts: true, sideConflicts: true, crowding: true, region: true, length: true,
+  sharedPorts: true,
 });
 
 /** The limits in effect: config.json → layout.bendRuleLimits over the defaults, `over` last. */
@@ -295,6 +297,28 @@ function sideConflicts(entry, pts, entries) {
   return n;
 }
 /**
+ * Ports this route shares with another flow in the same direction: it leaves its source where
+ * another flow leaves that node, or enters its target where another flow enters it. On a gateway or
+ * an event a port is the side the end segment runs through — a vertex and the facet beside it,
+ * 12.5 px apart, read as one bundle (rechnungspruefung, "Betrag über 10.000 EUR?") and put one
+ * branch's label on the other's line; on a rectangle it is the endpoint itself (within collinearPx),
+ * since two ports on one side of a task are fine. Flows in opposite directions on one side are
+ * sideConflicts' business.
+ */
+function sharedPorts(entry, pts, entries, ctx, tolerance) {
+  const same = (node, p, side, q, qSide) => (ctx.shapeOf(node) === 'rect'
+    ? Math.abs(p.x - q.x) < tolerance && Math.abs(p.y - q.y) < tolerance
+    : side === qSide);
+  const xs = exitSide(pts), es = entrySide(pts), a = pts[0], z = pts[pts.length - 1];
+  let n = 0;
+  for (const o of entries) {
+    if (o.id === entry.id || o.source === o.target) continue;
+    if (o.source === entry.source && same(entry.source, a, xs, o.points[0], exitSide(o.points))) n++;
+    if (o.target === entry.target && same(entry.target, z, es, o.points[o.points.length - 1], entrySide(o.points))) n++;
+  }
+  return n;
+}
+/**
  * Overlap with the vertical line a message flow takes at a message-flow node's centre, above or
  * below it — routeMessageFlows runs after this pass, so that line is not in edgeCoords yet.
  */
@@ -475,6 +499,7 @@ function makeChecker(entry, entries, ctx, cfg) {
     over: collinearOverlap(entry, curPts, entries, limits.collinearPx),
     crowd: guards.crowding ? crowdPairs(entry, curPts, entries, limits.crowdingPx) : 0,
     side: guards.sideConflicts ? sideConflicts(entry, curPts, entries) : 0,
+    ports: guards.sharedPorts ? sharedPorts(entry, curPts, entries, ctx, limits.collinearPx) : 0,
     mf: guards.messageFlowPorts ? messageFlowLineOverlap(curPts, ctx, limits.messageFlowLinePx) : 0,
     lab: guards.nodeLabels ? nodeLabelHits(curPts, ctx.labelBoxes) : 0,
   };
@@ -494,6 +519,7 @@ function makeChecker(entry, entries, ctx, cfg) {
     if (collinearOverlap(entry, pts, entries, limits.collinearPx) > cur.over + EPS) return false;
     if (guards.crowding && crowdPairs(entry, pts, entries, limits.crowdingPx) > cur.crowd) return false;
     if (guards.sideConflicts && sideConflicts(entry, pts, entries) > cur.side) return false;
+    if (guards.sharedPorts && sharedPorts(entry, pts, entries, ctx, limits.collinearPx) > cur.ports) return false;
     if (guards.messageFlowPorts && messageFlowLineOverlap(pts, ctx, limits.messageFlowLinePx) > cur.mf + EPS) return false;
     if (guards.nodeLabels && nodeLabelHits(pts, ctx.labelBoxes) > cur.lab) return false;
     return true;
