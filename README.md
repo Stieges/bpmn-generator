@@ -373,11 +373,13 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 }
 ```
 
-**Project-wide without editing the package:** set the environment variable `BPMN_CONFIG` to a JSON file; it is merged over the shipped `scripts/config.json` one level deep, so it only needs the keys it changes. For example, to restore the layout before the bend rule:
+**Project-wide without editing the package:** set the environment variable `BPMN_CONFIG` to a JSON file; it is merged over the shipped `scripts/config.json` one level deep, so it only needs the keys it changes. For example, to switch off the three layout switches:
 
 ```json
 { "layout": { "bendRule": false, "nodeLabelsAvoidFlows": false, "foreignShapeRepair": false } }
 ```
+
+This gives the routes from before the bend rule, with one exception that no switch restores: a boundary event whose outgoing flow leads to a target above its host sits on the host's top edge (#91).
 
 ```bash
 BPMN_CONFIG=./my-bpmn-config.json node bpmn/pipeline.js input.json output

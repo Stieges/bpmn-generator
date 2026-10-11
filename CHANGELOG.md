@@ -18,18 +18,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{ "layout": { "bendRule": false, "nodeLabelsAvoidFlows": false } }` — merged over the shipped
   `config.json` (one level deep), so an npm install needs no edit inside `node_modules` — or the
   same two keys in `config.json` itself. With both off the output is byte-identical to before the
-  bend rule for every committed fixture but `realistic-collaboration`, whose boundary event moved with
-  #91 (below); the hash fence now pins the switches-off output of current master. The SVG canvas
-  change under Changed applies either way.
+  bend rule for every committed fixture with two exceptions from #91 (below): `realistic-collaboration`,
+  whose boundary event now sits on its host's top edge — permanent, no switch restores it — and any
+  model `layout.foreignShapeRepair` re-routes (among the fixtures `example-rechnungspruefung`) unless
+  that is switched off too. The hash fence now pins the output with all three off on current master.
+  The SVG canvas change under Changed applies either way.
 - **Sequence flows through a foreign shape are re-routed, and boundary events face their target
   (#91).** Default output changes for models where a flow ran through a task, event or gateway that
   is neither its source nor its target (DI11). Two changes:
   - A boundary event goes on its host's **top** edge when the target of its outgoing flow lies above
     the host — in a lane stacked above, or wholly above it in the same band — and stays on the bottom
-    edge otherwise; several events spread per side, on the top edge over the half facing their
-    targets so the middle stays free for a flow docking there. Its label sits above it. Not
-    switchable. Among the committed fixtures only `realistic-collaboration` changes: `inf8` leaves
-    the timer upwards instead of running round `in_check` and through `in_gw`.
+    edge otherwise, and whenever the lane order cannot decide (a nested child lane, a node without a
+    lane in a process that has lanes). Several events spread per side; on the top edge never in the
+    middle, where a flow coming down into the host docks: over the half facing their targets (target
+    straight above: the right half) when they fit side by side there, else over the whole edge with
+    the middle slot left out, ordered by target x. Its label sits above it. Not switchable. Among the
+    committed fixtures only `realistic-collaboration` changes: `inf8` leaves the timer upwards
+    instead of running round `in_check` and through `in_gw`.
   - The stuck-end pass (`reclipStuckEnds`) also re-routes a sequence flow through a foreign shape —
     the routes `coordinates.js` §5.2 rebuilds for flows between lanes without an obstacle test, which
     no other pass was triggered by. A shape traversal may be traded for one crossing; a port where
