@@ -3902,25 +3902,20 @@ describe('long-lane-names matrix', () => {
 describe('Pass 1 metric assertions', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/long-lane-names.json', 'utf8'));
 
-  test('laneHeaderWidth does not narrow when refinement is enabled', async () => {
-    // After v3.5 visual-polish, the base laneHeaderWidth was reduced from 40 → 30
-    // (matching bpmn.io's pool-header convention). The refinement's min is also 30,
-    // so dynamic widening kicks in only for labels that don't fit in 30px when rotated.
-    // For long-lane-names, the rotated text fits within 30px height — no widening needed.
-    // Test invariant is "refinement never produces a narrower header than off".
+  test('--refine keeps every pool and lane header at LANE_HEADER_W', async () => {
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
+    const pools = Object.values(on.coordMap.poolCoords);
+    expect(pools.length).toBeGreaterThan(0);
+    for (const pc of pools) expect(pc.laneHeaderWidth).toBe(CFG.layout.laneHeaderWidth);
+    // the DI agrees: the lane shape is laid out from the pool's x, header width is the constant
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const poolKey = Object.keys(off.coordMap.poolCoords)[0];
-    const offWidth = off.coordMap.poolCoords[poolKey].laneHeaderWidth;
-    const onWidth  = on.coordMap.poolCoords[poolKey].laneHeaderWidth;
-    expect(onWidth).toBeGreaterThanOrEqual(offWidth);
+    expect(on.coordMap.poolCoords[poolKey].laneHeaderWidth).toBe(off.coordMap.poolCoords[poolKey].laneHeaderWidth);
   });
 
   test('canvas width does not grow runaway (<= 1.6× baseline)', async () => {
     // After v3.5 pool/lane polish (base laneHeaderWidth 40→30, lanePadding 30→60),
-    // the relative growth from refinement (long-lane-names triggers dynamic header
-    // widening from 30 → up to 120) is ~1.53× the baseline. Bumped tolerance from
-    // 1.5× to 1.6× to accommodate. Intent ("canvas doesn't blow up") preserved.
+    // the relative growth from refinement (long-lane-names) was ~1.53× the baseline. Intent ("canvas doesn't blow up") preserved.
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
     const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const extractW = (svg) => {
@@ -3967,7 +3962,7 @@ describe('Pass 3 metric assertions', () => {
   for (const fixture of readdirSync('../tests/fixtures').filter(f => f.endsWith('.json')).sort()) {
     test(`${fixture}: label-collision repair never adds a label/label or label/node overlap (refined)`, async () => {
       const { bboxOverlaps } = await import('./visual-refinement.js');
-      const without = await runPipeline(loadFixture(fixture), { ...ALL_ON, visualRefinement: { dynamicLaneHeader: true, laneCompaction: true, edgeLabelCollisionRepair: false } });
+      const without = await runPipeline(loadFixture(fixture), { ...ALL_ON, visualRefinement: { laneCompaction: true, edgeLabelCollisionRepair: false } });
       const withRepair = await runPipeline(loadFixture(fixture), ALL_ON);
       if (!without.coordMap) return;   // blocked on purpose
       const a = labelOverlaps(without.coordMap, bboxOverlaps), b = labelOverlaps(withRepair.coordMap, bboxOverlaps);
@@ -4089,9 +4084,9 @@ describe('refinement defaults', () => {
   test('the default call runs label-collision repair only; routes are the unrefined ones', async () => {
     const lc = () => loadFixture('bpmn-generator-pipeline.json');
     const { resolveRefinement } = await import('./visual-refinement.js');
-    expect(resolveRefinement()).toEqual({ dynamicLaneHeader: false, laneCompaction: false, edgeLabelCollisionRepair: true });
+    expect(resolveRefinement()).toEqual({ laneCompaction: false, edgeLabelCollisionRepair: true });
     const def = await runPipeline(lc());
-    const labelsOnly = await runPipeline(lc(), { visualRefinement: { dynamicLaneHeader: false, laneCompaction: false, edgeLabelCollisionRepair: true } });
+    const labelsOnly = await runPipeline(lc(), { visualRefinement: { laneCompaction: false, edgeLabelCollisionRepair: true } });
     const off = await runPipeline(lc(), { visualRefinement: false });
     expect(def.bpmnXml).toBe(labelsOnly.bpmnXml);
     expect(JSON.stringify(def.coordMap.edgeCoords)).toBe(JSON.stringify(off.coordMap.edgeCoords)); // routes did not
@@ -6850,7 +6845,7 @@ describe('boundary event flows', () => {
 
   test('visualRefinement: true keeps the host-containment fix and reaches zero crossings', async () => {
     // Was a separate, pre-existing gap: the layout passes that only run under
-    // refinement (dynamic lane headers, lane compaction) move nodes AFTER
+    // refinement (lane compaction) move nodes AFTER
     // crossingRepair's fixed-shape candidate search already ran, and ELK
     // wrapping (also refinement-only, but a pre-buildCoordinateMap ELK
     // decision, not a post-repair pass) changes the topology it has to solve. Both left the
@@ -6874,7 +6869,7 @@ describe('boundary event flows', () => {
 });
 
 describe('lane compaction keeps sequence flows off lane lines', () => {
-  const COMPACT = { visualRefinement: { laneCompaction: true, edgeLabelCollisionRepair: true, dynamicLaneHeader: false } };
+  const COMPACT = { visualRefinement: { laneCompaction: true, edgeLabelCollisionRepair: true } };
   const minLegDistance = (cm, lc) => {
     let m = Infinity;
     for (const p of (lc.pools || [lc])) {
