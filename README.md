@@ -349,7 +349,7 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 
 ### Visual Refinement
 
-Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Each refinement pass has its own switch; both are on by default. `--refine` switches every pass on, `--no-refine` every pass off (the two are mutually exclusive). `--no-refine` restores the uncompacted lane geometry, not the pre-4.0 output as a whole: edge-label placement changed in every mode (labels beside their flow, message flows carry a label of their own) and cannot be switched back.
+Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Each refinement pass has its own switch; both are on by default. `--refine` switches every pass on, `--no-refine` every pass off (the two are mutually exclusive). `--no-refine` restores the uncompacted lane geometry, not the pre-4.0 output as a whole: edge-label placement changed in every mode (labels beside their flow, message flows carry a label of their own, the SVG label backdrop is gone) and cannot be switched back.
 
 - **`laneCompaction`** — `compactLanes`: reduces lane padding. Lanes keep their lane names whole in bpmn.io (`laneLabelFloor`) and sequence flows are kept `laneLineClearance` px off the lane separators. Diagrams with lanes or an expanded subprocess come out up to 29 % smaller in area (10–29 % on the seven golden fixtures; some diagrams are unchanged).
 - **`edgeLabelCollisionRepair`** — edge label collision repair via bbox-nudge; it only moves labels, never a route.
