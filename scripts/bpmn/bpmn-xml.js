@@ -215,6 +215,61 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
 }
 
 /**
+ * One `<bpmn:resource>` per distinct `role` name, in document order — every process, depth-first
+ * through subprocess children, exactly the walk `buildFlowNode` makes. Returns the elements to
+ * publish as RootElements and a `name → element` map the performer write resolves against, so two
+ * activities naming the same role reference ONE resource.
+ *
+ * Only a role the activity may carry (`fieldAllowedOn`) gets a resource: a `role` on a gateway is
+ * dropped by `buildFlowNode` and reported by S15, and a resource nothing references would be a
+ * second, silent trace of a field the writer declined.
+ *
+ * The id is derived from the name — `Resource_` plus the name with every run of characters outside
+ * `[A-Za-z0-9_-]` collapsed to `_` — so it is deterministic and readable, and always a valid NCName
+ * (it starts with a letter). Two names can collapse to the same slug ("Experte XY" and
+ * "Experte.XY"), and a model can already use the id, so a candidate that is taken gets `_2`, `_3`…
+ * "Taken" means: any `id` anywhere in the Logic-Core, or the `<id>_di` / `<id>_do` this writer
+ * derives from one. Every other id this writer generates carries a different prefix
+ * (`Participant_`, `LaneSet_`, `Category_`, `Message_` …), so it cannot collide with `Resource_`.
+ */
+function buildResources(lc, processes) {
+  const taken = new Set();
+  (function collectIds(value) {
+    if (Array.isArray(value)) { value.forEach(collectIds); return; }
+    if (!value || typeof value !== 'object') return;
+    if (typeof value.id === 'string') taken.add(value.id);
+    for (const v of Object.values(value)) collectIds(v);
+  })(lc);
+  const isTaken = (candidate) => taken.has(candidate)
+    || (/_d[io]$/.test(candidate) && taken.has(candidate.slice(0, -3)));
+
+  const elements = [];
+  const byName = new Map();
+  const visit = (nodes) => {
+    for (const node of (nodes || [])) {
+      if (node.role && fieldAllowedOn(node, 'role') && !byName.has(node.role)) {
+        const slug = node.role.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+        const base = slug ? `Resource_${slug}` : 'Resource';
+        let id = base;
+        for (let n = 2; isTaken(id); n++) id = `${base}_${n}`;
+        taken.add(id);
+        const el = create('bpmn:Resource', { id, name: node.role });
+        elements.push(el);
+        byName.set(node.role, el);
+      }
+      if (node.nodes) visit(node.nodes);
+    }
+  };
+  for (const proc of processes) visit(proc.nodes);
+  return { elements, byName };
+}
+
+// The tasks a PERSON performs get the human-specific ResourceRole; every other Activity the
+// generic one. `HumanPerformer` is a `Performer` subclass (bpmn.json), so a reader that only knows
+// `performer` still finds the role.
+const HUMAN_PERFORMER_TYPES = new Set(['userTask', 'manualTask']);
+
+/**
  * Turn one Logic-Core node into its fully enriched moddle element.
  *
  * EVERY node goes through here — top-level nodes and the children of an expanded
@@ -425,11 +480,32 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
   // write was unguarded, so a `decisionRef` on a userTask was emitted, re-imported and never
   // questioned. Unlike loopType/multiInstance this was not a silent DROP but a silent
   // ACCEPTANCE: the field reached the XML on a class the published contract does not scope it to.
+  //
+  // `system` — which IT system a task involves — goes into the same extensionElements, for the same
+  // reason: BPMN 2.0 has no element for it. One ExtensionElements per node, so the two fields share
+  // it on a businessRuleTask that carries both.
+  const extensionValues = [];
   if (node.decisionRef && fieldAllowedOn(node, 'decisionRef')) {
-    const ref = moddle.createAny(`${EXTENSION_PREFIX}:decisionRef`, EXTENSION_NS, {
+    extensionValues.push(moddle.createAny(`${EXTENSION_PREFIX}:decisionRef`, EXTENSION_NS, {
       $body: String(node.decisionRef),
-    });
-    el.extensionElements = create('bpmn:ExtensionElements', { values: [ref] });
+    }));
+  }
+  if (node.system && fieldAllowedOn(node, 'system')) {
+    extensionValues.push(moddle.createAny(`${EXTENSION_PREFIX}:system`, EXTENSION_NS, {
+      $body: node.system,
+    }));
+  }
+  if (extensionValues.length) {
+    el.extensionElements = create('bpmn:ExtensionElements', { values: extensionValues });
+  }
+
+  // role — OMG's own vocabulary: a performer (humanPerformer for the tasks a person does) whose
+  // resourceRef names the shared `<bpmn:resource>` built by `buildResources`. The lookup cannot
+  // miss for an allowed role: `buildResources` walks the same nodes under the same guard.
+  if (node.role && fieldAllowedOn(node, 'role')) {
+    const resource = topLevelDefsMap.resources.get(node.role);
+    const performerType = HUMAN_PERFORMER_TYPES.has(node.type) ? 'bpmn:HumanPerformer' : 'bpmn:Performer';
+    el.get('resources').push(create(performerType, { resourceRef: resource }));
   }
 
   registerNode(node, el);
@@ -942,6 +1018,9 @@ async function generateBpmnXml(lc, coordMap) {
   // 1. Top-level definitions
   const { elements: topLevelElements, markerMap: topLevelDefsMap } =
     buildTopLevelDefinitions(processes, lc.definitions);
+  // 1b. One <bpmn:resource> per distinct role name (RootElements, like the definitions above).
+  const { elements: resourceElements, byName: resourceByName } = buildResources(lc, processes);
+  topLevelDefsMap.resources = resourceByName;
 
   // 2. Build processes
   const allFlowNodeMaps = new Map();
@@ -1051,6 +1130,10 @@ async function generateBpmnXml(lc, coordMap) {
 
   // Top-level definitions first
   for (const el of topLevelElements) rootElements.push(el);
+
+  // Resources next: a performer's resourceRef must resolve when the process is read. Empty for
+  // every model without a `role`, so their output is unchanged.
+  for (const el of resourceElements) rootElements.push(el);
 
   // Categories carry the Groups' labels and must be resolvable when the
   // Groups' categoryValueRef is read, so they go in ahead of the processes.

@@ -418,6 +418,30 @@
     "decisionRef": [
       "businessRuleTask"
     ],
+    "role": [
+      "task",
+      "userTask",
+      "serviceTask",
+      "scriptTask",
+      "sendTask",
+      "receiveTask",
+      "manualTask",
+      "businessRuleTask",
+      "subProcess",
+      "transaction",
+      "adHocSubProcess",
+      "callActivity"
+    ],
+    "system": [
+      "task",
+      "userTask",
+      "serviceTask",
+      "scriptTask",
+      "sendTask",
+      "receiveTask",
+      "manualTask",
+      "businessRuleTask"
+    ],
     "isAdHoc": [
       "subProcess"
     ],

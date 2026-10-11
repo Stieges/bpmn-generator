@@ -333,6 +333,11 @@ const SAMPLES = {
   errorRef: [{ label: 'the first of two errors', value: 'Err_Order', extra: { marker: 'error' }, model: { definitions: DEFS('error') } }],
   escalationRef: [{ label: 'the first of two escalations', value: 'Esc_Order', extra: { marker: 'escalation' }, model: { definitions: DEFS('escalation') } }],
   decisionRef: [{ label: 'a decision id', value: 'dec_bonitaet' }],
+  // A name with a space, a non-ASCII letter and XML-special characters: the resource id is DERIVED
+  // from the name, so this is the sample that would expose a writer leaking the raw name into an
+  // id, and an importer reading the id instead of the resource's `name`.
+  role: [{ label: 'a role name with spaces and specials', value: 'Experte XY & Prüfer <2>' }],
+  system: [{ label: 'a system name with specials', value: 'SAP S/4 & "Core"' }],
   isAdHoc: [{ label: 'true', value: true }],
   isInterrupting: [{ label: 'true', value: true }],
   extensions: [{ label: 'a foreign attribute bag', value: { 'acme:owner': 'Fachbereich' } }],

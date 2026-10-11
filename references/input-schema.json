@@ -15,7 +15,7 @@
         "$schemaVersion": {
           "type": "string",
           "pattern": "^1\\.(0|[1-9][0-9]*)$",
-          "default": "1.1",
+          "default": "1.2",
           "description": "Optional schema version. Absent, or any 1.x, is accepted; the current version is the default, and equals the version of references/ontology.jsonld. A new node type or marker raises the minor version; earlier minors stay valid."
         },
         "id": { "type": "string", "description": "Process ID" },
@@ -36,7 +36,7 @@
         "$schemaVersion": {
           "type": "string",
           "pattern": "^1\\.(0|[1-9][0-9]*)$",
-          "default": "1.1",
+          "default": "1.2",
           "description": "Optional schema version. Absent, or any 1.x, is accepted; the current version is the default, and equals the version of references/ontology.jsonld. A new node type or marker raises the minor version; earlier minors stay valid."
         },
         "pools": {
@@ -138,6 +138,8 @@
         "script": { "type": "string", "description": "For scriptTask: script body" },
         "implementation": { "type": "string", "description": "For service/send/receive/businessRule tasks: implementation type" },
         "decisionRef": { "type": "string", "description": "For businessRuleTask: id of the decision this task invokes. Serialised into bpmn:extensionElements under the generator's own namespace, not camunda:" },
+        "role": { "type": "string", "minLength": 1, "description": "For an Activity (task, subProcess, transaction, callActivity): the role that performs it, e.g. \"Claims handler\". Serialised as OMG standard: one bpmn:resource per distinct role name (same name, same resource) and, on the activity, a bpmn:humanPerformer (userTask, manualTask) or bpmn:performer (every other Activity) whose resourceRef points to it. One role per activity; names are compared exactly. Does not change the drawing" },
+        "system": { "type": "string", "minLength": 1, "description": "For a task (any task type): the IT system involved, e.g. \"SAP\". BPMN 2.0 has no standard element for this, so it is serialised into bpmn:extensionElements under the generator's own namespace, like decisionRef. Does not change the drawing" },
         "eventGatewayType": { "enum": ["Exclusive", "Parallel"], "description": "For eventBasedGateway" },
         "instantiate": { "type": "boolean", "description": "For eventBasedGateway or receiveTask: instantiate process. OMG grants `instantiate` to both classes (BPMN 2.0.2 \u00a710.2.4) \u2014 an instantiating Receive Task starts a process on an incoming message without a message start event" },
         "linkName": { "type": "string", "description": "For link events: linkEventDefinition name" },

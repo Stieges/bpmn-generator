@@ -571,6 +571,22 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'object when a loopCardinality or completionCondition is present. Both are equivalent '
       + 'input, so no meaning is lost — but the value is not deep-equal. Dropped entirely when the '
       + 'same node also carries `loopType` (one loopCharacteristics slot).' },
+  // `role` — who performs the activity, in OMG's own vocabulary: `Activity#resources` holds
+  // ResourceRoles, and the two this row writes are `bpmn:humanPerformer` (userTask, manualTask —
+  // the tasks a person does) and `bpmn:performer` (every other Activity). Each points through
+  // `resourceRef` at a `<bpmn:resource>` RootElement, ONE per distinct role name, so two tasks
+  // naming the same role share one resource — which is what makes the role a thing a tool can
+  // query rather than a label on each box. `attr` names the metamodel property the mechanism
+  // attaches to (convention 2 above), so the metamodel fence checks `allowed` against every class
+  // that carries `resources`: exactly the Activity subtree.
+  //
+  // The importers read back ONE form only: a single performer/humanPerformer whose `resourceRef`
+  // names a resource with a non-empty `name`. A foreign file expressing the role otherwise — a
+  // `resourceAssignmentExpression`, several performers, a nameless resource — is not read: that is
+  // the requirement's parked point (foreign role forms, owner: the "import mode" record), not a
+  // round-trip loss, because this writer never produces those forms.
+  { field: 'role', attr: 'resources', type: 'string', on: 'self', allowed: domain('Node', 'role'), scope: 'an Activity',
+    shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'exact' },
   { field: 'nodes', attr: 'flowElements', type: 'array', on: 'self', allowed: domain('Node', 'nodes'), scope: 'a subProcess or a transaction',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'A flow-node child, a data reference and a `textAnnotation` child all round-trip '
@@ -693,6 +709,18 @@ export const OMG_NODE_FIELD_SCOPE = [
     // emitted, re-imported and never questioned — a field the published contract scopes to one
     // class, silently honoured on all 25.
   },
+
+  // `system` — which IT system a task involves. BPMN 2.0 has no element for it (a `performer` is a
+  // ResourceRole, and an IT system is not the one who performs the work), so it goes into our own
+  // extension namespace exactly like `decisionRef`, written through `moddle.createAny`.
+  //
+  // `'table'`, not `'convention'` like its neighbour, and that is a deliberate difference: the
+  // scope here is OMG's class hierarchy (a Task, the activity that is a unit of work), not a
+  // contract this project invented for one class, and the requirement names S15 as the rule that
+  // reports it off scope. S15 words the message for an extension row accordingly — it does not
+  // claim OMG defines the field.
+  { field: 'system', attr: 'system', type: 'string', on: 'self', allowed: domain('Node', 'system'), scope: 'a Task',
+    shape: 'extension', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'exact' },
 
   // ── shape: 'unserialised' — nothing writes these ───────────────────────────────────────────────
   // `attr` is null for every row here, and the fences assert that: a row that names a target it
