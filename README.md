@@ -30,7 +30,7 @@ See [EVALUATION.md](EVALUATION.md) for the full benchmark, the competitor matrix
 </tr>
 </table>
 
-Full gallery: [docs/screenshots/](docs/screenshots/). All SVGs regenerated from fixtures by the pipeline — they reflect current output, not stale marketing screenshots.
+Full gallery: [docs/screenshots/](docs/screenshots/). All SVGs regenerated from fixtures by the pipeline with default options (lane compaction and label repair on) — they reflect current output, not stale marketing screenshots.
 
 ### How we compare (verified)
 
@@ -105,6 +105,20 @@ npm test
 ```
 
 **Output:** `output.bpmn` (BPMN 2.0 XML) + `output.svg` (vector preview)
+
+**Flags** of `node bpmn/pipeline.js <input.json | -> [output-basename]`:
+
+| Flag | Effect |
+|------|--------|
+| `--dot` | Also write a Graphviz DOT export |
+| `--import-dot` | Treat the input as DOT and write Logic-Core JSON |
+| `--doc` | Also write a Markdown documentation companion |
+| `--strict` | Write nothing on any unresolved warning (rule engine, diagram integrity, serialization) |
+| `--optimize` | Enable the opt-in Optimization Advisory layer |
+| `--refine` | Switch every visual-refinement pass on (lane compaction and label repair already are by default) |
+| `--no-refine` | Switch every visual-refinement pass off (mutually exclusive with `--refine`) |
+| `--wrap` | Wrap long chains (> 20 nodes) into rows with ELK; independent of `--refine` |
+| `--drill-down` | Emit the parent diagram plus one diagram per expanded subprocess |
 
 ## Usage as Claude Code Skill
 
@@ -329,36 +343,42 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)
 - **Documentation View** (SVG tooltips + `--doc` Markdown companion)
 - **Happy-Path Y-Leveling** (post-layout alignment, configurable)
-- **Visual Refinement Pass** (opt-in post-layout polish — see below)
+- **Visual refinement** (lane compaction and edge-label repair on by default, `--no-refine` switches them off — see below)
 - **MCP Server** (generate, validate, import as MCP tools)
 - **bpmn.io compatible** (verified with bpmn-js viewer)
 
 ### Visual Refinement
 
-Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Each pass has its own switch; edge-label collision repair and lane compaction are on by default; ELK wrapping is opt-in. `--refine` switches every pass on, `--no-refine` every pass off (the previous, uncompacted geometry).
+Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Each refinement pass has its own switch; both are on by default. `--refine` switches every pass on, `--no-refine` every pass off (the two are mutually exclusive). `--no-refine` restores the uncompacted lane geometry, not the pre-4.0 output as a whole: edge-label placement changed in every mode (labels beside their flow, message flows carry a label of their own) and cannot be switched back.
 
-- **Pass 1** — `compactLanes`: reduces lane padding (~45px per non-empty lane on typical layouts, ~10–20% canvas shrink on multi-lane diagrams)
-- **Pass 2** — Edge label collision repair via bbox-nudge
-- **Pass 3** — ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes) — its own switch: `layout.elkWrapping` (`off`/`auto`/`always`), `--wrap`, `runPipeline(lc, { elkWrapping: 'auto' })`; if ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
+- **`laneCompaction`** — `compactLanes`: reduces lane padding. Lanes keep their lane names whole in bpmn.io (`laneLabelFloor`) and sequence flows are kept `laneLineClearance` px off the lane separators. Diagrams with lanes or an expanded subprocess come out up to 29 % smaller in area (10–29 % on the seven golden fixtures; some diagrams are unchanged).
+- **`edgeLabelCollisionRepair`** — edge label collision repair via bbox-nudge; it only moves labels, never a route.
+- **ELK wrapping** is not a refinement pass but its own layout-level switch (opt-in): row wrapping of wide pipelines (> 20 nodes) via `layout.elkWrapping` (`off`/`auto`/`always`), `--wrap` or `runPipeline(lc, { elkWrapping: 'auto' })`; if ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so.
 
-**Configure (defaults shown):**
+**Configure (defaults shown, `scripts/config.json`):**
 
 ```json
 {
   "visualRefinement": {
     "laneCompaction": true,
     "minLaneHeight": 80,
+    "laneLineClearance": 10,
+    "laneLabelFloor": true,
     "edgeLabelCollisionRepair": true,
     "edgeLabelMaxShift": 25
   }
 }
 ```
 
+`minLaneHeight` is the height floor for an empty lane, `laneLineClearance` the distance in px that a re-routed leg keeps from lane separators, `laneLabelFloor` keeps a lane tall enough for its longest label word, and `edgeLabelMaxShift` is the farthest in px a label may be nudged.
+
 **Or per-call:**
 
 ```javascript
 const result = await runPipeline(logicCore, { visualRefinement: { laneCompaction: false } });
 ```
+
+`visualRefinement` is `true`, `false` or an object with the keys `laneCompaction` and `edgeLabelCollisionRepair` (booleans); any other key or a non-boolean value is rejected (`TypeError` in the library, `schema_error` over HTTP and MCP). The same option is accepted by `POST /api/v1/generate`, `POST /api/v1/orchestrate` and the MCP tools `generate_bpmn` and `orchestrate_bpmn` (schema `$defs/VisualRefinementOption` in [`references/api-schema.json`](references/api-schema.json)); `validate_bpmn` has no geometry and ignores it. Omitted, the `config.json` defaults apply.
 
 Design spec: [`docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md`](docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md)
 
