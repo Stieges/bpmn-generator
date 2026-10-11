@@ -241,6 +241,32 @@ describe('flowMetrics — crowd, endpoint offset, message-flow crowd', () => {
   });
 });
 
+describe('flowMetrics — overlapLen (collinear overlap, px)', () => {
+  // sparse-lanes f3 as the bend rule's first round left it: the flow leaving the join runs down
+  // 2.5 px beside the flow entering it from below. Both touch the join — crowd skips that pair,
+  // overlapLen does not.
+  const lc = { id: 'P', nodes: [{ id: 'join', type: 'parallelGateway' }, { id: 'a4', type: 'task' }, { id: 'b1', type: 'task' }],
+    edges: [{ id: 'f2d', source: 'a4', target: 'join' }, { id: 'f3', source: 'join', target: 'b1' }] };
+  const of = (x) => flowMetrics({ coords: {}, laneCoords: {}, poolCoords: {}, edgeCoords: {
+    f2d: [{ x: 471, y: 540 }, { x: 588.5, y: 540 }, { x: 588.5, y: 290 }],
+    f3: [{ x: x, y: 292.5 }, { x: x, y: 700 }, { x: 696, y: 700 }] } }, lc);
+  test(`legs closer than layout.bendRuleLimits.collinearPx (${CFG.layout.bendRuleLimits.collinearPx}) count with their overlap length`, () => {
+    const m = of(591);
+    expect(m.overlapLen).toBe(248); // 292.5–540, rounded
+    expect(m.seq.crowd.pairs).toBe(0);
+  });
+  test('legs collinearPx apart or more do not', () => {
+    expect(of(588.5 + CFG.layout.bendRuleLimits.collinearPx).overlapLen).toBe(0);
+  });
+  test('a message flow on top of a sequence flow counts too', () => {
+    const collab = { pools: [{ id: 'A', nodes: [{ id: 'a', type: 'task' }, { id: 'b', type: 'task' }], edges: [{ id: 's', source: 'a', target: 'b' }] },
+      { id: 'B', nodes: [{ id: 'c', type: 'task' }], edges: [] }], messageFlows: [{ id: 'm', source: 'a', target: 'c' }] };
+    const m = flowMetrics({ coords: {}, laneCoords: {}, poolCoords: {}, edgeCoords: {
+      s: [{ x: 100, y: 0 }, { x: 100, y: 200 }], m: [{ x: 101, y: 50 }, { x: 101, y: 400 }] } }, collab);
+    expect(m.overlapLen).toBe(150);
+  });
+});
+
 // Exact values per fixture × mode. Modes: default (no option), off (visualRefinement: false),
 // on (every refinement pass + ELK wrapping — the .refined golden set). Keys: crossings
 // (segment-pair crossings between non-adjacent sequence flows), along (#52 ends on their own
@@ -254,11 +280,13 @@ describe('flowMetrics — crowd, endpoint offset, message-flow crowd', () => {
 // excluded), labelOwnEdge (edge-label box reaching into its own route — must stay 0),
 // labelLabel (edge-label box pairs overlapping), labelNode (edge-label box × node box),
 // labelLaneLine (edge-label box across an inner lane separator — must stay 0), labelFar (edge-label
-// box farther than layout.edgeLabelGap + LABEL_DISTANCE_TOLERANCE_PX from its own route — must stay 0).
+// box farther than layout.edgeLabelGap + LABEL_DISTANCE_TOLERANCE_PX from its own route — must stay 0),
+// overlapLen (px two flows — sequence or message, a pair at a shared node included — run on top of
+// each other: parallel legs closer than layout.bendRuleLimits.collinearPx; flow-metrics.mjs).
 // null: the pipeline blocks the fixture on purpose.
 const ZERO = { crossings: 0, along: 0, laneGap: 0, mfThrough: 0, seqThrough: 0, ownThrough: 0,
   hug: 0, bendsMax: 0, crowd: 0, mfCrowd: 0, offOver5: 0, labelOwnEdge: 0, labelLabel: 0, labelNode: 0,
-  labelLaneLine: 0, labelFar: 0 };
+  labelLaneLine: 0, labelFar: 0, overlapLen: 0 };
 const r = (over = {}) => ({ ...ZERO, ...over });
 const same = (row) => ({ default: row, off: row, on: row });
 // realistic-collaboration on: the 5 remaining message-flow hits are all shapes of the flow's own
@@ -273,23 +301,24 @@ const same = (row) => ({ default: row, off: row, on: row });
 const BUDGET = {
   'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
-  'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }), off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13 }),
-                                          on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1 }) },
+  'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 227 }),
+                                          off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 245 }),
+                                          on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1, overlapLen: 786 }) },
   'deadlock-process.json':              { default: null, off: null, on: null },
   'dense-edge-labels.json':             same(r({ bendsMax: 1, offOver5: 4 })),
   'expanded-subprocess.json':           same(r()),
   'long-lane-names.json':               { default: r({ bendsMax: 2 }), off: r({ bendsMax: 2 }), on: r({ bendsMax: 2 }) },
-  'loop-with-join.json':                same(r({ bendsMax: 2, offOver5: 6 })),
-  'messageflow-to-subprocess.json':     same(r({ mfCrowd: 1 })),
-  'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2 }), off: r({ bendsMax: 2, offOver5: 2 }),
-                                          on: r({ bendsMax: 2, offOver5: 2 }) },
+  'loop-with-join.json':                same(r({ bendsMax: 2, offOver5: 6, overlapLen: 23 })),
+  'messageflow-to-subprocess.json':     same(r({ mfCrowd: 1, overlapLen: 83 })),
+  'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }), off: r({ bendsMax: 2, offOver5: 2, overlapLen: 86 }),
+                                          on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
-  'realistic-collaboration.json':       { default: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
-                                          off: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
-                                          on: r({ bendsMax: 5, mfCrowd: 7, offOver5: 3, labelLabel: 1 }) },
+  'realistic-collaboration.json':       { default: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 386 }),
+                                          off: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 646 }),
+                                          on: r({ bendsMax: 5, mfCrowd: 7, offOver5: 3, labelLabel: 1, overlapLen: 646 }) },
   'simple-approval.json':               same(r({ bendsMax: 2, offOver5: 6 })),
-  'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4 }), off: r({ bendsMax: 2, offOver5: 4 }),
-                                          on: r({ bendsMax: 2, offOver5: 4 }) },
+  'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }), off: r({ bendsMax: 2, offOver5: 4, overlapLen: 216 }),
+                                          on: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }) },
   'subprocess-child-fidelity.json':     same(r({ bendsMax: 2, offOver5: 5 })),
   'subprocess-collapsed-children.json': same(r()),
   'subprocess-merge-fanout.json':       same(r({ bendsMax: 2, offOver5: 8 })),
@@ -305,20 +334,23 @@ const BUDGET = {
 // the counterpart's height, off the midpoint) straighten small Z jogs into lines — boundary-event-
 // shapes f9, bpmn-generator-pipeline fu2/fo4, loop-with-join Flow_6, subprocess-merge-fanout f5/f7 —
 // so bendsMax falls in loop-with-join and offOver5 rises by the off-midpoint ends they leave
-// (boundary-event-shapes +1, bpmn-generator-pipeline +2, loop-with-join +1).
+// (boundary-event-shapes +1, bpmn-generator-pipeline +2, loop-with-join +1). overlapLen falls
+// against default wherever a moved route left another flow's line: bpmn-generator-pipeline
+// 227 → 187, multi-pool-collaboration 50 → 0, realistic-collaboration 386 → 226, sparse-lanes
+// 184 → 0 (f3).
 const BUDGET_BENDS = {
   'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
   'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 10 }),
-  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15 }),
+  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 187 }),
   'deadlock-process.json':              null,
   'dense-edge-labels.json':             r({ bendsMax: 1, offOver5: 4 }),
   'expanded-subprocess.json':           r(),
   'long-lane-names.json':               r({ bendsMax: 1 }),
-  'loop-with-join.json':                r({ bendsMax: 1, offOver5: 7 }),
-  'messageflow-to-subprocess.json':     r({ mfCrowd: 1 }),
+  'loop-with-join.json':                r({ bendsMax: 1, offOver5: 7, overlapLen: 23 }),
+  'messageflow-to-subprocess.json':     r({ mfCrowd: 1, overlapLen: 83 }),
   'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 2 }),
   'parallel-split-join.json':           r({ bendsMax: 1, offOver5: 4 }),
-  'realistic-collaboration.json':       r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1 }),
+  'realistic-collaboration.json':       r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 226 }),
   'simple-approval.json':               r({ bendsMax: 1, offOver5: 5 }),
   'sparse-lanes.json':                  r({ bendsMax: 1, offOver5: 4 }),
   'subprocess-child-fidelity.json':     r({ bendsMax: 2, offOver5: 3 }),

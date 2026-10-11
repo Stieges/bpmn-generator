@@ -6,7 +6,7 @@
  */
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { resolveLaneId, normalizeEdgeIds } from '../bpmn/topology.js';
-import { bendMetrics } from '../bpmn/bend-rule.js';
+import { bendMetrics, bendRuleLimits, collinearRun } from '../bpmn/bend-rule.js';
 
 /** Horizontal run within this many px of an inner lane boundary counts as lying on the line. */
 export const LANE_LINE_HUG_PX = 3;
@@ -97,6 +97,24 @@ function crowding(listA, listB, same) {
     }
   }
   return { pairs, collinear };
+}
+
+/**
+ * Collinear overlap: over every pair of segments of two DIFFERENT flows (sequence and message flows
+ * alike, a pair at a shared endpoint node included), the length they run on top of each other —
+ * parallel, closer than layout.bendRuleLimits.collinearPx, overlapping by more than 1 px
+ * (bend-rule.js collinearRun, the definition the bend rule's guard uses). px, rounded.
+ */
+function overlapLength(list) {
+  const tol = bendRuleLimits().collinearPx;
+  let t = 0;
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      if (list[i].edge === list[j].edge) continue;
+      t += collinearRun(list[i].s, list[j].s, tol);
+    }
+  }
+  return Math.round(t);
 }
 
 export function flowMetrics(coordMap, lc, ctx = buildFlowContext(lc)) {
@@ -194,6 +212,7 @@ export function flowMetrics(coordMap, lc, ctx = buildFlowContext(lc)) {
     };
   }
   out.seq.crowd = crowding(segList.seq, segList.seq, true);
+  out.overlapLen = overlapLength([...segList.seq, ...segList.mf]);
   out.mf.crowd = (() => {
     const a = crowding(segList.mf, segList.mf, true), b = crowding(segList.mf, segList.seq, false);
     return { pairs: a.pairs + b.pairs, collinear: a.collinear + b.collinear, mfmf: a.pairs, mfseq: b.pairs };

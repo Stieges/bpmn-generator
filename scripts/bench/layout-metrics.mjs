@@ -48,6 +48,12 @@
  *                        label farther from its own route than
  *                        layout.edgeLabelGap + LABEL_DISTANCE_TOLERANCE_PX
  *                        (a label that no longer sits beside its flow).
+ *   - overlapLen        (measureLayout only, flow-metrics.mjs) px two flows —
+ *                        sequence or message — run on top of each other:
+ *                        parallel legs closer than bendRuleLimits.collinearPx,
+ *                        a pair at a shared node included (crowd skips those).
+ *                        Does NOT see associations, nor a message flow's
+ *                        MESSAGE_FLOW_FAN offset before it is routed.
  *
  * Also measures ELK's *raw* output (before coordinates.js post-processing) so
  * that crossings introduced by our own route rebuilding become visible: ELK
@@ -643,7 +649,7 @@ export async function measureLayout(lc, opts = {}) {
     ownThrough: seqThroughOwnShape(cm, lc, edgeList),
     labels: edgeLabelHits(cm, lc),
     flow: { hug: f.seq.laneLineHug, bendsMax: f.seq.bendsMax, crowd: f.seq.crowd.pairs, mfCrowd: f.mf.crowd.pairs,
-      offOver5: f.seq.endOffOver5 + f.mf.endOffOver5 },
+      offOver5: f.seq.endOffOver5 + f.mf.endOffOver5, overlapLen: f.overlapLen },
     direction: flowDirectionMetrics(cm, lc),
     diCodes,
   };
@@ -669,6 +675,7 @@ export function summarize(m) {
     labelNode: m.labels.labelNode.length,
     labelLaneLine: m.labels.laneLine.length,
     labelFar: m.labels.farFromEdge.length,
+    overlapLen: m.flow.overlapLen,
   };
 }
 
