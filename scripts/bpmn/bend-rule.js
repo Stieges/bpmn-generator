@@ -60,6 +60,11 @@
  */
 import { routeAroundObstacles } from './orthogonal-router.js';
 import { CFG } from '../shared/utils.js';
+// The global Math, bound once to a module constant. Under Jest (--experimental-vm-modules) code runs
+// in a vm context, where every global lookup goes through the context's interceptor; this module's
+// hot geometry loops call Math.min/max/abs millions of times, which made every pipeline run about
+// ten times slower under test than under node. Same object, so no behaviour change.
+const Math = globalThis.Math;
 import { isEvent, isGateway } from './types.js';
 
 const DEFAULT_LIMITS = Object.freeze({
