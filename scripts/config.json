@@ -179,6 +179,8 @@
     "bendRule": true,
     "nodeLabelsAvoidFlows": true,
     "foreignShapeRepair": true,
+    "messageFlowLabelRepair": true,
+    "messageFlowLabelSlidePx": 10,
     "bendRuleLimits": {
       "shapeClearance": 8,
       "regionInset": 10,

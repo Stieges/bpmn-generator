@@ -1,6 +1,7 @@
 /**
- * The fence behind "the output with layout.bendRule, layout.nodeLabelsAvoidFlows and
- * layout.foreignShapeRepair off does not change unnoticed": the BPMN XML and SVG hashes of every
+ * The fence behind "the output with layout.bendRule, layout.nodeLabelsAvoidFlows,
+ * layout.foreignShapeRepair and layout.messageFlowLabelRepair off does not change unnoticed": the
+ * BPMN XML and SVG hashes of every
  * top-level fixture × four modes against a snapshot of that output on current master (see
  * output-hashes.mjs for its history).
  */

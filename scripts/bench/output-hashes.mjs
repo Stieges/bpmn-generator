@@ -5,7 +5,7 @@
  * The "switches off" fence. For every top-level Logic-Core fixture in tests/fixtures/ that lays
  * out, and for each of four modes, the SHA-256 of the BPMN XML and of the SVG, with every opt-in
  * layout switch that changes geometry explicitly OFF (layout.bendRule, layout.nodeLabelsAvoidFlows,
- * layout.foreignShapeRepair).
+ * layout.foreignShapeRepair, layout.messageFlowLabelRepair).
  * The committed snapshot (tests/bench/default-output-hashes.json) is the output with those switches
  * off on current master — no longer the output from before the bend rule. It was first generated at
  * 9b5a597, before either switch existed; #91 regenerated it when boundary events started facing the
@@ -31,7 +31,7 @@ export const SNAPSHOT_PATH = join(__dirname, '..', '..', 'tests', 'bench', 'defa
 export const FIXTURES = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
 
 // The new switches are named explicitly: the fence must keep meaning "off" if a default ever flips.
-const OFF = { bendRule: false, nodeLabelsAvoidFlows: false, foreignShapeRepair: false };
+const OFF = { bendRule: false, nodeLabelsAvoidFlows: false, foreignShapeRepair: false, messageFlowLabelRepair: false };
 export const MODES = {
   default: {},
   'no-refine': { visualRefinement: false },

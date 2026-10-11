@@ -295,9 +295,9 @@ const same = (row) => ({ default: row, on: row });
 // realistic-collaboration on: the 5 remaining message-flow hits are all shapes of the flow's own
 // participant, in another lane — mf1>ap_wait, mf3>as_assess, mf4>as_assess, mf6>de_decide,
 // mf6>ap_submit. No port column clears them; none crosses a participant the flow does not involve.
-// The label overlaps (bpmn-generator-pipeline on mf6/mf7, realistic-collaboration mf2/mf5) are
-// message-flow label pairs: their labels are placed after the label repair pass, which never sees them
-// (#72).
+// labelLabel is 0 everywhere since #88: the message-flow label pairs that overlapped
+// (bpmn-generator-pipeline on mf6/mf7, realistic-collaboration mf2/mf5 in every mode) are repaired
+// after routeMessageFlows (coordinates.js repairMessageFlowLabels, layout.messageFlowLabelRepair).
 // on rows: compaction's lane-line legs re-routed — bpmn-generator-pipeline fo2, fo3, fo9, fo16,
 // fo17; long-lane-names f2, f3; multi-pool-collaboration sf3, sf5; realistic-collaboration inf8,
 // asf3, def2, def3; sparse-lanes f3, f4, f5.
@@ -309,7 +309,7 @@ const BUDGET_PLAIN = {
   'artifacts-laneless-pool.json':       same(r({})),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
   'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 227 }),
-                                          on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1, overlapLen: 786 }) },
+                                          on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, overlapLen: 786 }) },
   'deadlock-process.json':              { default: null, on: null },
   'dense-edge-labels.json':             same(r({ bendsMax: 1, offOver5: 4 })),
   'example-bestellung-versand.json':   { default: r({ crossings: 2, bendsMax: 4, offOver5: 6, overlapLen: 277 }),
@@ -330,8 +330,8 @@ const BUDGET_PLAIN = {
   'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }),
                                           on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
-  'realistic-collaboration.json':       { default: r({ bendsMax: 2, offOver5: 4, labelLabel: 1, overlapLen: 386 }),
-                                          on: r({ bendsMax: 4, mfCrowd: 7, offOver5: 4, labelLabel: 1, overlapLen: 646 }) },
+  'realistic-collaboration.json':       { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 386 }),
+                                          on: r({ bendsMax: 4, mfCrowd: 7, offOver5: 4, overlapLen: 646 }) },
   'simple-approval.json':               same(r({ bendsMax: 2, offOver5: 6 })),
   'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }),
                                           on: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }) },
@@ -373,7 +373,7 @@ const BUDGET_DEFAULT = {
   'messageflow-to-subprocess.json':     r({ mfCrowd: 1, overlapLen: 83 }),
   'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 2 }),
   'parallel-split-join.json':           r({ bendsMax: 1, offOver5: 4 }),
-  'realistic-collaboration.json':       r({ bendsMax: 2, offOver5: 4, labelLabel: 1, overlapLen: 226 }),
+  'realistic-collaboration.json':       r({ bendsMax: 2, offOver5: 4, overlapLen: 226 }),
   'simple-approval.json':               r({ bendsMax: 1, offOver5: 5 }),
   'sparse-lanes.json':                  r({ bendsMax: 1, offOver5: 4 }),
   'subprocess-child-fidelity.json':     r({ bendsMax: 2, offOver5: 3 }),
@@ -387,7 +387,7 @@ const BUDGET_DEFAULT = {
 // 2026-10-11 when both switches became defaults. off (no compaction, no wrapping) leaves more or less
 // overlap than default because the rule judges different geometry: bpmn-generator-pipeline 172,
 // example-bestellung-versand 262, example-schadenmeldung 110, realistic-collaboration 356 (px).
-// on (refinement + wrapping): bpmn-generator-pipeline offOver5 16, labelLabel 1, overlapLen 112;
+// on (refinement + wrapping): bpmn-generator-pipeline offOver5 16, overlapLen 112;
 // example-kreditantrag bendsMax 4, offOver5 11; realistic-collaboration bendsMax 4, mfCrowd 6,
 // offOver5 4, overlapLen 586.
 // #91: realistic-collaboration's seqThrough 1 / crowd 2 (inf8 through in_gw) are gone in every mode
@@ -400,7 +400,7 @@ const BUDGET = Object.fromEntries(Object.entries(BUDGET_DEFAULT).map(([name, row
   { default: row, off: row, on: row, plain: BUDGET_PLAIN[name].default, 'plain-on': BUDGET_PLAIN[name].on }]));
 Object.assign(BUDGET['bpmn-generator-pipeline.json'], {
   off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 172 }),
-  on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 16, labelLabel: 1, overlapLen: 112 }) });
+  on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 16, overlapLen: 112 }) });
 Object.assign(BUDGET['example-bestellung-versand.json'], {
   off: r({ crossings: 2, bendsMax: 3, offOver5: 6, overlapLen: 262 }) });
 Object.assign(BUDGET['example-kreditantrag.json'], {
@@ -408,8 +408,8 @@ Object.assign(BUDGET['example-kreditantrag.json'], {
 Object.assign(BUDGET['example-schadenmeldung.json'], {
   off: r({ bendsMax: 2, offOver5: 6, overlapLen: 110 }) });
 Object.assign(BUDGET['realistic-collaboration.json'], {
-  off: r({ bendsMax: 2, offOver5: 4, labelLabel: 1, overlapLen: 356 }),
-  on: r({ bendsMax: 4, mfCrowd: 6, offOver5: 4, labelLabel: 1, overlapLen: 586 }) });
+  off: r({ bendsMax: 2, offOver5: 4, overlapLen: 356 }),
+  on: r({ bendsMax: 4, mfCrowd: 6, offOver5: 4, overlapLen: 586 }) });
 
 // Flow direction (bend-rule.js bendMetrics, through flow-metrics.mjs flowDirectionMetrics), every
 // mode: [avoidableBends, againstFlowEntries]. avoidableBends sums current − fewest admissible bends
