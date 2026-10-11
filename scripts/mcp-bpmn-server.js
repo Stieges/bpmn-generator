@@ -40,7 +40,7 @@ const PROFILE_PARAM = {
 
 const VISUAL_REFINEMENT_PARAM = {
   ...VISUAL_REFINEMENT_OPTION_SCHEMA,
-  description: "Refinement passes: true/false switches all; an object { laneCompaction, edgeLabelCollisionRepair } switches single passes. Omitted: the server's config defaults",
+  description: "Refinement passes: true/false switches all; an object { laneCompaction, edgeLabelCollisionRepair } switches single passes. Omitted: edge-label repair and lane compaction on",
 };
 
 const server = new Server(

@@ -325,6 +325,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Breaking
+- **Default output is compacted.** Lane compaction (`visualRefinement.laneCompaction`) is now on by
+  default, together with edge-label collision repair: every diagram with lanes or an expanded
+  subprocess comes out 10–29 % smaller in area (7 golden fixtures), and sequence flows between lanes are re-routed
+  off the lane separators. Every `.bpmn`/`.svg` produced with default options changes. To get the
+  previous geometry: CLI `--no-refine`, library `runPipeline(lc, { visualRefinement: false })`,
+  HTTP/MCP `"visualRefinement": false`, or project-wide `config.json -> visualRefinement.laneCompaction: false`
+  and `edgeLabelCollisionRepair: false`. ELK wrapping stays opt-in.
 - The `dynamicLaneHeader` refinement pass was removed: bpmn.io and Camunda Modeler draw lane and
   participant headers at a fixed width, so a wider header showed as an empty strip. `--refine` /
   `visualRefinement: true` no longer change the header width; passing `dynamicLaneHeader` in a

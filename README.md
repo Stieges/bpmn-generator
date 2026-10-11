@@ -335,18 +335,18 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 
 ### Visual Refinement
 
-Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Each pass has its own switch; edge-label collision repair is on by default (it only moves labels), the other passes are opt-in. `--refine` switches every pass on, `--no-refine` every pass off.
+Post-layout coordinate transforms that polish BPMN diagrams without changing semantics. Each pass has its own switch; edge-label collision repair and lane compaction are on by default; ELK wrapping is opt-in. `--refine` switches every pass on, `--no-refine` every pass off (the previous, uncompacted geometry).
 
 - **Pass 1** — `compactLanes`: reduces lane padding (~45px per non-empty lane on typical layouts, ~10–20% canvas shrink on multi-lane diagrams)
 - **Pass 2** — Edge label collision repair via bbox-nudge
 - **Pass 3** — ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes) — its own switch: `layout.elkWrapping` (`off`/`auto`/`always`), `--wrap`, `runPipeline(lc, { elkWrapping: 'auto' })`; if ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
 
-**Enable via config:**
+**Configure (defaults shown):**
 
 ```json
 {
   "visualRefinement": {
-    "laneCompaction": false,
+    "laneCompaction": true,
     "minLaneHeight": 80,
     "edgeLabelCollisionRepair": true,
     "edgeLabelMaxShift": 25
@@ -357,7 +357,7 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 **Or per-call:**
 
 ```javascript
-const result = await runPipeline(logicCore, { visualRefinement: { laneCompaction: true } });
+const result = await runPipeline(logicCore, { visualRefinement: { laneCompaction: false } });
 ```
 
 Design spec: [`docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md`](docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md)
