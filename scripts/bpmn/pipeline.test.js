@@ -5138,6 +5138,34 @@ describe('DI integrity check', () => {
       }
     }
   });
+
+  describe('DI08 — an end segment along its own outline (#52)', () => {
+    const lc = { pools: [{ id: 'P',
+      nodes: [{ id: 'a', type: 'userTask' }, { id: 'b', type: 'userTask' }],
+      edges: [{ id: 'e1', source: 'a', target: 'b' }] }] };
+    const coords = { a: { x: 0, y: 0, w: 100, h: 80 }, b: { x: 200, y: 100, w: 100, h: 80 } };
+    const di08 = (pts) => checkDiagramIntegrity({ coords, poolCoords: {}, edgeCoords: { e1: pts } }, lc)
+      .issues.filter(i => i.code === 'DI08');
+
+    test('fires, as a WARNING, on a last segment down the target\'s left side', () => {
+      const issues = di08([{ x: 100, y: 40 }, { x: 200, y: 40 }, { x: 200, y: 140 }]);
+      expect(issues).toEqual([{ code: 'DI08', severity: 'WARNING',
+        message: 'Sequence flow "e1" ends along the left side of "b" for 40 px.', elements: ['e1', 'b'] }]);
+    });
+    test('fires on a first segment along the source', () => {
+      const issues = di08([{ x: 100, y: 40 }, { x: 100, y: 140 }, { x: 200, y: 140 }]);
+      expect(issues.map(i => i.message)).toEqual(['Sequence flow "e1" starts along the right side of "a" for 40 px.']);
+    });
+    test('5 px or less hides under the arrowhead: silent', () => {
+      expect(di08([{ x: 100, y: 40 }, { x: 200, y: 40 }, { x: 200, y: 105 }])).toEqual([]);
+    });
+    test('a perpendicular arrival is silent, and DI08 never flips ok', () => {
+      expect(di08([{ x: 100, y: 40 }, { x: 150, y: 40 }, { x: 150, y: 140 }, { x: 200, y: 140 }])).toEqual([]);
+      const r = checkDiagramIntegrity({ coords, poolCoords: {},
+        edgeCoords: { e1: [{ x: 100, y: 40 }, { x: 200, y: 40 }, { x: 200, y: 140 }] } }, lc);
+      expect(r.ok).toBe(true);
+    });
+  });
 });
 
 describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () => {
@@ -6245,6 +6273,23 @@ describe('repairCrossings', () => {
       CFG.layout.crossingRepair = original;
     }
   });
+});
+
+describe('#52 — loop with a join: every flow crosses its endpoints\' outlines', () => {
+  for (const visualRefinement of [false, true]) {
+    test(`Flow_5, Flow_6, Flow_8 arrive perpendicular (refinement: ${visualRefinement})`, async () => {
+      const r = await runPipeline(loadFixture('loop-with-join.json'), { visualRefinement });
+      const last = (id) => { const p = r.coordMap.edgeCoords[id]; return [p[p.length - 2], p[p.length - 1]]; };
+      // Flow_8 and Flow_6 end on a task's left side, Flow_5 on the end event's left point: each
+      // last segment must be horizontal, moving right.
+      for (const id of ['Flow_5', 'Flow_6', 'Flow_8']) {
+        const [a, b] = last(id);
+        expect(`${id} ${Math.abs(a.y - b.y) < 1e-6 && b.x > a.x}`).toBe(`${id} true`);
+      }
+      expect(r.diagnostics.issues.filter(i => i.code === 'DI08')).toEqual([]);
+      expect(r.diagnostics.ok).toBe(true);
+    });
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════

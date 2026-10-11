@@ -114,11 +114,14 @@ reported but do not flip `status` to `"diagram_error"`.
 | DI05 | WARNING | A message flow crossing a participant it does not involve |
 | DI06 | ERROR | A child outside its expanded subprocess |
 | DI07 | ERROR | A sequence flow that does not start or end on its own node's shape |
+| DI08 | WARNING | A sequence flow whose first or last segment lies on its own endpoint's outline for more than 5 px (#52) |
 
 DI05 is a warning rather than an error because a communication cycle across three or
 more participants cannot be linearised into a single vertical stack — some crossings
 are unavoidable; `poolOrder: "auto"` (see above) minimises them but cannot always reach
 zero.
+
+DI08 is a warning too: the flow is attached and the model is correct, but the line covers the shape's border and the arrowhead sits on it.
 
 **Example:**
 ```bash
@@ -170,7 +173,7 @@ id collapse into one before ELK, and a later check would be judging a graph the 
 left.
 
 It is a **separate key** from `diagnostics` rather than merged into it: `DiagnosticIssue.code` in
-`references/api-schema.json` is a closed `DI01`–`DI06` enum with `additionalProperties: false`.
+`references/api-schema.json` is a closed `DI01`–`DI08` enum with `additionalProperties: false`.
 For the same reason `netDiagnostics` is **not surfaced over HTTP or MCP** — `/generate`,
 `/orchestrate` and `generate_bpmn` assemble their payloads key by key and none of them carries it.
 The CLI gates on it much as it gates on DI: an NC ERROR is fatal with no files written, an NC
@@ -293,7 +296,7 @@ NC05 is disclosure, not a defect: van der Aalst's WF-nets require a single sourc
 normalising them onto one source place with several consumers is standard, not a translation bug.
 It stays INFO on purpose — a reader should be told, not warned.
 
-`ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI06 and DMN's
+`ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI08 and DMN's
 DD01–DD03 above.
 
 ---

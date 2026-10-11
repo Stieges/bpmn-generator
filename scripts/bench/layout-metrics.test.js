@@ -136,24 +136,29 @@ describe('seqThroughOwnShape', () => {
 const b = (crossings, along, laneGap, mfThrough, seqThrough, ownThrough = 0) =>
   ({ crossings, along, laneGap, mfThrough, seqThrough, ownThrough });
 const Z = b(0, 0, 0, 0, 0);
+// realistic-collaboration --refine inf3: the crossing guard reverts it to the old L (its new route
+// left inf2 × inf8); with fixed endpoints no crossing-free route exists (exhaustive search, measured). The old
+// L runs back through its own source "Check completeness" and, with inf8, accounts for ownThrough 2
+// — a later endpoint re-clip pass removes them.
 const BUDGET = {
   'all-element-classes.json':           { off: b(0, 0, 0, 3, 0),   on: b(0, 0, 0, 3, 0) },
-  'boundary-event-shapes.json':         { off: b(1, 3, 0, 0, 0),   on: b(1, 3, 0, 0, 0) },
-  'bpmn-generator-pipeline.json':       { off: b(0, 11, 0, 0, 0),  on: b(0, 14, 40, 1, 0, 2) },
+  'boundary-event-shapes.json':         { off: b(1, 0, 0, 0, 0),   on: b(1, 0, 0, 0, 0) },
+  'bpmn-generator-pipeline.json':       { off: Z,                  on: b(0, 0, 40, 1, 0) },
   'deadlock-process.json':              { off: null,               on: null },
   'dense-edge-labels.json':             { off: Z,                  on: Z },
   'expanded-subprocess.json':           { off: Z,                  on: Z },
-  'long-lane-names.json':               { off: b(0, 2, 0, 0, 0),   on: b(0, 2, 40, 0, 0) },
+  'long-lane-names.json':               { off: Z,                  on: b(0, 0, 40, 0, 0) },
+  'loop-with-join.json':                { off: Z,                  on: Z },
   'messageflow-to-subprocess.json':     { off: Z,                  on: Z },
-  'multi-pool-collaboration.json':      { off: b(0, 2, 0, 0, 0),   on: b(0, 2, 40, 0, 0) },
+  'multi-pool-collaboration.json':      { off: Z,                  on: b(0, 0, 40, 0, 0) },
   'parallel-split-join.json':           { off: Z,                  on: Z },
-  'realistic-collaboration.json':       { off: b(0, 6, 0, 2, 1),   on: b(0, 5, 40, 7, 0, 3) },
-  'simple-approval.json':               { off: b(0, 2, 0, 0, 0),   on: b(0, 2, 0, 0, 0) },
-  'sparse-lanes.json':                  { off: b(0, 4, 0, 0, 0),   on: b(0, 4, 40, 0, 0) },
+  'realistic-collaboration.json':       { off: b(0, 0, 0, 2, 1),   on: b(0, 1, 40, 7, 0, 2) },
+  'simple-approval.json':               { off: Z,                  on: Z },
+  'sparse-lanes.json':                  { off: Z,                  on: b(0, 0, 40, 0, 0) },
   'subprocess-child-fidelity.json':     { off: Z,                  on: Z },
   'subprocess-collapsed-children.json': { off: Z,                  on: Z },
-  'subprocess-merge-fanout.json':       { off: b(0, 2, 0, 0, 0),   on: b(0, 2, 0, 0, 0) },
-  'wide-pipeline.json':                 { off: Z,                  on: b(0, 4, 0, 0, 0, 4) },
+  'subprocess-merge-fanout.json':       { off: Z,                  on: Z },
+  'wide-pipeline.json':                 { off: Z,                  on: Z },
 };
 
 describe('layout budget — every top-level fixture × both modes', () => {
@@ -177,4 +182,14 @@ describe('layout budget — every top-level fixture × both modes', () => {
       }, 30000);
     }
   }
+});
+
+describe('wrapped layout row folds (wide-pipeline, refined)', () => {
+  test('every fold edge arrives across the outline and runs through no node', async () => {
+    const m = await measureLayout(load('wide-pipeline.json'), { visualRefinement: true });
+    expect(m.alongBorder).toEqual([]);
+    expect(m.seqThroughNodes).toEqual([]);
+    expect(m.ownThrough).toEqual([]);      // master: f5, f11, f17, f23 ran back through their source
+    expect(m.diCodes.DI07 ?? 0).toBe(0);
+  }, 30000);
 });

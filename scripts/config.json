@@ -148,7 +148,9 @@
     "crossingRepairMaxPasses": 2,
     "boundaryExitClearance": 12,
     "orthogonalRouterEnabled": true,
-    "orthogonalRouterMaxGridPoints": 4000
+    "orthogonalRouterMaxGridPoints": 4000,
+    "endStubPx": 15,
+    "crossingGuard": true
   },
   "elk": {
     "layered": {

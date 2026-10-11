@@ -320,6 +320,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **Sequence-flow ends no longer run along their own shape's outline (#52).** `simplifyAllEdges`
+  replaced ELK's Z-shaped routes with an L whenever one cleared the nodes — including the L whose
+  last leg lay on the target's border (and the mirror case at the source), so the line covered the
+  outline and the arrowhead sat on it. 19 ends in 7 of 15 fixtures, 27 in 8 with `--refine`. It now
+  takes only an L that crosses both outlines, otherwise the simplest two/three-bend route that does
+  (including routes with a 15 px perpendicular stub at an end), otherwise ELK's route. A per-edge
+  crossing guard after `repairCrossings` reverts a single edge to its old L when its new route
+  leaves more crossings (config `layout.crossingGuard`). ELK's settings are unchanged: its raw
+  routes never end along an outline. New diagnostic **DI08**
+  (WARNING) reports any remaining case; `references/api-schema.json`'s DI enum gains DI07 (already
+  emitted, missing from the enum) and DI08.
 - **DMN import: the `mapsTo` values are fenced against the Decision-Core schema (#61).** F1b fenced
   the keys only, so a row could claim a slot that `references/decision-core-schema.json` does not
   have. Fence F1c resolves each value's leading slot (`Type.property`, `Type{type:"x"}` or a root
