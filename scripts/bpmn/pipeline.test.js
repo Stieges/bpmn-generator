@@ -6317,6 +6317,10 @@ describe('stuck ends are re-clipped (owner decision 4)', () => {
       expect(r.diagnostics.issues.filter(i => i.code === 'DI08' || i.code === 'DI09')).toEqual([]);
       expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
       expect(r.diagnostics.ok).toBe(true);
+      // inf8 leaves the timer boundary event "in_timer": its start is the event's bottom point,
+      // where placeBoundaryEvents routes it — the re-clip pass must not have moved it.
+      const timer = r.coordMap.coords.in_timer;
+      expect(r.coordMap.edgeCoords.inf8[0]).toEqual({ x: timer.x + timer.w / 2, y: timer.y + timer.h });
     });
   }
 });

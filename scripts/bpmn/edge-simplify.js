@@ -22,6 +22,7 @@
 
 import { routeAroundObstacles } from './orthogonal-router.js';
 import { CFG } from '../shared/utils.js';
+import { isEvent, isGateway } from './types.js';
 
 const NODE_PADDING = 4;  // px buffer around each node bbox for clearance
 
@@ -757,4 +758,20 @@ export function reclipStuckEnds(edgeCoords, coords, edges, skipIds = new Set(), 
   const out = { ...edgeCoords };
   for (const [id, points] of changed) out[id] = points;
   return out;
+}
+
+/**
+ * The options the pipeline hands reclipStuckEnds, from a flat node list (subprocess children
+ * included): each node's drawn shape, and the endpoints that may never move. A boundary event's
+ * endpoint is fixed — its place on the host is placeBoundaryEvents' contract (coordinates.js §5.0-).
+ */
+export function reclipOptionsFor(nodes) {
+  const typeOf = {};
+  const fixedEndpoints = new Set();
+  for (const n of nodes || []) {
+    typeOf[n.id] = n.type;
+    if (n.attachedTo) fixedEndpoints.add(n.id);
+  }
+  const shapeOf = (id) => (isEvent(typeOf[id]) ? 'circle' : isGateway(typeOf[id]) ? 'diamond' : 'rect');
+  return { shapeOf, fixedEndpoints };
 }

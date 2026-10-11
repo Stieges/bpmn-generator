@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds } from './edge-simplify.js';
+import { simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor } from './edge-simplify.js';
 
 describe('simplifyEdge — an L never ends along its endpoint\'s outline (#52)', () => {
   test("Flow_8: the L that runs down the target's left side is replaced by the one arriving horizontally", () => {
@@ -137,5 +137,40 @@ describe('reclipStuckEnds — an end may move to another side when it is stuck (
     const out = reclipStuckEnds(ec, wallCoords, wallEdges, new Set(), { shapeOf });
     expect(out.e).toEqual([{ x: 200, y: 27 }, { x: 388, y: 27 }, { x: 388, y: 225 }, { x: 150, y: 225 }]);
     expect(out.w).toBe(ec.w);
+  });
+});
+
+describe('reclipStuckEnds — a boundary event\'s endpoint stays where placeBoundaryEvents put it', () => {
+  // f starts on E's bottom point and runs back up through E. w is laid so that the cheapest fix
+  // moves f's start to E's top (over Z, no crossing); keeping the start costs one crossing with w.
+  const coords = { E: { x: 100, y: 100, w: 36, h: 36 }, T: { x: 300, y: 0, w: 100, h: 80 },
+    A: { x: 40, y: 130, w: 20, h: 30 }, Z: { x: 240, y: -90, w: 40, h: 40 } };
+  const edges = [{ id: 'f', source: 'E', target: 'T' }, { id: 'w', source: 'A', target: 'Z' }];
+  const shapeOf = (id) => (id === 'E' ? 'circle' : 'rect');
+  const stuck = () => ({ f: [{ x: 118, y: 136 }, { x: 118, y: 40 }, { x: 300, y: 40 }],
+    w: [{ x: 60, y: 145 }, { x: 260, y: 145 }, { x: 260, y: -50 }] });
+
+  test('free, the start would move — that is what makes the fixed case a real test', () => {
+    expect(reclipStuckEnds(stuck(), coords, edges, new Set(), { shapeOf }).f[0]).toEqual({ x: 118, y: 100 });
+  });
+  test('fixed, the start stays on the bottom point and the route pays the crossing instead', () => {
+    const out = reclipStuckEnds(stuck(), coords, edges, new Set(), { shapeOf, fixedEndpoints: new Set(['E']) }).f;
+    expect(out).toEqual([{ x: 118, y: 136 }, { x: 118, y: 172 }, { x: 350, y: 172 }, { x: 350, y: 80 }]);
+  });
+});
+
+describe('reclipOptionsFor — what the pipeline hands reclipStuckEnds', () => {
+  const nodes = [
+    { id: 'task', type: 'userTask' },
+    { id: 'timer', type: 'boundaryEvent', attachedTo: 'task' },
+    { id: 'end', type: 'endEvent' },
+    { id: 'gw', type: 'exclusiveGateway' },
+  ];
+  test('every boundary event is a fixed endpoint, nothing else is', () => {
+    expect([...reclipOptionsFor(nodes).fixedEndpoints]).toEqual(['timer']);
+  });
+  test('shapes: event → circle, gateway → diamond, anything else → rect', () => {
+    const { shapeOf } = reclipOptionsFor(nodes);
+    expect(['task', 'timer', 'end', 'gw', 'unknown'].map(shapeOf)).toEqual(['rect', 'circle', 'circle', 'diamond', 'rect']);
   });
 });
