@@ -45,8 +45,8 @@
 <rect x="80" y="500" width="30" height="225" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="95" y="612.5" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,612.5)">Datenschutzkoordinator</text>
 <path d="M 206 150 L 286 150" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 336 190 L 516 190 L 516 335" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 516 415 L 696 415 L 696 560" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 336 190 L 336 262.5 L 516 262.5 L 516 335" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path d="M 516 415 L 516 487.5 L 696 487.5 L 696 560" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 746 600 L 826 600" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <circle cx="188" cy="149.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text x="188" y="187.5" text-anchor="middle" font-size="11" fill="#000000">Start</text>
