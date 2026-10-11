@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor } from './edge-simplify.js';
+import { assertStubClearsPad, simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor } from './edge-simplify.js';
 
 describe('simplifyEdge — an L never ends along its endpoint\'s outline (#52)', () => {
   test("Flow_8: the L that runs down the target's left side is replaced by the one arriving horizontally", () => {
@@ -25,7 +25,7 @@ describe('simplifyEdge — an L never ends along its endpoint\'s outline (#52)',
       [{ x: 130, y: 105 }, { x: 300, y: 105 }, { x: 300, y: 240 }]);
   });
 
-  test('a 15 px stub reaches the gap a mid-corridor Z cannot (study case: a node right in front of the target)', () => {
+  test('a 15 px stub reaches the gap a mid-corridor Z cannot (a node right in front of the target)', () => {
     // Both L's lie on an outline; O blocks every candidateRoutes corridor (y 140, 180, 100); the
     // stub route turns 15 px above T's top, in the strip O leaves free.
     const boxes = {
@@ -104,7 +104,7 @@ describe('guardAgainstLegacy — per-edge crossing guard', () => {
   });
 });
 
-describe('reclipStuckEnds — an end may move to another side when it is stuck (owner decision 4)', () => {
+describe('reclipStuckEnds — an end may move to another side when it is stuck', () => {
   // S's flow leaves its right side and runs back through S, then down the left tangent of G.
   const coords = { S: { x: 100, y: 0, w: 100, h: 80 }, G: { x: 100, y: 200, w: 50, h: 50 } };
   const edges = [{ id: 'e', source: 'S', target: 'G' }];
@@ -172,5 +172,18 @@ describe('reclipOptionsFor — what the pipeline hands reclipStuckEnds', () => {
   test('shapes: event → circle, gateway → diamond, anything else → rect', () => {
     const { shapeOf } = reclipOptionsFor(nodes);
     expect(['task', 'timer', 'end', 'gw', 'unknown'].map(shapeOf)).toEqual(['rect', 'circle', 'circle', 'diamond', 'rect']);
+  });
+});
+
+describe('assertStubClearsPad', () => {
+  test('rejects a stub length that does not exceed the router padding, accepts a larger one', () => {
+    expect(() => assertStubClearsPad(12, 12)).toThrow(/endStubPx/);
+    expect(() => assertStubClearsPad(8, 12)).toThrow(/greater than/);
+    expect(() => assertStubClearsPad(15, 12)).not.toThrow();
+  });
+  test('the configured stub clears the real router padding', async () => {
+    const { ROUTER_PAD } = await import('./orthogonal-router.js');
+    const { CFG } = await import('../shared/utils.js');
+    expect(() => assertStubClearsPad(CFG.layout?.endStubPx ?? 15, ROUTER_PAD)).not.toThrow();
   });
 });

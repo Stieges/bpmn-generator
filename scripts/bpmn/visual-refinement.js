@@ -196,6 +196,8 @@ const LANE_COMPACT_PADDING = 20;
  * upward to the band above, so the stack tiles without a strip (bpmn.io draws one as
  * an extra empty band).
  *
+ * Only top-level lanes are handled: nested `childLanes` are neither compacted nor tiled (#75).
+ *
  * Idempotent: running twice produces the same result as running once.
  */
 /**
@@ -364,8 +366,8 @@ export function compactLanes(coordMap, process, opts = {}) {
       // up to 40 px below the lane above and bpmn.io — which does not tile lanes — drew an
       // empty band. Growing this band up to the previous bottom closes it without moving any
       // content: the bottom edge, `delta`, the cascade and the waypoint clamp above are exactly
-      // what they were. (The full fix — re-shifting the content flush — is the high-risk third
-      // shift the layout-quality analysis §8 describes and was deliberately not taken.)
+      // what they were. (The full fix — re-shifting the content flush — is a third shift of everything
+      // below, which is high-risk and was deliberately not taken; see #74.)
       if (prevBottom !== null && lc.y > prevBottom + 0.5) {
         lc.h += lc.y - prevBottom;
         lc.y = prevBottom;

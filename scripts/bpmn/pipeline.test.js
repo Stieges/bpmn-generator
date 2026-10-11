@@ -6158,7 +6158,7 @@ describe('message flow routing', () => {
     test(`a horizontal leg lies in a gap or, as a jog, in the flow's own participant clear of every shape (refinement: ${visualRefinement})`, async () => {
       // This is why routing runs after visual refinement: lane compaction moves
       // participants, and a route computed before it had three of eight legs
-      // end up inside a pool. Since the own-participant jog (owner decision 2026-10-11)
+      // end up inside a pool. Since the own-participant jog
       // a short leg inside the SENDER's or RECEIVER's own pool is allowed — it steps
       // round the task in the next lane — but never inside a pool the flow does not involve.
       const lc = loadFixture('realistic-collaboration.json');
@@ -6510,7 +6510,7 @@ describe('#52 — loop with a join: every flow crosses its endpoints\' outlines'
   }
 });
 
-describe('stuck ends are re-clipped (owner decision 4)', () => {
+describe('stuck ends are re-clipped', () => {
   for (const visualRefinement of [false, true]) {
     test(`realistic-collaboration: no flow through its own shape, no end along an outline, no crossing (refinement: ${visualRefinement})`, async () => {
       const lc = loadFixture('realistic-collaboration.json');

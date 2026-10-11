@@ -34,6 +34,7 @@
 import { CFG } from '../shared/utils.js';
 
 const PAD = 12; // px clearance kept around every hard obstacle when building the grid
+export const ROUTER_PAD = PAD; // read by edge-simplify to assert layout.endStubPx stays above it
 
 function segClearOfBox(a, b, box, pad = CFG.layout?.shapeClearance ?? 4) {
   const x1 = box.x - pad, y1 = box.y - pad, x2 = box.x + box.w + pad, y2 = box.y + box.h + pad;

@@ -20,7 +20,7 @@
  * or single-bend (3 waypoints).
  */
 
-import { routeAroundObstacles } from './orthogonal-router.js';
+import { routeAroundObstacles, ROUTER_PAD } from './orthogonal-router.js';
 import { CFG } from '../shared/utils.js';
 import { isEvent, isGateway } from './types.js';
 
@@ -324,8 +324,23 @@ function crossesEndpointOutlines(cand, srcBox, tgtBox) {
       && leavesOutward(cand[cand.length - 1], [-last[0], -last[1]], tgtBox);
 }
 
-/** Length of the perpendicular stub stubRoutes (and Task 2b's re-clip) put at an edge end. */
+/**
+ * Length of the perpendicular stub stubRoutes (and the stuck-end re-clip) put at an edge end.
+ * Must stay above orthogonal-router's PAD (the clearance kept around every obstacle, the edge's
+ * own shape included): a stub point inside that padded obstacle is unreachable, so reclipStuckEnds
+ * would silently find no route. assertStubClearsPad enforces it at load.
+ */
+export function assertStubClearsPad(stubPx, pad) {
+  if (!(stubPx > pad)) {
+    throw new Error(`config layout.endStubPx (${stubPx}) must be greater than the orthogonal router's obstacle padding (${pad})`);
+  }
+}
 const END_STUB_PX = CFG.layout?.endStubPx ?? 15;
+assertStubClearsPad(END_STUB_PX, ROUTER_PAD);
+
+/** Minimum length of an end segment lying along its own outline that counts as a defect (px;
+ *  bpmn-js's arrowhead length). One source for edge-simplify, di-check (DI08) and the bench. */
+const ALONG_OUTLINE_MIN_PX = CFG.layout?.alongOutlineMinPx ?? 5;
 
 /** Drops the middle one of three collinear points. */
 function withoutCollinear(pts) {
@@ -344,7 +359,7 @@ function withoutCollinear(pts) {
 /**
  * Routes with a short perpendicular stub at one or both ends, joined by an L: out of the source
  * END_STUB_PX along its side's normal, into the target the same way. They reach a corridor right
- * in front of a shape that candidateRoutes' mid-line offsets jump over (study: the 80 px gap
+ * in front of a shape that candidateRoutes' mid-line offsets jump over (for example the 80 px gap
  * between "Send reminder" and its host in realistic-collaboration). Endpoints stay fixed.
  * On an endpoint with no identifiable side the stub follows the ELK route's own first/last
  * direction; crossesEndpointOutlines filters out anything that would cut back into the shape.
@@ -570,7 +585,7 @@ export function repairCrossings(edgeCoords, coords, edges, skipIds = new Set(), 
 }
 
 /**
- * Per-edge crossing guard (owner decision 2026-10-11, ELK study variant T3g).
+ * Per-edge crossing guard.
  *
  * The #52 routes are chosen one edge at a time; repairCrossings then works around them. A new
  * route can block the only crossing-free path another edge had (measured: realistic-collaboration
@@ -582,6 +597,9 @@ export function repairCrossings(edgeCoords, coords, edges, skipIds = new Set(), 
  * the count is kept, and the next edge is tried against the result — not the best revert overall,
  * and not every subset. Returns the routes to hand to repairCrossings, and the reverted edge ids.
  * No blanket exception for any class of edge: whatever is reverted was measured to cost a crossing.
+ *
+ * Runs only when `layout.crossingRepair` is enabled: it sits inside that block in pipeline.js, so
+ * with crossingRepair off the #52 routes go unguarded.
  *
  * Cost: two extra repairCrossings runs on every call (one for `routes`, one for `legacyRoutes`),
  * plus one per trial revert — the trials only happen when the new routes left more crossings.
@@ -610,7 +628,7 @@ export function guardAgainstLegacy(routes, legacyRoutes, coords, edges, skipIds 
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Stuck ends (owner decision 4, 2026-10-11)
+// Stuck ends
 //
 // The one exception to "endpoints are clipped once, in coordinates.js §5.1": an edge that, after
 // simplification and crossing repair, still ends along an outline or runs through its own source
@@ -661,14 +679,14 @@ function alongOutline([a, b], box) {
   return best;
 }
 
-/** Number of end defects: an end segment along its outline (> 5 px, bpmn-js's arrowhead length),
+/** Number of end defects: an end segment along its outline (longer than ALONG_OUTLINE_MIN_PX),
  *  or any segment inside the edge's own source or target shape. */
 function endDefects(points, srcBox, tgtBox, srcShape, tgtShape) {
   const segs = segmentsOf(points);
   if (!segs.length) return 0;
   let n = 0;
-  if (alongOutline(segs[0], srcBox) > 5) n++;
-  if (alongOutline(segs[segs.length - 1], tgtBox) > 5) n++;
+  if (alongOutline(segs[0], srcBox) > ALONG_OUTLINE_MIN_PX) n++;
+  if (alongOutline(segs[segs.length - 1], tgtBox) > ALONG_OUTLINE_MIN_PX) n++;
   if (segs.some(s => segmentEntersShape(s, srcBox, srcShape))) n++;
   if (segs.some(s => segmentEntersShape(s, tgtBox, tgtShape))) n++;
   return n;

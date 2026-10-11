@@ -156,6 +156,7 @@
       "detourReach": 600
     },
     "endStubPx": 15,
+    "alongOutlineMinPx": 5,
     "crossingGuard": true,
     "endpointReclip": true
   },
