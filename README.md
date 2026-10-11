@@ -148,7 +148,7 @@ scripts/
 │   ├── topology.js     Gateway directions, topological sort, lane ordering
 │   ├── layout.js       ELK graph construction + layout execution
 │   ├── coordinates.js  Coordinate maps, edge clipping, pool equalization
-│   ├── di-check.js     Post-layout diagram integrity pass (DI01–DI10)
+│   ├── di-check.js     Post-layout diagram integrity pass (DI01–DI11)
 │   ├── bpmn-xml.js     BPMN 2.0 XML generation (DI, top-level defs)
 │   ├── svg.js          SVG rendering (pools, lanes, activities, events)
 │   ├── icons.js        Event markers, task icons, bottom markers

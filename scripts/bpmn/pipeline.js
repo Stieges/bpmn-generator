@@ -164,7 +164,7 @@ async function runPipeline(logicCore, opts = {}) {
   // means — which is what lets `main()` gate on it, the HTTP layer turn it into a status and
   // `agents/layout.js` pass it through without retrying. Returning early here instead would make
   // one key a gate in the library and a report over HTTP. Kept as its own key rather than merged
-  // into `diagnostics` because that one's `code` is a closed DI01…DI10 enum in
+  // into `diagnostics` because that one's `code` is a closed DI01…DI11 enum in
   // references/api-schema.json, which the docs gate validates a real response against.
   const netDiagnostics = checkNetTranslation(lc);
 

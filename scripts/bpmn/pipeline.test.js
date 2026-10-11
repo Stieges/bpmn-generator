@@ -5425,6 +5425,71 @@ describe('DI integrity check', () => {
     });
   });
 
+  describe('DI11 — a sequence flow through a foreign shape (#91)', () => {
+    const lc = { pools: [{ id: 'P',
+      nodes: [
+        { id: 'a', type: 'userTask' }, { id: 'mid', type: 'userTask' }, { id: 'b', type: 'userTask' },
+        { id: 'note', type: 'textAnnotation' }, { id: 'data', type: 'dataObjectReference' }, { id: 'grp', type: 'group' },
+        { id: 'sub', type: 'subProcess', nodes: [
+          { id: 'c', type: 'userTask' }, { id: 'inner', type: 'userTask' }, { id: 'd', type: 'userTask' }],
+          edges: [{ id: 'fc', source: 'c', target: 'd' }] },
+        { id: 'host', type: 'userTask' },
+        { id: 'bev', type: 'boundaryEvent', attachedTo: 'host' }, { id: 'after', type: 'userTask' },
+      ],
+      edges: [{ id: 'f', source: 'a', target: 'b' }, { id: 'fh', source: 'host', target: 'after' }] }] };
+    const coords = {
+      a: { x: 0, y: 0, w: 100, h: 80 }, b: { x: 0, y: 400, w: 100, h: 80 }, mid: { x: 20, y: 200, w: 100, h: 80 },
+      note: { x: 20, y: 120, w: 100, h: 40 }, data: { x: 40, y: 300, w: 36, h: 50 }, grp: { x: -20, y: 100, w: 200, h: 300 },
+      sub: { x: 500, y: 0, w: 300, h: 300 }, c: { x: 510, y: 20, w: 100, h: 80 }, inner: { x: 510, y: 120, w: 100, h: 80 },
+      d: { x: 510, y: 220, w: 100, h: 60 }, host: { x: 900, y: 0, w: 100, h: 80 }, bev: { x: 940, y: 62, w: 36, h: 36 },
+      after: { x: 900, y: 300, w: 100, h: 80 },
+    };
+    const run = (edgeCoords) => checkDiagramIntegrity({ coords, poolCoords: {}, edgeCoords }, lc);
+    const di11 = (edgeCoords) => run(edgeCoords).issues.filter(i => i.code === 'DI11');
+    const down = (x, y0, y1) => [{ x, y: y0 }, { x, y: y1 }];
+
+    test('through a foreign task fires as a WARNING naming flow and node; ok stays true', () => {
+      const r = run({ f: down(50, 80, 400) });
+      expect(r.issues.filter(i => i.code === 'DI11')).toEqual([{ code: 'DI11', severity: 'WARNING',
+        message: 'Sequence flow "f" runs through "mid", which is neither its source nor its target.', elements: ['f', 'mid'] }]);
+      expect(r.ok).toBe(true);
+    });
+    test('along the outline or touching a corner is silent', () => {
+      expect(di11({ f: down(20, 80, 400) })).toEqual([]);
+      expect(di11({ f: [{ x: 50, y: 80 }, { x: 50, y: 160 }, { x: 120, y: 160 }, { x: 120, y: 400 }] })).toEqual([]);
+    });
+    test('artifacts (annotation, data reference, group) are not obstacles', () => {
+      expect(di11({ f: down(50, 80, 190) })).toEqual([]);
+      expect(di11({ f: [{ x: 50, y: 80 }, { x: 50, y: 195 }, { x: 10, y: 195 }, { x: 10, y: 400 }] }).filter(i => i.elements[1] !== 'mid')).toEqual([]);
+    });
+    test('a container holding an endpoint is not foreign; a subprocess child is checked', () => {
+      expect(di11({ fc: down(560, 100, 220) }).map(i => i.elements)).toEqual([['fc', 'inner']]);
+      expect(di11({ fc: [{ x: 500, y: 100 }, { x: 500, y: 250 }] })).toEqual([]);
+    });
+    test('a flow across its own source\'s boundary event is reported and says which case it is', () => {
+      const r = di11({ fh: down(958, 80, 300) });
+      expect(r.map(i => i.message)).toEqual([
+        'Sequence flow "fh" runs through "bev" (a boundary event of its own source "host"), which is neither its source nor its target.']);
+    });
+    test('fires on the committed negative fixture: the loop-back flow through "Betrag über 10.000 EUR?"', async () => {
+      const neg = JSON.parse(readFileSync(resolve(fixturesDir, 'negative/example-rechnungspruefung.json'), 'utf8'));
+      const r = await runPipeline(neg, optionsFor('default'));
+      const hits = r.diagnostics.issues.filter(i => i.code === 'DI11');
+      expect(hits.some(i => i.elements[0] === 'f411' && i.elements[1] === 'r_gw3')).toBe(true);
+    }, 60000);
+    test('top-level fixtures reporting DI11 are exactly the known set', async () => {
+      const found = [];
+      for (const name of readdirSync(fixturesDir).filter(f => f.endsWith('.json'))) {
+        const doc = JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
+        if (!doc.pools && !doc.nodes) continue;
+        const r = await runPipeline(doc, optionsFor('default'));
+        if (!r.diagnostics) continue;
+        for (const i of r.diagnostics.issues) if (i.code === 'DI11') found.push(`${name}: ${i.elements.join(' > ')}`);
+      }
+      expect(found).toEqual(['realistic-collaboration.json: inf8 > in_gw']);
+    }, 60000);
+  });
+
   describe('DI05 presentation (#43)', () => {
     const lc = {
       pools: [{ id: 'Hub', nodes: [{ id: 't1' }, { id: 't2' }, { id: 't3' }] }],
