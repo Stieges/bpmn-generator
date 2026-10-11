@@ -137,6 +137,9 @@ const b = (crossings, along, laneGap, mfThrough, seqThrough, ownThrough = 0) =>
   ({ crossings, along, laneGap, mfThrough, seqThrough, ownThrough });
 const Z = b(0, 0, 0, 0, 0);
 // No along-outline end and no flow through its own shape remains in any fixture after the endpoint re-clip pass.
+// realistic-collaboration on: the 5 remaining message-flow hits are all shapes of the flow's own
+// participant, in another lane — mf1>ap_wait, mf3>as_assess, mf4>as_assess, mf6>de_decide,
+// mf6>ap_submit. No port column clears them; none crosses a participant the flow does not involve.
 const BUDGET = {
   'all-element-classes.json':           { off: b(0, 0, 0, 3, 0),   on: b(0, 0, 0, 3, 0) },
   'boundary-event-shapes.json':         { off: b(1, 0, 0, 0, 0),   on: b(1, 0, 0, 0, 0) },
@@ -149,7 +152,7 @@ const BUDGET = {
   'messageflow-to-subprocess.json':     { off: Z,                  on: Z },
   'multi-pool-collaboration.json':      { off: Z,                  on: Z },
   'parallel-split-join.json':           { off: Z,                  on: Z },
-  'realistic-collaboration.json':       { off: b(0, 0, 0, 2, 1),   on: b(0, 0, 0, 7, 0) },
+  'realistic-collaboration.json':       { off: b(0, 0, 0, 0, 1),   on: b(0, 0, 0, 5, 0) },
   'simple-approval.json':               { off: Z,                  on: Z },
   'sparse-lanes.json':                  { off: Z,                  on: Z },
   'subprocess-child-fidelity.json':     { off: Z,                  on: Z },
@@ -189,4 +192,13 @@ describe('wrapped layout row folds (wide-pipeline, refined)', () => {
     expect(m.ownThrough).toEqual([]);      // master: f5, f11, f17, f23 ran back through their source
     expect(m.diCodes.DI07 ?? 0).toBe(0);
   }, 30000);
+});
+
+describe('message flows and uninvolved participants (realistic-collaboration)', () => {
+  for (const mode of ['off', 'on']) {
+    test(`no flow runs through a shape of a participant it does not involve (${mode})`, async () => {
+      const m = await measureLayout(load('realistic-collaboration.json'), { visualRefinement: mode === 'on' });
+      expect(m.mfThroughNodes.filter((x) => x.relation === 'uninvolved')).toEqual([]);
+    }, 30000);
+  }
 });
