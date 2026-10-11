@@ -6077,6 +6077,45 @@ describe('message flow routing', () => {
     }
   });
 
+  describe('a flow through a participant it does not involve goes around the shapes there', () => {
+    // A, B, C stacked in declared order; a1, b1, c1 land in the same column, so a1 → c1 used to be
+    // one straight line through b1.
+    const pool = (p, t) => ({ id: p, name: p,
+      nodes: [{ id: `${p}_s`, type: 'startEvent', name: 'Start' }, { id: t, type: 'userTask', name: `Task ${t}` },
+        { id: `${p}_e`, type: 'endEvent', name: 'End' }],
+      edges: [{ id: `${p}_f1`, source: `${p}_s`, target: t }, { id: `${p}_f2`, source: t, target: `${p}_e` }] });
+    const lc = () => ({ pools: [pool('A', 'a1'), pool('B', 'b1'), pool('C', 'c1')],
+      messageFlows: [{ id: 'mf1', source: 'a1', target: 'c1', name: 'Order' }] });
+
+    test('no segment through b1, horizontals only in gaps, ends on a1 and c1', async () => {
+      const r = await runPipeline(lc(), { poolOrder: 'declared' });
+      const pts = r.coordMap.edgeCoords.mf1;
+      const { a1, b1, c1 } = r.coordMap.coords;
+      const through = (b) => pts.slice(0, -1).some((p, i) => {
+        const q = pts[i + 1];
+        return Math.max(p.x, q.x) > b.x + 1 && Math.min(p.x, q.x) < b.x + b.w - 1
+            && Math.max(p.y, q.y) > b.y + 1 && Math.min(p.y, q.y) < b.y + b.h - 1;
+      });
+      expect(through(b1)).toBe(false);
+      const pools = Object.values(r.coordMap.poolCoords);
+      const insidePool = pts.slice(0, -1).map((p, i) => [p, pts[i + 1]])
+        .filter(([p, q]) => Math.abs(p.y - q.y) < 1)
+        .filter(([p]) => pools.some(pc => p.y > pc.y + 2 && p.y < pc.y + pc.h - 2));
+      expect(insidePool).toEqual([]);
+      expect(pts.slice(0, -1).every((p, i) => Math.abs(p.x - pts[i + 1].x) < 1e-6 || Math.abs(p.y - pts[i + 1].y) < 1e-6)).toBe(true);
+      expect(pts[0].y).toBeCloseTo(a1.y + a1.h, 6);
+      expect(pts[0].x).toBeGreaterThanOrEqual(a1.x); expect(pts[0].x).toBeLessThanOrEqual(a1.x + a1.w);
+      expect(pts[pts.length - 1].y).toBeCloseTo(c1.y, 6);
+      expect(pts[pts.length - 1].x).toBeGreaterThanOrEqual(c1.x); expect(pts[pts.length - 1].x).toBeLessThanOrEqual(c1.x + c1.w);
+    });
+
+    test('DI05 still reports the participant it crosses — avoiding a shape is not avoiding a band', async () => {
+      const r = await runPipeline(lc(), { poolOrder: 'declared' });
+      expect(r.diagnostics.issues.filter(i => i.code === 'DI05').map(i => i.elements)).toEqual([['mf1', 'B']]);
+      expect(r.diagnostics.issues.filter(i => i.code === 'DI07')).toEqual([]);
+    });
+  });
+
   test('DI05 counts crossings and drops when the order improves', async () => {
     const auto = await runPipeline(loadFixture('realistic-collaboration.json'), { poolOrder: 'auto' });
     const declared = await runPipeline(loadFixture('realistic-collaboration.json'), { poolOrder: 'declared' });

@@ -149,6 +149,11 @@
     "boundaryExitClearance": 12,
     "orthogonalRouterEnabled": true,
     "orthogonalRouterMaxGridPoints": 4000,
+    "messageFlowAvoidance": {
+      "portInset": 10,
+      "columnStep": 10,
+      "detourReach": 600
+    },
     "endStubPx": 15,
     "crossingGuard": true,
     "endpointReclip": true

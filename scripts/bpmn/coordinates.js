@@ -798,28 +798,6 @@ function messageFlowKey(mf) {
 }
 
 /**
- * Orthogonal route for a message flow: out of the source shape, across in the
- * corridor between two participants, into the target shape.
- *
- * The horizontal leg deliberately runs in the POOL_GAP corridor and not at the
- * midpoint between the two shapes — a midpoint leg would cut horizontally
- * through a pool body, which reads as a participation that does not exist.
- */
-function routeMessageFlow(srcCoord, tgtCoord, poolCoords, fan = null) {
-  const { sx, sy, ex, ey } = messageFlowPorts(srcCoord, tgtCoord);
-  if (Math.abs(sx - ex) < 2) return [{ x: sx, y: sy }, { x: ex, y: ey }];
-
-  const base = participantGapY(sy, ey, poolCoords);
-  const corridorY = fan ? fanOut(base, fan.index, fan.total) : base;
-  return [
-    { x: sx, y: sy },
-    { x: sx, y: corridorY },
-    { x: ex, y: corridorY },
-    { x: ex, y: ey },
-  ];
-}
-
-/**
  * Spread the flows sharing a corridor evenly across it, so their horizontal legs
  * do not coincide.
  *
@@ -1256,6 +1234,117 @@ export function messageFlowPorts(srcCoord, tgtCoord) {
   };
 }
 
+// ─── Message flows and the shapes they pass ────────────────────────────────
+// Tunables in config.json → layout.messageFlowAvoidance. The 4 px clearance is the one
+// edge-simplify.js keeps for sequence flows (NODE_PADDING).
+const MF_AVOID = {
+  portInset: CFG.layout?.messageFlowAvoidance?.portInset ?? 10,
+  columnStep: CFG.layout?.messageFlowAvoidance?.columnStep ?? 10,
+  detourReach: CFG.layout?.messageFlowAvoidance?.detourReach ?? 600,
+};
+const MF_CLEARANCE = 4;
+
+/**
+ * Shapes a message flow must not run through: every node box but its own two endpoints, except a
+ * group (drawn to be overlapped) and a box containing an endpoint (the expanded subprocess a flow
+ * starts or ends in — entering it is unavoidable).
+ */
+function messageFlowObstacles(mf, coords, srcCoord, tgtCoord, typeOf) {
+  const contains = (o, i) => !!i && o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
+  return Object.entries(coords)
+    .filter(([id, b]) => id !== mf.source && id !== mf.target && typeOf[id] !== 'group'
+      && !contains(b, srcCoord) && !contains(b, tgtCoord))
+    .map(([, b]) => b);
+}
+
+function verticalClear(x, y0, y1, obstacles) {
+  const lo = Math.min(y0, y1), hi = Math.max(y0, y1);
+  return obstacles.every(b =>
+    x <= b.x - MF_CLEARANCE || x >= b.x + b.w + MF_CLEARANCE || hi <= b.y || lo >= b.y + b.h);
+}
+
+/**
+ * Port x positions on a shape's top/bottom edge, centre first, then outward one step at a time.
+ * Only an activity offers more than its centre: on a circle or a diamond any other x is off the
+ * outline, and a black-box participant has no entry in `coords`.
+ */
+function portColumns(x0, shape, movable) {
+  const out = [x0];
+  if (!movable) return out;
+  const lo = shape.x + MF_AVOID.portInset;
+  const hi = shape.x + shape.w - MF_AVOID.portInset;
+  for (let k = 1; x0 - k * MF_AVOID.columnStep >= lo || x0 + k * MF_AVOID.columnStep <= hi; k++) {
+    for (const x of [x0 - k * MF_AVOID.columnStep, x0 + k * MF_AVOID.columnStep]) {
+      if (x >= lo && x <= hi) out.push(x);
+    }
+  }
+  return out;
+}
+
+/** Nearest x to x0 (left first at equal distance) whose span y0..y1 is clear, or null. */
+function nearestClearColumn(x0, y0, y1, obstacles) {
+  for (let d = 0; d <= MF_AVOID.detourReach; d += MF_AVOID.columnStep) {
+    for (const x of (d === 0 ? [x0] : [x0 - d, x0 + d])) {
+      if (verticalClear(x, y0, y1, obstacles)) return x;
+    }
+  }
+  return null;
+}
+
+/**
+ * Where a message flow's legs go, before fan-out. A point on a corridor carries `corridor`
+ * (its un-fanned y) instead of `y`; routeMessageFlows resolves it once every flow's corridors are
+ * known.
+ *  - straight and clear: one vertical segment, as before;
+ *  - otherwise out of the source in the first port column that clears the source leg, across in
+ *    the corridor next to the source's participant, into the target in the first column that
+ *    clears the target leg;
+ *  - if no target column clears it, the leg crosses a shape of a participant in between: detour —
+ *    across to the nearest clear column, down to the corridor next to the TARGET's participant,
+ *    across, and in. Both horizontal legs lie in participant gaps, never in a pool body;
+ *  - a leg nothing clears keeps today's centre column (not made worse; the bench reports it).
+ */
+function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable) {
+  const { sx, sy, ex, ey } = messageFlowPorts(srcCoord, tgtCoord);
+  if (Math.abs(sx - ex) < 2 && verticalClear(sx, sy, ey, obstacles)) {
+    return { corridors: [], points: [{ x: sx, y: sy }, { x: ex, y: ey }] };
+  }
+  const c = participantGapY(sy, ey, poolCoords);
+  const sCol = portColumns(sx, srcCoord, movable.source).find(x => verticalClear(x, sy, c, obstacles)) ?? sx;
+  const head = [{ x: sCol, y: sy }, { x: sCol, corridor: c }];
+  const tCols = portColumns(ex, tgtCoord, movable.target);
+  const direct = tCols.find(x => verticalClear(x, c, ey, obstacles));
+  if (direct !== undefined) {
+    return { corridors: [c], points: [...head, { x: direct, corridor: c }, { x: direct, y: ey }] };
+  }
+  const t = participantGapY(ey, sy, poolCoords);
+  if (Math.abs(t - c) > 1) {
+    const tCol = tCols.find(x => verticalClear(x, t, ey, obstacles));
+    const dx = tCol === undefined ? null : nearestClearColumn(tCol, c, t, obstacles);
+    if (dx !== null) {
+      return { corridors: [c, t], points: [...head,
+        { x: dx, corridor: c }, { x: dx, corridor: t }, { x: tCol, corridor: t }, { x: tCol, y: ey }] };
+    }
+  }
+  return { corridors: [c], points: [...head, { x: ex, corridor: c }, { x: ex, y: ey }] };
+}
+
+/** Drops repeated points and the middle one of three collinear points. */
+function withoutRedundantPoints(pts) {
+  const same = (a, b) => Math.abs(a - b) < 1e-6;
+  const out = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (last && same(last.x, p.x) && same(last.y, p.y)) continue;
+    if (out.length >= 2) {
+      const a = out[out.length - 2];
+      if ((same(a.x, last.x) && same(last.x, p.x)) || (same(a.y, last.y) && same(last.y, p.y))) out.pop();
+    }
+    out.push(p);
+  }
+  return out;
+}
+
 /**
  * Route message flows and place their labels. MUTATES coordMap.
  *
@@ -1269,6 +1358,8 @@ export function messageFlowPorts(srcCoord, tgtCoord) {
  * Message flows depend on final participant and node geometry, and nothing
  * except the two renderers depends on them. They are a leaf of the dependency
  * chain, so they belong at its end.
+ *
+ * It also keeps a flow out of the shapes of the participants it passes — see planMessageFlow.
  */
 function routeMessageFlows(coordMap, lc) {
   const { coords, poolCoords, edgeCoords, edgeLabels } = coordMap;
@@ -1279,33 +1370,48 @@ function routeMessageFlows(coordMap, lc) {
     coords[mf.source] || poolCoords[mf.source],
     coords[mf.target] || poolCoords[mf.target],
   ];
+  const typeOf = {};
+  for (const proc of (lc.pools || [lc])) {
+    for (const n of flattenProcessNodes(proc.nodes)) typeOf[n.id] = n.type;
+  }
+  const movable = (id) => !!coords[id] && !!typeOf[id] && !isEvent(typeOf[id]) && !isGateway(typeOf[id]);
 
-  // First pass: how many flows share each corridor? Needed before routing, so
-  // that the fan-out spacing can shrink to fit instead of saturating.
+  // First pass: every flow's plan and the corridors it uses — needed before routing, so that the
+  // fan-out spacing can shrink to fit instead of saturating. A detoured flow uses two corridors.
+  const plans = new Map();
   const perCorridor = {};
   for (const mf of (lc.messageFlows || [])) {
     const [s, t] = shapes(mf);
     if (!s || !t) continue;
-    const { sx, sy, ex, ey } = messageFlowPorts(s, t);
-    if (Math.abs(sx - ex) < 2) continue;   // straight, no horizontal leg
-    (perCorridor[Math.round(participantGapY(sy, ey, poolCoords))] ??= []).push(messageFlowKey(mf));
+    const key = messageFlowKey(mf);
+    const plan = planMessageFlow(mf, s, t, poolCoords,
+      messageFlowObstacles(mf, coords, s, t, typeOf),
+      { source: movable(mf.source), target: movable(mf.target) });
+    plans.set(key, plan);
+    for (const c of plan.corridors) (perCorridor[Math.round(c)] ??= []).push(key);
   }
+  const fanned = (y, key) => {
+    const group = perCorridor[Math.round(y)];
+    return group ? fanOut(y, group.indexOf(key), group.length) : y;
+  };
+  const resolve = (p, key) => ('corridor' in p ? { x: p.x, y: fanned(p.corridor, key) } : p);
 
   for (const mf of (lc.messageFlows || [])) {
-    const [srcCoord, tgtCoord] = shapes(mf);
-    if (!srcCoord || !tgtCoord) continue;
-
     const key = messageFlowKey(mf);
-    const group = Object.values(perCorridor).find(g => g.includes(key));
-    const fan = group ? { index: group.indexOf(key), total: group.length } : null;
-    const pts = routeMessageFlow(srcCoord, tgtCoord, poolCoords, fan);
+    const plan = plans.get(key);
+    if (!plan) continue;
+    const pts = withoutRedundantPoints(plan.points.map(p => resolve(p, key)));
     edgeCoords[key] = pts;
 
     if (!mf.name) continue;
-    // Label on the horizontal leg. Deriving it from the shapes instead (and
-    // without the poolCoords fallback) used to drop every black-box flow's
-    // label at the same phantom position, far from the flow it belongs to.
-    const [a, b] = pts.length >= 4 ? [pts[1], pts[2]] : [pts[0], pts[pts.length - 1]];
+    // Label on the first leg that runs along a corridor. Deriving it from the shapes instead (and
+    // without the poolCoords fallback) used to drop every black-box flow's label at the same
+    // phantom position, far from the flow it belongs to.
+    const k = plan.points.findIndex((p, i) => 'corridor' in p && plan.points[i + 1]
+      && 'corridor' in plan.points[i + 1] && plan.points[i + 1].corridor === p.corridor);
+    const [a, b] = k >= 0
+      ? [resolve(plan.points[k], key), resolve(plan.points[k + 1], key)]
+      : [pts[0], pts[pts.length - 1]];
     edgeLabels[key] = { text: mf.name, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
 
