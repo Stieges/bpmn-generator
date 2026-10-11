@@ -10,9 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking
 - **Bend rule and node labels that avoid flows are on by default.** `layout.bendRule` and
   `layout.nodeLabelsAvoidFlows` default to `true`: default output changes (fewer bends, flows enter
-  activities and events in flow direction, event and gateway labels move off flows). Rollback: set
-  both keys to `false` in `config.json`, or pass `bendRule: false, nodeLabelsAvoidFlows: false` to
-  `runPipeline`.
+  activities and events in flow direction, event and gateway labels move off flows). Rollback, per
+  call: CLI `--no-bend-rule` / `--no-label-avoidance`; HTTP `/api/v1/generate` and
+  `/api/v1/orchestrate` and the MCP tools `generate_bpmn` / `orchestrate_bpmn` `"bendRule": false` /
+  `"nodeLabelsAvoidFlows": false`; library `runPipeline(lc, { bendRule: false, nodeLabelsAvoidFlows:
+  false })`. Project-wide: a file named by the `BPMN_CONFIG` environment variable,
+  `{ "layout": { "bendRule": false, "nodeLabelsAvoidFlows": false } }` — merged over the shipped
+  `config.json` (one level deep), so an npm install needs no edit inside `node_modules` — or the
+  same two keys in `config.json` itself. With both off the output is byte-identical to before the
+  bend rule for every committed fixture (hash fence); the SVG canvas change under Changed applies
+  either way.
 - **Default output is compacted.** Lane compaction (`visualRefinement.laneCompaction`) is now on by
   default, together with edge-label collision repair: diagrams with lanes or an expanded subprocess
   come out up to 29 % smaller in area (10–29 % on the seven golden fixtures; some diagrams are
@@ -77,9 +84,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   over the 19 top-level fixtures that predate the `example-*` ones, with it on: avoidable bends 29 → 0 (default) and
   49 → 0 (refinement + wrapping), entries against the flow 13 → 0 resp. 14 → 0, collinear overlap
   953 → 519 px resp. 1772 → 804 px; ends off their side's midpoint rise in three fixtures (projection
-  ports), no other layout metric worse. The layout ratchet gains a `bends` mode, two counts per
-  fixture, `avoidableBends` and `againstFlowEntries`, measured by the same search, and an `overlapLen`
-  column (px two flows run on top of each other) in every mode.
+  ports), no other layout metric worse. The layout ratchet runs the rule in its `default`/`off`/`on`
+  modes and gains `plain` and `plain-on` modes (both switches off, without and with refinement +
+  wrapping) carrying the former rows; every mode has two flow-direction counts per fixture,
+  `avoidableBends` and `againstFlowEntries`, measured by the same search, and an `overlapLen` column
+  (px two flows run on top of each other).
+- **Per-call layout switches on every surface.** CLI `--bend-rule` / `--no-bend-rule` and
+  `--label-avoidance` / `--no-label-avoidance` (each pair mutually exclusive; the positive flag
+  forces a pass on over a project config that turned it off). HTTP `/api/v1/generate`,
+  `/api/v1/orchestrate` and the MCP tools `generate_bpmn`, `orchestrate_bpmn` take optional booleans
+  `bendRule` and `nodeLabelsAvoidFlows` (schema `$defs/LayoutSwitchOption` in
+  `references/api-schema.json`); anything but a boolean is a `schema_error`, on `/orchestrate` before
+  any LLM work. `runPipeline` throws a `TypeError` for a non-boolean value instead of reading it as
+  truthy. `/api/v1/validate` and `validate_bpmn` run no layout and take neither.
+- **`BPMN_CONFIG` documented.** The environment variable names a JSON file merged over the shipped
+  `config.json` (one level deep) — the project-wide way to change a default without editing the
+  package.
 - **Five realistic example fixtures.** `tests/fixtures/example-*.json` — Kreditantrag, Bestellung
   und Versand, Urlaubsantrag, Schadenmeldung, Onboarding — at the top level, so every directory-wide
   fence (net check, DI, renderer agreement, output hashes, layout ratchet) covers them.
@@ -1057,6 +1077,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **The SVG canvas includes external node labels.** The canvas size now accounts for the label boxes
+  of events, gateways, data objects and stores, with the layout switches on or off. Every committed
+  fixture renders byte-identical with both switches off; a label reaching further than the canvas
+  margin past the shapes now enlarges the canvas instead of being clipped.
 - **Refinement passes have their own switches.** Each pass is switched by its own key
   (`laneCompaction`, `edgeLabelCollisionRepair`); `config.json → visualRefinement.enabled` is gone
   (see Breaking). `runPipeline`'s `visualRefinement` option takes `true`/`false` (every pass) or an
