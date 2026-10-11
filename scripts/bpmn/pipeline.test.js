@@ -35,7 +35,7 @@ import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from '../http-server.js';
 import { checkDiagramIntegrity, groupDi05BySource, formatDiWarnings } from './di-check.js';
-import { routeMessageFlows } from './coordinates.js';
+import { routeMessageFlows, edgeLabelBox as boxOf, labelHitsRoute as hitsRoute } from './coordinates.js';
 import { checkNetIntegrity } from './net-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 // Statically imported (not `await import` inside a test) so `describe` bodies can enumerate the
@@ -3948,28 +3948,37 @@ describe('dense-edge-labels matrix', () => {
 describe('Pass 3 metric assertions', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/dense-edge-labels.json', 'utf8'));
 
-  test('fewer label-vs-label bbox overlaps after refinement on dense fixture', async () => {
-    // Pass 3 reduces overlaps from 5 → 2 on this fixture; full zero-overlap
-    // is not achievable with simple nudge because two labels share the same
-    // mid-edge X and the nudge directions cancel (known limitation).
-    const { estimateTextBBox, bboxOverlaps } = await import('./visual-refinement.js');
-    const countOverlaps = (coordMap) => {
-      const bboxes = Object.values(coordMap.edgeLabels ?? {}).map(L => estimateTextBBox(L.text, L.x, L.y, 11));
-      let n = 0;
-      for (let i = 0; i < bboxes.length; i++) {
-        for (let j = i + 1; j < bboxes.length; j++) {
-          if (bboxOverlaps(bboxes[i], bboxes[j])) n++;
-        }
+  // The repair pass must never make things worse: with every other refinement pass equal, turning
+  // it on may not add a label/label or label/node overlap — on any fixture.
+  const labelOverlaps = (cm, overlaps) => {
+    const boxes = Object.values(cm.edgeLabels ?? {}).map(L => boxOf(L));
+    const nodes = Object.values(cm.coords ?? {});
+    let ll = 0, ln = 0;
+    boxes.forEach((b, i) => {
+      for (const o of boxes.slice(i + 1)) if (overlaps(b, o)) ll++;
+      for (const n of nodes) if (overlaps(b, n)) ln++;
+    });
+    return { ll, ln };
+  };
+  for (const fixture of readdirSync('../tests/fixtures').filter(f => f.endsWith('.json')).sort()) {
+    test(`${fixture}: label-collision repair never adds a label/label or label/node overlap (refined)`, async () => {
+      const { bboxOverlaps } = await import('./visual-refinement.js');
+      const before = CFG.visualRefinement.edgeLabelCollisionRepair;
+      let without, withRepair;
+      try {
+        CFG.visualRefinement.edgeLabelCollisionRepair = false;
+        without = await runPipeline(loadFixture(fixture), { visualRefinement: true });
+        CFG.visualRefinement.edgeLabelCollisionRepair = true;
+        withRepair = await runPipeline(loadFixture(fixture), { visualRefinement: true });
+      } finally {
+        CFG.visualRefinement.edgeLabelCollisionRepair = before;
       }
-      return n;
-    };
-    const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
-    const overlapsOff = countOverlaps(off.coordMap);
-    const overlapsOn  = countOverlaps(on.coordMap);
-    // Refinement must strictly reduce overlaps (5 → 2 observed)
-    expect(overlapsOn).toBeLessThan(overlapsOff);
-  });
+      if (!without.coordMap) return;   // blocked on purpose
+      const a = labelOverlaps(without.coordMap, bboxOverlaps), b = labelOverlaps(withRepair.coordMap, bboxOverlaps);
+      expect(b.ll).toBeLessThanOrEqual(a.ll);
+      expect(b.ln).toBeLessThanOrEqual(a.ln);
+    }, 30000);
+  }
 
   test('refinement ON has fewer or equal label overlaps vs OFF', async () => {
     const { estimateTextBBox, bboxOverlaps } = await import('./visual-refinement.js');
@@ -3985,7 +3994,7 @@ describe('Pass 3 metric assertions', () => {
     };
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
     const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
-    expect(countOverlaps(on)).toBeLessThanOrEqual(countOverlaps(off));
+    expect(countOverlaps(on.coordMap)).toBeLessThanOrEqual(countOverlaps(off.coordMap));
   });
 });
 
@@ -5407,6 +5416,16 @@ function diShapes(xml) {
   return out;
 }
 
+/** DI label bounds of every BPMNEdge that carries one, keyed by bpmnElement. */
+function diEdgeLabels(xml) {
+  const out = {};
+  for (const m of xml.matchAll(/<bpmndi:BPMNEdge[^>]*bpmnElement="([^"]+)"[\s\S]*?<\/bpmndi:BPMNEdge>/g)) {
+    const b = m[0].match(/<bpmndi:BPMNLabel>\s*<dc:Bounds x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/);
+    if (b) out[m[1]] = { x: +b[1], y: +b[2], w: +b[3], h: +b[4] };
+  }
+  return out;
+}
+
 describe('geometry contract — every drawable has coordinates', () => {
   const CLASSES = [
     ['activities, events, gateways', ['s', 't', 'esc', 'g', 'e', 'e2'], 'coords'],
@@ -6004,7 +6023,7 @@ describe('geometry contract — the two renderers agree', () => {
       return `${r1(x + dx)},${r1(y + dy)}`;
     }).join(' ');
 
-  for (const fixture of ['all-element-classes.json', 'multi-pool-collaboration.json', 'realistic-collaboration.json', 'expanded-subprocess.json', 'sparse-lanes.json']) {
+  for (const fixture of ['all-element-classes.json', 'multi-pool-collaboration.json', 'realistic-collaboration.json', 'expanded-subprocess.json', 'sparse-lanes.json', 'simple-approval.json', 'dense-edge-labels.json']) {
     for (const visualRefinement of [false, true]) {
       test(`${fixture} (refinement: ${visualRefinement}) — the DI is coordMap, unchanged`, async () => {
         const r = await runPipeline(loadFixture(fixture), { visualRefinement });
@@ -6054,6 +6073,78 @@ describe('geometry contract — the two renderers agree', () => {
         expect(new Set(drawn.map(p => poly(p))))
           .toEqual(new Set(ids.map(id => poly(r.coordMap.edgeCoords[id], dx, dy))));
       });
+
+      test(`${fixture} (refinement: ${visualRefinement}) — the SVG draws each edge label where bpmn-js draws its DI label`, async () => {
+        // bpmn-js keeps a BPMNLabel's centre-x and top, and sets its first baseline 3/4 of a line
+        // (fontSize × lineHeight) below the top. The SVG must put the same lines there, under the
+        // one canvas offset its connections use.
+        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const cm = r.coordMap;
+        const drawnConn = Object.values(svgConnections(r.svg)).flat();
+        const ids = Object.keys(cm.edgeCoords);
+        const dx = Math.min(...drawnConn.flat(2).filter((_, i) => i % 2 === 0))
+                 - Math.min(...ids.flatMap(id => cm.edgeCoords[id].map(p => p.x)));
+        const dy = Math.min(...drawnConn.flat(2).filter((_, i) => i % 2 === 1))
+                 - Math.min(...ids.flatMap(id => cm.edgeCoords[id].map(p => p.y)));
+        const lineH = CFG.layout.edgeLabelText.fontSize * CFG.layout.edgeLabelText.lineHeight;
+        const want = Object.values(cm.edgeLabels).flatMap(L => {
+          const b = boxOf(L);
+          return L.lines.map((line, i) => `${r1(b.x + b.w / 2 + dx)},${r1(b.y + dy + lineH * (0.75 + i))} ${line}`);
+        });
+        const got = [...r.svg.matchAll(/<tspan x="([-\d.]+)" y="([-\d.]+)">([^<]*)<\/tspan>/g)]
+          .map(m => `${r1(+m[1])},${r1(+m[2])} ${m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}`);
+        expect(got.sort()).toEqual(want.sort());
+      });
+
+      test(`${fixture} (refinement: ${visualRefinement}) — every edge label in the DI is coordMap's`, async () => {
+        const { edgeLabelBox } = await import('./coordinates.js');
+        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const lc = loadFixture(fixture);
+        const labelled = (nodes) => (nodes || []).flatMap(n => [...(n.edges || []).filter(e => e.label), ...labelled(n.nodes)]);
+        const edges = [
+          ...(lc.pools || [lc]).flatMap(p => [...(p.edges || []).filter(e => e.label), ...labelled(p.nodes)]),
+          ...(lc.messageFlows || []).filter(m => m.name),
+        ];
+        const di = diEdgeLabels(r.bpmnXml);
+        for (const e of edges) {
+          const L = r.coordMap.edgeLabels[e.id];
+          expect(L).toBeDefined();
+          const b = edgeLabelBox(L);
+          expect(`${e.id}: ${JSON.stringify(di[e.id] && { x: r1(di[e.id].x), y: r1(di[e.id].y), w: r1(di[e.id].w), h: r1(di[e.id].h) })}`)
+            .toBe(`${e.id}: ${JSON.stringify({ x: r1(b.x), y: r1(b.y), w: r1(b.w), h: r1(b.h) })}`);
+        }
+      });
+    }
+  }
+});
+
+describe('edge labels follow the final route', () => {
+  test('simple-approval f4 "No" sits on the horizontal leg of its simplified route, in coordMap and DI alike', async () => {
+    const r = await runPipeline(loadFixture('simple-approval.json'));
+    const pts = r.coordMap.edgeCoords.f4;
+    const leg = pts.findIndex((p, i) => i < pts.length - 1 && Math.abs(pts[i + 1].y - p.y) < 1);
+    expect(leg).toBeGreaterThanOrEqual(0);
+    const { edgeLabelBox } = await import('./coordinates.js');
+    const box = edgeLabelBox(r.coordMap.edgeLabels.f4);
+    // Beside the leg, never across it: the box ends edgeLabelGap px above the line.
+    expect(box.y + box.h).toBeCloseTo(pts[leg].y - (CFG.layout.edgeLabelGap ?? 4), 6);
+    expect(box.x + box.w / 2).toBeCloseTo((pts[leg].x + pts[leg + 1].x) / 2, 6);
+    const di = diEdgeLabels(r.bpmnXml).f4;
+    expect({ x: di.x, y: di.y }).toEqual({ x: Math.round(box.x * 10) / 10, y: Math.round(box.y * 10) / 10 });
+  });
+
+  // Every top-level fixture, both modes: no label box reaches into its own route — the box sits
+  // beside a segment, and neither the collision repair nor lane compaction may move it across.
+  const fixtures = readdirSync('../tests/fixtures').filter(f => f.endsWith('.json')).sort();
+  for (const fixture of fixtures) {
+    for (const visualRefinement of [false, true]) {
+      test(`${fixture} (refinement: ${visualRefinement}) — no edge label crosses its own flow`, async () => {
+        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        if (!r.coordMap) return;   // blocked on purpose
+        const crossing = Object.entries(r.coordMap.edgeLabels)
+          .filter(([id, L]) => hitsRoute(boxOf(L), r.coordMap.edgeCoords[id])).map(([id]) => id);
+        expect(crossing).toEqual([]);
+      }, 30000);
     }
   }
 });

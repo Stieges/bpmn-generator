@@ -11,7 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   FIXTURES, ALONG_MIN_PX, alongSide, edgeEndsAlongBorder, laneGaps,
-  messageFlowThroughNodes, seqFlowThroughNodes, seqThroughOwnShape, measureLayout, summarize,
+  messageFlowThroughNodes, seqFlowThroughNodes, seqThroughOwnShape, edgeLabelHits, measureLayout, summarize,
 } from './layout-metrics.mjs';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
@@ -128,22 +128,44 @@ describe('seqThroughOwnShape', () => {
   });
 });
 
+describe('edgeLabelHits', () => {
+  const lc = { nodes: [{ id: 'sub', type: 'subProcess', isExpanded: true, nodes: [{ id: 'a' }] }, { id: 't' }] };
+  const coords = { sub: { x: 0, y: 0, w: 400, h: 200 }, a: { x: 20, y: 20, w: 100, h: 80 }, t: { x: 500, y: 0, w: 100, h: 80 } };
+  const label = (x, y) => ({ text: 'x', x, y, w: 40, h: 14 });
+  test('a label across its own line counts; one beside it does not', () => {
+    const edgeCoords = { e: [{ x: 120, y: 150 }, { x: 300, y: 150 }], f: [{ x: 120, y: 170 }, { x: 300, y: 170 }] };
+    const hits = edgeLabelHits({ coords, edgeCoords, edgeLabels: { e: label(200, 150), f: label(200, 159) } }, lc);
+    expect(hits.ownEdge).toEqual(['e']);
+  });
+  test('label pairs and label × node count; the container the label lies inside does not', () => {
+    const edgeLabels = { e: label(200, 150), f: label(210, 152), g: label(110, 60) };
+    const hits = edgeLabelHits({ coords, edgeCoords: {}, edgeLabels }, lc);
+    expect(hits.labelLabel).toEqual(['e/f']);
+    expect(hits.labelNode).toEqual(['g>a']);
+  });
+});
+
 // Exact counts per fixture × mode, measured on master b1dc22c. Keys of each row: crossings
 // (segment-pair crossings between non-adjacent sequence flows), along (#52 ends on their own
 // outline > 5 px), laneGap (largest lane-stack strip, px), mfThrough (message flow × foreign shape),
 // seqThrough (sequence flow × foreign node), ownThrough (sequence flow through its own source or
-// target shape). null: the pipeline blocks the fixture on purpose.
-const b = (crossings, along, laneGap, mfThrough, seqThrough, ownThrough = 0) =>
-  ({ crossings, along, laneGap, mfThrough, seqThrough, ownThrough });
+// target shape), labelOwnEdge (edge-label box reaching into its own route — must stay 0),
+// labelLabel (edge-label box pairs overlapping), labelNode (edge-label box × node box).
+// null: the pipeline blocks the fixture on purpose.
+const b = (crossings, along, laneGap, mfThrough, seqThrough, ownThrough = 0, labelLabel = 0, labelNode = 0) =>
+  ({ crossings, along, laneGap, mfThrough, seqThrough, ownThrough, labelOwnEdge: 0, labelLabel, labelNode });
 const Z = b(0, 0, 0, 0, 0);
 // No along-outline end and no flow through its own shape remains in any fixture after the endpoint re-clip pass.
 // realistic-collaboration on: the 5 remaining message-flow hits are all shapes of the flow's own
 // participant, in another lane — mf1>ap_wait, mf3>as_assess, mf4>as_assess, mf6>de_decide,
 // mf6>ap_submit. No port column clears them; none crosses a participant the flow does not involve.
+// The label overlaps left (bpmn-generator-pipeline on mf6/mf7, realistic-collaboration mf2/mf5) are
+// message-flow label pairs: their labels are placed after the label repair pass, which never sees them
+// (#72).
 const BUDGET = {
   'all-element-classes.json':           { off: Z,                  on: Z },
   'boundary-event-shapes.json':         { off: b(1, 0, 0, 0, 0),   on: b(1, 0, 0, 0, 0) },
-  'bpmn-generator-pipeline.json':       { off: Z,                  on: Z },
+  'bpmn-generator-pipeline.json':       { off: Z,                  on: b(0, 0, 0, 0, 0, 0, 1) },
   'deadlock-process.json':              { off: null,               on: null },
   'dense-edge-labels.json':             { off: Z,                  on: Z },
   'expanded-subprocess.json':           { off: Z,                  on: Z },
@@ -152,7 +174,7 @@ const BUDGET = {
   'messageflow-to-subprocess.json':     { off: Z,                  on: Z },
   'multi-pool-collaboration.json':      { off: Z,                  on: Z },
   'parallel-split-join.json':           { off: Z,                  on: Z },
-  'realistic-collaboration.json':       { off: b(0, 0, 0, 0, 1),   on: Z },
+  'realistic-collaboration.json':       { off: b(0, 0, 0, 0, 1, 0, 1), on: b(0, 0, 0, 0, 0, 0, 1) },
   'simple-approval.json':               { off: Z,                  on: Z },
   'sparse-lanes.json':                  { off: Z,                  on: Z },
   'subprocess-child-fidelity.json':     { off: Z,                  on: Z },
@@ -175,7 +197,7 @@ describe('layout budget — every top-level fixture × both modes', () => {
         // `in`, not `??`: a deliberate `null` row (blocked fixture) must not read as "missing".
         const want = BUDGET[name] && mode in BUDGET[name] ? BUDGET[name][mode] : 'missing';
         const detail = m && JSON.stringify({ along: m.alongBorder, gaps: m.laneGaps,
-          mf: m.mfThroughNodes, seq: m.seqThroughNodes });
+          mf: m.mfThroughNodes, seq: m.seqThroughNodes, labels: m.labels });
         const differs = JSON.stringify(got) !== JSON.stringify(want);
         expect(`${name} ${mode} ${JSON.stringify(got)}`)
           .toBe(`${name} ${mode} ${JSON.stringify(want)}${differs && detail ? ' | ' + detail : ''}`);

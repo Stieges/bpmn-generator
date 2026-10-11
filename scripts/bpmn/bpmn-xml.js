@@ -18,6 +18,7 @@ import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { inferGatewayDirections, assignEdgeIds, withProcessId } from './topology.js';
 import { inferEventMarker } from './icons.js';
+import { edgeLabelBox } from './coordinates.js';
 
 const moddle = new BpmnModdle();
 
@@ -672,6 +673,7 @@ function buildDefaultFlowMap(proc) {
 
 function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collapsedParticipants) {
   const { coords, laneCoords, poolCoords, edgeCoords } = coordMap;
+  const edgeLabels = coordMap.edgeLabels || {};
   const isMultiPool = lc.pools && lc.pools.length > 0;
   const associations = lc.associations || [];
   const needsCollaboration = !!collaboration;
@@ -722,7 +724,7 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
 
   // Node shapes — recursive, at every nesting depth. See buildNodeShapeDI.
   for (const proc of (lc.pools || [lc])) {
-    buildNodeShapeDI(proc.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements);
+    buildNodeShapeDI(proc.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels);
   }
 
   // Edge DI
@@ -740,21 +742,12 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
         waypoint: waypoints,
       });
 
-      // Edge label
-      if (edge.label && pts.length >= 2) {
-        let lx, ly, found = false;
-        for (let i = 0; i < pts.length - 1; i++) {
-          if (Math.abs(pts[i + 1].y - pts[i].y) < 1) {
-            lx = (pts[i].x + pts[i + 1].x) / 2;
-            ly = pts[i].y - 5;
-            found = true;
-            break;
-          }
-        }
-        if (!found) { lx = pts[1].x; ly = pts[1].y - 5; }
-        const lw = edge.label.length * 6.5 + 8;
+      // Edge label — coordMap's, never recomputed here (geometry contract, CLAUDE.md "Do NOT").
+      const label = edge.label ? edgeLabels[eid] : null;
+      if (label) {
+        const b = edgeLabelBox(label);
         edgeEl.label = create('bpmndi:BPMNLabel', {
-          bounds: create('dc:Bounds', { x: rn(lx - lw / 2), y: rn(ly - 8), width: rn(lw), height: 16 }),
+          bounds: create('dc:Bounds', { x: rn(b.x), y: rn(b.y), width: rn(b.w), height: rn(b.h) }),
         });
       }
       planeElements.push(edgeEl);
@@ -766,16 +759,26 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
     for (const mf of lc.messageFlows) {
       // Route comes from coordinates.js §5.4 — same source as the SVG, so the
       // two can no longer diverge.
-      const pts = edgeCoords[mf.id || `mf_${mf.source}_${mf.target}`] || [];
+      const mfKey = mf.id || `mf_${mf.source}_${mf.target}`;
+      const pts = edgeCoords[mfKey] || [];
       // DI requires at least two waypoints; emitting fewer produces XML that no
       // tool can read. Better no DI edge than an invalid one.
       if (pts.length < 2) continue;
       const waypoints = pts.map(p => create('dc:Point', { x: rn(p.x), y: rn(p.y) }));
-      planeElements.push(create('bpmndi:BPMNEdge', {
+      const mfEl = create('bpmndi:BPMNEdge', {
         id: `${mf.id}_di`,
         bpmnElement: allFlowNodeMaps.get(mf.id) || mf.id,
         waypoint: waypoints,
-      }));
+      });
+      // Without bounds bpmn-js centres the name on the flow's midpoint, across the line.
+      const mfLabel = mf.name ? edgeLabels[mfKey] : null;
+      if (mfLabel) {
+        const b = edgeLabelBox(mfLabel);
+        mfEl.label = create('bpmndi:BPMNLabel', {
+          bounds: create('dc:Bounds', { x: rn(b.x), y: rn(b.y), width: rn(b.w), height: rn(b.h) }),
+        });
+      }
+      planeElements.push(mfEl);
     }
   }
 
@@ -819,7 +822,7 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
  * geometry in a renderer" records three times over. The loss is recorded on the `isExpanded` row
  * instead, naming all three places a fix has to touch.
  */
-function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeElements) {
+function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels = {}) {
   for (const node of (nodes || [])) {
     const c = coords[node.id];
     if (!c) continue;
@@ -853,16 +856,24 @@ function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeEleme
 
     // Expanded container: its children's shapes and its own edges' BPMNEdges.
     if (node.isExpanded && node.nodes) {
-      buildNodeShapeDI(node.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements);
+      buildNodeShapeDI(node.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels);
       for (const subEdge of (node.edges || [])) {
         const seid = subEdge.id;
         const spts = edgeCoords[seid] || [];
         const waypoints = buildWaypoints(spts, coords, subEdge.source, subEdge.target);
-        planeElements.push(create('bpmndi:BPMNEdge', {
+        const subEdgeEl = create('bpmndi:BPMNEdge', {
           id: `${seid}_di`,
           bpmnElement: allFlowNodeMaps.get(seid) || seid,
           waypoint: waypoints,
-        }));
+        });
+        const subLabel = subEdge.label ? edgeLabels[seid] : null;
+        if (subLabel) {
+          const b = edgeLabelBox(subLabel);
+          subEdgeEl.label = create('bpmndi:BPMNLabel', {
+            bounds: create('dc:Bounds', { x: rn(b.x), y: rn(b.y), width: rn(b.w), height: rn(b.h) }),
+          });
+        }
+        planeElements.push(subEdgeEl);
       }
     }
   }
