@@ -779,14 +779,21 @@ function edgeLabelBox(label) {
  * re-sizes the box to its text. So the box is centred below the shape, its top `layout.labelDistance`
  * px under an event or a gateway and `layout.dataLabelDistance` px under a data object or store.
  */
-function nodeLabelBox(node, c) {
+function nodeLabelBox(node, c, hostC = null) {
   if (!node.name) return null;
   let gap;
   if (isEvent(node.type) || isGateway(node.type)) gap = LABEL_DISTANCE;
   else if (node.type === 'dataObjectReference' || node.type === 'dataStoreReference') gap = CFG.layout?.dataLabelDistance ?? 5;
   else return null;
   const { lines, w, h } = edgeLabelLayout(node.name);
+  // A boundary event on its host's top edge (placeBoundaryEvents): below it is the host's body.
+  if (onHostTop(c, hostC)) return { x: c.x + c.w / 2 - w / 2, y: c.y - gap - h, w, h, lines };
   return { x: c.x + c.w / 2 - w / 2, y: c.y + c.h + gap, w, h, lines };
+}
+
+/** Does the boundary event at `c` sit on the top edge of its host `hostC`? */
+function onHostTop(c, hostC) {
+  return !!(c && hostC) && c.y + c.h / 2 < hostC.y + hostC.h / 2;
 }
 
 /**
@@ -799,7 +806,7 @@ function placeNodeLabels(coords, lc) {
   for (const proc of (lc.pools ? lc.pools : [lc])) {
     for (const node of flattenProcessNodes(proc.nodes)) {
       const c = coords[node.id];
-      const box = c && nodeLabelBox(node, c);
+      const box = c && nodeLabelBox(node, c, node.attachedTo ? coords[node.attachedTo] : null);
       if (box) nodeLabels[node.id] = box;
     }
   }
@@ -817,12 +824,22 @@ function placeNodeLabels(coords, lc) {
  * bottom runs. Same box format as nodeLabelBox. Empty for a node without an external label, and
  * for a data object or store, whose label never moves.
  */
-function nodeLabelCandidates(node, c) {
+function nodeLabelCandidates(node, c, hostC = null) {
   if (!c || !(isEvent(node.type) || isGateway(node.type))) return [];
   const below = nodeLabelBox(node, c);
   if (!below) return [];
   const { w, h, lines } = below;
   const cx = c.x + c.w / 2;
+  // A boundary event on its host's top edge: the label goes above it by default, or beside that,
+  // never below — that is the host's body.
+  if (onHostTop(c, hostC)) {
+    const aboveY = c.y - LABEL_DISTANCE - h;
+    return [
+      { side: 'above', box: { x: cx - w / 2, y: aboveY, w, h, lines } },
+      { side: 'right-above', box: { x: cx + LABEL_DISTANCE, y: aboveY, w, h, lines } },
+      { side: 'left-above', box: { x: cx - LABEL_DISTANCE - w, y: aboveY, w, h, lines } },
+    ];
+  }
   return [
     { side: 'below', box: below },
     { side: 'above', box: { x: cx - w / 2, y: c.y - LABEL_DISTANCE - h, w, h, lines } },
@@ -869,9 +886,11 @@ function placeNodeLabelsAvoidingFlows(coordMap, lc) {
   // The trigger: one of the node's own flows docks at its bottom, or runs through the label below
   // it — ELK docks a gateway's second flow on the diamond's lower facet, not at its bottom vertex,
   // and that flow then turns down through the label just the same.
-  const flowAtLabel = (id, c, below) => (ends[id] || []).some(({ pts, at }) => {
+  // `labelSideY` is the y of the side the default label sits on: the bottom, or the top for a
+  // boundary event on its host's top edge.
+  const flowAtLabel = (id, c, below, labelSideY) => (ends[id] || []).some(({ pts, at }) => {
     const p = at === 'start' ? pts[0] : pts[pts.length - 1];
-    return (p && Math.abs(p.y - (c.y + c.h)) < 1 && p.x >= c.x - 1 && p.x <= c.x + c.w + 1)
+    return (p && Math.abs(p.y - labelSideY) < 1 && p.x >= c.x - 1 && p.x <= c.x + c.w + 1)
       || entersInterior(pts, below);
   });
 
@@ -912,8 +931,11 @@ function placeNodeLabelsAvoidingFlows(coordMap, lc) {
     for (const node of flattenProcessNodes(proc.nodes)) {
       const region = containerOf[node.id] ? innerArea(procRegion, containerOf[node.id]) : procRegion;
       const c = coords[node.id];
-      const candidates = nodeLabelCandidates(node, c);
-      if (!candidates.length || !current[node.id] || !flowAtLabel(node.id, c, candidates[0].box)) continue;
+      const hostC = node.attachedTo ? coords[node.attachedTo] : null;
+      const candidates = nodeLabelCandidates(node, c, hostC);
+      if (!candidates.length || !current[node.id]) continue;
+      const labelSideY = onHostTop(c, hostC) ? c.y : c.y + c.h;
+      if (!flowAtLabel(node.id, c, candidates[0].box, labelSideY)) continue;
       const free = (box) =>
         (!region || boxWithin(region, box))
         && !boxCrossesLines(box, laneLines)
@@ -922,7 +944,7 @@ function placeNodeLabelsAvoidingFlows(coordMap, lc) {
         && !Object.entries(out).some(([id, L]) => id !== node.id && boxesOverlap(L, box))
         && !edgeBoxes.some(b => boxesOverlap(b, box));
       const pick = candidates.find(k => free(k.box));
-      if (!pick || pick.side === 'below') continue;
+      if (!pick || pick === candidates[0]) continue;
       if (out === current) out = { ...current };
       out[node.id] = pick.box;
     }
@@ -1474,24 +1496,54 @@ function findNodeInAllProcesses(nodeId, processes) {
  *
  * ELK never sees boundary events (layout.js filters them out and re-anchors
  * their sequence flows on the host), so nothing has assigned them coordinates
- * yet. BPMN convention — and bpmn.io's own behaviour — is to place them
- * straddling the host's bottom edge; several events on the same host are
- * spread evenly across that edge.
+ * yet. They straddle the host's bottom edge — BPMN convention and bpmn.io's own
+ * default — unless the target of the event's outgoing flow lies ABOVE the host:
+ * then the top edge, so that the flow leaves towards its target instead of
+ * running down, round the host and back up past whatever stands beside it (#91:
+ * realistic-collaboration's timer flow to "Send reminder" in the lane above ran
+ * through the gateway next to its host). "Above" is decided once, here, in the
+ * order the bands will have after §5.0a: a target in another lane of the same
+ * process is above when its lane comes first in `proc.lanes` (the order §5.0a
+ * stacks); otherwise — same lane, no lanes, inside a subprocess — when its whole
+ * ELK box lies above the host's top. Same band, to the side or below: bottom, as
+ * before. An event without an outgoing flow stays at the bottom. Several events
+ * on one host are spread evenly across their side, each side on its own.
  *
  * Mutates `coords` in place. Hosts without coordinates are skipped, which
  * leaves the boundary event unplaced rather than placing it at (0,0).
  *
- * @returns Set of ids of the boundary events that were placed
+ * @returns Map of each placed boundary event's id to its host's id
  */
 function placeBoundaryEvents(coords, allProcesses) {
   const byHost = {};
-  const collect = (nodes) => {
+  const procOf = {};
+  const collect = (nodes, proc) => {
     for (const n of nodes || []) {
-      if (isBoundaryEvent(n) && n.attachedTo) (byHost[n.attachedTo] ||= []).push(n);
-      if (n.nodes) collect(n.nodes);
+      if (isBoundaryEvent(n) && n.attachedTo) { (byHost[n.attachedTo] ||= []).push(n); procOf[n.id] = proc; }
+      if (n.nodes) collect(n.nodes, proc);
     }
   };
-  for (const p of allProcesses) collect(p.nodes);
+  for (const p of allProcesses) collect(p.nodes, p);
+
+  // The first outgoing flow of each node decides; a boundary event has one in every fixture.
+  const targetOf = {};
+  for (const p of allProcesses) {
+    for (const e of flattenProcessEdges(p)) if (targetOf[e.source] === undefined) targetOf[e.source] = e.target;
+  }
+  const nodeById = {};
+  for (const p of allProcesses) for (const n of flattenProcessNodes(p.nodes || [])) nodeById[n.id] = n;
+
+  const sideFor = (ev, host) => {
+    const tgtId = targetOf[ev.id];
+    const tgt = coords[tgtId];
+    if (!tgt) return 'bottom';
+    const proc = procOf[ev.id];
+    const order = (proc.lanes || []).map(l => l.id);
+    const hi = order.indexOf(laneOfNode(nodeById[ev.attachedTo], proc));
+    const ti = order.indexOf(laneOfNode(nodeById[tgtId], proc));
+    if (hi >= 0 && ti >= 0 && hi !== ti) return ti < hi ? 'top' : 'bottom';
+    return tgt.y + tgt.h <= host.y ? 'top' : 'bottom';
+  };
 
   // Maps each placed event to its host. A Set of ids would be enough to know
   // WHICH routes to discard, but routing them again also needs to know what to
@@ -1500,16 +1552,31 @@ function placeBoundaryEvents(coords, allProcesses) {
   for (const [hostId, events] of Object.entries(byHost)) {
     const host = coords[hostId];
     if (!host) continue;
-    events.forEach((ev, i) => {
-      const sz = SHAPE[ev.type] || { w: 36, h: 36 };
-      coords[ev.id] = {
-        x: host.x + (host.w * (i + 1)) / (events.length + 1) - sz.w / 2,
-        y: host.y + host.h - sz.h / 2,
-        w: sz.w,
-        h: sz.h,
-      };
-      placed.set(ev.id, hostId);
-    });
+    const sides = { top: [], bottom: [] };
+    for (const ev of events) sides[sideFor(ev, host)].push(ev);
+    for (const [side, onSide] of Object.entries(sides)) {
+      // On the top edge the middle is where a flow coming down into the host docks (§5.2 enters a
+      // target at the middle of the side facing its source), so the events there are spread over
+      // the half of the edge facing their targets; on the bottom edge over the whole edge, as before.
+      let from = 0, span = 1;
+      if (side === 'top') {
+        const dx = onSide.reduce((n, ev) => {
+          const t = coords[targetOf[ev.id]];
+          return n + (t ? Math.sign((t.x + t.w / 2) - (host.x + host.w / 2)) : 0);
+        }, 0);
+        if (dx !== 0) { from = dx > 0 ? 0.5 : 0; span = 0.5; }
+      }
+      onSide.forEach((ev, i) => {
+        const sz = SHAPE[ev.type] || { w: 36, h: 36 };
+        coords[ev.id] = {
+          x: host.x + host.w * (from + (span * (i + 1)) / (onSide.length + 1)) - sz.w / 2,
+          y: (side === 'top' ? host.y : host.y + host.h) - sz.h / 2,
+          w: sz.w,
+          h: sz.h,
+        };
+        placed.set(ev.id, hostId);
+      });
+    }
   }
   return placed;
 }

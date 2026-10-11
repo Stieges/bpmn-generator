@@ -5106,6 +5106,62 @@ describe('B1 — boundary events reach the layout', () => {
     expect(bnd.x + bnd.w / 2).toBeLessThanOrEqual(host.x + host.w);
   });
 
+  // #91: the side faces the target. Two lanes, stacked by flow (the start is in L1, so L1 is on
+  // top): the host in the lower one; `up` leads to a task in the lane above, `side` to a task beside
+  // the host in its own lane.
+  const twoLanes = () => ({
+    lanes: [{ id: 'L1', name: 'Above' }, { id: 'L2', name: 'Host lane' }],
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'L1' },
+      { id: 't', type: 'userTask', name: 'Review', lane: 'L2' },
+      { id: 'up', type: 'boundaryEvent', marker: 'timer', attachedTo: 't', cancelActivity: false, name: 'Remind', lane: 'L2' },
+      { id: 'side', type: 'boundaryEvent', marker: 'error', attachedTo: 't', cancelActivity: true, name: 'Failed', lane: 'L2' },
+      { id: 'rem', type: 'sendTask', name: 'Send reminder', lane: 'L1' },
+      { id: 'fix', type: 'userTask', name: 'Fix it', lane: 'L2' },
+      { id: 'e', type: 'endEvent', name: 'Done', lane: 'L2' },
+      { id: 'e2', type: 'endEvent', name: 'Reminded', lane: 'L1' },
+      { id: 'e3', type: 'endEvent', name: 'Fixed', lane: 'L2' },
+    ],
+    edges: [
+      { id: 'f1', source: 's', target: 't' }, { id: 'f2', source: 't', target: 'e' },
+      { id: 'f3', source: 'up', target: 'rem' }, { id: 'f4', source: 'rem', target: 'e2' },
+      { id: 'f5', source: 'side', target: 'fix' }, { id: 'f6', source: 'fix', target: 'e3' },
+    ],
+  });
+
+  test('a boundary event whose target lies in a lane above sits on the top edge; one beside stays at the bottom (#91)', async () => {
+    const r = await runPipeline(twoLanes());
+    const { t: host, up, side } = r.coordMap.coords;
+    expect(up.y + up.h / 2).toBeCloseTo(host.y, 5);
+    expect(side.y + side.h / 2).toBeCloseTo(host.y + host.h, 5);
+    // Each side spreads its own events: one on the bottom sits in the middle.
+    expect(side.x + side.w / 2).toBeCloseTo(host.x + host.w / 2, 5);
+    // On the top edge the middle is left free for a flow docking there: the event takes the half
+    // facing its target.
+    const rem = r.coordMap.coords.rem;
+    const facesRight = rem.x + rem.w / 2 > host.x + host.w / 2;
+    expect(up.x + up.w / 2).toBeCloseTo(host.x + host.w * (facesRight ? 0.75 : 0.25), 5);
+  });
+
+  test('a top-edge boundary event: its flow starts at its top point and leaves upwards, its label sits above it', async () => {
+    const r = await runPipeline(twoLanes());
+    const up = r.coordMap.coords.up;
+    const pts = r.coordMap.edgeCoords.f3;
+    expect(pts[0]).toEqual({ x: up.x + up.w / 2, y: up.y });
+    expect(pts[1].y).toBeLessThan(pts[0].y);
+    const L = r.coordMap.nodeLabels.up;
+    expect(L.y + L.h).toBeLessThanOrEqual(up.y);
+    expect(r.diagnostics.issues.filter(i => /^DI(0[789]|1[01])$/.test(i.code))).toEqual([]);
+  });
+
+  test('a top-edge boundary event: the DI label bounds equal coordMap\'s box, above the event', async () => {
+    const r = await runPipeline(twoLanes());
+    const L = r.coordMap.nodeLabels.up;
+    const m = r.bpmnXml.match(/<bpmndi:BPMNShape id="up_di"[\s\S]*?<bpmndi:BPMNLabel>\s*<dc:Bounds x="([^"]+)" y="([^"]+)"/);
+    expect(m).not.toBeNull();
+    expect(Number(m[2])).toBeCloseTo(L.y, 1);
+  });
+
   test('the outgoing flow starts at the boundary event, not at the host', async () => {
     const r = await runPipeline(JSON.parse(JSON.stringify(withBoundary)));
     const pts = r.coordMap.edgeCoords.f3;
@@ -5486,7 +5542,8 @@ describe('DI integrity check', () => {
         if (!r.diagnostics) continue;
         for (const i of r.diagnostics.issues) if (i.code === 'DI11') found.push(`${name}: ${i.elements.join(' > ')}`);
       }
-      expect(found).toEqual(['realistic-collaboration.json: inf8 > in_gw']);
+      // realistic-collaboration's inf8 > in_gw left this set with #91's boundary-side placement.
+      expect(found).toEqual([]);
     }, 60000);
   });
 
@@ -6399,12 +6456,15 @@ describe('geometry contract — the two renderers agree on node labels', () => {
         const nodeOf = Object.fromEntries((lc.pools || [lc]).flatMap(p => flatNodes(p.nodes)).map(n => [n.id, n]));
         for (const [id, L] of Object.entries(labels)) {
           const c = r.coordMap.coords[id];
+          const hostC = nodeOf[id].attachedTo ? r.coordMap.coords[nodeOf[id].attachedTo] : null;
           if (nodeLabelsAvoidFlows) {
-            const cands = nodeLabelCandidates(nodeOf[id], c).map(k => box(k.box));
+            const cands = nodeLabelCandidates(nodeOf[id], c, hostC).map(k => box(k.box));
             if (cands.length) { expect(cands).toContain(box(L)); continue; }
           }
           expect(`${id}: ${r1(L.x + L.w / 2)}`).toBe(`${id}: ${r1(c.x + c.w / 2)}`);
-          const gap = L.y - (c.y + c.h);
+          // Below the node — above it for a boundary event on its host's top edge (#91).
+          const onTop = hostC && c.y + c.h / 2 < hostC.y + hostC.h / 2;
+          const gap = onTop ? c.y - (L.y + L.h) : L.y - (c.y + c.h);
           expect(gap >= 0 && gap <= CFG.layout.labelDistance).toBe(true);
         }
 
@@ -6937,10 +6997,13 @@ describe('stuck ends are re-clipped', () => {
       expect(r.diagnostics.issues.filter(i => i.code === 'DI08' || i.code === 'DI09')).toEqual([]);
       expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
       expect(r.diagnostics.ok).toBe(true);
-      // inf8 leaves the timer boundary event "in_timer": its start is the event's bottom point,
-      // where placeBoundaryEvents routes it — the re-clip pass must not have moved it.
+      // inf8 leaves the timer boundary event "in_timer": its target "Send reminder" sits in the lane
+      // above, so placeBoundaryEvents puts the timer on its host's top edge (#91) and the flow starts
+      // at the event's top point — the re-clip pass must not have moved it.
       const timer = r.coordMap.coords.in_timer;
-      expect(r.coordMap.edgeCoords.inf8[0]).toEqual({ x: timer.x + timer.w / 2, y: timer.y + timer.h });
+      const host = r.coordMap.coords.in_check;
+      expect(timer.y + timer.h / 2).toBe(host.y);
+      expect(r.coordMap.edgeCoords.inf8[0]).toEqual({ x: timer.x + timer.w / 2, y: timer.y });
     });
   }
 });

@@ -261,8 +261,11 @@ describe('placeNodeLabelsAvoidingFlows — in the pipeline', () => {
         for (const [id, L] of Object.entries(cm.nodeLabels)) {
           if (JSON.stringify(L) === JSON.stringify(defaults[id])) continue;
           const node = nodes.find(n => n.id === id);
-          const side = nodeLabelCandidates(node, cm.coords[id]).find(k => JSON.stringify(k.box) === JSON.stringify(L))?.side;
-          expect(`${f} ${id}: ${side}`).toMatch(/: (above|right-below|left-below)$/);
+          // A boundary event on its host's top edge has its own candidate list, `above` first.
+          const cands = nodeLabelCandidates(node, cm.coords[id], node.attachedTo ? cm.coords[node.attachedTo] : null);
+          const side = cands.find(k => JSON.stringify(k.box) === JSON.stringify(L))?.side;
+          expect(`${f} ${id}: ${side}`).toMatch(/: (above|right-below|left-below|right-above|left-above)$/);
+          expect(side).not.toBe(cands[0].side);
           expect(`${f} ${id}: ${Object.entries(cm.edgeCoords).filter(([, pts]) => labelHitsRoute(L, pts)).map(([k]) => k)}`).toBe(`${f} ${id}: `);
           const over = (b) => L.x < b.x + b.w && b.x < L.x + L.w && L.y < b.y + b.h && b.y < L.y + L.h;
           const labels = [...Object.entries(cm.nodeLabels).filter(([k]) => k !== id).map(([k, b]) => [k, b]),

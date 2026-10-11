@@ -240,20 +240,20 @@
     "svg": "98de43bf9670138d89f4e7a86cd6869dd3efe9fa1aa28b5ed41e7f190d33021e"
   },
   "realistic-collaboration.json × default": {
-    "xml": "b00a15c1fe8962c94955e6957bf32dfbba118c09d98796fde2a3b490f4c599a8",
-    "svg": "1525463e0679fc8f1355071992ff439d03a8898e7f1015ab147892586e695ec3"
+    "xml": "ba080eae9144204402253fe330292739030f85a523fcfc97aeeb03baf5fc39bb",
+    "svg": "a7de96f4a28718a67cf1dd2c68fac81db81c41962c3d6b42a16b8310a050674e"
   },
   "realistic-collaboration.json × no-refine": {
-    "xml": "ac537a7f8fec07f5508ea625167488a32c36a3d26798ce8cfa24023ba1aa76fc",
-    "svg": "ee4663a504e8f9f8ca8527379ef78028424e4bbf790785f4a00730ac201ee8d1"
+    "xml": "ff06919e471ecd74b2fd3f67eb2228185445286e3cb2abea013c079f01171310",
+    "svg": "bac41bea92b4a2adea501076a256bcc3eb4410c04267d071b2f0eb68d88b719d"
   },
   "realistic-collaboration.json × refine": {
-    "xml": "b00a15c1fe8962c94955e6957bf32dfbba118c09d98796fde2a3b490f4c599a8",
-    "svg": "1525463e0679fc8f1355071992ff439d03a8898e7f1015ab147892586e695ec3"
+    "xml": "ba080eae9144204402253fe330292739030f85a523fcfc97aeeb03baf5fc39bb",
+    "svg": "a7de96f4a28718a67cf1dd2c68fac81db81c41962c3d6b42a16b8310a050674e"
   },
   "realistic-collaboration.json × refine+wrap": {
-    "xml": "e8661f7458501fb4c3149fd3ab64c9b75d8a7d5e0e8e98dee689f4a5e7f3b3f2",
-    "svg": "47174e90dd692956ca145b9ba69308d680f0010e65b866e8cd76e847716e8c75"
+    "xml": "8767bd882b17a0f3cee0fa29d63630c4a084be12e20b9d7736cc013530bc136b",
+    "svg": "023c9894a9ed400783cee6afe36d1cc095ad32889c3be650e24650e2c3f6d55a"
   },
   "simple-approval.json × default": {
     "xml": "e502dc672f1c1c65ca01161cdfeea7850057426617e327ac69139be2430c2d8d",

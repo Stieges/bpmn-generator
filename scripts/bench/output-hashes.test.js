@@ -1,7 +1,7 @@
 /**
- * The fence behind "layout.bendRule and layout.nodeLabelsAvoidFlows off => the default output is
- * byte-identical": the BPMN XML and SVG hashes of every top-level fixture × four modes against a
- * snapshot generated at 9b5a597, before either switch existed (see output-hashes.mjs).
+ * The fence behind "the output with layout.bendRule and layout.nodeLabelsAvoidFlows off does not
+ * change unnoticed": the BPMN XML and SVG hashes of every top-level fixture × four modes against a
+ * snapshot of that output on current master (see output-hashes.mjs for its history).
  */
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
