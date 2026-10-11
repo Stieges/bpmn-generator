@@ -5139,6 +5139,28 @@ describe('DI integrity check', () => {
     }
   });
 
+  test('lane bands tile without a strip, refined or not', async () => {
+    const fixtureNames = readdirSync(fixturesDir).filter(f => f.endsWith('.json'));
+    for (const name of fixtureNames) {
+      const lc = JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
+      if (!lc.pools && !lc.nodes) continue;
+      for (const visualRefinement of [false, true]) {
+        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement });
+        if (!r.coordMap) continue;
+        const strips = [];
+        for (const proc of lc.pools || [lc]) {
+          const bands = (proc.lanes || []).map(l => ({ id: l.id, ...r.coordMap.laneCoords[l.id] }))
+            .filter(b => Number.isFinite(b.y)).sort((a, b) => a.y - b.y);
+          for (let i = 1; i < bands.length; i++) {
+            const gap = bands[i].y - (bands[i - 1].y + bands[i - 1].h);
+            if (Math.abs(gap) > 0.5) strips.push(`${bands[i - 1].id}|${bands[i].id} ${gap}`);
+          }
+        }
+        expect(`${name} vr=${visualRefinement}: ${strips.join(', ')}`).toBe(`${name} vr=${visualRefinement}: `);
+      }
+    }
+  });
+
   describe('DI08 — an end segment along its own outline (#52)', () => {
     const lc = { pools: [{ id: 'P',
       nodes: [{ id: 'a', type: 'userTask' }, { id: 'b', type: 'userTask' }],
