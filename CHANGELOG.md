@@ -49,6 +49,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
 
 ### Added
+- **Node labels that avoid flows (opt-in).** An event's or a gateway's label no longer has to sit
+  where a flow leaves or enters the node: when one of its sequence or message flows uses the node's
+  bottom or runs through the label, the label moves to the first free spot among below, above, right-below and left-below —
+  free of routes, shapes, other node and edge labels and lane separators, and inside its participant.
+  With no free spot it stays below. Runs after message-flow routing, since a message flow's port is
+  only known then; it moves label boxes in `coordMap.nodeLabels` only, which both renderers read
+  unchanged. Off by default: `runPipeline(lc, { nodeLabelsAvoidFlows: true })` or
+  `config.json -> layout.nodeLabelsAvoidFlows: true`. Switched off, the output is unchanged.
 - **Bend rule (opt-in): fewest bends, then enter in flow direction.** A new routing pass
   (`scripts/bpmn/bend-rule.js`) re-routes a sequence flow when a route with fewer bends exists, or one
   with as many bends that enters an activity or event from the left; endpoints stay put or move to a

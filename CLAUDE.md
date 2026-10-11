@@ -224,7 +224,12 @@ layout and rendering. Two rules make it hold:
    `svg.js` draws its `lines` into it.
 2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
-   the last pass that can still move a participant.
+   the last pass that can still move a participant. The one pass after it is
+   `placeNodeLabelsAvoidingFlows` (opt-in, `layout.nodeLabelsAvoidFlows`): it moves an event's or a
+   gateway's label off the bottom when one of its sequence or message flows uses that side, and a
+   message flow's port is only known once message flows are routed. It changes label boxes only,
+   never a route, and nothing but the two renderers reads a node label afterwards — so message
+   flows are still the last *routing* step.
 
 This is also why a `Lane`'s `flowNodeRef` in `bpmn-xml.js`'s `buildLane` excludes artifacts and
 data references: `flowNodeRef` is typed `FlowNode` and neither qualifies (an Artifact never
@@ -251,7 +256,7 @@ membership instead of coordinates.
 | `scripts/bpmn/constants.js` | The 13 BPMN-only layout constants (`SHAPE`, `SW`, `CLR`, `LANE_HEADER_W`, `LANE_PADDING`, `LABEL_DISTANCE`, `TASK_RX`, `INNER_OUTER_GAP`, `EXTERNAL_LABEL_H`, `POOL_GAP`, `COLLAB_PADDING`, `MESSAGE_FLOW_FAN`, `ARTIFACT_GAP`), derived from `CFG` (`../shared/utils.js`) — never imported by `dmn/` |
 | `scripts/bpmn/topology.js` | `assignProcessId`/`withProcessId` (the one place a single-process Logic-Core without `id` gets `Process_1`, `_2`… on collision; the public `generateBpmnXml`/`logicCoreToDot`/`runScenarioPipeline`), `inferGatewayDirections`, `sortNodesTopologically`, `orderLanesByFlow`, `normalizeLaneAssignments`, `identifyHappyPathNodes` (which nodes an `isHappyPath` edge chain touches — also read by `scripts/scenarios/format.js`), `normalizeEdgeIds`/`assignEdgeIds` (the one place an id-less sequence-flow edge gets its `flow_<source>_<target>` id, `_2`… on collision — nothing downstream invents one), `resolveLaneId` (the single cross-format lane resolver — `node.lane` **or** `Lane.nodeIds`; lives here to stay clear of the `redesign-core → rules → optimize` import cycle) |
 | `scripts/bpmn/layout.js` | `logicCoreToElk`, `runElkLayout` (ElkJS Sugiyama) |
-| `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x |
+| `scripts/bpmn/coordinates.js` | `buildCoordinateMap`, `clipOrthogonal`, pool width balancing; owns the **vertical** axis (§5.0a lane bands, §5.0b2 participant stacking) — ELK owns only x. Node label boxes: `placeNodeLabels` (default, below the node) and the opt-in `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, default `false`; per call `runPipeline(lc, { nodeLabelsAvoidFlows: true })`): an event's or gateway's label whose own sequence or message flow leaves or enters the node through the bottom, or runs through the label on its way, goes to the first free `nodeLabelCandidates` box — below, above, right-below, left-below; free = no route, shape, node or edge label, lane separator, and inside the participant — else stays below. Runs in `pipeline.js` after `routeMessageFlows` |
 | `scripts/bpmn/di-check.js` | `checkDiagramIntegrity` — post-layout geometry pass. DI01 identical participant positions, DI02 overlapping participants, DI03 node outside its participant, DI04 overlapping lane bands, DI06 child outside its expanded subprocess, DI07 sequence-flow endpoint off its own shape (all ERROR); DI05 message flow crossing an uninvolved participant, DI08 a sequence-flow end segment lying on its own endpoint's outline, DI09 a sequence flow through its own source or target shape, DI10 a message flow through a foreign shape (all WARNING). `ok` means "no ERROR". Result lands in `result.diagnostics`, **not** in `validation` |
 | `scripts/bpmn/topology.js` | additionally `orderParticipantsByMessageFlow` — stacks participants so that communication partners are adjacent (exact search up to 8 participants, heuristic above). Toggle: `poolOrder: 'auto' \| 'declared'` |
 | `scripts/bpmn/bpmn-xml.js` | `generateBpmnXml` — OMG-compliant BPMN 2.0 XML + DI |
@@ -484,6 +489,14 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    project-wide `layout.bendRule: true`. Limits: `layout.bendRuleLimits` (see `scripts/bpmn/bend-rule.js`).
 2. Verify: the layout ratchet's `bends` mode (`cd scripts && npm test -- --testPathPatterns=layout-metrics`)
    and `scripts/bpmn/bend-rule.test.js` (DI07–DI10 clean and idempotent over every fixture).
+
+### Switch on node labels that avoid flows
+
+1. Off by default (`config.json → layout.nodeLabelsAvoidFlows: false`). Per call
+   `runPipeline(lc, { nodeLabelsAvoidFlows: true })`; project-wide `layout.nodeLabelsAvoidFlows: true`.
+   Independent of the bend rule; with both on, the labels follow the bend rule's routes.
+2. Verify: `cd scripts && npm test -- --testPathPatterns=node-labels-avoid-flows` and the renderer-agreement
+   test in `scripts/bpmn/pipeline.test.js` ("the two renderers agree on node labels", switch off and on).
 
 ### Change the participant order of a collaboration
 
