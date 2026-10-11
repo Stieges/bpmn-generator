@@ -15,7 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   running through their OWN source or target shape (exempt from every check until now). It is
   importable; `scripts/bench/layout-metrics.test.js` holds an exact per-fixture ratchet, so a
   layout change that makes any of them worse fails `npm test`. Its edge-through-node count no
-  longer counts an expanded subprocess as foreign to its own children.
+  longer counts an expanded subprocess as foreign to its own children. It also measures flow
+  quality (`scripts/bench/flow-metrics.mjs`): length of sequence-flow legs lying on a lane
+  separator, most bends on one flow, parallel-segment crowding of sequence and message flows, and
+  ends off their side's midpoint — all part of the ratchet, in three modes (default, refinement
+  off, everything on).
 - **Rules in the ontology.** `references/ontology.jsonld` now holds the rule catalog: every rule of
   the three rule sets — 40 BPMN rules, 5 layers; 19 DMN rules, 3 layers; 2 cross-notation rules, 1
   layer — as a `bg:Rule` with notation(s), kind (`specific`/`crossNotation`), layer (`bg:Layer`,
@@ -938,7 +942,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
-- **Refinement passes have their own switches.** `config.json → visualRefinement.enabled` is gone;
+- **Refinement passes have their own switches.** `config.json → visualRefinement.enabled` is gone (a config that still sets it is ignored; only
+  the per-pass keys apply);
   each pass is switched by its own key (`dynamicLaneHeader`, `laneCompaction`,
   `edgeLabelCollisionRepair`). `runPipeline`'s `visualRefinement` option takes `true`/`false`
   (every pass) or an object switching single passes; an unknown pass name throws. The CLI gains
