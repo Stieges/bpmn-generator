@@ -134,6 +134,7 @@
     "laneHeaderWidth": 30,
     "lanePadding": 60,
     "labelDistance": 10,
+    "dataLabelDistance": 5,
     "taskBorderRadius": 10,
     "innerOuterGap": 3,
     "externalLabelHeight": 25,

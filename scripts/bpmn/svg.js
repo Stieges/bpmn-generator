@@ -291,12 +291,16 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels) {
  */
 function renderEdgeLabel(out, label, tx, ty) {
   const b = edgeLabelBox(label);
+  drawLabelLines(out, b.x + b.w / 2, b.y, label.lines ?? [label.text], tx, ty);
+}
+
+/** `lines` centred on `centreX`, first baseline 3/4 of a line below `top` (coordMap coordinates). */
+function drawLabelLines(out, centreX, top, lines, tx, ty) {
   const { fontSize, lineHeight } = edgeLabelTextStyle();
   const lineH = fontSize * lineHeight;
-  const cx = rn(tx(b.x + b.w / 2));
-  const lines = label.lines ?? [label.text];
+  const cx = rn(tx(centreX));
   const tspans = lines.map((line, i) =>
-    `<tspan x="${cx}" y="${rn(ty(b.y) + lineH * (0.75 + i))}">${esc(line)}</tspan>`).join('');
+    `<tspan x="${cx}" y="${rn(ty(top) + lineH * (0.75 + i))}">${esc(line)}</tspan>`).join('');
   out.push(`<text text-anchor="middle" font-size="${fontSize}" fill="${CLR.label}">${tspans}</text>`);
 }
 
@@ -547,17 +551,15 @@ function renderDataArtifact(node, c, tx, ty, label) {
 }
 
 /**
- * Draw an external node label into its coordMap.nodeLabels box (coordinates.js placeNodeLabels):
- * centred on the box, first baseline 10 px below its top, 13 px per further line. Line breaks come
- * from coordMap (`lines`); nothing is positioned or measured here.
+ * Draw an external node label into its coordMap.nodeLabels box (coordinates.js placeNodeLabels) the
+ * way bpmn-js draws the same BPMNLabel — the rule renderEdgeLabel follows. Nothing is positioned
+ * or measured here.
  */
 function renderNodeLabel(label, tx, ty) {
   if (!label) return '';
-  const cx = tx(label.x + label.w / 2);
-  const top = ty(label.y);
-  return label.lines.map((line, i) =>
-    `<text x="${cx}" y="${rn(top + i*13 + 10)}" text-anchor="middle" font-size="11" fill="${CLR.label}">${esc(line)}</text>`
-  ).join('\n');
+  const out = [];
+  drawLabelLines(out, label.x + label.w / 2, label.y, label.lines, tx, ty);
+  return out.join('');
 }
 
 export { generateSvg };

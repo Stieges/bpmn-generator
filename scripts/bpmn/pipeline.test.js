@@ -6189,10 +6189,12 @@ describe('geometry contract — the two renderers agree', () => {
         const dy = Math.min(...drawnConn.flat(2).filter((_, i) => i % 2 === 1))
                  - Math.min(...ids.flatMap(id => cm.edgeCoords[id].map(p => p.y)));
         const lineH = CFG.layout.edgeLabelText.fontSize * CFG.layout.edgeLabelText.lineHeight;
-        const want = Object.values(cm.edgeLabels).flatMap(L => {
-          const b = boxOf(L);
-          return L.lines.map((line, i) => `${r1(b.x + b.w / 2 + dx)},${r1(b.y + dy + lineH * (0.75 + i))} ${line}`);
-        });
+        // Node labels are drawn by the same rule (coordMap.nodeLabels boxes are top-left based).
+        const want = [
+          ...Object.values(cm.edgeLabels).map(L => ({ ...boxOf(L), lines: L.lines })),
+          ...Object.values(cm.nodeLabels),
+        ].flatMap(b =>
+          b.lines.map((line, i) => `${r1(b.x + b.w / 2 + dx)},${r1(b.y + dy + lineH * (0.75 + i))} ${line}`));
         const got = [...r.svg.matchAll(/<tspan x="([-\d.]+)" y="([-\d.]+)">([^<]*)<\/tspan>/g)]
           .map(m => `${r1(+m[1])},${r1(+m[2])} ${m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}`);
         expect(got.sort()).toEqual(want.sort());
@@ -6235,11 +6237,13 @@ describe('geometry contract — the two renderers agree on node labels', () => {
     }
     return out;
   };
-  // Where the SVG puts line i of a node label whose box is `b`: centred, first baseline 10 px below
-  // the box top, 13 px per further line.
-  const lineAt = (b, i) => ({ x: b.x + b.w / 2, y: b.y + 10 + 13 * i });
-  const svgNodeLabelLines = (svg) =>
-    [...svg.matchAll(/<text x="([-\d.]+)" y="([-\d.]+)" text-anchor="middle" font-size="11" fill="[^"]*">([^<]*)<\/text>/g)]
+  // Where the SVG puts line i of a label whose box is `b`: bpmn-js's Text.js rule (see the edge-label
+  // test above) — centred, first baseline 3/4 of a line below the box top, one line per line height.
+  const lineH = () => CFG.layout.edgeLabelText.fontSize * CFG.layout.edgeLabelText.lineHeight;
+  const lineAt = (b, i) => ({ x: b.x + b.w / 2, y: b.y + lineH() * (0.75 + i) });
+  // Node and edge labels are drawn alike, so the SVG's lines are compared against both together.
+  const svgLabelLines = (svg) =>
+    [...svg.matchAll(/<tspan x="([-\d.]+)" y="([-\d.]+)">([^<]*)<\/tspan>/g)]
       .map(m => ({ x: +m[1], y: +m[2], text: m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>') }));
   const hasExternalLabel = (n) => !!n.name && (/Event$/.test(n.type) || /Gateway$/.test(n.type)
     || n.type === 'dataObjectReference' || n.type === 'dataStoreReference');
@@ -6269,12 +6273,18 @@ describe('geometry contract — the two renderers agree on node labels', () => {
           expect(gap >= 0 && gap <= CFG.layout.labelDistance).toBe(true);
         }
 
-        // The DI writes coordMap's box, unchanged — for every event and gateway label.
+        // The DI writes coordMap's box, unchanged — for every label.
         const di = diNodeLabels(r.bpmnXml);
-        const typeOf = Object.fromEntries((lc.pools || [lc]).flatMap(p => flatNodes(p.nodes)).map(n => [n.id, n.type]));
-        const inDi = Object.keys(labels).filter(id => /(Event|Gateway)$/.test(typeOf[id])).sort();
-        expect(Object.keys(di).sort()).toEqual(inDi);
-        for (const id of inDi) expect(`${id}: ${box(di[id])}`).toBe(`${id}: ${box(labels[id])}`);
+        expect(Object.keys(di).sort()).toEqual(Object.keys(labels).sort());
+        for (const id of Object.keys(labels)) expect(`${id}: ${box(di[id])}`).toBe(`${id}: ${box(labels[id])}`);
+
+        // Its size is the text's, laid out the way bpmn-js lays it out, so bpmn.io keeps the box.
+        const { edgeLabelLayout } = await import('./coordinates.js');
+        const nameOf = Object.fromEntries((lc.pools || [lc]).flatMap(p => flatNodes(p.nodes)).map(n => [n.id, n.name]));
+        for (const [id, L] of Object.entries(labels)) {
+          const t = edgeLabelLayout(nameOf[id]);
+          expect({ id, w: L.w, h: L.h, lines: L.lines }).toEqual({ id, w: t.w, h: t.h, lines: t.lines });
+        }
 
         // The SVG draws every line of every box where the box says, under one canvas offset. It
         // draws nodes two levels deep only (a top-level node and the children of an expanded one;
@@ -6282,8 +6292,11 @@ describe('geometry contract — the two renderers agree on node labels', () => {
         // compared at those levels.
         const drawn = new Set((lc.pools || [lc]).flatMap(p => (p.nodes || []).flatMap(n =>
           [n.id, ...(n.isExpanded ? (n.nodes || []).map(k => k.id) : [])])));
-        const got = svgNodeLabelLines(r.svg);
-        const want = Object.entries(labels).filter(([id]) => drawn.has(id)).flatMap(([, L]) => L.lines.map((text, i) => ({ ...lineAt(L, i), text })));
+        const got = svgLabelLines(r.svg);
+        const want = [
+          ...Object.entries(labels).filter(([id]) => drawn.has(id)).map(([, L]) => L),
+          ...Object.values(r.coordMap.edgeLabels).map(L => ({ ...boxOf(L), lines: L.lines })),
+        ].flatMap(L => L.lines.map((text, i) => ({ ...lineAt(L, i), text })));
         expect(got).toHaveLength(want.length);
         if (!want.length) return;
         // The offset is derived from the labels themselves (leftmost/topmost line on each side), so

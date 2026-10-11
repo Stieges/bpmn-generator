@@ -371,8 +371,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   data object/store was positioned twice — by `bpmn-xml.js` for the `BPMNLabel` bounds and by
   `svg.js` for the drawn text — against the geometry contract. Its box is now computed once, in
   `coordMap.nodeLabels` (`placeNodeLabels`, `scripts/bpmn/coordinates.js`), re-derived after lane
-  compaction so it follows a moved node, and both renderers read it. Output is byte-identical; the
-  test `geometry contract — the two renderers agree on node labels` checks every top-level fixture.
+  compaction so it follows a moved node, and both renderers read it. The test `geometry contract —
+  the two renderers agree on node labels` checks every top-level fixture.
+  **Output changes:** the box is sized with bpmn-js's own text metrics (Arial 11 px, line height 1.2,
+  wrapped at 90 px — the layout edge labels already use), so the `BPMNLabel` bounds in the DI are the
+  box bpmn.io keeps on import, and the SVG wraps and places node labels exactly as bpmn.io does (a
+  name the SVG used to break after 15 characters now stays on one line when bpmn.io keeps it there).
+  Data objects and data stores now get a `BPMNLabel` too. New config key `layout.dataLabelDistance`
+  (default 5): the gap between a data object/store and its label; events and gateways keep
+  `layout.labelDistance`.
 - **Compacted lanes keep their lane names whole in bpmn.io.** bpmn-js wraps a lane label against
   the lane height, so lane compaction (`laneCompaction`) could shrink a lane below its longest word
   and bpmn.io / Camunda Modeler then broke that word in the middle. `compactLanes` now takes a
