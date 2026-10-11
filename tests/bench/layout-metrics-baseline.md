@@ -95,7 +95,7 @@ Our post-processing introduces no crossings beyond ELK's own result.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 0 | 4/4 | 0 | 692×80 (11072/node) | 8.65 | 2/2 (100%) | 2 cross-lane | 0 | — | — | — | — |
 | unrefined | 0 | 4 | 2/4 | 0 | 692×530 (73352/node) | 1.31 | 2/2 (100%) | 2 cross-lane | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 4 | 2/4 | 0 | 692×400 (55360/node) | 1.73 | 2/2 (100%) | 2 cross-lane | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 4 | 2/4 | 0 | 692×496 (68646/node) | 1.40 | 2/2 (100%) | 2 cross-lane | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
