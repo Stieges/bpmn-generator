@@ -167,7 +167,19 @@
     },
     "alongOutlineMinPx": 5,
     "crossingGuard": true,
-    "endpointReclip": true
+    "endpointReclip": true,
+    "bendRule": false,
+    "bendRuleLimits": {
+      "shapeClearance": 8,
+      "regionInset": 10,
+      "lengthFactor": 1.1,
+      "lengthSlackPx": 20,
+      "laneLineHugPx": 3,
+      "crowdingPx": 10,
+      "corridorReachPx": 120,
+      "corridorStepPx": 5,
+      "messageFlowLinePx": 3
+    }
   },
   "elk": {
     "layered": {
