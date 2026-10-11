@@ -334,6 +334,7 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **Loop/multi-instance markers** (standard loop, parallel MI, sequential MI)
 - **Data objects**, data stores, text annotations, groups, associations
 - **Collapsed pools** (black-box participants)
+- **Roles and systems on an activity** (`role` → BPMN `performer`/`resource`, `system` → extension element; data only, the drawing is unchanged) — to *show* roles and systems as lanes or pools today, see [docs/roles-and-systems.md](docs/roles-and-systems.md)
 - **Round-tripping** (BPMN XML → Logic-Core JSON → BPMN XML)
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
