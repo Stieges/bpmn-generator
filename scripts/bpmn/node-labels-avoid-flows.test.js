@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, edgeLabelBox, labelHitsRoute } from './coordinates.js';
 import { runPipeline } from './pipeline.js';
 import { CFG } from '../shared/utils.js';
+import { generateSvg } from './svg.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const FIXTURES = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
@@ -175,6 +176,34 @@ describe('placeNodeLabelsAvoidingFlows — on hand-built geometry', () => {
     cm.coords.sp = { x: -100, y: 0, w: 500, h: 400 };
     cm.nodeLabels = placeNodeLabels(cm.coords, lc);
     expect(sideOf(lc, cm, 'g', placeNodeLabelsAvoidingFlows(cm, lc).g)).toBe('above');
+  });
+
+  test("a child near the top of an expanded subprocess: above would cover the title band, so it is rejected", () => {
+    const { lc: inner, cm } = sf3();
+    const lc = { id: 'P', nodes: [{ id: 'sp', type: 'subProcess', isExpanded: true, nodes: inner.nodes, edges: inner.edges }], edges: [] };
+    cm.coords.sp = { x: -100, y: 0, w: 500, h: 400 };
+    cm.coords.g.y = 60;
+    cm.edgeCoords.yes[0] = P(25, 110); cm.edgeCoords.no[0] = P(50, 85);
+    cm.nodeLabels = placeNodeLabels(cm.coords, lc);
+    const moved = placeNodeLabelsAvoidingFlows(cm, lc).g;
+    expect(sideOf(lc, cm, 'g', moved)).not.toBe('above');
+    expect(moved.y).toBeGreaterThanOrEqual(cm.coords.sp.y + CFG.layout.subProcessTitleBand);
+    // The same node lower down still takes "above".
+    cm.coords.g.y = 100; cm.edgeCoords.yes[0] = P(25, 150); cm.edgeCoords.no[0] = P(50, 125);
+    cm.nodeLabels = placeNodeLabels(cm.coords, lc);
+    expect(sideOf(lc, cm, 'g', placeNodeLabelsAvoidingFlows(cm, lc).g)).toBe('above');
+  });
+
+  test('a left-below label of a leftmost event in a lane-less process lies inside the SVG canvas', () => {
+    const lc = { id: 'P', nodes: [{ id: 's', type: 'startEvent', name: 'Order received by the warehouse' }, { id: 't', type: 'task', name: 'Ship' }],
+      edges: [{ id: 'e', source: 's', target: 't' }] };
+    const coords = { s: { x: 100, y: 100, w: 36, h: 36 }, t: { x: 200, y: 78, w: 100, h: 80 } };
+    const box = { x: 100 + 18 - 10 - 90, y: 146, w: 90, h: 42, lines: ['Order received by', 'the warehouse'] };
+    const svg = generateSvg(lc, { coords, laneCoords: {}, poolCoords: {}, edgeCoords: { e: [P(136, 118), P(200, 118)] }, edgeLabels: {}, nodeLabels: { s: box } });
+    const [, , vw] = svg.match(/viewBox="([\d.\s-]+)"/)[1].split(/\s+/).map(Number);
+    // Shapes alone span x 100..300; the label starts 72 px left of the leftmost shape, beyond the
+    // 50 px padding — the canvas has to grow to hold it, to the box's left edge plus padding.
+    expect(vw).toBeGreaterThanOrEqual(300 - box.x + 50);
   });
 
   test('a data object\'s label never moves', () => {

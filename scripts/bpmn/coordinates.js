@@ -842,10 +842,31 @@ function placeNodeLabelsAvoidingFlows(coordMap, lc) {
     return { x: pc.x + head, y: pc.y, w: pc.w - head, h: pc.h };
   };
 
+  // A child of an expanded subprocess keeps inside its container's area below the title band
+  // (layout.subProcessTitleBand, the top padding layout.js gives ELK) — a label above the child
+  // would otherwise leave the subprocess or cover its title. Innermost container wins.
+  const containerOf = {};
+  const mapChildren = (nodes, parent) => {
+    for (const n of nodes || []) {
+      if (parent) containerOf[n.id] = parent;
+      if (n.nodes?.length) mapChildren(n.nodes, n.isExpanded && coords[n.id] ? n.id : parent);
+    }
+  };
+  for (const proc of processes) mapChildren(proc.nodes, null);
+  const band = CFG.layout.subProcessTitleBand;
+  const innerArea = (region, spId) => {
+    const sp = coords[spId];
+    const inner = { x: sp.x, y: sp.y + band, w: sp.w, h: sp.h - band };
+    if (!region) return inner;
+    const x = Math.max(region.x, inner.x), y = Math.max(region.y, inner.y);
+    return { x, y, w: Math.min(region.x + region.w, inner.x + inner.w) - x, h: Math.min(region.y + region.h, inner.y + inner.h) - y };
+  };
+
   let out = current;
   for (const proc of processes) {
-    const region = regionOf(proc);
+    const procRegion = regionOf(proc);
     for (const node of flattenProcessNodes(proc.nodes)) {
+      const region = containerOf[node.id] ? innerArea(procRegion, containerOf[node.id]) : procRegion;
       const c = coords[node.id];
       const candidates = nodeLabelCandidates(node, c);
       if (!candidates.length || !current[node.id] || !flowAtLabel(node.id, c, candidates[0].box)) continue;

@@ -226,8 +226,9 @@ layout and rendering. Two rules make it hold:
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant. The one pass after it is
    `placeNodeLabelsAvoidingFlows` (opt-in, `layout.nodeLabelsAvoidFlows`): it moves an event's or a
-   gateway's label off the bottom when one of its sequence or message flows uses that side, and a
-   message flow's port is only known once message flows are routed. It changes label boxes only,
+   gateway's label off the bottom when one of its sequence or message flows docks at the bottom,
+   or when an own flow runs through the default label box, and a message flow's port is only known
+   once message flows are routed. It changes label boxes only,
    never a route, and nothing but the two renderers reads a node label afterwards — so message
    flows are still the last *routing* step.
 
