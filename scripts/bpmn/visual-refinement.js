@@ -192,7 +192,9 @@ const LANE_COMPACT_PADDING = 20;
  * (LANE_PADDING + EXTERNAL_LABEL_H + LANE_PADDING) and the compact padding here
  * sums to 40px — the `content_h` terms cancel out, leaving a near-constant delta
  * independent of lane density. Lanes whose ELK output already fits within
- * `minLaneHeight + 2 * padding` are not shrunk.
+ * `minLaneHeight + 2 * padding` are not shrunk. Each band below the first then grows
+ * upward to the band above, so the stack tiles without a strip (bpmn.io draws one as
+ * an extra empty band).
  *
  * Idempotent: running twice produces the same result as running once.
  */
@@ -282,6 +284,7 @@ export function compactLanes(coordMap, process, opts = {}) {
     const poolNodes = pool.nodes ?? [];
     const poolEdgeIds = edgesOf(pool.id);
 
+    let prevBottom = null;  // the band above's bottom edge — final once its iteration is done
     for (const laneId of lanes) {
       const lc = coordMap.laneCoords[laneId];
 
@@ -355,6 +358,19 @@ export function compactLanes(coordMap, process, opts = {}) {
         // longer occupies — see shiftParticipantsBelow's doc comment.
         shiftParticipantsBelow(pool.id, oldEndY, delta);
       }
+
+      // Close the strip above. `newY` follows this lane's content, which sat
+      // LANE_PADDING + EXTERNAL_LABEL_H below the old band top, so the band started
+      // up to 40 px below the lane above and bpmn.io — which does not tile lanes — drew an
+      // empty band. Growing this band up to the previous bottom closes it without moving any
+      // content: the bottom edge, `delta`, the cascade and the waypoint clamp above are exactly
+      // what they were. (The full fix — re-shifting the content flush — is the high-risk third
+      // shift the layout-quality analysis §8 describes and was deliberately not taken.)
+      if (prevBottom !== null && lc.y > prevBottom + 0.5) {
+        lc.h += lc.y - prevBottom;
+        lc.y = prevBottom;
+      }
+      prevBottom = lc.y + lc.h;
     }
 
     // Recompute pool bounds

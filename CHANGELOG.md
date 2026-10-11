@@ -320,6 +320,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **No empty strip between lanes with `--refine`.** `compactLanes` re-derived each band from its content, which left up to 40 px between a band and the one above (5 of 10 laned fixtures); bpmn.io draws that as an extra empty band. Each band below the first now grows up to the band above. No node, edge or participant moves.
 - **Sequence-flow ends no longer run along their own shape's outline (#52).** `simplifyAllEdges`
   replaced ELK's Z-shaped routes with an L whenever one cleared the nodes — including the L whose
   last leg lay on the target's border (and the mirror case at the source), so the line covered the

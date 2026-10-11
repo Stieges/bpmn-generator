@@ -366,6 +366,50 @@ describe('compactLanes — basic shrink', () => {
   });
 });
 
+describe('compactLanes — no strip between lanes', () => {
+  // laneB's content sits 60 px below its band top (coordinates.js §5.0: LANE_PADDING +
+  // EXTERNAL_LABEL_H). Re-derived from content alone, laneB's band started 40 px below laneA's
+  // new bottom — the empty band bpmn.io drew in 5 of 10 laned fixtures.
+  function fixture() {
+    return {
+      cm: {
+        coords: { n1: { x: 50, y: 20, w: 100, h: 80 }, n2: { x: 50, y: 260, w: 100, h: 80 } },
+        poolCoords: { p1: { x: 0, y: 0, w: 300, h: 400, laneHeaderWidth: 40 } },
+        laneCoords: {
+          laneA: { x: 40, y: 0, w: 260, h: 200 },
+          laneB: { x: 40, y: 200, w: 260, h: 200 },
+        },
+        edgeCoords: {},
+      },
+      proc: { pools: [{ id: 'p1', lanes: [{ id: 'laneA' }, { id: 'laneB' }],
+        nodes: [{ id: 'n1', lane: 'laneA' }, { id: 'n2', lane: 'laneB' }] }] },
+    };
+  }
+
+  test('the lower band starts exactly where the upper one ends', () => {
+    const { cm, proc } = fixture();
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect(cm.laneCoords.laneA).toEqual({ x: 40, y: 0, w: 260, h: 120 });
+    expect(cm.laneCoords.laneB).toEqual({ x: 40, y: 120, w: 260, h: 160 });
+  });
+
+  test('no content moves to close it: n2 sits where the cascade put it, 20 px above the band bottom', () => {
+    const { cm, proc } = fixture();
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect(cm.coords.n2.y).toBe(180);
+    expect(cm.laneCoords.laneB.y + cm.laneCoords.laneB.h - (cm.coords.n2.y + cm.coords.n2.h)).toBe(20);
+    expect(cm.poolCoords.p1).toMatchObject({ y: 0, h: 280 });
+  });
+
+  test('idempotent with offset content', () => {
+    const { cm, proc } = fixture();
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    const once = structuredClone({ coords: cm.coords, laneCoords: cm.laneCoords, poolCoords: cm.poolCoords });
+    compactLanes(cm, proc, { minLaneHeight: 60 });
+    expect({ coords: cm.coords, laneCoords: cm.laneCoords, poolCoords: cm.poolCoords }).toEqual(once);
+  });
+});
+
 describe('compactLanes — multi-pool', () => {
   // Two pools stacked vertically (p2 below p1, POOL_GAP-style separation).
   // Compacting p1's only lane must move p2 as a rigid body: its box, its
