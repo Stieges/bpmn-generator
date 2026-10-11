@@ -45,8 +45,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 12 | 9/15 | 0 | 1514×357 (36033/node) | 4.24 | 4/4 (100%) | 1 branch, 1 hosts-boundary | 3 | — | — | — | — |
-| unrefined | 1 | 11 | 10/15 | 0 | 1514×357 (30028/node) | 4.24 | 4/4 (100%) | 1 branch, 1 hosts-boundary, 3 boundary-src | 2 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 1 | 11 | 10/15 | 0 | 1514×357 (30028/node) | 4.24 | 4/4 (100%) | 1 branch, 1 hosts-boundary, 3 boundary-src | 2 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 1 | 9 | 11/15 | 0 | 1514×357 (30028/node) | 4.24 | 4/4 (100%) | 1 branch, 1 hosts-boundary, 3 boundary-src | 2 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 1 | 9 | 11/15 | 0 | 1514×357 (30028/node) | 4.24 | 4/4 (100%) | 1 branch, 1 hosts-boundary, 3 boundary-src | 2 | 0 | 0 | 0 | 0/0/0 |
 
 Crossings introduced by our own post-processing (default − ELK raw): **+1** —
 ELK routed around these; the routes we delete and rebuild do not.
@@ -56,8 +56,8 @@ ELK routed around these; the routes we delete and rebuild do not.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 18 | 15/24 | 0 | 2542×745 (86081/node) | 3.41 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 | — | — | — | — |
-| unrefined | 0 | 24 | 15/24 | 0 | 2542×1433 (165519/node) | 1.77 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 35 | 12/24 | 0 | 2302×2460 (257353/node) | 0.94 | 4/4 (100%) | 2 cross-lane, 1 fold-back, 5 branch | 0 | 0 | 0 | 0 | 0/1/0 |
+| unrefined | 0 | 17 | 20/24 | 0 | 2542×1433 (165519/node) | 1.77 | 5/5 (100%) | 2 cross-lane, 5 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 25 | 17/24 | 0 | 2302×2460 (257353/node) | 0.94 | 4/4 (100%) | 2 cross-lane, 1 fold-back, 5 branch | 0 | 0 | 0 | 0 | 0/1/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -79,6 +79,60 @@ Our post-processing introduces no crossings beyond ELK's own result.
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
+## example-bestellung-versand.json
+
+| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ELK raw (pre-postprocess) | 0 | 10 | 14/19 | 0 | 2230×357 (41901/node) | 6.25 | 8/8 (100%) | 2 branch, 1 hosts-boundary | 1 | — | — | — | — |
+| unrefined | 2 | 11 | 16/19 | 0 | 2230×908 (96421/node) | 2.46 | 8/8 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 2 | 11 | 16/19 | 0 | 2230×778 (82616/node) | 2.87 | 8/8 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
+
+Crossings introduced by our own post-processing (default − ELK raw): **+2** —
+ELK routed around these; the routes we delete and rebuild do not.
+
+## example-kreditantrag.json
+
+| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ELK raw (pre-postprocess) | 0 | 12 | 16/22 | 0 | 1452×718 (47388/node) | 2.02 | 7/7 (100%) | 3 branch, 1 hosts-boundary | 1 | — | — | — | — |
+| unrefined | 1 | 9 | 21/22 | 0 | 1452×1373 (83036/node) | 1.06 | 7/7 (100%) | 3 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 1 | 13 | 20/22 | 0 | 1272×1906 (101018/node) | 0.67 | 6/6 (100%) | 1 fold-back, 3 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
+
+Crossings introduced by our own post-processing (default − ELK raw): **+1** —
+ELK routed around these; the routes we delete and rebuild do not.
+
+## example-onboarding.json
+
+| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ELK raw (pre-postprocess) | 0 | 16 | 13/21 | 0 | 2079×440 (45738/node) | 4.72 | 4/4 (100%) | 4 branch, 1 hosts-boundary | 1 | — | — | — | — |
+| unrefined | 0 | 11 | 19/21 | 0 | 2079×1453 (137261/node) | 1.43 | 4/4 (100%) | 4 branch, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 11 | 19/21 | 0 | 2079×1323 (124976/node) | 1.57 | 4/4 (100%) | 4 branch, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/0/0 |
+
+Our post-processing introduces no crossings beyond ELK's own result.
+
+## example-schadenmeldung.json
+
+| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ELK raw (pre-postprocess) | 0 | 18 | 11/20 | 0 | 2072×383 (39679/node) | 5.41 | 5/6 (83%) | 4 branch | 0 | — | — | — | — |
+| unrefined | 0 | 13 | 18/20 | 0 | 2072×1094 (113338/node) | 1.89 | 5/6 (83%) | 4 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 13 | 18/20 | 0 | 2072×964 (99870/node) | 2.15 | 5/6 (83%) | 4 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+
+Our post-processing introduces no crossings beyond ELK's own result.
+
+Worst remaining alignable gap: 5.5 px (`f308 sc_absage->sc_end2`).
+
+## example-urlaubsantrag.json
+
+| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ELK raw (pre-postprocess) | 0 | 8 | 9/13 | 0 | 1548×280 (33342/node) | 5.53 | 3/3 (100%) | 1 cross-lane, 1 branch, 1 hosts-boundary | 1 | — | — | — | — |
+| unrefined | 0 | 11 | 9/13 | 0 | 1548×1079 (111353/node) | 1.43 | 3/3 (100%) | 1 cross-lane, 1 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 11 | 9/13 | 0 | 1548×949 (97937/node) | 1.63 | 3/3 (100%) | 1 cross-lane, 1 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
+
+Our post-processing introduces no crossings beyond ELK's own result.
+
 ## expanded-subprocess.json
 
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
@@ -94,8 +148,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 0 | 4/4 | 0 | 692×80 (11072/node) | 8.65 | 2/2 (100%) | 2 cross-lane | 0 | — | — | — | — |
-| unrefined | 0 | 4 | 2/4 | 0 | 692×530 (73352/node) | 1.31 | 2/2 (100%) | 2 cross-lane | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 4 | 2/4 | 0 | 692×496 (68646/node) | 1.40 | 2/2 (100%) | 2 cross-lane | 0 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 2 | 4/4 | 0 | 692×530 (73352/node) | 1.31 | 2/2 (100%) | 2 cross-lane | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 2 | 4/4 | 0 | 692×496 (68646/node) | 1.40 | 2/2 (100%) | 2 cross-lane | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -104,8 +158,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 6 | 5/8 | 0 | 1096×239 (32743/node) | 4.59 | 1/2 (50%) | 2 branch | 0 | — | — | — | — |
-| unrefined | 0 | 4 | 7/8 | 0 | 1096×227 (31031/node) | 4.84 | 1/2 (50%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 4 | 7/8 | 0 | 1096×227 (31031/node) | 4.84 | 1/2 (50%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 2 | 8/8 | 0 | 1096×227 (31031/node) | 4.84 | 1/2 (50%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 2 | 8/8 | 0 | 1096×227 (31031/node) | 4.84 | 1/2 (50%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -126,8 +180,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 4 | 9/11 | 0 | 1012×480 (40480/node) | 2.11 | 5/5 (100%) | 2 branch | 0 | — | — | — | — |
-| unrefined | 0 | 5 | 9/11 | 0 | 1012×717 (60467/node) | 1.41 | 5/5 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 5 | 9/11 | 0 | 1012×587 (49504/node) | 1.72 | 5/5 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 3 | 11/11 | 0 | 1012×717 (60467/node) | 1.41 | 5/5 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 3 | 11/11 | 0 | 1012×587 (49504/node) | 1.72 | 5/5 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -146,8 +200,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 6 | 20/23 | 0 | 932×1358 (45202/node) | 0.69 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary | 1 | — | — | — | — |
-| unrefined | 0 | 12 | 18/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/1/0 |
-| everything on (refine + wrap) | 0 | 16 | 18/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/1/0 |
+| unrefined | 0 | 10 | 20/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/1/0 |
+| everything on (refine + wrap) | 0 | 15 | 19/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/1/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -156,8 +210,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 4 | 4/6 | 0 | 702×220 (25740/node) | 3.19 | 1/1 (100%) | 1 branch | 0 | — | — | — | — |
-| unrefined | 0 | 3 | 5/6 | 0 | 702×220 (25740/node) | 3.19 | 1/1 (100%) | 1 branch | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 3 | 5/6 | 0 | 702×220 (25740/node) | 3.19 | 1/1 (100%) | 1 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 2 | 6/6 | 0 | 702×220 (25740/node) | 3.19 | 1/1 (100%) | 1 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 2 | 6/6 | 0 | 702×220 (25740/node) | 3.19 | 1/1 (100%) | 1 branch | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -166,8 +220,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 12 | 7/13 | 0 | 1132×500 (51455/node) | 2.26 | 1/1 (100%) | 2 cross-lane, 2 branch | 0 | — | — | — | — |
-| unrefined | 0 | 12 | 10/13 | 0 | 1132×1175 (120918/node) | 0.96 | 1/1 (100%) | 2 cross-lane, 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 12 | 10/13 | 0 | 1132×980 (100851/node) | 1.16 | 1/1 (100%) | 2 cross-lane, 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 9 | 13/13 | 0 | 1132×1175 (120918/node) | 0.96 | 1/1 (100%) | 2 cross-lane, 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 9 | 13/13 | 0 | 1132×980 (100851/node) | 1.16 | 1/1 (100%) | 2 cross-lane, 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -176,8 +230,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 6 | 12/15 | 0 | 1966×526 (60830/node) | 3.74 | 7/7 (100%) | 2 branch, 1 hosts-boundary | 1 | — | — | — | — |
-| unrefined | 0 | 6 | 12/15 | 0 | 1966×526 (51706/node) | 3.74 | 7/7 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 6 | 12/15 | 0 | 1966×526 (51706/node) | 3.74 | 7/7 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 4 | 14/15 | 0 | 1966×526 (51706/node) | 3.74 | 7/7 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 4 | 14/15 | 0 | 1966×526 (51706/node) | 3.74 | 7/7 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -196,8 +250,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 8 | 10/14 | 0 | 1304×260 (22603/node) | 5.02 | 4/4 (100%) | 2 branch | 0 | — | — | — | — |
-| unrefined | 0 | 6 | 12/14 | 0 | 1304×260 (22603/node) | 5.02 | 4/4 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 6 | 12/14 | 0 | 1304×260 (22603/node) | 5.02 | 4/4 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 2 | 14/14 | 0 | 1304×260 (22603/node) | 5.02 | 4/4 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 2 | 14/14 | 0 | 1304×260 (22603/node) | 5.02 | 4/4 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -207,7 +261,7 @@ Our post-processing introduces no crossings beyond ELK's own result.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 0 | 26/26 | 0 | 4652×80 (13784/node) | 58.15 | 26/26 (100%) | — | 0 | — | — | — | — |
 | unrefined | 0 | 0 | 26/26 | 0 | 4652×80 (13784/node) | 58.15 | 26/26 (100%) | — | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 16 | 22/26 | 0 | 3932×804 (117086/node) | 4.89 | 22/22 (100%) | 4 fold-back | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 0 | 26/26 | 0 | 3932×804 (117086/node) | 4.89 | 22/22 (100%) | 4 fold-back | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
@@ -216,8 +270,8 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node | Labels own/L-L/L-N |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 4 | 22/23 | 0 | 3962×93 (16020/node) | 42.60 | 18/18 (100%) | 2 branch | 0 | — | — | — | — |
-| unrefined | 0 | 4 | 22/23 | 0 | 3962×93 (16020/node) | 42.60 | 18/18 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
-| everything on (refine + wrap) | 0 | 4 | 22/23 | 0 | 3962×93 (16020/node) | 42.60 | 18/18 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| unrefined | 0 | 2 | 22/23 | 0 | 3962×93 (16020/node) | 42.60 | 18/18 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
+| everything on (refine + wrap) | 0 | 2 | 22/23 | 0 | 3962×93 (16020/node) | 42.60 | 18/18 (100%) | 2 branch | 0 | 0 | 0 | 0 | 0/0/0 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 

@@ -81,15 +81,13 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
         <di:waypoint x="306" y="160" />
-        <di:waypoint x="306" y="221" />
-        <di:waypoint x="486" y="221" />
-        <di:waypoint x="486" y="271" />
+        <di:waypoint x="306" y="311" />
+        <di:waypoint x="436" y="311" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
         <di:waypoint x="486" y="351" />
-        <di:waypoint x="486" y="423.5" />
-        <di:waypoint x="666" y="423.5" />
-        <di:waypoint x="666" y="496" />
+        <di:waypoint x="486" y="536" />
+        <di:waypoint x="616" y="536" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
         <di:waypoint x="716" y="536" />
