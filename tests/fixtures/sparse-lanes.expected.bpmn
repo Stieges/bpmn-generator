@@ -107,13 +107,13 @@
       <bpmndi:BPMNShape id="s_di" bpmnElement="s">
         <dc:Bounds x="140" y="249.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="136.8" y="295.5" width="42.5" height="20" />
+          <dc:Bounds x="146.4" y="295.5" width="23.2" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="split_di" bpmnElement="split">
         <dc:Bounds x="256" y="242.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="259.8" y="302.5" width="42.5" height="20" />
+          <dc:Bounds x="270.3" y="302.5" width="21.4" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="a1_di" bpmnElement="a1">
@@ -131,7 +131,7 @@
       <bpmndi:BPMNShape id="join_di" bpmnElement="join">
         <dc:Bounds x="566" y="242.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="573" y="302.5" width="36" height="20" />
+          <dc:Bounds x="580.9" y="302.5" width="20.2" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="b1_di" bpmnElement="b1">
@@ -146,7 +146,7 @@
       <bpmndi:BPMNShape id="e_di" bpmnElement="e">
         <dc:Bounds x="1236" y="1001.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1239.3" y="1047.5" width="29.5" height="20" />
+          <dc:Bounds x="1244.2" y="1047.5" width="19.6" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0">

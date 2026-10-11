@@ -58,7 +58,7 @@
       <bpmndi:BPMNShape id="start1_di" bpmnElement="start1">
         <dc:Bounds x="140" y="241.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="113" y="287.5" width="90" height="20" />
+          <dc:Bounds x="132.9" y="287.5" width="50.1" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="task1_di" bpmnElement="task1">
@@ -67,7 +67,7 @@
       <bpmndi:BPMNShape id="gw1_di" bpmnElement="gw1" isMarkerVisible="true">
         <dc:Bounds x="416" y="107.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="406.8" y="167.5" width="68.5" height="20" />
+          <dc:Bounds x="414.4" y="167.5" width="53.2" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="task2_di" bpmnElement="task2">
@@ -79,7 +79,7 @@
       <bpmndi:BPMNShape id="end1_di" bpmnElement="end1">
         <dc:Bounds x="806" y="101.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="779" y="147.5" width="90" height="20" />
+          <dc:Bounds x="798.9" y="147.5" width="50.1" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
