@@ -46,6 +46,7 @@ export async function layoutAgent(state) {
     visualRefinement: state.options?.visualRefinement,
     bendRule: state.options?.bendRule,
     nodeLabelsAvoidFlows: state.options?.nodeLabelsAvoidFlows,
+    foreignShapeRepair: state.options?.foreignShapeRepair,
   });
 
   const update = {

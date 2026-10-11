@@ -178,6 +178,7 @@
     "endpointReclip": true,
     "bendRule": true,
     "nodeLabelsAvoidFlows": true,
+    "foreignShapeRepair": true,
     "bendRuleLimits": {
       "shapeClearance": 8,
       "regionInset": 10,

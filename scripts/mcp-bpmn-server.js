@@ -53,6 +53,11 @@ const NODE_LABELS_AVOID_FLOWS_PARAM = {
   description: "Event and gateway labels move off the flows at their node. Omitted: the server's config default (as shipped: on)",
 };
 
+const FOREIGN_SHAPE_REPAIR_PARAM = {
+  ...LAYOUT_SWITCH_OPTION_SCHEMA,
+  description: "Re-route a sequence flow that runs through a task, event or gateway that is not its own source or target. Omitted: the server's config default (as shipped: on)",
+};
+
 const server = new Server(
   { name: 'bpmn-generator', version: PACKAGE_VERSION },
   { capabilities: { tools: {} } }
@@ -73,6 +78,7 @@ const TOOLS = [
         visualRefinement: VISUAL_REFINEMENT_PARAM,
         bendRule: BEND_RULE_PARAM,
         nodeLabelsAvoidFlows: NODE_LABELS_AVOID_FLOWS_PARAM,
+        foreignShapeRepair: FOREIGN_SHAPE_REPAIR_PARAM,
         poolOrder: { type: 'string', enum: ['auto', 'declared'], description: "'auto' (default) stacks participants so that the ones exchanging messages sit next to each other; 'declared' keeps the input order" },
         include: {
           type: 'array',
@@ -118,6 +124,7 @@ const TOOLS = [
         visualRefinement: VISUAL_REFINEMENT_PARAM,
         bendRule: BEND_RULE_PARAM,
         nodeLabelsAvoidFlows: NODE_LABELS_AVOID_FLOWS_PARAM,
+        foreignShapeRepair: FOREIGN_SHAPE_REPAIR_PARAM,
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (Soll — adds redesign advisories)" }
       }
     }
@@ -136,7 +143,7 @@ const text = (payload) => ({ content: [{ type: 'text', text: JSON.stringify(payl
 function schemaGate(logicCore, layoutOptions) {
   const check = validateLogicCoreSchema(logicCore);
   if (!check.valid) return text({ status: 'schema_error', errors: check.errors });
-  // visualRefinement, bendRule, nodeLabelsAvoidFlows — only on the tools that lay out
+  // visualRefinement, bendRule, nodeLabelsAvoidFlows, foreignShapeRepair — only on the tools that lay out
   const layoutCheck = validateLayoutOptions(layoutOptions);
   return layoutCheck.valid ? null : text({ status: 'schema_error', errors: layoutCheck.errors });
 }

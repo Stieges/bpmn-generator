@@ -5527,9 +5527,11 @@ describe('DI integrity check', () => {
       expect(r.map(i => i.message)).toEqual([
         'Sequence flow "fh" runs through "bev" (a boundary event of its own source "host"), which is neither its source nor its target.']);
     });
-    test('fires on the committed negative fixture: the loop-back flow through "Betrag über 10.000 EUR?"', async () => {
-      const neg = JSON.parse(readFileSync(resolve(fixturesDir, 'negative/example-rechnungspruefung.json'), 'utf8'));
-      const r = await runPipeline(neg, optionsFor('default'));
+    test('fires on example-rechnungspruefung without the repair: the loop-back flow through "Betrag über 10.000 EUR?"', async () => {
+      // The model #91 was found on. layout.foreignShapeRepair re-routes the flow; switched off, the
+      // route coordinates.js §5.2 builds runs through the gateway and DI11 reports it.
+      const lc = JSON.parse(readFileSync(resolve(fixturesDir, 'example-rechnungspruefung.json'), 'utf8'));
+      const r = await runPipeline(lc, { ...optionsFor('default'), foreignShapeRepair: false });
       const hits = r.diagnostics.issues.filter(i => i.code === 'DI11');
       expect(hits.some(i => i.elements[0] === 'f411' && i.elements[1] === 'r_gw3')).toBe(true);
     }, 60000);
@@ -6989,6 +6991,26 @@ describe('#52 — loop with a join: every flow crosses its endpoints\' outlines'
   }
 });
 
+describe('flows through a foreign shape are re-routed (#91, layout.foreignShapeRepair)', () => {
+  const MODES91 = { default: {}, 'no-bend': { bendRule: false }, 'no-refine': { visualRefinement: false }, refine: ALL_ON };
+  for (const [mode, opts] of Object.entries(MODES91)) {
+    test(`example-rechnungspruefung (${mode}): no DI08, DI09 or DI11; the loop-back flow f411 shares no port with f410`, async () => {
+      const r = await runPipeline(loadFixture('example-rechnungspruefung.json'), opts);
+      expect(r.diagnostics.issues.filter(i => ['DI08', 'DI09', 'DI11'].includes(i.code)).map(i => i.message)).toEqual([]);
+      const ec = r.coordMap.edgeCoords;
+      const same = (p, q) => Math.abs(p.x - q.x) < 0.5 && Math.abs(p.y - q.y) < 0.5;
+      expect(same(ec.f411[0], ec.f410[ec.f410.length - 1])).toBe(false);
+    }, 30000);
+  }
+  test('switched off per call, the routes coordinates.js §5.2 builds are left as they are', async () => {
+    const r = await runPipeline(loadFixture('example-rechnungspruefung.json'), { foreignShapeRepair: false });
+    expect(r.diagnostics.issues.filter(i => i.code === 'DI11').length).toBeGreaterThan(0);
+  }, 30000);
+  test('a non-boolean switch is a TypeError, like every layout switch', async () => {
+    await expect(runPipeline(loadFixture('simple-approval.json'), { foreignShapeRepair: 'no' })).rejects.toThrow(TypeError);
+  });
+});
+
 describe('stuck ends are re-clipped', () => {
   for (const visualRefinement of [false, true]) {
     test(`realistic-collaboration: no flow through its own shape, no end along an outline, no crossing (refinement: ${visualRefinement})`, async () => {
@@ -7027,6 +7049,7 @@ describe('stuck ends are re-clipped', () => {
 
 const BOUNDARY_FIXTURES = [
   'all-element-classes.json',
+  'example-rechnungspruefung.json',
   'realistic-collaboration.json',
   'subprocess-child-fidelity.json',
 ];

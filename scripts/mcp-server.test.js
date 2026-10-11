@@ -201,7 +201,7 @@ describe('layout switches over MCP', () => {
   test('generate_bpmn and orchestrate_bpmn declare both with the shared schema; validate_bpmn does not', async () => {
     const { LAYOUT_SWITCH_OPTION_SCHEMA } = await import('./bpmn/schema-gate.js');
     for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
-      for (const key of ['bendRule', 'nodeLabelsAvoidFlows']) {
+      for (const key of ['bendRule', 'nodeLabelsAvoidFlows', 'foreignShapeRepair']) {
         expect(tool(name).inputSchema.properties[key]).toMatchObject(LAYOUT_SWITCH_OPTION_SCHEMA);
       }
     }
@@ -217,6 +217,21 @@ describe('layout switches over MCP', () => {
       const out = parse(await call(name, { logicCore: fixture('simple-approval.json'), [key]: value }));
       expect(out.status).toBe('schema_error');
       expect(out.errors[0].path).toBe(key);
+    });
+  }
+  // foreignShapeRepair changes nothing in simple-approval; the #91 model shows a dropped forwarding.
+  for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
+    test(`foreignShapeRepair: false on ${name} equals the library call and differs from no option`, async () => {
+      const { runPipeline } = await import('./bpmn/pipeline.js');
+      const rp = () => fixture('example-rechnungspruefung.json');
+      const out = parse(await call(name, { logicCore: rp(), foreignShapeRepair: false, include: ['xml'] }));
+      expect(out.bpmnXml).toBe((await runPipeline(rp(), { foreignShapeRepair: false })).bpmnXml);
+      expect(out.bpmnXml).not.toBe((await runPipeline(rp(), {})).bpmnXml);
+    }, 30000);
+    test(`foreignShapeRepair = "no" is a schema_error on ${name}`, async () => {
+      const out = parse(await call(name, { logicCore: fixture('simple-approval.json'), foreignShapeRepair: 'no' }));
+      expect(out.status).toBe('schema_error');
+      expect(out.errors[0].path).toBe('foreignShapeRepair');
     });
   }
   test('drillDown on generate_bpmn forwards them too', async () => {

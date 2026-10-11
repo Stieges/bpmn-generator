@@ -317,6 +317,7 @@ const BUDGET_PLAIN = {
                                           on: r({ crossings: 1, bendsMax: 4, offOver5: 11, overlapLen: 62 }) },
   'example-onboarding.json':            { default: r({ bendsMax: 2, offOver5: 10, overlapLen: 1387 }),
                                           on: r({ bendsMax: 2, offOver5: 10, overlapLen: 1387 }) },
+  'example-rechnungspruefung.json':     same(r({ crossings: 1, bendsMax: 6, offOver5: 3, overlapLen: 137 })),
   'example-schadenmeldung.json':        { default: r({ bendsMax: 2, offOver5: 8, overlapLen: 346 }),
                                           on: r({ bendsMax: 2, offOver5: 8, overlapLen: 346 }) },
   'example-urlaubsantrag.json':         { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 133 }),
@@ -329,7 +330,7 @@ const BUDGET_PLAIN = {
                                           on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
   'realistic-collaboration.json':       { default: r({ bendsMax: 2, offOver5: 4, labelLabel: 1, overlapLen: 386 }),
-                                          on: r({ crossings: 1, seqThrough: 2, bendsMax: 4, crowd: 1, mfCrowd: 8, offOver5: 4, labelLabel: 1, overlapLen: 780 }) },
+                                          on: r({ bendsMax: 4, mfCrowd: 7, offOver5: 4, labelLabel: 1, overlapLen: 646 }) },
   'simple-approval.json':               same(r({ bendsMax: 2, offOver5: 6 })),
   'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }),
                                           on: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }) },
@@ -361,6 +362,7 @@ const BUDGET_DEFAULT = {
   'example-bestellung-versand.json':   r({ crossings: 2, bendsMax: 3, offOver5: 6, overlapLen: 197 }),
   'example-kreditantrag.json':          r({ crossings: 1, bendsMax: 2, offOver5: 10, overlapLen: 62 }),
   'example-onboarding.json':            r({ bendsMax: 2, offOver5: 10, overlapLen: 92 }),
+  'example-rechnungspruefung.json':     r({ crossings: 1, bendsMax: 6, offOver5: 3 }),
   'example-schadenmeldung.json':        r({ bendsMax: 2, offOver5: 6, overlapLen: 230 }),
   'example-urlaubsantrag.json':         r({ bendsMax: 2, offOver5: 4 }),
   'expanded-subprocess.json':           r(),
@@ -388,8 +390,10 @@ const BUDGET_DEFAULT = {
 // offOver5 4, overlapLen 586.
 // #91: realistic-collaboration's seqThrough 1 / crowd 2 (inf8 through in_gw) are gone in every mode
 // — the timer sits on its host's top edge, facing "Send reminder" in the lane above. Its plain-on
-// plain-on row shows inf2 through in_remind and the timer: with wrapping "Send reminder" stands
-// right above "Check completeness", and inf2's coordinates.js §5.2 route runs through both.
+// row would show inf2 through in_remind and the timer without layout.foreignShapeRepair.
+// example-rechnungspruefung (the #91 model, promoted from negative/): crossings 1 is the trade the
+// repair makes for f411's four shapes (f411 × f408); bendsMax 6 is f410, ELK's route as
+// repairCrossings left it.
 const BUDGET = Object.fromEntries(Object.entries(BUDGET_DEFAULT).map(([name, row]) => [name,
   { default: row, off: row, on: row, plain: BUDGET_PLAIN[name].default, 'plain-on': BUDGET_PLAIN[name].on }]));
 Object.assign(BUDGET['bpmn-generator-pipeline.json'], {
@@ -431,6 +435,7 @@ const DIRECTION = {
   'example-bestellung-versand.json':   dir(d(4, 1)),
   'example-kreditantrag.json':          dir(d(5, 3), d(11, 3)),
   'example-onboarding.json':            dir(d(7, 3)),
+  'example-rechnungspruefung.json':     dir(d(4, 3)),
   'example-schadenmeldung.json':        dir(d(8, 2)),
   'example-urlaubsantrag.json':         { ...dir(d(3, 2)), default: d(0, 1), off: d(0, 1), on: d(0, 1) }, // f213: an even trade, see above
   'expanded-subprocess.json':           dir(NONE),
@@ -439,7 +444,7 @@ const DIRECTION = {
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
   'parallel-split-join.json':           dir(NONE),
-  'realistic-collaboration.json':       dir(d(3, 5), d(6, 2)),
+  'realistic-collaboration.json':       dir(d(3, 5), d(5, 1)),
   'simple-approval.json':               dir(d(1, 0)),
   'sparse-lanes.json':                  dir(d(3, 3)),
   'subprocess-child-fidelity.json':     dir(d(2, 0)),

@@ -27,8 +27,8 @@ import { isMainModule } from './shared/entry-point.js';
 /**
  * @param {string|object} input - process description (needs `options.llmProvider`) or Logic-Core
  * @param {object} [options] - besides the loop bounds, `llmProvider`, `ruleProfile` and `mode`, the
- *   per-call layout options `visualRefinement`, `bendRule` and `nodeLabelsAvoidFlows`, which the
- *   layout agent forwards to runPipeline unchanged. Callers on a client surface gate them first
+ *   per-call layout options `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows` and
+ *   `foreignShapeRepair`, which the layout agent forwards to runPipeline unchanged. Callers on a client surface gate them first
  *   (`validateLayoutOptions` in bpmn/schema-gate.js).
  */
 export async function orchestrate(input, options = {}) {

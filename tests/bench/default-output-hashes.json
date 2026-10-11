@@ -111,6 +111,22 @@
     "xml": "22ec3319e72de87414054cde4a2d525b734254e67ad5fbdc0354bcefa2ba1fa0",
     "svg": "67df6defb4523c0edbc647a4bb819e6e0f6980072d1d4495788ffdecea575dca"
   },
+  "example-rechnungspruefung.json × default": {
+    "xml": "159e4c809d9e1526318524f4db65ab86226cfd5ef4d5065679132b1074f57c76",
+    "svg": "07d4dfc59b2eaeddd3a1a1626c2e0b26aba5c6967b3ca487b658391c45c5d861"
+  },
+  "example-rechnungspruefung.json × no-refine": {
+    "xml": "77fd4122e6f3731260163f0016a2a6eb5a4ced3a0cfdc1eeec457e8855fcb4f4",
+    "svg": "1d4aab903e31f6195fccbc4ed73ad72f765a0f8cd92470855ffdec5aa9fe9324"
+  },
+  "example-rechnungspruefung.json × refine": {
+    "xml": "159e4c809d9e1526318524f4db65ab86226cfd5ef4d5065679132b1074f57c76",
+    "svg": "07d4dfc59b2eaeddd3a1a1626c2e0b26aba5c6967b3ca487b658391c45c5d861"
+  },
+  "example-rechnungspruefung.json × refine+wrap": {
+    "xml": "159e4c809d9e1526318524f4db65ab86226cfd5ef4d5065679132b1074f57c76",
+    "svg": "07d4dfc59b2eaeddd3a1a1626c2e0b26aba5c6967b3ca487b658391c45c5d861"
+  },
   "example-schadenmeldung.json × default": {
     "xml": "f1f71b84cc8ae2e064129230680e492046fb620d903734c8f7356cfdeae266a0",
     "svg": "df1f7c0809b84e733a39f9818fc3f12272abeecb4d2314eb07946261a800514f"

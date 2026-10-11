@@ -41,10 +41,11 @@ export function validateVisualRefinementOption(value) {
 
 /**
  * The per-call layout switches every geometry surface takes (runPipeline, CLI, HTTP /generate and
- * /orchestrate, MCP generate_bpmn and orchestrate_bpmn): the bend rule and node labels that avoid
- * flows. Omitted, `config.json -> layout.<switch>` decides.
+ * /orchestrate, MCP generate_bpmn and orchestrate_bpmn): the bend rule, node labels that avoid
+ * flows, and the repair of sequence flows through a foreign shape. Omitted,
+ * `config.json -> layout.<switch>` decides.
  */
-export const LAYOUT_SWITCHES = Object.freeze(['bendRule', 'nodeLabelsAvoidFlows']);
+export const LAYOUT_SWITCHES = Object.freeze(['bendRule', 'nodeLabelsAvoidFlows', 'foreignShapeRepair']);
 
 /** JSON Schema of one layout switch; mirrored as `$defs/LayoutSwitchOption` in references/api-schema.json. */
 export const LAYOUT_SWITCH_OPTION_SCHEMA = Object.freeze({ type: 'boolean' });

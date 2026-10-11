@@ -110,6 +110,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
  * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (true)
  * @param {boolean} [opts.nodeLabelsAvoidFlows] - event and gateway labels off their flows (placeNodeLabelsAvoidingFlows); default config.json -> layout.nodeLabelsAvoidFlows (true)
+ * @param {boolean} [opts.foreignShapeRepair] - the stuck-end pass also re-routes a sequence flow through a foreign shape (reclipStuckEnds' foreignShapes, #91); default config.json -> layout.foreignShapeRepair (true)
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
@@ -206,6 +207,10 @@ async function runPipeline(logicCore, opts = {}) {
   // §5.2, §5.0e, §5.5) pick their axis by |dy| > |dx| alone, so they can cross
   // an edge that ELK had routed around. Runs after simplifyAllEdges because
   // that pass rewrites routes too. A no-op unless a crossing actually exists.
+  // Sequence flows through a foreign shape (#91): the stuck-end pass re-routes them too — see
+  // reclipStuckEnds' `foreignShapes`. On by default (config.json -> layout.foreignShapeRepair); per
+  // call `foreignShapeRepair`, CLI --no-foreign-shape-repair / --foreign-shape-repair.
+  const foreignShapes = opts.foreignShapeRepair ?? (CFG.layout?.foreignShapeRepair === true);
   const repairOpts = {
     maxPasses: CFG.layout?.crossingRepairMaxPasses ?? 2,
     orthogonalRouter: CFG.layout?.orthogonalRouterEnabled !== false,
@@ -237,7 +242,7 @@ async function runPipeline(logicCore, opts = {}) {
   // midpoint — see reclipStuckEnds. A boundary event's endpoint never moves: its place on the host
   // is placeBoundaryEvents' contract.
   if (CFG.layout?.endpointReclip !== false) {
-    const reclipOpts = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
+    const reclipOpts = { ...reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || []))), foreignShapes };
     const beforeReclip = coordMap.edgeCoords;
     coordMap.edgeCoords = reclipStuckEnds(beforeReclip, coordMap.coords, allEdges, skipSimplify, reclipOpts);
     refreshMovedLabels(coordMap, allEdges, beforeReclip, laneLines);
@@ -270,7 +275,7 @@ async function runPipeline(logicCore, opts = {}) {
       repairOpts,
     });
     if (CFG.layout?.endpointReclip !== false) {
-      const reclipOpts = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
+      const reclipOpts = { ...reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || []))), foreignShapes };
       coordMap.edgeCoords = reclipStuckEnds(coordMap.edgeCoords, coordMap.coords, allEdges, skipSimplify, reclipOpts);
     }
     refreshMovedLabels(coordMap, allEdges, beforeReroute, laneLines);
@@ -522,7 +527,7 @@ async function main() {
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair]');
     process.exit(1);
   }
   if (refine && noRefine) {
@@ -532,7 +537,7 @@ async function main() {
   // The layout switches, each forced on or off for this call; with neither flag config.json
   // (or a BPMN_CONFIG override) decides.
   const switchOpts = {};
-  for (const [key, on, off] of [['bendRule', '--bend-rule', '--no-bend-rule'], ['nodeLabelsAvoidFlows', '--label-avoidance', '--no-label-avoidance']]) {
+  for (const [key, on, off] of [['bendRule', '--bend-rule', '--no-bend-rule'], ['nodeLabelsAvoidFlows', '--label-avoidance', '--no-label-avoidance'], ['foreignShapeRepair', '--foreign-shape-repair', '--no-foreign-shape-repair']]) {
     if (flags.includes(on) && flags.includes(off)) {
       console.error(`${on} and ${off} are mutually exclusive.`);
       process.exit(1);
