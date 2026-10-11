@@ -4,7 +4,8 @@
  *  - one test per limit, each on a minimal coordMap the rule WITHOUT that limit breaks — the test
  *    shows the unguarded result first, so a scenario that no longer reaches its guard fails loudly
  *    instead of passing for the wrong reason;
- *  - the pass in the pipeline: off is byte-identical, on keeps DI07–DI10 clean and is idempotent.
+ *  - the pass in the pipeline: on keeps DI07–DI10 clean and is idempotent (off is byte-identical:
+ *    bench/output-hashes.test.js).
  */
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -12,6 +13,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyBendRule, bendMetrics, bendCount, entrySide, exitSide, bendRuleLimits } from './bend-rule.js';
 import { runPipeline } from './pipeline.js';
+import { normalizeEdgeIds } from './topology.js';
 import { CFG } from '../shared/utils.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
@@ -161,6 +163,69 @@ describe('applyBendRule — every limit, on a scenario the unguarded rule breaks
     expect(changes(cm, lc, { guards: { crowding: false } }).e).toEqual([P(25, 50), P(25, 190), P(100, 190)]); // 5 px beside o
     expect(changes(cm, lc)).toEqual({ e: [P(50, 25), P(150, 25), P(150, 150)] });
   });
+
+  // Conditions 3, 4 and 6 have no guards switch: each shows the rule with the limit relaxed (or the
+  // other flow absent), then with it in force. The L the rule prefers on gatewayToTask() is
+  // (25,50) → (25,190) → (100,190).
+  const L = [P(25, 50), P(25, 190), P(100, 190)];
+  const far = { fx: { x: 2000, y: 2000, w: 40, h: 40 } };
+  /** gatewayToTask() plus a second flow whose route is hand-placed: a self-loop, which the pass never moves. */
+  const withOther = (route) => {
+    const { lc, cm } = gatewayToTask();
+    lc.nodes.push({ id: 'fx', type: 'task' });
+    lc.edges.push({ id: 'o', source: 'fx', target: 'fx' });
+    Object.assign(cm.coords, far);
+    if (route) cm.edgeCoords.o = route;
+    return { lc, cm };
+  };
+
+  test('end stubs (condition 3): no last leg shorter than endStubPx', () => {
+    const { lc, cm } = gatewayToTask();
+    cm.coords.t = { x: 35, y: 150, w: 100, h: 80 };
+    cm.edgeCoords.e = [P(50, 25), P(200, 25), P(200, 190), P(135, 190)];
+    const stub = CFG.layout.endStubPx;
+    const lastLeg = (pts) => Math.hypot(pts.at(-1).x - pts.at(-2).x, pts.at(-1).y - pts.at(-2).y);
+    CFG.layout.endStubPx = 0;
+    let unguarded;
+    try { unguarded = changes(cm, lc).e; } finally { CFG.layout.endStubPx = stub; }
+    expect(lastLeg(unguarded)).toBeLessThan(stub); // the 10 px left of t
+    const guarded = changes(cm, lc).e;
+    expect(guarded === undefined || lastLeg(guarded) >= stub).toBe(true);
+    expect(guarded).not.toEqual(unguarded);
+  });
+
+  test('shape clearance (condition 4): no new leg within shapeClearance of a foreign shape', () => {
+    const { lc, cm } = gatewayToTask();
+    lc.nodes.push({ id: 'o', type: 'task' });
+    cm.coords.o = { x: 30, y: 100, w: 40, h: 30 }; // 5 px beside the L's vertical leg
+    expect(bendRuleLimits().shapeClearance).toBeGreaterThan(5);
+    expect(changes(cm, lc, { limits: { shapeClearance: 0 } }).e).toEqual(L);
+    expect(changes(cm, lc).e).not.toEqual(L);
+  });
+
+  test('crossings (condition 6): the new route crosses no flow the current one does not', () => {
+    const crossing = [P(-50, 120), P(40, 120)]; // meets the L's vertical leg, not the Z's
+    expect(changes(withOther().cm, withOther().lc).e).toEqual(L); // absent: the L is taken
+    const { lc, cm } = withOther(crossing);
+    expect(changes(cm, lc).e).not.toEqual(L);
+  });
+
+  test('collinear overlap (condition 6): the new route does not run over another flow', () => {
+    const along = [P(25, 100), P(25, 140)]; // lies on the L's vertical leg
+    const { lc, cm } = withOther(along);
+    expect(changes(cm, lc).e).not.toEqual(L);
+    delete cm.edgeCoords.o;
+    expect(changes(cm, lc).e).toEqual(L);
+  });
+
+  test('lane-line hug (condition 6): no more run along a lane separator than the current route has', () => {
+    const { lc, cm } = gatewayToTask();
+    lc.lanes = [{ id: 'L1' }, { id: 'L2' }];
+    cm.laneCoords = { L1: { x: -100, y: -100, w: 500, h: 290 }, L2: { x: -100, y: 190, w: 500, h: 200 } }; // separator at y = 190
+    cm.poolCoords = { _singlePool: { x: -130, y: -100, w: 530, h: 490, laneHeaderWidth: 30 } };
+    expect(changes(cm, lc, { limits: { laneLineHugPx: -1 } }).e).toEqual(L); // the L's last leg lies on the separator
+    expect(changes(cm, lc).e).not.toEqual(L);
+  });
 });
 
 describe('bendMetrics', () => {
@@ -192,13 +257,8 @@ describe('the pass in the pipeline', () => {
     expect(CFG.layout.bendRule).toBe(false);
   });
 
-  test('off: every fixture comes out byte-identical to a run without the option', async () => {
-    for (const name of FIXTURES) {
-      const plain = await runPipeline(load(name));
-      const off = await runPipeline(load(name), { bendRule: false });
-      expect(`${name} ${off.bpmnXml === plain.bpmnXml && off.svg === plain.svg}`).toBe(`${name} true`);
-    }
-  }, 60000);
+  // "off => byte-identical" is fenced where it can fail: bench/output-hashes.test.js compares the
+  // default output against hashes generated before the switches existed.
 
   for (const [mode, opts] of Object.entries(MODES)) {
     test(`on (${mode}): no DI07–DI10 finding, no XML warning, and a second run of the pass changes nothing`, async () => {
@@ -209,9 +269,23 @@ describe('the pass in the pipeline', () => {
         if (!r.coordMap) continue; // blocked on purpose (deadlock-process)
         for (const i of r.diagnostics.issues) if (['DI07', 'DI08', 'DI09', 'DI10'].includes(i.code)) bad.push(`${name} ${i.code}`);
         if (r.validation.xmlWarnings?.length) bad.push(`${name} xmlWarnings`);
-        if (applyBendRule(r.coordMap, lc) !== r.coordMap.edgeCoords) bad.push(`${name} not idempotent`);
+        // The Logic-Core the pipeline laid out: ids assigned to id-less edges, or the rule would see no route.
+        if (applyBendRule(r.coordMap, normalizeEdgeIds(lc)) !== r.coordMap.edgeCoords) bad.push(`${name} not idempotent`);
       }
       expect(bad).toEqual([]);
     }, 60000);
   }
+
+  test('an id-less edge: the pipeline gives it an id, and the measure and the pass see its route', async () => {
+    const lc = load('simple-approval.json');
+    delete lc.pools[0].edges[0].id;
+    const r = await runPipeline(lc, { bendRule: true });
+    const normalised = normalizeEdgeIds(lc);
+    const n = lc.pools[0].edges.length;
+    expect(normalised.pools[0].edges[0].id).toBeDefined();
+    expect(bendMetrics(r.coordMap, normalised).scope).toBe(n);
+    // fed the raw Logic-Core the same call is silently vacuous — the reason the tests normalise
+    expect(bendMetrics(r.coordMap, lc).scope).toBe(n - 1);
+    expect(applyBendRule(r.coordMap, normalised)).toBe(r.coordMap.edgeCoords);
+  });
 });

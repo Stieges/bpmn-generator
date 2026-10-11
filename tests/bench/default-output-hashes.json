@@ -1,0 +1,290 @@
+{
+  "all-element-classes.json × default": {
+    "xml": "fce63dc6dad99e5f420d4c6e9175c0a5d7e813265843974a07ac4364e732b028",
+    "svg": "127324023811c36803c0953e0eea95ae87137621267606269ff5aae092f89f4b"
+  },
+  "all-element-classes.json × no-refine": {
+    "xml": "eac96f293b35c9b3875eee7810f411949e7c357fa81d753e91d7d764d12532be",
+    "svg": "a7ef4c97ad7833614ca22a93196be14aa380e99c29496ad467b7a0fd871fbfc5"
+  },
+  "all-element-classes.json × refine": {
+    "xml": "fce63dc6dad99e5f420d4c6e9175c0a5d7e813265843974a07ac4364e732b028",
+    "svg": "127324023811c36803c0953e0eea95ae87137621267606269ff5aae092f89f4b"
+  },
+  "all-element-classes.json × refine+wrap": {
+    "xml": "fce63dc6dad99e5f420d4c6e9175c0a5d7e813265843974a07ac4364e732b028",
+    "svg": "127324023811c36803c0953e0eea95ae87137621267606269ff5aae092f89f4b"
+  },
+  "boundary-event-shapes.json × default": {
+    "xml": "47552d5bac3348cfd401ad7b14131a12d1311a56f1044797cedcdfaf60c0ac5a",
+    "svg": "5df354b249f282fb772142903f41d514dcb1120c064aad966ebabe2d4302bffd"
+  },
+  "boundary-event-shapes.json × no-refine": {
+    "xml": "47552d5bac3348cfd401ad7b14131a12d1311a56f1044797cedcdfaf60c0ac5a",
+    "svg": "5df354b249f282fb772142903f41d514dcb1120c064aad966ebabe2d4302bffd"
+  },
+  "boundary-event-shapes.json × refine": {
+    "xml": "47552d5bac3348cfd401ad7b14131a12d1311a56f1044797cedcdfaf60c0ac5a",
+    "svg": "5df354b249f282fb772142903f41d514dcb1120c064aad966ebabe2d4302bffd"
+  },
+  "boundary-event-shapes.json × refine+wrap": {
+    "xml": "47552d5bac3348cfd401ad7b14131a12d1311a56f1044797cedcdfaf60c0ac5a",
+    "svg": "5df354b249f282fb772142903f41d514dcb1120c064aad966ebabe2d4302bffd"
+  },
+  "bpmn-generator-pipeline.json × default": {
+    "xml": "b5134fc4ca0c4306d390b460b80a08097d0a2b1c1f40add33b7f42bb12f26242",
+    "svg": "1883d719a4801c5b7039722a091c5dd16e7af97fe60ff4a607827f2e8254eeae"
+  },
+  "bpmn-generator-pipeline.json × no-refine": {
+    "xml": "c4101291d05af13e7ee226cd293793cfc1cd425ec2dfe690bef34a0547c2f157",
+    "svg": "52e37e5240390a71a9e0ef6c32f13c95213c4a52c9fa73e5b1760b7587cea806"
+  },
+  "bpmn-generator-pipeline.json × refine": {
+    "xml": "b5134fc4ca0c4306d390b460b80a08097d0a2b1c1f40add33b7f42bb12f26242",
+    "svg": "1883d719a4801c5b7039722a091c5dd16e7af97fe60ff4a607827f2e8254eeae"
+  },
+  "bpmn-generator-pipeline.json × refine+wrap": {
+    "xml": "298dc100d508df71d811c2b23c56446f865e2e4ee5f813a488b2c207dd27d447",
+    "svg": "abfb9f86b521e409a88d4b3323772633bbc71e9b2f61059cf6a898140729491d"
+  },
+  "dense-edge-labels.json × default": {
+    "xml": "b679afe7a3fd14f7f1d267615f3daf764afceceb020b566cacf7e843332f4c5b",
+    "svg": "a594b54e7114131c9a6a494f1d1dd64e2d1cf3bea357eb7deca8032f20c32d01"
+  },
+  "dense-edge-labels.json × no-refine": {
+    "xml": "577b98fcf966aec6d2024d1a4b4137eefea670d9b12a63c469d22873fc21bdce",
+    "svg": "6979e4b3fd58e9ae5ea59b410fe1133a4bcb1efd2b4b1cd9beace6402d605677"
+  },
+  "dense-edge-labels.json × refine": {
+    "xml": "b679afe7a3fd14f7f1d267615f3daf764afceceb020b566cacf7e843332f4c5b",
+    "svg": "a594b54e7114131c9a6a494f1d1dd64e2d1cf3bea357eb7deca8032f20c32d01"
+  },
+  "dense-edge-labels.json × refine+wrap": {
+    "xml": "b679afe7a3fd14f7f1d267615f3daf764afceceb020b566cacf7e843332f4c5b",
+    "svg": "a594b54e7114131c9a6a494f1d1dd64e2d1cf3bea357eb7deca8032f20c32d01"
+  },
+  "expanded-subprocess.json × default": {
+    "xml": "3a11168b4a7924ea2a9f8f88419e40fd65da1eef07f0ef9e31e758ff710b25d6",
+    "svg": "82a67f059bb4c8721c43ec93b4c3ad39cf3461fb9ab873865cc014b9177dbc3d"
+  },
+  "expanded-subprocess.json × no-refine": {
+    "xml": "19a97dfadcbf578e801a96d62bf526bd033746fc01dd5f55f42392b9c04d07de",
+    "svg": "b1b7b4b8b1f4fb58a90b829c9339adf029a5f4fea10aa5abd8b906558feb9150"
+  },
+  "expanded-subprocess.json × refine": {
+    "xml": "3a11168b4a7924ea2a9f8f88419e40fd65da1eef07f0ef9e31e758ff710b25d6",
+    "svg": "82a67f059bb4c8721c43ec93b4c3ad39cf3461fb9ab873865cc014b9177dbc3d"
+  },
+  "expanded-subprocess.json × refine+wrap": {
+    "xml": "3a11168b4a7924ea2a9f8f88419e40fd65da1eef07f0ef9e31e758ff710b25d6",
+    "svg": "82a67f059bb4c8721c43ec93b4c3ad39cf3461fb9ab873865cc014b9177dbc3d"
+  },
+  "long-lane-names.json × default": {
+    "xml": "7a3e0a1a51d57557a8575ef409011c1401ad5735b8538231a259a6c17dd628e9",
+    "svg": "c36205c3610c252b00e4a65729b2fe98c5ca06d00dc9a6552c294313e8be407b"
+  },
+  "long-lane-names.json × no-refine": {
+    "xml": "fe9e885906149e0c18ebed8e4d2f9925a2cce04d7761427c767aebfb46336d61",
+    "svg": "13801f5fc7b62bb854708784633356ced7920e494462875833ed0c3499a46887"
+  },
+  "long-lane-names.json × refine": {
+    "xml": "7a3e0a1a51d57557a8575ef409011c1401ad5735b8538231a259a6c17dd628e9",
+    "svg": "c36205c3610c252b00e4a65729b2fe98c5ca06d00dc9a6552c294313e8be407b"
+  },
+  "long-lane-names.json × refine+wrap": {
+    "xml": "7a3e0a1a51d57557a8575ef409011c1401ad5735b8538231a259a6c17dd628e9",
+    "svg": "c36205c3610c252b00e4a65729b2fe98c5ca06d00dc9a6552c294313e8be407b"
+  },
+  "loop-with-join.json × default": {
+    "xml": "f7f01d1891ef420dbc22dd4012f4c5d75aa904394243ce3144714e4e2d13b30e",
+    "svg": "39aa2ef2286ccc2b95672c22b8249922820408d9b0aa0fe552c7905d72331b9a"
+  },
+  "loop-with-join.json × no-refine": {
+    "xml": "3c247ccdf507ec4d710f292548ea43b872573a76631fa52dd0cc6a629c0fd370",
+    "svg": "e7a82503500f1fe906b07dcc546f7452ec79c1f520e20ca4f2b8fb77a37c5b40"
+  },
+  "loop-with-join.json × refine": {
+    "xml": "f7f01d1891ef420dbc22dd4012f4c5d75aa904394243ce3144714e4e2d13b30e",
+    "svg": "39aa2ef2286ccc2b95672c22b8249922820408d9b0aa0fe552c7905d72331b9a"
+  },
+  "loop-with-join.json × refine+wrap": {
+    "xml": "f7f01d1891ef420dbc22dd4012f4c5d75aa904394243ce3144714e4e2d13b30e",
+    "svg": "39aa2ef2286ccc2b95672c22b8249922820408d9b0aa0fe552c7905d72331b9a"
+  },
+  "messageflow-to-subprocess.json × default": {
+    "xml": "967406767052406c70de0b999477288ff6ff98de5a77ce7e7e1f0aa8381c38a9",
+    "svg": "46375f567ba62c4ab35a53bf7fb7e9c91a53c33b17ef5b92f130adb0893e348c"
+  },
+  "messageflow-to-subprocess.json × no-refine": {
+    "xml": "967406767052406c70de0b999477288ff6ff98de5a77ce7e7e1f0aa8381c38a9",
+    "svg": "46375f567ba62c4ab35a53bf7fb7e9c91a53c33b17ef5b92f130adb0893e348c"
+  },
+  "messageflow-to-subprocess.json × refine": {
+    "xml": "967406767052406c70de0b999477288ff6ff98de5a77ce7e7e1f0aa8381c38a9",
+    "svg": "46375f567ba62c4ab35a53bf7fb7e9c91a53c33b17ef5b92f130adb0893e348c"
+  },
+  "messageflow-to-subprocess.json × refine+wrap": {
+    "xml": "967406767052406c70de0b999477288ff6ff98de5a77ce7e7e1f0aa8381c38a9",
+    "svg": "46375f567ba62c4ab35a53bf7fb7e9c91a53c33b17ef5b92f130adb0893e348c"
+  },
+  "multi-pool-collaboration.json × default": {
+    "xml": "efe35542712ffdf31264cc698670e30a8001a8fb229904c6306e1e6ecd6c6ed9",
+    "svg": "ef41210da6e30f2ebcdafb8197b081c7acfc2a908e723d155b35669fec476348"
+  },
+  "multi-pool-collaboration.json × no-refine": {
+    "xml": "bbd4a97e8483839575c238491aa83beb8b379a7a06302ce8496e5f50aaa724fb",
+    "svg": "ed3c4475b617c6b81f17d7784f4c83007cf488f9fbdd0bea4e792d328e725ef4"
+  },
+  "multi-pool-collaboration.json × refine": {
+    "xml": "efe35542712ffdf31264cc698670e30a8001a8fb229904c6306e1e6ecd6c6ed9",
+    "svg": "ef41210da6e30f2ebcdafb8197b081c7acfc2a908e723d155b35669fec476348"
+  },
+  "multi-pool-collaboration.json × refine+wrap": {
+    "xml": "efe35542712ffdf31264cc698670e30a8001a8fb229904c6306e1e6ecd6c6ed9",
+    "svg": "ef41210da6e30f2ebcdafb8197b081c7acfc2a908e723d155b35669fec476348"
+  },
+  "parallel-split-join.json × default": {
+    "xml": "4fba7f47f9b242fc863809924cba4b96d6f999cfe3e28ce99f7451b595deeb81",
+    "svg": "98de43bf9670138d89f4e7a86cd6869dd3efe9fa1aa28b5ed41e7f190d33021e"
+  },
+  "parallel-split-join.json × no-refine": {
+    "xml": "4fba7f47f9b242fc863809924cba4b96d6f999cfe3e28ce99f7451b595deeb81",
+    "svg": "98de43bf9670138d89f4e7a86cd6869dd3efe9fa1aa28b5ed41e7f190d33021e"
+  },
+  "parallel-split-join.json × refine": {
+    "xml": "4fba7f47f9b242fc863809924cba4b96d6f999cfe3e28ce99f7451b595deeb81",
+    "svg": "98de43bf9670138d89f4e7a86cd6869dd3efe9fa1aa28b5ed41e7f190d33021e"
+  },
+  "parallel-split-join.json × refine+wrap": {
+    "xml": "4fba7f47f9b242fc863809924cba4b96d6f999cfe3e28ce99f7451b595deeb81",
+    "svg": "98de43bf9670138d89f4e7a86cd6869dd3efe9fa1aa28b5ed41e7f190d33021e"
+  },
+  "realistic-collaboration.json × default": {
+    "xml": "b00a15c1fe8962c94955e6957bf32dfbba118c09d98796fde2a3b490f4c599a8",
+    "svg": "1525463e0679fc8f1355071992ff439d03a8898e7f1015ab147892586e695ec3"
+  },
+  "realistic-collaboration.json × no-refine": {
+    "xml": "ac537a7f8fec07f5508ea625167488a32c36a3d26798ce8cfa24023ba1aa76fc",
+    "svg": "ee4663a504e8f9f8ca8527379ef78028424e4bbf790785f4a00730ac201ee8d1"
+  },
+  "realistic-collaboration.json × refine": {
+    "xml": "b00a15c1fe8962c94955e6957bf32dfbba118c09d98796fde2a3b490f4c599a8",
+    "svg": "1525463e0679fc8f1355071992ff439d03a8898e7f1015ab147892586e695ec3"
+  },
+  "realistic-collaboration.json × refine+wrap": {
+    "xml": "e8661f7458501fb4c3149fd3ab64c9b75d8a7d5e0e8e98dee689f4a5e7f3b3f2",
+    "svg": "47174e90dd692956ca145b9ba69308d680f0010e65b866e8cd76e847716e8c75"
+  },
+  "simple-approval.json × default": {
+    "xml": "e502dc672f1c1c65ca01161cdfeea7850057426617e327ac69139be2430c2d8d",
+    "svg": "ab221746b2cb06db0d52be49554b5ab6bd2f3daa21f203e52a5594ee477a0ef2"
+  },
+  "simple-approval.json × no-refine": {
+    "xml": "820d4c6341b9a2606c103d27604e4903d456f9a38f0aeb9e3299927417fff431",
+    "svg": "46567ef1b9546ce2bf7bb9e516319c46d3806ffbdd4a3c3b95eee490e662e8a8"
+  },
+  "simple-approval.json × refine": {
+    "xml": "e502dc672f1c1c65ca01161cdfeea7850057426617e327ac69139be2430c2d8d",
+    "svg": "ab221746b2cb06db0d52be49554b5ab6bd2f3daa21f203e52a5594ee477a0ef2"
+  },
+  "simple-approval.json × refine+wrap": {
+    "xml": "e502dc672f1c1c65ca01161cdfeea7850057426617e327ac69139be2430c2d8d",
+    "svg": "ab221746b2cb06db0d52be49554b5ab6bd2f3daa21f203e52a5594ee477a0ef2"
+  },
+  "sparse-lanes.json × default": {
+    "xml": "7e618f59bde660c99864f70c995454bfaee43fc0b75b503fb285fd51c2d1616a",
+    "svg": "b9512e5f45361a69fb17b7f16428eb996f3d865c2fa5e5689caa5d01e5917902"
+  },
+  "sparse-lanes.json × no-refine": {
+    "xml": "2714f7b1504ba70b61fc62c940e6aae5f03f49ba10cf01fb5c9625376e3223d8",
+    "svg": "a56486a5e7b476642de2fa92fc0c527f1b3476f2c2e472bf68722493ba5d8ac4"
+  },
+  "sparse-lanes.json × refine": {
+    "xml": "7e618f59bde660c99864f70c995454bfaee43fc0b75b503fb285fd51c2d1616a",
+    "svg": "b9512e5f45361a69fb17b7f16428eb996f3d865c2fa5e5689caa5d01e5917902"
+  },
+  "sparse-lanes.json × refine+wrap": {
+    "xml": "7e618f59bde660c99864f70c995454bfaee43fc0b75b503fb285fd51c2d1616a",
+    "svg": "b9512e5f45361a69fb17b7f16428eb996f3d865c2fa5e5689caa5d01e5917902"
+  },
+  "subprocess-child-fidelity.json × default": {
+    "xml": "f584c6c19d7596464e3415776b25a5c829aa235b3d23ecbd2a7fd66a0066fa0a",
+    "svg": "9bfb0474b5a1b871b82fbc2a338cfe7ebd6b8f17bca47b08f0c8c6c8d47d4439"
+  },
+  "subprocess-child-fidelity.json × no-refine": {
+    "xml": "f584c6c19d7596464e3415776b25a5c829aa235b3d23ecbd2a7fd66a0066fa0a",
+    "svg": "9bfb0474b5a1b871b82fbc2a338cfe7ebd6b8f17bca47b08f0c8c6c8d47d4439"
+  },
+  "subprocess-child-fidelity.json × refine": {
+    "xml": "f584c6c19d7596464e3415776b25a5c829aa235b3d23ecbd2a7fd66a0066fa0a",
+    "svg": "9bfb0474b5a1b871b82fbc2a338cfe7ebd6b8f17bca47b08f0c8c6c8d47d4439"
+  },
+  "subprocess-child-fidelity.json × refine+wrap": {
+    "xml": "f584c6c19d7596464e3415776b25a5c829aa235b3d23ecbd2a7fd66a0066fa0a",
+    "svg": "9bfb0474b5a1b871b82fbc2a338cfe7ebd6b8f17bca47b08f0c8c6c8d47d4439"
+  },
+  "subprocess-collapsed-children.json × default": {
+    "xml": "6a17044da4515ae33ff7fdd2ed76d2fc4eb463d938192cdddc1fd4d40139533a",
+    "svg": "36dac5598a5586abe1947dce2e8e39e35cd00259364798bfac3d992145cc7215"
+  },
+  "subprocess-collapsed-children.json × no-refine": {
+    "xml": "6a17044da4515ae33ff7fdd2ed76d2fc4eb463d938192cdddc1fd4d40139533a",
+    "svg": "36dac5598a5586abe1947dce2e8e39e35cd00259364798bfac3d992145cc7215"
+  },
+  "subprocess-collapsed-children.json × refine": {
+    "xml": "6a17044da4515ae33ff7fdd2ed76d2fc4eb463d938192cdddc1fd4d40139533a",
+    "svg": "36dac5598a5586abe1947dce2e8e39e35cd00259364798bfac3d992145cc7215"
+  },
+  "subprocess-collapsed-children.json × refine+wrap": {
+    "xml": "6a17044da4515ae33ff7fdd2ed76d2fc4eb463d938192cdddc1fd4d40139533a",
+    "svg": "36dac5598a5586abe1947dce2e8e39e35cd00259364798bfac3d992145cc7215"
+  },
+  "subprocess-merge-fanout.json × default": {
+    "xml": "e01a4409315a9de01bf2006a618a52ca8ee07ea3cc06d3e7024b348f9c6a8a85",
+    "svg": "d16b43a0eff754115f12ae81853595f0cfb0860833d959be0748dff01b049677"
+  },
+  "subprocess-merge-fanout.json × no-refine": {
+    "xml": "e01a4409315a9de01bf2006a618a52ca8ee07ea3cc06d3e7024b348f9c6a8a85",
+    "svg": "d16b43a0eff754115f12ae81853595f0cfb0860833d959be0748dff01b049677"
+  },
+  "subprocess-merge-fanout.json × refine": {
+    "xml": "e01a4409315a9de01bf2006a618a52ca8ee07ea3cc06d3e7024b348f9c6a8a85",
+    "svg": "d16b43a0eff754115f12ae81853595f0cfb0860833d959be0748dff01b049677"
+  },
+  "subprocess-merge-fanout.json × refine+wrap": {
+    "xml": "e01a4409315a9de01bf2006a618a52ca8ee07ea3cc06d3e7024b348f9c6a8a85",
+    "svg": "d16b43a0eff754115f12ae81853595f0cfb0860833d959be0748dff01b049677"
+  },
+  "wide-pipeline.json × default": {
+    "xml": "0def6a76790b8ec022dcf006e555e1efbfeda139e364b2317367a443265d1ab1",
+    "svg": "62e5e6703b0eaeb868c84c927e80bbeec9d8463a4b9113e00115a1cae91834cc"
+  },
+  "wide-pipeline.json × no-refine": {
+    "xml": "c469fe2636af90fb438826d0034769d0df98e645c88e0be99a17550aabb8778f",
+    "svg": "b498fab3ebdb31dd022ef421255f3ef77f95b5c3ebb2e8ea21cb674aae56d812"
+  },
+  "wide-pipeline.json × refine": {
+    "xml": "0def6a76790b8ec022dcf006e555e1efbfeda139e364b2317367a443265d1ab1",
+    "svg": "62e5e6703b0eaeb868c84c927e80bbeec9d8463a4b9113e00115a1cae91834cc"
+  },
+  "wide-pipeline.json × refine+wrap": {
+    "xml": "468bb482b5ac8684cc658320fbb37c44a5793638343c8d990628d202692aa5a3",
+    "svg": "b66fc30a9b4c07050b190a4c861be2efb69787960378d246b0d9973d69906497"
+  },
+  "wrapping-back-edge.json × default": {
+    "xml": "3e52e499a95ee91675d417ed6480cfe6e286865ccb12a29a5595defeceaab693",
+    "svg": "189b61e65c98437c64816c75eeb3d2d9a89d19ef47cb5d3563bc6c8c627bd5e6"
+  },
+  "wrapping-back-edge.json × no-refine": {
+    "xml": "3e52e499a95ee91675d417ed6480cfe6e286865ccb12a29a5595defeceaab693",
+    "svg": "189b61e65c98437c64816c75eeb3d2d9a89d19ef47cb5d3563bc6c8c627bd5e6"
+  },
+  "wrapping-back-edge.json × refine": {
+    "xml": "3e52e499a95ee91675d417ed6480cfe6e286865ccb12a29a5595defeceaab693",
+    "svg": "189b61e65c98437c64816c75eeb3d2d9a89d19ef47cb5d3563bc6c8c627bd5e6"
+  },
+  "wrapping-back-edge.json × refine+wrap": {
+    "xml": "3e52e499a95ee91675d417ed6480cfe6e286865ccb12a29a5595defeceaab693",
+    "svg": "189b61e65c98437c64816c75eeb3d2d9a89d19ef47cb5d3563bc6c8c627bd5e6"
+  }
+}
