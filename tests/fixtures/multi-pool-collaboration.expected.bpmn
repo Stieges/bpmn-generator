@@ -185,14 +185,14 @@
         <di:waypoint x="676" y="630.8" />
         <di:waypoint x="676" y="717" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="554.8" y="617.8" width="27.5" height="16" />
+          <dc:Bounds x="559" y="612.8" width="19" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf4_di" bpmnElement="sf4">
         <di:waypoint x="473.5" y="532" />
         <di:waypoint x="646" y="532" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="549.3" y="519" width="21" height="16" />
+          <dc:Bounds x="552.7" y="514" width="14.1" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="sf5_di" bpmnElement="sf5">
@@ -219,12 +219,18 @@
         <di:waypoint x="306" y="268" />
         <di:waypoint x="158" y="268" />
         <di:waypoint x="158" y="501.5" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="211.5" y="250" width="41" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="mf2_di" bpmnElement="mf2">
         <di:waypoint x="986" y="365" />
         <di:waypoint x="986" y="282" />
         <di:waypoint x="486" y="282" />
         <di:waypoint x="486" y="160" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="711.2" y="264" width="49.5" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
