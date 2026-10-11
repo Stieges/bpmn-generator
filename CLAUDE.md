@@ -49,7 +49,7 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     │                          edge-simplify.js, by repairCrossings and reclipStuckEnds, and from
     │                          bend-rule.js as its fallback; duplicates its own segment/box clearance
     │                          test to avoid a circular import)
-    ├── bend-rule.js         ← orthogonal-router.js, types.js, ../shared/utils.js (opt-in, layout.bendRule:
+    ├── bend-rule.js         ← orthogonal-router.js, types.js, ../shared/utils.js (layout.bendRule, on by default:
     │                          fewest bends, then enter activities/events from the left; runs after
     │                          lane compaction, before edge-label repair and routeMessageFlows)
     ├── bpmn-xml.js          ← types.js, ../shared/utils.js, constants.js, topology.js, icons.js
@@ -228,7 +228,7 @@ layout and rendering. Two rules make it hold:
 2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant. The one pass after it is
-   `placeNodeLabelsAvoidingFlows` (opt-in, `layout.nodeLabelsAvoidFlows`): it moves an event's or a
+   `placeNodeLabelsAvoidingFlows` (`layout.nodeLabelsAvoidFlows`, on by default): it moves an event's or a
    gateway's label off the bottom when one of its sequence or message flows docks at the bottom,
    or when an own flow runs through the default label box, and a message flow's port is only known
    once message flows are routed. It changes label boxes only,
@@ -272,7 +272,7 @@ membership instead of coordinates.
 | `scripts/bpmn/visual-refinement.js` | The refinement passes — `laneCompaction` (`compactLanes`) and `edgeLabelCollisionRepair` (`repairEdgeLabels`), both on by default; `resolveRefinement` turns the `visualRefinement` option into per-pass switches and rejects an unknown key or a non-boolean; `VISUAL_REFINEMENT_OPTION_SCHEMA` is the same contract for the HTTP/MCP gate (fenced against `references/api-schema.json`). ELK wrapping is not a pass here — it is `layout.elkWrapping` / `--wrap` |
 | `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends; `repairCrossings` re-routes edges that cross another, falling back to `orthogonal-router.js` when its own fixed-shape candidate search finds nothing admissible; `guardAgainstLegacy` reverts single #52 re-routes that cost a crossing; `reclipStuckEnds` may move an endpoint to another side's midpoint when every fixed-endpoint route still ends along an outline or runs through the edge's own shape — the one exception to endpoint clipping in coordinates.js §5.1; `rerouteAfterCompaction` re-runs simplify → legacy guard → crossing repair for the flows lane compaction bent, then `keepOffLaneLines` keeps their inner legs `visualRefinement.laneLineClearance` px off lane separators. `guardAgainstLegacy` runs only while `layout.crossingRepair` is enabled. `layout.endStubPx` must stay above orthogonal-router's `PAD` (12), asserted at load by `assertStubClearsPad`; `layout.alongOutlineMinPx` is the one along-outline threshold (edge-simplify, DI08, bench) |
 | `scripts/bpmn/orthogonal-router.js` | `routeAroundObstacles` — obstacle-aware orthogonal Dijkstra pathfinder ("trellis"/extended-lines grid + per-bend cost penalty + soft crossing penalty), three callers: in `edge-simplify.js` `repairCrossings` (fallback candidate source) and `reclipStuckEnds` (the route between the two 15 px end stubs, for each port pair it tries), and `bend-rule.js` (fallback when no 0/1/2-bend shape is admissible). The router never chooses an endpoint: it routes between the two points it is given, and its caller decides whether an endpoint moves |
-| `scripts/bpmn/bend-rule.js` | `applyBendRule` — opt-in routing pass (`layout.bendRule`, default `false`; per call `runPipeline(lc, { bendRule: true })`): a sequence flow is re-routed when an admissible route has fewer bends, or as many bends and enters an activity/event from the left (leaves one to the right; gateways free). Endpoints stay put or move to a side midpoint, on a rectangle also to a projection port (level with the counterpart's centre or endpoint, `portCornerMarginPx` from the corners); a boundary event's never moves. Admissible = no end defect, clear of foreign shapes, inside its region, at most `lengthFactor`× + `lengthSlackPx` longer, and per edge not worse than the current route in crossings, lane-line hug, length of collinear overlap (legs closer than `collinearPx` count as one line), crowding, `coordMap.nodeLabels` hits, side conflicts, shared ports (two flows out of — or into — one gateway/event side, or one rectangle point; rechnungspruefung's „Betrag über 10.000 EUR?“) and the later message-flow line; no new top/bottom port at a message-flow node. A re-routed flow's label is refreshed with the other routes as obstacles (`placeEdgeLabel`'s `avoidRoutes`; the first candidate off every route, else off its own). Limits in `layout.bendRuleLimits`. Greedy in edge order, repeated to a fixpoint (idempotent). Runs in `pipeline.js` after lane compaction and its re-route, before edge-label repair and `routeMessageFlows`. `bendMetrics` is the same search as a measure (avoidable bends, entries against the flow), read by `scripts/bench/flow-metrics.mjs` |
+| `scripts/bpmn/bend-rule.js` | `applyBendRule` — routing pass (`layout.bendRule`, default `true`; per call `runPipeline(lc, { bendRule: false })` switches it off): a sequence flow is re-routed when an admissible route has fewer bends, or as many bends and enters an activity/event from the left (leaves one to the right; gateways free). Endpoints stay put or move to a side midpoint, on a rectangle also to a projection port (level with the counterpart's centre or endpoint, `portCornerMarginPx` from the corners); a boundary event's never moves. Admissible = no end defect, clear of foreign shapes, inside its region, at most `lengthFactor`× + `lengthSlackPx` longer, and per edge not worse than the current route in crossings, lane-line hug, length of collinear overlap (legs closer than `collinearPx` count as one line), crowding, `coordMap.nodeLabels` hits, side conflicts, shared ports (two flows out of — or into — one gateway/event side, or one rectangle point; rechnungspruefung's „Betrag über 10.000 EUR?“) and the later message-flow line; no new top/bottom port at a message-flow node. A re-routed flow's label is refreshed with the other routes as obstacles (`placeEdgeLabel`'s `avoidRoutes`; the first candidate off every route, else off its own). Limits in `layout.bendRuleLimits`. Greedy in edge order, repeated to a fixpoint (idempotent). Runs in `pipeline.js` after lane compaction and its re-route, before edge-label repair and `routeMessageFlows`. `bendMetrics` is the same search as a measure (avoidable bends, entries against the flow), read by `scripts/bench/flow-metrics.mjs` |
 | `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API and MCP; also `validateVisualRefinementOption` |
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |
@@ -488,17 +488,17 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 2. The passes are `laneCompaction`, `edgeLabelCollisionRepair`; `resolveRefinement` turns the option into per-pass switches. See `scripts/bpmn/visual-refinement.js` for the pass implementations.
 3. Verify against goldens: `cd scripts && npm test -- --testPathPatterns=visual-refinement`.
 
-### Switch on the bend rule
+### Switch the bend rule off (or tune it)
 
-1. Off by default (`config.json → layout.bendRule: false`). Per call `runPipeline(lc, { bendRule: true })`;
-   project-wide `layout.bendRule: true`. Limits: `layout.bendRuleLimits` (see `scripts/bpmn/bend-rule.js`).
+1. On by default (`config.json → layout.bendRule: true`). Per call `runPipeline(lc, { bendRule: false })`;
+   project-wide `layout.bendRule: false`. Limits: `layout.bendRuleLimits` (see `scripts/bpmn/bend-rule.js`).
 2. Verify: the layout ratchet's `bends` mode (`cd scripts && npm test -- --testPathPatterns=layout-metrics`)
    and `scripts/bpmn/bend-rule.test.js` (DI07–DI10 clean and idempotent over every fixture).
 
-### Switch on node labels that avoid flows
+### Switch node labels that avoid flows off
 
-1. Off by default (`config.json → layout.nodeLabelsAvoidFlows: false`). Per call
-   `runPipeline(lc, { nodeLabelsAvoidFlows: true })`; project-wide `layout.nodeLabelsAvoidFlows: true`.
+1. On by default (`config.json → layout.nodeLabelsAvoidFlows: true`). Per call
+   `runPipeline(lc, { nodeLabelsAvoidFlows: false })`; project-wide `layout.nodeLabelsAvoidFlows: false`.
    Independent of the bend rule; with both on, the labels follow the bend rule's routes.
 2. Verify: `cd scripts && npm test -- --testPathPatterns=node-labels-avoid-flows` and the renderer-agreement
    test in `scripts/bpmn/pipeline.test.js` ("the two renderers agree on node labels", switch off and on).
@@ -697,11 +697,11 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - Edge-label repair runs before `routeMessageFlows`, so message-flow labels are never repaired:
   `realistic-collaboration` keeps two overlapping message-flow labels (mf2/mf5) in every mode
   (#88)
-- The bend rule's message-flow guard (`layout.bendRule`, opt-in) models a message flow as its single
+- The bend rule's message-flow guard (`layout.bendRule`) models a message flow as its single
   centre line at a message-flow node, above or below it. `routeMessageFlows` runs later and fans several
   flows at one node out by `MESSAGE_FLOW_FAN` px either side of that line; the guard does not model the
   offsets, so a bend-rule route can still end up within the fan of a message flow
-- "Default output unchanged with `layout.bendRule` and `layout.nodeLabelsAvoidFlows` off" is fenced by
+- "Output with `layout.bendRule` and `layout.nodeLabelsAvoidFlows` explicitly off is unchanged from before the bend rule" is fenced by
   SHA-256 hashes of BPMN XML and SVG per top-level fixture × four modes
   (`tests/bench/default-output-hashes.json`, written by `node bench/output-hashes.mjs`, compared by
   `scripts/bench/output-hashes.test.js`); regenerate it only for an intended change of the default output

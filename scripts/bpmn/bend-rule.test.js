@@ -373,8 +373,8 @@ describe('bendMetrics', () => {
 const MODES = { default: {}, 'no-refine': { visualRefinement: false }, 'refine+wrap': { visualRefinement: true, elkWrapping: 'auto' } };
 
 describe('the pass in the pipeline', () => {
-  test('layout.bendRule defaults to off', () => {
-    expect(CFG.layout.bendRule).toBe(false);
+  test('layout.bendRule defaults to on', () => {
+    expect(CFG.layout.bendRule).toBe(true);
   });
 
   // "off => byte-identical" is fenced where it can fail: bench/output-hashes.test.js compares the

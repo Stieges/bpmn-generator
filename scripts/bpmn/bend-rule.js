@@ -51,7 +51,7 @@
  *
  * Where it runs (pipeline.js): after every pass that moves a shape or a route — lane compaction, its
  * re-route and the stuck-end pass — so it judges final geometry; before edge-label repair and
- * routeMessageFlows. Switched by layout.bendRule (default off).
+ * routeMessageFlows. Switched by layout.bendRule (default on).
  *
  * The measure (bendMetrics) runs the same search on any coordMap: avoidable bends = current bends −
  * the fewest bends of an admissible route; an entry against the flow = an activity/event target not

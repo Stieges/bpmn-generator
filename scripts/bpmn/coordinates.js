@@ -763,7 +763,7 @@ function placeNodeLabels(coords, lc) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Node labels that keep clear of flows (layout.nodeLabelsAvoidFlows, opt-in)
+// Node labels that keep clear of flows (layout.nodeLabelsAvoidFlows, on by default)
 // ─────────────────────────────────────────────────────────────────────
 
 /**
