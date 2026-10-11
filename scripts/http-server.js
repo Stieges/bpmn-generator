@@ -19,7 +19,7 @@ import { chatAgent } from './agents/chat.js';
 import { createLlmProvider, LlmProviderError } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
-import { validateLogicCoreSchema, boundSchemaErrors } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, validateVisualRefinementOption, boundSchemaErrors } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
@@ -368,10 +368,15 @@ const server = createServer(async (req, res) => {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: schemaCheck.errors.length });
         return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
       }
+      const refineCheck = validateVisualRefinementOption(body.visualRefinement);
+      if (!refineCheck.valid) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: refineCheck.errors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(refineCheck.errors) });
+      }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       const poolOrder = body.poolOrder === 'declared' ? 'declared' : 'auto';
       const ruleProfile = clientRuleProfile(body);
-      const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile });
+      const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile, visualRefinement: body.visualRefinement });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
       // A green validation says nothing about the layout — the rule engine never
@@ -467,6 +472,13 @@ const server = createServer(async (req, res) => {
           return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
         }
       }
+
+      const refineCheck = validateVisualRefinementOption(body.visualRefinement);
+      if (!refineCheck.valid) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: refineCheck.errors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(refineCheck.errors) });
+      }
+      options.visualRefinement = body.visualRefinement;
 
       const result = await orchestrate(input, options);
       const durationMs = Date.now() - t0;

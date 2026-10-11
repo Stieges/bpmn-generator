@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`visualRefinement` on the HTTP API and MCP.** `POST /api/v1/generate`, `/api/v1/orchestrate` and the MCP tools `generate_bpmn`, `orchestrate_bpmn` take an optional `visualRefinement` (boolean or per-pass object, schema `$defs/VisualRefinementOption`); invalid values are a `schema_error`. Before, these entry points could not switch refinement at all.
 - **Layout readability fence.** `scripts/bench/layout-metrics.mjs` now measures every top-level
   fixture (it had a fixed list of eight, which is how `boundary-event-shapes`' crossing went
   unseen) and four more things: sequence-flow ends lying on their own endpoint's outline (#52),

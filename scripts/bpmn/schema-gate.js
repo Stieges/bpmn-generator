@@ -3,6 +3,7 @@ import addFormats from 'ajv-formats';
 import { readFileSync } from 'node:fs';
 import { inputSchemaPath } from '../shared/resource-paths.js';
 import { boundText } from '../shared/safe-text.js';
+import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './visual-refinement.js';
 
 // Which of the two layouts applies — and why the source wins over the in-package
 // copy — is decided in one place; see resource-paths.js.
@@ -20,6 +21,20 @@ export function validateLogicCoreSchema(input) {
       path: e.instancePath || '(root)',
       message: e.message,
       params: e.params,
+    })),
+  };
+}
+
+const validateRefinementOption = ajv.compile(VISUAL_REFINEMENT_OPTION_SCHEMA);
+
+/** The `visualRefinement` request option, checked against the one schema every surface shares. */
+export function validateVisualRefinementOption(value) {
+  if (value === undefined) return { valid: true, errors: [] };
+  const valid = validateRefinementOption(value);
+  return {
+    valid,
+    errors: valid ? [] : (validateRefinementOption.errors || []).map(e => ({
+      path: `visualRefinement${e.instancePath}`, message: e.message, params: e.params,
     })),
   };
 }

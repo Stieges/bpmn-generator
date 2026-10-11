@@ -4,6 +4,20 @@
   "title": "BPMN Generator HTTP API — response contract",
   "description": "The success-response shape of each POST endpoint in scripts/http-server.js, documented in references/api-reference.md. Validated by .github/scripts/docs-gate.mjs against a response actually produced by the running pipeline — not asserted from memory. Error responses (schema_error / validation_error / diagram_error / profile_error / internal_error) are simpler and covered in prose in api-reference.md, not schematized here.",
   "$defs": {
+    "VisualRefinementOption": {
+      "description": "Request option on POST /api/v1/generate and /api/v1/orchestrate and the MCP tools generate_bpmn and orchestrate_bpmn. Must equal VISUAL_REFINEMENT_OPTION_SCHEMA in scripts/bpmn/visual-refinement.js (fenced by a test).",
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "laneCompaction": { "type": "boolean" },
+            "edgeLabelCollisionRepair": { "type": "boolean" }
+          }
+        }
+      ]
+    },
     "GenerateResponse": {
       "type": "object",
       "description": "POST /api/v1/generate — success response.",

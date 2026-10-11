@@ -25,7 +25,8 @@ import { loadNamedRuleProfile, ProfileRejectedError } from './shared/rule-profil
 import { rulesDirPath } from './shared/resource-paths.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
-import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, validateVisualRefinementOption } from './bpmn/schema-gate.js';
+import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 
@@ -35,6 +36,11 @@ const PROFILE_PARAM = {
     '(also "strict-profile", "strict-profile.json" or "rules/strict-profile.json"), or "custom/<name>" for a ' +
     'project profile in rules/custom/. Names only — no other directory, no "..". Needs a repository checkout; ' +
     'an installed npm package has no rules/ directory and refuses every name.',
+};
+
+const VISUAL_REFINEMENT_PARAM = {
+  ...VISUAL_REFINEMENT_OPTION_SCHEMA,
+  description: "Refinement passes: true/false switches all; an object { laneCompaction, edgeLabelCollisionRepair } switches single passes. Omitted: the server's config defaults",
 };
 
 const server = new Server(
@@ -54,6 +60,7 @@ const TOOLS = [
         drillDown: { type: 'boolean', description: 'Generate per-subprocess diagrams (optional, default false)' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default, faithful IST) or 'optimize' (Soll — adds redesign advisories)" },
         ruleProfile: PROFILE_PARAM,
+        visualRefinement: VISUAL_REFINEMENT_PARAM,
         poolOrder: { type: 'string', enum: ['auto', 'declared'], description: "'auto' (default) stacks participants so that the ones exchanging messages sit next to each other; 'declared' keeps the input order" },
         include: {
           type: 'array',
@@ -96,6 +103,7 @@ const TOOLS = [
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to orchestrate' },
         ruleProfile: PROFILE_PARAM,
+        visualRefinement: VISUAL_REFINEMENT_PARAM,
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (Soll — adds redesign advisories)" }
       }
     }
@@ -111,9 +119,11 @@ const text = (payload) => ({ content: [{ type: 'text', text: JSON.stringify(payl
  * Without this, a wrong `type` or an unknown field surfaces much later as an
  * opaque ELK error instead of a pointed schema message.
  */
-function schemaGate(logicCore) {
+function schemaGate(logicCore, visualRefinement) {
   const check = validateLogicCoreSchema(logicCore);
-  return check.valid ? null : text({ status: 'schema_error', errors: check.errors });
+  if (!check.valid) return text({ status: 'schema_error', errors: check.errors });
+  const refineCheck = validateVisualRefinementOption(visualRefinement);
+  return refineCheck.valid ? null : text({ status: 'schema_error', errors: refineCheck.errors });
 }
 
 /** The profile a tool call names, read from rules/ only; null when none is named. */
@@ -133,11 +143,11 @@ async function handleToolCall(request) {
   const { name, arguments: args } = request.params;
 
   if (name === 'generate_bpmn') {
-    const rejected = schemaGate(args.logicCore);
+    const rejected = schemaGate(args.logicCore, args.visualRefinement);
     if (rejected) return rejected;
 
     const include = new Set(args.include ?? ['xml', 'svg', 'validation', 'diagnostics']);
-    const opts = { mode: args.mode, ruleProfile: ruleProfileOf(args), poolOrder: args.poolOrder };
+    const opts = { mode: args.mode, ruleProfile: ruleProfileOf(args), poolOrder: args.poolOrder, visualRefinement: args.visualRefinement };
 
     if (args.drillDown) {
       const set = await generateDiagramSet(args.logicCore, opts);
@@ -171,7 +181,7 @@ async function handleToolCall(request) {
   }
 
   if (name === 'validate_bpmn') {
-    const rejected = schemaGate(args.logicCore);
+    const rejected = schemaGate(args.logicCore, args.visualRefinement);
     if (rejected) return rejected;
     // infos and metrics used to be dropped here, which silently killed the
     // whole P layer (complexity metrics) for every MCP caller.
@@ -187,11 +197,12 @@ async function handleToolCall(request) {
   if (name === 'orchestrate_bpmn') {
     // Same gate as the other tools: a string here would otherwise be taken for a process
     // description, and a malformed model would surface as a thrown error, not a schema_error.
-    const rejected = schemaGate(args.logicCore);
+    const rejected = schemaGate(args.logicCore, args.visualRefinement);
     if (rejected) return rejected;
     const result = await orchestrate(args.logicCore, {
       ruleProfile: ruleProfileOf(args),
       mode: args.mode,
+      visualRefinement: args.visualRefinement,
     });
     return text({
       bpmnXml: result.bpmnXml,
