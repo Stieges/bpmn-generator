@@ -245,11 +245,12 @@ describe('placeNodeLabelsAvoidingFlows — in the pipeline', () => {
     expect(movedIds.some(id => hit(off.coordMap, id) && !hit(on.coordMap, id))).toBe(true);
   });
 
-  // Every top-level fixture, switch on alone and with the bend rule: a moved label is one of its
-  // candidates and free — no route through it, no shape, no other label under it. A label left at
-  // its default is no worse than without the pass, by construction.
-  for (const extra of [{}, { bendRule: true }]) {
-    test(`every fixture (nodeLabelsAvoidFlows${extra.bendRule ? ' + bendRule' : ''}): moved labels land on free candidates`, async () => {
+  // Every top-level fixture, switch on alone (bend rule explicitly off — it is on by default) and
+  // with the bend rule: a moved label is one of its candidates and free — no route through it, no
+  // shape, no other label under it. A label left at its default is no worse than without the pass,
+  // by construction.
+  for (const extra of [{ bendRule: false }, { bendRule: true }]) {
+    test(`every fixture (nodeLabelsAvoidFlows${extra.bendRule ? ' + bendRule' : ' alone'}): moved labels land on free candidates`, async () => {
       for (const f of FIXTURES) {
         const lc = load(f);
         const r = await runPipeline(lc, { nodeLabelsAvoidFlows: true, ...extra });

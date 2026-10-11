@@ -20,12 +20,12 @@ import { CFG } from '../shared/utils.js';
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
 // default / off / on run with the shipped defaults, which include layout.bendRule and
-// layout.nodeLabelsAvoidFlows (both on since 4.0.0). plain: the default options with both switches
-// explicitly off — what the default was before the bend rule; its rows are the former default rows,
-// kept verbatim so the pre-switch geometry stays fenced.
+// layout.nodeLabelsAvoidFlows (both on since 4.0.0). plain / plain-on: default resp. on with both
+// switches explicitly off — what default and on were before the bend rule; their rows are the
+// former default and on rows, kept verbatim so the pre-switch geometry stays fenced.
 const PLAIN = { bendRule: false, nodeLabelsAvoidFlows: false };
 const MODES = { default: {}, off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' },
-  plain: PLAIN };
+  plain: PLAIN, 'plain-on': { ...PLAIN, visualRefinement: true, elkWrapping: 'auto' } };
 
 describe('alongSide', () => {
   const box = { x: 386, y: 131, w: 100, h: 80 };
@@ -291,7 +291,7 @@ const ZERO = { crossings: 0, along: 0, laneGap: 0, mfThrough: 0, seqThrough: 0, 
   hug: 0, bendsMax: 0, crowd: 0, mfCrowd: 0, offOver5: 0, labelOwnEdge: 0, labelLabel: 0, labelNode: 0,
   labelLaneLine: 0, labelFar: 0, overlapLen: 0 };
 const r = (over = {}) => ({ ...ZERO, ...over });
-const same = (row) => ({ default: row, off: row, on: row });
+const same = (row) => ({ default: row, on: row });
 // realistic-collaboration on: the 5 remaining message-flow hits are all shapes of the flow's own
 // participant, in another lane — mf1>ap_wait, mf3>as_assess, mf4>as_assess, mf6>de_decide,
 // mf6>ap_submit. No port column clears them; none crosses a participant the flow does not involve.
@@ -308,42 +308,35 @@ const BUDGET_PLAIN = {
   'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
   'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 227 }),
-                                          off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 245 }),
                                           on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1, overlapLen: 786 }) },
-  'deadlock-process.json':              { default: null, off: null, on: null },
+  'deadlock-process.json':              { default: null, on: null },
   'dense-edge-labels.json':             same(r({ bendsMax: 1, offOver5: 4 })),
   'example-bestellung-versand.json':   { default: r({ crossings: 2, bendsMax: 4, offOver5: 6, overlapLen: 277 }),
-                                          off: r({ crossings: 2, bendsMax: 4, offOver5: 6, overlapLen: 342 }),
                                           on: r({ crossings: 2, bendsMax: 4, offOver5: 6, overlapLen: 277 }) },
   'example-kreditantrag.json':          { default: r({ crossings: 1, bendsMax: 2, offOver5: 11, overlapLen: 62 }),
-                                          off: r({ crossings: 1, bendsMax: 2, offOver5: 11, overlapLen: 62 }),
                                           on: r({ crossings: 1, bendsMax: 4, offOver5: 11, overlapLen: 62 }) },
   'example-onboarding.json':            { default: r({ bendsMax: 2, offOver5: 10, overlapLen: 1387 }),
-                                          off: r({ bendsMax: 2, offOver5: 10, overlapLen: 1615 }),
                                           on: r({ bendsMax: 2, offOver5: 10, overlapLen: 1387 }) },
   'example-schadenmeldung.json':        { default: r({ bendsMax: 2, offOver5: 8, overlapLen: 346 }),
-                                          off: r({ bendsMax: 2, offOver5: 8, overlapLen: 259 }),
                                           on: r({ bendsMax: 2, offOver5: 8, overlapLen: 346 }) },
   'example-urlaubsantrag.json':         { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 133 }),
-                                          off: r({ bendsMax: 2, offOver5: 4, overlapLen: 165 }),
                                           on: r({ bendsMax: 2, offOver5: 4, overlapLen: 133 }) },
   'expanded-subprocess.json':           same(r()),
-  'long-lane-names.json':               { default: r({ bendsMax: 2 }), off: r({ bendsMax: 2 }), on: r({ bendsMax: 2 }) },
+  'long-lane-names.json':               { default: r({ bendsMax: 2 }), on: r({ bendsMax: 2 }) },
   'loop-with-join.json':                same(r({ bendsMax: 2, offOver5: 6, overlapLen: 23 })),
   'messageflow-to-subprocess.json':     same(r({ mfCrowd: 1, overlapLen: 83 })),
-  'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }), off: r({ bendsMax: 2, offOver5: 2, overlapLen: 86 }),
+  'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }),
                                           on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
   'realistic-collaboration.json':       { default: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 386 }),
-                                          off: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 646 }),
                                           on: r({ bendsMax: 5, mfCrowd: 7, offOver5: 3, labelLabel: 1, overlapLen: 646 }) },
   'simple-approval.json':               same(r({ bendsMax: 2, offOver5: 6 })),
-  'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }), off: r({ bendsMax: 2, offOver5: 4, overlapLen: 216 }),
+  'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }),
                                           on: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }) },
   'subprocess-child-fidelity.json':     same(r({ bendsMax: 2, offOver5: 5 })),
   'subprocess-collapsed-children.json': same(r()),
   'subprocess-merge-fanout.json':       same(r({ bendsMax: 2, offOver5: 8 })),
-  'wide-pipeline.json':                 { default: r(), off: r(), on: r({ bendsMax: 4 }) },
+  'wide-pipeline.json':                 { default: r(), on: r({ bendsMax: 4 }) },
   'wrapping-back-edge.json':            same(r({ bendsMax: 4, offOver5: 4 })),
 };
 
@@ -394,7 +387,7 @@ const BUDGET_DEFAULT = {
 // example-kreditantrag bendsMax 4, offOver5 11; realistic-collaboration drops seqThrough/crowd and
 // shows bendsMax 5, mfCrowd 6, offOver5 3, overlapLen 586.
 const BUDGET = Object.fromEntries(Object.entries(BUDGET_DEFAULT).map(([name, row]) => [name,
-  { default: row, off: row, on: row, plain: BUDGET_PLAIN[name].default }]));
+  { default: row, off: row, on: row, plain: BUDGET_PLAIN[name].default, 'plain-on': BUDGET_PLAIN[name].on }]));
 Object.assign(BUDGET['bpmn-generator-pipeline.json'], {
   off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 172 }),
   on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 16, labelLabel: 1, overlapLen: 112 }) });
@@ -411,9 +404,9 @@ Object.assign(BUDGET['realistic-collaboration.json'], {
 // Flow direction (bend-rule.js bendMetrics, through flow-metrics.mjs flowDirectionMetrics), every
 // mode: [avoidableBends, againstFlowEntries]. avoidableBends sums current − fewest admissible bends
 // over the sequence flows; againstFlowEntries counts activity/event targets not entered from the
-// left although an admissible left entry with no more bends exists. With the rule on (bends) both
-// are 0 — the rule and the measure share one search — so the bends column fences the pass, the
-// other three what the rule would still find. One exception the measure counts and the rule rightly
+// left although an admissible left entry with no more bends exists. With the rule on (default, off,
+// on) both are 0 — the rule and the measure share one search — so those modes fence the pass, and
+// plain / plain-on what the rule would still find without it. One exception the measure counts and the rule rightly
 // leaves: an even trade, where the left entry needs a source exit that is not rightwards (one side
 // penalty for another) — example-urlaubsantrag f213, "Mitarbeiter informieren" → "Urlaub
 // genehmigt", entered from below. The search includes projection ports
@@ -422,13 +415,14 @@ Object.assign(BUDGET['realistic-collaboration.json'], {
 // subprocess-merge-fanout f5/f7) and a left entry onto a projection port (wrapping-back-edge).
 const d = (avoidableBends, againstFlowEntries) => ({ avoidableBends, againstFlowEntries });
 const NONE = d(0, 0);
-// plain = the former default rows; default / off / on run the rule, which leaves nothing avoidable.
-const dir = (row, on = row) => ({ default: NONE, off: NONE, on: NONE, plain: row });
+// plain / plain-on = the former default / on rows; default / off / on run the rule, which leaves
+// nothing avoidable. `on` defaults to the plain row where refinement + wrapping change neither count.
+const dir = (row, on = row) => ({ default: NONE, off: NONE, on: NONE, plain: row, 'plain-on': on });
 const DIRECTION = {
   'all-element-classes.json':           dir(NONE),
   'boundary-event-shapes.json':         dir(d(2, 0)),
   'bpmn-generator-pipeline.json':       dir(d(7, 2), d(12, 6)),
-  'deadlock-process.json':              { default: null, off: null, on: null, plain: null },
+  'deadlock-process.json':              { default: null, off: null, on: null, plain: null, 'plain-on': null },
   'dense-edge-labels.json':             dir(NONE),
   'example-bestellung-versand.json':   dir(d(4, 1)),
   'example-kreditantrag.json':          dir(d(5, 3), d(11, 3)),
@@ -451,7 +445,7 @@ const DIRECTION = {
   'wrapping-back-edge.json':            dir(d(2, 1)),
 };
 
-describe('layout budget — every top-level fixture × four modes (default, off, on, plain)', () => {
+describe('layout budget — every top-level fixture × five modes (default, off, on, plain, plain-on)', () => {
   test('every fixture has a budget row (a new fixture must be measured, not skipped)', () => {
     expect(Object.keys(BUDGET).sort()).toEqual(FIXTURES);
     expect(Object.keys(BUDGET_DEFAULT).sort()).toEqual(FIXTURES);
