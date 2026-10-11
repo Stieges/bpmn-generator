@@ -5268,7 +5268,7 @@ describe('DI integrity check', () => {
           .toBe(`${name} vr=${visualRefinement}: []`);
       }
     }
-  }, 30000); // every fixture × three modes; CI runners are slower than local machines (#78)
+  }, 60000); // every fixture × three modes, ~11 s under the full parallel run; CI runners are slower than local machines (#78)
 
   test('lane bands tile without a strip, refined or not', async () => {
     const fixtureNames = readdirSync(fixturesDir).filter(f => f.endsWith('.json'));
@@ -5290,7 +5290,7 @@ describe('DI integrity check', () => {
         expect(`${name} vr=${visualRefinement}: ${strips.join(', ')}`).toBe(`${name} vr=${visualRefinement}: `);
       }
     }
-  }, 30000); // every fixture × three modes; CI runners are slower than local machines (#78)
+  }, 60000); // every fixture × three modes, ~11 s under the full parallel run; CI runners are slower than local machines (#78)
 
   describe('DI08 — an end segment along its own outline (#52)', () => {
     const lc = { pools: [{ id: 'P',

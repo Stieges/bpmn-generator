@@ -1,0 +1,297 @@
+{
+ "pools": [
+  {
+   "id": "Process_Onboarding",
+   "name": "Onboarding neuer Mitarbeiter",
+   "lanes": [
+    {
+     "id": "hr",
+     "name": "Personalabteilung"
+    },
+    {
+     "id": "it",
+     "name": "IT-Service"
+    },
+    {
+     "id": "fb",
+     "name": "Fachbereich"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "o_start",
+     "type": "startEvent",
+     "name": "Arbeitsvertrag unterzeichnet",
+     "lane": "hr"
+    },
+    {
+     "id": "o_do",
+     "type": "dataObjectReference",
+     "name": "Personalakte",
+     "lane": "hr"
+    },
+    {
+     "id": "o_akte",
+     "type": "userTask",
+     "name": "Personalakte anlegen",
+     "lane": "hr"
+    },
+    {
+     "id": "o_split",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "hr"
+    },
+    {
+     "id": "o_hw",
+     "type": "sendTask",
+     "name": "Arbeitsplatz-Hardware bestellen",
+     "lane": "it"
+    },
+    {
+     "id": "o_konto",
+     "type": "serviceTask",
+     "name": "Benutzerkonto einrichten",
+     "lane": "it"
+    },
+    {
+     "id": "o_timer",
+     "type": "boundaryEvent",
+     "name": "Lieferung nach 10 Tagen offen",
+     "lane": "it",
+     "marker": "timer",
+     "attachedTo": "o_hw"
+    },
+    {
+     "id": "o_nachfassen",
+     "type": "userTask",
+     "name": "Lieferanten nachfassen",
+     "lane": "it"
+    },
+    {
+     "id": "o_hwrein",
+     "type": "receiveTask",
+     "name": "Hardware erhalten",
+     "lane": "it"
+    },
+    {
+     "id": "o_einricht",
+     "type": "userTask",
+     "name": "Arbeitsplatz einrichten",
+     "lane": "it"
+    },
+    {
+     "id": "o_sub",
+     "type": "subProcess",
+     "name": "Einarbeitung",
+     "lane": "fb",
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "e_start",
+       "type": "startEvent",
+       "name": "Einarbeitung startet"
+      },
+      {
+       "id": "e_pate",
+       "type": "userTask",
+       "name": "Paten zuweisen"
+      },
+      {
+       "id": "e_plan",
+       "type": "userTask",
+       "name": "Einarbeitungsplan erstellen"
+      },
+      {
+       "id": "e_gw",
+       "type": "exclusiveGateway",
+       "name": "Plan abgenommen?"
+      },
+      {
+       "id": "e_end",
+       "type": "endEvent",
+       "name": "Plan aktiv"
+      }
+     ],
+     "edges": [
+      {
+       "id": "f501",
+       "source": "e_start",
+       "target": "e_pate"
+      },
+      {
+       "id": "f502",
+       "source": "e_pate",
+       "target": "e_plan"
+      },
+      {
+       "id": "f503",
+       "source": "e_plan",
+       "target": "e_gw"
+      },
+      {
+       "id": "f504",
+       "source": "e_gw",
+       "target": "e_end",
+       "label": "Ja"
+      },
+      {
+       "id": "f505",
+       "source": "e_gw",
+       "target": "e_plan",
+       "label": "Nein"
+      }
+     ]
+    },
+    {
+     "id": "o_join",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "fb"
+    },
+    {
+     "id": "o_tag1",
+     "type": "userTask",
+     "name": "Erster Arbeitstag begleiten",
+     "lane": "fb"
+    },
+    {
+     "id": "o_gw",
+     "type": "exclusiveGateway",
+     "name": "Probezeit bestanden?",
+     "lane": "hr"
+    },
+    {
+     "id": "o_end1",
+     "type": "endEvent",
+     "name": "Onboarding abgeschlossen",
+     "lane": "hr"
+    },
+    {
+     "id": "o_end2",
+     "type": "endEvent",
+     "name": "Vertragsende eingeleitet",
+     "lane": "hr"
+    },
+    {
+     "id": "o_end3",
+     "type": "endEvent",
+     "name": "Nachfassen erledigt",
+     "lane": "it"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f506",
+     "source": "o_start",
+     "target": "o_akte"
+    },
+    {
+     "id": "f507",
+     "source": "o_akte",
+     "target": "o_split"
+    },
+    {
+     "id": "f508",
+     "source": "o_split",
+     "target": "o_hw"
+    },
+    {
+     "id": "f509",
+     "source": "o_split",
+     "target": "o_konto"
+    },
+    {
+     "id": "f510",
+     "source": "o_split",
+     "target": "o_sub"
+    },
+    {
+     "id": "f511",
+     "source": "o_hw",
+     "target": "o_hwrein"
+    },
+    {
+     "id": "f512",
+     "source": "o_hwrein",
+     "target": "o_einricht"
+    },
+    {
+     "id": "f513",
+     "source": "o_timer",
+     "target": "o_nachfassen"
+    },
+    {
+     "id": "f514",
+     "source": "o_nachfassen",
+     "target": "o_end3"
+    },
+    {
+     "id": "f515",
+     "source": "o_einricht",
+     "target": "o_join"
+    },
+    {
+     "id": "f516",
+     "source": "o_konto",
+     "target": "o_join"
+    },
+    {
+     "id": "f517",
+     "source": "o_sub",
+     "target": "o_join"
+    },
+    {
+     "id": "f518",
+     "source": "o_join",
+     "target": "o_tag1"
+    },
+    {
+     "id": "f519",
+     "source": "o_tag1",
+     "target": "o_gw"
+    },
+    {
+     "id": "f520",
+     "source": "o_gw",
+     "target": "o_end1",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f521",
+     "source": "o_gw",
+     "target": "o_end2",
+     "label": "Nein"
+    }
+   ]
+  }
+ ],
+ "collapsedPools": [
+  {
+   "id": "Pool_Lieferant",
+   "name": "Hardware-Lieferant"
+  }
+ ],
+ "messageFlows": [
+  {
+   "id": "mf522",
+   "source": "o_hw",
+   "target": "Pool_Lieferant",
+   "name": "Bestellung"
+  },
+  {
+   "id": "mf523",
+   "source": "Pool_Lieferant",
+   "target": "o_hwrein",
+   "name": "Lieferung"
+  }
+ ],
+ "associations": [
+  {
+   "id": "as_o1",
+   "source": "o_do",
+   "target": "o_akte"
+  }
+ ]
+}

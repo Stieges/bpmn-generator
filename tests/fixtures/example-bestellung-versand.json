@@ -1,0 +1,291 @@
+{
+ "pools": [
+  {
+   "id": "Process_Shop",
+   "name": "Webshop",
+   "lanes": [
+    {
+     "id": "vt",
+     "name": "Vertrieb"
+    },
+    {
+     "id": "lg",
+     "name": "Lager"
+    },
+    {
+     "id": "vs",
+     "name": "Versand"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "b_start",
+     "type": "startEvent",
+     "name": "Bestellung eingegangen",
+     "lane": "vt",
+     "marker": "message"
+    },
+    {
+     "id": "b_do",
+     "type": "dataObjectReference",
+     "name": "Bestellung",
+     "lane": "vt"
+    },
+    {
+     "id": "b_pruefen",
+     "type": "userTask",
+     "name": "Bestellung prüfen",
+     "lane": "vt"
+    },
+    {
+     "id": "b_gw1",
+     "type": "exclusiveGateway",
+     "name": "Ware verfügbar?",
+     "lane": "lg"
+    },
+    {
+     "id": "b_nachbestellen",
+     "type": "serviceTask",
+     "name": "Nachbestellung auslösen",
+     "lane": "lg"
+    },
+    {
+     "id": "b_wartenware",
+     "type": "intermediateCatchEvent",
+     "name": "Ware eingetroffen",
+     "lane": "lg",
+     "marker": "message"
+    },
+    {
+     "id": "b_sub",
+     "type": "subProcess",
+     "name": "Kommissionierung",
+     "lane": "lg",
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "s_start",
+       "type": "startEvent",
+       "name": "Auftrag liegt vor"
+      },
+      {
+       "id": "s_pick",
+       "type": "manualTask",
+       "name": "Artikel entnehmen"
+      },
+      {
+       "id": "s_scan",
+       "type": "userTask",
+       "name": "Artikel scannen"
+      },
+      {
+       "id": "s_pack",
+       "type": "manualTask",
+       "name": "Paket verpacken"
+      },
+      {
+       "id": "s_end",
+       "type": "endEvent",
+       "name": "Paket bereit"
+      }
+     ],
+     "edges": [
+      {
+       "id": "f101",
+       "source": "s_start",
+       "target": "s_pick"
+      },
+      {
+       "id": "f102",
+       "source": "s_pick",
+       "target": "s_scan"
+      },
+      {
+       "id": "f103",
+       "source": "s_scan",
+       "target": "s_pack"
+      },
+      {
+       "id": "f104",
+       "source": "s_pack",
+       "target": "s_end"
+      }
+     ]
+    },
+    {
+     "id": "b_timer",
+     "type": "boundaryEvent",
+     "name": "Lieferfrist überschritten",
+     "lane": "lg",
+     "marker": "timer",
+     "attachedTo": "b_sub"
+    },
+    {
+     "id": "b_eskal",
+     "type": "userTask",
+     "name": "Lagerleiter informieren",
+     "lane": "lg"
+    },
+    {
+     "id": "b_split",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "vs"
+    },
+    {
+     "id": "b_label",
+     "type": "serviceTask",
+     "name": "Versandetikett erzeugen",
+     "lane": "vs"
+    },
+    {
+     "id": "b_rechnung",
+     "type": "serviceTask",
+     "name": "Rechnung erstellen",
+     "lane": "vt"
+    },
+    {
+     "id": "b_join",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "vs"
+    },
+    {
+     "id": "b_uebergabe",
+     "type": "sendTask",
+     "name": "Paket an Paketdienst übergeben",
+     "lane": "vs"
+    },
+    {
+     "id": "b_end",
+     "type": "endEvent",
+     "name": "Versand abgeschlossen",
+     "lane": "vs"
+    },
+    {
+     "id": "b_end2",
+     "type": "endEvent",
+     "name": "Eskalation erfasst",
+     "lane": "lg"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f105",
+     "source": "b_start",
+     "target": "b_pruefen"
+    },
+    {
+     "id": "f106",
+     "source": "b_pruefen",
+     "target": "b_gw1"
+    },
+    {
+     "id": "f107",
+     "source": "b_gw1",
+     "target": "b_sub",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f108",
+     "source": "b_gw1",
+     "target": "b_nachbestellen",
+     "label": "Nein"
+    },
+    {
+     "id": "f109",
+     "source": "b_nachbestellen",
+     "target": "b_wartenware"
+    },
+    {
+     "id": "f110",
+     "source": "b_wartenware",
+     "target": "b_sub"
+    },
+    {
+     "id": "f111",
+     "source": "b_timer",
+     "target": "b_eskal"
+    },
+    {
+     "id": "f112",
+     "source": "b_eskal",
+     "target": "b_end2"
+    },
+    {
+     "id": "f113",
+     "source": "b_sub",
+     "target": "b_split"
+    },
+    {
+     "id": "f114",
+     "source": "b_split",
+     "target": "b_label"
+    },
+    {
+     "id": "f115",
+     "source": "b_split",
+     "target": "b_rechnung"
+    },
+    {
+     "id": "f116",
+     "source": "b_label",
+     "target": "b_join"
+    },
+    {
+     "id": "f117",
+     "source": "b_rechnung",
+     "target": "b_join"
+    },
+    {
+     "id": "f118",
+     "source": "b_join",
+     "target": "b_uebergabe"
+    },
+    {
+     "id": "f119",
+     "source": "b_uebergabe",
+     "target": "b_end"
+    }
+   ]
+  }
+ ],
+ "collapsedPools": [
+  {
+   "id": "Pool_Paket",
+   "name": "Paketdienst"
+  },
+  {
+   "id": "Pool_Kunde2",
+   "name": "Kunde"
+  }
+ ],
+ "messageFlows": [
+  {
+   "id": "mf120",
+   "source": "Pool_Kunde2",
+   "target": "b_start",
+   "name": "Bestellung"
+  },
+  {
+   "id": "mf121",
+   "source": "b_uebergabe",
+   "target": "Pool_Paket",
+   "name": "Paket"
+  },
+  {
+   "id": "mf122",
+   "source": "b_rechnung",
+   "target": "Pool_Kunde2",
+   "name": "Rechnung"
+  }
+ ],
+ "associations": [
+  {
+   "id": "as_b1",
+   "source": "b_do",
+   "target": "b_pruefen"
+  }
+ ]
+}

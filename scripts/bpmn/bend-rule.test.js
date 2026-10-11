@@ -393,7 +393,7 @@ describe('the pass in the pipeline', () => {
         if (applyBendRule(r.coordMap, normalizeEdgeIds(lc)) !== r.coordMap.edgeCoords) bad.push(`${name} not idempotent`);
       }
       expect(bad).toEqual([]);
-    }, 60000);
+    }, 120000); // ~23 s under the full parallel run (example-bestellung-versand alone ~2 s per mode)
   }
 
   test('an id-less edge: the pipeline gives it an id, and the measure and the pass see its route', async () => {
@@ -452,4 +452,13 @@ describe('labels of re-routed flows (urlaubsantrag, "Resturlaub ausreichend?")',
     }
     expect(bad).toEqual([]);
   }, 120000);
+
+  test('example-urlaubsantrag: the two branches out of "Resturlaub ausreichend?" leave by different sides, each label off the other\'s line', async () => {
+    const lc = load('example-urlaubsantrag.json');
+    const r = await runPipeline(lc, { bendRule: true });
+    const { f209, f210 } = r.coordMap.edgeCoords;
+    expect(exitSide(f209)).not.toBe(exitSide(f210));
+    expect(labelHitsRoute(edgeLabelBox(r.coordMap.edgeLabels.f209), f210)).toBe(false);
+    expect(labelHitsRoute(edgeLabelBox(r.coordMap.edgeLabels.f210), f209)).toBe(false);
+  }, 30000);
 });

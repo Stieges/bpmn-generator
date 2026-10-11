@@ -21,5 +21,5 @@ describe('default output, both opt-in layout switches off', () => {
     expect(diffs.length ? `default output changed for: ${diffs.join('; ')}. Inspect the diff like a golden ` +
       '(CLAUDE.md, "React to a golden-file failure"); regenerate with `node bench/output-hashes.mjs` only when the change is intended.' : '')
       .toBe('');
-  }, 60000); // ~2 s locally (72 pipeline runs); 30x headroom for a slow CI runner
+  }, 120000); // ~4 s alone, ~17 s under the full parallel run (92 pipeline runs); 7x headroom for a slow CI runner
 });

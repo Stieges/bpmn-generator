@@ -1,0 +1,196 @@
+{
+ "pools": [
+  {
+   "id": "Process_Urlaub",
+   "name": "Urlaubsantrag",
+   "lanes": [
+    {
+     "id": "ma",
+     "name": "Mitarbeiter"
+    },
+    {
+     "id": "vg",
+     "name": "Vorgesetzter"
+    },
+    {
+     "id": "hr",
+     "name": "Personalabteilung"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "u_start",
+     "type": "startEvent",
+     "name": "Urlaubswunsch",
+     "lane": "ma"
+    },
+    {
+     "id": "u_form",
+     "type": "userTask",
+     "name": "Urlaubsantrag stellen",
+     "lane": "ma"
+    },
+    {
+     "id": "u_do",
+     "type": "dataObjectReference",
+     "name": "Urlaubsformular",
+     "lane": "ma"
+    },
+    {
+     "id": "u_pruefen",
+     "type": "userTask",
+     "name": "Antrag prüfen",
+     "lane": "vg"
+    },
+    {
+     "id": "u_timer",
+     "type": "boundaryEvent",
+     "name": "3 Tage keine Reaktion",
+     "lane": "vg",
+     "marker": "timer",
+     "attachedTo": "u_pruefen"
+    },
+    {
+     "id": "u_eskal",
+     "type": "sendTask",
+     "name": "Erinnerung an Vorgesetzten",
+     "lane": "hr"
+    },
+    {
+     "id": "u_gw",
+     "type": "exclusiveGateway",
+     "name": "Genehmigt?",
+     "lane": "vg"
+    },
+    {
+     "id": "u_gw2",
+     "type": "exclusiveGateway",
+     "name": "Resturlaub ausreichend?",
+     "lane": "hr"
+    },
+    {
+     "id": "u_aendern",
+     "type": "userTask",
+     "name": "Antrag überarbeiten",
+     "lane": "ma"
+    },
+    {
+     "id": "u_konto",
+     "type": "serviceTask",
+     "name": "Urlaubskonto buchen",
+     "lane": "hr"
+    },
+    {
+     "id": "u_plan",
+     "type": "serviceTask",
+     "name": "Abwesenheitskalender aktualisieren",
+     "lane": "hr"
+    },
+    {
+     "id": "u_info",
+     "type": "sendTask",
+     "name": "Mitarbeiter informieren",
+     "lane": "hr"
+    },
+    {
+     "id": "u_end1",
+     "type": "endEvent",
+     "name": "Urlaub genehmigt",
+     "lane": "ma"
+    },
+    {
+     "id": "u_end2",
+     "type": "endEvent",
+     "name": "Antrag zurückgezogen",
+     "lane": "ma"
+    },
+    {
+     "id": "u_end3",
+     "type": "endEvent",
+     "name": "Erinnerung versendet",
+     "lane": "hr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f201",
+     "source": "u_start",
+     "target": "u_form"
+    },
+    {
+     "id": "f202",
+     "source": "u_form",
+     "target": "u_pruefen"
+    },
+    {
+     "id": "f203",
+     "source": "u_pruefen",
+     "target": "u_gw"
+    },
+    {
+     "id": "f204",
+     "source": "u_timer",
+     "target": "u_eskal"
+    },
+    {
+     "id": "f205",
+     "source": "u_eskal",
+     "target": "u_end3"
+    },
+    {
+     "id": "f206",
+     "source": "u_gw",
+     "target": "u_gw2",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f207",
+     "source": "u_gw",
+     "target": "u_aendern",
+     "label": "Nein, Änderung nötig"
+    },
+    {
+     "id": "f208",
+     "source": "u_aendern",
+     "target": "u_form"
+    },
+    {
+     "id": "f209",
+     "source": "u_gw2",
+     "target": "u_konto",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f210",
+     "source": "u_gw2",
+     "target": "u_end2",
+     "label": "Nein"
+    },
+    {
+     "id": "f211",
+     "source": "u_konto",
+     "target": "u_plan"
+    },
+    {
+     "id": "f212",
+     "source": "u_plan",
+     "target": "u_info"
+    },
+    {
+     "id": "f213",
+     "source": "u_info",
+     "target": "u_end1"
+    }
+   ]
+  }
+ ],
+ "associations": [
+  {
+   "id": "as_u1",
+   "source": "u_do",
+   "target": "u_form"
+  }
+ ]
+}
