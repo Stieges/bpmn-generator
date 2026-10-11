@@ -28,6 +28,9 @@ import { repairCrossings } from './edge-simplify.js';
 import { wrapText, wrapTextByPx, CFG } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
+
+// Everything on: visual refinement plus ELK wrapping (wrapping is its own switch, off by default).
+const ALL_ON = { visualRefinement: true, elkWrapping: 'auto' };
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
 import { checkWorkflowNetSoundness, bpmnToPN, checkSoundness } from './workflow-net.js';
 import { enumerateScenarios } from '../scenarios/enumerate.js';
@@ -3767,7 +3770,7 @@ describe('SVG Golden-File Regression', () => {
 
     test(`${name}: SVG matches refined golden file`, async () => {
       const lc = loadFixture(`${name}.json`);
-      const result = await runPipeline(lc, { visualRefinement: true });
+      const result = await runPipeline(lc, ALL_ON);
       expect(result.svg).toBeDefined();
 
       let expected;
@@ -3781,7 +3784,7 @@ describe('SVG Golden-File Regression', () => {
 
     test(`${name}: BPMN XML matches refined golden file`, async () => {
       const lc = loadFixture(`${name}.json`);
-      const result = await runPipeline(lc, { visualRefinement: true });
+      const result = await runPipeline(lc, ALL_ON);
       expect(result.bpmnXml).toBeDefined();
 
       let expected;
@@ -3887,7 +3890,7 @@ describe('long-lane-names matrix', () => {
   });
 
   test('matches .refined golden with refinement enabled', async () => {
-    const res = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const res = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const goldenBpmn = readFileSync('../tests/fixtures/long-lane-names.refined.bpmn', 'utf8');
     const goldenSvg  = readFileSync('../tests/fixtures/long-lane-names.refined.svg',  'utf8');
     expect(res.bpmnXml).toBe(goldenBpmn);
@@ -3905,7 +3908,7 @@ describe('Pass 1 metric assertions', () => {
     // For long-lane-names, the rotated text fits within 30px height — no widening needed.
     // Test invariant is "refinement never produces a narrower header than off".
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const poolKey = Object.keys(off.coordMap.poolCoords)[0];
     const offWidth = off.coordMap.poolCoords[poolKey].laneHeaderWidth;
     const onWidth  = on.coordMap.poolCoords[poolKey].laneHeaderWidth;
@@ -3918,7 +3921,7 @@ describe('Pass 1 metric assertions', () => {
     // widening from 30 → up to 120) is ~1.53× the baseline. Bumped tolerance from
     // 1.5× to 1.6× to accommodate. Intent ("canvas doesn't blow up") preserved.
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const extractW = (svg) => {
       const m = svg.match(/width="(\d+)"/);
       return m ? parseInt(m[1], 10) : 0;
@@ -3939,7 +3942,7 @@ describe('dense-edge-labels matrix', () => {
   });
 
   test('matches .refined golden (refinement on)', async () => {
-    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/dense-edge-labels.refined.bpmn', 'utf8'));
     expect(r.svg).toBe(readFileSync('../tests/fixtures/dense-edge-labels.refined.svg', 'utf8'));
   });
@@ -3967,9 +3970,9 @@ describe('Pass 3 metric assertions', () => {
       let without, withRepair;
       try {
         CFG.visualRefinement.edgeLabelCollisionRepair = false;
-        without = await runPipeline(loadFixture(fixture), { visualRefinement: true });
+        without = await runPipeline(loadFixture(fixture), ALL_ON);
         CFG.visualRefinement.edgeLabelCollisionRepair = true;
-        withRepair = await runPipeline(loadFixture(fixture), { visualRefinement: true });
+        withRepair = await runPipeline(loadFixture(fixture), ALL_ON);
       } finally {
         CFG.visualRefinement.edgeLabelCollisionRepair = before;
       }
@@ -3993,7 +3996,7 @@ describe('Pass 3 metric assertions', () => {
       return n;
     };
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     expect(countOverlaps(on.coordMap)).toBeLessThanOrEqual(countOverlaps(off.coordMap));
   });
 });
@@ -4002,7 +4005,7 @@ describe('Pass 3 metric assertions', () => {
 // §P4.1  logicCoreToElk — conditional ELK wrapping
 // ═══════════════════════════════════════════════════════════════
 
-import { logicCoreToElk } from './layout.js';
+import { logicCoreToElk, runElkLayout, resolveElkWrapping } from './layout.js';
 
 describe('logicCoreToElk — conditional ELK wrapping', () => {
   // A linear 30-node pipeline (forces long single row without wrapping)
@@ -4039,6 +4042,29 @@ describe('logicCoreToElk — conditional ELK wrapping', () => {
     expect(props['elk.layered.wrapping.additionalEdgeSpacing']).toBeDefined();
   });
 
+  test('resolveElkWrapping: config default off, true means auto, unknown values are refused', () => {
+    expect(resolveElkWrapping(undefined)).toBe('off');
+    expect(resolveElkWrapping(true)).toBe('auto');
+    expect(resolveElkWrapping(false)).toBe('off');
+    expect(resolveElkWrapping('always')).toBe('always');
+    expect(() => resolveElkWrapping('sometimes')).toThrow(TypeError);
+  });
+
+  test("'always' wraps below the threshold", () => {
+    const lc = { nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }], edges: [{ id: 'f', source: 's', target: 'e' }] };
+    expect(logicCoreToElk(lc, { elkWrapping: 'always' }).properties['elk.layered.wrapping.strategy']).toBe('MULTI_EDGE');
+  });
+
+  test('artifacts and boundary events do not count against the threshold', () => {
+    const lc = mkWideLc();
+    lc.nodes = lc.nodes.slice(0, 15);                 // 15 nodes in the ELK graph
+    lc.edges = lc.edges.slice(0, 14);
+    for (let i = 0; i < 10; i++) lc.nodes.push({ id: `a${i}`, type: 'textAnnotation', name: `Note ${i}` });
+    lc.nodes.push({ id: 'b0', type: 'boundaryEvent', attachedTo: 't1', name: 'B' });
+    const graph = logicCoreToElk(lc, { elkWrapping: 'auto' });
+    expect(graph.properties['elk.layered.wrapping.strategy']).toBeUndefined();
+  });
+
   test('no wrapping when node count below threshold (5 nodes)', () => {
     const lc = {
       nodes: [
@@ -4060,6 +4086,48 @@ describe('logicCoreToElk — conditional ELK wrapping', () => {
   });
 });
 
+describe('ELK wrapping is independent of visual refinement', () => {
+  const lc = () => JSON.parse(readFileSync('../tests/fixtures/wide-pipeline.json', 'utf8'));
+  const height = (r) => Math.max(...Object.values(r.coordMap.poolCoords).map(p => p.y + p.h)) - Math.min(...Object.values(r.coordMap.poolCoords).map(p => p.y));
+  test('visualRefinement: true alone does not wrap a 27-node chain', async () => {
+    const plain = await runPipeline(lc(), { visualRefinement: true });
+    const wrapped = await runPipeline(lc(), ALL_ON);
+    expect(height(wrapped)).toBeGreaterThan(height(plain) * 2);
+  });
+  test("elkWrapping: 'auto' alone wraps it", async () => {
+    const off = await runPipeline(lc(), { visualRefinement: false });
+    const wrapOnly = await runPipeline(lc(), { visualRefinement: false, elkWrapping: 'auto' });
+    expect(height(wrapOnly)).toBeGreaterThan(height(off) * 2);
+  });
+});
+
+describe('ELK wrapping fallback', () => {
+  const lc = () => JSON.parse(readFileSync('../tests/fixtures/wrapping-back-edge.json', 'utf8'));
+
+  test('a 23-node chain with a back edge lays out with wrapping requested and says it fell back', async () => {
+    const r = await runPipeline(lc(), { elkWrapping: 'auto' });
+    expect(r.bpmnXml).toBeTruthy();
+    expect(r.diagnostics.ok).toBe(true);
+    expect(r.validation.infos).toEqual([expect.stringContaining('wrapping skipped')]);
+  });
+
+  test('--refine --wrap equivalent (ALL_ON) no longer crashes on it', async () => {
+    const r = await runPipeline(lc(), ALL_ON);
+    expect(r.bpmnXml).toBeTruthy();
+    expect(r.validation.infos.length).toBe(1);
+  });
+
+  test('without wrapping there is nothing to report', async () => {
+    const r = await runPipeline(lc());
+    expect(r.validation.infos).toEqual([]);
+  });
+
+  test('runElkLayout re-throws when there was no wrapping to remove', async () => {
+    const bad = { id: 'root', properties: {}, children: [], edges: [{ id: 'e', sources: ['nope'], targets: ['nada'] }] };
+    await expect(runElkLayout(bad)).rejects.toBeDefined();
+  });
+});
+
 describe('wide-pipeline matrix', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/wide-pipeline.json', 'utf8'));
 
@@ -4070,7 +4138,7 @@ describe('wide-pipeline matrix', () => {
   });
 
   test('matches .refined golden (refinement on)', async () => {
-    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/wide-pipeline.refined.bpmn', 'utf8'));
     expect(r.svg).toBe(readFileSync('../tests/fixtures/wide-pipeline.refined.svg', 'utf8'));
   });
@@ -4086,7 +4154,7 @@ describe('Pass 5 (ELK wrapping) metric assertions', () => {
   };
 
   test('refinement ON produces a more compact aspect ratio (≤ 4.5)', async () => {
-    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const { w, h } = parseCanvas(on.svg);
     const aspect = w / h;
     expect(aspect).toBeLessThanOrEqual(4.5);
@@ -4094,7 +4162,7 @@ describe('Pass 5 (ELK wrapping) metric assertions', () => {
 
   test('refinement ON has significantly better aspect ratio than OFF', async () => {
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
-    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const on  = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const offRatio = parseCanvas(off.svg).w / parseCanvas(off.svg).h;
     const onRatio  = parseCanvas(on.svg).w  / parseCanvas(on.svg).h;
     // Require at least 2× improvement
@@ -4107,7 +4175,7 @@ describe('Pass 5 (ELK wrapping) metric assertions', () => {
     // wrapping mode. The structural property (nodes assigned to lane) holds;
     // the geometric tolerance is widened to +25 until the Edge-Routing pass
     // recomputes lane right-padding from ELK output.
-    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     const laneBbox = on.coordMap.laneCoords['l1'];
     expect(laneBbox).toBeDefined();
     for (const [id, c] of Object.entries(on.coordMap.coords)) {
@@ -4129,7 +4197,7 @@ describe('sparse-lanes matrix', () => {
   });
 
   test('matches .refined golden (refinement on)', async () => {
-    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const r = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
     expect(r.bpmnXml).toBe(readFileSync('../tests/fixtures/sparse-lanes.refined.bpmn', 'utf8'));
     expect(r.svg).toBe(readFileSync('../tests/fixtures/sparse-lanes.refined.svg', 'utf8'));
   });
@@ -4201,7 +4269,7 @@ describe('Pass 2 (lane compaction) abort criterion', () => {
     // Run pipeline with refinement OFF (baseline)
     const off = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
     // Run pipeline with refinement ON (with compaction)
-    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: true });
+    const on = await runPipeline(JSON.parse(JSON.stringify(lc)), ALL_ON);
 
     // Extract edge polylines from coordMap
     const edgesOff = off.coordMap.edgeCoords;
@@ -5164,7 +5232,7 @@ describe('DI integrity check', () => {
       const lc = JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
       if (!lc.pools && !lc.nodes) continue; // not a Logic-Core document
       for (const visualRefinement of [false, true]) {
-        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement });
+        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         if (!r.coordMap) continue; // fixture intentionally fails validation (e.g. deadlock-process)
         const di07 = r.diagnostics.issues.filter(i => i.code === 'DI07');
         expect(`${name} vr=${visualRefinement}: ${JSON.stringify(di07)}`)
@@ -5179,7 +5247,7 @@ describe('DI integrity check', () => {
       const lc = JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
       if (!lc.pools && !lc.nodes) continue;
       for (const visualRefinement of [false, true]) {
-        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement });
+        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         if (!r.coordMap) continue;
         const strips = [];
         for (const proc of lc.pools || [lc]) {
@@ -5352,7 +5420,7 @@ describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () 
   test('lane bands never overlap, with or without visual refinement', async () => {
     for (const visualRefinement of [false, true]) {
       const lc = loadFixture('realistic-collaboration.json');
-      const r = await runPipeline(lc, { visualRefinement });
+      const r = await runPipeline(lc, (visualRefinement ? ALL_ON : { visualRefinement: false }));
       expect(r.diagnostics.issues.filter(i => i.code === 'DI04')).toEqual([]);
       expect(r.diagnostics.ok).toBe(true);
     }
@@ -5552,7 +5620,7 @@ describe('artifacts inside an expanded subprocess stay inside it', () => {
 
   test('the fidelity fixture, which carries two unassociated nested data objects, is clean', async () => {
     for (const visualRefinement of [false, true]) {
-      const r = await runPipeline(loadFixture('subprocess-child-fidelity.json'), { visualRefinement });
+      const r = await runPipeline(loadFixture('subprocess-child-fidelity.json'), (visualRefinement ? ALL_ON : { visualRefinement: false }));
       expect(errorsOf(r)).toEqual([]);
     }
   });
@@ -6026,7 +6094,7 @@ describe('geometry contract — the two renderers agree', () => {
   for (const fixture of ['all-element-classes.json', 'multi-pool-collaboration.json', 'realistic-collaboration.json', 'expanded-subprocess.json', 'sparse-lanes.json', 'simple-approval.json', 'dense-edge-labels.json']) {
     for (const visualRefinement of [false, true]) {
       test(`${fixture} (refinement: ${visualRefinement}) — the DI is coordMap, unchanged`, async () => {
-        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         const cm = r.coordMap;
 
         for (const [id, b] of Object.entries(diShapes(r.bpmnXml))) {
@@ -6043,7 +6111,7 @@ describe('geometry contract — the two renderers agree', () => {
       });
 
       test(`${fixture} (refinement: ${visualRefinement}) — the SVG is coordMap under one offset`, async () => {
-        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         const svg = svgConnections(r.svg);
         const drawn = [...svg.sequenceFlow, ...svg.messageFlow, ...svg.association];
 
@@ -6078,7 +6146,7 @@ describe('geometry contract — the two renderers agree', () => {
         // bpmn-js keeps a BPMNLabel's centre-x and top, and sets its first baseline 3/4 of a line
         // (fontSize × lineHeight) below the top. The SVG must put the same lines there, under the
         // one canvas offset its connections use.
-        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         const cm = r.coordMap;
         const drawnConn = Object.values(svgConnections(r.svg)).flat();
         const ids = Object.keys(cm.edgeCoords);
@@ -6098,7 +6166,7 @@ describe('geometry contract — the two renderers agree', () => {
 
       test(`${fixture} (refinement: ${visualRefinement}) — every edge label in the DI is coordMap's`, async () => {
         const { edgeLabelBox } = await import('./coordinates.js');
-        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         const lc = loadFixture(fixture);
         const labelled = (nodes) => (nodes || []).flatMap(n => [...(n.edges || []).filter(e => e.label), ...labelled(n.nodes)]);
         const edges = [
@@ -6139,7 +6207,7 @@ describe('edge labels follow the final route', () => {
   for (const fixture of fixtures) {
     for (const visualRefinement of [false, true]) {
       test(`${fixture} (refinement: ${visualRefinement}) — no edge label crosses its own flow`, async () => {
-        const r = await runPipeline(loadFixture(fixture), { visualRefinement });
+        const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         if (!r.coordMap) return;   // blocked on purpose
         const crossing = Object.entries(r.coordMap.edgeLabels)
           .filter(([id, L]) => hitsRoute(boxOf(L), r.coordMap.edgeCoords[id])).map(([id]) => id);
@@ -6241,7 +6309,7 @@ describe('message flow routing', () => {
   for (const visualRefinement of [false, true]) {
     test(`every segment is orthogonal (refinement: ${visualRefinement})`, async () => {
       const lc = loadFixture('realistic-collaboration.json');
-      const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement });
+      const r = await runPipeline(loadFixture('realistic-collaboration.json'), (visualRefinement ? ALL_ON : { visualRefinement: false }));
       const diagonal = legs(r, lc).filter(s => Math.abs(s.a.x - s.b.x) > 1 && Math.abs(s.a.y - s.b.y) > 1);
       expect(diagonal).toEqual([]);
     });
@@ -6253,7 +6321,7 @@ describe('message flow routing', () => {
       // a short leg inside the SENDER's or RECEIVER's own pool is allowed — it steps
       // round the task in the next lane — but never inside a pool the flow does not involve.
       const lc = loadFixture('realistic-collaboration.json');
-      const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement });
+      const r = await runPipeline(loadFixture('realistic-collaboration.json'), (visualRefinement ? ALL_ON : { visualRefinement: false }));
       const poolOfNode = {};
       const walk = (nodes, pid) => { for (const n of nodes || []) { poolOfNode[n.id] = pid; walk(n.nodes, pid); } };
       for (const p of lc.pools) walk(p.nodes, p.id);
@@ -6550,7 +6618,7 @@ describe('repairCrossings', () => {
     try {
       const measure = async (name, visualRefinement) => {
         const lc = loadFixture(name);
-        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        const r = await runPipeline(loadFixture(name), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         return {
           crossings: countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc)),
           ok: r.diagnostics.ok,
@@ -6587,7 +6655,7 @@ describe('repairCrossings', () => {
 describe('#52 — loop with a join: every flow crosses its endpoints\' outlines', () => {
   for (const visualRefinement of [false, true]) {
     test(`Flow_5, Flow_6, Flow_8 arrive perpendicular (refinement: ${visualRefinement})`, async () => {
-      const r = await runPipeline(loadFixture('loop-with-join.json'), { visualRefinement });
+      const r = await runPipeline(loadFixture('loop-with-join.json'), (visualRefinement ? ALL_ON : { visualRefinement: false }));
       const last = (id) => { const p = r.coordMap.edgeCoords[id]; return [p[p.length - 2], p[p.length - 1]]; };
       // Flow_8 and Flow_6 end on a task's left side, Flow_5 on the end event's left point: each
       // last segment must be horizontal, moving right.
@@ -6605,7 +6673,7 @@ describe('stuck ends are re-clipped', () => {
   for (const visualRefinement of [false, true]) {
     test(`realistic-collaboration: no flow through its own shape, no end along an outline, no crossing (refinement: ${visualRefinement})`, async () => {
       const lc = loadFixture('realistic-collaboration.json');
-      const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement });
+      const r = await runPipeline(loadFixture('realistic-collaboration.json'), (visualRefinement ? ALL_ON : { visualRefinement: false }));
       expect(r.diagnostics.issues.filter(i => i.code === 'DI08' || i.code === 'DI09')).toEqual([]);
       expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
       expect(r.diagnostics.ok).toBe(true);
@@ -6691,7 +6759,7 @@ describe('boundary event flows', () => {
       for (const visualRefinement of [false, true]) {
         const lc = loadFixture(name);
         const nodes = allNodesDeep(lc);
-        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        const r = await runPipeline(loadFixture(name), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         for (const e of allEdgesDeep(lc)) {
           const src = nodes[e.source];
           if (src?.type !== 'boundaryEvent') continue;
@@ -6713,7 +6781,7 @@ describe('boundary event flows', () => {
       for (const visualRefinement of [false, true]) {
         const lc = loadFixture(name);
         const nodes = allNodesDeep(lc);
-        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        const r = await runPipeline(loadFixture(name), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         for (const e of allEdgesDeep(lc)) {
           const src = nodes[e.source];
           if (src?.type !== 'boundaryEvent') continue;
@@ -6746,7 +6814,7 @@ describe('boundary event flows', () => {
     // candidate search with nothing admissible. orthogonal-router.js's
     // obstacle-aware fallback clears it — same fix as the vr:false case above.
     const lc = loadFixture('realistic-collaboration.json');
-    const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement: true });
+    const r = await runPipeline(loadFixture('realistic-collaboration.json'), ALL_ON);
     expect(r.diagnostics.ok).toBe(true);
     expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
   });
@@ -6754,7 +6822,7 @@ describe('boundary event flows', () => {
   test('the diagram integrity check stays clean on every boundary fixture', async () => {
     for (const name of BOUNDARY_FIXTURES) {
       for (const visualRefinement of [false, true]) {
-        const r = await runPipeline(loadFixture(name), { visualRefinement });
+        const r = await runPipeline(loadFixture(name), (visualRefinement ? ALL_ON : { visualRefinement: false }));
         expect(`${name} vr=${visualRefinement}: ${r.diagnostics.issues.filter(i => i.severity === 'ERROR').length}`)
           .toBe(`${name} vr=${visualRefinement}: 0`);
       }

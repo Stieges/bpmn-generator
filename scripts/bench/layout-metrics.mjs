@@ -560,6 +560,8 @@ function flattenElk(node, offX, offY, acc, containerIds) {
   }
 }
 
+const EVERYTHING_ON = { visualRefinement: true, elkWrapping: 'auto' };
+
 async function measureRawElk(lc, alignCtx) {
   const clone = JSON.parse(JSON.stringify(lc));
   const containerIds = collectContainerIds(clone);
@@ -599,8 +601,8 @@ export function edgeLabelHits(coordMap, lc) {
 }
 
 /** One fixture × mode, every readability measure. `null` when the pipeline blocks the model. */
-export async function measureLayout(lc, { visualRefinement }) {
-  const r = await runPipeline(lc, { visualRefinement });
+export async function measureLayout(lc, opts = {}) {
+  const r = await runPipeline(lc, opts);
   if (!r.coordMap) return null;
   const edgeList = collectAllEdges(lc);
   const cm = r.coordMap;
@@ -646,7 +648,7 @@ async function measureFixture(name) {
     const alignCtx = buildAlignContext(lc);
   
     const defaultResult = await runPipeline(lc, { visualRefinement: false });
-    const refinedResult = await runPipeline(lc, { visualRefinement: true });
+    const refinedResult = await runPipeline(lc, EVERYTHING_ON);
   
     const defaultMetrics = defaultResult.coordMap
       ? computeMetrics(defaultResult.coordMap.coords, defaultResult.coordMap.edgeCoords, edgeList, alignCtx)
@@ -656,10 +658,10 @@ async function measureFixture(name) {
       : null;
     const rawElkMetrics = await measureRawElk(lc, alignCtx);
   
-    const extras = async (visualRefinement) =>
-      summarize(await measureLayout(JSON.parse(raw), { visualRefinement }));
+    const extras = async (opts) =>
+      summarize(await measureLayout(JSON.parse(raw), opts));
     return { name, defaultMetrics, refinedMetrics, rawElkMetrics,
-      defaultExtras: await extras(false), refinedExtras: await extras(true) };
+      defaultExtras: await extras({ visualRefinement: false }), refinedExtras: await extras(EVERYTHING_ON) };
   } catch (err) {
     return { name, error: String(err.message || err) };
   }
@@ -734,7 +736,7 @@ async function main() {
     lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     lines.push(fmtRow('ELK raw (pre-postprocess)', r.rawElkMetrics, null));
     lines.push(fmtRow('default', r.defaultMetrics, r.defaultExtras));
-    lines.push(fmtRow('visualRefinement: true', r.refinedMetrics, r.refinedExtras));
+    lines.push(fmtRow('everything on (refine + wrap)', r.refinedMetrics, r.refinedExtras));
     lines.push('');
     if (r.defaultMetrics) {
       const delta = r.defaultMetrics.crossings - r.rawElkMetrics.crossings;

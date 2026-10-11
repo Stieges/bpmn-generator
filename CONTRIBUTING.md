@@ -53,11 +53,11 @@ See [README.md](README.md) for the full module architecture and dependency graph
    done
    ```
    The same 7 fixtures also carry `.refined.bpmn`/`.refined.svg` goldens (visual refinement
-   enabled) — regenerate those with `--refine`:
+   enabled, plus ELK wrapping) — regenerate those with `--refine --wrap`:
    ```bash
    for f in simple-approval multi-pool-collaboration expanded-subprocess \
             dense-edge-labels long-lane-names sparse-lanes wide-pipeline; do
-     node bpmn/pipeline.js ../tests/fixtures/$f.json ../tests/fixtures/$f.refined --refine
+     node bpmn/pipeline.js ../tests/fixtures/$f.json ../tests/fixtures/$f.refined --refine --wrap
    done
    ```
 5. **Submit a PR** with a clear description of what changed and why

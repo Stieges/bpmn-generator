@@ -16,6 +16,7 @@ import {
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
+const MODES = { off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' } };
 
 describe('alongSide', () => {
   const box = { x: 386, y: 131, w: 100, h: 80 };
@@ -181,6 +182,7 @@ const BUDGET = {
   'subprocess-collapsed-children.json': { off: Z,                  on: Z },
   'subprocess-merge-fanout.json':       { off: Z,                  on: Z },
   'wide-pipeline.json':                 { off: Z,                  on: Z },
+  'wrapping-back-edge.json':            { off: Z,                  on: Z },
 };
 
 describe('layout budget — every top-level fixture × both modes', () => {
@@ -190,7 +192,7 @@ describe('layout budget — every top-level fixture × both modes', () => {
   for (const name of FIXTURES) {
     for (const mode of ['off', 'on']) {
       test(`${name} ${mode}`, async () => {
-        const m = await measureLayout(load(name), { visualRefinement: mode === 'on' });
+        const m = await measureLayout(load(name), MODES[mode]);
         // Compared as a string so a failure names the fixture and the full row, and lists the
         // offending edges, without a debugger.
         const got = summarize(m);
@@ -208,7 +210,7 @@ describe('layout budget — every top-level fixture × both modes', () => {
 
 describe('wrapped layout row folds (wide-pipeline, refined)', () => {
   test('every fold edge arrives across the outline and runs through no node', async () => {
-    const m = await measureLayout(load('wide-pipeline.json'), { visualRefinement: true });
+    const m = await measureLayout(load('wide-pipeline.json'), MODES.on);
     expect(m.alongBorder).toEqual([]);
     expect(m.seqThroughNodes).toEqual([]);
     expect(m.ownThrough).toEqual([]);      // master: f5, f11, f17, f23 ran back through their source
@@ -219,7 +221,7 @@ describe('wrapped layout row folds (wide-pipeline, refined)', () => {
 describe('message flows and uninvolved participants (realistic-collaboration)', () => {
   for (const mode of ['off', 'on']) {
     test(`no flow runs through a shape of a participant it does not involve (${mode})`, async () => {
-      const m = await measureLayout(load('realistic-collaboration.json'), { visualRefinement: mode === 'on' });
+      const m = await measureLayout(load('realistic-collaboration.json'), MODES[mode]);
       expect(m.mfThroughNodes.filter((x) => x.relation === 'uninvolved')).toEqual([]);
     }, 30000);
   }

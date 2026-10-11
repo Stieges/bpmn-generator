@@ -1,0 +1,244 @@
+{
+  "pools": [
+    {
+      "id": "Process_Rework",
+      "name": "Rework Chain",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "startEvent",
+          "name": "Start"
+        },
+        {
+          "id": "t1",
+          "type": "task",
+          "name": "Step 1"
+        },
+        {
+          "id": "t2",
+          "type": "task",
+          "name": "Step 2"
+        },
+        {
+          "id": "t3",
+          "type": "task",
+          "name": "Step 3"
+        },
+        {
+          "id": "t4",
+          "type": "task",
+          "name": "Step 4"
+        },
+        {
+          "id": "t5",
+          "type": "task",
+          "name": "Step 5"
+        },
+        {
+          "id": "t6",
+          "type": "task",
+          "name": "Step 6"
+        },
+        {
+          "id": "t7",
+          "type": "task",
+          "name": "Step 7"
+        },
+        {
+          "id": "t8",
+          "type": "task",
+          "name": "Step 8"
+        },
+        {
+          "id": "t9",
+          "type": "task",
+          "name": "Step 9"
+        },
+        {
+          "id": "t10",
+          "type": "task",
+          "name": "Step 10"
+        },
+        {
+          "id": "t11",
+          "type": "task",
+          "name": "Step 11"
+        },
+        {
+          "id": "t12",
+          "type": "task",
+          "name": "Step 12"
+        },
+        {
+          "id": "t13",
+          "type": "task",
+          "name": "Step 13"
+        },
+        {
+          "id": "t14",
+          "type": "task",
+          "name": "Step 14"
+        },
+        {
+          "id": "t15",
+          "type": "task",
+          "name": "Step 15"
+        },
+        {
+          "id": "t16",
+          "type": "task",
+          "name": "Step 16"
+        },
+        {
+          "id": "t17",
+          "type": "task",
+          "name": "Step 17"
+        },
+        {
+          "id": "t18",
+          "type": "task",
+          "name": "Step 18"
+        },
+        {
+          "id": "t19",
+          "type": "task",
+          "name": "Step 19"
+        },
+        {
+          "id": "t20",
+          "type": "task",
+          "name": "Step 20"
+        },
+        {
+          "id": "gw",
+          "type": "exclusiveGateway",
+          "name": "Complete?"
+        },
+        {
+          "id": "end",
+          "type": "endEvent",
+          "name": "Done"
+        }
+      ],
+      "edges": [
+        {
+          "id": "f0",
+          "source": "start",
+          "target": "t1"
+        },
+        {
+          "id": "f1",
+          "source": "t1",
+          "target": "t2"
+        },
+        {
+          "id": "f2",
+          "source": "t2",
+          "target": "t3"
+        },
+        {
+          "id": "f3",
+          "source": "t3",
+          "target": "t4"
+        },
+        {
+          "id": "f4",
+          "source": "t4",
+          "target": "t5"
+        },
+        {
+          "id": "f5",
+          "source": "t5",
+          "target": "t6"
+        },
+        {
+          "id": "f6",
+          "source": "t6",
+          "target": "t7"
+        },
+        {
+          "id": "f7",
+          "source": "t7",
+          "target": "t8"
+        },
+        {
+          "id": "f8",
+          "source": "t8",
+          "target": "t9"
+        },
+        {
+          "id": "f9",
+          "source": "t9",
+          "target": "t10"
+        },
+        {
+          "id": "f10",
+          "source": "t10",
+          "target": "t11"
+        },
+        {
+          "id": "f11",
+          "source": "t11",
+          "target": "t12"
+        },
+        {
+          "id": "f12",
+          "source": "t12",
+          "target": "t13"
+        },
+        {
+          "id": "f13",
+          "source": "t13",
+          "target": "t14"
+        },
+        {
+          "id": "f14",
+          "source": "t14",
+          "target": "t15"
+        },
+        {
+          "id": "f15",
+          "source": "t15",
+          "target": "t16"
+        },
+        {
+          "id": "f16",
+          "source": "t16",
+          "target": "t17"
+        },
+        {
+          "id": "f17",
+          "source": "t17",
+          "target": "t18"
+        },
+        {
+          "id": "f18",
+          "source": "t18",
+          "target": "t19"
+        },
+        {
+          "id": "f19",
+          "source": "t19",
+          "target": "t20"
+        },
+        {
+          "id": "f20",
+          "source": "t20",
+          "target": "gw"
+        },
+        {
+          "id": "fdone",
+          "source": "gw",
+          "target": "end",
+          "label": "yes"
+        },
+        {
+          "id": "frework",
+          "source": "gw",
+          "target": "t3",
+          "label": "no"
+        }
+      ]
+    }
+  ]
+}

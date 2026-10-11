@@ -101,6 +101,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes) {
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean} [opts.visualRefinement] - Enable visual refinement passes (overrides CFG.visualRefinement.enabled)
+ * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
  * @returns {Promise<{
@@ -164,8 +165,9 @@ async function runPipeline(logicCore, opts = {}) {
   // poolOrder: 'auto' (default) orders participants so that the ones exchanging
   // messages sit next to each other; 'declared' keeps the input order.
   const poolOrder = opts.poolOrder ?? CFG.layout?.poolOrder ?? 'auto';
-  const elkGraph  = logicCoreToElk(lc, { elkWrapping: refineOn, poolOrder });
+  const elkGraph  = logicCoreToElk(lc, { elkWrapping: opts.elkWrapping, poolOrder });
   const elkResult = await runElkLayout(elkGraph);
+  const layoutInfos = elkResult.layoutInfos ?? [];
   const coordMap  = buildCoordinateMap(elkResult, lc);
 
   // Edge simplification: collapse ELK's layer-column jogs into clean L-shapes
@@ -260,7 +262,7 @@ async function runPipeline(logicCore, opts = {}) {
 
   return {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
-    validation: { errors: [], warnings, advisories, metrics, xmlWarnings: roundTrip.warnings },
+    validation: { errors: [], warnings, infos: layoutInfos, advisories, metrics, xmlWarnings: roundTrip.warnings },
   };
 }
 
@@ -455,8 +457,9 @@ async function main() {
   const strict     = flags.includes('--strict');
   const optimize   = flags.includes('--optimize') || flags.includes('--mode=soll') || flags.includes('--mode=optimize');
   const refine     = flags.includes('--refine');
+  const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--wrap]');
     process.exit(1);
   }
 
@@ -496,7 +499,8 @@ async function main() {
   // `opts.visualRefinement ?? CFG.visualRefinement?.enabled ?? false` fallback
   // still decides — passing `false` here would pin today's default and quietly
   // survive a future flip of that default in config.json.
-  const refineOpts = refine ? { visualRefinement: true } : {};
+  // --wrap likewise only ever asks for wrapping; the config default decides otherwise.
+  const refineOpts = { ...(refine ? { visualRefinement: true } : {}), ...(wrap ? { elkWrapping: 'auto' } : {}) };
 
   // Drill-down mode: generate parent + per-subprocess diagrams
   if (drillDown) {
@@ -542,6 +546,9 @@ async function main() {
   if (result.validation.warnings.length) {
     console.warn('\n⚠ Warnings:');
     result.validation.warnings.forEach(w => console.warn('  · ' + w));
+  }
+  if (result.validation.infos?.length) {
+    result.validation.infos.forEach(i => console.log('ℹ ' + i));
   }
   if (optimize && result.validation.advisories?.length) {
     console.log('\n💡 Optimization opportunities (Soll-Redesign — Vorschläge, kein Auto-Fix):');

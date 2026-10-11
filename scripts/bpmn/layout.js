@@ -31,23 +31,46 @@ function logicCoreToElk(lc, opts = {}) {
   return buildSingleProcessElk(lc, wrappingOpts);
 }
 
+const WRAPPING_MODES = new Set(['off', 'auto', 'always']);
+const WRAPPING_PREFIX = 'elk.layered.wrapping.';
+
 /**
- * Decide whether to inject `elk.layered.wrapping.strategy: MULTI_EDGE` into
- * the top-level layered layout properties. Returns an object that can be
- * spread into the properties block (empty object if no wrapping).
+ * ELK wrapping mode for one call: the option when given, else `config.json -> layout.elkWrapping`
+ * (default 'off'). `true`/`false` are shorthands for 'auto'/'off'. Independent of visual
+ * refinement: wrapping trades width for height and changes every route of a long chain, so it is
+ * asked for on its own.
  *
- * @param {Object} lc    — Logic-Core
- * @param {Object} opts  — { elkWrapping: boolean }
- * @returns {Object}     — layout property overrides (possibly empty)
+ * @param {boolean|'off'|'auto'|'always'} [option]
+ * @returns {'off'|'auto'|'always'}
+ */
+function resolveElkWrapping(option) {
+  const value = option ?? CFG.layout?.elkWrapping ?? 'off';
+  if (value === true) return 'auto';
+  if (value === false) return 'off';
+  if (WRAPPING_MODES.has(value)) return value;
+  throw new TypeError(`elkWrapping must be 'off', 'auto' or 'always' (got ${JSON.stringify(value)})`);
+}
+
+/** Nodes that take part in the ELK graph: boundary events and artifacts are placed afterwards. */
+function countElkNodes(nodes) {
+  return (nodes ?? []).filter(n => !isBoundaryEvent(n) && !isArtifact(n.type)).length;
+}
+
+/**
+ * `elk.layered.wrapping.strategy: MULTI_EDGE` properties for the top-level layered layout, or
+ * `{}`. 'auto' wraps only above `layout.elkWrappingNodeThreshold` nodes of the ELK graph
+ * (default 20).
+ *
+ * @param {Object} lc    - Logic-Core
+ * @param {Object} opts  - { elkWrapping }
+ * @returns {Object}     - layout property overrides (possibly empty)
  */
 function resolveWrappingOpts(lc, opts) {
-  if (!opts.elkWrapping) return {};
-  const mode = CFG.visualRefinement?.elkWrapping ?? 'auto';
+  const mode = resolveElkWrapping(opts.elkWrapping);
   if (mode === 'off') return {};
 
-  const threshold = CFG.visualRefinement?.elkWrappingNodeThreshold ?? 20;
-  const allNodes = lc.nodes ?? (lc.pools ?? []).flatMap(p => p.nodes ?? []);
-  const nodeCount = allNodes.length;
+  const threshold = CFG.layout?.elkWrappingNodeThreshold ?? 20;
+  const nodeCount = countElkNodes(lc.nodes ?? (lc.pools ?? []).flatMap(p => p.nodes ?? []));
 
   if (mode === 'auto' && nodeCount <= threshold) return {};
 
@@ -336,10 +359,49 @@ function stackCollaborationVertically(layouted) {
   return layouted;
 }
 
-async function runElkLayout(elkGraph) {
-  const elk = new ELK();
-  const layouted = await elk.layout(elkGraph);
-  return stackCollaborationVertically(layouted);
+/** Remove every wrapping property from an ELK graph, recursively. Returns how many were removed. */
+function stripWrapping(node) {
+  let removed = 0;
+  for (const key of Object.keys(node.properties ?? {})) {
+    if (key.startsWith(WRAPPING_PREFIX)) { delete node.properties[key]; removed++; }
+  }
+  for (const child of node.children ?? []) removed += stripWrapping(child);
+  return removed;
 }
 
-export { runElkLayout, logicCoreToElk, buildSingleProcessElk, buildLanedProcessElk, buildMultiPoolElk, buildElkNode, buildElkEdge, elkDefaults };
+/**
+ * Run ELK on a graph built by `logicCoreToElk`.
+ *
+ * MULTI_EDGE wrapping can throw inside elkjs on some models (more than 20 nodes plus a back
+ * edge). When it does, the layout is retried once without any wrapping property, and the result
+ * carries `layoutInfos` naming the fallback so a caller sees that wrapping was skipped. An error
+ * with no wrapping property to remove is re-thrown unchanged.
+ *
+ * @returns {Promise<Object>} the laid-out graph; `layoutInfos` (string[]) is set only on fallback
+ */
+async function runElkLayout(elkGraph) {
+  const elk = new ELK();
+  // elkjs may mutate its input, so keep a pristine copy to retry from (a JSON round trip: the graph
+  // is plain data, and structuredClone is not reliable across realms, e.g. under jest).
+  const pristine = hasWrapping(elkGraph) ? JSON.parse(JSON.stringify(elkGraph)) : null;
+  let layouted;
+  let fallback = null;
+  try {
+    layouted = await elk.layout(elkGraph);
+  } catch (err) {
+    if (!pristine || stripWrapping(pristine) === 0) throw err;
+    // A fresh instance: the one that threw may hold half-built state from the failed run.
+    layouted = await new ELK().layout(pristine);
+    fallback = `ELK wrapping skipped: layout failed with wrapping on (${err?.message ?? err}); laid out without it`;
+  }
+  const result = stackCollaborationVertically(layouted);
+  if (fallback) result.layoutInfos = [fallback];
+  return result;
+}
+
+function hasWrapping(node) {
+  return Object.keys(node.properties ?? {}).some(k => k.startsWith(WRAPPING_PREFIX))
+    || (node.children ?? []).some(hasWrapping);
+}
+
+export { resolveElkWrapping, runElkLayout, logicCoreToElk, buildSingleProcessElk, buildLanedProcessElk, buildMultiPoolElk, buildElkNode, buildElkEdge, elkDefaults };

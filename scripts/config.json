@@ -142,6 +142,8 @@
     "messageFlowFan": 14,
     "artifactGap": 30,
     "poolOrder": "auto",
+    "elkWrapping": "off",
+    "elkWrappingNodeThreshold": 20,
     "happyPathLeveling": false,
     "crossLaneDeconflict": true,
     "crossingRepair": true,
@@ -206,9 +208,7 @@
     "laneCompaction": true,
     "minLaneHeight": 80,
     "edgeLabelCollisionRepair": true,
-    "edgeLabelMaxShift": 25,
-    "elkWrapping": "auto",
-    "elkWrappingNodeThreshold": 20
+    "edgeLabelMaxShift": 25
   },
   "optimization": {
     "minParallelChain": 3,
