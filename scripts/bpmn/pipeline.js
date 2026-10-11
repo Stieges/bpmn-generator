@@ -108,7 +108,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
- * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (false)
+ * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (true)
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it

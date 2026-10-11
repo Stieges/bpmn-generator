@@ -169,8 +169,8 @@
     "alongOutlineMinPx": 5,
     "crossingGuard": true,
     "endpointReclip": true,
-    "bendRule": false,
-    "nodeLabelsAvoidFlows": false,
+    "bendRule": true,
+    "nodeLabelsAvoidFlows": true,
     "bendRuleLimits": {
       "shapeClearance": 8,
       "regionInset": 10,

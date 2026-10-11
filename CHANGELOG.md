@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **Bend rule and node labels that avoid flows are on by default.** `layout.bendRule` and
+  `layout.nodeLabelsAvoidFlows` default to `true`: default output changes (fewer bends, flows enter
+  activities and events in flow direction, event and gateway labels move off flows). Rollback: set
+  both keys to `false` in `config.json`, or pass `bendRule: false, nodeLabelsAvoidFlows: false` to
+  `runPipeline`.
 - **Default output is compacted.** Lane compaction (`visualRefinement.laneCompaction`) is now on by
   default, together with edge-label collision repair: diagrams with lanes or an expanded subprocess
   come out up to 29 % smaller in area (10–29 % on the seven golden fixtures; some diagrams are
@@ -49,15 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
 
 ### Added
-- **Node labels that avoid flows (opt-in).** An event's or a gateway's label no longer has to sit
+- **Node labels that avoid flows (on by default).** An event's or a gateway's label no longer has to sit
   where a flow leaves or enters the node: when one of its sequence or message flows uses the node's
   bottom or runs through the label, the label moves to the first free spot among below, above, right-below and left-below —
   free of routes, shapes, other node and edge labels and lane separators, and inside its participant.
   With no free spot it stays below. Runs after message-flow routing, since a message flow's port is
   only known then; it moves label boxes in `coordMap.nodeLabels` only, which both renderers read
-  unchanged. Off by default: `runPipeline(lc, { nodeLabelsAvoidFlows: true })` or
-  `config.json -> layout.nodeLabelsAvoidFlows: true`. Switched off, the output is unchanged.
-- **Bend rule (opt-in): fewest bends, then enter in flow direction.** A new routing pass
+  unchanged. On by default; switch off with `runPipeline(lc, { nodeLabelsAvoidFlows: false })` or
+  `config.json -> layout.nodeLabelsAvoidFlows: false`.
+- **Bend rule (on by default): fewest bends, then enter in flow direction.** A new routing pass
   (`scripts/bpmn/bend-rule.js`) re-routes a sequence flow when a route with fewer bends exists, or one
   with as many bends that enters an activity or event from the left; endpoints stay put or move to a
   side midpoint — on a task, subprocess or call activity also to the point level with the other end
@@ -67,9 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `collinearPx` count as one line), crowding, external node labels, side
   conflicts, shared ports (two flows out of — or into — one gateway or event side, or one point of a
   task) and the later message-flow line, stays clear of shapes and inside its pool/lane stack, and
-  is at most 10 % + 20 px longer. Off by default: `runPipeline(lc, { bendRule: true })` or
-  `config.json -> layout.bendRule: true`; limits in `layout.bendRuleLimits`. Switched off, the output
-  is unchanged. A re-routed flow's label is placed off every other route where a spot allows. Measured
+  is at most 10 % + 20 px longer. On by default; switch off with `runPipeline(lc, { bendRule: false })` or
+  `config.json -> layout.bendRule: false`; limits in `layout.bendRuleLimits`. A re-routed flow's label is placed off every other route where a spot allows. Measured
   over the 19 top-level fixtures that predate the `example-*` ones, with it on: avoidable bends 29 → 0 (default) and
   49 → 0 (refinement + wrapping), entries against the flow 13 → 0 resp. 14 → 0, collinear overlap
   953 → 519 px resp. 1772 → 804 px; ends off their side's midpoint rise in three fixtures (projection

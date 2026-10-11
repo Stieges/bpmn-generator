@@ -19,10 +19,13 @@ import { CFG } from '../shared/utils.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
-// bends: the default options with the bend rule switched on (layout.bendRule) — the mode the
-// default would become.
+// default / off / on run with the shipped defaults, which include layout.bendRule and
+// layout.nodeLabelsAvoidFlows (both on since 4.0.0). plain: the default options with both switches
+// explicitly off — what the default was before the bend rule; its rows are the former default rows,
+// kept verbatim so the pre-switch geometry stays fenced.
+const PLAIN = { bendRule: false, nodeLabelsAvoidFlows: false };
 const MODES = { default: {}, off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' },
-  bends: { bendRule: true } };
+  plain: PLAIN };
 
 describe('alongSide', () => {
   const box = { x: 386, y: 131, w: 100, h: 80 };
@@ -301,7 +304,7 @@ const same = (row) => ({ default: row, off: row, on: row });
 // example-* (the bend rule's review examples, German process names): measured as they lay out
 // today, nothing fixed for them — their sequence-flow crossings (bestellung-versand 2,
 // kreditantrag 1) are ELK's and stand in every mode.
-const BUDGET = {
+const BUDGET_PLAIN = {
   'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
   'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 227 }),
@@ -344,7 +347,7 @@ const BUDGET = {
   'wrapping-back-edge.json':            same(r({ bendsMax: 4, offOver5: 4 })),
 };
 
-// bends mode (bend rule on): the rows of the default mode, except where the rule removed a bend —
+// default mode (bend rule on): the rows of the plain mode, except where the rule removed a bend —
 // bendsMax falls in long-lane-names (f2, f3), multi-pool-collaboration (sf3, sf5), simple-approval
 // (f2), sparse-lanes (f3, f4, f5), subprocess-merge-fanout (f5, f7), wrapping-back-edge (frework);
 // offOver5 falls where a moved end now sits on a side midpoint (simple-approval f2,
@@ -356,7 +359,7 @@ const BUDGET = {
 // against default wherever a moved route left another flow's line: bpmn-generator-pipeline
 // 227 → 187, multi-pool-collaboration 50 → 0, realistic-collaboration 386 → 226, sparse-lanes
 // 184 → 0 (f3).
-const BUDGET_BENDS = {
+const BUDGET_DEFAULT = {
   'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
   'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 10 }),
   'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 187 }),
@@ -383,6 +386,28 @@ const BUDGET_BENDS = {
   'wrapping-back-edge.json':            r({ bendsMax: 2, offOver5: 2 }),
 };
 
+// off / on modes with the bend rule on: the default row, except in the five fixtures below. Measured
+// 2026-10-11 when both switches became defaults. off (no compaction, no wrapping) leaves more or less
+// overlap than default because the rule judges different geometry: bpmn-generator-pipeline 172,
+// example-bestellung-versand 262, example-schadenmeldung 110, realistic-collaboration 356 (px).
+// on (refinement + wrapping): bpmn-generator-pipeline offOver5 16, labelLabel 1, overlapLen 112;
+// example-kreditantrag bendsMax 4, offOver5 11; realistic-collaboration drops seqThrough/crowd and
+// shows bendsMax 5, mfCrowd 6, offOver5 3, overlapLen 586.
+const BUDGET = Object.fromEntries(Object.entries(BUDGET_DEFAULT).map(([name, row]) => [name,
+  { default: row, off: row, on: row, plain: BUDGET_PLAIN[name].default }]));
+Object.assign(BUDGET['bpmn-generator-pipeline.json'], {
+  off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 172 }),
+  on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 16, labelLabel: 1, overlapLen: 112 }) });
+Object.assign(BUDGET['example-bestellung-versand.json'], {
+  off: r({ crossings: 2, bendsMax: 3, offOver5: 6, overlapLen: 262 }) });
+Object.assign(BUDGET['example-kreditantrag.json'], {
+  on: r({ crossings: 1, bendsMax: 4, offOver5: 11, overlapLen: 62 }) });
+Object.assign(BUDGET['example-schadenmeldung.json'], {
+  off: r({ bendsMax: 2, offOver5: 6, overlapLen: 110 }) });
+Object.assign(BUDGET['realistic-collaboration.json'], {
+  off: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 356 }),
+  on: r({ bendsMax: 5, mfCrowd: 6, offOver5: 3, labelLabel: 1, overlapLen: 586 }) });
+
 // Flow direction (bend-rule.js bendMetrics, through flow-metrics.mjs flowDirectionMetrics), every
 // mode: [avoidableBends, againstFlowEntries]. avoidableBends sums current − fewest admissible bends
 // over the sequence flows; againstFlowEntries counts activity/event targets not entered from the
@@ -397,18 +422,19 @@ const BUDGET_BENDS = {
 // subprocess-merge-fanout f5/f7) and a left entry onto a projection port (wrapping-back-edge).
 const d = (avoidableBends, againstFlowEntries) => ({ avoidableBends, againstFlowEntries });
 const NONE = d(0, 0);
-const dir = (row, on = row) => ({ default: row, off: row, on, bends: NONE });
+// plain = the former default rows; default / off / on run the rule, which leaves nothing avoidable.
+const dir = (row, on = row) => ({ default: NONE, off: NONE, on: NONE, plain: row });
 const DIRECTION = {
   'all-element-classes.json':           dir(NONE),
   'boundary-event-shapes.json':         dir(d(2, 0)),
   'bpmn-generator-pipeline.json':       dir(d(7, 2), d(12, 6)),
-  'deadlock-process.json':              { default: null, off: null, on: null, bends: null },
+  'deadlock-process.json':              { default: null, off: null, on: null, plain: null },
   'dense-edge-labels.json':             dir(NONE),
   'example-bestellung-versand.json':   dir(d(4, 1)),
   'example-kreditantrag.json':          dir(d(5, 3), d(11, 3)),
   'example-onboarding.json':            dir(d(7, 3)),
   'example-schadenmeldung.json':        dir(d(8, 2)),
-  'example-urlaubsantrag.json':         { ...dir(d(3, 2)), bends: d(0, 1) }, // f213: an even trade, see above
+  'example-urlaubsantrag.json':         { ...dir(d(3, 2)), default: d(0, 1), off: d(0, 1), on: d(0, 1) }, // f213: an even trade, see above
   'expanded-subprocess.json':           dir(NONE),
   'long-lane-names.json':               dir(d(2, 2)),
   'loop-with-join.json':                dir(d(2, 0)),
@@ -425,10 +451,10 @@ const DIRECTION = {
   'wrapping-back-edge.json':            dir(d(2, 1)),
 };
 
-describe('layout budget — every top-level fixture × four modes', () => {
+describe('layout budget — every top-level fixture × four modes (default, off, on, plain)', () => {
   test('every fixture has a budget row (a new fixture must be measured, not skipped)', () => {
     expect(Object.keys(BUDGET).sort()).toEqual(FIXTURES);
-    expect(Object.keys(BUDGET_BENDS).sort()).toEqual(FIXTURES);
+    expect(Object.keys(BUDGET_DEFAULT).sort()).toEqual(FIXTURES);
     expect(Object.keys(DIRECTION).sort()).toEqual(FIXTURES);
   });
   for (const name of FIXTURES) {
@@ -439,7 +465,7 @@ describe('layout budget — every top-level fixture × four modes', () => {
         // offending edges, without a debugger.
         const got = summarize(m);
         // `in`, not `??`: a deliberate `null` row (blocked fixture) must not read as "missing".
-        const rows = mode === 'bends' ? { bends: BUDGET_BENDS[name] } : BUDGET[name];
+        const rows = BUDGET[name];
         const want = rows && mode in rows ? rows[mode] : 'missing';
         const detail = m && JSON.stringify({ along: m.alongBorder, gaps: m.laneGaps,
           mf: m.mfThroughNodes, seq: m.seqThroughNodes, labels: m.labels });

@@ -225,8 +225,8 @@ describe('placeNodeLabelsAvoidingFlows — on hand-built geometry', () => {
 });
 
 describe('placeNodeLabelsAvoidingFlows — in the pipeline', () => {
-  test('the switch defaults to off in config.json', () => {
-    expect(CFG.layout.nodeLabelsAvoidFlows).toBe(false);
+  test('the switch defaults to on in config.json', () => {
+    expect(CFG.layout.nodeLabelsAvoidFlows).toBe(true);
   });
 
   test('off: every label is the default box below its node', async () => {
