@@ -128,6 +128,9 @@ class MinHeap {
  * @param {number} [opts.maxGridPoints=4000] safety cap on the grid size, checked per attempt
  *   AFTER the margin restriction below — capping the unclipped (2N+2)² grid would silently
  *   disable the router on exactly the large diagrams it is most needed for
+ * @param {number} [opts.endLines=0] when > 0, extra grid lines this many px either side of both
+ *   ends, so a path can turn into an end from just beyond it rather than from the next obstacle
+ *   line (reclipStuckEnds with foreignShapes, #91 — without them the route hooks round the target)
  * @param {number[]} [opts.margins=[140,400,900]] escalating search-region margins (px) around
  *   the endpoints' bounding box; each is tried in turn until one finds a path or all are exhausted
  * @returns {{x:number,y:number}[]|null} minimal orthogonal waypoint list, or null if no path
@@ -139,15 +142,16 @@ export function routeAroundObstacles(start, startDir, end, endDir, obstacles, op
   const maxGridPoints = opts.maxGridPoints ?? 4000;
   const soft = opts.softObstacles ?? [];
   const margins = opts.margins ?? [140, 400, 900];
+  const endLines = opts.endLines ?? 0;
 
   for (const margin of margins) {
-    const res = attempt(start, startDir, end, endDir, obstacles, soft, margin, bendPenalty, crossPenalty, maxGridPoints);
+    const res = attempt(start, startDir, end, endDir, obstacles, soft, margin, bendPenalty, crossPenalty, maxGridPoints, endLines);
     if (res) return res;
   }
   return null;
 }
 
-function attempt(start, startDir, end, endDir, obstacles, soft, margin, bendPenalty, crossPenalty, maxGridPoints) {
+function attempt(start, startDir, end, endDir, obstacles, soft, margin, bendPenalty, crossPenalty, maxGridPoints, endLines = 0) {
   const minX = Math.min(start.x, end.x) - margin, maxX = Math.max(start.x, end.x) + margin;
   const minY = Math.min(start.y, end.y) - margin, maxY = Math.max(start.y, end.y) + margin;
 
@@ -156,6 +160,12 @@ function attempt(start, startDir, end, endDir, obstacles, soft, margin, bendPena
   for (const b of obstacles) {
     for (const x of [b.x - PAD, b.x + b.w + PAD]) if (x >= minX && x <= maxX) xsSet.add(x);
     for (const y of [b.y - PAD, b.y + b.h + PAD]) if (y >= minY && y <= maxY) ysSet.add(y);
+  }
+  if (endLines > 0) {
+    for (const p of [start, end]) {
+      xsSet.add(p.x - endLines); xsSet.add(p.x + endLines);
+      ysSet.add(p.y - endLines); ysSet.add(p.y + endLines);
+    }
   }
   const xs = [...xsSet].sort((a, b) => a - b);
   const ys = [...ysSet].sort((a, b) => a - b);

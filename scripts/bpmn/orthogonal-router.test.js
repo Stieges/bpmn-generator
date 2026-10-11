@@ -95,3 +95,23 @@ describe('routeAroundObstacles', () => {
     }
   });
 });
+
+describe('routeAroundObstacles — endLines (#91)', () => {
+  // The end must be reached travelling down, from a start below it. Without a grid line above the
+  // end, the only way in is from the next obstacle line — 400 px up. endLines puts one 15 px above.
+  const start = { x: 0, y: 150 };
+  const end = { x: 200, y: 100 };
+  const far = [{ x: 500, y: -300, w: 10, h: 10 }];
+  const top = (pts) => Math.min(...pts.map(p => p.y));
+
+  test('without endLines the route hooks round the far obstacle line', () => {
+    const pts = routeAroundObstacles(start, 'right', end, 'down', far);
+    expect(pts).not.toBeNull();
+    expect(top(pts)).toBeLessThan(0);
+  });
+  test('with endLines it turns in just above the end', () => {
+    const pts = routeAroundObstacles(start, 'right', end, 'down', far, { endLines: 15 });
+    expect(top(pts)).toBe(85);
+    expect(pts[pts.length - 1]).toEqual(end);
+  });
+});
