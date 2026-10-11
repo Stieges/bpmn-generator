@@ -201,11 +201,10 @@
     }
   },
   "visualRefinement": {
-    "enabled": false,
-    "dynamicLaneHeader": true,
+    "dynamicLaneHeader": false,
     "laneHeaderMinWidth": 30,
     "laneHeaderMaxWidth": 120,
-    "laneCompaction": true,
+    "laneCompaction": false,
     "minLaneHeight": 80,
     "edgeLabelCollisionRepair": true,
     "edgeLabelMaxShift": 25

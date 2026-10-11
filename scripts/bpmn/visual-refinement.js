@@ -2,7 +2,8 @@
  * BPMN Visual Refinement — Post-Layout Coordinate Transforms
  *
  * Pure functions that run between buildCoordinateMap and serialization.
- * All transforms are opt-in via config.visualRefinement.enabled.
+ * Each pass has its own switch (`config.json → visualRefinement.<pass>`, overridable per call —
+ * see `resolveRefinement`).
  *
  * - estimateTextWidth:          char-count-based text width heuristic
  * - computeDynamicLaneHeaders:  per-pool dynamic lane header strip width
@@ -11,8 +12,50 @@
  */
 
 import { LANE_HEADER_W } from './constants.js';
-import { wrapTextByPx } from '../shared/utils.js';
+import { wrapTextByPx, CFG } from '../shared/utils.js';
 import { flattenProcessNodes, flattenProcessEdges, edgeLabelBox, labelHitsRoute } from './coordinates.js';
+
+/** The three refinement passes, in the order of their config switches. */
+export const REFINEMENT_PASSES = Object.freeze(['dynamicLaneHeader', 'laneCompaction', 'edgeLabelCollisionRepair']);
+
+/**
+ * JSON Schema of the `visualRefinement` option on every surface (runPipeline, HTTP, MCP):
+ * a boolean (every pass on/off) or an object switching single passes over the config defaults.
+ */
+export const VISUAL_REFINEMENT_OPTION_SCHEMA = Object.freeze({
+  oneOf: [
+    { type: 'boolean' },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        dynamicLaneHeader: { type: 'boolean' },
+        laneCompaction: { type: 'boolean' },
+        edgeLabelCollisionRepair: { type: 'boolean' },
+      },
+    },
+  ],
+});
+
+/**
+ * Which refinement passes run. `undefined` → `config.json → visualRefinement.<pass>`;
+ * `true`/`false` → every pass; an object → its passes over the defaults. Anything else throws,
+ * so a typo in a pass name is an error rather than a silent no-op.
+ */
+export function resolveRefinement(option, defaults = CFG.visualRefinement ?? {}) {
+  const base = Object.fromEntries(REFINEMENT_PASSES.map(p => [p, defaults[p] === true]));
+  if (option === undefined || option === null) return base;
+  if (option === true || option === false) return Object.fromEntries(REFINEMENT_PASSES.map(p => [p, option]));
+  if (typeof option === 'object' && !Array.isArray(option)) {
+    for (const [k, v] of Object.entries(option)) {
+      if (!REFINEMENT_PASSES.includes(k) || typeof v !== 'boolean') {
+        throw new TypeError(`visualRefinement: unknown pass or non-boolean value ${JSON.stringify(k)}: ${JSON.stringify(v)}`);
+      }
+    }
+    return { ...base, ...option };
+  }
+  throw new TypeError(`visualRefinement must be a boolean or an object of pass switches (got ${JSON.stringify(option)})`);
+}
 
 // Average character-width factors for Arial at fontSize 1 (in px).
 // Calibrated against bpmn.io renderings; accurate to ~±15% which is

@@ -938,6 +938,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **Refinement passes have their own switches.** `config.json → visualRefinement.enabled` is gone;
+  each pass is switched by its own key (`dynamicLaneHeader`, `laneCompaction`,
+  `edgeLabelCollisionRepair`). `runPipeline`'s `visualRefinement` option takes `true`/`false`
+  (every pass) or an object switching single passes; an unknown pass name throws. The CLI gains
+  `--no-refine` (every pass off) next to `--refine` (every pass on). Edge-label collision repair is
+  now on by default — it only moves labels, never a route. The ELK wrapping fallback message bounds
+  the error text it quotes from elkjs.
 - **ELK wrapping is its own switch.** Row wrapping of long chains (> 20 nodes in the ELK graph) used
   to switch on with visual refinement. It now has `config.json → layout.elkWrapping`
   (`"off"` default, `"auto"`, `"always"`; threshold `layout.elkWrappingNodeThreshold`), the
