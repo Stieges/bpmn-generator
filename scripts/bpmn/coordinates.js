@@ -762,6 +762,104 @@ function placeNodeLabels(coords, lc) {
   return nodeLabels;
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Node labels that keep clear of flows (layout.nodeLabelsAvoidFlows, opt-in)
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Where an event's or a gateway's label may go, in order of preference: below (the default box of
+ * nodeLabelBox), above, right-below, left-below. Right-/left-below hang `layout.labelDistance` px
+ * beside the node's vertical centre line, which is where a flow leaving or entering through the
+ * bottom runs. Same box format as nodeLabelBox. Empty for a node without an external label, and
+ * for a data object or store, whose label never moves.
+ */
+function nodeLabelCandidates(node, c) {
+  if (!c || !(isEvent(node.type) || isGateway(node.type))) return [];
+  const below = nodeLabelBox(node, c);
+  if (!below) return [];
+  const { w, h, lines } = below;
+  const cx = c.x + c.w / 2;
+  return [
+    { side: 'below', box: below },
+    { side: 'above', box: { x: cx - w / 2, y: c.y - LABEL_DISTANCE - h, w, h, lines } },
+    { side: 'right-below', box: { x: cx + LABEL_DISTANCE, y: below.y, w, h, lines } },
+    { side: 'left-below', box: { x: cx - LABEL_DISTANCE - w, y: below.y, w, h, lines } },
+  ];
+}
+
+/** Do two boxes share interior? Touching edges do not count. */
+function boxesOverlap(a, b) {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/**
+ * Re-place the label of every event and gateway that a sequence flow or a message flow leaves or
+ * enters through the bottom — the side the label sits on — at the first FREE candidate of
+ * nodeLabelCandidates: no route runs through it, it overlaps no shape and no other label (node or
+ * edge label), it crosses no inner lane separator and stays inside its participant's content area.
+ * A shape counts as in the way unless it is a container of the node (expanded subprocess, group)
+ * that wraps the candidate whole; a boundary event's host therefore always does. No free candidate:
+ * the default box stays, so the result is never worse than without the pass.
+ *
+ * Runs after routeMessageFlows (pipeline.js), because a message flow's port at a node's bottom is
+ * only known then. That does not break "message flows last": a label box is not route geometry and
+ * nothing routes around node labels after this point; only the two renderers read them.
+ *
+ * Deterministic: nodes in placeNodeLabels' order; each candidate is judged against the other
+ * labels as they stand at that moment. Pure: returns a new nodeLabels object when a label moved,
+ * `coordMap.nodeLabels` itself otherwise.
+ */
+function placeNodeLabelsAvoidingFlows(coordMap, lc) {
+  const { coords = {}, edgeCoords = {}, edgeLabels = {}, poolCoords = {} } = coordMap;
+  const current = coordMap.nodeLabels ?? {};
+  const processes = lc.pools ? lc.pools : [lc];
+
+  // Which flows end on which node: sequence flows at every depth, message flows.
+  const ends = {};                                    // nodeId -> [{ pts, at: 'start' | 'end' }]
+  const addEnd = (id, key, at) => { if (edgeCoords[key]) (ends[id] ??= []).push({ pts: edgeCoords[key], at }); };
+  for (const proc of processes) {
+    for (const e of flattenProcessEdges(proc)) { if (e.id) { addEnd(e.source, e.id, 'start'); addEnd(e.target, e.id, 'end'); } }
+  }
+  for (const mf of (lc.messageFlows || [])) { const k = messageFlowKey(mf); addEnd(mf.source, k, 'start'); addEnd(mf.target, k, 'end'); }
+  const usesBottom = (id, c) => (ends[id] || []).some(({ pts, at }) => {
+    const p = at === 'start' ? pts[0] : pts[pts.length - 1];
+    return p && Math.abs(p.y - (c.y + c.h)) < 1 && p.x >= c.x - 1 && p.x <= c.x + c.w + 1;
+  });
+
+  const routes = Object.values(edgeCoords).filter(pts => pts && pts.length >= 2);
+  const edgeBoxes = Object.values(edgeLabels).map(edgeLabelBox);
+  const laneLines = innerLaneLines(coordMap, lc);
+  const shapes = Object.entries(coords);
+  const regionOf = (proc) => {
+    const pc = lc.pools ? poolCoords[proc.id] : poolCoords._singlePool;
+    if (!pc) return null;
+    const head = pc.laneHeaderWidth ?? LANE_HEADER_W;
+    return { x: pc.x + head, y: pc.y, w: pc.w - head, h: pc.h };
+  };
+
+  let out = current;
+  for (const proc of processes) {
+    const region = regionOf(proc);
+    for (const node of flattenProcessNodes(proc.nodes)) {
+      const c = coords[node.id];
+      const candidates = nodeLabelCandidates(node, c);
+      if (!candidates.length || !current[node.id] || !usesBottom(node.id, c)) continue;
+      const free = (box) =>
+        (!region || boxWithin(region, box))
+        && !boxCrossesLines(box, laneLines)
+        && !routes.some(pts => entersInterior(pts, box))
+        && !shapes.some(([id, s]) => boxesOverlap(s, box) && !(id !== node.id && boxWithin(s, c) && boxWithin(s, box)))
+        && !Object.entries(out).some(([id, L]) => id !== node.id && boxesOverlap(L, box))
+        && !edgeBoxes.some(b => boxesOverlap(b, box));
+      const pick = candidates.find(k => free(k.box));
+      if (!pick || pick.side === 'below') continue;
+      if (out === current) out = { ...current };
+      out[node.id] = pick.box;
+    }
+  }
+  return out;
+}
+
 /** Does a label box reach into its own route? Touching it does not count. */
 function labelHitsRoute(box, pts) {
   return !!pts && pts.length >= 2 && entersInterior(pts, box);
@@ -1736,4 +1834,4 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, placeNodeLabels, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
