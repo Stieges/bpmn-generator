@@ -38,7 +38,8 @@ import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from '../http-server.js';
 import { checkDiagramIntegrity, groupDi05BySource, formatDiWarnings } from './di-check.js';
-import { routeMessageFlows, edgeLabelBox as boxOf, labelHitsRoute as hitsRoute } from './coordinates.js';
+import { rerouteAfterCompaction } from './edge-simplify.js';
+import { routeMessageFlows, edgeLabelBox as boxOf, labelHitsRoute as hitsRoute, flattenProcessEdges, innerLaneLines } from './coordinates.js';
 import { checkNetIntegrity } from './net-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 // Statically imported (not `await import` inside a test) so `describe` bodies can enumerate the
@@ -6878,7 +6879,7 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
     let m = Infinity;
     for (const p of (lc.pools || [lc])) {
       const ys = (p.lanes || []).map(l => cm.laneCoords[l.id]).filter(Boolean).sort((a, b) => a.y - b.y).slice(1).map(b => b.y);
-      const edges = [...(p.edges || [])];
+      const edges = flattenProcessEdges(p);
       for (const e of edges) {
         const pts = cm.edgeCoords[e.id] || [];
         for (let i = 1; i + 2 < pts.length; i++) {
@@ -6933,6 +6934,14 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
       const cm = structuredClone(a.coordMap);
       compactLanes(cm, loadFixture(`${name}.json`), { minLaneHeight: 80 });
       expect(JSON.stringify(cm)).toBe(JSON.stringify(a.coordMap));
+      // the re-route run a second time on its own output changes nothing; the uncompacted routes
+      // stand in for "before compaction", so every bent flow counts as affected again
+      const off = await runPipeline(loadFixture(`${name}.json`), { visualRefinement: false });
+      const lc2 = loadFixture(`${name}.json`);
+      const edges = (lc2.pools || [lc2]).flatMap(p => flattenProcessEdges(p));
+      const again = rerouteAfterCompaction(a.coordMap.edgeCoords, off.coordMap.edgeCoords, a.coordMap.coords,
+        edges.filter(e => a.coordMap.edgeCoords[e.id]), new Set(), { laneLines: innerLaneLines(a.coordMap, lc2), laneLineClearance: 10 });
+      expect(JSON.stringify(again)).toBe(JSON.stringify(a.coordMap.edgeCoords));
       const b = await runPipeline(loadFixture(`${name}.json`), COMPACT);
       expect(b.bpmnXml).toBe(a.bpmnXml);
     }
@@ -6947,6 +6956,18 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
       expect(`${name} ${hits.laneLine.join(',')}|${hits.farFromEdge.join(',')}`).toBe(`${name} |`);
     }
   }, 30000);
+
+  test('a label inside a container still leaves a lane separator (the container is not an obstacle)', async () => {
+    const { computeSequenceFlowLabel } = await import('./coordinates.js');
+    const pts = [{ x: 100, y: 100 }, { x: 300, y: 100 }];
+    const edge = { id: 'e', source: 'a', target: 'b', label: 'Yes' };
+    const shapes = { a: { x: 20, y: 80, w: 80, h: 40 }, b: { x: 300, y: 80, w: 80, h: 40 } };
+    const laneLines = [{ y: 90, x0: 0, x1: 500 }];
+    const bare = computeSequenceFlowLabel(edge, pts, shapes, { laneLines });
+    const inside = computeSequenceFlowLabel(edge, pts, { ...shapes, sp: { x: 0, y: 40, w: 500, h: 200 } }, { laneLines });
+    expect(bare.side).toBe('below');
+    expect(inside.side).toBe('below');
+  });
 
   test('nested lanes: compaction neither throws nor adds a DI error', async () => {
     const lc = () => ({ id: 'P', name: 'Nested', lanes: [

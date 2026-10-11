@@ -331,12 +331,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same chain as before (simplify, legacy guard, crossing repair, stuck-end re-clip), and their inner
   horizontal legs keep `visualRefinement.laneLineClearance` (10 px) from lane separators. Message
   flows are still routed last. Compaction's area gains (−13 … −47 %) are unchanged.
-- **Edge labels no longer lie across lane separators.** A label whose box would cross an inner lane
+- **Edge labels no longer lie across lane separators, in every mode** (the lane lines feed label
+  placement also with refinement off). A label whose box would cross an inner lane
   line is placed on the other side of its segment (or the next leg), clear of the route, of node
   shapes and — for message flows — of every other label; the collision repair refuses a nudge that
   would cross a separator. The layout bench counts both defects (`labelLaneLine`, a label across a
   separator, and `labelFar`, a label more than `layout.edgeLabelGap` + 2 px from its own route) in
-  the ratchet, at 0 for every fixture and mode.
+  the ratchet, at 0 for every fixture and mode. A container wrapping the label (expanded
+  subprocess, group) is not counted as an obstacle. Where no candidate spot is clear, the label —
+  and, when a move would add a crossing, the leg `keepOffLaneLines`/`rerouteAfterCompaction`
+  leaves — stays on the separator; this is reported nowhere (see Known Limitations in CLAUDE.md).
 - **ELK wrapping no longer crashes layout (#80).** MULTI_EDGE wrapping made elkjs throw
   (`Cannot read properties of null`) on models with more than 20 nodes and a back edge. When ELK
   fails with wrapping properties set, `runElkLayout` now retries once without them, re-throws the
