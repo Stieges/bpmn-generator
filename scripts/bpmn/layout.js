@@ -270,7 +270,7 @@ function buildElkNode(node) {
       properties: {
         ...props,
         ...elkDefaults(),
-        'elk.padding': `[top=40,left=20,bottom=${20 + artifactReserve},right=20]`,
+        'elk.padding': `[top=${CFG.layout.subProcessTitleBand},left=20,bottom=${20 + artifactReserve},right=20]`,
       },
       children: childNodes,
       edges: childEdges,

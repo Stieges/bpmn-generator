@@ -68,6 +68,8 @@ function generateSvg(lc, coordMap) {
       { x: p.x + p.w, y: p.y + p.h },
     ]),
     ...Object.values(edgeCoords).flatMap(pts => pts),
+    // A node label that moved off its default spot (nodeLabelsAvoidFlows) can lie beyond the shapes.
+    ...Object.values(nodeLabels).flatMap(b => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]),
   ];
   if (!allPts.length)
     return `<svg xmlns="http://www.w3.org/2000/svg"><text y="20">No elements</text></svg>`;

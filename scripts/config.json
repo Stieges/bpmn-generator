@@ -142,6 +142,7 @@
     "collabPadding": 20,
     "messageFlowFan": 14,
     "artifactGap": 30,
+    "subProcessTitleBand": 40,
     "poolOrder": "auto",
     "elkWrapping": "off",
     "elkWrappingNodeThreshold": 20,
