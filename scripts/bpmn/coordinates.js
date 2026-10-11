@@ -793,8 +793,9 @@ function boxesOverlap(a, b) {
 }
 
 /**
- * Re-place the label of every event and gateway that a sequence flow or a message flow leaves or
- * enters through the bottom — the side the label sits on — at the first FREE candidate of
+ * Re-place the label of every event and gateway that one of its own sequence flows or message flows
+ * leaves or enters through the bottom — the side the label sits on — or runs through on its way
+ * out or in (a gateway's flow docked on a lower facet, turning down), at the first FREE candidate of
  * nodeLabelCandidates: no route runs through it, it overlaps no shape and no other label (node or
  * edge label), it crosses no inner lane separator and stays inside its participant's content area.
  * A shape counts as in the way unless it is a container of the node (expanded subprocess, group)
@@ -821,9 +822,13 @@ function placeNodeLabelsAvoidingFlows(coordMap, lc) {
     for (const e of flattenProcessEdges(proc)) { if (e.id) { addEnd(e.source, e.id, 'start'); addEnd(e.target, e.id, 'end'); } }
   }
   for (const mf of (lc.messageFlows || [])) { const k = messageFlowKey(mf); addEnd(mf.source, k, 'start'); addEnd(mf.target, k, 'end'); }
-  const usesBottom = (id, c) => (ends[id] || []).some(({ pts, at }) => {
+  // The trigger: one of the node's own flows docks at its bottom, or runs through the label below
+  // it — ELK docks a gateway's second flow on the diamond's lower facet, not at its bottom vertex,
+  // and that flow then turns down through the label just the same.
+  const flowAtLabel = (id, c, below) => (ends[id] || []).some(({ pts, at }) => {
     const p = at === 'start' ? pts[0] : pts[pts.length - 1];
-    return p && Math.abs(p.y - (c.y + c.h)) < 1 && p.x >= c.x - 1 && p.x <= c.x + c.w + 1;
+    return (p && Math.abs(p.y - (c.y + c.h)) < 1 && p.x >= c.x - 1 && p.x <= c.x + c.w + 1)
+      || entersInterior(pts, below);
   });
 
   const routes = Object.values(edgeCoords).filter(pts => pts && pts.length >= 2);
@@ -843,7 +848,7 @@ function placeNodeLabelsAvoidingFlows(coordMap, lc) {
     for (const node of flattenProcessNodes(proc.nodes)) {
       const c = coords[node.id];
       const candidates = nodeLabelCandidates(node, c);
-      if (!candidates.length || !current[node.id] || !usesBottom(node.id, c)) continue;
+      if (!candidates.length || !current[node.id] || !flowAtLabel(node.id, c, candidates[0].box)) continue;
       const free = (box) =>
         (!region || boxWithin(region, box))
         && !boxCrossesLines(box, laneLines)
