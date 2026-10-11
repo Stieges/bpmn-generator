@@ -447,6 +447,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **Layout bench names what it compares.** The crossings line of `scripts/bench/layout-metrics.mjs`
+  and `tests/bench/layout-metrics-baseline.md` still read "default − ELK raw"; it is the
+  `unrefined` row (default layout passes, visual refinement off) minus the ELK raw row. Wording
+  only, no number changes.
 - **`tests/fixtures/messageflow-to-subprocess.json` passes the schema gate.** The fixture carried a
   stray top-level `name`, which the collaboration branch of `references/input-schema.json` does not
   allow, so the CLI refused it in every mode (the tests read it past the gate). The key is removed;

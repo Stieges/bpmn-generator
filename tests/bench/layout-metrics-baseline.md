@@ -48,7 +48,7 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | unrefined | 1 | 9 | 11/15 | 0 | 1514×357 (30028/node) | 4.24 | 4/4 (100%) | 1 branch, 1 hosts-boundary, 3 boundary-src | 2 | 0 | 0 | 0 | 0/0/0 |
 | everything on (refine + wrap) | 1 | 9 | 11/15 | 0 | 1514×357 (30028/node) | 4.24 | 4/4 (100%) | 1 branch, 1 hosts-boundary, 3 boundary-src | 2 | 0 | 0 | 0 | 0/0/0 |
 
-Crossings introduced by our own post-processing (default − ELK raw): **+1** —
+Crossings introduced by our own post-processing (unrefined row − ELK raw row; the pipeline with the default layout passes — bend rule, label avoidance, crossing repair — and visual refinement off): **+1** —
 ELK routed around these; the routes we delete and rebuild do not.
 
 ## bpmn-generator-pipeline.json
@@ -87,7 +87,7 @@ Our post-processing introduces no crossings beyond ELK's own result.
 | unrefined | 2 | 11 | 16/19 | 0 | 2230×908 (96421/node) | 2.46 | 8/8 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
 | everything on (refine + wrap) | 2 | 11 | 16/19 | 0 | 2230×778 (82616/node) | 2.87 | 8/8 (100%) | 2 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
 
-Crossings introduced by our own post-processing (default − ELK raw): **+2** —
+Crossings introduced by our own post-processing (unrefined row − ELK raw row; the pipeline with the default layout passes — bend rule, label avoidance, crossing repair — and visual refinement off): **+2** —
 ELK routed around these; the routes we delete and rebuild do not.
 
 ## example-kreditantrag.json
@@ -98,7 +98,7 @@ ELK routed around these; the routes we delete and rebuild do not.
 | unrefined | 1 | 9 | 21/22 | 0 | 1452×1373 (83036/node) | 1.06 | 7/7 (100%) | 3 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
 | everything on (refine + wrap) | 1 | 13 | 20/22 | 0 | 1272×1906 (101018/node) | 0.67 | 6/6 (100%) | 1 fold-back, 3 branch, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 0 | 0 | 0/0/0 |
 
-Crossings introduced by our own post-processing (default − ELK raw): **+1** —
+Crossings introduced by our own post-processing (unrefined row − ELK raw row; the pipeline with the default layout passes — bend rule, label avoidance, crossing repair — and visual refinement off): **+1** —
 ELK routed around these; the routes we delete and rebuild do not.
 
 ## example-onboarding.json

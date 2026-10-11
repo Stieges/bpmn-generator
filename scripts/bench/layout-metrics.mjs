@@ -790,7 +790,7 @@ async function main() {
     if (r.unrefinedMetrics) {
       const delta = r.unrefinedMetrics.crossings - r.rawElkMetrics.crossings;
       if (delta > 0) {
-        lines.push(`Crossings introduced by our own post-processing (default − ELK raw): **+${delta}** —`);
+        lines.push(`Crossings introduced by our own post-processing (unrefined row − ELK raw row; the pipeline with the default layout passes — bend rule, label avoidance, crossing repair — and visual refinement off): **+${delta}** —`);
         lines.push('ELK routed around these; the routes we delete and rebuild do not.');
       } else {
         lines.push('Our post-processing introduces no crossings beyond ELK\'s own result.');
