@@ -13,7 +13,7 @@
 
 import { LANE_HEADER_W } from './constants.js';
 import { wrapTextByPx, CFG } from '../shared/utils.js';
-import { flattenProcessNodes, flattenProcessEdges, edgeLabelBox, labelHitsRoute } from './coordinates.js';
+import { flattenProcessNodes, flattenProcessEdges, edgeLabelBox, labelHitsRoute, boxCrossesLines, innerLaneLines } from './coordinates.js';
 
 /** The three refinement passes, in the order of their config switches. */
 export const REFINEMENT_PASSES = Object.freeze(['dynamicLaneHeader', 'laneCompaction', 'edgeLabelCollisionRepair']);
@@ -160,7 +160,8 @@ export function bboxOverlaps(a, b) {
 /**
  * Nudge edge labels that overlap with nodes or other labels.
  * Tries distances [15, 25, maxShift] × directions [up, down, left, right], minus the direction
- * toward the label's own segment, and rejects a slot whose box reaches into the label's own route.
+ * toward the label's own segment, and rejects a slot whose box reaches into the label's own route
+ * or lies across one of `opts.laneLines` (inner lane separators, see innerLaneLines).
  * If no collision-free slot is found within maxShift, the label stays at
  * its original position (graceful degradation — we never throw).
  *
@@ -168,11 +169,12 @@ export function bboxOverlaps(a, b) {
  * returns the same coordMap reference for chaining.
  *
  * @param {Object} coordMap   — { coords, edgeLabels, ... }; MUTATED
- * @param {Object} opts       — { maxShift = 25 }
+ * @param {Object} opts       — { maxShift = 25, laneLines = [] }
  * @returns {Object}          — same coordMap (mutated)
  */
 export function repairEdgeLabels(coordMap, opts = {}) {
   const maxShift = opts.maxShift ?? 25;
+  const laneLines = opts.laneLines ?? [];
   const labels = coordMap.edgeLabels ?? {};
   const labelIds = Object.keys(labels);
   if (labelIds.length === 0) return coordMap;
@@ -215,7 +217,7 @@ export function repairEdgeLabels(coordMap, opts = {}) {
           x: origBB.x + dir.dx * d,
           y: origBB.y + dir.dy * d
         };
-        if (!collides(tryBB) && !labelHitsRoute(tryBB, ownRoute)) {
+        if (!collides(tryBB) && !labelHitsRoute(tryBB, ownRoute) && !boxCrossesLines(tryBB, laneLines)) {
           labels[id].x += dir.dx * d;
           labels[id].y += dir.dy * d;
           fixed = true;
@@ -433,3 +435,7 @@ export function compactLanes(coordMap, process, opts = {}) {
 
   return coordMap;
 }
+
+// Inner lane separators — defined beside the label placement that avoids them (coordinates.js),
+// re-exported here for the refinement passes.
+export { innerLaneLines };

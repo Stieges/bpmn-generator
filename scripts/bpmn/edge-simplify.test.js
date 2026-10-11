@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { assertStubClearsPad, simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor } from './edge-simplify.js';
+import { assertStubClearsPad, simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, movedNonRigidly, keepOffLaneLines } from './edge-simplify.js';
 
 describe('simplifyEdge — an L never ends along its endpoint\'s outline (#52)', () => {
   test("Flow_8: the L that runs down the target's left side is replaced by the one arriving horizontally", () => {
@@ -185,5 +185,48 @@ describe('assertStubClearsPad', () => {
     const { ROUTER_PAD } = await import('./orthogonal-router.js');
     const { CFG } = await import('../shared/utils.js');
     expect(() => assertStubClearsPad(CFG.layout?.endStubPx ?? 15, ROUTER_PAD)).not.toThrow();
+  });
+});
+
+describe('movedNonRigidly', () => {
+  const a = [{ x: 0, y: 0 }, { x: 0, y: 50 }, { x: 100, y: 50 }];
+  test('a rigid shift is not a bend', () => {
+    expect(movedNonRigidly(a, a.map(p => ({ x: p.x, y: p.y - 30 })))).toBe(false);
+  });
+  test('one point moved by another delta is', () => {
+    expect(movedNonRigidly(a, [{ x: 0, y: 0 }, { x: 0, y: 39 }, { x: 100, y: 39 }])).toBe(true);
+  });
+  test('missing or different-length routes are not judged', () => {
+    expect(movedNonRigidly(undefined, a)).toBe(false);
+    expect(movedNonRigidly(a, a.slice(1))).toBe(false);
+  });
+});
+
+describe('keepOffLaneLines', () => {
+  const boxes = { s: { x: 100, y: 20, w: 100, h: 80 }, t: { x: 300, y: 140, w: 100, h: 80 } };
+  const line = [{ y: 120, x0: 30, x1: 530 }];
+  test('a leg on the line moves to the nearest clearance position inside its vertical span', () => {
+    const pts = [{ x: 150, y: 100 }, { x: 150, y: 119 }, { x: 350, y: 119 }, { x: 350, y: 140 }];
+    expect(keepOffLaneLines(pts, line, 10, boxes, 's', 't')).toEqual(
+      [{ x: 150, y: 100 }, { x: 150, y: 110 }, { x: 350, y: 110 }, { x: 350, y: 140 }]);
+  });
+  test('a leg already clear is returned as the same array', () => {
+    const pts = [{ x: 150, y: 100 }, { x: 150, y: 108 }, { x: 350, y: 108 }, { x: 350, y: 140 }];
+    expect(keepOffLaneLines(pts, line, 10, boxes, 's', 't')).toBe(pts);
+  });
+  test('first and last segments are never moved (they are pinned to the endpoints)', () => {
+    const pts = [{ x: 200, y: 119 }, { x: 300, y: 119 }];
+    expect(keepOffLaneLines(pts, line, 10, boxes, 's', 't')).toBe(pts);
+  });
+  test('a move into a box the leg did not touch before is refused', () => {
+    const blocked = { ...boxes, x: { x: 200, y: 106, w: 60, h: 6 } };   // clear of the original leg (incl. shapeClearance 4)
+    const pts = [{ x: 150, y: 100 }, { x: 150, y: 119 }, { x: 350, y: 119 }, { x: 350, y: 140 }];
+    const out = keepOffLaneLines(pts, line, 10, blocked, 's', 't');
+    expect(out[1].y).toBe(130);                       // the other side of the line instead
+  });
+  test('a box the segments already touched does not block the move (boundary event on the exit side)', () => {
+    const withEvent = { ...boxes, b: { x: 132, y: 82, w: 36, h: 36 } };   // sits on s's bottom, the stub runs through it
+    const pts = [{ x: 150, y: 100 }, { x: 150, y: 119 }, { x: 350, y: 119 }, { x: 350, y: 140 }];
+    expect(keepOffLaneLines(pts, line, 10, withEvent, 's', 't')[1].y).toBe(110);
   });
 });

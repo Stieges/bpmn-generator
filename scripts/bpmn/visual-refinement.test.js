@@ -1,7 +1,8 @@
 /**
  * Visual Refinement — unit tests
  */
-import { estimateTextWidth, computeDynamicLaneHeaders, estimateTextBBox, bboxOverlaps, repairEdgeLabels, compactLanes, resolveRefinement, REFINEMENT_PASSES } from './visual-refinement.js';
+import { estimateTextWidth, computeDynamicLaneHeaders, estimateTextBBox, bboxOverlaps, repairEdgeLabels, compactLanes, resolveRefinement, REFINEMENT_PASSES, innerLaneLines } from './visual-refinement.js';
+import { placeEdgeLabel } from './coordinates.js';
 
 describe('estimateTextWidth', () => {
   test('returns 0 for empty string', () => {
@@ -543,5 +544,41 @@ describe('resolveRefinement', () => {
   });
   test('the pass list is exactly the three passes', () => {
     expect([...REFINEMENT_PASSES]).toEqual(['dynamicLaneHeader', 'laneCompaction', 'edgeLabelCollisionRepair']);
+  });
+});
+
+describe('innerLaneLines', () => {
+  test('one line per band below the first, spanning the band', () => {
+    const lc = { pools: [{ id: 'P', lanes: [{ id: 'B' }, { id: 'A' }] }] };
+    const cm = { laneCoords: { A: { x: 30, y: 0, w: 500, h: 120 }, B: { x: 30, y: 120, w: 500, h: 90 } } };
+    expect(innerLaneLines(cm, lc)).toEqual([{ y: 120, x0: 30, x1: 530 }]);
+  });
+});
+
+describe('edge labels keep off lane separators', () => {
+  const route = [{ x: 100, y: 60 }, { x: 100, y: 100 }, { x: 200, y: 100 }, { x: 200, y: 160 }];
+  const line = [{ y: 90, x0: 30, x1: 530 }];
+  test('placement: a label that would lie across a separator takes the other side of its segment', () => {
+    const plain = placeEdgeLabel('Yes', route);
+    expect(plain.side).toBe('above');
+    const kept = placeEdgeLabel('Yes', route, { avoidLines: line });
+    expect(kept.side).toBe('below');
+    expect(kept.x).toBe(plain.x);
+    expect(kept.y - kept.h / 2).toBeGreaterThan(100);
+  });
+  test('placement: a separator nowhere near the label changes nothing', () => {
+    expect(placeEdgeLabel('Yes', route, { avoidLines: [{ y: 300, x0: 30, x1: 530 }] }))
+      .toEqual(placeEdgeLabel('Yes', route));
+  });
+  const collidingMap = () => ({
+    coords: { n: { x: 120, y: 80, w: 60, h: 15 } }, poolCoords: {}, laneCoords: {},
+    edgeCoords: { e: [{ x: 100, y: 100 }, { x: 200, y: 100 }] },
+    edgeLabels: { e: { text: 'Yes', x: 150, y: 80, w: 20, h: 14, side: 'above' } },
+  });
+  test('repair: a nudge that would put the label across a separator is refused', () => {
+    const free = repairEdgeLabels(collidingMap(), { maxShift: 25 });
+    expect(free.edgeLabels.e.y).toBe(65);
+    const kept = repairEdgeLabels(collidingMap(), { maxShift: 25, laneLines: [{ y: 65, x0: 30, x1: 530 }] });
+    expect(kept.edgeLabels.e.y).toBe(55);
   });
 });

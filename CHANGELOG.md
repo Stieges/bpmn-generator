@@ -324,6 +324,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
+- **Lane compaction no longer lays sequence flows on lane lines.** `compactLanes` clamped every
+  waypoint inside the strip it cut away onto the shrunk band's bottom edge, so a cross-lane flow
+  whose horizontal leg sat in the gap ended up on the lane separator (360–1080 px of such legs in
+  6 of 20 measured models). The flows it bent are now re-routed on the compacted geometry by the
+  same chain as before (simplify, legacy guard, crossing repair, stuck-end re-clip), and their inner
+  horizontal legs keep `visualRefinement.laneLineClearance` (10 px) from lane separators. Message
+  flows are still routed last. Compaction's area gains (−13 … −47 %) are unchanged.
+- **Edge labels no longer lie across lane separators.** A label whose box would cross an inner lane
+  line is placed on the other side of its segment (or the next leg), clear of the route, of node
+  shapes and — for message flows — of every other label; the collision repair refuses a nudge that
+  would cross a separator. The layout bench counts both defects (`labelLaneLine`, a label across a
+  separator, and `labelFar`, a label more than `layout.edgeLabelGap` + 2 px from its own route) in
+  the ratchet, at 0 for every fixture and mode.
 - **ELK wrapping no longer crashes layout (#80).** MULTI_EDGE wrapping made elkjs throw
   (`Cannot read properties of null`) on models with more than 20 nodes and a back edge. When ELK
   fails with wrapping properties set, `runElkLayout` now retries once without them, re-throws the
