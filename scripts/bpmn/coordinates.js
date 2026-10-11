@@ -986,6 +986,22 @@ function innerLaneLines(coordMap, process) {
 }
 
 /**
+ * Centre of a `w` × `h` label box beside the axis-parallel segment `[a, b]`, `gap` px clear of it on
+ * `side` ('above' | 'below' | 'right' | 'left'), shifted `along` px along the segment from its
+ * midpoint. The one formula for "beside its segment", shared by placeEdgeLabel and
+ * repairMessageFlowLabels.
+ */
+function besideSegment(a, b, side, w, h, gap, along = 0) {
+  const mx = (a.x + b.x) / 2 + along, my = (a.y + b.y) / 2 + along;
+  switch (side) {
+    case 'above': return { x: mx, y: a.y - gap - h / 2, side, seg: [a, b] };
+    case 'below': return { x: mx, y: a.y + gap + h / 2, side, seg: [a, b] };
+    case 'right': return { x: a.x + gap + w / 2, y: my, side, seg: [a, b] };
+    default:      return { x: a.x - gap - w / 2, y: my, side, seg: [a, b] };
+  }
+}
+
+/**
  * Place a label beside its route — above a horizontal segment, right of a vertical one, its box
  * `layout.edgeLabelGap` px clear of the line, never across it.
  *
@@ -1010,15 +1026,7 @@ function innerLaneLines(coordMap, process) {
 function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLines = [], obstacles = [], avoidRoutes = [] } = {}) {
   const { lines, w, h } = edgeLabelLayout(text);
   const gap = CFG.layout?.edgeLabelGap ?? 4;
-  const beside = (a, b, side) => {
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    switch (side) {
-      case 'above': return { x: mx, y: a.y - gap - h / 2, side, seg: [a, b] };
-      case 'below': return { x: mx, y: a.y + gap + h / 2, side, seg: [a, b] };
-      case 'right': return { x: a.x + gap + w / 2, y: my, side, seg: [a, b] };
-      default:      return { x: a.x - gap - w / 2, y: my, side, seg: [a, b] };
-    }
-  };
+  const beside = (a, b, side) => besideSegment(a, b, side, w, h, gap);
   const OTHER_SIDE = { above: 'below', below: 'above', right: 'left', left: 'right' };
   const isH = (a, b) => Math.abs(b.y - a.y) < 1 && Math.abs(b.x - a.x) >= 1;
   const isV = (a, b) => Math.abs(b.x - a.x) < 1 && Math.abs(b.y - a.y) >= 1;
@@ -2065,4 +2073,159 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+/**
+ * Header strips of every participant as boxes: an expanded pool's header (left of its lanes, or of
+ * its body when it has none), each top-level lane's header inside its band, and a black-box
+ * participant whole — its name sits in its middle. A single process gets a pool only when it has
+ * lanes. The same strips svg.js draws (laneHeaderWidth, else LANE_HEADER_W).
+ */
+function participantHeaders(coordMap, lc) {
+  const { poolCoords = {}, laneCoords = {} } = coordMap;
+  const out = [];
+  const procs = lc.pools ? lc.pools.map(p => [p, p.id]) : [[lc, '_singlePool']];
+  for (const [proc, key] of procs) {
+    const pc = poolCoords[key];
+    const head = pc?.laneHeaderWidth ?? LANE_HEADER_W;
+    const bands = (proc.lanes || []).map(l => laneCoords[l.id]).filter(Boolean);
+    if (bands.length) {
+      const x = Math.min(...bands.map(b => b.x)) - head, y = Math.min(...bands.map(b => b.y));
+      out.push({ x, y, w: head, h: Math.max(...bands.map(b => b.y + b.h)) - y });
+      for (const b of bands) out.push({ x: b.x, y: b.y, w: head, h: b.h });
+    } else if (lc.pools && pc) {
+      out.push({ x: pc.x, y: pc.y, w: head, h: pc.h });
+    }
+  }
+  for (const cp of (lc.collapsedPools || [])) {
+    const pc = poolCoords[cp.id];
+    if (pc) out.push({ x: pc.x, y: pc.y, w: pc.w, h: pc.h });
+  }
+  return out;
+}
+
+/**
+ * Collision repair for message-flow labels (#88, `layout.messageFlowLabelRepair`, on by default).
+ * routeMessageFlows places each label beside its corridor leg without looking at the labels placed
+ * after it, and the sequence-flow label repair (visual-refinement.js repairEdgeLabels) runs before
+ * message flows exist — so two fanned flows in one corridor put their labels on top of each other,
+ * or one label on the other's line (realistic-collaboration mf2/mf5).
+ *
+ * A message-flow label is CLEAR when its box reaches into no route (its own or any other: sequence
+ * flow, message flow, association), overlaps no shape (a container — expanded subprocess, group —
+ * that wraps the box whole is not in its way), no node label (coordMap.nodeLabels), no other edge
+ * label and no participant header (participantHeaders), and crosses no inner lane separator. Only
+ * message-flow labels move; every other box is an obstacle.
+ *
+ * Candidates keep the placement rule of every edge label (besideSegment): the box beside one of its
+ * own axis-parallel segments, `layout.edgeLabelGap` px clear of it, on either side (above/below a
+ * horizontal segment, right/left a vertical one), at the midpoint or shifted along the segment by
+ * ±`layout.messageFlowLabelSlidePx`, ±2×… while the centre stays on the segment. They are tried
+ * nearest to the label's current centre first — the smallest move that clears it, so a label
+ * squeezed out of its corridor leg goes to the other side of that leg, or to the stretch of the
+ * neighbouring leg next to it, not to some leg's far midpoint. Ties: the segment the label sits
+ * beside now, then route order; the current side first.
+ *
+ * Order: repeatedly, the first label (in lc.messageFlows order) that is not clear and has a clear
+ * candidate moves to its first one — labels that collide with something other than a message-flow
+ * label first, so a label on another flow's line moves before the label it merely overlaps. A
+ * move makes that label clear and makes no other one unclear (its new box overlaps no label), so
+ * every move adds a clear label and the loop ends after at most one move per label. Deterministic,
+ * and idempotent: at the end no unclear label has a clear candidate, so a second run moves nothing.
+ * A label with no clear candidate stays where it is — never worse than without the pass.
+ *
+ * Pure: returns a new edgeLabels object when a label moved, `coordMap.edgeLabels` itself otherwise.
+ */
+function repairMessageFlowLabels(coordMap, lc) {
+  const { coords = {}, edgeCoords = {}, nodeLabels = {} } = coordMap;
+  const current = coordMap.edgeLabels ?? {};
+  const keys = (lc.messageFlows || []).map(messageFlowKey)
+    .filter((k, i, all) => all.indexOf(k) === i && current[k] && edgeCoords[k]?.length >= 2);
+  if (!keys.length) return current;
+  const mfKeys = new Set(keys);
+
+  const gap = CFG.layout?.edgeLabelGap ?? 4;
+  const step = CFG.layout?.messageFlowLabelSlidePx ?? 10;
+  const laneLines = innerLaneLines(coordMap, lc);
+  const headers = participantHeaders(coordMap, lc);
+  const containers = new Set((lc.pools || [lc]).flatMap(p => flattenProcessNodes(p.nodes))
+    .filter(n => (n.isExpanded && n.nodes?.length) || n.type === 'group').map(n => n.id));
+  const shapes = Object.entries(coords);
+  const nodeBoxes = Object.values(nodeLabels);
+  const routes = Object.entries(edgeCoords).filter(([, pts]) => pts && pts.length >= 2);
+  const fixedLabels = Object.entries(current).filter(([id]) => !mfKeys.has(id)).map(([, L]) => edgeLabelBox(L));
+
+  let out = current;
+  const boxOf = (k) => edgeLabelBox(out[k]);
+  // Everything but the other message-flow labels: none of it moves in this pass.
+  const staticClear = (k, box) =>
+    !routes.some(([, pts]) => labelHitsRoute(box, pts))
+    && !shapes.some(([id, s]) => boxesOverlap(s, box) && !(containers.has(id) && boxWithin(s, box)))
+    && !nodeBoxes.some(b => boxesOverlap(b, box))
+    && !fixedLabels.some(b => boxesOverlap(b, box))
+    && !headers.some(b => boxesOverlap(b, box))
+    && !boxCrossesLines(box, laneLines);
+  const labelsClear = (k, box) => !keys.some(o => o !== k && boxesOverlap(boxOf(o), box));
+  const clear = (k, box) => staticClear(k, box) && labelsClear(k, box);
+
+  const candidates = (k) => {
+    const L = out[k];
+    const { w, h } = edgeLabelBox(L);
+    const pts = edgeCoords[k];
+    const segs = [];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      const horizontal = Math.abs(b.y - a.y) < 1 && Math.abs(b.x - a.x) >= 1;
+      const vertical = Math.abs(b.x - a.x) < 1 && Math.abs(b.y - a.y) >= 1;
+      if (!horizontal && !vertical) continue;
+      const sides = horizontal ? ['above', 'below'] : ['right', 'left'];
+      if (sides[1] === L.side) sides.reverse();
+      const half = horizontal ? Math.abs(b.x - a.x) / 2 : Math.abs(b.y - a.y) / 2;
+      const dist = besideDistance(L, a, b, horizontal);
+      segs.push({ a, b, sides, half, dist, i });
+    }
+    // The segment the label sits beside now first; the rest in route order.
+    const first = segs.reduce((best, s) => (!best || s.dist < best.dist ? s : best), null);
+    const ordered = first ? [first, ...segs.filter(s => s !== first)] : [];
+    const out2 = [];
+    for (const s of ordered) {
+      const offsets = [0];
+      for (let d = step; step > 0 && d <= s.half; d += step) offsets.push(-d, d);
+      for (const along of offsets) {
+        for (const side of s.sides) {
+          const c = besideSegment(s.a, s.b, side, w, h, gap, along);
+          out2.push({ x: c.x, y: c.y, side, box: { x: c.x - w / 2, y: c.y - h / 2, w, h } });
+        }
+      }
+    }
+    // Nearest to where the label is now first; generation order breaks ties (sort is stable).
+    const dist = (c) => Math.hypot(c.x - L.x, c.y - L.y);
+    return out2.map((c, i) => ({ c, d: dist(c), i })).sort((p, q) => p.d - q.d || p.i - q.i).map(p => p.c);
+  };
+
+  for (let moves = 0; moves < keys.length; moves++) {
+    const unclear = keys.filter(k => !clear(k, boxOf(k)));
+    const ordered = [...unclear.filter(k => !staticClear(k, boxOf(k))), ...unclear.filter(k => staticClear(k, boxOf(k)))];
+    let moved = false;
+    for (const k of ordered) {
+      const pick = candidates(k).find(c => clear(k, c.box));
+      if (!pick) continue;
+      if (out === current) out = { ...current };
+      out[k] = { ...out[k], x: pick.x, y: pick.y, side: pick.side };
+      moved = true;
+      break;
+    }
+    if (!moved) break;
+  }
+  return out;
+}
+
+/** Distance from a label's centre to the axis-parallel segment [a, b] (for "which leg is it beside"). */
+function besideDistance(L, a, b, horizontal) {
+  if (horizontal) {
+    const dx = Math.max(Math.min(a.x, b.x) - L.x, 0, L.x - Math.max(a.x, b.x));
+    return Math.hypot(dx, L.y - a.y);
+  }
+  const dy = Math.max(Math.min(a.y, b.y) - L.y, 0, L.y - Math.max(a.y, b.y));
+  return Math.hypot(L.x - a.x, dy);
+}
+
+export { buildCoordinateMap, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, participantHeaders, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };

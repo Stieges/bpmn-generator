@@ -32,7 +32,7 @@ import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
+import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
@@ -109,6 +109,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
  * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (true)
+ * @param {boolean} [opts.messageFlowLabelRepair] - message-flow labels off routes, shapes, labels, headers and lane separators (repairMessageFlowLabels); default config.json -> layout.messageFlowLabelRepair (true)
  * @param {boolean} [opts.nodeLabelsAvoidFlows] - event and gateway labels off their flows (placeNodeLabelsAvoidingFlows); default config.json -> layout.nodeLabelsAvoidFlows (true)
  * @param {boolean} [opts.foreignShapeRepair] - the stuck-end pass also re-routes a sequence flow through a foreign shape (reclipStuckEnds' foreignShapes, #91); default config.json -> layout.foreignShapeRepair (true)
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
@@ -306,6 +307,19 @@ async function runPipeline(logicCore, opts = {}) {
   // Message flows LAST: their horizontal leg has to sit in the gap between two
   // participants, so every pass that can still move a participant must be done.
   routeMessageFlows(coordMap, lc);
+
+  // Message-flow label repair (repairMessageFlowLabels, #88): routeMessageFlows placed each label
+  // without the ones after it, and the edge-label repair above ran before any message flow existed.
+  // A label that overlaps a route, a shape, a node or edge label, a participant header or crosses a
+  // lane separator moves beside one of its own segments. Labels only — every route is final here.
+  // BEFORE node-label avoidance, so edge labels are settled when node labels choose: that pass treats
+  // every edge label as an obstacle and never moves one, and this one treats every node label as one
+  // and never moves one — neither can undo the other, and a node label moved afterwards lands only
+  // on a spot clear of the repaired boxes. On by default (config.json ->
+  // layout.messageFlowLabelRepair); per call `messageFlowLabelRepair`.
+  if (opts.messageFlowLabelRepair ?? (CFG.layout?.messageFlowLabelRepair === true)) {
+    coordMap.edgeLabels = repairMessageFlowLabels(coordMap, lc);
+  }
 
   // Node labels away from flows (placeNodeLabelsAvoidingFlows): an event's or a gateway's label
   // leaves the bottom when a flow leaves or enters the node there. After routeMessageFlows on
