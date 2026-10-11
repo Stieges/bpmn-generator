@@ -1,19 +1,19 @@
 {
   "all-element-classes.json × default": {
-    "xml": "fce63dc6dad99e5f420d4c6e9175c0a5d7e813265843974a07ac4364e732b028",
-    "svg": "127324023811c36803c0953e0eea95ae87137621267606269ff5aae092f89f4b"
+    "xml": "35776eeb4dadd6acca6c36c1eee3f05652dbc6fa64413735734405a9df1cf226",
+    "svg": "79fd1070deb00f6e2daf369fade9ff9344155158c4546ee7c47473185c80c3e8"
   },
   "all-element-classes.json × no-refine": {
-    "xml": "eac96f293b35c9b3875eee7810f411949e7c357fa81d753e91d7d764d12532be",
-    "svg": "a7ef4c97ad7833614ca22a93196be14aa380e99c29496ad467b7a0fd871fbfc5"
+    "xml": "2de8a848bb85f177714bb9cfebd0b20760261c7bff6dbae746c6224ef15b4003",
+    "svg": "837f240c7179c0e1d15d1b3c72f20e73d206aa35508533a6a5eacc8a3f385c8b"
   },
   "all-element-classes.json × refine": {
-    "xml": "fce63dc6dad99e5f420d4c6e9175c0a5d7e813265843974a07ac4364e732b028",
-    "svg": "127324023811c36803c0953e0eea95ae87137621267606269ff5aae092f89f4b"
+    "xml": "35776eeb4dadd6acca6c36c1eee3f05652dbc6fa64413735734405a9df1cf226",
+    "svg": "79fd1070deb00f6e2daf369fade9ff9344155158c4546ee7c47473185c80c3e8"
   },
   "all-element-classes.json × refine+wrap": {
-    "xml": "fce63dc6dad99e5f420d4c6e9175c0a5d7e813265843974a07ac4364e732b028",
-    "svg": "127324023811c36803c0953e0eea95ae87137621267606269ff5aae092f89f4b"
+    "xml": "35776eeb4dadd6acca6c36c1eee3f05652dbc6fa64413735734405a9df1cf226",
+    "svg": "79fd1070deb00f6e2daf369fade9ff9344155158c4546ee7c47473185c80c3e8"
   },
   "boundary-event-shapes.json × default": {
     "xml": "47552d5bac3348cfd401ad7b14131a12d1311a56f1044797cedcdfaf60c0ac5a",
