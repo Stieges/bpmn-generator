@@ -118,7 +118,7 @@
       "description": "Output of the post-layout DI integrity check (scripts/di-check.js checkDiagramIntegrity). Inspects the geometry actually produced — never seen by the rule engine.",
       "required": ["ok", "issues"],
       "properties": {
-        "ok": { "type": "boolean", "description": "No ERROR-severity finding. WARNING-severity findings (DI05, DI08, DI09, DI10) may still be present." },
+        "ok": { "type": "boolean", "description": "No ERROR-severity finding. WARNING-severity findings (DI05, DI08, DI09, DI10, DI11) may still be present." },
         "issues": { "type": "array", "items": { "$ref": "#/$defs/DiagnosticIssue" } }
       },
       "additionalProperties": false
@@ -128,7 +128,7 @@
       "type": "object",
       "required": ["code", "severity", "message", "elements"],
       "properties": {
-        "code": { "enum": ["DI01", "DI02", "DI03", "DI04", "DI05", "DI06", "DI07", "DI08", "DI09", "DI10"] },
+        "code": { "enum": ["DI01", "DI02", "DI03", "DI04", "DI05", "DI06", "DI07", "DI08", "DI09", "DI10", "DI11"] },
         "severity": { "enum": ["ERROR", "WARNING"] },
         "message": { "type": "string" },
         "elements": { "type": "array", "items": { "type": "string" }, "minItems": 1 }

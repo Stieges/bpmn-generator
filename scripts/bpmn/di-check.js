@@ -18,6 +18,8 @@
  * `diagnostics` in the pipeline result, separate from `validation`.
  */
 
+import { isArtifact } from './types.js';
+
 const DEFAULT_TOLERANCE = 1;
 const DEFAULT_ALONG_MIN_PX = 5; // bpmn-js arrowhead length — see DI08; the pipeline passes layout.alongOutlineMinPx
 
@@ -222,6 +224,43 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
           code: 'DI09',
           severity: 'WARNING',
           message: `Sequence flow "${edge.id}" runs through its own ${role} "${nodeId}".`,
+          elements: [edge.id, nodeId],
+        });
+      }
+    }
+  }
+
+  // DI11 — a sequence flow running through a shape that is neither its source nor its target.
+  // WARNING: the flow is attached and the model is fine, but the line reads as passing through a
+  // task, event or gateway it has nothing to do with. Not counted: artifacts (data references,
+  // annotations, groups — not obstacles in the BPMN reading; a group is drawn to be overlapped)
+  // and a box containing an endpoint (the expanded subprocess a flow lives in).
+  // A boundary event attached to the flow's own source or target IS counted, and the message says
+  // so: it is a known case (a flow leaving its host across the host's own boundary event) but
+  // still a readability defect. Shapes are the drawn ones, as in DI09; axis-parallel segments
+  // only; segmentEntersShape's 1 px inset keeps a corner touch from counting as "through".
+  const hostOfNode = {};
+  for (const proc of (lc.pools || [lc])) for (const n of flattenNodes(proc.nodes)) if (n.attachedTo) hostOfNode[n.id] = n.attachedTo;
+  for (const proc of (lc.pools || [lc])) {
+    for (const edge of flattenEdges(proc)) {
+      const segs = nonZeroSegments((coordMap.edgeCoords || {})[edge.id] || [])
+        .filter(([a, z]) => Math.abs(a.x - z.x) < 1e-6 || Math.abs(a.y - z.y) < 1e-6);
+      if (!segs.length) continue;
+      const src = coords[edge.source], tgt = coords[edge.target];
+      for (const [nodeId, b] of Object.entries(coords)) {
+        if (nodeId === edge.source || nodeId === edge.target) continue;
+        if (!(nodeId in typeOfNode) || isArtifact(typeOfNode[nodeId]) || !Number.isFinite(b.x)) continue;
+        if ((src && contains(b, src, 0)) || (tgt && contains(b, tgt, 0))) continue;
+        if (!segs.some(s => segmentEntersShape(s, b, shapeOfNode(nodeId)))) continue;
+        const host = hostOfNode[nodeId];
+        const note = host === edge.source ? ` (a boundary event of its own source "${host}")`
+          : host === edge.target ? ` (a boundary event of its own target "${host}")`
+          : hostOfNode[edge.source] === nodeId ? ' (the host of its own boundary-event source)'
+          : hostOfNode[edge.target] === nodeId ? ' (the host of its own boundary-event target)' : '';
+        issues.push({
+          code: 'DI11',
+          severity: 'WARNING',
+          message: `Sequence flow "${edge.id}" runs through "${nodeId}"${note}, which is neither its source nor its target.`,
           elements: [edge.id, nodeId],
         });
       }

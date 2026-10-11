@@ -103,6 +103,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Five realistic example fixtures.** `tests/fixtures/example-*.json` — Kreditantrag, Bestellung
   und Versand, Urlaubsantrag, Schadenmeldung, Onboarding — at the top level, so every directory-wide
   fence (net check, DI, renderer agreement, output hashes, layout ratchet) covers them.
+- **DI11 — sequence flow through a foreign shape (WARNING).** `checkDiagramIntegrity` now reports a
+  sequence flow (at any nesting depth) whose segment runs through the interior of a node that is
+  neither its source nor its target (#91). Not counted: artifacts (data references, annotations,
+  groups) and a box that contains an endpoint (the expanded subprocess a flow lives in). A boundary
+  event attached to the flow's own source or target, or the host of a boundary-event source, is
+  counted and the message says which case it is. Closed DI enum in `references/api-schema.json`
+  and the table in `references/api-reference.md` extended. Behaviour: new entries in
+  `diagnostics.issues`; `diagnostics.ok` is unchanged (WARNING), and the CLI prints them under
+  "Diagram diagnostics" and aborts on them under `--strict` like DI08–DI10. Among the committed
+  top-level fixtures only `realistic-collaboration` reports one (`inf8` through `in_gw`), and it
+  already fails `--strict` on its style warnings, so no `--strict` outcome changes there. The
+  layout defects themselves stay open; `tests/fixtures/negative/example-rechnungspruefung.json`
+  pins the detection.
 - **`visualRefinement` on the HTTP API and MCP.** `POST /api/v1/generate`, `/api/v1/orchestrate` and the MCP tools `generate_bpmn`, `orchestrate_bpmn` take an optional `visualRefinement` (boolean or per-pass object, schema `$defs/VisualRefinementOption`); invalid values are a `schema_error`. Before, these entry points could not switch refinement at all.
 - **Layout readability fence.** `scripts/bench/layout-metrics.mjs` now measures every top-level
   fixture (it had a fixed list of eight, which is how `boundary-event-shapes`' crossing went

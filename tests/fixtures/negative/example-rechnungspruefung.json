@@ -1,0 +1,219 @@
+{
+ "pools": [
+  {
+   "id": "Process_Rechnung",
+   "name": "Rechnungsprüfung",
+   "lanes": [
+    {
+     "id": "po",
+     "name": "Posteingang"
+    },
+    {
+     "id": "bh",
+     "name": "Buchhaltung"
+    },
+    {
+     "id": "fa",
+     "name": "Fachabteilung"
+    },
+    {
+     "id": "gf",
+     "name": "Geschäftsleitung"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "r_start",
+     "type": "startEvent",
+     "name": "Rechnung eingegangen",
+     "lane": "po"
+    },
+    {
+     "id": "r_scan",
+     "type": "serviceTask",
+     "name": "Rechnung digitalisieren",
+     "lane": "po"
+    },
+    {
+     "id": "r_do",
+     "type": "dataObjectReference",
+     "name": "Eingangsrechnung",
+     "lane": "po"
+    },
+    {
+     "id": "r_erfassen",
+     "type": "userTask",
+     "name": "Rechnungsdaten erfassen",
+     "lane": "bh"
+    },
+    {
+     "id": "r_gw1",
+     "type": "exclusiveGateway",
+     "name": "Bestellung vorhanden?",
+     "lane": "bh"
+    },
+    {
+     "id": "r_sachlich",
+     "type": "userTask",
+     "name": "Sachlich prüfen",
+     "lane": "fa"
+    },
+    {
+     "id": "r_timer",
+     "type": "boundaryEvent",
+     "name": "Frist 7 Tage",
+     "lane": "fa",
+     "marker": "timer",
+     "attachedTo": "r_sachlich"
+    },
+    {
+     "id": "r_mahn",
+     "type": "sendTask",
+     "name": "Fachabteilung mahnen",
+     "lane": "bh"
+    },
+    {
+     "id": "r_gw2",
+     "type": "exclusiveGateway",
+     "name": "Sachlich korrekt?",
+     "lane": "fa"
+    },
+    {
+     "id": "r_klaerung",
+     "type": "userTask",
+     "name": "Klärung mit Lieferant",
+     "lane": "bh"
+    },
+    {
+     "id": "r_gw3",
+     "type": "exclusiveGateway",
+     "name": "Betrag über 10.000 EUR?",
+     "lane": "bh"
+    },
+    {
+     "id": "r_freigabe",
+     "type": "userTask",
+     "name": "Rechnung freigeben",
+     "lane": "gf"
+    },
+    {
+     "id": "r_zahlung",
+     "type": "serviceTask",
+     "name": "Zahlung anweisen",
+     "lane": "bh"
+    },
+    {
+     "id": "r_end1",
+     "type": "endEvent",
+     "name": "Rechnung bezahlt",
+     "lane": "bh"
+    },
+    {
+     "id": "r_end2",
+     "type": "endEvent",
+     "name": "Rechnung abgelehnt",
+     "lane": "bh"
+    },
+    {
+     "id": "r_end3",
+     "type": "endEvent",
+     "name": "Mahnung versendet",
+     "lane": "bh"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f401",
+     "source": "r_start",
+     "target": "r_scan"
+    },
+    {
+     "id": "f402",
+     "source": "r_scan",
+     "target": "r_erfassen"
+    },
+    {
+     "id": "f403",
+     "source": "r_erfassen",
+     "target": "r_gw1"
+    },
+    {
+     "id": "f404",
+     "source": "r_gw1",
+     "target": "r_sachlich",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f405",
+     "source": "r_gw1",
+     "target": "r_end2",
+     "label": "Nein"
+    },
+    {
+     "id": "f406",
+     "source": "r_timer",
+     "target": "r_mahn"
+    },
+    {
+     "id": "f407",
+     "source": "r_mahn",
+     "target": "r_end3"
+    },
+    {
+     "id": "f408",
+     "source": "r_sachlich",
+     "target": "r_gw2"
+    },
+    {
+     "id": "f409",
+     "source": "r_gw2",
+     "target": "r_gw3",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f410",
+     "source": "r_gw2",
+     "target": "r_klaerung",
+     "label": "Nein"
+    },
+    {
+     "id": "f411",
+     "source": "r_klaerung",
+     "target": "r_sachlich"
+    },
+    {
+     "id": "f412",
+     "source": "r_gw3",
+     "target": "r_freigabe",
+     "label": "Ja"
+    },
+    {
+     "id": "f413",
+     "source": "r_gw3",
+     "target": "r_zahlung",
+     "label": "Nein",
+     "isHappyPath": true
+    },
+    {
+     "id": "f414",
+     "source": "r_freigabe",
+     "target": "r_zahlung"
+    },
+    {
+     "id": "f415",
+     "source": "r_zahlung",
+     "target": "r_end1"
+    }
+   ]
+  }
+ ],
+ "associations": [
+  {
+   "id": "as_r1",
+   "source": "r_do",
+   "target": "r_erfassen"
+  }
+ ]
+}
