@@ -11,9 +11,10 @@ import { describe, test, expect } from '@jest/globals';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyBendRule, bendMetrics, bendCount, entrySide, exitSide, bendRuleLimits } from './bend-rule.js';
+import { applyBendRule, bendMetrics, bendCount, entrySide, exitSide, bendRuleLimits, sequenceFlowsOf } from './bend-rule.js';
 import { runPipeline } from './pipeline.js';
 import { normalizeEdgeIds } from './topology.js';
+import { placeEdgeLabel, edgeLabelBox, labelHitsRoute } from './coordinates.js';
 import { CFG } from '../shared/utils.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
@@ -218,6 +219,44 @@ describe('applyBendRule — every limit, on a scenario the unguarded rule breaks
     expect(changes(cm, lc).e).toEqual(L);
   });
 
+  // rechnungspruefung, gateway "Betrag über 10.000 EUR?": the rule moved one branch to the right
+  // vertex while the other already left rightwards from the upper-right facet — two flows out of
+  // one gateway side, 12.5 px apart, the second one's label on the first one's line.
+  const split = () => ({
+    lc: { id: 'P', nodes: [{ id: 'g', type: 'exclusiveGateway' }, { id: 'ta', type: 'task' }, { id: 'tb', type: 'task' }, { id: 'o', type: 'task' }],
+      edges: [{ id: 'a', source: 'g', target: 'ta', label: 'Ja' }, { id: 'b', source: 'g', target: 'tb', label: 'Nein' }] },
+    cm: { coords: { g: { x: 0, y: 0, w: 50, h: 50 }, ta: { x: 400, y: -27.5, w: 100, h: 80 }, tb: { x: 200, y: 150, w: 100, h: 80 },
+      o: { x: 0, y: 100, w: 50, h: 40 } }, // blocks the L out of the bottom vertex
+    edgeCoords: { a: [P(37.5, 12.5), P(400, 12.5)], b: [P(25, 50), P(25, 70), P(250, 70), P(250, 150)] } },
+  });
+
+  test('shared port (condition 6): two flows out of one gateway side only where the current route already does', () => {
+    const { lc, cm } = split();
+    const unguarded = changes(cm, lc, { guards: { sharedPorts: false } }).b;
+    expect(unguarded).toEqual([P(50, 25), P(250, 25), P(250, 150)]); // leaves rightwards, as `a` does
+    expect(exitSide(unguarded)).toBe(exitSide(cm.edgeCoords.a));
+    const guarded = changes(cm, lc).b ?? cm.edgeCoords.b;
+    expect(exitSide(guarded)).not.toBe('right');
+    // a route that already shares the side may keep doing so
+    const { lc: lc2, cm: cm2 } = split();
+    cm2.edgeCoords.b = [P(50, 25), P(150, 25), P(150, 100), P(250, 100), P(250, 150)];
+    const kept = changes(cm2, lc2).b;
+    expect(kept).toEqual([P(50, 25), P(250, 25), P(250, 150)]);
+  });
+
+  test('shared port, incoming: two flows into one gateway side only where the current route already does', () => {
+    // the split mirrored left-right: two flows into a join, one from the left at the upper-left facet
+    const { lc, cm } = split();
+    const mirror = (b) => ({ ...b, x: 500 - b.x - b.w });
+    for (const k of Object.keys(cm.coords)) cm.coords[k] = mirror(cm.coords[k]);
+    lc.edges = [{ id: 'a', source: 'ta', target: 'g' }, { id: 'b', source: 'tb', target: 'g' }];
+    cm.edgeCoords = { a: [P(100, 12.5), P(462.5, 12.5)], b: [P(250, 150), P(250, 70), P(475, 70), P(475, 50)] };
+    const unguarded = changes(cm, lc, { guards: { sharedPorts: false } }).b;
+    expect(entrySide(unguarded)).toBe('left');
+    const guarded = changes(cm, lc).b ?? cm.edgeCoords.b;
+    expect(entrySide(guarded)).not.toBe('left');
+  });
+
   test('lane-line hug (condition 6): no more run along a lane separator than the current route has', () => {
     const { lc, cm } = gatewayToTask();
     lc.lanes = [{ id: 'L1' }, { id: 'L2' }];
@@ -369,4 +408,48 @@ describe('the pass in the pipeline', () => {
     expect(bendMetrics(r.coordMap, lc).scope).toBe(n - 1);
     expect(applyBendRule(r.coordMap, normalised)).toBe(r.coordMap.edgeCoords);
   });
+});
+
+describe('labels of re-routed flows (urlaubsantrag, "Resturlaub ausreichend?")', () => {
+  // A label is placed against its own route only (coordinates.js placeEdgeLabel). The bend rule's
+  // refresh also hands it the other routes, so a re-routed flow's label does not land on a sibling.
+  const route = [P(0, 100), P(200, 100), P(200, 300)];
+  const sibling = [P(100, 0), P(100, 100)]; // runs down through the box above the first leg
+  test('placement: with avoidRoutes the first candidate off every route wins; without, nothing changes', () => {
+    const plain = placeEdgeLabel('Nein', route);
+    expect(labelHitsRoute(edgeLabelBox(plain), sibling)).toBe(true);
+    const kept = placeEdgeLabel('Nein', route, { avoidRoutes: [sibling] });
+    expect(labelHitsRoute(edgeLabelBox(kept), sibling)).toBe(false);
+    expect(labelHitsRoute(edgeLabelBox(kept), route)).toBe(false);
+    expect(placeEdgeLabel('Nein', route, { avoidRoutes: [] })).toEqual(plain);
+  });
+  test('placement: when no candidate is off every route, the label still stays off its own', () => {
+    // a horizontal line every 5 px: every candidate box (14 px tall) has one inside it
+    const grid = Array.from({ length: 120 }, (_, i) => [P(-200, -100 + 5 * i + 0.5), P(600, -100 + 5 * i + 0.5)]);
+    const plain = placeEdgeLabel('Nein', route);
+    expect(grid.some((g) => labelHitsRoute(edgeLabelBox(plain), g))).toBe(true);
+    expect(placeEdgeLabel('Nein', route, { avoidRoutes: grid })).toEqual(plain);
+  });
+
+  const gap = CFG.layout.edgeLabelGap;
+  const dist = (b, pts) => Math.min(...segmentsOf(pts).map(([a, z]) => Math.hypot(
+    Math.max(0, b.x - Math.max(a.x, z.x), Math.min(a.x, z.x) - (b.x + b.w)),
+    Math.max(0, b.y - Math.max(a.y, z.y), Math.min(a.y, z.y) - (b.y + b.h)))));
+  test('every fixture: a flow the rule re-routed keeps its label edgeLabelGap beside its own route and off every other sequence flow', async () => {
+    const bad = [];
+    for (const name of FIXTURES) {
+      const lc = normalizeEdgeIds(load(name));
+      const off = await runPipeline(lc, { bendRule: false });
+      if (!off.coordMap) continue;
+      const on = await runPipeline(lc, { bendRule: true });
+      const flows = sequenceFlowsOf(lc);
+      for (const e of flows) {
+        if (!e.label || JSON.stringify(off.coordMap.edgeCoords[e.id]) === JSON.stringify(on.coordMap.edgeCoords[e.id])) continue;
+        const box = edgeLabelBox(on.coordMap.edgeLabels[e.id]);
+        if (dist(box, on.coordMap.edgeCoords[e.id]) < gap - 1e-6) bad.push(`${name} ${e.id} within the gap of its own route`);
+        for (const o of flows) if (o.id !== e.id && labelHitsRoute(box, on.coordMap.edgeCoords[o.id])) bad.push(`${name} ${e.id} on ${o.id}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  }, 120000);
 });

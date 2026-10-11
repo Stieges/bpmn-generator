@@ -89,11 +89,16 @@ function checkNetTranslation(lc) {
  * that changes the route without this leaves the label on a leg that no longer exists.
  * A pass that moves route points in place passes `{}` as `beforeRoutes`: every label is refreshed.
  * `laneLines` (innerLaneLines of the current geometry) keeps a refreshed label off lane separators.
+ * `avoidOtherRoutes` keeps it off every other route too, where a candidate allows (placeEdgeLabel's
+ * `avoidRoutes`) — the bend rule's refresh only, so every other pass places labels as before.
  */
-function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = []) {
+function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avoidOtherRoutes = false } = {}) {
   for (const e of edges) {
     if (beforeRoutes[e.id] === coordMap.edgeCoords[e.id]) continue;
-    const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords, { laneLines });
+    const avoidRoutes = avoidOtherRoutes
+      ? Object.entries(coordMap.edgeCoords).filter(([id]) => id !== e.id).map(([, pts]) => pts)
+      : [];
+    const label = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords, { laneLines, avoidRoutes });
     if (label) coordMap.edgeLabels[e.id] = label;
   }
 }
@@ -275,7 +280,7 @@ async function runPipeline(logicCore, opts = {}) {
   if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
     const beforeBend = coordMap.edgeCoords;
     coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
-    refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines);
+    refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines, { avoidOtherRoutes: true });
   }
   if (refine.edgeLabelCollisionRepair) {
     repairEdgeLabels(coordMap, {
