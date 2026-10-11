@@ -106,7 +106,7 @@
         <dc:Bounds x="50" y="280" width="1162" height="247" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_mgr_di" bpmnElement="s_mgr" isHorizontal="true">
-        <dc:Bounds x="50" y="567" width="1162" height="120" />
+        <dc:Bounds x="50" y="527" width="1162" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c_start_di" bpmnElement="c_start">
         <dc:Bounds x="140" y="101.5" width="36" height="36" />
