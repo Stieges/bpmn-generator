@@ -1,5 +1,4 @@
 {
-  "name": "Message flow endpoints and subprocess containers",
   "pools": [
     {
       "id": "Pool_Customer",
