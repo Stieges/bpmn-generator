@@ -331,6 +331,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `visualRefinement` object is a TypeError.
 
 ### Fixed
+- **Compacted lanes keep their lane names whole in bpmn.io.** bpmn-js wraps a lane label against
+  the lane height, so lane compaction (`laneCompaction`) could shrink a lane below its longest word
+  and bpmn.io / Camunda Modeler then broke that word in the middle. `compactLanes` now takes a
+  per-lane floor (`minLaneHeightFor`); the pipeline passes `laneLabelFloor(name)` — the longest
+  word's estimated width at bpmn-js's 12 px lane font plus 2 × 8 px — capped at the lane's
+  uncompacted height, so compaction still never makes a lane taller. A lane at its floor is never
+  placed above the previous lane's bottom. Switch: `config.json → visualRefinement.laneLabelFloor`
+  (default `true`).
 - **Lane compaction no longer lays sequence flows on lane lines.** `compactLanes` clamped every
   waypoint inside the strip it cut away onto the shrunk band's bottom edge, so a cross-lane flow
   whose horizontal leg sat in the gap ended up on the lane separator (360–1080 px of such legs in

@@ -3897,6 +3897,21 @@ describe('long-lane-names matrix', () => {
     expect(res.bpmnXml).toBe(goldenBpmn);
     expect(res.svg).toBe(goldenSvg);
   });
+
+  test('compacted lanes stay tall enough for their longest word', async () => {
+    const { laneLabelFloor } = await import('./visual-refinement.js');
+    const lc = loadFixture('long-lane-names.json');
+    const r = await runPipeline(lc, { visualRefinement: { laneCompaction: true } });
+    // the floor is capped at the uncompacted height: compaction never makes a lane taller
+    const off = await runPipeline(loadFixture('long-lane-names.json'), { visualRefinement: false });
+    const lanes = (lc.pools ?? [lc]).flatMap(p => p.lanes ?? []);
+    expect(lanes.length).toBeGreaterThan(0);
+    for (const lane of lanes) {
+      const bound = Math.min(laneLabelFloor(lane.name), off.coordMap.laneCoords[lane.id].h);
+      expect(r.coordMap.laneCoords[lane.id].h).toBeGreaterThanOrEqual(bound);
+    }
+    expect(r.diagnostics.ok).toBe(true);
+  });
 });
 
 describe('Pass 1 metric assertions', () => {
@@ -6922,12 +6937,15 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
   });
 
   test('compactLanes twice equals once; two runs are byte-identical', async () => {
-    const { compactLanes } = await import('./visual-refinement.js');
+    const { compactLanes, laneLabelFloor } = await import('./visual-refinement.js');
     for (const name of ['sparse-lanes', 'multi-pool-collaboration', 'realistic-collaboration', 'long-lane-names', 'all-element-classes']) {
       const lc = loadFixture(`${name}.json`);
       const a = await runPipeline(lc, COMPACT);
       const cm = structuredClone(a.coordMap);
-      compactLanes(cm, loadFixture(`${name}.json`), { minLaneHeight: 80 });
+      // the same lane-label floor the pipeline passes, so the second run sees the same constraint
+      const fresh = loadFixture(`${name}.json`);
+      const laneNameOf = new Map((fresh.pools ?? [fresh]).flatMap(p => p.lanes ?? []).map(l => [l.id, l.name]));
+      compactLanes(cm, fresh, { minLaneHeight: 80, minLaneHeightFor: (id) => laneLabelFloor(laneNameOf.get(id)) });
       expect(JSON.stringify(cm)).toBe(JSON.stringify(a.coordMap));
       // the re-route run a second time on its own output changes nothing; the uncompacted routes
       // stand in for "before compaction", so every bent flow counts as affected again
