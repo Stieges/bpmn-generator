@@ -328,8 +328,8 @@ const BUDGET_PLAIN = {
   'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }),
                                           on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
-  'realistic-collaboration.json':       { default: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 386 }),
-                                          on: r({ bendsMax: 5, mfCrowd: 7, offOver5: 3, labelLabel: 1, overlapLen: 646 }) },
+  'realistic-collaboration.json':       { default: r({ bendsMax: 2, offOver5: 4, labelLabel: 1, overlapLen: 386 }),
+                                          on: r({ crossings: 1, seqThrough: 2, bendsMax: 4, crowd: 1, mfCrowd: 8, offOver5: 4, labelLabel: 1, overlapLen: 780 }) },
   'simple-approval.json':               same(r({ bendsMax: 2, offOver5: 6 })),
   'sparse-lanes.json':                  { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }),
                                           on: r({ bendsMax: 2, offOver5: 4, overlapLen: 184 }) },
@@ -369,7 +369,7 @@ const BUDGET_DEFAULT = {
   'messageflow-to-subprocess.json':     r({ mfCrowd: 1, overlapLen: 83 }),
   'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 2 }),
   'parallel-split-join.json':           r({ bendsMax: 1, offOver5: 4 }),
-  'realistic-collaboration.json':       r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 226 }),
+  'realistic-collaboration.json':       r({ bendsMax: 2, offOver5: 4, labelLabel: 1, overlapLen: 226 }),
   'simple-approval.json':               r({ bendsMax: 1, offOver5: 5 }),
   'sparse-lanes.json':                  r({ bendsMax: 1, offOver5: 4 }),
   'subprocess-child-fidelity.json':     r({ bendsMax: 2, offOver5: 3 }),
@@ -384,8 +384,12 @@ const BUDGET_DEFAULT = {
 // overlap than default because the rule judges different geometry: bpmn-generator-pipeline 172,
 // example-bestellung-versand 262, example-schadenmeldung 110, realistic-collaboration 356 (px).
 // on (refinement + wrapping): bpmn-generator-pipeline offOver5 16, labelLabel 1, overlapLen 112;
-// example-kreditantrag bendsMax 4, offOver5 11; realistic-collaboration drops seqThrough/crowd and
-// shows bendsMax 5, mfCrowd 6, offOver5 3, overlapLen 586.
+// example-kreditantrag bendsMax 4, offOver5 11; realistic-collaboration bendsMax 4, mfCrowd 6,
+// offOver5 4, overlapLen 586.
+// #91: realistic-collaboration's seqThrough 1 / crowd 2 (inf8 through in_gw) are gone in every mode
+// — the timer sits on its host's top edge, facing "Send reminder" in the lane above. Its plain-on
+// plain-on row shows inf2 through in_remind and the timer: with wrapping "Send reminder" stands
+// right above "Check completeness", and inf2's coordinates.js §5.2 route runs through both.
 const BUDGET = Object.fromEntries(Object.entries(BUDGET_DEFAULT).map(([name, row]) => [name,
   { default: row, off: row, on: row, plain: BUDGET_PLAIN[name].default, 'plain-on': BUDGET_PLAIN[name].on }]));
 Object.assign(BUDGET['bpmn-generator-pipeline.json'], {
@@ -398,8 +402,8 @@ Object.assign(BUDGET['example-kreditantrag.json'], {
 Object.assign(BUDGET['example-schadenmeldung.json'], {
   off: r({ bendsMax: 2, offOver5: 6, overlapLen: 110 }) });
 Object.assign(BUDGET['realistic-collaboration.json'], {
-  off: r({ seqThrough: 1, bendsMax: 2, crowd: 2, offOver5: 4, labelLabel: 1, overlapLen: 356 }),
-  on: r({ bendsMax: 5, mfCrowd: 6, offOver5: 3, labelLabel: 1, overlapLen: 586 }) });
+  off: r({ bendsMax: 2, offOver5: 4, labelLabel: 1, overlapLen: 356 }),
+  on: r({ bendsMax: 4, mfCrowd: 6, offOver5: 4, labelLabel: 1, overlapLen: 586 }) });
 
 // Flow direction (bend-rule.js bendMetrics, through flow-metrics.mjs flowDirectionMetrics), every
 // mode: [avoidableBends, againstFlowEntries]. avoidableBends sums current − fewest admissible bends
@@ -435,7 +439,7 @@ const DIRECTION = {
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
   'parallel-split-join.json':           dir(NONE),
-  'realistic-collaboration.json':       dir(d(2, 4), d(1, 1)),
+  'realistic-collaboration.json':       dir(d(3, 5), d(6, 2)),
   'simple-approval.json':               dir(d(1, 0)),
   'sparse-lanes.json':                  dir(d(3, 3)),
   'subprocess-child-fidelity.json':     dir(d(2, 0)),
