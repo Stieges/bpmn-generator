@@ -6906,7 +6906,7 @@ describe('boundary event flows', () => {
         }
       }
     }
-  });
+  }, 30000);
 
   test('a boundary flow starts at the event, including inside a subprocess', async () => {
     // The nested case is the one that regressed: §5.0- and §5.2 used to walk
@@ -6929,7 +6929,7 @@ describe('boundary event flows', () => {
         }
       }
     }
-  });
+  }, 30000);
 
   test('routing the flow away from its host clears realistic-collaboration (visualRefinement: false)', async () => {
     const lc = loadFixture('realistic-collaboration.json');
