@@ -447,6 +447,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **`tests/fixtures/messageflow-to-subprocess.json` passes the schema gate.** The fixture carried a
+  stray top-level `name`, which the collaboration branch of `references/input-schema.json` does not
+  allow, so the CLI refused it in every mode (the tests read it past the gate). The key is removed;
+  output and every hash are unchanged.
 - **Node labels have one geometry source (#82).** The external label of an event, a gateway or a
   data object/store was positioned twice — by `bpmn-xml.js` for the `BPMNLabel` bounds and by
   `svg.js` for the drawn text — against the geometry contract. Its box is now computed once, in
