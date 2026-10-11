@@ -136,10 +136,7 @@ describe('seqThroughOwnShape', () => {
 const b = (crossings, along, laneGap, mfThrough, seqThrough, ownThrough = 0) =>
   ({ crossings, along, laneGap, mfThrough, seqThrough, ownThrough });
 const Z = b(0, 0, 0, 0, 0);
-// realistic-collaboration --refine inf3: the crossing guard reverts it to the old L (its new route
-// left inf2 × inf8); with fixed endpoints no crossing-free route exists (exhaustive search, measured). The old
-// L runs back through its own source "Check completeness" and, with inf8, accounts for ownThrough 2
-// — a later endpoint re-clip pass removes them.
+// No along-outline end and no flow through its own shape remains in any fixture after the endpoint re-clip pass.
 const BUDGET = {
   'all-element-classes.json':           { off: b(0, 0, 0, 3, 0),   on: b(0, 0, 0, 3, 0) },
   'boundary-event-shapes.json':         { off: b(1, 0, 0, 0, 0),   on: b(1, 0, 0, 0, 0) },
@@ -152,7 +149,7 @@ const BUDGET = {
   'messageflow-to-subprocess.json':     { off: Z,                  on: Z },
   'multi-pool-collaboration.json':      { off: Z,                  on: b(0, 0, 40, 0, 0) },
   'parallel-split-join.json':           { off: Z,                  on: Z },
-  'realistic-collaboration.json':       { off: b(0, 0, 0, 2, 1),   on: b(0, 1, 40, 7, 0, 2) },
+  'realistic-collaboration.json':       { off: b(0, 0, 0, 2, 1),   on: b(0, 0, 40, 7, 0) },
   'simple-approval.json':               { off: Z,                  on: Z },
   'sparse-lanes.json':                  { off: Z,                  on: b(0, 0, 40, 0, 0) },
   'subprocess-child-fidelity.json':     { off: Z,                  on: Z },

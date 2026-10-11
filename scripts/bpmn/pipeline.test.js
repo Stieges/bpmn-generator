@@ -5166,6 +5166,23 @@ describe('DI integrity check', () => {
       expect(r.ok).toBe(true);
     });
   });
+
+  describe('DI09 — a sequence flow through its own source or target', () => {
+    const lc = { pools: [{ id: 'P',
+      nodes: [{ id: 't', type: 'userTask' }, { id: 'g', type: 'exclusiveGateway' }],
+      edges: [{ id: 'inf3', source: 't', target: 'g' }] }] };
+    const coords = { t: { x: 436, y: 1932, w: 100, h: 80 }, g: { x: 436, y: 2151.5, w: 50, h: 50 } };
+    const di09 = (pts) => checkDiagramIntegrity({ coords, poolCoords: {}, edgeCoords: { inf3: pts } }, lc)
+      .issues.filter(i => i.code === 'DI09');
+    test('fires, as a WARNING, on realistic-collaboration inf3\'s old route', () => {
+      expect(di09([{ x: 536, y: 1959 }, { x: 436.5, y: 1959 }, { x: 436.5, y: 2177 }])).toEqual([{
+        code: 'DI09', severity: 'WARNING',
+        message: 'Sequence flow "inf3" runs through its own source "t".', elements: ['inf3', 't'] }]);
+    });
+    test('a route that leaves outward is silent; a rhombus is a rhombus, not its bounding box', () => {
+      expect(di09([{ x: 436, y: 1972 }, { x: 421, y: 1972 }, { x: 421, y: 2176.5 }, { x: 436, y: 2176.5 }])).toEqual([]);
+    });
+  });
 });
 
 describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () => {
@@ -6287,6 +6304,18 @@ describe('#52 — loop with a join: every flow crosses its endpoints\' outlines'
         expect(`${id} ${Math.abs(a.y - b.y) < 1e-6 && b.x > a.x}`).toBe(`${id} true`);
       }
       expect(r.diagnostics.issues.filter(i => i.code === 'DI08')).toEqual([]);
+      expect(r.diagnostics.ok).toBe(true);
+    });
+  }
+});
+
+describe('stuck ends are re-clipped (owner decision 4)', () => {
+  for (const visualRefinement of [false, true]) {
+    test(`realistic-collaboration: no flow through its own shape, no end along an outline, no crossing (refinement: ${visualRefinement})`, async () => {
+      const lc = loadFixture('realistic-collaboration.json');
+      const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement });
+      expect(r.diagnostics.issues.filter(i => i.code === 'DI08' || i.code === 'DI09')).toEqual([]);
+      expect(countCrossings(r.coordMap.edgeCoords, allSequenceEdges(lc))).toBe(0);
       expect(r.diagnostics.ok).toBe(true);
     });
   }

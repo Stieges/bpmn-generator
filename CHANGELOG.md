@@ -331,6 +331,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   routes never end along an outline. New diagnostic **DI08**
   (WARNING) reports any remaining case; `references/api-schema.json`'s DI enum gains DI07 (already
   emitted, missing from the enum) and DI08.
+- **No sequence flow runs through its own task any more.** A flow that, after the #52 routing and
+  crossing repair, still ended along an outline or ran through its own source or target
+  (realistic-collaboration `--refine`: `inf3` back through "Check completeness", `inf8` through
+  "Send reminder") is re-routed; when no route keeping its endpoints works, an endpoint moves to the
+  middle of another side of the same shape (config `layout.endpointReclip`). New diagnostic
+  **DI09** (WARNING).
 - **DMN import: the `mapsTo` values are fenced against the Decision-Core schema (#61).** F1b fenced
   the keys only, so a row could claim a slot that `references/decision-core-schema.json` does not
   have. Fence F1c resolves each value's leading slot (`Type.property`, `Type{type:"x"}` or a root
