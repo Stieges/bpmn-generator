@@ -249,7 +249,7 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
       issues.push({
         code: 'DI05',
         severity: 'WARNING',
-        message: `Message flow "${mf.id}" crosses uninvolved participant(s): ${crossed.join(', ')}.`,
+        message: `Message flow "${mf.id}" crosses ${crossed.length} uninvolved participant(s): ${crossed.join(', ')}.`,
         elements: [mf.id, ...crossed],
       });
     }
@@ -361,5 +361,51 @@ function segmentEntersShape([a, z], box, shape) {
       && Math.max(a.y, z.y) > box.y + 1 && Math.min(a.y, z.y) < box.y + box.h - 1;
 }
 
-export { checkDiagramIntegrity };
+/**
+ * DI05 findings grouped by the participant each flow leaves (#43). Presentation only: the per-flow
+ * `issues` stay the machine contract (HTTP, MCP, tests). Largest group first, then participant id.
+ */
+function groupDi05BySource(issues, lc) {
+  const participantOf = {};
+  for (const proc of (lc.pools || [])) for (const n of flattenNodes(proc.nodes)) participantOf[n.id] = proc.id;
+  const sourceOf = {};
+  for (const mf of (lc.messageFlows || [])) sourceOf[mf.id || `mf_${mf.source}_${mf.target}`] = mf.source;
+  const groups = new Map();
+  for (const i of issues) {
+    if (i.code !== 'DI05') continue;
+    const [flow, ...crossed] = i.elements;
+    const participant = participantOf[sourceOf[flow]] ?? sourceOf[flow] ?? '(unknown)';
+    if (!groups.has(participant)) groups.set(participant, []);
+    groups.get(participant).push({ flow, crossed });
+  }
+  return [...groups].map(([participant, flows]) => ({ participant, flows }))
+    .sort((a, b) => (b.flows.length - a.flows.length) || a.participant.localeCompare(b.participant));
+}
+
+/**
+ * Human-readable lines for the WARNING-severity diagnostics. Up to `groupThreshold` DI05 findings
+ * print one line each, as always; above it they collapse to one line per source participant with
+ * a histogram of bands crossed per flow and the worst flows named — at 28 lines the flat list
+ * stopped carrying signal (#43). Every other code prints one line per finding.
+ */
+function formatDiWarnings(issues, lc, { groupThreshold = 5 } = {}) {
+  const warnings = issues.filter(i => i.severity !== 'ERROR');
+  const di05 = warnings.filter(i => i.code === 'DI05');
+  const grouped = di05.length > groupThreshold;
+  const lines = warnings.filter(i => !(grouped && i.code === 'DI05')).map(i => `${i.code} ${i.message}`);
+  if (!grouped) return lines;
+  lines.push(`DI05 ${di05.length} message flows cross uninvolved participants — by source participant:`);
+  for (const g of groupDi05BySource(di05, lc)) {
+    const hist = {};
+    for (const f of g.flows) hist[f.crossed.length] = (hist[f.crossed.length] || 0) + 1;
+    const bands = Object.keys(hist).map(Number).sort((a, b) => a - b)
+      .map(n => `${hist[n]}× ${n} band${n === 1 ? '' : 's'}`).join(', ');
+    const worst = Math.max(...g.flows.map(f => f.crossed.length));
+    const worstFlows = g.flows.filter(f => f.crossed.length === worst).map(f => f.flow).join(', ');
+    lines.push(`    ${g.participant}: ${g.flows.length} flow${g.flows.length === 1 ? '' : 's'} (${bands}); most bands (${worst}): ${worstFlows}`);
+  }
+  return lines;
+}
+
+export { checkDiagramIntegrity, groupDi05BySource, formatDiWarnings };
 

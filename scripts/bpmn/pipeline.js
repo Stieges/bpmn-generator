@@ -33,7 +33,7 @@ import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
-import { checkDiagramIntegrity } from './di-check.js';
+import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
 import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor } from './edge-simplify.js';
@@ -557,7 +557,11 @@ async function main() {
   const diWarnings = (result.diagnostics?.issues ?? []).filter(i => i.severity !== 'ERROR');
   if (diWarnings.length) {
     console.warn('\n⚠ Diagram diagnostics:');
-    diWarnings.forEach(i => console.warn(`  · ${i.code} ${i.message}`));
+    // #43: above the threshold DI05 prints grouped by source participant; the JSON result keeps
+    // one issue per flow.
+    formatDiWarnings(result.diagnostics.issues, parsedInput,
+      { groupThreshold: CFG.diagnostics?.di05GroupThreshold ?? 5 })
+      .forEach(line => console.warn(`  · ${line}`));
   }
   if (diErrors.length) {
     console.error('\n✗ Diagram integrity (DI) — the geometry is broken, no files written:');

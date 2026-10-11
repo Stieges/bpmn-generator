@@ -122,6 +122,7 @@ DI05 is a warning rather than an error because a communication cycle across thre
 more participants cannot be linearised into a single vertical stack — some crossings
 are unavoidable; `poolOrder: "auto"` (see above) minimises them but cannot always reach
 zero.
+The CLI prints more than `diagnostics.di05GroupThreshold` (config.json, default 5) DI05 findings grouped by the participant each flow leaves, with a histogram of bands crossed; `diagnostics.issues` in the JSON result always has one DI05 per flow.
 
 DI08 is a warning too: the flow is attached and the model is correct, but the line covers the shape's border and the arrowhead sits on it.
 

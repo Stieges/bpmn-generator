@@ -909,6 +909,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **DI05 is readable at high participant counts (#43).** Above `diagnostics.di05GroupThreshold` (default 5) the CLI prints DI05 grouped by source participant, one line each with a histogram of bands crossed and the worst flows named. Each DI05 message now says how many participants it crosses. The JSON result keeps one DI05 per flow.
 - **`references/bpmn-ontology.jsonld` is now `references/ontology.jsonld`**, and its loader moved from
   `scripts/bpmn/ontology.js` to `scripts/shared/ontology.js` — the file now also describes DMN and
   the rule catalog, and `dmn/` must not import `bpmn/`. The export `bpmn-generator/ontology` keeps

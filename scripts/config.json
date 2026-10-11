@@ -238,6 +238,9 @@
       }
     }
   },
+  "diagnostics": {
+    "di05GroupThreshold": 5
+  },
   "scenarios": {
     "defaultCycleBound": 1,
     "maxScenarios": 10000,
