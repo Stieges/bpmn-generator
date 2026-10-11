@@ -717,3 +717,38 @@ describe('schema-gate errors in responses are capped and bounded', () => {
     });
   }
 });
+
+describe('visualRefinement over HTTP', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/sparse-lanes.json', import.meta.url), 'utf8'));
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  beforeEach(() => _resetRateLimit());
+
+  test('false on /generate is byte-identical to runPipeline(lc, { visualRefinement: false })', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const res = await post('/api/v1/generate', { logicCore: lc, visualRefinement: false });
+    expect(res.status).toBe(200);
+    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    expect((await res.json()).bpmnXml).toBe(lib.bpmnXml);
+  });
+  test('a per-pass object is accepted', async () => {
+    const res = await post('/api/v1/generate', { logicCore: lc, visualRefinement: { laneCompaction: false } });
+    expect(res.status).toBe(200);
+  });
+  test.each([['a string', 'yes'], ['an unknown pass', { laneCompactoin: true }], ['a non-boolean pass', { laneCompaction: 1 }], ['the removed dynamicLaneHeader pass', { dynamicLaneHeader: true }]])(
+    '%s is a 400 schema_error on /generate and /orchestrate', async (_, value) => {
+      for (const path of ['/api/v1/generate', '/api/v1/orchestrate']) {
+        const res = await post(path, { logicCore: lc, visualRefinement: value });
+        expect(res.status).toBe(400);
+        expect((await res.json()).status).toBe('schema_error');
+      }
+    });
+  test('/orchestrate passes it to the layout agent', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const res = await post('/api/v1/orchestrate', { logicCore: lc, visualRefinement: false });
+    expect(res.status).toBe(200);
+    const lib = await runPipeline(JSON.parse(JSON.stringify(lc)), { visualRefinement: false });
+    expect((await res.json()).bpmnXml).toBe(lib.bpmnXml);
+  });
+});

@@ -502,3 +502,11 @@ describe('edge labels keep off lane separators', () => {
     expect(kept.edgeLabels.e.y).toBe(55);
   });
 });
+
+test('references/api-schema.json $defs/VisualRefinementOption equals VISUAL_REFINEMENT_OPTION_SCHEMA', async () => {
+  const { readFileSync } = await import('node:fs');
+  const api = JSON.parse(readFileSync(new URL('../../references/api-schema.json', import.meta.url), 'utf8'));
+  const { VISUAL_REFINEMENT_OPTION_SCHEMA } = await import('./visual-refinement.js');
+  const { description, ...def } = api.$defs.VisualRefinementOption;
+  expect(def).toEqual(JSON.parse(JSON.stringify(VISUAL_REFINEMENT_OPTION_SCHEMA)));
+});

@@ -191,3 +191,24 @@ describe('rule profiles over MCP are names inside rules/, never paths', () => {
     });
   }
 });
+
+describe('visualRefinement over MCP', () => {
+  test('generate_bpmn and orchestrate_bpmn declare it with the shared schema', async () => {
+    const { VISUAL_REFINEMENT_OPTION_SCHEMA } = await import('./bpmn/visual-refinement.js');
+    for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
+      expect(tool(name).inputSchema.properties.visualRefinement).toMatchObject(VISUAL_REFINEMENT_OPTION_SCHEMA);
+    }
+  });
+  test('false is byte-identical to the library call', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const out = parse(await call('generate_bpmn', { logicCore: fixture('sparse-lanes.json'), visualRefinement: false, include: ['xml'] }));
+    const lib = await runPipeline(fixture('sparse-lanes.json'), { visualRefinement: false });
+    expect(out.bpmnXml).toBe(lib.bpmnXml);
+  });
+  test.each([[{ nope: true }], [{ dynamicLaneHeader: true }], ['yes']])('%j is a schema_error on both tools', async (value) => {
+    for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
+      const out = parse(await call(name, { logicCore: fixture('sparse-lanes.json'), visualRefinement: value }));
+      expect(out.status).toBe('schema_error');
+    }
+  });
+});
