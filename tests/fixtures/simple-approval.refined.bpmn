@@ -67,7 +67,7 @@
       <bpmndi:BPMNShape id="gw1_di" bpmnElement="gw1" isMarkerVisible="true">
         <dc:Bounds x="416" y="107.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="414.4" y="167.5" width="53.2" height="14" />
+          <dc:Bounds x="414.4" y="83.5" width="53.2" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="task2_di" bpmnElement="task2">
@@ -87,9 +87,8 @@
         <di:waypoint x="256" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
-        <di:waypoint x="356" y="247" />
-        <di:waypoint x="386.3" y="247" />
-        <di:waypoint x="386.3" y="133" />
+        <di:waypoint x="306" y="220" />
+        <di:waypoint x="306" y="133" />
         <di:waypoint x="416.5" y="133" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">

@@ -99,7 +99,7 @@
       <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true">
         <dc:Bounds x="256" y="374.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="259.6" y="434.5" width="42.8" height="14" />
+          <dc:Bounds x="228.2" y="434.5" width="42.8" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t1_di" bpmnElement="t1">
