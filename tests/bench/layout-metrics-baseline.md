@@ -146,7 +146,7 @@ Our post-processing introduces no crossings beyond ELK's own result.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ELK raw (pre-postprocess) | 0 | 6 | 20/23 | 0 | 932×1358 (45202/node) | 0.69 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary | 1 | — | — | — |
 | default | 0 | 12 | 18/23 | 0 | 932×2109 (67779/node) | 0.44 | 15/15 (100%) | 4 cross-lane, 1 hosts-boundary, 1 boundary-src | 1 | 0 | 0 | 2 |
-| visualRefinement: true | 0 | 15 | 19/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 | 1 | 40 | 7 |
+| visualRefinement: true | 0 | 16 | 18/23 | 0 | 752×2644 (68562/node) | 0.28 | 14/14 (100%) | 4 cross-lane, 1 fold-back, 1 hosts-boundary, 1 boundary-src | 0 | 0 | 40 | 7 |
 
 Our post-processing introduces no crossings beyond ELK's own result.
 
