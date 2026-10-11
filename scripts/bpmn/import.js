@@ -52,7 +52,7 @@ function parseElement(xml, pos) {
       let attrVal = '';
       while (pos < xml.length && xml[pos] !== quote) { attrVal += xml[pos]; pos++; }
       pos++; // skip closing quote
-      attrs[attrName] = unescXml(attrVal);
+      attrs[attrName] = decodeXmlEntities(attrVal);
     }
   }
 
@@ -83,32 +83,23 @@ function parseElement(xml, pos) {
     }
   }
 
-  return { element: { tag: tagName, attrs, children, text: text.trim() }, pos };
+  return { element: { tag: tagName, attrs, children, text: decodeXmlEntities(text.trim()) }, pos };
 }
 
 /**
- * Every XML entity in ONE pass — the five named ones AND numeric character references, which
- * bpmn-moddle writes for `&` and `<` inside attributes (`&#38;`, `&#60;`). `unescXml` above decodes
- * only the named five, so on this legacy path an attribute such as a node's `name` containing `&`
- * comes back as `&#38;`; that is a parser-wide defect left for its own change. The `role` and
- * `system` reads use this one so their round trip is exact. One pass, not two, so a raw text node
- * `&amp;#38;` correctly decodes to the literal text `&#38;`. Applied to an ATTRIBUTE (the resource
- * name) it runs after `parseElement`'s `unescXml`, so there the same corner (`&amp;#38;` in a
- * foreign file) decodes once too often — the corner `unescXml`'s own sequential replaces already
- * have for `&amp;lt;`; never produced by bpmn-moddle, which writes a literal `&#38;` as `&#38;#38;`.
+ * Decode XML character data in ONE pass: the five predefined entities plus decimal and hex
+ * character references. One pass is what keeps `&amp;lt;` as the text `&lt;` (a chain of
+ * replaces would turn it into `<`). A reference outside the Unicode range, or a surrogate, is
+ * left as written instead of throwing from `String.fromCodePoint`.
  */
 function decodeXmlEntities(s) {
   const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-  return s.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g, (m, e) => {
+  return s.replace(/&(#[xX][0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g, (m, e) => {
     if (e[0] !== '#') return named[e];
-    const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-    // An out-of-range reference in a foreign file is left as written rather than thrown on.
-    return code <= 0x10FFFF ? String.fromCodePoint(code) : m;
+    const code = (e[1] === 'x' || e[1] === 'X') ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    if (!Number.isFinite(code) || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) return m;
+    return String.fromCodePoint(code);
   });
-}
-
-function unescXml(s) {
-  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -402,11 +393,9 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     const decisionRefEl = findChild(findChild(child, 'extensionElements'), 'decisionRef');
     if (decisionRefEl?.text) node.decisionRef = decisionRefEl.text;
 
-    // system — same extensionElements. Unescaped here, unlike decisionRef: this DOM parser keeps a
-    // text node's entities (see the `conditionExpression` row in types.js), and a system name such
-    // as "S/4 & Core" is exactly the kind of value that carries one.
+    // system — same extensionElements. The text node is already decoded by `parseElement`.
     const systemEl = findChild(findChild(child, 'extensionElements'), 'system');
-    if (systemEl?.text) node.system = decodeXmlEntities(systemEl.text);
+    if (systemEl?.text) node.system = systemEl.text;
 
     // role — the same single form moddle-import.js's `readRole` reads, over the raw DOM.
     const roleName = readRoleFromDom(child, resourcesById);
@@ -552,7 +541,7 @@ function readRoleFromDom(element, resourcesById) {
   if (findChild(r, 'resourceAssignmentExpression')) return undefined;
   const ref = findChild(r, 'resourceRef')?.text;
   const name = ref ? resourcesById[ref] : undefined;
-  return name ? decodeXmlEntities(name) : undefined;
+  return name || undefined;
 }
 
 function detectEventMarkerFull(element) {

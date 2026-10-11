@@ -194,10 +194,6 @@ const HOST_ID = 'host';
 const LANE_ID = 'lane_a';
 const LANES = { lanes: [{ id: LANE_ID, name: 'Sachbearbeitung' }, { id: 'lane_b', name: 'Leitung' }] };
 
-// Deliberately free of `<`, `>` and `&`. The legacy DOM parser never unescapes a text node — a
-// defect `conditionExpression`'s and `loopType`'s reasons both record — so an entity in a value
-// under test would mix that one parser defect into every other row's result. The two rows whose
-// reasons name the escaping loss assert it explicitly, with a value chosen for it.
 const PLAIN = 'Antrag vollstaendig';
 
 const DEFS = (kind) => {
@@ -767,11 +763,6 @@ const LOSSY_CONTRACTS = {
       const v = ctx.value;
       if (v === 'standard') return sameAs(ctx, ctx.out?.loopType, 'standard');
       if (Object.keys(v).every((k) => v[k] === false)) return sameAs(ctx, ctx.out?.loopType, 'standard');
-      if ('loopCondition' in v && ctx.path === 'legacy') {
-        // The legacy DOM parser never unescapes a text node — one parser defect, recorded in this
-        // row's reason and in `conditionExpression`'s. Asserted, not avoided.
-        return sameAs(ctx, ctx.out?.loopType, { ...v, loopCondition: 'x&lt;3' });
-      }
       return sameAs(ctx, ctx.out?.loopType, v);
     },
   },
@@ -823,11 +814,10 @@ const LOSSY_CONTRACTS = {
   },
 
   conditionExpression: {
-    quote: 'it is exact through `moddle-import.js` (the primary path) and NOT through the legacy',
+    quote: 'on any other marker the field is silently ignored',
     assert: (ctx) => {
       if (ctx.input.marker !== 'conditional') return sameAs(ctx, ctx.out?.conditionExpression, undefined, 'marker is not conditional');
-      const escaped = ctx.path === 'legacy' && ctx.value.includes('<');
-      return sameAs(ctx, ctx.out?.conditionExpression, escaped ? ctx.value.replace('<', '&lt;') : ctx.value);
+      return sameAs(ctx, ctx.out?.conditionExpression, ctx.value);
     },
   },
 
