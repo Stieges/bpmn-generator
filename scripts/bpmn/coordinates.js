@@ -4,7 +4,7 @@
  */
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, artifactSize } from './constants.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP } from './constants.js';
 import { CFG } from '../shared/utils.js';
 import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
@@ -684,9 +684,10 @@ function semanticShorten(line, maxLength) {
 /**
  * An edge label's text layout: its lines (broken exactly as bpmn-js Text.js `layoutNext` breaks
  * them, with Arial widths instead of a DOM measurement) and the box they need, `w` × `h` px.
+ * `style` defaults to the edge-label style; artifactSize passes a text annotation's.
  */
-function edgeLabelLayout(text) {
-  const { fontSize, lineHeight, wrapWidth } = edgeLabelTextStyle();
+function edgeLabelLayout(text, style = edgeLabelTextStyle()) {
+  const { fontSize, lineHeight, wrapWidth } = style;
   const pending = String(text ?? '').split(/\u00AD?\r?\n/);
   const lines = [];
   let w = 0;
@@ -706,6 +707,49 @@ function edgeLabelLayout(text) {
     }
   }
   return { lines, w, h: Math.ceil(lines.length * fontSize * lineHeight) };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Artifact size — one source for layout.js and placeArtifacts
+// ─────────────────────────────────────────────────────────────────────
+
+/** Text style of a text annotation, `layout.textAnnotationText` — bpmn-js's defaults for it. */
+function textAnnotationTextStyle() {
+  const t = CFG.layout?.textAnnotationText ?? {};
+  return {
+    fontSize: t.fontSize ?? 12, lineHeight: t.lineHeight ?? 1.2, padding: t.padding ?? 7,
+    maxWidth: t.maxWidth ?? 180, measureSlack: t.measureSlack ?? 2,
+  };
+}
+
+/**
+ * Shape size of an artifact node, `{ w, h }` — plus `lines` for a text annotation, its text as it
+ * is drawn into that box. Artifacts are kept out of the ELK graph, so two places have to size them:
+ * layout.js (the band an expanded subprocess keeps free for them) and placeArtifacts here. One
+ * function, so the reserved band and the placed shapes cannot disagree.
+ *
+ * Every artifact type has the fixed size of `config.json → shape[type]`, except a text annotation:
+ * its box grows to fit its text. The text is laid out the way bpmn-js lays out a TextAnnotation
+ * (edgeLabelLayout's bpmn-js line breaking, at `layout.textAnnotationText`: Arial 12 px, line height
+ * 1.2, 7 px padding — BpmnRenderer's values), so the DI bounds are a box bpmn.io's own text fits
+ * into, and svg.js draws `lines` without measuring anything. Width: the configured shape width as
+ * a floor, so a short annotation keeps today's 100 × 30; wider up to `maxWidth` when the text needs
+ * it; wrapped at `maxWidth` beyond that. Height: the configured shape height as a floor, else the
+ * lines plus padding.
+ */
+function artifactSize(node) {
+  const base = SHAPE[node.type];
+  if (!base) throw new Error(`no shape size for artifact type "${node.type}" in config.json`);
+  if (node.type !== 'textAnnotation') return base;
+  const { fontSize, lineHeight, padding, maxWidth, measureSlack } = textAnnotationTextStyle();
+  const text = String(node.name ?? '');
+  // The width the text needs unwrapped (explicit line breaks kept), plus the slack that keeps
+  // bpmn-js's strict `width < maxWidth` test from wrapping a line our metrics say just fits.
+  const natural = Math.max(0, ...text.split(/\u00AD?\r?\n/).map(l => lineWidth(l, fontSize)));
+  const w = Math.max(base.w, Math.min(maxWidth, Math.ceil(natural) + measureSlack + 2 * padding));
+  const { lines } = edgeLabelLayout(text, { fontSize, lineHeight, wrapWidth: w - 2 * padding });
+  const h = Math.max(base.h, Math.ceil(2 * padding + lines.length * fontSize * lineHeight));
+  return { w, h, lines };
 }
 
 /**
@@ -1090,7 +1134,7 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
     partnerOf[a.target] ??= a.source;
   }
 
-  const placedBelow = {};   // anchorId → how many artifacts already sit below it
+  const stackBelow = {};    // anchorId → px already taken below it by stacked artifacts
   const orphans = [];
   const bandOrphans = [];   // unassociated artifacts that go into their container's band
 
@@ -1107,7 +1151,7 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
   for (const proc of allProcesses) {
     for (const node of flattenProcessNodes(proc.nodes)) {
       if (!isArtifact(node.type) || coords[node.id]) continue;
-      const sz = artifactSize(node.type);
+      const sz = artifactSize(node);
       const anchor = coords[partnerOf[node.id]];
       const containerId = containerOf[node.id];
       if (!anchor && artifactBands[containerId]) { bandOrphans.push({ node, sz, containerId }); continue; }
@@ -1119,13 +1163,16 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
       // §5.0a does not move it when the band shifts — it stays at the anchor's
       // OLD position, up to a full band away from it.
       node.lane ??= laneOfNode(proc.nodes.find(n => n.id === anchorId), proc);
-      const slot = placedBelow[anchorId] = (placedBelow[anchorId] ?? -1) + 1;
-      coords[node.id] = {
+      // A running cursor, not `slot * height`: stacked artifacts can differ in height (a wrapped
+      // annotation, a data object), and the next one starts where the previous one ends.
+      const offset = stackBelow[anchorId] ?? 0;
+      stackBelow[anchorId] = offset + sz.h + ARTIFACT_GAP;
+      coords[node.id] = withLines({
         x: anchor.x + anchor.w / 2 - sz.w / 2,
-        y: anchor.y + anchor.h + ARTIFACT_GAP + slot * (sz.h + ARTIFACT_GAP),
+        y: anchor.y + anchor.h + ARTIFACT_GAP + offset,
         w: sz.w,
         h: sz.h,
-      };
+      }, sz);
     }
   }
 
@@ -1150,7 +1197,7 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
       if (!collides(candidate)) { slot = candidate; break; }
       cur.x += ARTIFACT_GAP;
     }
-    coords[node.id] = slot ?? { x: cur.x, y: cur.y, w: sz.w, h: sz.h };
+    coords[node.id] = withLines(slot ?? { x: cur.x, y: cur.y, w: sz.w, h: sz.h }, sz);
     cur.x += sz.w + ARTIFACT_GAP;
     cur.rowH = Math.max(cur.rowH, sz.h);
   }
@@ -1160,9 +1207,18 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
   let x = placed.length ? Math.min(...placed.map(c => c.x)) : 0;
   const y = (placed.length ? Math.max(...placed.map(c => c.y + c.h)) : 0) + ARTIFACT_GAP;
   for (const { node, sz } of orphans) {
-    coords[node.id] = { x, y, w: sz.w, h: sz.h };
+    coords[node.id] = withLines({ x, y, w: sz.w, h: sz.h }, sz);
     x += sz.w + ARTIFACT_GAP;
   }
+}
+
+/**
+ * A text annotation's coordMap entry carries its `lines` next to the box: the box height is the line
+ * count's, so the two are computed together and travel together. svg.js draws them; bpmn-xml.js
+ * writes only the box. Every other artifact's entry stays `{ x, y, w, h }`.
+ */
+function withLines(box, sz) {
+  return sz.lines ? { ...box, lines: sz.lines } : box;
 }
 
 // clipStraight/clipToRect moved to scripts/shared/geometry.js — a second notation (DMN's DRD)
@@ -1869,4 +1925,4 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };

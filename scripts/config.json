@@ -166,6 +166,13 @@
       "lineHeight": 1.2,
       "wrapWidth": 90
     },
+    "textAnnotationText": {
+      "fontSize": 12,
+      "lineHeight": 1.2,
+      "padding": 7,
+      "maxWidth": 180,
+      "measureSlack": 2
+    },
     "alongOutlineMinPx": 5,
     "crossingGuard": true,
     "endpointReclip": true,
