@@ -650,6 +650,10 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   tiles nested `childLanes` (#75); the orthogonal router can produce a U-turn (#76); participant
   ordering is heuristic above 8 participants (#77); layout time roughly doubles on large models
   (122 nodes: ~2x) because of the crossing guard and the router (#78)
+- A label or leg the fallback cannot move stays on a lane separator, and nothing reports it:
+  `placeEdgeLabel` keeps its first pick when no other spot is clear of route, separators and shapes,
+  and `keepOffLaneLines`/`rerouteAfterCompaction` refuse a move that would add a crossing; only the
+  bench (`labelLaneLine`, `hug`) counts these
 - The DMN importer reads no DMNDI, so every diagram is reported as IM06 and **`report.lossless` is
   never true for a file this generator wrote** — the writer always emits a DMNDI tree (IM06) and
   generates `<variable>`/`<literalExpression>` ids (IM05). `--strict` on `dmn/import.js` and on

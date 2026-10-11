@@ -785,7 +785,10 @@ function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLin
   const offRoute = (c) => !labelHitsRoute(boxOf(c), pts);
   let pick = cands.find(offRoute) ?? cands[0];
   if (pick && avoidLines.length && boxCrossesLines(boxOf(pick), avoidLines)) {
-    const clearOf = (b) => !obstacles.some(o => b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h);
+    // A container (expanded subprocess, group) that wraps the whole box is not in its way — the same
+    // rule as the bench's edgeLabelHits.
+    const wraps = (o, b) => b.x >= o.x && b.y >= o.y && b.x + b.w <= o.x + o.w && b.y + b.h <= o.y + o.h;
+    const clearOf = (b) => !obstacles.some(o => !wraps(o, b) && b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h);
     const ok = (c) => offRoute(c) && !boxCrossesLines(boxOf(c), avoidLines) && clearOf(boxOf(c));
     const twin = beside(pick.seg[0], pick.seg[1], OTHER_SIDE[pick.side]);
     pick = (ok(twin) ? twin : cands.find(ok)) ?? pick;
