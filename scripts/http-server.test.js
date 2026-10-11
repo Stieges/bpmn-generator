@@ -755,6 +755,29 @@ describe('layout switches over HTTP', () => {
         expect(body.errors[0].path).toBe(key);
       });
   }
+  // foreignShapeRepair leaves simple-approval alone (nothing runs through a shape there), so its
+  // forwarding is fenced on the #91 model, which it changes.
+  const rp = JSON.parse(readFileSync(new URL('../tests/fixtures/example-rechnungspruefung.json', import.meta.url), 'utf8'));
+  const libRp = async (opts) => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    return (await runPipeline(JSON.parse(JSON.stringify(rp)), opts)).bpmnXml;
+  };
+  for (const path of ['/api/v1/generate', '/api/v1/orchestrate']) {
+    test(`foreignShapeRepair: false on ${path} equals runPipeline with it and differs from no option`, async () => {
+      const res = await post(path, { logicCore: rp, foreignShapeRepair: false });
+      expect(res.status).toBe(200);
+      const xml = (await res.json()).bpmnXml;
+      expect(xml).toBe(await libRp({ foreignShapeRepair: false }));
+      expect(xml).not.toBe(await libRp({}));
+    }, 30000);
+    test(`foreignShapeRepair = "no" is a 400 schema_error on ${path}`, async () => {
+      const res = await post(path, { logicCore: rp, foreignShapeRepair: 'no' });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.status).toBe('schema_error');
+      expect(body.errors[0].path).toBe('foreignShapeRepair');
+    });
+  }
   test('/orchestrate refuses an invalid switch before any LLM work', async () => {
     // userText only makes sense with an LLM; the gate has to answer before that question is asked
     const res = await post('/api/v1/orchestrate', { userText: 'a process', bendRule: 'yes', llmConfig: { apiKey: 'k', model: 'm', baseUrl: 'http://127.0.0.1:1' } });

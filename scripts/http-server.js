@@ -368,7 +368,7 @@ const server = createServer(async (req, res) => {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: schemaCheck.errors.length });
         return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
       }
-      // visualRefinement, bendRule, nodeLabelsAvoidFlows — client options, gated before use
+      // visualRefinement, bendRule, nodeLabelsAvoidFlows, foreignShapeRepair — client options, gated before use
       const layoutCheck = validateLayoutOptions(body);
       if (!layoutCheck.valid) {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: layoutCheck.errors.length });

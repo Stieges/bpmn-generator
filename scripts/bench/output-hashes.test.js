@@ -1,7 +1,8 @@
 /**
- * The fence behind "the output with layout.bendRule and layout.nodeLabelsAvoidFlows off does not
- * change unnoticed": the BPMN XML and SVG hashes of every top-level fixture × four modes against a
- * snapshot of that output on current master (see output-hashes.mjs for its history).
+ * The fence behind "the output with layout.bendRule, layout.nodeLabelsAvoidFlows and
+ * layout.foreignShapeRepair off does not change unnoticed": the BPMN XML and SVG hashes of every
+ * top-level fixture × four modes against a snapshot of that output on current master (see
+ * output-hashes.mjs for its history).
  */
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
