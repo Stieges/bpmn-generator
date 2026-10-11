@@ -72,6 +72,15 @@ describe('placeNodeLabelsAvoidingFlows — on hand-built geometry', () => {
     expect(cm.nodeLabels.g.y).toBeGreaterThan(cm.coords.g.y);                   // input untouched
   });
 
+  test('a flow leaving through the lower-right facet and turning down through the label counts too', () => {
+    // How ELK docks a gateway's second outgoing flow: on the diamond's lower-right edge, not at its
+    // bottom vertex — then straight down through the default label.
+    const { lc, cm } = sf3();
+    cm.edgeCoords.yes = [P(37.5, 137.5), P(37.5, 290), P(100, 290)];
+    expect(labelHitsRoute(cm.nodeLabels.g, cm.edgeCoords.yes)).toBe(true);
+    expect(sideOf(lc, cm, 'g', placeNodeLabelsAvoidingFlows(cm, lc).g)).toBe('above');
+  });
+
   test('above taken by a flow entering from the top — right-below', () => {
     const { lc, cm } = sf3();
     lc.nodes.push({ id: 'v', type: 'task' });
