@@ -515,6 +515,18 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 2. Verify: `cd scripts && npm test -- --testPathPatterns=node-labels-avoid-flows` and the renderer-agreement
    test in `scripts/bpmn/pipeline.test.js` ("the two renderers agree on node labels", switch off and on).
 
+### Switch the repair of flows through a foreign shape off
+
+1. On by default (`config.json → layout.foreignShapeRepair: true`). Per call
+   `runPipeline(lc, { foreignShapeRepair: false })`, CLI `--no-foreign-shape-repair`
+   (`--foreign-shape-repair` forces it on), HTTP/MCP `"foreignShapeRepair": false`; project-wide
+   `layout.foreignShapeRepair: false` in a file named by `BPMN_CONFIG`. It widens `reclipStuckEnds`
+   (`scripts/bpmn/edge-simplify.js`, see its doc comment): a flow through a foreign shape (the DI11
+   measure) is re-routed too, one crossing per shape traversed may be traded, a shared in/out port is
+   given up. Off, the pass is the plain stuck-end pass.
+2. Verify: `cd scripts && npm test -- --testPathPatterns=edge-simplify` and the `#91` block in
+   `scripts/bpmn/pipeline.test.js` (`example-rechnungspruefung` clean of DI08/DI09/DI11 in every mode).
+
 ### Change the participant order of a collaboration
 
 1. Default is `poolOrder: 'auto'` — participants are stacked so that the ones exchanging messages sit
@@ -662,9 +674,10 @@ node bpmn/pipeline.js input.json output --refine
 # Wrap long chains into rows (ELK MULTI_EDGE, > 20 nodes; off by default, independent of --refine):
 node bpmn/pipeline.js input.json output --wrap
 
-# Bend rule / node labels that avoid flows are on by default; switch either off for this call
-# (--bend-rule / --label-avoidance force it on over a project config; each pair is mutually exclusive):
-node bpmn/pipeline.js input.json output --no-bend-rule --no-label-avoidance
+# Bend rule / node labels that avoid flows / repair of flows through a foreign shape are on by
+# default; switch any off for this call (--bend-rule / --label-avoidance / --foreign-shape-repair
+# force it on over a project config; each pair is mutually exclusive):
+node bpmn/pipeline.js input.json output --no-bend-rule --no-label-avoidance --no-foreign-shape-repair
 
 # Project-wide config override (merged over scripts/config.json, one level deep):
 BPMN_CONFIG=my-config.json node bpmn/pipeline.js input.json output
@@ -724,8 +737,9 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   associations only: message flows are routed after it, so the label can still land on one. Its
   guard does not count other flows' edge labels either, so a new route can run through a label that
   did not move (the class of #73). No check reports either
-- "Output with `layout.bendRule` and `layout.nodeLabelsAvoidFlows` explicitly off is unchanged from before the bend rule" is fenced by
-  SHA-256 hashes of BPMN XML and SVG per top-level fixture × four modes
+- "Output with `layout.bendRule`, `layout.nodeLabelsAvoidFlows` and `layout.foreignShapeRepair` explicitly off does not change unnoticed" is fenced by
+  SHA-256 hashes of BPMN XML and SVG per top-level fixture × four modes against current master's output
+  (no longer the output from before the bend rule: #91 moved `realistic-collaboration`'s boundary event, which no switch restores)
   (`tests/bench/default-output-hashes.json`, written by `node bench/output-hashes.mjs`, compared by
   `scripts/bench/output-hashes.test.js`); regenerate it only for an intended change of the default output
 - The DMN importer reads no DMNDI, so every diagram is reported as IM06 and **`report.lossless` is
@@ -743,7 +757,8 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
 - Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + unit tests; not exhaustive across all BPMN element types. Two classes were recently added to that coverage after both turned out to be lossy: text annotations and groups (the primary importer walked only `flowElements`, where bpmn-moddle never places an Artifact), and **subprocess children**, which reached the XML with only their id and name — documentation, loop/multi-instance, script, `calledElement`, `gatewayDirection` and the mandatory `attachedToRef` were all dropped, grandchildren entirely. Both directions were affected, so the round trip looked intact while both ends lost the same fields. The guard is now a field-set comparison over `tests/fixtures/subprocess-child-fidelity.json`, not a per-field assertion. The annotation/group half of that was closed at top level only, and the identical `flowElements`-vs-`artifacts` gap survived one level down until `scripts/bpmn/field-fidelity.test.js` measured it; both levels now read from `artifacts` through the same function
-- Boundary events are placed deterministically on the bottom edge of their host and their outgoing flow is re-routed there (`coordinates.js` §5.0-). ELK does not lay them out; a host carrying many of them will spread them evenly rather than optimally
+- Boundary events are placed deterministically on their host's bottom edge — or its top edge when the target of their outgoing flow lies above the host (#91) — and their outgoing flow is re-routed from there (`coordinates.js` §5.0-). ELK does not lay them out; a host carrying many of them will spread them evenly per side rather than optimally, and the side is decided by the event's first outgoing flow alone
+- `example-rechnungspruefung`'s "Ja" flow (`f412`) leaves "Betrag über 10.000 EUR?" at the bottom vertex and runs through the gateway's own label: `placeNodeLabelsAvoidingFlows` finds every candidate blocked (below and right-below by `f412` itself, above by `f409`/`f410`, left-below by `f410`) and keeps the default box. Its `f410` carries a 10 px jog from `repairCrossings` (6 bends) that no later pass straightens (#91)
 - Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right. Because ELK therefore sizes an expanded subprocess without its artifacts, `layout.js` reserves a band at the subprocess's bottom for the artifacts it declares (`artifactReserveHeight`, sized for the worst case — every artifact stacked under one anchor), and `placeArtifacts` puts unassociated ones into that band — last, onto free slots, because an anchor near the bottom hangs its own artifact into the same band; without it they landed below the whole collaboration, outside both subprocess and participant (#56). Over-reserving costs whitespace, under-reserving a DI06
 - Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, which is why DI05 is a WARNING
 - The DI check (`di-check.js`) covers participants, lane bands, node containment, message flow crossings, and (DI07) that a sequence flow starts and ends on its own node, (DI08) that no sequence-flow end runs along its own endpoint's outline, (DI09) that no sequence flow runs through its own source or target, (DI10) that no message flow runs through a shape that is not one of its endpoints, and (DI11) that no sequence flow runs through a shape that is neither its source nor its target. It says nothing about sequence-flow *crossings*, label collisions or readability

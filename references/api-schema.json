@@ -19,7 +19,7 @@
       ]
     },
     "LayoutSwitchOption": {
-      "description": "Request options bendRule and nodeLabelsAvoidFlows on POST /api/v1/generate and /api/v1/orchestrate and the MCP tools generate_bpmn and orchestrate_bpmn. Omitted: config.json -> layout.<option>. Must equal LAYOUT_SWITCH_OPTION_SCHEMA in scripts/bpmn/schema-gate.js (fenced by a test).",
+      "description": "Request options bendRule, nodeLabelsAvoidFlows and foreignShapeRepair on POST /api/v1/generate and /api/v1/orchestrate and the MCP tools generate_bpmn and orchestrate_bpmn. Omitted: config.json -> layout.<option>. Must equal LAYOUT_SWITCH_OPTION_SCHEMA in scripts/bpmn/schema-gate.js (fenced by a test).",
       "type": "boolean"
     },
     "GenerateResponse": {

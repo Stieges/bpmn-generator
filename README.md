@@ -355,6 +355,7 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 - **`laneCompaction`** — `compactLanes`: reduces lane padding. Lanes keep their lane names whole in bpmn.io (`laneLabelFloor`) and sequence flows are kept `laneLineClearance` px off the lane separators. Diagrams with lanes or an expanded subprocess come out up to 29 % smaller in area (10–29 % on the seven golden fixtures; some diagrams are unchanged).
 - **`edgeLabelCollisionRepair`** — edge label collision repair via bbox-nudge; it only moves labels, never a route.
 - **Bend rule and node labels that avoid flows** are layout switches, not refinement passes, and are on by default (`layout.bendRule`, `layout.nodeLabelsAvoidFlows` in `scripts/config.json`): fewer bends, flows entering activities and events in flow direction, event and gateway labels moved off flows. Switch off per call with CLI `--no-bend-rule` / `--no-label-avoidance` (`--bend-rule` / `--label-avoidance` force a pass on; each pair is mutually exclusive), the booleans `bendRule` / `nodeLabelsAvoidFlows` on `POST /api/v1/generate`, `POST /api/v1/orchestrate` and the MCP tools `generate_bpmn` and `orchestrate_bpmn` (schema `$defs/LayoutSwitchOption` in [`references/api-schema.json`](references/api-schema.json); anything but a boolean is a `schema_error`), or `runPipeline(lc, { bendRule: false, nodeLabelsAvoidFlows: false })`. Project-wide, see the next paragraph.
+- **Repair of flows through a foreign shape** is a layout switch too, on by default (`layout.foreignShapeRepair`): a sequence flow that runs through a task, event or gateway that is neither its source nor its target is re-routed, trading at most one crossing per shape. Switch off per call with CLI `--no-foreign-shape-repair` (`--foreign-shape-repair` forces it on), the boolean `foreignShapeRepair` on the same HTTP endpoints and MCP tools, or `runPipeline(lc, { foreignShapeRepair: false })`.
 - **ELK wrapping** is not a refinement pass but its own layout-level switch (opt-in): row wrapping of wide pipelines (> 20 nodes) via `layout.elkWrapping` (`off`/`auto`/`always`), `--wrap` or `runPipeline(lc, { elkWrapping: 'auto' })`; if ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so.
 
 **Configure (defaults shown, `scripts/config.json`):**
@@ -375,7 +376,7 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 **Project-wide without editing the package:** set the environment variable `BPMN_CONFIG` to a JSON file; it is merged over the shipped `scripts/config.json` one level deep, so it only needs the keys it changes. For example, to restore the layout before the bend rule:
 
 ```json
-{ "layout": { "bendRule": false, "nodeLabelsAvoidFlows": false } }
+{ "layout": { "bendRule": false, "nodeLabelsAvoidFlows": false, "foreignShapeRepair": false } }
 ```
 
 ```bash
