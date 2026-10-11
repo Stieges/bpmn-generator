@@ -7,7 +7,9 @@
  * SVG, with every opt-in layout switch that changes geometry explicitly OFF (layout.bendRule,
  * layout.nodeLabelsAvoidFlows). The committed snapshot (tests/bench/default-output-hashes.json)
  * was generated at 9b5a597, before either switch existed, so a match proves the switches leave
- * the default output untouched — a comparison of two runs of the same code could not.
+ * the default output untouched — a comparison of two runs of the same code could not. The
+ * example-* entries (fixtures added later) were generated the same way: at 9b5a597 with the fixture
+ * files copied in, and found equal to HEAD's.
  *
  * Rewrite the snapshot: `node bench/output-hashes.mjs` from `scripts/`. Regenerate only when a
  * change to the default output is intended, after inspecting the diff like a golden.

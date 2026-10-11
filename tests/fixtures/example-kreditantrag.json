@@ -1,0 +1,349 @@
+{
+ "pools": [
+  {
+   "id": "Process_Kredit",
+   "name": "Kreditabteilung",
+   "lanes": [
+    {
+     "id": "kb",
+     "name": "Kundenberater"
+    },
+    {
+     "id": "sk",
+     "name": "Sachbearbeiter Kredit"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "k_start",
+     "type": "startEvent",
+     "name": "Kreditantrag eingegangen",
+     "lane": "kb",
+     "marker": "message"
+    },
+    {
+     "id": "k_erfassen",
+     "type": "userTask",
+     "name": "Antrag erfassen",
+     "lane": "kb"
+    },
+    {
+     "id": "k_do",
+     "type": "dataObjectReference",
+     "name": "Kreditakte",
+     "lane": "kb"
+    },
+    {
+     "id": "k_gw1",
+     "type": "exclusiveGateway",
+     "name": "Unterlagen vollständig?",
+     "lane": "kb"
+    },
+    {
+     "id": "k_nachfordern",
+     "type": "sendTask",
+     "name": "Unterlagen nachfordern",
+     "lane": "kb"
+    },
+    {
+     "id": "k_anfrage",
+     "type": "sendTask",
+     "name": "Bonitätsprüfung beauftragen",
+     "lane": "sk"
+    },
+    {
+     "id": "k_warten",
+     "type": "receiveTask",
+     "name": "Risikobewertung abwarten",
+     "lane": "sk"
+    },
+    {
+     "id": "k_timer",
+     "type": "boundaryEvent",
+     "name": "5 Tage ohne Antwort",
+     "lane": "sk",
+     "marker": "timer",
+     "attachedTo": "k_warten"
+    },
+    {
+     "id": "k_erinnern",
+     "type": "sendTask",
+     "name": "Risikoabteilung erinnern",
+     "lane": "sk"
+    },
+    {
+     "id": "k_gw2",
+     "type": "exclusiveGateway",
+     "name": "Kredit bewilligt?",
+     "lane": "sk"
+    },
+    {
+     "id": "k_vertrag",
+     "type": "userTask",
+     "name": "Kreditvertrag erstellen",
+     "lane": "sk"
+    },
+    {
+     "id": "k_ablehnung",
+     "type": "userTask",
+     "name": "Ablehnung schreiben",
+     "lane": "kb"
+    },
+    {
+     "id": "k_senden",
+     "type": "sendTask",
+     "name": "Vertrag an Kunden senden",
+     "lane": "sk"
+    },
+    {
+     "id": "k_end1",
+     "type": "endEvent",
+     "name": "Vertrag versendet",
+     "lane": "sk"
+    },
+    {
+     "id": "k_end2",
+     "type": "endEvent",
+     "name": "Antrag abgelehnt",
+     "lane": "kb"
+    },
+    {
+     "id": "k_end3",
+     "type": "endEvent",
+     "name": "Erinnerung gesendet",
+     "lane": "sk"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f1",
+     "source": "k_start",
+     "target": "k_erfassen"
+    },
+    {
+     "id": "f2",
+     "source": "k_erfassen",
+     "target": "k_gw1"
+    },
+    {
+     "id": "f3",
+     "source": "k_gw1",
+     "target": "k_nachfordern",
+     "label": "Nein"
+    },
+    {
+     "id": "f4",
+     "source": "k_nachfordern",
+     "target": "k_erfassen"
+    },
+    {
+     "id": "f5",
+     "source": "k_gw1",
+     "target": "k_anfrage",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f6",
+     "source": "k_anfrage",
+     "target": "k_warten"
+    },
+    {
+     "id": "f7",
+     "source": "k_warten",
+     "target": "k_gw2"
+    },
+    {
+     "id": "f8",
+     "source": "k_timer",
+     "target": "k_erinnern"
+    },
+    {
+     "id": "f9",
+     "source": "k_erinnern",
+     "target": "k_end3"
+    },
+    {
+     "id": "f10",
+     "source": "k_gw2",
+     "target": "k_vertrag",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f11",
+     "source": "k_gw2",
+     "target": "k_ablehnung",
+     "label": "Nein"
+    },
+    {
+     "id": "f12",
+     "source": "k_vertrag",
+     "target": "k_senden"
+    },
+    {
+     "id": "f13",
+     "source": "k_senden",
+     "target": "k_end1"
+    },
+    {
+     "id": "f14",
+     "source": "k_ablehnung",
+     "target": "k_end2"
+    }
+   ]
+  },
+  {
+   "id": "Process_Risiko",
+   "name": "Risikomanagement",
+   "lanes": [
+    {
+     "id": "ra",
+     "name": "Risikoanalyst"
+    },
+    {
+     "id": "rm",
+     "name": "Marktfolge"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "r_start",
+     "type": "startEvent",
+     "name": "Bonitätsanfrage erhalten",
+     "lane": "ra",
+     "marker": "message"
+    },
+    {
+     "id": "r_split",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "ra"
+    },
+    {
+     "id": "r_bonitaet",
+     "type": "serviceTask",
+     "name": "Schufa-Auskunft einholen",
+     "lane": "ra"
+    },
+    {
+     "id": "r_sicher",
+     "type": "userTask",
+     "name": "Sicherheiten bewerten",
+     "lane": "rm"
+    },
+    {
+     "id": "r_join",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "rm"
+    },
+    {
+     "id": "r_klasse",
+     "type": "businessRuleTask",
+     "name": "Risikoklasse festlegen",
+     "lane": "rm"
+    },
+    {
+     "id": "r_senden",
+     "type": "sendTask",
+     "name": "Bewertung übermitteln",
+     "lane": "rm"
+    },
+    {
+     "id": "r_end",
+     "type": "endEvent",
+     "name": "Bewertung gesendet",
+     "lane": "rm"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f15",
+     "source": "r_start",
+     "target": "r_split"
+    },
+    {
+     "id": "f16",
+     "source": "r_split",
+     "target": "r_bonitaet"
+    },
+    {
+     "id": "f17",
+     "source": "r_split",
+     "target": "r_sicher"
+    },
+    {
+     "id": "f18",
+     "source": "r_bonitaet",
+     "target": "r_join"
+    },
+    {
+     "id": "f19",
+     "source": "r_sicher",
+     "target": "r_join"
+    },
+    {
+     "id": "f20",
+     "source": "r_join",
+     "target": "r_klasse"
+    },
+    {
+     "id": "f21",
+     "source": "r_klasse",
+     "target": "r_senden"
+    },
+    {
+     "id": "f22",
+     "source": "r_senden",
+     "target": "r_end"
+    }
+   ]
+  }
+ ],
+ "collapsedPools": [
+  {
+   "id": "Pool_Kunde",
+   "name": "Kunde"
+  }
+ ],
+ "messageFlows": [
+  {
+   "id": "mf23",
+   "source": "Pool_Kunde",
+   "target": "k_start",
+   "name": "Kreditantrag"
+  },
+  {
+   "id": "mf24",
+   "source": "k_nachfordern",
+   "target": "Pool_Kunde",
+   "name": "Unterlagenanforderung"
+  },
+  {
+   "id": "mf25",
+   "source": "k_anfrage",
+   "target": "r_start",
+   "name": "Bonitätsanfrage"
+  },
+  {
+   "id": "mf26",
+   "source": "r_senden",
+   "target": "k_warten",
+   "name": "Risikobewertung"
+  },
+  {
+   "id": "mf27",
+   "source": "k_senden",
+   "target": "Pool_Kunde",
+   "name": "Kreditvertrag"
+  }
+ ],
+ "associations": [
+  {
+   "id": "as_k1",
+   "source": "k_do",
+   "target": "k_erfassen"
+  }
+ ]
+}

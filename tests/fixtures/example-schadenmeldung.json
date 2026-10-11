@@ -1,0 +1,296 @@
+{
+ "pools": [
+  {
+   "id": "Process_Schaden",
+   "name": "Versicherung",
+   "lanes": [
+    {
+     "id": "sv",
+     "name": "Schadenannahme"
+    },
+    {
+     "id": "sr",
+     "name": "Schadenregulierung"
+    },
+    {
+     "id": "gu",
+     "name": "Gutachterwesen"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "sc_start",
+     "type": "startEvent",
+     "name": "Schadenmeldung eingegangen",
+     "lane": "sv",
+     "marker": "message"
+    },
+    {
+     "id": "sc_erfassen",
+     "type": "userTask",
+     "name": "Schaden erfassen",
+     "lane": "sv"
+    },
+    {
+     "id": "sc_deckung",
+     "type": "businessRuleTask",
+     "name": "Deckung prüfen",
+     "lane": "sv"
+    },
+    {
+     "id": "sc_gw1",
+     "type": "exclusiveGateway",
+     "name": "Deckung gegeben?",
+     "lane": "sv"
+    },
+    {
+     "id": "sc_absage",
+     "type": "sendTask",
+     "name": "Deckungsablehnung senden",
+     "lane": "sv"
+    },
+    {
+     "id": "sc_split",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "sr"
+    },
+    {
+     "id": "sc_gutachter",
+     "type": "userTask",
+     "name": "Gutachter beauftragen",
+     "lane": "gu"
+    },
+    {
+     "id": "sc_gutachten",
+     "type": "userTask",
+     "name": "Gutachten erstellen",
+     "lane": "gu"
+    },
+    {
+     "id": "sc_belege",
+     "type": "receiveTask",
+     "name": "Reparaturkostenvoranschlag erhalten",
+     "lane": "sr"
+    },
+    {
+     "id": "sc_join",
+     "type": "parallelGateway",
+     "name": "",
+     "lane": "sr"
+    },
+    {
+     "id": "sc_sub",
+     "type": "subProcess",
+     "name": "Schadenprüfung",
+     "lane": "sr",
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "sp_start",
+       "type": "startEvent",
+       "name": "Prüfung beginnt"
+      },
+      {
+       "id": "sp_betrag",
+       "type": "userTask",
+       "name": "Schadenhöhe ermitteln"
+      },
+      {
+       "id": "sp_betrug",
+       "type": "serviceTask",
+       "name": "Betrugsindikatoren prüfen"
+      },
+      {
+       "id": "sp_end",
+       "type": "endEvent",
+       "name": "Prüfung beendet"
+      }
+     ],
+     "edges": [
+      {
+       "id": "f301",
+       "source": "sp_start",
+       "target": "sp_betrag"
+      },
+      {
+       "id": "f302",
+       "source": "sp_betrag",
+       "target": "sp_betrug"
+      },
+      {
+       "id": "f303",
+       "source": "sp_betrug",
+       "target": "sp_end"
+      }
+     ]
+    },
+    {
+     "id": "sc_gw2",
+     "type": "exclusiveGateway",
+     "name": "Schaden plausibel?",
+     "lane": "sr"
+    },
+    {
+     "id": "sc_zahlung",
+     "type": "serviceTask",
+     "name": "Entschädigung auszahlen",
+     "lane": "sr"
+    },
+    {
+     "id": "sc_rueck",
+     "type": "sendTask",
+     "name": "Rückfrage an Versicherungsnehmer",
+     "lane": "sv"
+    },
+    {
+     "id": "sc_end1",
+     "type": "endEvent",
+     "name": "Schaden reguliert",
+     "lane": "sr"
+    },
+    {
+     "id": "sc_end2",
+     "type": "endEvent",
+     "name": "Deckung abgelehnt",
+     "lane": "sv"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f304",
+     "source": "sc_start",
+     "target": "sc_erfassen"
+    },
+    {
+     "id": "f305",
+     "source": "sc_erfassen",
+     "target": "sc_deckung"
+    },
+    {
+     "id": "f306",
+     "source": "sc_deckung",
+     "target": "sc_gw1"
+    },
+    {
+     "id": "f307",
+     "source": "sc_gw1",
+     "target": "sc_absage",
+     "label": "Nein"
+    },
+    {
+     "id": "f308",
+     "source": "sc_absage",
+     "target": "sc_end2"
+    },
+    {
+     "id": "f309",
+     "source": "sc_gw1",
+     "target": "sc_split",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f310",
+     "source": "sc_split",
+     "target": "sc_gutachter"
+    },
+    {
+     "id": "f311",
+     "source": "sc_split",
+     "target": "sc_belege"
+    },
+    {
+     "id": "f312",
+     "source": "sc_gutachter",
+     "target": "sc_gutachten"
+    },
+    {
+     "id": "f313",
+     "source": "sc_gutachten",
+     "target": "sc_join"
+    },
+    {
+     "id": "f314",
+     "source": "sc_belege",
+     "target": "sc_join"
+    },
+    {
+     "id": "f315",
+     "source": "sc_join",
+     "target": "sc_sub"
+    },
+    {
+     "id": "f316",
+     "source": "sc_sub",
+     "target": "sc_gw2"
+    },
+    {
+     "id": "f317",
+     "source": "sc_gw2",
+     "target": "sc_zahlung",
+     "label": "Ja",
+     "isHappyPath": true
+    },
+    {
+     "id": "f318",
+     "source": "sc_gw2",
+     "target": "sc_rueck",
+     "label": "Nein"
+    },
+    {
+     "id": "f319",
+     "source": "sc_rueck",
+     "target": "sc_erfassen"
+    },
+    {
+     "id": "f320",
+     "source": "sc_zahlung",
+     "target": "sc_end1"
+    }
+   ]
+  }
+ ],
+ "collapsedPools": [
+  {
+   "id": "Pool_VN",
+   "name": "Versicherungsnehmer"
+  },
+  {
+   "id": "Pool_Werkstatt",
+   "name": "Werkstatt"
+  }
+ ],
+ "messageFlows": [
+  {
+   "id": "mf321",
+   "source": "Pool_VN",
+   "target": "sc_start",
+   "name": "Schadenmeldung"
+  },
+  {
+   "id": "mf322",
+   "source": "sc_absage",
+   "target": "Pool_VN",
+   "name": "Ablehnung"
+  },
+  {
+   "id": "mf323",
+   "source": "Pool_Werkstatt",
+   "target": "sc_belege",
+   "name": "Kostenvoranschlag"
+  },
+  {
+   "id": "mf324",
+   "source": "sc_zahlung",
+   "target": "Pool_VN",
+   "name": "Entschädigung"
+  },
+  {
+   "id": "mf325",
+   "source": "sc_rueck",
+   "target": "Pool_VN",
+   "name": "Rückfrage"
+  }
+ ]
+}

@@ -298,6 +298,9 @@ const same = (row) => ({ default: row, off: row, on: row });
 // on rows: compaction's lane-line legs re-routed — bpmn-generator-pipeline fo2, fo3, fo9, fo16,
 // fo17; long-lane-names f2, f3; multi-pool-collaboration sf3, sf5; realistic-collaboration inf8,
 // asf3, def2, def3; sparse-lanes f3, f4, f5.
+// example-* (the bend rule's review examples, German process names): measured as they lay out
+// today, nothing fixed for them — their sequence-flow crossings (bestellung-versand 2,
+// kreditantrag 1) are ELK's and stand in every mode.
 const BUDGET = {
   'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
@@ -306,6 +309,21 @@ const BUDGET = {
                                           on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1, overlapLen: 786 }) },
   'deadlock-process.json':              { default: null, off: null, on: null },
   'dense-edge-labels.json':             same(r({ bendsMax: 1, offOver5: 4 })),
+  'example-bestellung-versand.json':   { default: r({ crossings: 2, bendsMax: 4, offOver5: 6, overlapLen: 277 }),
+                                          off: r({ crossings: 2, bendsMax: 4, offOver5: 6, overlapLen: 342 }),
+                                          on: r({ crossings: 2, bendsMax: 4, offOver5: 6, overlapLen: 277 }) },
+  'example-kreditantrag.json':          { default: r({ crossings: 1, bendsMax: 2, offOver5: 11, overlapLen: 62 }),
+                                          off: r({ crossings: 1, bendsMax: 2, offOver5: 11, overlapLen: 62 }),
+                                          on: r({ crossings: 1, bendsMax: 4, offOver5: 11, overlapLen: 62 }) },
+  'example-onboarding.json':            { default: r({ bendsMax: 2, offOver5: 10, overlapLen: 1387 }),
+                                          off: r({ bendsMax: 2, offOver5: 10, overlapLen: 1615 }),
+                                          on: r({ bendsMax: 2, offOver5: 10, overlapLen: 1387 }) },
+  'example-schadenmeldung.json':        { default: r({ bendsMax: 2, offOver5: 8, overlapLen: 346 }),
+                                          off: r({ bendsMax: 2, offOver5: 8, overlapLen: 259 }),
+                                          on: r({ bendsMax: 2, offOver5: 8, overlapLen: 346 }) },
+  'example-urlaubsantrag.json':         { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 133 }),
+                                          off: r({ bendsMax: 2, offOver5: 4, overlapLen: 165 }),
+                                          on: r({ bendsMax: 2, offOver5: 4, overlapLen: 133 }) },
   'expanded-subprocess.json':           same(r()),
   'long-lane-names.json':               { default: r({ bendsMax: 2 }), off: r({ bendsMax: 2 }), on: r({ bendsMax: 2 }) },
   'loop-with-join.json':                same(r({ bendsMax: 2, offOver5: 6, overlapLen: 23 })),
@@ -344,6 +362,11 @@ const BUDGET_BENDS = {
   'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 187 }),
   'deadlock-process.json':              null,
   'dense-edge-labels.json':             r({ bendsMax: 1, offOver5: 4 }),
+  'example-bestellung-versand.json':   r({ crossings: 2, bendsMax: 3, offOver5: 6, overlapLen: 197 }),
+  'example-kreditantrag.json':          r({ crossings: 1, bendsMax: 2, offOver5: 10, overlapLen: 62 }),
+  'example-onboarding.json':            r({ bendsMax: 2, offOver5: 10, overlapLen: 92 }),
+  'example-schadenmeldung.json':        r({ bendsMax: 2, offOver5: 6, overlapLen: 230 }),
+  'example-urlaubsantrag.json':         r({ bendsMax: 2, offOver5: 4 }),
   'expanded-subprocess.json':           r(),
   'long-lane-names.json':               r({ bendsMax: 1 }),
   'loop-with-join.json':                r({ bendsMax: 1, offOver5: 7, overlapLen: 23 }),
@@ -364,8 +387,11 @@ const BUDGET_BENDS = {
 // mode: [avoidableBends, againstFlowEntries]. avoidableBends sums current − fewest admissible bends
 // over the sequence flows; againstFlowEntries counts activity/event targets not entered from the
 // left although an admissible left entry with no more bends exists. With the rule on (bends) both
-// are 0 by construction — the rule and the measure share one search — so the bends column fences
-// the pass, the other three what the rule would still find. The search includes projection ports
+// are 0 — the rule and the measure share one search — so the bends column fences the pass, the
+// other three what the rule would still find. One exception the measure counts and the rule rightly
+// leaves: an even trade, where the left entry needs a source exit that is not rightwards (one side
+// penalty for another) — example-urlaubsantrag f213, "Mitarbeiter informieren" → "Urlaub
+// genehmigt", entered from below. The search includes projection ports
 // and judges overlap with collinearPx, so it finds more than before them: the Z jogs a projection
 // port straightens (boundary-event-shapes, bpmn-generator-pipeline fu2/fo4, loop-with-join,
 // subprocess-merge-fanout f5/f7) and a left entry onto a projection port (wrapping-back-edge).
@@ -378,6 +404,11 @@ const DIRECTION = {
   'bpmn-generator-pipeline.json':       dir(d(7, 2), d(12, 6)),
   'deadlock-process.json':              { default: null, off: null, on: null, bends: null },
   'dense-edge-labels.json':             dir(NONE),
+  'example-bestellung-versand.json':   dir(d(4, 1)),
+  'example-kreditantrag.json':          dir(d(5, 3), d(11, 3)),
+  'example-onboarding.json':            dir(d(7, 3)),
+  'example-schadenmeldung.json':        dir(d(8, 2)),
+  'example-urlaubsantrag.json':         { ...dir(d(3, 2)), bends: d(0, 1) }, // f213: an even trade, see above
   'expanded-subprocess.json':           dir(NONE),
   'long-lane-names.json':               dir(d(2, 2)),
   'loop-with-join.json':                dir(d(2, 0)),

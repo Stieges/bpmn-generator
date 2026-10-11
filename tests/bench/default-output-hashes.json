@@ -63,6 +63,86 @@
     "xml": "b679afe7a3fd14f7f1d267615f3daf764afceceb020b566cacf7e843332f4c5b",
     "svg": "a594b54e7114131c9a6a494f1d1dd64e2d1cf3bea357eb7deca8032f20c32d01"
   },
+  "example-bestellung-versand.json × default": {
+    "xml": "5c8b240b6ea994b967d54d5d57e5286757505f67c34a2b20a58d161a08b9d55a",
+    "svg": "0d9baae937863959ba6b5d95984335576735b72447714fff43fade2387a0d5d5"
+  },
+  "example-bestellung-versand.json × no-refine": {
+    "xml": "63af16cef1894afee95564ca3a360fb96592002cd59fa3fbd23c0dd544632831",
+    "svg": "ff8d877f5355187ded382ec7315a24f73208ad3ee6532334f9dc96d352668a55"
+  },
+  "example-bestellung-versand.json × refine": {
+    "xml": "5c8b240b6ea994b967d54d5d57e5286757505f67c34a2b20a58d161a08b9d55a",
+    "svg": "0d9baae937863959ba6b5d95984335576735b72447714fff43fade2387a0d5d5"
+  },
+  "example-bestellung-versand.json × refine+wrap": {
+    "xml": "5c8b240b6ea994b967d54d5d57e5286757505f67c34a2b20a58d161a08b9d55a",
+    "svg": "0d9baae937863959ba6b5d95984335576735b72447714fff43fade2387a0d5d5"
+  },
+  "example-kreditantrag.json × default": {
+    "xml": "653a72f047c1c76b227398f0f34626b52623abe6ceff6e65e29c64282c045499",
+    "svg": "b06e91b9bc9b59ada28d625998b32e3d4153dc1bd1b880d05a2383e9697fba1b"
+  },
+  "example-kreditantrag.json × no-refine": {
+    "xml": "5c83cf2822627658d7b001b3a915f810af328814533ea40e4d47d5dfb67a4a78",
+    "svg": "6c03e801ba7308bb3df6800406a80dc39f0e5d62fd7106f2c57b2dc9eae34ca8"
+  },
+  "example-kreditantrag.json × refine": {
+    "xml": "653a72f047c1c76b227398f0f34626b52623abe6ceff6e65e29c64282c045499",
+    "svg": "b06e91b9bc9b59ada28d625998b32e3d4153dc1bd1b880d05a2383e9697fba1b"
+  },
+  "example-kreditantrag.json × refine+wrap": {
+    "xml": "bb57056745155689bb9eabafb676b92808a6dcd6c21028fc5790f3ef41c8d8c4",
+    "svg": "265457c53409d11c688ad7f57e9a6f32b206f7f60439ec75b49070228370b5ba"
+  },
+  "example-onboarding.json × default": {
+    "xml": "22ec3319e72de87414054cde4a2d525b734254e67ad5fbdc0354bcefa2ba1fa0",
+    "svg": "67df6defb4523c0edbc647a4bb819e6e0f6980072d1d4495788ffdecea575dca"
+  },
+  "example-onboarding.json × no-refine": {
+    "xml": "d7893ec024a2225774055c9edc5b60f4455cd2f3de7fe0695ee67b802b8e3de7",
+    "svg": "1fba9779476c3b50ef6323969db681b62a379beea83a6d7a9a0d187a0ef16d5a"
+  },
+  "example-onboarding.json × refine": {
+    "xml": "22ec3319e72de87414054cde4a2d525b734254e67ad5fbdc0354bcefa2ba1fa0",
+    "svg": "67df6defb4523c0edbc647a4bb819e6e0f6980072d1d4495788ffdecea575dca"
+  },
+  "example-onboarding.json × refine+wrap": {
+    "xml": "22ec3319e72de87414054cde4a2d525b734254e67ad5fbdc0354bcefa2ba1fa0",
+    "svg": "67df6defb4523c0edbc647a4bb819e6e0f6980072d1d4495788ffdecea575dca"
+  },
+  "example-schadenmeldung.json × default": {
+    "xml": "f1f71b84cc8ae2e064129230680e492046fb620d903734c8f7356cfdeae266a0",
+    "svg": "df1f7c0809b84e733a39f9818fc3f12272abeecb4d2314eb07946261a800514f"
+  },
+  "example-schadenmeldung.json × no-refine": {
+    "xml": "496a76da5516ea16991b3bc3054d2410d647180331fea037a0a08ee58c9b93fa",
+    "svg": "974a68ee89a2ca23560ff4393f31c42e431a2d14dc509d68db4dba924748d112"
+  },
+  "example-schadenmeldung.json × refine": {
+    "xml": "f1f71b84cc8ae2e064129230680e492046fb620d903734c8f7356cfdeae266a0",
+    "svg": "df1f7c0809b84e733a39f9818fc3f12272abeecb4d2314eb07946261a800514f"
+  },
+  "example-schadenmeldung.json × refine+wrap": {
+    "xml": "f1f71b84cc8ae2e064129230680e492046fb620d903734c8f7356cfdeae266a0",
+    "svg": "df1f7c0809b84e733a39f9818fc3f12272abeecb4d2314eb07946261a800514f"
+  },
+  "example-urlaubsantrag.json × default": {
+    "xml": "c2bd76c829e459cad28f44904f1c03a54abca7aebfe856f0f5f9e149f60db4e9",
+    "svg": "1a7c375ac54c573bd0f67e9d27e07bc6b57fdbb1ac542008f207ea7683343b60"
+  },
+  "example-urlaubsantrag.json × no-refine": {
+    "xml": "0de91e144bf75129692930641f95e7c64686ced9049ac9ca43ff4ce160ac75e8",
+    "svg": "510660ed9dfb5231326478096c4b43b60a8040ec3d9814e1d4ccd8fc71b6d5c8"
+  },
+  "example-urlaubsantrag.json × refine": {
+    "xml": "c2bd76c829e459cad28f44904f1c03a54abca7aebfe856f0f5f9e149f60db4e9",
+    "svg": "1a7c375ac54c573bd0f67e9d27e07bc6b57fdbb1ac542008f207ea7683343b60"
+  },
+  "example-urlaubsantrag.json × refine+wrap": {
+    "xml": "c2bd76c829e459cad28f44904f1c03a54abca7aebfe856f0f5f9e149f60db4e9",
+    "svg": "1a7c375ac54c573bd0f67e9d27e07bc6b57fdbb1ac542008f207ea7683343b60"
+  },
   "expanded-subprocess.json × default": {
     "xml": "3a11168b4a7924ea2a9f8f88419e40fd65da1eef07f0ef9e31e758ff710b25d6",
     "svg": "82a67f059bb4c8721c43ec93b4c3ad39cf3461fb9ab873865cc014b9177dbc3d"
