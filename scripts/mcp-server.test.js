@@ -199,11 +199,18 @@ describe('visualRefinement over MCP', () => {
       expect(tool(name).inputSchema.properties.visualRefinement).toMatchObject(VISUAL_REFINEMENT_OPTION_SCHEMA);
     }
   });
-  test('false is byte-identical to the library call', async () => {
+  test('true is byte-identical to the library call and differs from no option', async () => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    const out = parse(await call('generate_bpmn', { logicCore: fixture('sparse-lanes.json'), visualRefinement: false, include: ['xml'] }));
-    const lib = await runPipeline(fixture('sparse-lanes.json'), { visualRefinement: false });
+    const out = parse(await call('generate_bpmn', { logicCore: fixture('sparse-lanes.json'), visualRefinement: true, include: ['xml'] }));
+    const lib = await runPipeline(fixture('sparse-lanes.json'), { visualRefinement: true });
+    const none = await runPipeline(fixture('sparse-lanes.json'), {});
     expect(out.bpmnXml).toBe(lib.bpmnXml);
+    expect(out.bpmnXml).not.toBe(none.bpmnXml);
+  });
+  test('validate_bpmn ignores a bogus visualRefinement', async () => {
+    const out = parse(await call('validate_bpmn', { logicCore: fixture('sparse-lanes.json'), visualRefinement: { nope: 1 } }));
+    expect(out.status).not.toBe('schema_error');
+    expect(out.valid ?? out.errors ?? out).toBeDefined();
   });
   test.each([[{ nope: true }], [{ dynamicLaneHeader: true }], ['yes']])('%j is a schema_error on both tools', async (value) => {
     for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
