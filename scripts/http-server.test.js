@@ -718,6 +718,55 @@ describe('schema-gate errors in responses are capped and bounded', () => {
   }
 });
 
+// bendRule / nodeLabelsAvoidFlows: simple-approval.json changes when either is switched off, so a
+// dropped forwarding fails the `not.toBe`.
+describe('layout switches over HTTP', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const lib = async (opts) => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    return (await runPipeline(JSON.parse(JSON.stringify(lc)), opts)).bpmnXml;
+  };
+  beforeEach(() => _resetRateLimit());
+
+  test('references/api-schema.json $defs/LayoutSwitchOption equals LAYOUT_SWITCH_OPTION_SCHEMA', async () => {
+    const api = JSON.parse(readFileSync(new URL('../references/api-schema.json', import.meta.url), 'utf8'));
+    const { LAYOUT_SWITCH_OPTION_SCHEMA } = await import('./bpmn/schema-gate.js');
+    const { description, ...def } = api.$defs.LayoutSwitchOption;
+    expect(description).toBeTruthy();
+    expect(def).toEqual(JSON.parse(JSON.stringify(LAYOUT_SWITCH_OPTION_SCHEMA)));
+  });
+  for (const path of ['/api/v1/generate', '/api/v1/orchestrate']) {
+    test.each([['bendRule'], ['nodeLabelsAvoidFlows']])(`%s: false on ${path} equals runPipeline with it and differs from no option`, async (key) => {
+      const res = await post(path, { logicCore: lc, [key]: false });
+      expect(res.status).toBe(200);
+      const xml = (await res.json()).bpmnXml;
+      expect(xml).toBe(await lib({ [key]: false }));
+      expect(xml).not.toBe(await lib({}));
+    });
+    test.each([['bendRule', 'false'], ['nodeLabelsAvoidFlows', 0], ['bendRule', null], ['nodeLabelsAvoidFlows', { on: true }]])(
+      `%s = %j is a 400 schema_error on ${path}`, async (key, value) => {
+        const res = await post(path, { logicCore: lc, [key]: value });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.status).toBe('schema_error');
+        expect(body.errors[0].path).toBe(key);
+      });
+  }
+  test('/orchestrate refuses an invalid switch before any LLM work', async () => {
+    // userText only makes sense with an LLM; the gate has to answer before that question is asked
+    const res = await post('/api/v1/orchestrate', { userText: 'a process', bendRule: 'yes', llmConfig: { apiKey: 'k', model: 'm', baseUrl: 'http://127.0.0.1:1' } });
+    expect(res.status).toBe(400);
+    expect((await res.json()).status).toBe('schema_error');
+  });
+  test('/validate does not take them', async () => {
+    const res = await post('/api/v1/validate', { logicCore: lc, bendRule: 'yes' });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('visualRefinement over HTTP', () => {
   const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/sparse-lanes.json', import.meta.url), 'utf8'));
   const post = (path, body) => realFetch(`${baseUrl}${path}`, {

@@ -25,7 +25,7 @@ import { loadNamedRuleProfile, ProfileRejectedError } from './shared/rule-profil
 import { rulesDirPath } from './shared/resource-paths.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
-import { validateLogicCoreSchema, validateVisualRefinementOption } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA } from './bpmn/schema-gate.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -41,6 +41,16 @@ const PROFILE_PARAM = {
 const VISUAL_REFINEMENT_PARAM = {
   ...VISUAL_REFINEMENT_OPTION_SCHEMA,
   description: "Refinement passes: true/false switches all; an object { laneCompaction, edgeLabelCollisionRepair } switches single passes. Omitted: the server's config defaults (as shipped: edge-label repair and lane compaction on)",
+};
+
+const BEND_RULE_PARAM = {
+  ...LAYOUT_SWITCH_OPTION_SCHEMA,
+  description: "Bend rule: fewest bends, flows enter activities and events in flow direction. Omitted: the server's config default (as shipped: on)",
+};
+
+const NODE_LABELS_AVOID_FLOWS_PARAM = {
+  ...LAYOUT_SWITCH_OPTION_SCHEMA,
+  description: "Event and gateway labels move off the flows at their node. Omitted: the server's config default (as shipped: on)",
 };
 
 const server = new Server(
@@ -61,6 +71,8 @@ const TOOLS = [
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default, faithful IST) or 'optimize' (Soll — adds redesign advisories)" },
         ruleProfile: PROFILE_PARAM,
         visualRefinement: VISUAL_REFINEMENT_PARAM,
+        bendRule: BEND_RULE_PARAM,
+        nodeLabelsAvoidFlows: NODE_LABELS_AVOID_FLOWS_PARAM,
         poolOrder: { type: 'string', enum: ['auto', 'declared'], description: "'auto' (default) stacks participants so that the ones exchanging messages sit next to each other; 'declared' keeps the input order" },
         include: {
           type: 'array',
@@ -104,6 +116,8 @@ const TOOLS = [
         logicCore: { type: 'object', description: 'Logic-Core JSON to orchestrate' },
         ruleProfile: PROFILE_PARAM,
         visualRefinement: VISUAL_REFINEMENT_PARAM,
+        bendRule: BEND_RULE_PARAM,
+        nodeLabelsAvoidFlows: NODE_LABELS_AVOID_FLOWS_PARAM,
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (Soll — adds redesign advisories)" }
       }
     }
@@ -119,11 +133,12 @@ const text = (payload) => ({ content: [{ type: 'text', text: JSON.stringify(payl
  * Without this, a wrong `type` or an unknown field surfaces much later as an
  * opaque ELK error instead of a pointed schema message.
  */
-function schemaGate(logicCore, visualRefinement) {
+function schemaGate(logicCore, layoutOptions) {
   const check = validateLogicCoreSchema(logicCore);
   if (!check.valid) return text({ status: 'schema_error', errors: check.errors });
-  const refineCheck = validateVisualRefinementOption(visualRefinement);
-  return refineCheck.valid ? null : text({ status: 'schema_error', errors: refineCheck.errors });
+  // visualRefinement, bendRule, nodeLabelsAvoidFlows — only on the tools that lay out
+  const layoutCheck = validateLayoutOptions(layoutOptions);
+  return layoutCheck.valid ? null : text({ status: 'schema_error', errors: layoutCheck.errors });
 }
 
 /** The profile a tool call names, read from rules/ only; null when none is named. */
@@ -143,11 +158,11 @@ async function handleToolCall(request) {
   const { name, arguments: args } = request.params;
 
   if (name === 'generate_bpmn') {
-    const rejected = schemaGate(args.logicCore, args.visualRefinement);
+    const rejected = schemaGate(args.logicCore, args);
     if (rejected) return rejected;
 
     const include = new Set(args.include ?? ['xml', 'svg', 'validation', 'diagnostics']);
-    const opts = { mode: args.mode, ruleProfile: ruleProfileOf(args), poolOrder: args.poolOrder, visualRefinement: args.visualRefinement };
+    const opts = { mode: args.mode, ruleProfile: ruleProfileOf(args), poolOrder: args.poolOrder, ...layoutOptionsOf(args) };
 
     if (args.drillDown) {
       const set = await generateDiagramSet(args.logicCore, opts);
@@ -197,12 +212,12 @@ async function handleToolCall(request) {
   if (name === 'orchestrate_bpmn') {
     // Same gate as the other tools: a string here would otherwise be taken for a process
     // description, and a malformed model would surface as a thrown error, not a schema_error.
-    const rejected = schemaGate(args.logicCore, args.visualRefinement);
+    const rejected = schemaGate(args.logicCore, args);
     if (rejected) return rejected;
     const result = await orchestrate(args.logicCore, {
       ruleProfile: ruleProfileOf(args),
       mode: args.mode,
-      visualRefinement: args.visualRefinement,
+      ...layoutOptionsOf(args),
     });
     return text({
       bpmnXml: result.bpmnXml,
