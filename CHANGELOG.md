@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Layout readability fence.** `scripts/bench/layout-metrics.mjs` now measures every top-level
+  fixture (it had a fixed list of eight, which is how `boundary-event-shapes`' crossing went
+  unseen) and four more things: sequence-flow ends lying on their own endpoint's outline (#52),
+  empty strips in a lane stack, message/sequence flows through foreign shapes, and sequence flows
+  running through their OWN source or target shape (exempt from every check until now). It is
+  importable; `scripts/bench/layout-metrics.test.js` holds an exact per-fixture ratchet, so a
+  layout change that makes any of them worse fails `npm test`. Its edge-through-node count no
+  longer counts an expanded subprocess as foreign to its own children.
 - **Rules in the ontology.** `references/ontology.jsonld` now holds the rule catalog: every rule of
   the three rule sets — 40 BPMN rules, 5 layers; 19 DMN rules, 3 layers; 2 cross-notation rules, 1
   layer — as a `bg:Rule` with notation(s), kind (`specific`/`crossNotation`), layer (`bg:Layer`,

@@ -42,28 +42,24 @@
  * that crossings introduced by our own route rebuilding become visible: ELK
  * routes around obstacles, our synthetic 4-point replacements do not.
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPipeline } from '../bpmn/pipeline.js';
 import { logicCoreToElk, runElkLayout } from '../bpmn/layout.js';
 import { resolveLaneId } from '../bpmn/topology.js';
+import { isMainModule } from '../shared/entry-point.js';
+import { isEvent, isGateway } from '../bpmn/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
 const fixturesDir = join(repoRoot, 'tests', 'fixtures');
 const outPath = join(repoRoot, 'tests', 'bench', 'layout-metrics-baseline.md');
 
-const FIXTURES = [
-  'simple-approval.json',
-  'multi-pool-collaboration.json',
-  'realistic-collaboration.json',
-  'all-element-classes.json',
-  'expanded-subprocess.json',
-  'sparse-lanes.json',
-  'wide-pipeline.json',
-  'bpmn-generator-pipeline.json',
-];
+// Every Logic-Core document at the top level of tests/fixtures/ — a new fixture is measured (and,
+// through layout-metrics.test.js, fenced) the day it lands. A fixed list is how
+// boundary-event-shapes' crossing stayed unseen until 2026-10-11.
+export const FIXTURES = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
 
 // ─────────────────────────────────────────────────────────────────────────
 // Geometry primitives
@@ -122,6 +118,185 @@ function segmentRectOverlap(a, b, rect) {
     if (segmentsIntersect(a, b, corners[i], corners[(i + 1) % 4])) return true;
   }
   return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Readability measures added 2026-10-11 (#52, lane strips, message flows).
+// Each states what it deliberately does NOT count, for the reason §0 of the
+// layout-quality analysis records: a measure that counts a structurally
+// impossible case manufactures work.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** bpmn-js draws the sequence-flow arrowhead 5 px long (marker 'M 1 5 L 11 10 L 1 15 Z' at scale
+ *  0.5): up to 5 px of a segment lying on the outline hides under it. */
+export const ALONG_MIN_PX = 5;
+const COLLINEAR_TOL = 1;
+
+function overlap1d(a0, a1, b0, b1) {
+  return Math.max(0, Math.min(Math.max(a0, a1), b1) - Math.max(Math.min(a0, a1), b0));
+}
+
+/** How far a segment runs collinear (±1 px) with one side of `box`, and which side. For a circle or
+ *  a diamond the "side" is a tangent of its bounds — the line still visibly misses the shape. */
+export function alongSide([a, b], box) {
+  let best = { side: null, length: 0 };
+  const consider = (side, length) => { if (length > best.length) best = { side, length }; };
+  if (Math.abs(a.x - b.x) <= COLLINEAR_TOL) {
+    if (Math.abs(a.x - box.x) <= COLLINEAR_TOL) consider('left', overlap1d(a.y, b.y, box.y, box.y + box.h));
+    if (Math.abs(a.x - (box.x + box.w)) <= COLLINEAR_TOL) consider('right', overlap1d(a.y, b.y, box.y, box.y + box.h));
+  }
+  if (Math.abs(a.y - b.y) <= COLLINEAR_TOL) {
+    if (Math.abs(a.y - box.y) <= COLLINEAR_TOL) consider('top', overlap1d(a.x, b.x, box.x, box.x + box.w));
+    if (Math.abs(a.y - (box.y + box.h)) <= COLLINEAR_TOL) consider('bottom', overlap1d(a.x, b.x, box.x, box.x + box.w));
+  }
+  return best;
+}
+
+/**
+ * Sequence-flow ends whose end segment lies on its own endpoint's outline for more than
+ * ALONG_MIN_PX (#52). Both ends: the first segment against the source, the last against the target.
+ * Does NOT count a segment along a foreign shape (edgeThroughNode's job) or message flows.
+ */
+export function edgeEndsAlongBorder(coords, edgeCoords, edgeList) {
+  const out = [];
+  for (const e of edgeList) {
+    const segs = segments(edgeCoords[e.id] || []);
+    if (!segs.length) continue;
+    const ends = [['source', segs[0], e.source], ['target', segs[segs.length - 1], e.target]];
+    for (const [end, seg, node] of ends) {
+      const box = coords[node];
+      if (!box) continue;
+      const { side, length } = alongSide(seg, box);
+      if (length > ALONG_MIN_PX) out.push({ edge: e.id, end, node, side, length: Math.round(length * 10) / 10 });
+    }
+  }
+  return out;
+}
+
+/**
+ * Empty strips in a participant's lane stack: between consecutive bands, and between the stack and
+ * the participant's top/bottom edge. bpmn.io draws each as an extra band with a double line.
+ * Does NOT measure horizontal gaps (the header strip is the pool header's business).
+ */
+export function laneGaps(coordMap, lc) {
+  const out = [];
+  for (const proc of lc.pools || [lc]) {
+    const bands = (proc.lanes || [])
+      .map((l) => ({ id: l.id, ...(coordMap.laneCoords?.[l.id] || {}) }))
+      .filter((b) => Number.isFinite(b.y))
+      .sort((a, b) => a.y - b.y);
+    if (!bands.length) continue;
+    const participant = proc.id ?? '_singlePool';
+    const pc = coordMap.poolCoords?.[proc.id] ?? coordMap.poolCoords?._singlePool;
+    const push = (above, below, gap) => {
+      if (gap > 0.5) out.push({ participant, above, below, gap: Math.round(gap * 10) / 10 });
+    };
+    if (pc) push(null, bands[0].id, bands[0].y - pc.y);
+    for (let i = 1; i < bands.length; i++) {
+      push(bands[i - 1].id, bands[i].id, bands[i].y - (bands[i - 1].y + bands[i - 1].h));
+    }
+    const last = bands[bands.length - 1];
+    if (pc) push(last.id, null, pc.y + pc.h - (last.y + last.h));
+  }
+  return out;
+}
+
+const boxContains = (o, i) => !!i && o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
+// Interior hit, 1 px inset: touching an outline is not running through a shape.
+const segmentHitsInterior = ([a, z], b) =>
+  Math.max(a.x, z.x) > b.x + 1 && Math.min(a.x, z.x) < b.x + b.w - 1 &&
+  Math.max(a.y, z.y) > b.y + 1 && Math.min(a.y, z.y) < b.y + b.h - 1;
+
+/**
+ * (message flow, foreign shape) pairs: a segment through the interior of a node box that is neither
+ * endpoint. Does NOT count a group (drawn to be overlapped) or a box containing an endpoint (the
+ * expanded subprocess a flow starts or ends in — it cannot be avoided). `relation` says whose shape
+ * it is: own source/target participant, or a participant the flow does not involve.
+ */
+export function messageFlowThroughNodes(coordMap, lc) {
+  const typeOf = {};
+  const participantOf = {};
+  const walk = (nodes, pid) => {
+    for (const n of nodes || []) { typeOf[n.id] = n.type; participantOf[n.id] = pid; walk(n.nodes, pid); }
+  };
+  for (const p of lc.pools || []) walk(p.nodes, p.id);
+  walk(lc.nodes, undefined);
+  const out = [];
+  for (const mf of lc.messageFlows || []) {
+    const pts = coordMap.edgeCoords?.[mf.id || `mf_${mf.source}_${mf.target}`];
+    if (!pts || pts.length < 2) continue;
+    const src = coordMap.coords[mf.source];
+    const tgt = coordMap.coords[mf.target];
+    const srcP = participantOf[mf.source] ?? mf.source;
+    const tgtP = participantOf[mf.target] ?? mf.target;
+    for (const [id, b] of Object.entries(coordMap.coords)) {
+      if (id === mf.source || id === mf.target) continue;
+      if (typeOf[id] === 'group') continue;
+      if (boxContains(b, src) || boxContains(b, tgt)) continue;
+      if (!segments(pts).some((s) => segmentHitsInterior(s, b))) continue;
+      const p = participantOf[id];
+      out.push({ flow: mf.id, node: id,
+        relation: p === srcP ? 'source-participant' : p === tgtP ? 'target-participant' : 'uninvolved' });
+    }
+  }
+  return out;
+}
+
+/**
+ * (sequence flow, foreign node) pairs, interior hits only. Does NOT count a box containing an
+ * endpoint: an edge inside an expanded subprocess lies inside its container by construction.
+ */
+export function seqFlowThroughNodes(coordMap, edgeList) {
+  const out = [];
+  for (const e of edgeList) {
+    const pts = coordMap.edgeCoords?.[e.id];
+    if (!pts || pts.length < 2) continue;
+    const src = coordMap.coords[e.source];
+    const tgt = coordMap.coords[e.target];
+    for (const [id, b] of Object.entries(coordMap.coords)) {
+      if (id === e.source || id === e.target) continue;
+      if (boxContains(b, src) || boxContains(b, tgt)) continue;
+      if (segments(pts).some((s) => segmentHitsInterior(s, b))) out.push({ edge: e.id, node: id });
+    }
+  }
+  return out;
+}
+
+/**
+ * Does an axis-parallel segment enter the INTERIOR of the drawn shape? Rectangles use their box
+ * (1 px inset); events their circle, gateways their rhombus (1 px inset) — a segment through a
+ * gateway's bounding-box corner is outside the gateway and must not count.
+ */
+export function segmentEntersShape([a, z], box, shape) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const nx = Math.max(Math.min(a.x, z.x), Math.min(Math.max(a.x, z.x), cx));
+  const ny = Math.max(Math.min(a.y, z.y), Math.min(Math.max(a.y, z.y), cy));
+  if (shape === 'circle') return Math.hypot(nx - cx, ny - cy) < box.w / 2 - 1;
+  if (shape === 'diamond') return Math.abs(nx - cx) / (box.w / 2) + Math.abs(ny - cy) / (box.h / 2) < 1 - 2 / Math.min(box.w, box.h);
+  return segmentHitsInterior([a, z], box);
+}
+
+/**
+ * (sequence flow, own endpoint) pairs: a segment that enters the interior of the edge's OWN source
+ * or target shape (owner decision 3, 2026-10-11 — every other measure and DI check exempts the
+ * endpoints, which is how realistic-collaboration's inf3 ran through "Check completeness" unseen).
+ * Does NOT count a boundary event's flow against its host (the host is not an endpoint).
+ */
+export function seqThroughOwnShape(coordMap, lc, edgeList) {
+  const typeOf = {};
+  const walk = (nodes) => { for (const n of nodes || []) { typeOf[n.id] = n.type; walk(n.nodes); } };
+  for (const p of lc.pools || [lc]) walk(p.nodes);
+  const shapeOf = (id) => (isEvent(typeOf[id]) ? 'circle' : isGateway(typeOf[id]) ? 'diamond' : 'rect');
+  const out = [];
+  for (const e of edgeList) {
+    const segs = segments(coordMap.edgeCoords?.[e.id] || []);
+    for (const [end, node] of [['source', e.source], ['target', e.target]]) {
+      const box = coordMap.coords[node];
+      if (box && segs.some((s) => segmentEntersShape(s, box, shapeOf(node)))) out.push({ edge: e.id, end, node });
+    }
+  }
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -306,6 +481,8 @@ function computeMetrics(coords, edgeCoords, edgeList, alignCtx) {
     const segs = segments(e.points);
     for (const id of nodeIds) {
       if (id === e.source || id === e.target) continue;
+      // An expanded subprocess contains its own children's edges by construction — not a defect.
+      if (boxContains(coords[id], coords[e.source]) || boxContains(coords[id], coords[e.target])) continue;
       const rect = coords[id];
       for (const [a, b] of segs) {
         if (segmentRectOverlap(a, b, rect)) { edgeThroughNode++; break; }
@@ -382,7 +559,41 @@ async function measureRawElk(lc, alignCtx) {
   const elkResult = await runElkLayout(elkGraph);
   const acc = { coords: {}, edgeCoords: {}, edgeList: [] };
   flattenElk(elkResult, 0, 0, acc, containerIds);
+  const byId = new Map(collectAllEdges(lc).map((e) => [e.id, e]));
+  acc.edgeList = acc.edgeList.map((e) => byId.get(e.id) ?? e);
   return computeMetrics(acc.coords, acc.edgeCoords, acc.edgeList, alignCtx);
+}
+
+/** One fixture × mode, every readability measure. `null` when the pipeline blocks the model. */
+export async function measureLayout(lc, { visualRefinement }) {
+  const r = await runPipeline(lc, { visualRefinement });
+  if (!r.coordMap) return null;
+  const edgeList = collectAllEdges(lc);
+  const cm = r.coordMap;
+  const diCodes = {};
+  for (const i of r.diagnostics?.issues || []) diCodes[i.code] = (diCodes[i.code] || 0) + 1;
+  return {
+    crossings: computeMetrics(cm.coords, cm.edgeCoords, edgeList, buildAlignContext(lc)).crossings,
+    alongBorder: edgeEndsAlongBorder(cm.coords, cm.edgeCoords, edgeList),
+    laneGaps: laneGaps(cm, lc),
+    mfThroughNodes: messageFlowThroughNodes(cm, lc),
+    seqThroughNodes: seqFlowThroughNodes(cm, edgeList),
+    ownThrough: seqThroughOwnShape(cm, lc, edgeList),
+    diCodes,
+  };
+}
+
+/** The counts the fence compares. */
+export function summarize(m) {
+  if (!m) return null;
+  return {
+    crossings: m.crossings,
+    along: m.alongBorder.length,
+    laneGap: Math.round(Math.max(0, ...m.laneGaps.map((g) => g.gap))),
+    mfThrough: m.mfThroughNodes.length,
+    seqThrough: m.seqThroughNodes.length,
+    ownThrough: m.ownThrough.length,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -390,23 +601,30 @@ async function measureRawElk(lc, alignCtx) {
 // ─────────────────────────────────────────────────────────────────────────
 
 async function measureFixture(name) {
-  const raw = readFileSync(join(fixturesDir, name), 'utf8');
-  const lc = JSON.parse(raw);
-  const edgeList = collectAllEdges(lc);
-  const alignCtx = buildAlignContext(lc);
-
-  const defaultResult = await runPipeline(lc, { visualRefinement: false });
-  const refinedResult = await runPipeline(lc, { visualRefinement: true });
-
-  const defaultMetrics = defaultResult.coordMap
-    ? computeMetrics(defaultResult.coordMap.coords, defaultResult.coordMap.edgeCoords, edgeList, alignCtx)
-    : null;
-  const refinedMetrics = refinedResult.coordMap
-    ? computeMetrics(refinedResult.coordMap.coords, refinedResult.coordMap.edgeCoords, edgeList, alignCtx)
-    : null;
-  const rawElkMetrics = await measureRawElk(lc, alignCtx);
-
-  return { name, defaultMetrics, refinedMetrics, rawElkMetrics };
+  try {
+    const raw = readFileSync(join(fixturesDir, name), 'utf8');
+    const lc = JSON.parse(raw);
+    const edgeList = collectAllEdges(lc);
+    const alignCtx = buildAlignContext(lc);
+  
+    const defaultResult = await runPipeline(lc, { visualRefinement: false });
+    const refinedResult = await runPipeline(lc, { visualRefinement: true });
+  
+    const defaultMetrics = defaultResult.coordMap
+      ? computeMetrics(defaultResult.coordMap.coords, defaultResult.coordMap.edgeCoords, edgeList, alignCtx)
+      : null;
+    const refinedMetrics = refinedResult.coordMap
+      ? computeMetrics(refinedResult.coordMap.coords, refinedResult.coordMap.edgeCoords, edgeList, alignCtx)
+      : null;
+    const rawElkMetrics = await measureRawElk(lc, alignCtx);
+  
+    const extras = async (visualRefinement) =>
+      summarize(await measureLayout(JSON.parse(raw), { visualRefinement }));
+    return { name, defaultMetrics, refinedMetrics, rawElkMetrics,
+      defaultExtras: await extras(false), refinedExtras: await extras(true) };
+  } catch (err) {
+    return { name, error: String(err.message || err) };
+  }
 }
 
 const EXCLUSION_ORDER = ['cross-lane', 'fold-back', 'branch', 'hosts-boundary', 'boundary-src'];
@@ -418,11 +636,11 @@ function fmtExcluded(excluded) {
   return parts.length ? parts.join(', ') : '—';
 }
 
-function fmtRow(label, m) {
-  if (!m) return `| ${label} | (pipeline errored) | | | | | | | | |`;
+function fmtRow(label, m, x) {
+  if (!m) return `| ${label} | (pipeline errored) | | | | | | | | | | | |`;
   const alignPct = m.plainLinks ? Math.round((100 * m.alignedLinks) / m.plainLinks) : 0;
   const align = `${m.alignedLinks}/${m.plainLinks} (${alignPct}%)`;
-  return `| ${label} | ${m.crossings} | ${m.totalBends} | ${m.edgesWithLeq1Bend}/${m.edgeCount} | ${m.diagonals} | ${m.bboxW}×${m.bboxH} (${m.areaPerNode}/node) | ${m.aspect.toFixed(2)} | ${align} | ${fmtExcluded(m.excluded)} | ${m.edgeThroughNode} |`;
+  return `| ${label} | ${m.crossings} | ${m.totalBends} | ${m.edgesWithLeq1Bend}/${m.edgeCount} | ${m.diagonals} | ${m.bboxW}×${m.bboxH} (${m.areaPerNode}/node) | ${m.aspect.toFixed(2)} | ${align} | ${fmtExcluded(m.excluded)} | ${m.edgeThroughNode} | ${x ? x.along : '—'} | ${x ? x.laneGap : '—'} | ${x ? x.mfThrough : '—'} |`;
 }
 
 async function main() {
@@ -444,7 +662,9 @@ async function main() {
   lines.push('node. *Aspect*: bbox w/h. *Chain alignment*: of the links that could structurally be straight,');
   lines.push('how many share center-y within 1 px. *Excluded*: links left out of that quota because a');
   lines.push('vertical offset is correct for them — see below. *Edge-through-node*: segments crossing a');
-  lines.push('foreign node box.');
+  lines.push('foreign node box. *Along outline*: sequence-flow ends lying on their own endpoint\'s outline for more than 5 px (#52).');
+  lines.push('*Lane gap max*: largest empty strip in a participant\'s lane stack, px. *MF through node*: message-flow segments');
+  lines.push('through a foreign shape (groups and endpoint containers excluded).');
   lines.push('');
   lines.push('**Reading the numbers.** Two comparisons are invalid and the table deliberately does not');
   lines.push('invite them. Area must not be compared between "ELK raw" and the pipeline rows: raw ELK has');
@@ -466,11 +686,16 @@ async function main() {
   for (const r of results) {
     lines.push(`## ${r.name}`);
     lines.push('');
-    lines.push('| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node |');
-    lines.push('|---|---|---|---|---|---|---|---|---|---|');
-    lines.push(fmtRow('ELK raw (pre-postprocess)', r.rawElkMetrics));
-    lines.push(fmtRow('default', r.defaultMetrics));
-    lines.push(fmtRow('visualRefinement: true', r.refinedMetrics));
+    if (r.error) {
+      lines.push(`Pipeline error: ${r.error}`);
+      lines.push('');
+      continue;
+    }
+    lines.push('| Variant | Crossings | Bends | Edges <=1 bend | Diag | Area (w×h) | Aspect | Chain alignment | Excluded (not alignable) | Edge-through-node | Along outline | Lane gap max | MF through node |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+    lines.push(fmtRow('ELK raw (pre-postprocess)', r.rawElkMetrics, null));
+    lines.push(fmtRow('default', r.defaultMetrics, r.defaultExtras));
+    lines.push(fmtRow('visualRefinement: true', r.refinedMetrics, r.refinedExtras));
     lines.push('');
     if (r.defaultMetrics) {
       const delta = r.defaultMetrics.crossings - r.rawElkMetrics.crossings;
@@ -494,7 +719,11 @@ async function main() {
   process.stderr.write(`\nwrote ${outPath}\n`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Importable: the fence test (layout-metrics.test.js) and the local review tools import the
+// measures; only a direct run measures every fixture and rewrites the baseline file.
+if (isMainModule(import.meta.url, process.argv[1])) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
