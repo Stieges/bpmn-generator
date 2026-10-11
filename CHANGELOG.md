@@ -18,8 +18,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{ "layout": { "bendRule": false, "nodeLabelsAvoidFlows": false } }` — merged over the shipped
   `config.json` (one level deep), so an npm install needs no edit inside `node_modules` — or the
   same two keys in `config.json` itself. With both off the output is byte-identical to before the
-  bend rule for every committed fixture (hash fence); the SVG canvas change under Changed applies
-  either way.
+  bend rule for every committed fixture but `realistic-collaboration`, whose boundary event moved with
+  #91 (below); the hash fence now pins the switches-off output of current master. The SVG canvas
+  change under Changed applies either way.
+- **Sequence flows through a foreign shape are re-routed, and boundary events face their target
+  (#91).** Default output changes for models where a flow ran through a task, event or gateway that
+  is neither its source nor its target (DI11). Two changes:
+  - A boundary event goes on its host's **top** edge when the target of its outgoing flow lies above
+    the host — in a lane stacked above, or wholly above it in the same band — and stays on the bottom
+    edge otherwise; several events spread per side, on the top edge over the half facing their
+    targets so the middle stays free for a flow docking there. Its label sits above it. Not
+    switchable. Among the committed fixtures only `realistic-collaboration` changes: `inf8` leaves
+    the timer upwards instead of running round `in_check` and through `in_gw`.
+  - The stuck-end pass (`reclipStuckEnds`) also re-routes a sequence flow through a foreign shape —
+    the routes `coordinates.js` §5.2 rebuilds for flows between lanes without an obstacle test, which
+    no other pass was triggered by. A shape traversal may be traded for one crossing; a port where
+    another flow of the same node enters or leaves in the other direction is given up for a free one.
+    `layout.foreignShapeRepair` (default `true`). Rollback, per call: CLI
+    `--no-foreign-shape-repair` (`--foreign-shape-repair` forces it on); HTTP `/api/v1/generate`,
+    `/api/v1/orchestrate` and the MCP tools `generate_bpmn` / `orchestrate_bpmn`
+    `"foreignShapeRepair": false` (schema `$defs/LayoutSwitchOption`); library
+    `runPipeline(lc, { foreignShapeRepair: false })`; project-wide `{ "layout": { "foreignShapeRepair":
+    false } }` in a file named by `BPMN_CONFIG`. The model #91 was found on is now the top-level
+    fixture `tests/fixtures/example-rechnungspruefung.json` (from `negative/`): DI08 and four DI11 go,
+    at the price of one crossing.
 - **Default output is compacted.** Lane compaction (`visualRefinement.laneCompaction`) is now on by
   default, together with edge-label collision repair: diagrams with lanes or an expanded subprocess
   come out up to 29 % smaller in area (10–29 % on the seven golden fixtures; some diagrams are
@@ -124,11 +146,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted and the message says which case it is. Closed DI enum in `references/api-schema.json`
   and the table in `references/api-reference.md` extended. Behaviour: new entries in
   `diagnostics.issues`; `diagnostics.ok` is unchanged (WARNING), and the CLI prints them under
-  "Diagram diagnostics" and aborts on them under `--strict` like DI08–DI10. Among the committed
-  top-level fixtures only `realistic-collaboration` reports one (`inf8` through `in_gw`), and it
-  already fails `--strict` on its style warnings, so no `--strict` outcome changes there. The
-  layout defects themselves stay open; `tests/fixtures/negative/example-rechnungspruefung.json`
-  pins the detection.
+  "Diagram diagnostics" and aborts on them under `--strict` like DI08–DI10. With the shipped
+  defaults no committed fixture reports one: the two layout defects it found are fixed under
+  Breaking (boundary events facing their target, `layout.foreignShapeRepair`).
+  `tests/fixtures/example-rechnungspruefung.json` with the repair off pins the detection.
 - **`visualRefinement` on the HTTP API and MCP.** `POST /api/v1/generate`, `/api/v1/orchestrate` and the MCP tools `generate_bpmn`, `orchestrate_bpmn` take an optional `visualRefinement` (boolean or per-pass object, schema `$defs/VisualRefinementOption`); invalid values are a `schema_error`. Before, these entry points could not switch refinement at all.
 - **Layout readability fence.** `scripts/bench/layout-metrics.mjs` now measures every top-level
   fixture (it had a fixed list of eight, which is how `boundary-event-shapes`' crossing went
