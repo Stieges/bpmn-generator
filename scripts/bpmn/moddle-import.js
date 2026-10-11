@@ -30,6 +30,23 @@ export const INSTANTIATE_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field === 'ins
 const EVENT_DEF_MAP = Object.fromEntries(MARKER_BY_EVENT_DEFINITION);
 
 /**
+ * The Logic-Core `role` of an Activity, read from its `resources` (ResourceRole list), or
+ * `undefined`. The one form this generator writes and the only one read back: exactly one
+ * `bpmn:Performer` or `bpmn:HumanPerformer`, without a `resourceAssignmentExpression`, whose
+ * `resourceRef` names a resource with a non-empty `name`. `import.js`'s `readRoleFromDom` states
+ * the same rule over the raw DOM; change both together.
+ */
+function readRole(resourceRoles) {
+  const roles = resourceRoles ?? [];
+  if (roles.length !== 1) return undefined;
+  const [r] = roles;
+  if (r.$type !== 'bpmn:Performer' && r.$type !== 'bpmn:HumanPerformer') return undefined;
+  if (r.resourceAssignmentExpression) return undefined;
+  const name = r.resourceRef?.name;
+  return typeof name === 'string' && name !== '' ? name : undefined;
+}
+
+/**
  * Find a converted Logic-Core node by id ANYWHERE in a node tree, not only at the top level.
  *
  * The DI plane is FLAT: `buildDI` pushes a `<bpmndi:BPMNShape>` for a nested container's children
@@ -339,6 +356,19 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
     const decisionRefEl = (el.extensionElements?.values ?? [])
       .find(v => v.$type?.split(':').pop() === 'decisionRef');
     if (decisionRefEl?.$body) node.decisionRef = decisionRefEl.$body;
+
+    // system — same extensionElements, same local-name match.
+    const systemEl = (el.extensionElements?.values ?? [])
+      .find(v => v.$type?.split(':').pop() === 'system');
+    if (systemEl?.$body) node.system = systemEl.$body;
+
+    // role — exactly ONE performer or humanPerformer whose resourceRef resolves to a resource with
+    // a name. bpmn-moddle has already resolved the IDREF to the Resource element. Other forms a
+    // foreign file may use (a resourceAssignmentExpression, several performers, a nameless
+    // resource, a potentialOwner) are not read: Logic-Core holds one role per activity, and
+    // guessing which of several is "the" role would invent a fact. See the `role` row in types.js.
+    const roleName = readRole(el.resources);
+    if (roleName) node.role = roleName;
 
     // EventBasedGateway. `eventGatewayType` really is this one class's attribute; `instantiate` is
     // not, and reading them together is what hid that for as long as it did.

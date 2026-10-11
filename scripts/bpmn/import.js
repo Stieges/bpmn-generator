@@ -86,6 +86,26 @@ function parseElement(xml, pos) {
   return { element: { tag: tagName, attrs, children, text: text.trim() }, pos };
 }
 
+/**
+ * Every XML entity in ONE pass — the five named ones AND numeric character references, which
+ * bpmn-moddle writes for `&` and `<` inside attributes (`&#38;`, `&#60;`). `unescXml` above decodes
+ * only the named five, so on this legacy path an attribute such as a node's `name` containing `&`
+ * comes back as `&#38;`; that is a parser-wide defect left for its own change. The `role` and
+ * `system` reads use this one so their round trip is exact. One pass, not two, so a raw text node
+ * `&amp;#38;` correctly decodes to the literal text `&#38;`. Applied to an ATTRIBUTE (the resource
+ * name) it runs after `parseElement`'s `unescXml`, so there the same corner (`&amp;#38;` in a
+ * foreign file) decodes once too often — the corner `unescXml`'s own sequential replaces already
+ * have for `&amp;lt;`; never produced by bpmn-moddle, which writes a literal `&#38;` as `&#38;#38;`.
+ */
+function decodeXmlEntities(s) {
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+  return s.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g, (m, e) => {
+    if (e[0] !== '#') return named[e];
+    const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    return String.fromCodePoint(code);
+  });
+}
+
 function unescXml(s) {
   return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 }
@@ -148,6 +168,12 @@ function bpmnToLogicCoreLegacy(xml) {
     }
   }
 
+  // `<bpmn:resource>` RootElements, id → name, for the `role` read (a performer's resourceRef).
+  const resourcesById = {};
+  for (const child of defs.children) {
+    if (stripNs(child.tag) === 'resource' && child.attrs.id) resourcesById[child.attrs.id] = child.attrs.name || '';
+  }
+
   // Open-vs-collapsed is a DI property (BPMNShape.isExpanded), not something to
   // infer from a subprocess having content — see the same collection in
   // moddle-import.js.
@@ -165,7 +191,7 @@ function bpmnToLogicCoreLegacy(xml) {
   // Convert each process
   const pools = [];
   for (const proc of processes) {
-    const pool = convertProcess(proc, partMap, categoryValues, expandedIds);
+    const pool = convertProcess(proc, partMap, categoryValues, expandedIds, resourcesById);
     pools.push(pool);
   }
 
@@ -247,7 +273,7 @@ function bpmnToLogicCoreLegacy(xml) {
   return { id: 'Process_1', name: 'Empty', nodes: [], edges: [], lanes: [] };
 }
 
-function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Set()) {
+function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Set(), resourcesById = {}) {
   const processId = proc.attrs.id;
   const processName = proc.attrs.name || findPartNameForProcess(processId, partMap) || processId;
 
@@ -375,6 +401,16 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     const decisionRefEl = findChild(findChild(child, 'extensionElements'), 'decisionRef');
     if (decisionRefEl?.text) node.decisionRef = decisionRefEl.text;
 
+    // system — same extensionElements. Unescaped here, unlike decisionRef: this DOM parser keeps a
+    // text node's entities (see the `conditionExpression` row in types.js), and a system name such
+    // as "S/4 & Core" is exactly the kind of value that carries one.
+    const systemEl = findChild(findChild(child, 'extensionElements'), 'system');
+    if (systemEl?.text) node.system = decodeXmlEntities(systemEl.text);
+
+    // role — the same single form moddle-import.js's `readRole` reads, over the raw DOM.
+    const roleName = readRoleFromDom(child, resourcesById);
+    if (roleName) node.role = roleName;
+
     // EventBasedGateway: eventGatewayType (OMG spec §10.5.6). `instantiate` is read one line down
     // and NOT under this guard — OMG grants it to ReceiveTask too (§10.2.4); see
     // INSTANTIATE_TYPES's doc comment in moddle-import.js.
@@ -494,6 +530,28 @@ function parseLanes(laneSet, lanes, nodeLaneMap) {
       nodeLaneMap[ref.text] = lane.attrs.id;
     }
   }
+}
+
+// The ResourceRole subclasses an Activity can carry (bpmn.json: ResourceRole, Performer,
+// HumanPerformer, PotentialOwner). Counted together: "exactly one" means one of ANY of them.
+const RESOURCE_ROLE_TAGS = new Set(['resourceRole', 'performer', 'humanPerformer', 'potentialOwner']);
+
+/**
+ * The `role` of an activity element, read over the raw DOM — the same single form
+ * `moddle-import.js`'s `readRole` reads: exactly one ResourceRole child, a `performer` or
+ * `humanPerformer`, without a `resourceAssignmentExpression`, whose `resourceRef` names a
+ * resource with a non-empty `name`. Anything else is not read (see the `role` row in types.js).
+ */
+function readRoleFromDom(element, resourcesById) {
+  const roles = (element.children || []).filter(c => RESOURCE_ROLE_TAGS.has(stripNs(c.tag)));
+  if (roles.length !== 1) return undefined;
+  const [r] = roles;
+  const tag = stripNs(r.tag);
+  if (tag !== 'performer' && tag !== 'humanPerformer') return undefined;
+  if (findChild(r, 'resourceAssignmentExpression')) return undefined;
+  const ref = findChild(r, 'resourceRef')?.text;
+  const name = ref ? resourcesById[ref] : undefined;
+  return name ? decodeXmlEntities(name) : undefined;
 }
 
 function detectEventMarkerFull(element) {

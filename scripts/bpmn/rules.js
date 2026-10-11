@@ -778,7 +778,8 @@ const SOUNDNESS_CHECKS = [
       + 'CallActivity, scriptFormat and the script body to ScriptTask, isCollection to '
       + 'DataObjectReference, cancelActivity to BoundaryEvent, eventGatewayType to '
       + 'EventBasedGateway, instantiate to EventBasedGateway and ReceiveTask, loop and '
-      + 'multi-instance characteristics to an Activity, and decisionRef to a businessRuleTask',
+      + 'multi-instance characteristics to an Activity, a role (performer) to an Activity, a '
+      + 'system (generator extension) to a Task, and decisionRef to a businessRuleTask',
     ref: {
       omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity)',
       cmof: 'Activity.isForCompensation (BPMN20.cmof:1095), SubProcess.triggeredByEvent (:1147, '
@@ -787,7 +788,8 @@ const SOUNDNESS_CHECKS = [
         + 'DataObjectReference.isCollection (:641), ScriptTask.script (:1251), '
         + 'BoundaryEvent.cancelActivity (:301), EventBasedGateway.eventGatewayType (:1015), '
         + '`instantiate` granted per class to EventBasedGateway (:1015) and ReceiveTask (:1214), '
-        + 'Activity.loopCharacteristics (:1095), and `implementation` granted per class to '
+        + 'Activity.loopCharacteristics (:1095), Activity.resources (the ResourceRole a `role` '
+        + 'becomes), and `implementation` granted per class to '
         + 'UserTask (:1263), ServiceTask (:1240), SendTask (:1229), ReceiveTask (:1214) and '
         + 'BusinessRuleTask (:1177) — never inherited from Activity, which is why a plain Task, '
         + 'a scriptTask, a manualTask and every container may not carry it. The scopes live once '
@@ -843,8 +845,13 @@ const SOUNDNESS_CHECKS = [
             // rule says one thing about a field, not two. Class first: if the node may not carry
             // the field at all, its value's type is beside the point.
             if (isFieldOutOfScope(node, spec)) {
+              // An extension row (`system`) has an OMG-derived scope but no OMG element, so the
+              // sentence names the generator as the one writing it, not OMG as defining it.
+              const where = spec.shape === 'extension'
+                ? `but the generator writes it (in its own extension namespace; BPMN has no element for it) only on ${spec.scope}`
+                : `but OMG defines ${spec.attr} only on ${spec.scope}`;
               msgs.push(`Node "${node.id}" (${node.name || ''}) is a ${node.type} and carries `
-                + `"${spec.field}", but OMG defines ${spec.attr} only on ${spec.scope}. The field is `
+                + `"${spec.field}", ${where}. The field is `
                 + 'dropped when the BPMN is written, so it has no effect — remove it, or move it to '
                 + 'a node whose class carries it.');
             } else if (isFieldWrongType(node, spec)) {
@@ -859,8 +866,9 @@ const SOUNDNESS_CHECKS = [
                   + 'emitting the opposite of what was meant.'
                 : '';
               msgs.push(`Node "${node.id}" (${node.name || ''}) carries "${spec.field}" as `
-                + `${typeof node[spec.field]} (${JSON.stringify(node[spec.field])}), but OMG types `
-                + `${spec.attr} as ${spec.type}. The value is dropped when the BPMN is written, so `
+                + `${typeof node[spec.field]} (${JSON.stringify(node[spec.field])}), but `
+                + (spec.shape === 'extension' ? `the generator types ${spec.field}` : `OMG types ${spec.attr}`)
+                + ` as ${spec.type}. The value is dropped when the BPMN is written, so `
                 + `it has no effect — write a real ${spec.type}.${whyNotCoerced}`);
             }
           }
