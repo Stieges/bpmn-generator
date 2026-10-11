@@ -102,7 +102,8 @@ function decodeXmlEntities(s) {
   return s.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g, (m, e) => {
     if (e[0] !== '#') return named[e];
     const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-    return String.fromCodePoint(code);
+    // An out-of-range reference in a foreign file is left as written rather than thrown on.
+    return code <= 0x10FFFF ? String.fromCodePoint(code) : m;
   });
 }
 

@@ -220,6 +220,11 @@ describe('foreign role forms are not read (parked: "Import-Modus")', () => {
     expect(findNode(back.nodes, 't').role).toBe('Clerk');
   });
 
+  test('legacy importer keeps an out-of-range character reference in a resource name as written', async () => {
+    const back = bpmnToLogicCoreLegacy(wrap('<bpmn:resource id="R9" name="A &#99999999; B" />', `<bpmn:performer>${ref('R9')}</bpmn:performer>`));
+    expect(findNode((await back).nodes, 't').role).toBe('A &#99999999; B');
+  });
+
   for (const [label, body] of CASES) {
     test.each(IMPORTERS)(`%s importer: ${label} → no role`, async (_n, read) => {
       const back = await read(wrap(R, body));

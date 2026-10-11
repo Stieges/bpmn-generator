@@ -392,7 +392,8 @@ that never arrived, so an omission produces no warning and `validation.errors` s
 with its `domain` (JSON key; `bg:allowedOn` in RDF) to `references/ontology.jsonld`, then add a row to
 `OMG_NODE_FIELD_SCOPE` (or `OMG_EDGE_FIELD_SCOPE`) in `scripts/bpmn/types.js` (its `allowed` now
 comes from that domain), then let `scripts/bpmn/field-fidelity.test.js` name every place you
-missed.** Adding the property to `references/input-schema.json` without a row fails CI naming the
+missed.** A new field raises the minor `version` of the ontology and of both `$schemaVersion` defaults,
+as a new element does. Adding the property to `references/input-schema.json` without a row fails CI naming the
 property; with a row, the fence drives the field through the real pipeline and back through both
 importers, for every class the row allows, at depth 0 and one level down — so a write that skipped
 the child path, or a read that only one importer learned, fails with the field, the class, the
