@@ -1352,15 +1352,21 @@ function entersInterior(pts, box) {
 
 /**
  * Which way is "away from the host" for a boundary event sitting on its outline?
- * Derived from the two centers rather than hard-coded to 'down', so that if
- * placeBoundaryEvents ever stops using the bottom edge the routing follows
- * instead of silently staying wrong.
+ * The side of the host the event's centre lies nearest to: placeBoundaryEvents
+ * puts an event on the bottom edge or — target above, #91 — the top edge, and
+ * spreads several along it. Comparing the two centres instead would call an
+ * event near the end of a wide host's edge 'left' or 'right'.
  */
 function outwardFromHost(evC, hostC) {
-  const dx = (evC.x + evC.w / 2) - (hostC.x + hostC.w / 2);
-  const dy = (evC.y + evC.h / 2) - (hostC.y + hostC.h / 2);
-  if (Math.abs(dy) >= Math.abs(dx)) return dy >= 0 ? 'down' : 'up';
-  return dx >= 0 ? 'right' : 'left';
+  const cx = evC.x + evC.w / 2;
+  const cy = evC.y + evC.h / 2;
+  const dist = {
+    up: Math.abs(cy - hostC.y),
+    down: Math.abs(cy - (hostC.y + hostC.h)),
+    left: Math.abs(cx - hostC.x),
+    right: Math.abs(cx - (hostC.x + hostC.w)),
+  };
+  return Object.keys(dist).reduce((a, b) => (dist[b] < dist[a] ? b : a));
 }
 
 /**
@@ -1431,9 +1437,9 @@ function orthogonalConnect(srcC, tgtC, opts = {}) {
  * back towards the target.
  *
  * Only the vertical case is built out, because `placeBoundaryEvents` puts every
- * boundary event on its host's bottom edge; `outwardFromHost` still derives the
- * direction rather than assuming it, so a future change of placement produces a
- * wrong-but-obvious route here instead of a silently wrong one elsewhere.
+ * boundary event on its host's bottom or top edge (#91: top when the target lies
+ * above); `outwardFromHost` derives which, so the corridor runs below or above
+ * the host accordingly. A left or right edge would need its own case here.
  */
 function boundaryOutwardRoute(srcC, tgtC, hostC, clearance) {
   const srcCx = srcC.x + srcC.w / 2;
@@ -1504,9 +1510,12 @@ function findNodeInAllProcesses(nodeId, processes) {
  * through the gateway next to its host). "Above" is decided once, here, in the
  * order the bands will have after §5.0a: a target in another lane of the same
  * process is above when its lane comes first in `proc.lanes` (the order §5.0a
- * stacks); otherwise — same lane, no lanes, inside a subprocess — when its whole
- * ELK box lies above the host's top. Same band, to the side or below: bottom, as
- * before. An event without an outgoing flow stays at the bottom. Several events
+ * stacks); in the same lane, or in a process without lanes, when its whole ELK
+ * box lies above the host's top. Same band, to the side or below: bottom, as
+ * before. So is every case the lane order cannot decide — host or target in a
+ * nested child lane or without a lane in a process that has lanes — because
+ * ELK's positions there predate the restacking. An event without an outgoing
+ * flow stays at the bottom. Several events
  * on one host are spread evenly across their side, each side on its own.
  *
  * Mutates `coords` in place. Hosts without coordinates are skipped, which
@@ -1514,6 +1523,9 @@ function findNodeInAllProcesses(nodeId, processes) {
  *
  * @returns Map of each placed boundary event's id to its host's id
  */
+/** Minimum free space (px) between two boundary events side by side on a host's top edge. */
+const BOUNDARY_EVENT_GAP = 4;
+
 function placeBoundaryEvents(coords, allProcesses) {
   const byHost = {};
   const procOf = {};
@@ -1539,10 +1551,39 @@ function placeBoundaryEvents(coords, allProcesses) {
     if (!tgt) return 'bottom';
     const proc = procOf[ev.id];
     const order = (proc.lanes || []).map(l => l.id);
-    const hi = order.indexOf(laneOfNode(nodeById[ev.attachedTo], proc));
-    const ti = order.indexOf(laneOfNode(nodeById[tgtId], proc));
-    if (hi >= 0 && ti >= 0 && hi !== ti) return ti < hi ? 'top' : 'bottom';
+    if (order.length) {
+      // A process with lanes: §5.0a will restack the bands, so ELK's y says nothing across bands.
+      // Both lanes must be top-level bands; anything else (a nested child lane, a subprocess child
+      // without a lane) keeps the bottom edge rather than guess from pre-restack positions.
+      const hi = order.indexOf(laneOfNode(nodeById[ev.attachedTo], proc));
+      const ti = order.indexOf(laneOfNode(nodeById[tgtId], proc));
+      if (hi < 0 || ti < 0) return 'bottom';
+      if (hi !== ti) return ti < hi ? 'top' : 'bottom';
+    }
+    // Same band, or no lanes at all: both move together from here on, so ELK's y decides.
     return tgt.y + tgt.h <= host.y ? 'top' : 'bottom';
+  };
+
+  // Where the events on a host's top edge go, as fractions of its width, in `events` order (which
+  // this sorts by target x, so their flows do not cross each other on the way up). The middle of
+  // the top edge is where a flow coming down into the host docks (§5.2 enters a target at the
+  // middle of the side facing its source), so no event goes there: all targets to the right (or
+  // straight above) — spread over the right half; all to the left — the left half; mixed, or when
+  // the half is too narrow for the events side by side — over the whole edge on n + 2 slots, the
+  // one nearest the middle left out.
+  const topEdgeSlots = (events, host) => {
+    const cx = host.x + host.w / 2;
+    const tx = (ev) => { const t = coords[targetOf[ev.id]]; return t ? t.x + t.w / 2 : cx; };
+    events.sort((a, b) => tx(a) - tx(b));
+    const n = events.length;
+    const widest = Math.max(...events.map(ev => (SHAPE[ev.type] || { w: 36 }).w));
+    const fits = (slots) => slots.every((s, i) => i === 0 || (s - slots[i - 1]) * host.w >= widest + BOUNDARY_EVENT_GAP);
+    const half = (from) => events.map((_, i) => from + 0.5 * (i + 1) / (n + 1));
+    const all = Array.from({ length: n + 1 }, (_, k) => (k + 1) / (n + 2));
+    const whole = all.sort((a, b) => Math.abs(b - 0.5) - Math.abs(a - 0.5)).slice(0, n).sort((a, b) => a - b);
+    if (events.every(ev => tx(ev) >= cx) && fits(half(0.5))) return half(0.5);
+    if (events.every(ev => tx(ev) < cx) && fits(half(0))) return half(0);
+    return whole;
   };
 
   // Maps each placed event to its host. A Set of ids would be enough to know
@@ -1555,21 +1596,11 @@ function placeBoundaryEvents(coords, allProcesses) {
     const sides = { top: [], bottom: [] };
     for (const ev of events) sides[sideFor(ev, host)].push(ev);
     for (const [side, onSide] of Object.entries(sides)) {
-      // On the top edge the middle is where a flow coming down into the host docks (§5.2 enters a
-      // target at the middle of the side facing its source), so the events there are spread over
-      // the half of the edge facing their targets; on the bottom edge over the whole edge, as before.
-      let from = 0, span = 1;
-      if (side === 'top') {
-        const dx = onSide.reduce((n, ev) => {
-          const t = coords[targetOf[ev.id]];
-          return n + (t ? Math.sign((t.x + t.w / 2) - (host.x + host.w / 2)) : 0);
-        }, 0);
-        if (dx !== 0) { from = dx > 0 ? 0.5 : 0; span = 0.5; }
-      }
+      const slots = side === 'top' ? topEdgeSlots(onSide, host) : onSide.map((_, i) => (i + 1) / (onSide.length + 1));
       onSide.forEach((ev, i) => {
         const sz = SHAPE[ev.type] || { w: 36, h: 36 };
         coords[ev.id] = {
-          x: host.x + host.w * (from + (span * (i + 1)) / (onSide.length + 1)) - sz.w / 2,
+          x: host.x + host.w * slots[i] - sz.w / 2,
           y: (side === 'top' ? host.y : host.y + host.h) - sz.h / 2,
           w: sz.w,
           h: sz.h,
