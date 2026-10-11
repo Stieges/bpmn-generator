@@ -49,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
 
 ### Added
+- **Bend rule (opt-in): fewest bends, then enter in flow direction.** A new routing pass
+  (`scripts/bpmn/bend-rule.js`) re-routes a sequence flow when a route with fewer bends exists, or one
+  with as many bends that enters an activity or event from the left; endpoints stay put or move to a
+  side midpoint, a boundary event's never moves. A route is only replaced by one that is no worse in
+  crossings, lane-line hug, overlap and crowding with other flows, external node labels, side
+  conflicts and the later message-flow line, stays clear of shapes and inside its pool/lane stack, and
+  is at most 10 % + 20 px longer. Off by default: `runPipeline(lc, { bendRule: true })` or
+  `config.json -> layout.bendRule: true`; limits in `layout.bendRuleLimits`. Switched off, the output
+  is unchanged. Measured over the top-level fixtures with it on: avoidable bends 19 → 0 (default) and
+  39 → 0 (refinement + wrapping), entries against the flow 12 → 0 resp. 13 → 0, no other layout metric
+  worse. The layout ratchet gains a `bends` mode and two counts per fixture, `avoidableBends` and
+  `againstFlowEntries`, measured by the same search.
 - **`visualRefinement` on the HTTP API and MCP.** `POST /api/v1/generate`, `/api/v1/orchestrate` and the MCP tools `generate_bpmn`, `orchestrate_bpmn` take an optional `visualRefinement` (boolean or per-pass object, schema `$defs/VisualRefinementOption`); invalid values are a `schema_error`. Before, these entry points could not switch refinement at all.
 - **Layout readability fence.** `scripts/bench/layout-metrics.mjs` now measures every top-level
   fixture (it had a fixed list of eight, which is how `boundary-event-shapes`' crossing went

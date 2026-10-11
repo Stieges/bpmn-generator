@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 27 bpmn-pipeline + 12 dmn (growing) + 8 shared + 1 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 28 bpmn-pipeline + 12 dmn (growing) + 8 shared + 1 cross-notation + 7 agent +
 9 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -45,9 +45,13 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     │                          repairCrossings falls back to the router when its own fixed-shape
     │                          candidate search finds nothing admissible; reclipStuckEnds routes
     │                          through it between two end stubs)
-    ├── orthogonal-router.js ← ../shared/utils.js (obstacle-aware Dijkstra pathfinder, called only from
-    │                          edge-simplify.js, by repairCrossings and reclipStuckEnds; duplicates
-    │                          its own segment/box clearance test to avoid a circular import)
+    ├── orthogonal-router.js ← ../shared/utils.js (obstacle-aware Dijkstra pathfinder, called from
+    │                          edge-simplify.js, by repairCrossings and reclipStuckEnds, and from
+    │                          bend-rule.js as its fallback; duplicates its own segment/box clearance
+    │                          test to avoid a circular import)
+    ├── bend-rule.js         ← orthogonal-router.js, types.js, ../shared/utils.js (opt-in, layout.bendRule:
+    │                          fewest bends, then enter activities/events from the left; runs after
+    │                          lane compaction, before edge-label repair and routeMessageFlows)
     ├── bpmn-xml.js          ← types.js, ../shared/utils.js, constants.js, topology.js, icons.js
     ├── svg.js               ← types.js, ../shared/utils.js, constants.js, icons.js
     ├── icons.js             ← ../shared/utils.js, constants.js
@@ -211,8 +215,9 @@ layout and rendering. Two rules make it hold:
    own placement step (`coordinates.js` §5.0-, §5.4, `routeMessageFlows`). Letting a renderer compute
    geometry means computing it *twice* — `svg.js` for humans, `bpmn-xml.js` for tools — and the two
    copies drift. That has happened three times; see **Do NOT**.
-   Sequence-flow endpoints are clipped in `coordinates.js` §5.1; the only pass that may move one
-   afterwards is `reclipStuckEnds`, and only to the midpoint of another side of the same node.
+   Sequence-flow endpoints are clipped in `coordinates.js` §5.1; the only passes that may move one
+   afterwards are `reclipStuckEnds` and, when `layout.bendRule` is on, the bend rule
+   (`bend-rule.js`), and only to the midpoint of another side of the same node.
    External node labels (events incl. boundary events, gateways, data objects and stores) are boxes
    in `coordMap.nodeLabels` (`placeNodeLabels`, `coordinates.js` §5.7), re-derived in `pipeline.js`
    after the last pass that moves a node; `bpmn-xml.js` writes the box as the `BPMNLabel` bounds and
@@ -257,7 +262,8 @@ membership instead of coordinates.
 | `scripts/bpmn/net-check.js` | `checkNetIntegrity` — post-translation sanity pass on the net `bpmnToPN` produces, the same role `di-check.js` plays for geometry: checks whether the *translation* is faithful (every node has a transition, every place is produced and consumed, every id is unique), never whether the *model* is sound — a legitimately unsound process must come out clean, `checkSoundness`/WF01–WF03's job. NC01 node with no transition, NC02 transition that can never fire, NC02b/NC03a/NC03b/NC06 the same class of drop applied to arcs/places/ids (all ERROR — NC02 became ERROR once boundary events got a translation, its one legitimate cause). NC02/NC02b are scoped to the translation by that same doctrine: they fire only when the Logic-Core gives the node an input (resp. output) the net does not have, so a node nothing routes to is WF01's finding and not theirs — plus S04's, but only where the node has no edges at all; a node with an outgoing flow but no incoming one (a stranded `parallelGateway`, say) passes S04 and S07 both and is caught only by the opt-in WF01 (see CHANGELOG's Known limitations) — and a boundary event's `attachedTo` host counts as an input source, without which the narrowing would blind NC02 to the very defect its promotion was for; NC04 (two distinct edges assigned the same place) is ERROR since every flow got a place of its own, but note it reads `pn.placeOfEdge` rather than re-deriving the id, so it asserts `namePlaces`' invariant against `namePlaces`' output — a regression fence that cannot fire under the current naming rule, not a check of the net against the Logic-Core; NC05 (multiple start events sharing one source place) is INFO — disclosure, not a defect. `ok` means "no ERROR". Wired into `runPipeline` as `result.netDiagnostics` (`{ ok, issues }`, `null` on the early-return path, one call per pool, findings prefixed `[pool] ` and carrying `process`) — **computed before `logicCoreToElk`**, because `preprocessLogicCore` rebuilds `proc.nodes` from an id-keyed map in place and would erase a duplicate-id defect before a later check could see it. A separate key from `diagnostics`, whose `code` is a closed DI enum in `references/api-schema.json`. The CLI gates on it as it gates on DI, with one difference: **INFO is printed and never fatal**, not even under `--strict` — NC05 says in its own message that it is not a defect. Both gates sit on the ordinary generate path; `--drill-down` bypasses NC exactly as it already bypasses DI. Not surfaced over HTTP or MCP. NC06 is scoped to duplicate **node** ids — two edges sharing an id are translated faithfully (places are keyed by node pair, `placeOfEdge` by edge identity), so that half belongs to the serialisation round-trip, where a `duplicate ID <…>` warning in `validation.xmlWarnings` is unconditionally fatal on the CLI (exit 1, no files written, `--strict` or not); the rest of that channel stays non-fatal outside `--strict`. Also fenced over every top-level fixture in `tests/fixtures/` by `net-check.test.js` |
 | `scripts/bpmn/visual-refinement.js` | The refinement passes — `laneCompaction` (`compactLanes`) and `edgeLabelCollisionRepair` (`repairEdgeLabels`), both on by default; `resolveRefinement` turns the `visualRefinement` option into per-pass switches and rejects an unknown key or a non-boolean; `VISUAL_REFINEMENT_OPTION_SCHEMA` is the same contract for the HTTP/MCP gate (fenced against `references/api-schema.json`). ELK wrapping is not a pass here — it is `layout.elkWrapping` / `--wrap` |
 | `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends; `repairCrossings` re-routes edges that cross another, falling back to `orthogonal-router.js` when its own fixed-shape candidate search finds nothing admissible; `guardAgainstLegacy` reverts single #52 re-routes that cost a crossing; `reclipStuckEnds` may move an endpoint to another side's midpoint when every fixed-endpoint route still ends along an outline or runs through the edge's own shape — the one exception to endpoint clipping in coordinates.js §5.1; `rerouteAfterCompaction` re-runs simplify → legacy guard → crossing repair for the flows lane compaction bent, then `keepOffLaneLines` keeps their inner legs `visualRefinement.laneLineClearance` px off lane separators. `guardAgainstLegacy` runs only while `layout.crossingRepair` is enabled. `layout.endStubPx` must stay above orthogonal-router's `PAD` (12), asserted at load by `assertStubClearsPad`; `layout.alongOutlineMinPx` is the one along-outline threshold (edge-simplify, DI08, bench) |
-| `scripts/bpmn/orthogonal-router.js` | `routeAroundObstacles` — obstacle-aware orthogonal Dijkstra pathfinder ("trellis"/extended-lines grid + per-bend cost penalty + soft crossing penalty), two callers, both in `edge-simplify.js`: `repairCrossings` (fallback candidate source) and `reclipStuckEnds` (the route between the two 15 px end stubs, for each port pair it tries). The router never chooses an endpoint: it routes between the two points it is given, and `reclipStuckEnds` alone decides whether an endpoint moves |
+| `scripts/bpmn/orthogonal-router.js` | `routeAroundObstacles` — obstacle-aware orthogonal Dijkstra pathfinder ("trellis"/extended-lines grid + per-bend cost penalty + soft crossing penalty), three callers: in `edge-simplify.js` `repairCrossings` (fallback candidate source) and `reclipStuckEnds` (the route between the two 15 px end stubs, for each port pair it tries), and `bend-rule.js` (fallback when no 0/1/2-bend shape is admissible). The router never chooses an endpoint: it routes between the two points it is given, and its caller decides whether an endpoint moves |
+| `scripts/bpmn/bend-rule.js` | `applyBendRule` — opt-in routing pass (`layout.bendRule`, default `false`; per call `runPipeline(lc, { bendRule: true })`): a sequence flow is re-routed when an admissible route has fewer bends, or as many bends and enters an activity/event from the left (leaves one to the right; gateways free). Endpoints stay put or move to a side midpoint; a boundary event's never moves. Admissible = no end defect, clear of foreign shapes, inside its region, at most `lengthFactor`× + `lengthSlackPx` longer, and per edge not worse than the current route in crossings, lane-line hug, collinear overlap, crowding, `coordMap.nodeLabels` hits, side conflicts and the later message-flow line; no new top/bottom port at a message-flow node. Limits in `layout.bendRuleLimits`. Greedy in edge order, repeated to a fixpoint (idempotent). Runs in `pipeline.js` after lane compaction and its re-route, before edge-label repair and `routeMessageFlows`. `bendMetrics` is the same search as a measure (avoidable bends, entries against the flow), read by `scripts/bench/flow-metrics.mjs` |
 | `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API and MCP; also `validateVisualRefinementOption` |
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |
@@ -471,6 +477,13 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 1. Each pass has its own default in `scripts/config.json → visualRefinement`: `edgeLabelCollisionRepair` and `laneCompaction` on. Per call: `runPipeline(lc, { visualRefinement: true | false | { laneCompaction: true, … } })`; CLI `--refine` (all on) / `--no-refine` (all off). ELK wrapping is separate (`elkWrapping`, `--wrap`).
 2. The passes are `laneCompaction`, `edgeLabelCollisionRepair`; `resolveRefinement` turns the option into per-pass switches. See `scripts/bpmn/visual-refinement.js` for the pass implementations.
 3. Verify against goldens: `cd scripts && npm test -- --testPathPatterns=visual-refinement`.
+
+### Switch on the bend rule
+
+1. Off by default (`config.json → layout.bendRule: false`). Per call `runPipeline(lc, { bendRule: true })`;
+   project-wide `layout.bendRule: true`. Limits: `layout.bendRuleLimits` (see `scripts/bpmn/bend-rule.js`).
+2. Verify: the layout ratchet's `bends` mode (`cd scripts && npm test -- --testPathPatterns=layout-metrics`)
+   and `scripts/bpmn/bend-rule.test.js` (DI07–DI10 clean and idempotent over every fixture).
 
 ### Change the participant order of a collaboration
 
