@@ -5205,6 +5205,24 @@ describe('DI integrity check', () => {
       expect(di09([{ x: 436, y: 1972 }, { x: 421, y: 1972 }, { x: 421, y: 2176.5 }, { x: 436, y: 2176.5 }])).toEqual([]);
     });
   });
+
+  describe('DI10 — a message flow through a foreign shape', () => {
+    const lc = { pools: [
+      { id: 'A', nodes: [{ id: 's', type: 'userTask' }] },
+      { id: 'B', nodes: [{ id: 'mid', type: 'userTask' }, { id: 'grp', type: 'group' }] },
+      { id: 'C', nodes: [{ id: 't', type: 'userTask' }] },
+    ], messageFlows: [{ id: 'mf', source: 's', target: 't' }] };
+    const coords = {
+      s: { x: 0, y: 0, w: 100, h: 80 }, mid: { x: 20, y: 200, w: 100, h: 80 },
+      grp: { x: -20, y: 150, w: 200, h: 200 }, t: { x: 0, y: 400, w: 100, h: 80 },
+    };
+    test('fires as a WARNING on the task, never on the group', () => {
+      const r = checkDiagramIntegrity({ coords, poolCoords: {}, edgeCoords: { mf: [{ x: 50, y: 80 }, { x: 50, y: 400 }] } }, lc);
+      expect(r.issues.filter(i => i.code === 'DI10')).toEqual([{ code: 'DI10', severity: 'WARNING',
+        message: 'Message flow "mf" runs through "mid".', elements: ['mf', 'mid'] }]);
+      expect(r.ok).toBe(true);
+    });
+  });
 });
 
 describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () => {
@@ -6035,17 +6053,36 @@ describe('message flow routing', () => {
       expect(diagonal).toEqual([]);
     });
 
-    test(`no horizontal leg lies inside a pool body (refinement: ${visualRefinement})`, async () => {
+    test(`a horizontal leg lies in a gap or, as a jog, in the flow's own participant clear of every shape (refinement: ${visualRefinement})`, async () => {
       // This is why routing runs after visual refinement: lane compaction moves
       // participants, and a route computed before it had three of eight legs
-      // end up inside a pool.
+      // end up inside a pool. Since the own-participant jog (owner decision 2026-10-11)
+      // a short leg inside the SENDER's or RECEIVER's own pool is allowed — it steps
+      // round the task in the next lane — but never inside a pool the flow does not involve.
       const lc = loadFixture('realistic-collaboration.json');
       const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement });
-      const pools = Object.values(r.coordMap.poolCoords);
-      const inside = legs(r, lc)
-        .filter(s => Math.abs(s.a.y - s.b.y) < 1)
-        .filter(s => pools.some(p => s.a.y > p.y + 2 && s.a.y < p.y + p.h - 2));
-      expect(inside).toEqual([]);
+      const poolOfNode = {};
+      for (const p of lc.pools) for (const n of p.nodes) poolOfNode[n.id] = p.id;
+      const bad = [];
+      for (const mf of lc.messageFlows) {
+        const own = new Set([poolOfNode[mf.source] ?? mf.source, poolOfNode[mf.target] ?? mf.target]);
+        const pts = r.coordMap.edgeCoords[mf.id];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          if (Math.abs(a.y - b.y) >= 1) continue;
+          for (const [pid, pc] of Object.entries(r.coordMap.poolCoords)) {
+            if (!(a.y > pc.y + 2 && a.y < pc.y + pc.h - 2)) continue;
+            if (!own.has(pid)) bad.push(`${mf.id} leg ${i} inside uninvolved ${pid}`);
+            for (const [id, box] of Object.entries(r.coordMap.coords)) {
+              if (id === mf.source || id === mf.target) continue;
+              if (a.y > box.y && a.y < box.y + box.h && Math.max(a.x, b.x) > box.x && Math.min(a.x, b.x) < box.x + box.w) {
+                bad.push(`${mf.id} leg ${i} through ${id}`);
+              }
+            }
+          }
+        }
+      }
+      expect(bad).toEqual([]);
     });
   }
 

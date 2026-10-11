@@ -24,7 +24,9 @@ import { routeAroundObstacles } from './orthogonal-router.js';
 import { CFG } from '../shared/utils.js';
 import { isEvent, isGateway } from './types.js';
 
-const NODE_PADDING = 4;  // px buffer around each node bbox for clearance
+// px buffer around each node bbox for clearance; config.json → layout.shapeClearance, shared with
+// coordinates.js's message-flow routing.
+const NODE_PADDING = CFG.layout?.shapeClearance ?? 4;
 
 function segmentClearOfBox(p1, p2, box) {
   // box: { x, y, w, h }

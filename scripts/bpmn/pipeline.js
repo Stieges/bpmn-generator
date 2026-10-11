@@ -93,7 +93,7 @@ function checkNetTranslation(lc) {
  *   svg: string|null,
  *   coordMap: object|null,
  *   diagnostics: {ok: boolean, issues: object[]}|null,
- *     post-layout geometry findings (di-check.js, DI01-DI09); `null` when validation blocked and
+ *     post-layout geometry findings (di-check.js, DI01-DI10); `null` when validation blocked and
  *     no layout ran — "no artefact", which is not the same claim as "clean"
  *   netDiagnostics: {ok: boolean, issues: object[]}|null,
  *     Petri-net translation findings (net-check.js, NC01-NC06), one call per pool, messages
@@ -139,7 +139,7 @@ async function runPipeline(logicCore, opts = {}) {
   // means — which is what lets `main()` gate on it, the HTTP layer turn it into a status and
   // `agents/layout.js` pass it through without retrying. Returning early here instead would make
   // one key a gate in the library and a report over HTTP. Kept as its own key rather than merged
-  // into `diagnostics` because that one's `code` is a closed DI01…DI09 enum in
+  // into `diagnostics` because that one's `code` is a closed DI01…DI10 enum in
   // references/api-schema.json, which the docs gate validates a real response against.
   const netDiagnostics = checkNetTranslation(lc);
 

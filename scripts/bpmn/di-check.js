@@ -10,8 +10,9 @@
  * defects that make a diagram unusable regardless of how correct the semantics
  * are: participants stacked on top of each other, pools overlapping, nodes
  * sitting outside the pool they belong to, a sequence-flow arrow that no
- * longer starts or ends on the shape it's attached to, and a sequence flow
- * whose first or last segment lies on its own endpoint's outline.
+ * longer starts or ends on the shape it's attached to, a sequence flow
+ * whose first or last segment lies on its own endpoint's outline, and a
+ * message flow running through a shape that is not one of its endpoints.
  *
  * Findings are diagnostics, not rule violations — they are reported under
  * `diagnostics` in the pipeline result, separate from `validation`.
@@ -251,6 +252,28 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
         message: `Message flow "${mf.id}" crosses uninvolved participant(s): ${crossed.join(', ')}.`,
         elements: [mf.id, ...crossed],
       });
+    }
+  }
+
+  // DI10 — a message flow running through a shape that is not one of its endpoints.
+  // WARNING: the flow is attached and the model is fine, but the line reads as touching a task it
+  // has nothing to do with. Not counted: a group (drawn to be overlapped) and a box containing an
+  // endpoint (the expanded subprocess a flow starts or ends in — unavoidable). Interior hits only,
+  // 1 px inset, the definition of scripts/bench/layout-metrics.mjs's messageFlowThroughNodes.
+  for (const mf of (lc.messageFlows || [])) {
+    const id = mf.id || `mf_${mf.source}_${mf.target}`;
+    const segs = nonZeroSegments((coordMap.edgeCoords || {})[id] || []);
+    if (!segs.length) continue;
+    const src = coords[mf.source], tgt = coords[mf.target];
+    for (const [nodeId, b] of Object.entries(coords)) {
+      if (nodeId === mf.source || nodeId === mf.target || typeOfNode[nodeId] === 'group') continue;
+      if ((src && contains(b, src, 0)) || (tgt && contains(b, tgt, 0))) continue;
+      const hit = segs.some(([a, z]) => Math.max(a.x, z.x) > b.x + 1 && Math.min(a.x, z.x) < b.x + b.w - 1
+        && Math.max(a.y, z.y) > b.y + 1 && Math.min(a.y, z.y) < b.y + b.h - 1);
+      if (hit) {
+        issues.push({ code: 'DI10', severity: 'WARNING',
+          message: `Message flow "${id}" runs through "${nodeId}".`, elements: [id, nodeId] });
+      }
     }
   }
 
