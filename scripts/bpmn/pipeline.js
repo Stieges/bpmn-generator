@@ -40,7 +40,7 @@ import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds,
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
-import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines } from './visual-refinement.js';
+import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, laneLabelFloor } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -231,7 +231,13 @@ async function runPipeline(logicCore, opts = {}) {
   // Visual Refinement (post-layout coordinate transforms)
   if (refine.laneCompaction) {
     const preCompaction = structuredClone(coordMap.edgeCoords);
-    compactLanes(coordMap, lc, { minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80 });
+    // bpmn-js wraps a lane label against the lane height, so a lane compacted below its
+    // longest word shows that word broken mid-word in bpmn.io and Camunda Modeler.
+    const laneNameOf = new Map(allProcesses.flatMap(p => p.lanes || []).map(l => [l.id, l.name]));
+    compactLanes(coordMap, lc, {
+      minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80,
+      minLaneHeightFor: CFG.visualRefinement?.laneLabelFloor === false ? undefined : (id) => laneLabelFloor(laneNameOf.get(id)),
+    });
     laneLines = innerLaneLines(coordMap, lc);
     // compactLanes moves route points in place and shifts each label on its own, so a route whose
     // points land in different lanes ends up with its label off its leg — or across it. The

@@ -1,7 +1,7 @@
 /**
  * Visual Refinement — unit tests
  */
-import { estimateTextWidth, estimateTextBBox, bboxOverlaps, repairEdgeLabels, compactLanes, resolveRefinement, REFINEMENT_PASSES, innerLaneLines } from './visual-refinement.js';
+import { estimateTextWidth, estimateTextBBox, bboxOverlaps, repairEdgeLabels, compactLanes, resolveRefinement, REFINEMENT_PASSES, innerLaneLines, laneLabelFloor } from './visual-refinement.js';
 import { placeEdgeLabel } from './coordinates.js';
 
 describe('estimateTextWidth', () => {
@@ -171,6 +171,52 @@ describe('repairEdgeLabels', () => {
       coords: {}, poolCoords: {}, laneCoords: {}, edgeCoords: {}, edgeLabels: {}
     };
     expect(repairEdgeLabels(cm)).toBe(cm);
+  });
+});
+
+describe('laneLabelFloor', () => {
+  test('the longest word decides', () => {
+    expect(laneLabelFloor('Prozessverantwortlicher')).toBe(Math.ceil(23 * 12 * 0.6 + 16));
+    expect(laneLabelFloor('QA Team')).toBe(Math.ceil(4 * 12 * 0.6 + 16));
+    expect(laneLabelFloor('')).toBe(16);
+  });
+});
+
+describe('compactLanes — per-lane floor (minLaneHeightFor)', () => {
+  const setup = () => ({
+    cm: {
+      coords: { n1: { x: 50, y: 20, w: 100, h: 80 }, n2: { x: 50, y: 210, w: 100, h: 80 } },
+      poolCoords: { p1: { x: 0, y: 0, w: 300, h: 400, laneHeaderWidth: 30 } },
+      laneCoords: {
+        laneA: { x: 30, y:   0, w: 270, h: 200 },
+        laneB: { x: 30, y: 200, w: 270, h: 200 }
+      },
+      edgeCoords: {}
+    },
+    proc: { pools: [{
+      id: 'p1',
+      lanes: [{ id: 'laneA' }, { id: 'laneB' }],
+      nodes: [{ id: 'n1', lane: 'laneA' }, { id: 'n2', lane: 'laneB' }]
+    }] }
+  });
+
+  test('a floor much taller than the content never puts a lane above the previous one', () => {
+    const { cm, proc } = setup();
+    // laneB's content sits at its top; centring a 180 px band on it would start 40 px inside laneA
+    compactLanes(cm, proc, { minLaneHeight: 60, padding: 20, minLaneHeightFor: (id) => (id === 'laneB' ? 180 : 0) });
+    const a = cm.laneCoords.laneA, b = cm.laneCoords.laneB;
+    expect(b.y).toBe(a.y + a.h);          // tiled, no overlap, no strip
+    expect(b.h).toBe(180);
+    expect(cm.coords.n2.y).toBeGreaterThanOrEqual(b.y);
+    expect(cm.coords.n2.y + cm.coords.n2.h).toBeLessThanOrEqual(b.y + b.h);
+  });
+
+  test('the floor is capped at the uncompacted height: compaction never makes a lane taller', () => {
+    const { cm, proc } = setup();
+    compactLanes(cm, proc, { minLaneHeight: 60, padding: 20, minLaneHeightFor: () => 500 });
+    expect(cm.laneCoords.laneA.h).toBe(200);
+    expect(cm.laneCoords.laneB.h).toBe(200);
+    expect(cm.laneCoords.laneB.y).toBe(cm.laneCoords.laneA.y + cm.laneCoords.laneA.h);
   });
 });
 

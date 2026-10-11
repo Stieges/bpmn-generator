@@ -72,6 +72,21 @@ export function estimateTextWidth(text, fontSize = 11) {
 
 const TEXT_BBOX_PADDING = 2;
 
+// Padding on each side of a lane label inside bpmn-js's fixed 30 px header strip.
+const STRIP_PADDING = 8;
+// bpmn-js renders lane labels at 12 px.
+const LANE_LABEL_FONT_SIZE = 12;
+
+/**
+ * Lane height below which bpmn-js breaks the lane's longest word: it wraps a lane label
+ * against the lane height in a fixed 30 px strip (12 px font). A conservative estimate
+ * (CHAR_WIDTH_FACTOR 0.6), so lanes come out slightly taller rather than broken.
+ */
+export function laneLabelFloor(name) {
+  const longest = String(name ?? '').split(/\s+/).reduce((a, w) => (w.length > a.length ? w : a), '');
+  return Math.ceil(estimateTextWidth(longest, LANE_LABEL_FONT_SIZE) + 2 * STRIP_PADDING);
+}
+
 /**
  * Rectangular bbox for a short edge-label rendered centered at (x,y).
  * Width is derived from estimateTextWidth; height is fontSize plus small padding.
@@ -275,6 +290,10 @@ export function compactLanes(coordMap, process, opts = {}) {
     let prevBottom = null;  // the band above's bottom edge — final once its iteration is done
     for (const laneId of lanes) {
       const lc = coordMap.laneCoords[laneId];
+      // A lane label's floor is capped at the lane's uncompacted height (lc.h — earlier
+      // iterations move lc.y, never lc.h): compaction never makes a lane taller than the
+      // layout gave it, only never shorter than its label needs.
+      const floor = Math.max(minH, Math.min(opts.minLaneHeightFor?.(laneId) ?? 0, lc.h));
 
       const laneNodes = poolNodes.filter(n => laneIdOf(n, poolNodes) === laneId)
                                 .map(n => coordMap.coords[n.id])
@@ -286,14 +305,17 @@ export function compactLanes(coordMap, process, opts = {}) {
       // content did not start flush at the old top edge.
       let newH, newY;
       if (laneNodes.length === 0) {
-        newH = minH;
+        newH = floor;
         newY = lc.y;
       } else {
         const topY    = Math.min(...laneNodes.map(c => c.y));
         const botY    = Math.max(...laneNodes.map(c => c.y + c.h));
-        newH = Math.max(minH, (botY - topY) + 2 * pad);
-        // When the floor applies, the content is centred in the band instead.
+        newH = Math.max(floor, (botY - topY) + 2 * pad);
+        // When the floor applies, the content is centred in the band instead — but only within
+        // the free room: a floor much taller than the content would otherwise put the band's top
+        // above the previous lane's bottom, and the two bands would overlap (DI04).
         newY = topY - (newH - (botY - topY)) / 2;
+        if (prevBottom !== null && newY < prevBottom) newY = prevBottom;
       }
 
       const oldY = lc.y;

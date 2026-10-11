@@ -204,6 +204,7 @@
     "laneCompaction": false,
     "minLaneHeight": 80,
     "laneLineClearance": 10,
+    "laneLabelFloor": true,
     "edgeLabelCollisionRepair": true,
     "edgeLabelMaxShift": 25
   },
