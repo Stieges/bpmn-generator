@@ -37,10 +37,10 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     ├── optimize.js          ← types.js, topology.js (opt-in Optimization Advisory layer O01–O04, invoked by rules.js)
     ├── workflow-net.js      ← types.js
     ├── topology.js          ← types.js
-    ├── layout.js            ← types.js, ../shared/utils.js, constants.js, topology.js, elkjs
+    ├── layout.js            ← types.js, ../shared/utils.js, ../shared/safe-text.js, constants.js, topology.js, elkjs
     ├── coordinates.js       ← types.js, ../shared/utils.js, constants.js, topology.js
     ├── di-check.js          (no deps — post-layout DI integrity pass, see below)
-    ├── visual-refinement.js ← coordinates.js, constants.js (opt-in compaction passes)
+    ├── visual-refinement.js ← ../shared/utils.js, coordinates.js (refinement passes: lane compaction, label repair)
     ├── edge-simplify.js     ← types.js, orthogonal-router.js, ../shared/utils.js (post-process ELK waypoints, reduce zigzag;
     │                          repairCrossings falls back to the router when its own fixed-shape
     │                          candidate search finds nothing admissible; reclipStuckEnds routes
@@ -52,7 +52,8 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     ├── svg.js               ← types.js, ../shared/utils.js, constants.js, icons.js
     ├── icons.js             ← ../shared/utils.js, constants.js
     ├── dot.js               ← types.js, topology.js
-    ├── schema-gate.js       ← ../shared/resource-paths.js (ajv draft-2020-12 strict gate)
+    ├── schema-gate.js       ← ../shared/resource-paths.js, ../shared/safe-text.js, visual-refinement.js (ajv draft-2020-12 strict gate;
+    │                          visual-refinement.js supplies VISUAL_REFINEMENT_OPTION_SCHEMA, which pulls coordinates.js into the gate)
     ├── types.js             ← ../shared/ontology.js (every type set, marker map and field-table `allowed` derives from the ontology)
     ├── ontology-audit.js    (no deps — `findVocabularyLists`, `checkCompleteness`: the fence that finds private copies of the vocabulary)
     ├── constants.js         ← ../shared/utils.js (13 BPMN-only layout constants: SHAPE, SW, CLR,
@@ -250,10 +251,10 @@ membership instead of coordinates.
 | `scripts/bpmn/dot.js` | `logicCoreToDot` / `dotToLogicCore` — Graphviz DOT support |
 | `scripts/bpmn/workflow-net.js` | WF-Net soundness checks (used by WF01–WF03 rules). `bpmnToPN` also owns the translation itself: a container becomes its own subnet (`buildContainer`) and a boundary event becomes an XOR alternative to its host, consuming exactly the places the host consumes — one transition per host transition, so a container's multi-entry split and an implicit-merge host are both mirrored rather than AND-joined (`wireBoundaryEvents`). What the translation under-models rather than skips is listed on `pn.approximations` (today: a non-interrupting boundary event, and a boundary event on a container) |
 | `scripts/bpmn/net-check.js` | `checkNetIntegrity` — post-translation sanity pass on the net `bpmnToPN` produces, the same role `di-check.js` plays for geometry: checks whether the *translation* is faithful (every node has a transition, every place is produced and consumed, every id is unique), never whether the *model* is sound — a legitimately unsound process must come out clean, `checkSoundness`/WF01–WF03's job. NC01 node with no transition, NC02 transition that can never fire, NC02b/NC03a/NC03b/NC06 the same class of drop applied to arcs/places/ids (all ERROR — NC02 became ERROR once boundary events got a translation, its one legitimate cause). NC02/NC02b are scoped to the translation by that same doctrine: they fire only when the Logic-Core gives the node an input (resp. output) the net does not have, so a node nothing routes to is WF01's finding and not theirs — plus S04's, but only where the node has no edges at all; a node with an outgoing flow but no incoming one (a stranded `parallelGateway`, say) passes S04 and S07 both and is caught only by the opt-in WF01 (see CHANGELOG's Known limitations) — and a boundary event's `attachedTo` host counts as an input source, without which the narrowing would blind NC02 to the very defect its promotion was for; NC04 (two distinct edges assigned the same place) is ERROR since every flow got a place of its own, but note it reads `pn.placeOfEdge` rather than re-deriving the id, so it asserts `namePlaces`' invariant against `namePlaces`' output — a regression fence that cannot fire under the current naming rule, not a check of the net against the Logic-Core; NC05 (multiple start events sharing one source place) is INFO — disclosure, not a defect. `ok` means "no ERROR". Wired into `runPipeline` as `result.netDiagnostics` (`{ ok, issues }`, `null` on the early-return path, one call per pool, findings prefixed `[pool] ` and carrying `process`) — **computed before `logicCoreToElk`**, because `preprocessLogicCore` rebuilds `proc.nodes` from an id-keyed map in place and would erase a duplicate-id defect before a later check could see it. A separate key from `diagnostics`, whose `code` is a closed DI enum in `references/api-schema.json`. The CLI gates on it as it gates on DI, with one difference: **INFO is printed and never fatal**, not even under `--strict` — NC05 says in its own message that it is not a defect. Both gates sit on the ordinary generate path; `--drill-down` bypasses NC exactly as it already bypasses DI. Not surfaced over HTTP or MCP. NC06 is scoped to duplicate **node** ids — two edges sharing an id are translated faithfully (places are keyed by node pair, `placeOfEdge` by edge identity), so that half belongs to the serialisation round-trip, where a `duplicate ID <…>` warning in `validation.xmlWarnings` is unconditionally fatal on the CLI (exit 1, no files written, `--strict` or not); the rest of that channel stays non-fatal outside `--strict`. Also fenced over every top-level fixture in `tests/fixtures/` by `net-check.test.js` |
-| `scripts/bpmn/visual-refinement.js` | Optional compaction/refinement passes P1–P7.1 (off by default) |
+| `scripts/bpmn/visual-refinement.js` | The refinement passes — `laneCompaction` (`compactLanes`) and `edgeLabelCollisionRepair` (`repairEdgeLabels`), both on by default; `resolveRefinement` turns the `visualRefinement` option into per-pass switches and rejects an unknown key or a non-boolean; `VISUAL_REFINEMENT_OPTION_SCHEMA` is the same contract for the HTTP/MCP gate (fenced against `references/api-schema.json`). ELK wrapping is not a pass here — it is `layout.elkWrapping` / `--wrap` |
 | `scripts/bpmn/edge-simplify.js` | Post-process ELK edge waypoints to reduce zigzag bends; `repairCrossings` re-routes edges that cross another, falling back to `orthogonal-router.js` when its own fixed-shape candidate search finds nothing admissible; `guardAgainstLegacy` reverts single #52 re-routes that cost a crossing; `reclipStuckEnds` may move an endpoint to another side's midpoint when every fixed-endpoint route still ends along an outline or runs through the edge's own shape — the one exception to endpoint clipping in coordinates.js §5.1; `rerouteAfterCompaction` re-runs simplify → legacy guard → crossing repair for the flows lane compaction bent, then `keepOffLaneLines` keeps their inner legs `visualRefinement.laneLineClearance` px off lane separators. `guardAgainstLegacy` runs only while `layout.crossingRepair` is enabled. `layout.endStubPx` must stay above orthogonal-router's `PAD` (12), asserted at load by `assertStubClearsPad`; `layout.alongOutlineMinPx` is the one along-outline threshold (edge-simplify, DI08, bench) |
 | `scripts/bpmn/orthogonal-router.js` | `routeAroundObstacles` — obstacle-aware orthogonal Dijkstra pathfinder ("trellis"/extended-lines grid + per-bend cost penalty + soft crossing penalty), two callers, both in `edge-simplify.js`: `repairCrossings` (fallback candidate source) and `reclipStuckEnds` (the route between the two 15 px end stubs, for each port pair it tries). The router never chooses an endpoint: it routes between the two points it is given, and `reclipStuckEnds` alone decides whether an endpoint moves |
-| `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API |
+| `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API and MCP; also `validateVisualRefinementOption` |
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |
 | `scripts/mcp-bpmn-server.js` | MCP server entry point |
@@ -607,7 +608,8 @@ node bpmn/pipeline.js input.json output --strict
 # Enable the opt-in Optimization Advisory layer (soll/optimize mode):
 node bpmn/pipeline.js input.json output --optimize
 
-# Enable visual refinement (P1-P7.1 passes; off by default, see config.json):
+# Switch every refinement pass on (label repair and lane compaction already are by default;
+# --no-refine switches all off, the two flags are mutually exclusive):
 node bpmn/pipeline.js input.json output --refine
 
 # Wrap long chains into rows (ELK MULTI_EDGE, > 20 nodes; off by default, independent of --refine):
@@ -646,14 +648,20 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - Layout, tracked individually: `boundary-event-shapes` still has one sequence-flow crossing
   between boundary-event shapes (#71); a message-flow jog keeps clearance from shapes only, not
   from groups or labels (#72); a sequence flow can run through another edge's label (#73); with
-  with lane compaction (default) lane content is not re-centred in its band (#74); `compactLanes` neither compacts nor
+  lane compaction (default) lane content is not re-centred in its band (#74); `compactLanes` neither compacts nor
   tiles nested `childLanes` (#75); the orthogonal router can produce a U-turn (#76); participant
   ordering is heuristic above 8 participants (#77); layout time roughly doubles on large models
   (122 nodes: ~2x) because of the crossing guard and the router (#78)
 - A label or leg the fallback cannot move stays on a lane separator, and nothing reports it:
   `placeEdgeLabel` keeps its first pick when no other spot is clear of route, separators and shapes,
   and `keepOffLaneLines`/`rerouteAfterCompaction` refuse a move that would add a crossing; only the
-  bench (`labelLaneLine`, `hug`) counts these
+  bench (`labelLaneLine`, `hug`) counts these. Two later passes can also put a leg back on a
+  separator after `keepOffLaneLines` ran: the second `reclipStuckEnds` (it routes through
+  `orthogonal-router.js`, which knows nothing of lane lines) and `repairCrossings` on edges that
+  were not in `rerouteAfterCompaction`'s affected set. No fixture shows it today (`hug` is 0)
+- Edge-label repair runs before `routeMessageFlows`, so message-flow labels are never repaired:
+  `realistic-collaboration` keeps two overlapping message-flow labels (mf2/mf5) in every mode
+  (issue to be filed)
 - The DMN importer reads no DMNDI, so every diagram is reported as IM06 and **`report.lossless` is
   never true for a file this generator wrote** — the writer always emits a DMNDI tree (IM06) and
   generates `<variable>`/`<literalExpression>` ids (IM05). `--strict` on `dmn/import.js` and on
