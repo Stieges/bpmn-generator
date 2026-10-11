@@ -1,0 +1,37 @@
+{
+  "$schemaVersion": "1.0",
+  "pools": [
+    {
+      "id": "Process_main",
+      "name": "Customer service",
+      "nodes": [
+        { "id": "StartEvent_main", "type": "startEvent", "name": "Order received", "marker": "message", "lane": "Lane_1" },
+        { "id": "Join_Activity_s1", "type": "exclusiveGateway", "name": "", "has_join": true, "lane": "Lane_1" },
+        { "id": "Activity_s1", "type": "userTask", "name": "Review details", "lane": "Lane_1" },
+        { "id": "Activity_s2", "type": "userTask", "name": "Check documents", "lane": "Lane_1" },
+        { "id": "Gateway_s3", "type": "exclusiveGateway", "name": "Details complete?", "lane": "Lane_1" },
+        { "id": "Activity_s4", "type": "sendTask", "name": "Request details", "lane": "Lane_1" },
+        { "id": "Activity_s5", "type": "userTask", "name": "Record status", "lane": "Lane_1" },
+        { "id": "End_e1", "type": "endEvent", "name": "Details complete", "lane": "Lane_1" }
+      ],
+      "edges": [
+        { "id": "Flow_1", "source": "StartEvent_main", "target": "Join_Activity_s1", "isHappyPath": true },
+        { "id": "Flow_2", "source": "Activity_s1", "target": "Activity_s2", "isHappyPath": true },
+        { "id": "Flow_3", "source": "Activity_s2", "target": "Gateway_s3", "isHappyPath": true },
+        { "id": "Flow_4", "source": "Gateway_s3", "target": "Activity_s4", "label": "no", "isHappyPath": true },
+        { "id": "Flow_5", "source": "Gateway_s3", "target": "End_e1", "label": "yes" },
+        { "id": "Flow_6", "source": "Activity_s4", "target": "Activity_s5", "isHappyPath": true },
+        { "id": "Flow_7", "source": "Activity_s5", "target": "Join_Activity_s1", "isHappyPath": true },
+        { "id": "Flow_8", "source": "Join_Activity_s1", "target": "Activity_s1", "isHappyPath": true }
+      ],
+      "lanes": [
+        { "id": "Lane_1", "name": "Case handling", "nodeIds": ["StartEvent_main", "Join_Activity_s1", "Activity_s1", "Activity_s2", "Gateway_s3", "Activity_s4", "Activity_s5", "End_e1"] }
+      ]
+    }
+  ],
+  "collapsedPools": [{ "id": "Participant_1", "name": "Customer" }],
+  "messageFlows": [
+    { "id": "MessageFlow_1", "source": "Participant_1", "target": "StartEvent_main", "name": "Order received" },
+    { "id": "MessageFlow_2", "source": "Activity_s4", "target": "Participant_1", "name": "Request for details" }
+  ]
+}

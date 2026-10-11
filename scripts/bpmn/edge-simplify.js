@@ -8,9 +8,11 @@
  * this produces visible zigzags (5+ waypoints for a path that could be
  * a 3-waypoint L-shape).
  *
- * This module post-processes each edge: if either of the two possible
- * single-bend L-shapes (horizontal-first or vertical-first) clears all
- * node bounding boxes, use it instead of ELK's path.
+ * This module post-processes each edge: if a single-bend L-shape clears all
+ * node boxes and crosses both endpoint outlines, use it; if every clear L would
+ * lie on an endpoint's outline (#52), try the simplest two/three-bend or stubbed
+ * route that does not — see simplifyEdge; guardAgainstLegacy then reverts any
+ * single edge whose new route costs a crossing.
  *
  * Pure function. Doesn't mutate ELK's coordMap if no simplification is
  * possible. Doesn't touch edges that are already straight (2 waypoints)
@@ -18,6 +20,7 @@
  */
 
 import { routeAroundObstacles } from './orthogonal-router.js';
+import { CFG } from '../shared/utils.js';
 
 const NODE_PADDING = 4;  // px buffer around each node bbox for clearance
 
@@ -70,27 +73,51 @@ function pathLength(waypoints) {
 }
 
 /**
- * Try to simplify a single edge's waypoints into a 3-waypoint L-shape.
- * Returns the simplified waypoints if one of the L-shapes clears all
- * non-endpoint nodes, otherwise returns the original waypoints unchanged.
+ * Try to replace an ELK route with a simpler one, keeping both endpoints exactly where §5.1
+ * clipped them.
+ *
+ * Order of preference, each candidate clear of every node box except its own endpoints:
+ *  1. a single-bend L that crosses both endpoint outlines (see crossesEndpointOutlines);
+ *  2. if every clear L lies ON an endpoint's outline (#52: the last leg running down the target's
+ *     border, arrowhead on the border), the simplest two/three-bend route that does cross both
+ *     outlines — candidateRoutes' mid-corridor shapes plus stubRoutes' 15 px perpendicular stubs
+ *     (a corridor at the midpoint ±40/±80 px misses an 80 px gap right in front of the target);
+ *  3. otherwise ELK's own route when it is clear — and when it is not (coordinates.js §5.0a/§5.2
+ *     rebuilt it without an obstacle test), the old L after all: a line on an outline is the
+ *     lesser defect than a line through a shape.
+ * `legacy: true` returns the first clear L, as before #52 — the route guardAgainstLegacy reverts to.
+ * Returns the original array reference when nothing changes.
  */
-export function simplifyEdge(waypoints, boxes, sourceId, targetId) {
+export function simplifyEdge(waypoints, boxes, sourceId, targetId, { legacy = false } = {}) {
   if (!waypoints || waypoints.length <= 3) return waypoints;  // already minimal
   const start = waypoints[0];
   const end = waypoints[waypoints.length - 1];
   if (start.x === end.x || start.y === end.y) return waypoints;  // would be 2-pt straight
 
-  // Two candidate L-shapes: bend at (end.x, start.y) or (start.x, end.y)
-  const candidates = [
+  // Both L-shapes have the same Manhattan length, so the first clear one in this order is the
+  // one this pass has always taken.
+  const ls = [
     [start, { x: end.x, y: start.y }, end],  // horizontal-first
     [start, { x: start.x, y: end.y }, end],  // vertical-first
   ];
+  const clear = ls.filter(c => pathClearOfBoxes(c, boxes, sourceId, targetId));
+  if (clear.length === 0) return waypoints;
+  const legacyL = clear[0];
+  if (legacy) return legacyL;
 
-  const valid = candidates.filter(c => pathClearOfBoxes(c, boxes, sourceId, targetId));
-  if (valid.length === 0) return waypoints;
-  // Prefer the shorter (and if tied, the one that matches the original's first-segment direction)
-  valid.sort((a, b) => pathLength(a) - pathLength(b));
-  return valid[0];
+  const srcBox = boxes[sourceId];
+  const tgtBox = boxes[targetId];
+  const good = clear.find(c => crossesEndpointOutlines(c, srcBox, tgtBox));
+  if (good) return good;
+
+  const alternatives = [...candidateRoutes(waypoints), ...stubRoutes(waypoints, srcBox, tgtBox)]
+    .filter(c => c.length >= 4
+      && pathClearOfBoxes(c, boxes, sourceId, targetId)
+      && crossesEndpointOutlines(c, srcBox, tgtBox))
+    .sort((a, b) => (bendCount(a) - bendCount(b)) || (pathLength(a) - pathLength(b)));
+  if (alternatives.length) return alternatives[0];
+
+  return pathClearOfBoxes(waypoints, boxes, sourceId, targetId) ? waypoints : legacyL;
 }
 
 /**
@@ -99,6 +126,7 @@ export function simplifyEdge(waypoints, boxes, sourceId, targetId) {
  * edgeCoords: { edgeId: [{x,y}, ...] }
  * edges: array of { id, source, target } from logic-core
  * skipIds: edge ids to leave untouched
+ * legacy: the pre-#52 behaviour for every edge (first clear L) — guardAgainstLegacy's reference.
  * Returns a new edgeCoords (does not mutate the input).
  *
  * `skipIds` exists for routes that are already final: clearance here is checked against NODE
@@ -106,7 +134,7 @@ export function simplifyEdge(waypoints, boxes, sourceId, targetId) {
  * line through a pool body or into a shape — undoing the clipping and corridor
  * routing done in coordinates.js §5.4.
  */
-export function simplifyAllEdges(edgeCoords, coords, edges, skipIds = new Set()) {
+export function simplifyAllEdges(edgeCoords, coords, edges, skipIds = new Set(), { legacy = false } = {}) {
   const out = {};
   const edgeBySrcTarget = {};
   for (const e of edges || []) {
@@ -115,7 +143,7 @@ export function simplifyAllEdges(edgeCoords, coords, edges, skipIds = new Set())
   for (const [id, wp] of Object.entries(edgeCoords)) {
     if (skipIds.has(id)) { out[id] = wp; continue; }
     const lookup = edgeBySrcTarget[id];
-    out[id] = simplifyEdge(wp, coords, lookup?.source, lookup?.target);
+    out[id] = simplifyEdge(wp, coords, lookup?.source, lookup?.target, { legacy });
   }
   return out;
 }
@@ -258,6 +286,80 @@ function sideOf(point, box) {
 // Leaving the source: away from the shape. Entering the target: into it.
 const OUTWARD = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
 const INWARD  = { left: [1, 0], right: [-1, 0], top: [0, 1], bottom: [0, -1] };
+
+/**
+ * Does the end segment move out of its shape, seen from the endpoint? `away` is the direction
+ * from the endpoint along that segment, pointing away from the shape.
+ *
+ * Endpoint on a side of the bounds (sideOf): `away` must be that side's outward normal — a
+ * segment parallel to the side lies on the outline (#52).
+ * Endpoint on no side (clipped onto a circle's or diamond's slanted outline for the OTHER approach
+ * axis): no side to honour, but the segment must still move away from the centre along its own
+ * axis, or it cuts back through the shape.
+ */
+function leavesOutward(point, away, box) {
+  if (!box) return true;
+  const side = sideOf(point, box);
+  if (side) return sameDir(away, OUTWARD[side]);
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  if (away[0] !== 0) return Math.abs(point.x - cx) < 1e-6 || Math.sign(point.x - cx) === away[0];
+  return Math.abs(point.y - cy) < 1e-6 || Math.sign(point.y - cy) === away[1];
+}
+
+/** A route that leaves its source and reaches its target across the outline, never along it. */
+function crossesEndpointOutlines(cand, srcBox, tgtBox) {
+  const first = firstDirection(cand);
+  const last = lastDirection(cand);
+  if (!first || !last) return false;
+  return leavesOutward(cand[0], first, srcBox)
+      && leavesOutward(cand[cand.length - 1], [-last[0], -last[1]], tgtBox);
+}
+
+/** Length of the perpendicular stub stubRoutes (and Task 2b's re-clip) put at an edge end. */
+const END_STUB_PX = CFG.layout?.endStubPx ?? 15;
+
+/** Drops the middle one of three collinear points. */
+function withoutCollinear(pts) {
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = out[out.length - 1], b = pts[i], c = pts[i + 1];
+    const vertical = Math.abs(a.x - b.x) < 1e-6 && Math.abs(b.x - c.x) < 1e-6;
+    const horizontal = Math.abs(a.y - b.y) < 1e-6 && Math.abs(b.y - c.y) < 1e-6;
+    if (vertical || horizontal) continue;
+    out.push(b);
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+
+/**
+ * Routes with a short perpendicular stub at one or both ends, joined by an L: out of the source
+ * END_STUB_PX along its side's normal, into the target the same way. They reach a corridor right
+ * in front of a shape that candidateRoutes' mid-line offsets jump over (study: the 80 px gap
+ * between "Send reminder" and its host in realistic-collaboration). Endpoints stay fixed.
+ * On an endpoint with no identifiable side the stub follows the ELK route's own first/last
+ * direction; crossesEndpointOutlines filters out anything that would cut back into the shape.
+ */
+function stubRoutes(points, srcBox, tgtBox) {
+  const start = points[0];
+  const end = points[points.length - 1];
+  const ss = sideOf(start, srcBox);
+  const ts = sideOf(end, tgtBox);
+  const out1 = ss ? OUTWARD[ss] : firstDirection(points);
+  const in1 = ts ? INWARD[ts] : lastDirection(points);
+  if (!out1 || !in1) return [];
+  const s1 = { x: start.x + out1[0] * END_STUB_PX, y: start.y + out1[1] * END_STUB_PX };
+  const e1 = { x: end.x - in1[0] * END_STUB_PX, y: end.y - in1[1] * END_STUB_PX };
+  return [
+    [start, s1, { x: s1.x, y: e1.y }, e1, end],          // both stubs
+    [start, s1, { x: e1.x, y: s1.y }, e1, end],
+    [start, { x: e1.x, y: start.y }, e1, end],            // target stub only
+    [start, { x: start.x, y: e1.y }, e1, end],
+    [start, s1, { x: s1.x, y: end.y }, end],              // source stub only
+    [start, s1, { x: end.x, y: s1.y }, end],
+  ].map(withoutCollinear).filter(isOrthogonal);
+}
 
 // Same two directions, named the way orthogonal-router.js's routeAroundObstacles
 // wants them ('up'|'down'|'left'|'right' instead of a unit vector).
@@ -457,4 +559,39 @@ export function repairCrossings(edgeCoords, coords, edges, skipIds = new Set(), 
   const out = { ...edgeCoords };
   for (const [id, points] of changed) out[id] = points;
   return out;
+}
+
+/**
+ * Per-edge crossing guard (owner decision 2026-10-11, ELK study variant T3g).
+ *
+ * The #52 routes are chosen one edge at a time; repairCrossings then works around them. A new
+ * route can block the only crossing-free path another edge had (measured: realistic-collaboration
+ * --refine, inf3's new route left inf2 × inf8 that repairCrossings could not remove). So: count the
+ * crossings repairCrossings leaves for `routes` and for `legacyRoutes` (simplifyAllEdges with
+ * legacy: true). Only if the new routes leave more, revert single edges to their legacy route, in
+ * `edges` order, keeping a revert only when it lowers the count, until the count is back at the
+ * legacy level. Returns the routes to hand to repairCrossings, and the reverted edge ids.
+ * No blanket exception for any class of edge: whatever is reverted was measured to cost a crossing.
+ */
+export function guardAgainstLegacy(routes, legacyRoutes, coords, edges, skipIds = new Set(), repairOpts = {}) {
+  const crossingsAfterRepair = (map) => {
+    const repaired = repairCrossings(map, coords, edges, skipIds, repairOpts);
+    const entries = (edges || [])
+      .filter(e => !skipIds.has(e.id) && repaired[e.id]?.length >= 2)
+      .map(e => ({ id: e.id, source: e.source, target: e.target, points: repaired[e.id] }));
+    return totalCrossings(entries);
+  };
+  const target = crossingsAfterRepair(legacyRoutes);
+  let current = routes;
+  let n = crossingsAfterRepair(current);
+  const reverted = [];
+  for (const e of edges || []) {
+    if (n <= target) break;
+    if (skipIds.has(e.id) || !legacyRoutes[e.id]) continue;
+    if (JSON.stringify(current[e.id]) === JSON.stringify(legacyRoutes[e.id])) continue;
+    const trial = { ...current, [e.id]: legacyRoutes[e.id] };
+    const m = crossingsAfterRepair(trial);
+    if (m < n) { current = trial; n = m; reverted.push(e.id); }
+  }
+  return { routes: current, reverted };
 }

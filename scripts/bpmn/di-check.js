@@ -9,14 +9,16 @@
  * This pass closes that gap. It checks the finished coordinate map for the
  * defects that make a diagram unusable regardless of how correct the semantics
  * are: participants stacked on top of each other, pools overlapping, nodes
- * sitting outside the pool they belong to, and a sequence-flow arrow that no
- * longer starts or ends on the shape it's attached to.
+ * sitting outside the pool they belong to, a sequence-flow arrow that no
+ * longer starts or ends on the shape it's attached to, and a sequence flow
+ * whose first or last segment lies on its own endpoint's outline.
  *
  * Findings are diagnostics, not rule violations — they are reported under
  * `diagnostics` in the pipeline result, separate from `validation`.
  */
 
 const DEFAULT_TOLERANCE = 1;
+const ALONG_MIN_PX = 5; // bpmn-js arrowhead length — see DI08
 
 /**
  * @param coordMap  result of buildCoordinateMap ({ coords, laneCoords, poolCoords, ... })
@@ -163,6 +165,34 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
     }
   }
 
+  // DI08 — a sequence flow's first or last segment lies on its own endpoint's outline (#52).
+  // WARNING: the edge is attached (DI07 holds) and the model is fine, but the line covers the
+  // shape's border and the arrowhead sits on it. Counted only beyond 5 px — bpmn-js's arrowhead
+  // length (marker 'M 1 5 L 11 10 L 1 15 Z' at scale 0.5), shorter overlap hides under it — with
+  // ±tol collinearity, the same definition as scripts/bench/layout-metrics.mjs's
+  // edgeEndsAlongBorder, restated because this pass is dependency-free by design. For a circle or
+  // a diamond the side is a tangent of its bounds; the line still visibly misses the shape.
+  for (const proc of (lc.pools || [lc])) {
+    for (const edge of flattenEdges(proc)) {
+      const segs = nonZeroSegments((coordMap.edgeCoords || {})[edge.id] || []);
+      if (!segs.length) continue;
+      const ends = [['starts', segs[0], edge.source], ['ends', segs[segs.length - 1], edge.target]];
+      for (const [verb, seg, nodeId] of ends) {
+        const box = coords[nodeId];
+        if (!box || !Number.isFinite(box.x)) continue;
+        const { side, length } = alongSide(seg, box, tol);
+        if (length > ALONG_MIN_PX) {
+          issues.push({
+            code: 'DI08',
+            severity: 'WARNING',
+            message: `Sequence flow "${edge.id}" ${verb} along the ${side} side of "${nodeId}" for ${Math.round(length)} px.`,
+            elements: [edge.id, nodeId],
+          });
+        }
+      }
+    }
+  }
+
   // DI05 — a message flow crossing a participant it does not involve.
   // WARNING, not ERROR: with a communication cycle across three or more
   // participants a linear stack cannot avoid it, so this reports rather than
@@ -233,6 +263,35 @@ function flattenEdges(proc) {
 
 function touchesShape(box, pt, tol) {
   return contains(box, { x: pt.x, y: pt.y, w: 0, h: 0 }, tol);
+}
+
+function nonZeroSegments(pts) {
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6) continue;
+    out.push([a, b]);
+  }
+  return out;
+}
+
+function overlap1d(a0, a1, b0, b1) {
+  return Math.max(0, Math.min(Math.max(a0, a1), b1) - Math.max(Math.min(a0, a1), b0));
+}
+
+/** Longest stretch a segment runs collinear (±tol) with one side of `box`, and which side. */
+function alongSide([a, b], box, tol) {
+  let best = { side: null, length: 0 };
+  const consider = (side, length) => { if (length > best.length) best = { side, length }; };
+  if (Math.abs(a.x - b.x) <= tol) {
+    if (Math.abs(a.x - box.x) <= tol) consider('left', overlap1d(a.y, b.y, box.y, box.y + box.h));
+    if (Math.abs(a.x - (box.x + box.w)) <= tol) consider('right', overlap1d(a.y, b.y, box.y, box.y + box.h));
+  }
+  if (Math.abs(a.y - b.y) <= tol) {
+    if (Math.abs(a.y - box.y) <= tol) consider('top', overlap1d(a.x, b.x, box.x, box.x + box.w));
+    if (Math.abs(a.y - (box.y + box.h)) <= tol) consider('bottom', overlap1d(a.x, b.x, box.x, box.x + box.w));
+  }
+  return best;
 }
 
 export { checkDiagramIntegrity };

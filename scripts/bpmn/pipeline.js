@@ -36,7 +36,7 @@ import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlow
 import { checkDiagramIntegrity } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
-import { simplifyAllEdges, repairCrossings } from './edge-simplify.js';
+import { simplifyAllEdges, repairCrossings, guardAgainstLegacy } from './edge-simplify.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
@@ -139,7 +139,7 @@ async function runPipeline(logicCore, opts = {}) {
   // means — which is what lets `main()` gate on it, the HTTP layer turn it into a status and
   // `agents/layout.js` pass it through without retrying. Returning early here instead would make
   // one key a gate in the library and a report over HTTP. Kept as its own key rather than merged
-  // into `diagnostics` because that one's `code` is a closed DI01…DI06 enum in
+  // into `diagnostics` because that one's `code` is a closed DI01…DI08 enum in
   // references/api-schema.json, which the docs gate validates a real response against.
   const netDiagnostics = checkNetTranslation(lc);
 
@@ -154,7 +154,8 @@ async function runPipeline(logicCore, opts = {}) {
   const coordMap  = buildCoordinateMap(elkResult, lc);
 
   // Edge simplification: collapse ELK's layer-column jogs into clean L-shapes
-  // where node-bbox collision allows it. Reduces cross-lane zigzag.
+  // where node-bbox collision allows it — never an L that would lie on an
+  // endpoint's outline (#52). Reduces cross-lane zigzag.
   // flattenProcessEdges, not proc.edges: a subprocess child's edges must reach
   // simplifyAllEdges/repairCrossings too, or a nested crossing is invisible to
   // both passes (see the coordinates.js §5.0- comment for the same pattern).
@@ -162,19 +163,28 @@ async function runPipeline(logicCore, opts = {}) {
   // Associations are already clipped to both shapes (coordinates.js §5.4) and
   // must not be simplified — clearance here is checked against nodes only.
   const skipSimplify = new Set((lc.associations || []).map(a => a.id));
-  coordMap.edgeCoords = simplifyAllEdges(coordMap.edgeCoords, coordMap.coords, allEdges, skipSimplify);
+  const elkRoutes = coordMap.edgeCoords;
+  coordMap.edgeCoords = simplifyAllEdges(elkRoutes, coordMap.coords, allEdges, skipSimplify);
 
   // Crossing repair: the routes coordinates.js deletes and rebuilds (§5.0a,
   // §5.2, §5.0e, §5.5) pick their axis by |dy| > |dx| alone, so they can cross
   // an edge that ELK had routed around. Runs after simplifyAllEdges because
   // that pass rewrites routes too. A no-op unless a crossing actually exists.
   if (CFG.layout?.crossingRepair !== false) {
-    const beforeRepair = coordMap.edgeCoords;
-    coordMap.edgeCoords = repairCrossings(beforeRepair, coordMap.coords, allEdges, skipSimplify, {
+    const repairOpts = {
       maxPasses: CFG.layout?.crossingRepairMaxPasses ?? 2,
       orthogonalRouter: CFG.layout?.orthogonalRouterEnabled !== false,
       orthogonalRouterMaxGridPoints: CFG.layout?.orthogonalRouterMaxGridPoints,
-    });
+    };
+    // #52 guard: a new route must not cost a crossing the pre-#52 routes did not have — see
+    // guardAgainstLegacy. Reverts single edges only; a no-op unless the count went up.
+    if (CFG.layout?.crossingGuard !== false) {
+      const legacyRoutes = simplifyAllEdges(elkRoutes, coordMap.coords, allEdges, skipSimplify, { legacy: true });
+      coordMap.edgeCoords = guardAgainstLegacy(coordMap.edgeCoords, legacyRoutes, coordMap.coords,
+        allEdges, skipSimplify, repairOpts).routes;
+    }
+    const beforeRepair = coordMap.edgeCoords;
+    coordMap.edgeCoords = repairCrossings(beforeRepair, coordMap.coords, allEdges, skipSimplify, repairOpts);
     // Labels were placed on the pre-repair geometry (coordinates.js §5.6).
     // Refresh only the ones whose route actually moved — repairCrossings keeps
     // the original array reference for everything it left alone.
