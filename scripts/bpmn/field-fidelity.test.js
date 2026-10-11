@@ -204,7 +204,7 @@ const DEFS = (kind) => {
 const SAMPLES = {
   // ── node fields ────────────────────────────────────────────────────────────────────────────
   // Booleans are sampled with `true` only, except where the row's own mechanism is about the other
-  // value (`cancelActivity`, `has_join`). The table states the write loop's contract as "write the
+  // value (`cancelActivity`, `isInterrupting`, `has_join`). The table states the write loop's contract as "write the
   // value when it is truthy", so a `false` is by that stated contract indistinguishable from an
   // absent field on the way out — a property of the loop, already written down, not a per-field
   // fidelity question this fence can answer per row.
@@ -335,7 +335,10 @@ const SAMPLES = {
   role: [{ label: 'a role name with spaces and specials', value: 'Experte XY & Prüfer <2>' }],
   system: [{ label: 'a system name with specials', value: 'SAP S/4 & "Core"' }],
   isAdHoc: [{ label: 'true', value: true }],
-  isInterrupting: [{ label: 'true', value: true }],
+  isInterrupting: [
+    { label: 'false (the only value written)', value: false },
+    { label: 'true (the XSD default)', value: true },
+  ],
   extensions: [{ label: 'a foreign attribute bag', value: { 'acme:owner': 'Fachbereich' } }],
 
   // ── edge fields ────────────────────────────────────────────────────────────────────────────
@@ -649,7 +652,7 @@ function reportBothPaths(blocks) {
 }
 
 /**
- * The 15 `roundTrip: 'lossy'` contracts.
+ * The 16 `roundTrip: 'lossy'` contracts.
  *
  * WHY THEY LIVE HERE and not beside the row in `types.js`. The brief left the choice open between a
  * per-row assertion function in `types.js` and a lookup keyed by field in the test. Three things
@@ -705,6 +708,13 @@ const LOSSY_CONTRACTS = {
     quote: 'Only `cancelActivity: false` is serialised',
     assert: (ctx) => {
       sameAs(ctx, ctx.out?.cancelActivity, ctx.value === false ? false : undefined);
+    },
+  },
+
+  isInterrupting: {
+    quote: 'Only `isInterrupting: false` is serialised',
+    assert: (ctx) => {
+      sameAs(ctx, ctx.out?.isInterrupting, ctx.value === false ? false : undefined);
     },
   },
 

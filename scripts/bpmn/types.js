@@ -477,6 +477,16 @@ export const OMG_NODE_FIELD_SCOPE = [
     reason: 'Only `cancelActivity: false` is serialised — `true` is the XSD default and is left '
       + 'implicit, so a literal `cancelActivity: true` comes back absent. The semantics survive '
       + '(no attribute means interrupting); the literal field does not.' },
+  // The start-event twin of `cancelActivity`, and written at the same site for the same reason:
+  // `StartEvent#isInterrupting` defaults to true (BPMN 2.0.2 Table 10.84), so only `false` carries
+  // information, and the generic loop skips falsy values. It used to be render-only — `svg.js` drew
+  // the dashed ring of a non-interrupting event-subprocess start while the XML said nothing, so
+  // bpmn.io and Camunda showed an interrupting start event (#83).
+  { field: 'isInterrupting', attr: 'isInterrupting', type: 'boolean', on: 'self', allowed: domain('Node', 'isInterrupting'), scope: 'a startEvent',
+    shape: 'attr', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
+    reason: 'Only `isInterrupting: false` is serialised — `true` is the XSD default and is left '
+      + 'implicit, so a literal `isInterrupting: true` comes back absent. The semantics survive '
+      + '(no attribute means interrupting); the literal field does not.' },
   // The boolean becomes `gatewayDirection`, and only `Converging` maps back — `Diverging` is
   // recomputed from the graph by `inferGatewayDirections`, and the value actually written comes
   // from that inference (`node._direction`), not from `has_join` itself. Meaning survives; the
@@ -722,12 +732,6 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'CLASS (`bpmn:adHocSubProcess`), not an attribute, so implementing it means emitting that '
       + 'class — which also means giving it an `xmlTag` in the ontology (`bpmnXmlTag` now throws for it). '
       + 'Decided and queued (plan "Root fix", backlog items 5 and 6).' },
-  { field: 'isInterrupting', attr: null, type: 'boolean', on: 'self', allowed: domain('Node', 'isInterrupting'), scope: 'a startEvent',
-    shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
-    reason: 'Render-only: `svg.js` draws the dashed ring of a non-interrupting event-subprocess '
-      + 'start event and nothing serialises it. OMG has the attribute ready — `StartEvent'
-      + '#isInterrupting`, default true — so this is a write plus two reads, not a design question. '
-      + 'Decided and queued (plan "Root fix", backlog item 6).' },
   { field: 'extensions', attr: null, type: 'object', on: 'self', allowed: domain('Node', 'extensions'), scope: 'any node',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Import-side preservation only: `moddle-import.js` copies a foreign element\'s `$attrs` '

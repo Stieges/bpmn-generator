@@ -473,6 +473,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **A non-interrupting event-subprocess start event is non-interrupting in the BPMN XML (#83).**
+  `isInterrupting: false` on a `startEvent` was drawn as a dashed ring in our SVG and written
+  nowhere, so bpmn.io and Camunda showed an interrupting start event. `bpmn-xml.js` now writes
+  `isInterrupting="false"` at every nesting depth (only `false`: `true` is the XSD default, like
+  `cancelActivity`), both importers read it back, and the field-fidelity fence covers it (row
+  `isInterrupting`, `roundTrip: 'lossy'` — a literal `true` comes back absent).
 - **The legacy importer decodes XML character data like the primary one.** `bpmnToLogicCoreLegacy`
   (`scripts/bpmn/import.js`) decoded only the five named entities in attributes and nothing in
   element text, so a name written as `&#38;` came back as `Check A &#38; B` and `x<1` in a
