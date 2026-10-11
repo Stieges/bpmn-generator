@@ -1372,8 +1372,7 @@ function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable)
   }
   // The target's own participant blocks every column between the corridor next to the source and
   // the target (or the detour corridor and the target): jog inside the target's participant.
-  const t2 = participantGapY(ey, sy, poolCoords);
-  const jogFrom = Math.abs(t2 - c) > 1 ? t2 : c;
+  const jogFrom = Math.abs(t - c) > 1 ? t : c;
   const tailJog = tCols.map(x => jogLeg(x, ey, jogFrom, obstacles)).find(Boolean);
   if (tailJog) {
     const back = tailJog.slice().reverse();                      // from jogFrom down to the port

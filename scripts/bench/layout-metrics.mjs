@@ -50,6 +50,7 @@ import { logicCoreToElk, runElkLayout } from '../bpmn/layout.js';
 import { resolveLaneId } from '../bpmn/topology.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { isEvent, isGateway } from '../bpmn/types.js';
+import { CFG } from '../shared/utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
@@ -122,14 +123,13 @@ function segmentRectOverlap(a, b, rect) {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Readability measures added 2026-10-11 (#52, lane strips, message flows).
-// Each states what it deliberately does NOT count, for the reason §0 of the
-// layout-quality analysis records: a measure that counts a structurally
+// Each states what it deliberately does NOT count, for this reason: a measure that counts a structurally
 // impossible case manufactures work.
 // ─────────────────────────────────────────────────────────────────────────
 
 /** bpmn-js draws the sequence-flow arrowhead 5 px long (marker 'M 1 5 L 11 10 L 1 15 Z' at scale
  *  0.5): up to 5 px of a segment lying on the outline hides under it. */
-export const ALONG_MIN_PX = 5;
+export const ALONG_MIN_PX = CFG.layout?.alongOutlineMinPx ?? 5;
 const COLLINEAR_TOL = 1;
 
 function overlap1d(a0, a1, b0, b1) {
@@ -279,7 +279,7 @@ export function segmentEntersShape([a, z], box, shape) {
 
 /**
  * (sequence flow, own endpoint) pairs: a segment that enters the interior of the edge's OWN source
- * or target shape (owner decision 3, 2026-10-11 — every other measure and DI check exempts the
+ * or target shape (every other measure and DI check exempts the
  * endpoints, which is how realistic-collaboration's inf3 ran through "Check completeness" unseen).
  * Does NOT count a boundary event's flow against its host (the host is not an endpoint).
  */

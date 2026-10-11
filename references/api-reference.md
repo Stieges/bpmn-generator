@@ -149,7 +149,7 @@ adds the tool surface); today it is `runDmnPipeline(dc).diagnostics`, called dir
 | DD02 | ERROR | A shape outside the diagram's declared bounds |
 | DD03 | ERROR | A requirement-connection endpoint that does not sit on its shape's boundary |
 
-`diagnostics.ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI07 above.
+`diagnostics.ok` means "no ERROR-severity finding" — the same convention as BPMN's DI01–DI10 above.
 
 ---
 

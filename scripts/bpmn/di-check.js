@@ -19,16 +19,19 @@
  */
 
 const DEFAULT_TOLERANCE = 1;
-const ALONG_MIN_PX = 5; // bpmn-js arrowhead length — see DI08
+const DEFAULT_ALONG_MIN_PX = 5; // bpmn-js arrowhead length — see DI08; the pipeline passes layout.alongOutlineMinPx
 
 /**
  * @param coordMap  result of buildCoordinateMap ({ coords, laneCoords, poolCoords, ... })
  * @param lc        Logic-Core
  * @param opts.tolerance  overlap slack in px (default 1) — abutting edges are fine
+ * @param opts.alongOutlineMinPx  DI08 threshold in px (default 5); config `layout.alongOutlineMinPx`,
+ *        passed in by pipeline.js so this pass stays dependency-free
  * @returns { ok, issues: [{ code, severity, message, elements }] }
  */
 function checkDiagramIntegrity(coordMap, lc, opts = {}) {
   const tol = opts.tolerance ?? DEFAULT_TOLERANCE;
+  const alongMinPx = opts.alongOutlineMinPx ?? DEFAULT_ALONG_MIN_PX;
   const issues = [];
   const { coords = {}, poolCoords = {}, laneCoords = {} } = coordMap || {};
 
@@ -182,7 +185,7 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
         const box = coords[nodeId];
         if (!box || !Number.isFinite(box.x)) continue;
         const { side, length } = alongSide(seg, box, tol);
-        if (length > ALONG_MIN_PX) {
+        if (length > alongMinPx) {
           issues.push({
             code: 'DI08',
             severity: 'WARNING',
@@ -194,7 +197,7 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
     }
   }
 
-  // DI09 — a sequence flow running through its own source or target shape (owner decision 3).
+  // DI09 — a sequence flow running through its own source or target shape (a design decision, 2026-10-11).
   // Every other check exempts an edge's own endpoints; this one is about exactly them. WARNING:
   // the flow is attached, but it visibly starts or ends somewhere else. The shape is the drawn
   // one — a circle for an event, a rhombus for a gateway (type-name suffix: this pass is

@@ -320,9 +320,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
 ### Fixed
-- **Message flows step round the next lane's task.** When a shape of the flow's own participant blocks every column, the flow jogs inside that participant; new diagnostic **DI10** (WARNING) reports any message flow still running through a foreign shape.
-- **Message flows no longer run through the shapes of participants they pass.** A flow whose straight leg crossed a task or event of another participant now detours through a clear column, with both horizontal legs in participant gaps; inside a rectangular endpoint the port moves along the edge when that clears the leg. DI05 is unchanged: avoiding a shape is not avoiding a participant's band.
-- **No empty strip between lanes with `--refine`.** `compactLanes` re-derived each band from its content, which left up to 40 px between a band and the one above (5 of 10 laned fixtures); bpmn.io draws that as an extra empty band. Each band below the first now grows up to the band above. No node, edge or participant moves.
 - **Sequence-flow ends no longer run along their own shape's outline (#52).** `simplifyAllEdges`
   replaced ELK's Z-shaped routes with an L whenever one cleared the nodes — including the L whose
   last leg lay on the target's border (and the mirror case at the source), so the line covered the
@@ -330,7 +327,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   takes only an L that crosses both outlines, otherwise the simplest two/three-bend route that does
   (including routes with a 15 px perpendicular stub at an end), otherwise ELK's route. A per-edge
   crossing guard after `repairCrossings` reverts a single edge to its old L when its new route
-  leaves more crossings (config `layout.crossingGuard`). ELK's settings are unchanged: its raw
+  leaves more crossings (config `layout.crossingGuard`; the guard runs only while `layout.crossingRepair` is
+  enabled, so with that off the #52 routes go unguarded). ELK's settings are unchanged: its raw
   routes never end along an outline. New diagnostic **DI08**
   (WARNING) reports any remaining case; `references/api-schema.json`'s DI enum gains DI07 (already
   emitted, missing from the enum) and DI08.
@@ -340,6 +338,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Send reminder") is re-routed; when no route keeping its endpoints works, an endpoint moves to the
   middle of another side of the same shape (config `layout.endpointReclip`). New diagnostic
   **DI09** (WARNING).
+- **No empty strip between lanes with `--refine`.** `compactLanes` re-derived each band from its
+  content, which left up to 40 px between a band and the one above (5 of 10 laned fixtures);
+  bpmn.io draws that as an extra empty band. Each band below the first now grows up to the band
+  above. No node, edge or participant moves.
+- **Message flows no longer run through the shapes of participants they pass.** A flow whose
+  straight leg crossed a task or event of another participant now detours through a clear column,
+  with both horizontal legs in participant gaps; inside a rectangular endpoint the port moves along
+  the edge when that clears the leg. DI05 is unchanged: avoiding a shape is not avoiding a
+  participant's band.
+- **Message flows step round the next lane's task.** When a shape of the flow's own participant
+  blocks every column, the flow jogs inside that participant; new diagnostic **DI10** (WARNING)
+  reports any message flow still running through a foreign shape.
 - **DMN import: the `mapsTo` values are fenced against the Decision-Core schema (#61).** F1b fenced
   the keys only, so a row could claim a slot that `references/decision-core-schema.json` does not
   have. Fence F1c resolves each value's leading slot (`Type.property`, `Type{type:"x"}` or a root
@@ -909,7 +919,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
-- **DI05 is readable at high participant counts (#43).** Above `diagnostics.di05GroupThreshold` (default 5) the CLI prints DI05 grouped by source participant, one line each with a histogram of bands crossed and the worst flows named. Each DI05 message now says how many participants it crosses. The JSON result keeps one DI05 per flow.
+- **DI05 is readable at high participant counts (#43).** Above `diagnostics.di05GroupThreshold`
+  (default 5) the CLI prints DI05 grouped by source participant, one line each with a histogram of
+  bands crossed and the worst flows named. Each DI05 message now says how many participants it
+  crosses. The JSON result keeps one DI05 per flow.
 - **`references/bpmn-ontology.jsonld` is now `references/ontology.jsonld`**, and its loader moved from
   `scripts/bpmn/ontology.js` to `scripts/shared/ontology.js` — the file now also describes DMN and
   the rule catalog, and `dmn/` must not import `bpmn/`. The export `bpmn-generator/ontology` keeps
@@ -948,6 +961,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
 
+- **Layout limits left open by the edge and message-flow work**, each tracked:
+  - `boundary-event-shapes` still has one sequence-flow crossing between boundary-event shapes (#71).
+  - A message-flow jog keeps clearance from shapes only; it ignores groups and labels (#72).
+  - A sequence flow can still run through another edge's label (#73).
+  - With `--refine`, lane content is not re-centred in its band after compaction (#74).
+  - `compactLanes` neither compacts nor tiles nested `childLanes` (#75).
+  - The orthogonal router can produce a U-turn where a detour is cheaper (#76).
+  - Participant ordering is a heuristic above 8 participants (#77).
+  - Layout time grows on large models: the crossing guard and the router add roughly 2x on a
+    122-node process (#78).
 - **SC01–SC06 are not profile-switchable yet**: the scenario pipeline takes no profile. A profile that
   turns off `workflow_net` (`rules/default-profile.json` does) or DMN `semantics` silences WF01–WF03
   resp. D06–D08, but not SC01/SC06 resp. SC04/SC05, which sit in those layers.

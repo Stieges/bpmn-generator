@@ -197,7 +197,7 @@ async function runPipeline(logicCore, opts = {}) {
     }
   }
 
-  // Stuck ends (owner decision 4): an edge that still ends along an outline or runs through its
+  // Stuck ends: an edge that still ends along an outline or runs through its
   // own source/target after simplification and repair may move an endpoint to another side's
   // midpoint — see reclipStuckEnds. A boundary event's endpoint never moves: its place on the host
   // is placeBoundaryEvents' contract.
@@ -244,7 +244,7 @@ async function runPipeline(logicCore, opts = {}) {
 
   // DI integrity: the rule engine never sees a coordinate, so a layout defect
   // passes validation green. This pass inspects the produced geometry.
-  const diagnostics = checkDiagramIntegrity(coordMap, lc);
+  const diagnostics = checkDiagramIntegrity(coordMap, lc, { alongOutlineMinPx: CFG.layout?.alongOutlineMinPx });
 
   return {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
