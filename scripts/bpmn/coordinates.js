@@ -718,6 +718,15 @@ function labelHitsRoute(box, pts) {
   return !!pts && pts.length >= 2 && entersInterior(pts, box);
 }
 
+/**
+ * Does `outer` wrap the whole of `inner`? A container (expanded subprocess, group) that wraps a
+ * label box entirely is not in its way. One definition, shared by placeEdgeLabel and the bench's
+ * edgeLabelHits so the placement rule and its measure cannot drift apart.
+ */
+function boxWithin(outer, inner) {
+  return inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
+}
+
 /** Does a box lie across one of `lines` (`{ y, x0, x1 }`)? Touching a line does not count. */
 function boxCrossesLines(box, lines) {
   return lines.some(L => box.y < L.y && L.y < box.y + box.h && box.x < L.x1 && L.x0 < box.x + box.w);
@@ -786,9 +795,8 @@ function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLin
   let pick = cands.find(offRoute) ?? cands[0];
   if (pick && avoidLines.length && boxCrossesLines(boxOf(pick), avoidLines)) {
     // A container (expanded subprocess, group) that wraps the whole box is not in its way — the same
-    // rule as the bench's edgeLabelHits.
-    const wraps = (o, b) => b.x >= o.x && b.y >= o.y && b.x + b.w <= o.x + o.w && b.y + b.h <= o.y + o.h;
-    const clearOf = (b) => !obstacles.some(o => !wraps(o, b) && b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h);
+    // rule as the bench's edgeLabelHits (boxWithin).
+    const clearOf = (b) => !obstacles.some(o => !boxWithin(o, b) && b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h);
     const ok = (c) => offRoute(c) && !boxCrossesLines(boxOf(c), avoidLines) && clearOf(boxOf(c));
     const twin = beside(pick.seg[0], pick.seg[1], OTHER_SIDE[pick.side]);
     pick = (ok(twin) ? twin : cands.find(ok)) ?? pick;
@@ -1679,4 +1687,4 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };

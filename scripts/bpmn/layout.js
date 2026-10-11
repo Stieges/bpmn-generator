@@ -382,8 +382,9 @@ function stripWrapping(node) {
  */
 async function runElkLayout(elkGraph) {
   const elk = new ELK();
-  // elkjs may mutate its input, so keep a pristine copy to retry from (a JSON round trip: the graph
-  // is plain data, and structuredClone is not reliable across realms, e.g. under jest).
+  // elkjs may mutate its input, so keep a pristine copy to retry from. A JSON round trip is enough:
+  // the graph is plain data (pipeline.js copies coordMap.edgeCoords with structuredClone for the
+  // same reason, and either works on plain data).
   const pristine = hasWrapping(elkGraph) ? JSON.parse(JSON.stringify(elkGraph)) : null;
   let layouted;
   let fallback = null;

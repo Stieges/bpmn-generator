@@ -63,7 +63,7 @@ import { isMainModule } from '../shared/entry-point.js';
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { CFG } from '../shared/utils.js';
 import { flowMetrics } from './flow-metrics.mjs';
-import { edgeLabelBox, labelHitsRoute, flattenProcessNodes } from '../bpmn/coordinates.js';
+import { edgeLabelBox, labelHitsRoute, boxWithin, flattenProcessNodes } from '../bpmn/coordinates.js';
 import { innerLaneLines } from '../bpmn/visual-refinement.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -603,7 +603,6 @@ function boxSegmentDistance(b, p, q) {
 export function edgeLabelHits(coordMap, lc) {
   const containers = new Set((lc.pools || [lc]).flatMap((p) => flattenProcessNodes(p.nodes || []))
     .filter((n) => (n.isExpanded && n.nodes?.length) || n.type === 'group').map((n) => n.id));
-  const inside = (b, c) => b.x >= c.x && b.y >= c.y && b.x + b.w <= c.x + c.w && b.y + b.h <= c.y + c.h;
   const labels = Object.entries(coordMap.edgeLabels || {}).map(([id, L]) => [id, edgeLabelBox(L)]);
   const out = { ownEdge: [], labelLabel: [], labelNode: [], laneLine: [], farFromEdge: [] };
   const lines = innerLaneLines(coordMap, lc);
@@ -619,7 +618,7 @@ export function edgeLabelHits(coordMap, lc) {
     }
     for (const [other, ob] of labels.slice(i + 1)) if (boxesOverlap(box, ob)) out.labelLabel.push(`${id}/${other}`);
     for (const [node, c] of Object.entries(coordMap.coords || {})) {
-      if (containers.has(node) && inside(box, c)) continue;
+      if (containers.has(node) && boxWithin(c, box)) continue;
       if (boxesOverlap(box, c)) out.labelNode.push(`${id}>${node}`);
     }
   });

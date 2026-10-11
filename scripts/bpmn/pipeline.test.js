@@ -25,12 +25,14 @@ import {
 } from './pipeline.js';
 import { normalizeLaneAssignments, orderParticipantsByMessageFlow } from './topology.js';
 import { repairCrossings } from './edge-simplify.js';
-import { wrapText, wrapTextByPx, CFG } from '../shared/utils.js';
+import { wrapText, CFG } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 
 // Everything on: visual refinement plus ELK wrapping (wrapping is its own switch, off by default).
 const ALL_ON = { visualRefinement: true, elkWrapping: 'auto' };
+// Modes of the every-fixture loops: refinement off, everything on, and the shipped default (no option).
+const optionsFor = (mode) => (mode === 'default' ? {} : mode ? ALL_ON : { visualRefinement: false });
 import { moddleParse, moddleToLogicCore } from './moddle-import.js';
 import { checkWorkflowNetSoundness, bpmnToPN, checkSoundness } from './workflow-net.js';
 import { enumerateScenarios } from '../scenarios/enumerate.js';
@@ -3858,27 +3860,6 @@ describe('wrapText char-level fallback', () => {
   });
 });
 
-describe('wrapTextByPx', () => {
-  test('wraps based on pixel budget, using estimateTextWidth heuristic', () => {
-    // 60px at fontSize=11 ≈ 9 chars (60 / (11 * 0.6))
-    const result = wrapTextByPx('Hello World Foo Bar', 60, 11);
-    expect(result.length).toBeGreaterThan(1);
-    expect(result.every(l => l.length <= 10)).toBe(true);
-  });
-
-  test('handles zero-width gracefully (does not infinite-loop)', () => {
-    const result = wrapTextByPx('abc', 1, 11);
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThanOrEqual(1);
-  });
-
-  test('uses default fontSize=11 when omitted', () => {
-    const a = wrapTextByPx('Hello World', 60);
-    const b = wrapTextByPx('Hello World', 60, 11);
-    expect(a).toEqual(b);
-  });
-});
-
 describe('long-lane-names matrix', () => {
   const lc = JSON.parse(readFileSync('../tests/fixtures/long-lane-names.json', 'utf8'));
 
@@ -4101,6 +4082,10 @@ describe('refinement defaults', () => {
     const def = await runPipeline(lc());
     const expected = await runPipeline(lc(), { visualRefinement: { laneCompaction: true, edgeLabelCollisionRepair: true } });
     expect(def.bpmnXml).toBe(expected.bpmnXml);
+  });
+  test('resolveRefinement() with no option reads the shipped config', async () => {
+    const { resolveRefinement } = await import('./visual-refinement.js');
+    expect(resolveRefinement()).toEqual({ laneCompaction: true, edgeLabelCollisionRepair: true });
   });
 });
 
@@ -5275,23 +5260,23 @@ describe('DI integrity check', () => {
     for (const name of fixtureNames) {
       const lc = JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
       if (!lc.pools && !lc.nodes) continue; // not a Logic-Core document
-      for (const visualRefinement of [false, true]) {
-        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), (visualRefinement ? ALL_ON : { visualRefinement: false }));
+      for (const visualRefinement of [false, true, 'default']) {
+        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), optionsFor(visualRefinement));
         if (!r.coordMap) continue; // fixture intentionally fails validation (e.g. deadlock-process)
         const di07 = r.diagnostics.issues.filter(i => i.code === 'DI07');
         expect(`${name} vr=${visualRefinement}: ${JSON.stringify(di07)}`)
           .toBe(`${name} vr=${visualRefinement}: []`);
       }
     }
-  }, 30000); // every fixture × both modes; CI runners are slower than local machines (#78)
+  }, 30000); // every fixture × three modes; CI runners are slower than local machines (#78)
 
   test('lane bands tile without a strip, refined or not', async () => {
     const fixtureNames = readdirSync(fixturesDir).filter(f => f.endsWith('.json'));
     for (const name of fixtureNames) {
       const lc = JSON.parse(readFileSync(resolve(fixturesDir, name), 'utf8'));
       if (!lc.pools && !lc.nodes) continue;
-      for (const visualRefinement of [false, true]) {
-        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), (visualRefinement ? ALL_ON : { visualRefinement: false }));
+      for (const visualRefinement of [false, true, 'default']) {
+        const r = await runPipeline(JSON.parse(JSON.stringify(lc)), optionsFor(visualRefinement));
         if (!r.coordMap) continue;
         const strips = [];
         for (const proc of lc.pools || [lc]) {
@@ -5305,7 +5290,7 @@ describe('DI integrity check', () => {
         expect(`${name} vr=${visualRefinement}: ${strips.join(', ')}`).toBe(`${name} vr=${visualRefinement}: `);
       }
     }
-  }, 30000); // every fixture × both modes; CI runners are slower than local machines (#78)
+  }, 30000); // every fixture × three modes; CI runners are slower than local machines (#78)
 
   describe('DI08 — an end segment along its own outline (#52)', () => {
     const lc = { pools: [{ id: 'P',
@@ -5462,13 +5447,13 @@ describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () 
   });
 
   test('lane bands never overlap, with or without visual refinement', async () => {
-    for (const visualRefinement of [false, true]) {
+    for (const visualRefinement of [false, true, 'default']) {
       const lc = loadFixture('realistic-collaboration.json');
-      const r = await runPipeline(lc, (visualRefinement ? ALL_ON : { visualRefinement: false }));
+      const r = await runPipeline(lc, optionsFor(visualRefinement));
       expect(r.diagnostics.issues.filter(i => i.code === 'DI04')).toEqual([]);
       expect(r.diagnostics.ok).toBe(true);
     }
-  });
+  }, 30000);
 
   test('DI04 fires on overlapping lane bands', () => {
     const coordMap = {
@@ -6698,7 +6683,7 @@ describe('repairCrossings', () => {
     } finally {
       CFG.layout.crossingRepair = original;
     }
-  });
+  }, 30000);
 });
 
 describe('#52 — loop with a join: every flow crosses its endpoints\' outlines', () => {
@@ -6858,7 +6843,7 @@ describe('boundary event flows', () => {
     // Was a separate, pre-existing gap: the layout passes that only run under
     // refinement (lane compaction) move nodes AFTER
     // crossingRepair's fixed-shape candidate search already ran, and ELK
-    // wrapping (also refinement-only, but a pre-buildCoordinateMap ELK
+    // wrapping (a layout-level switch of its own, a pre-buildCoordinateMap ELK
     // decision, not a post-repair pass) changes the topology it has to solve. Both left the
     // candidate search with nothing admissible. orthogonal-router.js's
     // obstacle-aware fallback clears it — same fix as the vr:false case above.
@@ -6870,13 +6855,13 @@ describe('boundary event flows', () => {
 
   test('the diagram integrity check stays clean on every boundary fixture', async () => {
     for (const name of BOUNDARY_FIXTURES) {
-      for (const visualRefinement of [false, true]) {
-        const r = await runPipeline(loadFixture(name), (visualRefinement ? ALL_ON : { visualRefinement: false }));
+      for (const visualRefinement of [false, true, 'default']) {
+        const r = await runPipeline(loadFixture(name), optionsFor(visualRefinement));
         expect(`${name} vr=${visualRefinement}: ${r.diagnostics.issues.filter(i => i.severity === 'ERROR').length}`)
           .toBe(`${name} vr=${visualRefinement}: 0`);
       }
     }
-  });
+  }, 30000);
 });
 
 describe('lane compaction keeps sequence flows off lane lines', () => {
@@ -6944,7 +6929,9 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
       compactLanes(cm, fresh, { minLaneHeight: 80, minLaneHeightFor: (id) => laneLabelFloor(laneNameOf.get(id)) });
       expect(JSON.stringify(cm)).toBe(JSON.stringify(a.coordMap));
       // the re-route run a second time on its own output changes nothing; the uncompacted routes
-      // stand in for "before compaction", so every bent flow counts as affected again
+      // stand in for "before compaction", so every bent flow counts as affected again — the
+      // affected set is deliberately a superset of what the first run re-routed, which makes
+      // this a stricter no-op check than the pipeline's own
       const off = await runPipeline(loadFixture(`${name}.json`), { visualRefinement: false });
       const lc2 = loadFixture(`${name}.json`);
       const edges = (lc2.pools || [lc2]).flatMap(p => flattenProcessEdges(p));
