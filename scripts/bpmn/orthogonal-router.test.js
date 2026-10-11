@@ -4,6 +4,7 @@
 
 import { describe, test, expect } from '@jest/globals';
 import { routeAroundObstacles } from './orthogonal-router.js';
+import { CFG } from '../shared/utils.js';
 
 describe('routeAroundObstacles', () => {
   test('an open path finds the direct route', () => {
@@ -78,5 +79,19 @@ describe('routeAroundObstacles', () => {
     }
     const route = routeAroundObstacles(start, 'right', end, 'down', obstacles, { maxGridPoints: 10, margins: [900] });
     expect(route).toBeNull();
+  });
+
+  test('the clearance comes from config.json → layout.shapeClearance', () => {
+    // A box 6 px below a straight line: clear at the default 4 px, blocking at 8.
+    const start = { x: 0, y: 0 }, end = { x: 100, y: 0 };
+    const box = { x: 40, y: 6, w: 20, h: 40 };
+    const saved = CFG.layout.shapeClearance;
+    try {
+      expect(routeAroundObstacles(start, 'right', end, 'right', [box])).toEqual([start, end]);
+      CFG.layout.shapeClearance = 8;
+      expect(routeAroundObstacles(start, 'right', end, 'right', [box])).not.toEqual([start, end]);
+    } finally {
+      CFG.layout.shapeClearance = saved;
+    }
   });
 });

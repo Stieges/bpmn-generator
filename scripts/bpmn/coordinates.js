@@ -1449,8 +1449,11 @@ function routeMessageFlows(coordMap, lc) {
     for (const c of plan.corridors) (perCorridor[Math.round(c)] ??= []).push(key);
   }
   const fanned = (y, key) => {
+    // A flow not in the group (a straight plan whose corridor point is collinear) keeps the
+    // un-fanned y — indexOf's -1 would put it, and its label, below the first slot.
     const group = perCorridor[Math.round(y)];
-    return group ? fanOut(y, group.indexOf(key), group.length) : y;
+    const i = group ? group.indexOf(key) : -1;
+    return i >= 0 ? fanOut(y, i, group.length) : y;
   };
   const resolve = (p, key) => ('corridor' in p ? { x: p.x, y: fanned(p.corridor, key) } : p);
 

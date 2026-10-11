@@ -27,12 +27,15 @@
  * This module deliberately duplicates edge-simplify.js's segment/box
  * clearance test rather than importing it: edge-simplify.js calls INTO this
  * module as its fallback candidate source, so importing back would be
- * circular.
+ * circular. Its clearance is the same config key, config.json → layout.shapeClearance, read
+ * per call so a changed value reaches this module too.
  */
+
+import { CFG } from '../shared/utils.js';
 
 const PAD = 12; // px clearance kept around every hard obstacle when building the grid
 
-function segClearOfBox(a, b, box, pad = 4) {
+function segClearOfBox(a, b, box, pad = CFG.layout?.shapeClearance ?? 4) {
   const x1 = box.x - pad, y1 = box.y - pad, x2 = box.x + box.w + pad, y2 = box.y + box.h + pad;
   const loX = Math.min(a.x, b.x), hiX = Math.max(a.x, b.x);
   const loY = Math.min(a.y, b.y), hiY = Math.max(a.y, b.y);

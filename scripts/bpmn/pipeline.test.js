@@ -35,6 +35,7 @@ import { runRules, RULES, loadRuleProfile, profileForMode } from './rules.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { parseBody, validateCallbackUrl } from '../http-server.js';
 import { checkDiagramIntegrity } from './di-check.js';
+import { routeMessageFlows } from './coordinates.js';
 import { checkNetIntegrity } from './net-check.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 // Statically imported (not `await import` inside a test) so `describe` bodies can enumerate the
@@ -5222,6 +5223,16 @@ describe('DI integrity check', () => {
         message: 'Message flow "mf" runs through "mid".', elements: ['mf', 'mid'] }]);
       expect(r.ok).toBe(true);
     });
+    test('an expanded subprocess containing an endpoint is not foreign', () => {
+      const nested = { pools: [
+        { id: 'A', nodes: [{ id: 's', type: 'userTask' }] },
+        { id: 'C', nodes: [{ id: 'sub', type: 'subProcess', nodes: [{ id: 't', type: 'userTask' }] }] },
+      ], messageFlows: [{ id: 'mf', source: 's', target: 't' }] };
+      const boxes = { s: { x: 0, y: 0, w: 100, h: 80 }, sub: { x: -50, y: 300, w: 300, h: 200 },
+        t: { x: 0, y: 400, w: 100, h: 80 } };
+      const r = checkDiagramIntegrity({ coords: boxes, poolCoords: {}, edgeCoords: { mf: [{ x: 50, y: 80 }, { x: 50, y: 400 }] } }, nested);
+      expect(r.issues.filter(i => i.code === 'DI10')).toEqual([]);
+    });
   });
 });
 
@@ -6040,6 +6051,29 @@ describe('participant ordering by communication', () => {
 });
 
 describe('message flow routing', () => {
+  test('a straight flow takes no fan slot, and its label stays on its own corridor y', () => {
+    // s→t is centre-aligned but blocked at the centre; a shifted port column clears it end to end,
+    // so it runs straight down and reserves no corridor slot. mf2 and mf3 share that corridor.
+    const pools = [
+      { id: 'A', nodes: ['s', 'u', 'u2'].map(id => ({ id, type: 'task' })) },
+      { id: 'B', nodes: ['t', 'v', 'v2', 'x'].map(id => ({ id, type: 'task' })) },
+    ];
+    const coords = {
+      s: { x: 0, y: 20, w: 100, h: 60 }, t: { x: 0, y: 180, w: 100, h: 60 }, x: { x: 40, y: 90, w: 20, h: 80 },
+      u: { x: 300, y: 20, w: 100, h: 60 }, v: { x: 500, y: 180, w: 100, h: 60 },
+      u2: { x: 700, y: 20, w: 100, h: 60 }, v2: { x: 900, y: 180, w: 100, h: 60 },
+    };
+    const route = (flows) => routeMessageFlows({ coords: structuredClone(coords), laneCoords: {}, edgeLabels: {}, edgeCoords: {},
+      poolCoords: { A: { x: -50, y: 0, w: 1200, h: 100 }, B: { x: -50, y: 160, w: 1200, h: 100 } } },
+      { pools, messageFlows: flows });
+    const mf1 = { id: 'mf1', source: 's', target: 't', name: 'Straight' };
+    const alone = route([mf1]);
+    const shared = route([mf1, { id: 'mf2', source: 'u', target: 'v' }, { id: 'mf3', source: 'u2', target: 'v2' }]);
+    expect(alone.edgeCoords.mf1).toEqual([{ x: 30, y: 80 }, { x: 30, y: 180 }]);
+    expect(shared.edgeCoords.mf1).toEqual(alone.edgeCoords.mf1);
+    expect(shared.edgeLabels.mf1).toEqual(alone.edgeLabels.mf1);
+  });
+
   const legs = (r, lc) => (lc.messageFlows || []).flatMap(mf => {
     const pts = r.coordMap.edgeCoords[mf.id] || [];
     return pts.slice(0, -1).map((p, i) => ({ a: p, b: pts[i + 1] }));
@@ -6062,7 +6096,8 @@ describe('message flow routing', () => {
       const lc = loadFixture('realistic-collaboration.json');
       const r = await runPipeline(loadFixture('realistic-collaboration.json'), { visualRefinement });
       const poolOfNode = {};
-      for (const p of lc.pools) for (const n of p.nodes) poolOfNode[n.id] = p.id;
+      const walk = (nodes, pid) => { for (const n of nodes || []) { poolOfNode[n.id] = pid; walk(n.nodes, pid); } };
+      for (const p of lc.pools) walk(p.nodes, p.id);
       const bad = [];
       for (const mf of lc.messageFlows) {
         const own = new Set([poolOfNode[mf.source] ?? mf.source, poolOfNode[mf.target] ?? mf.target]);
