@@ -202,7 +202,7 @@ Cross-notation rules (scripts/cross/) — opt-in, called only by scenarios/pipel
 
 ### The geometry contract
 
-`coordMap` (`{ coords, laneCoords, poolCoords, edgeCoords, edgeLabels }`) is the contract between
+`coordMap` (`{ coords, laneCoords, poolCoords, edgeCoords, edgeLabels, nodeLabels }`) is the contract between
 layout and rendering. Two rules make it hold:
 
 1. **Every drawable element has its geometry in `coordMap` — renderers only translate, never compute.**
@@ -213,6 +213,10 @@ layout and rendering. Two rules make it hold:
    copies drift. That has happened three times; see **Do NOT**.
    Sequence-flow endpoints are clipped in `coordinates.js` §5.1; the only pass that may move one
    afterwards is `reclipStuckEnds`, and only to the midpoint of another side of the same node.
+   External node labels (events incl. boundary events, gateways, data objects and stores) are boxes
+   in `coordMap.nodeLabels` (`placeNodeLabels`, `coordinates.js` §5.7), re-derived in `pipeline.js`
+   after the last pass that moves a node; `bpmn-xml.js` writes the box as the `BPMNLabel` bounds and
+   `svg.js` draws its `lines` into it.
 2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant.
@@ -549,7 +553,7 @@ failing on.
 - Functions are pure (no global state except `CFG`)
 - IDs in Logic-Core: `^[a-zA-Z_][a-zA-Z0-9_-]*$`
 - XML escaping via `esc()` from `utils.js`
-- Coordinates in the internal `coordMap` contract (`{ coords, laneCoords, poolCoords, edgeCoords, edgeLabels }`, and its DMN analogue) are always `{ x, y, w, h }` — **`w`/`h`, not `width`/`height`**. Only the emitted DI attributes (`dc:Bounds`) use `width`/`height`; `bpmn-xml.js` and `svg.js` translate on the way out.
+- Coordinates in the internal `coordMap` contract (`{ coords, laneCoords, poolCoords, edgeCoords, edgeLabels, nodeLabels }`, and its DMN analogue) are always `{ x, y, w, h }` — **`w`/`h`, not `width`/`height`**. Only the emitted DI attributes (`dc:Bounds`) use `width`/`height`; `bpmn-xml.js` and `svg.js` translate on the way out.
 
 ### Security defaults (HTTP API + MCP)
 

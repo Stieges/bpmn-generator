@@ -367,6 +367,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **Node labels have one geometry source (#82).** The external label of an event, a gateway or a
+  data object/store was positioned twice — by `bpmn-xml.js` for the `BPMNLabel` bounds and by
+  `svg.js` for the drawn text — against the geometry contract. Its box is now computed once, in
+  `coordMap.nodeLabels` (`placeNodeLabels`, `scripts/bpmn/coordinates.js`), re-derived after lane
+  compaction so it follows a moved node, and both renderers read it. Output is byte-identical; the
+  test `geometry contract — the two renderers agree on node labels` checks every top-level fixture.
 - **Compacted lanes keep their lane names whole in bpmn.io.** bpmn-js wraps a lane label against
   the lane height, so lane compaction (`laneCompaction`) could shrink a lane below its longest word
   and bpmn.io / Camunda Modeler then broke that word in the middle. `compactLanes` now takes a
