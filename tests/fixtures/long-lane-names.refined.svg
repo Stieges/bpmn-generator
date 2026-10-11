@@ -38,12 +38,12 @@
 <rect x="80" y="50" width="842" height="120" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
 <rect x="80" y="50" width="30" height="120" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="95" y="110" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,110)">Prozessverantwortlicher</text>
-<rect x="80" y="210" width="842" height="120" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
-<rect x="80" y="210" width="30" height="120" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
-<text x="95" y="270" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,270)">Qualitätssicherungsbeauftragter</text>
-<rect x="80" y="370" width="842" height="120" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
-<rect x="80" y="370" width="30" height="120" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
-<text x="95" y="430" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,430)">Datenschutzkoordinator</text>
+<rect x="80" y="170" width="842" height="160" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="80" y="170" width="30" height="160" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="95" y="250" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,250)">Qualitätssicherungsbeauftragter</text>
+<rect x="80" y="330" width="842" height="160" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
+<rect x="80" y="330" width="30" height="160" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
+<text x="95" y="410" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,410)">Datenschutzkoordinator</text>
 <path d="M 206 110 L 286 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 336 150 L 336 169 L 516 169 L 516 230" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <path d="M 516 310 L 516 329 L 696 329 L 696 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>

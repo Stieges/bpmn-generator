@@ -49,10 +49,10 @@
         <dc:Bounds x="50" y="60" width="842" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="laneB_di" bpmnElement="laneB" isHorizontal="true">
-        <dc:Bounds x="50" y="220" width="842" height="120" />
+        <dc:Bounds x="50" y="180" width="842" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="laneC_di" bpmnElement="laneC" isHorizontal="true">
-        <dc:Bounds x="50" y="380" width="842" height="120" />
+        <dc:Bounds x="50" y="340" width="842" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s1_di" bpmnElement="s1">
         <dc:Bounds x="140" y="101.5" width="36" height="36" />

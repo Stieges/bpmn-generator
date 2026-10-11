@@ -96,13 +96,13 @@
         <dc:Bounds x="50" y="60" width="1282" height="540" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="laneB_di" bpmnElement="laneB" isHorizontal="true">
-        <dc:Bounds x="50" y="640" width="1282" height="120" />
+        <dc:Bounds x="50" y="600" width="1282" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="laneC_di" bpmnElement="laneC" isHorizontal="true">
-        <dc:Bounds x="50" y="800" width="1282" height="120" />
+        <dc:Bounds x="50" y="760" width="1282" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="laneD_di" bpmnElement="laneD" isHorizontal="true">
-        <dc:Bounds x="50" y="960" width="1282" height="120" />
+        <dc:Bounds x="50" y="920" width="1282" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_di" bpmnElement="s">
         <dc:Bounds x="140" y="249.5" width="36" height="36" />
