@@ -469,6 +469,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   table described other rules than the placeholders registered in code; they now read "message flow
   labels: nouns only" (Silver Ch.5) and "event labels: participle/state or noun" (Silver Ch.3).
   Thanks to @kndrio.
+- **`npm run build:skill` excludes `node_modules/`, `agents/` and `robustness/` on Windows too.**
+  `scripts/build-skill.mjs` tested for `'/node_modules/'` etc. as substrings, which never matches a
+  backslash-separated path: on Windows the bundle carried all of `node_modules` and the `zip`
+  argument list overran the command-line limit. The filters now compare whole path segments, split
+  on `/` and `\`, of the path relative to the walked directory; on POSIX the file list is
+  unchanged. `zip` remains a prerequisite on every platform. Thanks to @sebastianbraun25.
 - **Node labels have one geometry source (#82).** The external label of an event, a gateway or a
   data object/store was positioned twice — by `bpmn-xml.js` for the `BPMNLabel` bounds and by
   `svg.js` for the drawn text — against the geometry contract. Its box is now computed once, in

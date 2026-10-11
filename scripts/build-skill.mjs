@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readdirSync, statSync, unlinkSync } from 'fs';
-import { join, relative, dirname } from 'path';
+import { join, relative, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 
@@ -12,20 +12,41 @@ const outPath = join(repoRoot, outName);
 // Inclusion rules: SKILL.md + scripts/*.js (no tests, no agents/, no robustness/, no node_modules)
 //                  + scripts/config.json + scripts/package.json
 //                  + references/*.md + references/*.json (no omg-spec/, no review-set/)
-const includes = [
-  'SKILL.md',
-  ...walk(join(repoRoot, 'scripts'), (full, name) => {
-    if (full.includes('/node_modules/')) return false;
-    if (full.includes('/agents/') || full.includes('/robustness/')) return false;
-    if (name.endsWith('.test.js')) return false;
-    // Note: build-skill.mjs is intentionally excluded by the `.js`-only rule (not `.mjs`).
-    return name.endsWith('.js') || name === 'config.json' || name === 'package.json';
-  }).map(f => relative(repoRoot, f)),
-  ...walk(join(repoRoot, 'references'), (full, name) => {
-    if (full.includes('/omg-spec/') || full.includes('/review-set/')) return false;
-    return name.endsWith('.md') || name.endsWith('.json') || name.endsWith('.jsonld');
-  }).map(f => relative(repoRoot, f)),
-];
+//
+// Directory exclusions compare whole path segments, split on both `/` and `\`. A substring
+// test such as `full.includes('/node_modules/')` assumes POSIX separators and never matches a
+// Windows path, so node_modules/, agents/ and robustness/ would all land in the zip — and the
+// resulting argument list exceeds the Windows command-line limit. The segments are taken from
+// the path *relative to the walked root*, so a checkout that itself sits under a directory
+// called e.g. `agents` excludes nothing by accident.
+export function hasSegment(path, seg) {
+  return path.split(/[\\/]/).includes(seg);
+}
+
+export function includeScriptFile(rel, name) {
+  if (hasSegment(rel, 'node_modules')) return false;
+  if (hasSegment(rel, 'agents') || hasSegment(rel, 'robustness')) return false;
+  if (name.endsWith('.test.js')) return false;
+  // Note: build-skill.mjs is intentionally excluded by the `.js`-only rule (not `.mjs`).
+  return name.endsWith('.js') || name === 'config.json' || name === 'package.json';
+}
+
+export function includeReferenceFile(rel, name) {
+  if (hasSegment(rel, 'omg-spec') || hasSegment(rel, 'review-set')) return false;
+  return name.endsWith('.md') || name.endsWith('.json') || name.endsWith('.jsonld');
+}
+
+function collectIncludes() {
+  const scriptsDir = join(repoRoot, 'scripts');
+  const referencesDir = join(repoRoot, 'references');
+  return [
+    'SKILL.md',
+    ...walk(scriptsDir, (full, name) => includeScriptFile(relative(scriptsDir, full), name))
+      .map(f => relative(repoRoot, f)),
+    ...walk(referencesDir, (full, name) => includeReferenceFile(relative(referencesDir, full), name))
+      .map(f => relative(repoRoot, f)),
+  ];
+}
 
 function walk(dir, filter, acc = []) {
   for (const entry of readdirSync(dir)) {
@@ -37,8 +58,14 @@ function walk(dir, filter, acc = []) {
   return acc;
 }
 
-const args = ['-r', outPath, ...includes];
-try { unlinkSync(outPath); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-execFileSync('zip', args, { cwd: repoRoot, stdio: 'inherit' });
-console.log(`\nBuilt ${outName} (${includes.length} files).`);
-console.log(`Inspect: unzip -l ${outName}`);
+function main() {
+  const includes = collectIncludes();
+  const args = ['-r', outPath, ...includes];
+  try { unlinkSync(outPath); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  execFileSync('zip', args, { cwd: repoRoot, stdio: 'inherit' });
+  console.log(`\nBuilt ${outName} (${includes.length} files).`);
+  console.log(`Inspect: unzip -l ${outName}`);
+}
+
+// Build only when run as a script; importing the module (tests) has no side effects.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
