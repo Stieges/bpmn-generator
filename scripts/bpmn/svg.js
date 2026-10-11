@@ -5,7 +5,7 @@
 
 import { assignEdgeIds } from './topology.js';
 import { isEvent, isGateway, isDataArtifact } from './types.js';
-import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
+import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
 import { esc, rn, wrapText } from '../shared/utils.js';
 import { edgeLabelBox, edgeLabelTextStyle } from './coordinates.js';
 
@@ -35,6 +35,7 @@ function generateSvg(lc, coordMap) {
   // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
   assignEdgeIds(lc);
   const { coords, laneCoords, poolCoords, edgeCoords, edgeLabels } = coordMap;
+  const nodeLabels = coordMap.nodeLabels ?? {};
   const processes = lc.pools ? lc.pools : [lc];
   const allNodes  = processes.flatMap(p => p.nodes || []);
   const allEdges  = processes.flatMap(p => p.edges || []);
@@ -215,14 +216,14 @@ function generateSvg(lc, coordMap) {
   for (const node of allNodes) {
     const c = coords[node.id];
     if (!c) continue;
-    out.push(renderNode(node, c, tx, ty));
+    out.push(renderNode(node, c, tx, ty, nodeLabels[node.id]));
 
     // Expanded SubProcess: render child nodes + edges inside
     if (node.isExpanded && node.nodes) {
       for (const child of node.nodes) {
         const cc = coords[child.id];
         if (!cc) continue;
-        out.push(renderNode(child, cc, tx, ty));
+        out.push(renderNode(child, cc, tx, ty, nodeLabels[child.id]));
       }
       // Render internal sequence flows
       for (const subEdge of (node.edges || [])) {
@@ -302,12 +303,12 @@ function renderEdgeLabel(out, label, tx, ty) {
 // ─────────────────────────────────────────────────────────────────────
 // NODE RENDERERS
 // ─────────────────────────────────────────────────────────────────────
-function renderNode(node, c, tx, ty) {
+function renderNode(node, c, tx, ty, label) {
   const type = node.type || 'task';
   let svg;
-  if (isEvent(type))         svg = renderEvent(node, c, tx, ty);
-  else if (isGateway(type))  svg = renderGateway(node, c, tx, ty);
-  else if (isDataArtifact(type)) svg = renderDataArtifact(node, c, tx, ty);
+  if (isEvent(type))         svg = renderEvent(node, c, tx, ty, label);
+  else if (isGateway(type))  svg = renderGateway(node, c, tx, ty, label);
+  else if (isDataArtifact(type)) svg = renderDataArtifact(node, c, tx, ty, label);
   else                       svg = renderActivity(node, c, tx, ty);
   if (node.documentation) {
     svg = `<g><title>${esc(node.documentation)}</title>\n${svg}\n</g>`;
@@ -316,7 +317,7 @@ function renderNode(node, c, tx, ty) {
 }
 
 // ── Events (OMG spec §10.4) ─────────────────────────────────────────
-function renderEvent(node, c, tx, ty) {
+function renderEvent(node, c, tx, ty, label) {
   const type   = node.type;
   const cx     = tx(c.x + c.w / 2);
   const cy     = ty(c.y + c.h / 2);
@@ -352,15 +353,14 @@ function renderEvent(node, c, tx, ty) {
     o.push(`<circle cx="${cx}" cy="${cy}" r="${rn(r * 0.55)}" fill="${CLR.stroke}"/>`);
   }
 
-  // External label below shape
-  const labelY = ty(c.y + c.h) + LABEL_DISTANCE;
-  o.push(renderExternalLabel(node.name || '', cx, labelY, 90));
+  // External label — its box from coordMap.nodeLabels
+  o.push(renderNodeLabel(label, tx, ty));
 
   return o.join('\n');
 }
 
 // ── Gateways (OMG spec §10.5) ───────────────────────────────────────
-function renderGateway(node, c, tx, ty) {
+function renderGateway(node, c, tx, ty, label) {
   const type = node.type;
   const x = tx(c.x), y = ty(c.y), w = c.w, h = c.h;
   const cx = x + w/2, cy = y + h/2;
@@ -397,9 +397,8 @@ function renderGateway(node, c, tx, ty) {
     }
   }
 
-  // External label below diamond
-  const labelY = ty(c.y + c.h) + LABEL_DISTANCE;
-  o.push(renderExternalLabel(node.name || '', cx, labelY, 90));
+  // External label — its box from coordMap.nodeLabels
+  o.push(renderNodeLabel(label, tx, ty));
 
   return o.join('\n');
 }
@@ -504,7 +503,7 @@ function renderBottomMarkers(node, cx, bottomY, actX, actW) {
 }
 
 // ── Data Objects & Artifacts (OMG spec §10.6) ───────────────────────
-function renderDataArtifact(node, c, tx, ty) {
+function renderDataArtifact(node, c, tx, ty, label) {
   const type = node.type;
   const x = tx(c.x), y = ty(c.y), w = c.w, h = c.h;
   const cx = x + w/2;
@@ -524,8 +523,8 @@ function renderDataArtifact(node, c, tx, ty) {
       o.push(`<line x1="${bx+6}" y1="${by}" x2="${bx+6}" y2="${by+8}" stroke="${stroke}" stroke-width="1.5"/>`);
       o.push(`<line x1="${bx+12}" y1="${by}" x2="${bx+12}" y2="${by+8}" stroke="${stroke}" stroke-width="1.5"/>`);
     }
-    // Label below
-    o.push(renderExternalLabel(node.name || '', cx, ty(c.y + c.h) + 5, 70));
+    // Label below — its box from coordMap.nodeLabels
+    o.push(renderNodeLabel(label, tx, ty));
   } else if (type === 'dataStoreReference') {
     // Data store: cylinder (OMG spec Fig 10.85)
     const ry = 6;
@@ -533,7 +532,7 @@ function renderDataArtifact(node, c, tx, ty) {
     o.push(`<path d="M ${x},${y+ry} L ${x},${y+h-ry}" stroke="${stroke}" stroke-width="${SW.dataObject}" fill="none"/>`);
     o.push(`<path d="M ${x+w},${y+ry} L ${x+w},${y+h-ry}" stroke="${stroke}" stroke-width="${SW.dataObject}" fill="none"/>`);
     o.push(`<ellipse cx="${cx}" cy="${y+h-ry}" rx="${w/2}" ry="${ry}" fill="${fill}" stroke="${stroke}" stroke-width="${SW.dataObject}"/>`);
-    o.push(renderExternalLabel(node.name || '', cx, ty(c.y + c.h) + 5, 70));
+    o.push(renderNodeLabel(label, tx, ty));
   } else if (type === 'textAnnotation') {
     // Open bracket [ shape (OMG spec Fig 10.86)
     o.push(`<path d="M ${x+15},${y} L ${x},${y} L ${x},${y+h} L ${x+15},${y+h}" fill="none" stroke="${stroke}" stroke-width="${SW.annotation}"/>`);
@@ -547,11 +546,17 @@ function renderDataArtifact(node, c, tx, ty) {
   return o.join('\n');
 }
 
-function renderExternalLabel(text, cx, y, maxW) {
-  if (!text) return '';
-  const lines = wrapText(text, Math.floor(maxW / 6));
-  return lines.map((line, i) =>
-    `<text x="${cx}" y="${rn(y + i*13 + 10)}" text-anchor="middle" font-size="11" fill="${CLR.label}">${esc(line)}</text>`
+/**
+ * Draw an external node label into its coordMap.nodeLabels box (coordinates.js placeNodeLabels):
+ * centred on the box, first baseline 10 px below its top, 13 px per further line. Line breaks come
+ * from coordMap (`lines`); nothing is positioned or measured here.
+ */
+function renderNodeLabel(label, tx, ty) {
+  if (!label) return '';
+  const cx = tx(label.x + label.w / 2);
+  const top = ty(label.y);
+  return label.lines.map((line, i) =>
+    `<text x="${cx}" y="${rn(top + i*13 + 10)}" text-anchor="middle" font-size="11" fill="${CLR.label}">${esc(line)}</text>`
   ).join('\n');
 }
 

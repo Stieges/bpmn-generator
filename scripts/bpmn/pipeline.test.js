@@ -6220,6 +6220,84 @@ describe('geometry contract — the two renderers agree', () => {
   }
 });
 
+describe('geometry contract — the two renderers agree on node labels', () => {
+  // The external label of an event, a gateway or a data object/store: coordMap.nodeLabels holds its
+  // box (coordinates.js placeNodeLabels); bpmn-xml.js writes that box as the BPMNLabel bounds and
+  // svg.js draws its lines into it. Both are compared against the contract, every top-level fixture.
+  const r1 = n => (Math.round(n * 10) / 10).toFixed(1);
+  const box = (b) => b && `${r1(b.x)},${r1(b.y)} ${r1(b.w)}x${r1(b.h)}`;
+  /** BPMNLabel bounds of every BPMNShape that carries one, keyed by node id (the shape id minus `_di`). */
+  const diNodeLabels = (xml) => {
+    const out = {};
+    for (const m of xml.matchAll(/<bpmndi:BPMNShape id="([^"]+)_di"[\s\S]*?<\/bpmndi:BPMNShape>/g)) {
+      const b = m[0].match(/<bpmndi:BPMNLabel>\s*<dc:Bounds x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/);
+      if (b) out[m[1]] = { x: +b[1], y: +b[2], w: +b[3], h: +b[4] };
+    }
+    return out;
+  };
+  // Where the SVG puts line i of a node label whose box is `b`: centred, first baseline 10 px below
+  // the box top, 13 px per further line.
+  const lineAt = (b, i) => ({ x: b.x + b.w / 2, y: b.y + 10 + 13 * i });
+  const svgNodeLabelLines = (svg) =>
+    [...svg.matchAll(/<text x="([-\d.]+)" y="([-\d.]+)" text-anchor="middle" font-size="11" fill="[^"]*">([^<]*)<\/text>/g)]
+      .map(m => ({ x: +m[1], y: +m[2], text: m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>') }));
+  const hasExternalLabel = (n) => !!n.name && (/Event$/.test(n.type) || /Gateway$/.test(n.type)
+    || n.type === 'dataObjectReference' || n.type === 'dataStoreReference');
+  const flatNodes = (nodes) => (nodes || []).flatMap(n => [n, ...flatNodes(n.nodes)]);
+
+  const fixtures = readdirSync('../tests/fixtures').filter(f => f.endsWith('.json')).sort();
+  for (const fixture of fixtures) {
+    for (const visualRefinement of [false, true]) {
+      test(`${fixture} (refinement: ${visualRefinement}) — DI and SVG draw coordMap.nodeLabels`, async () => {
+        const r = await runPipeline(loadFixture(fixture), (visualRefinement ? ALL_ON : { visualRefinement: false }));
+        if (!r.coordMap) return;   // blocked on purpose
+        const labels = r.coordMap.nodeLabels;
+        expect(labels).toBeDefined();
+
+        // Every node that carries an external label has its box in coordMap, and nothing else does.
+        const lc = loadFixture(fixture);
+        const labelled = (lc.pools || [lc]).flatMap(p => flatNodes(p.nodes))
+          .filter(n => hasExternalLabel(n) && r.coordMap.coords[n.id]).map(n => n.id).sort();
+        expect(Object.keys(labels).sort()).toEqual(labelled);
+
+        // Each box hangs centred below its node's FINAL box — a pass that moved the node (lane
+        // compaction) left no label behind.
+        for (const [id, L] of Object.entries(labels)) {
+          const c = r.coordMap.coords[id];
+          expect(`${id}: ${r1(L.x + L.w / 2)}`).toBe(`${id}: ${r1(c.x + c.w / 2)}`);
+          const gap = L.y - (c.y + c.h);
+          expect(gap >= 0 && gap <= CFG.layout.labelDistance).toBe(true);
+        }
+
+        // The DI writes coordMap's box, unchanged — for every event and gateway label.
+        const di = diNodeLabels(r.bpmnXml);
+        const typeOf = Object.fromEntries((lc.pools || [lc]).flatMap(p => flatNodes(p.nodes)).map(n => [n.id, n.type]));
+        const inDi = Object.keys(labels).filter(id => /(Event|Gateway)$/.test(typeOf[id])).sort();
+        expect(Object.keys(di).sort()).toEqual(inDi);
+        for (const id of inDi) expect(`${id}: ${box(di[id])}`).toBe(`${id}: ${box(labels[id])}`);
+
+        // The SVG draws every line of every box where the box says, under one canvas offset. It
+        // draws nodes two levels deep only (a top-level node and the children of an expanded one;
+        // a grandchild has no shape in the SVG either, while the DI has it), so its labels are
+        // compared at those levels.
+        const drawn = new Set((lc.pools || [lc]).flatMap(p => (p.nodes || []).flatMap(n =>
+          [n.id, ...(n.isExpanded ? (n.nodes || []).map(k => k.id) : [])])));
+        const got = svgNodeLabelLines(r.svg);
+        const want = Object.entries(labels).filter(([id]) => drawn.has(id)).flatMap(([, L]) => L.lines.map((text, i) => ({ ...lineAt(L, i), text })));
+        expect(got).toHaveLength(want.length);
+        if (!want.length) return;
+        // The offset is derived from the labels themselves (leftmost/topmost line on each side), so
+        // every line has to sit under that ONE translation; the connections' offset is pinned by
+        // the tests above, which a grandchild's flow (not drawn) would skew here.
+        const dx = Math.min(...got.map(g => g.x)) - Math.min(...want.map(w => w.x));
+        const dy = Math.min(...got.map(g => g.y)) - Math.min(...want.map(w => w.y));
+        const fmt = (l, ox = 0, oy = 0) => `${r1(l.x + ox)},${r1(l.y + oy)} ${l.text}`;
+        expect(got.map(l => fmt(l)).sort()).toEqual(want.map(l => fmt(l, dx, dy)).sort());
+      }, 30000);
+    }
+  }
+});
+
 describe('edge labels follow the final route', () => {
   test('simple-approval f4 "No" sits on the horizontal leg of its simplified route, in coordMap and DI alike', async () => {
     const r = await runPipeline(loadFixture('simple-approval.json'));

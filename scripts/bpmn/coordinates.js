@@ -4,8 +4,8 @@
  */
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, artifactSize } from './constants.js';
-import { CFG } from '../shared/utils.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP, artifactSize } from './constants.js';
+import { CFG, wrapText } from '../shared/utils.js';
 import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
 
@@ -602,7 +602,11 @@ function buildCoordinateMap(elkResult, lc) {
   // which runs after visual refinement because it depends on final participant
   // geometry.
 
-  return { coords, laneCoords, poolCoords, edgeCoords, edgeLabels };
+  // §5.7  Node label boxes — see placeNodeLabels. A pass that moves a node afterwards
+  //        (lane compaction) re-derives them; pipeline.js does so once, after the last one.
+  const nodeLabels = placeNodeLabels(coords, lc);
+
+  return { coords, laneCoords, poolCoords, edgeCoords, edgeLabels, nodeLabels };
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -711,6 +715,48 @@ function edgeLabelLayout(text) {
 function edgeLabelBox(label) {
   const { w, h } = label.w !== undefined && label.h !== undefined ? label : edgeLabelLayout(label.text);
   return { x: label.x - w / 2, y: label.y - h / 2, w, h };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Node labels — one geometry source for both renderers
+// ─────────────────────────────────────────────────────────────────────
+//
+// An external node label — the name of an event (boundary events included), a gateway, a data
+// object or a data store, drawn below its shape rather than inside it — lives in
+// coordMap.nodeLabels[nodeId] = { x, y, w, h, lines }: (x, y) is the box's top-left corner, like
+// coords, and `lines` the text as drawn. bpmn-xml.js writes the box as the shape's BPMNLabel
+// bounds; svg.js draws `lines` into it. Neither computes a label position (CLAUDE.md, "Never
+// compute geometry in a renderer").
+
+/** The external label box of one node at `c`, or null when it has none. */
+function nodeLabelBox(node, c) {
+  if (!node.name) return null;
+  if (isEvent(node.type) || isGateway(node.type)) {
+    const w = Math.min(node.name.length * 6.5 + 10, 90);
+    return { x: c.x + c.w / 2 - w / 2, y: c.y + c.h + LABEL_DISTANCE, w, h: 20, lines: wrapText(node.name, 15) };
+  }
+  if (node.type === 'dataObjectReference' || node.type === 'dataStoreReference') {
+    const w = 70;
+    return { x: c.x + c.w / 2 - w / 2, y: c.y + c.h + 5, w, h: 20, lines: wrapText(node.name, Math.floor(w / 6)) };
+  }
+  return null;
+}
+
+/**
+ * Every external node label of `lc` at the node positions in `coords`, at every depth (a subprocess
+ * child's label is drawn by both renderers too). Pure: a node moved later gets its label re-derived
+ * by calling this again, never by moving the box on its own.
+ */
+function placeNodeLabels(coords, lc) {
+  const nodeLabels = {};
+  for (const proc of (lc.pools ? lc.pools : [lc])) {
+    for (const node of flattenProcessNodes(proc.nodes)) {
+      const c = coords[node.id];
+      const box = c && nodeLabelBox(node, c);
+      if (box) nodeLabels[node.id] = box;
+    }
+  }
+  return nodeLabels;
 }
 
 /** Does a label box reach into its own route? Touching it does not count. */
@@ -1687,4 +1733,4 @@ function routeMessageFlows(coordMap, lc) {
   return coordMap;
 }
 
-export { buildCoordinateMap, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, placeNodeLabels, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };

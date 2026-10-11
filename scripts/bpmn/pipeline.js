@@ -32,7 +32,7 @@ import { validateLogicCoreSchema } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
+import { buildCoordinateMap, placeNodeLabels, enforceOrthogonal, clipOrthogonal, routeMessageFlows, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
@@ -266,6 +266,12 @@ async function runPipeline(logicCore, opts = {}) {
       laneLines,
     });
   }
+
+  // Node labels follow their node: buildCoordinateMap placed them, lane compaction may have moved
+  // nodes since. Re-derived here, after the last pass that moves a node and before anything
+  // reads them (routeMessageFlows moves no node), rather than shifted pass by pass — placeNodeLabels
+  // is a pure function of the final node boxes, so re-deriving cannot drift from them.
+  coordMap.nodeLabels = placeNodeLabels(coordMap.coords, lc);
 
   // Message flows LAST: their horizontal leg has to sit in the gap between two
   // participants, so every pass that can still move a participant must be done.

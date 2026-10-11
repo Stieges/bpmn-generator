@@ -14,7 +14,7 @@ import {
   resolveDefinitionRef,
 } from './types.js';
 
-import { LANE_HEADER_W, LABEL_DISTANCE } from './constants.js';
+import { LANE_HEADER_W } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { inferGatewayDirections, assignEdgeIds, withProcessId } from './topology.js';
 import { inferEventMarker } from './icons.js';
@@ -724,7 +724,7 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
 
   // Node shapes — recursive, at every nesting depth. See buildNodeShapeDI.
   for (const proc of (lc.pools || [lc])) {
-    buildNodeShapeDI(proc.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels);
+    buildNodeShapeDI(proc.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels, coordMap.nodeLabels || {});
   }
 
   // Edge DI
@@ -822,7 +822,7 @@ function buildDI(lc, coordMap, processes, collaboration, allFlowNodeMaps, collap
  * geometry in a renderer" records three times over. The loss is recorded on the `isExpanded` row
  * instead, naming all three places a fix has to touch.
  */
-function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels = {}) {
+function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels = {}, nodeLabels = {}) {
   for (const node of (nodes || [])) {
     const c = coords[node.id];
     if (!c) continue;
@@ -843,20 +843,18 @@ function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeEleme
 
     const shape = create('bpmndi:BPMNShape', shapeAttrs);
 
-    // Label bounds for events/gateways
-    if ((isEvent(node.type) || isGateway(node.type)) && node.name) {
-      const labelW = Math.min(node.name.length * 6.5 + 10, 90);
-      const labelX = c.x + c.w / 2 - labelW / 2;
-      const labelY = c.y + c.h + LABEL_DISTANCE;
+    // External label — coordMap's box, never recomputed here (geometry contract, CLAUDE.md "Do NOT").
+    const L = (isEvent(node.type) || isGateway(node.type)) ? nodeLabels[node.id] : null;
+    if (L) {
       shape.label = create('bpmndi:BPMNLabel', {
-        bounds: create('dc:Bounds', { x: rn(labelX), y: rn(labelY), width: rn(labelW), height: 20 }),
+        bounds: create('dc:Bounds', { x: rn(L.x), y: rn(L.y), width: rn(L.w), height: rn(L.h) }),
       });
     }
     planeElements.push(shape);
 
     // Expanded container: its children's shapes and its own edges' BPMNEdges.
     if (node.isExpanded && node.nodes) {
-      buildNodeShapeDI(node.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels);
+      buildNodeShapeDI(node.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels, nodeLabels);
       for (const subEdge of (node.edges || [])) {
         const seid = subEdge.id;
         const spts = edgeCoords[seid] || [];
