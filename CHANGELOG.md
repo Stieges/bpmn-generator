@@ -469,6 +469,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   table described other rules than the placeholders registered in code; they now read "message flow
   labels: nouns only" (Silver Ch.5) and "event labels: participle/state or noun" (Silver Ch.3).
   Thanks to @kndrio.
+- **Text annotations wrap instead of running out of their box.** A text annotation was a fixed
+  100 × 30 box: our SVG drew a long text as one line across its neighbours and past the canvas edge,
+  bpmn.io wrapped it at 100 px and let it hang down across the lane border. The box now fits the
+  text: `artifactSize(node)` (`scripts/bpmn/coordinates.js`) lays it out the way bpmn-js lays out a
+  TextAnnotation (Arial 12 px, line height 1.2, 7 px padding; `layout.textAnnotationText` in
+  `config.json`), keeps 100 × 30 as the minimum, widens up to `maxWidth` (180 px) and wraps beyond.
+  The text lines travel with the box in `coordMap.coords[id].lines`; the DI carries the box, `svg.js`
+  draws the lines and never re-wraps. `layout.js` sizes an expanded subprocess's artifact band from
+  the same function, so a long annotation inside one stays inside it (DI06). Artifacts stacked under
+  one anchor now follow a running cursor instead of `slot × own height`, so they no longer overlap
+  when their heights differ. **Output changes** for models with stacked artifacts of different
+  heights (`all-element-classes`: the annotation moves 20 px down, clear of the data object's label
+  it overlapped) and for annotations longer than about 85 px of text. Thanks to @kndrio.
 - **`npm run build:skill` excludes `node_modules/`, `agents/` and `robustness/` on Windows too.**
   `scripts/build-skill.mjs` tested for `'/node_modules/'` etc. as substrings, which never matches a
   backslash-separated path: on Windows the bundle carried all of `node_modules` and the `zip`

@@ -37,7 +37,8 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     ├── optimize.js          ← types.js, topology.js (opt-in Optimization Advisory layer O01–O04, invoked by rules.js)
     ├── workflow-net.js      ← types.js
     ├── topology.js          ← types.js
-    ├── layout.js            ← types.js, ../shared/utils.js, ../shared/safe-text.js, constants.js, topology.js, elkjs
+    ├── layout.js            ← types.js, ../shared/utils.js, ../shared/safe-text.js, constants.js, topology.js,
+    │                          coordinates.js (artifactSize only), elkjs
     ├── coordinates.js       ← types.js, ../shared/utils.js, constants.js, topology.js
     ├── di-check.js          ← types.js (isArtifact only — post-layout DI integrity pass, see below)
     ├── visual-refinement.js ← ../shared/utils.js, coordinates.js (refinement passes: lane compaction, label repair)
@@ -226,6 +227,11 @@ layout and rendering. Two rules make it hold:
    after the last pass that moves a node; `bpmn-xml.js` writes the box as the `BPMNLabel` bounds and
    `svg.js` draws its `lines` into it. The SVG canvas is sized to include these boxes, with both layout
    switches on or off — so a label reaching past the shapes' margin enlarges the canvas in every mode.
+   A text annotation's `coords` entry is the one entry that carries more than `{ x, y, w, h }`: its
+   `lines`, because the box is sized from them. `artifactSize(node)` (`coordinates.js`) lays the
+   text out the way bpmn-js lays out a TextAnnotation (`layout.textAnnotationText`) and is the one
+   size source for both `layout.js` (`artifactReserveHeight`) and `placeArtifacts`; `bpmn-xml.js`
+   writes the box, `svg.js` draws `lines` into it and never re-wraps.
 2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant. The one pass after it is

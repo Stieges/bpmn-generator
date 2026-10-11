@@ -4,7 +4,8 @@
  */
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
-import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING, ARTIFACT_GAP, artifactSize } from './constants.js';
+import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING, ARTIFACT_GAP } from './constants.js';
+import { artifactSize } from './coordinates.js';
 import { CFG } from '../shared/utils.js';
 import { boundText } from '../shared/safe-text.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
@@ -305,7 +306,7 @@ function buildElkNode(node) {
 function artifactReserveHeight(nodes) {
   const artifacts = nodes.filter(n => isArtifact(n.type));
   if (artifacts.length === 0) return 0;
-  const tallest = Math.max(...artifacts.map(n => artifactSize(n.type).h));
+  const tallest = Math.max(...artifacts.map(n => artifactSize(n).h));
   return artifacts.length * (tallest + ARTIFACT_GAP);
 }
 

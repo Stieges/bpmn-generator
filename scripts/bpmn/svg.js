@@ -7,7 +7,7 @@ import { assignEdgeIds } from './topology.js';
 import { isEvent, isGateway, isDataArtifact } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
 import { esc, rn, wrapText } from '../shared/utils.js';
-import { edgeLabelBox, edgeLabelTextStyle } from './coordinates.js';
+import { edgeLabelBox, edgeLabelTextStyle, textAnnotationTextStyle } from './coordinates.js';
 
 import {
   renderEventMarker, inferEventMarker, renderTaskIcon, renderPentagon,
@@ -542,7 +542,11 @@ function renderDataArtifact(node, c, tx, ty, label) {
   } else if (type === 'textAnnotation') {
     // Open bracket [ shape (OMG spec Fig 10.86)
     o.push(`<path d="M ${x+15},${y} L ${x},${y} L ${x},${y+h} L ${x+15},${y+h}" fill="none" stroke="${stroke}" stroke-width="${SW.annotation}"/>`);
-    o.push(`<text x="${x+20}" y="${rn(y+h/2+4)}" font-size="11" fill="${CLR.label}">${esc(node.name || '')}</text>`);
+    // The text as coordinates.js laid it out (artifactSize): `lines` sized the box, so they are
+    // drawn, never re-wrapped here. One line sits where it always did; several are centred as a block.
+    const lines = c.lines ?? [node.name || ''];
+    const lineH = textAnnotationTextStyle().fontSize * textAnnotationTextStyle().lineHeight;
+    lines.forEach((line, i) => o.push(`<text x="${x+20}" y="${rn(y + h / 2 + 4 + (i - (lines.length - 1) / 2) * lineH)}" font-size="11" fill="${CLR.label}">${esc(line)}</text>`));
   } else if (type === 'group') {
     // Dashed rounded rectangle (OMG spec Fig 10.88)
     o.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" ry="10" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="8,4,2,4"/>`);
