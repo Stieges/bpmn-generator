@@ -323,6 +323,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `collaboration.js` and rendered as a note — never a warning, the enumeration did finish — by
   `describeEnumerationCompleteness` (`scripts/scenarios/format.js`), next to how `orGateways` is
   disclosed.
+### Breaking
+- The `dynamicLaneHeader` refinement pass was removed: bpmn.io and Camunda Modeler draw lane and
+  participant headers at a fixed width, so a wider header showed as an empty strip. `--refine` /
+  `visualRefinement: true` no longer change the header width; passing `dynamicLaneHeader` in a
+  `visualRefinement` object is a TypeError.
+
 ### Fixed
 - **Lane compaction no longer lays sequence flows on lane lines.** `compactLanes` clamped every
   waypoint inside the strip it cut away onto the shrunk band's bottom edge, so a cross-lane flow

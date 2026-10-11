@@ -201,9 +201,6 @@
     }
   },
   "visualRefinement": {
-    "dynamicLaneHeader": false,
-    "laneHeaderMinWidth": 30,
-    "laneHeaderMaxWidth": 120,
     "laneCompaction": false,
     "minLaneHeight": 80,
     "laneLineClearance": 10,

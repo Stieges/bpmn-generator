@@ -40,7 +40,7 @@ import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds,
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
-import { computeDynamicLaneHeaders, compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines } from './visual-refinement.js';
+import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -101,7 +101,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = []) {
  * Run the full BPMN pipeline programmatically.
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
- * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { dynamicLaneHeader?, laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
+ * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
@@ -229,12 +229,6 @@ async function runPipeline(logicCore, opts = {}) {
   }
 
   // Visual Refinement (post-layout coordinate transforms)
-  if (refine.dynamicLaneHeader) {
-    computeDynamicLaneHeaders(coordMap, lc, {
-      minWidth: CFG.visualRefinement?.laneHeaderMinWidth ?? 30,
-      maxWidth: CFG.visualRefinement?.laneHeaderMaxWidth ?? 120,
-    });
-  }
   if (refine.laneCompaction) {
     const preCompaction = structuredClone(coordMap.edgeCoords);
     compactLanes(coordMap, lc, { minLaneHeight: CFG.visualRefinement?.minLaneHeight ?? 80 });
