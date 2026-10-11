@@ -4,30 +4,38 @@
  *
  * The rule. Among the admissible routes between an edge's two shapes, prefer (1) the fewest bends,
  * then (2) entering an activity or event from the left and leaving one to the right. A gateway may
- * be entered and left at any vertex. An endpoint is either kept where it is or moved to the middle
+ * be entered and left at any vertex. An endpoint is either kept where it is, moved to the middle
  * of one of its shape's sides (on a circle or a diamond that midpoint lies on the outline, so no
- * second clip is needed — the same mechanism reclipStuckEnds uses). A boundary event's endpoint
- * never moves: its place on the host is placeBoundaryEvents' contract.
+ * second clip is needed — the same mechanism reclipStuckEnds uses), or — on a rectangle only
+ * (task, subprocess, call activity) — moved to a projection port: the point of a side level with
+ * the counterpart's centre or current endpoint, at least bendRuleLimits.portCornerMarginPx from
+ * either corner. A rectangle's side is straight, so that point lies on the outline too; it is what
+ * lets a flow from a tall expanded subprocess run straight into a task beside it. An event or a
+ * gateway keeps its midpoints/vertices. A boundary event's endpoint never moves: its place on the
+ * host is placeBoundaryEvents' contract.
  *
  * Admissible route — every condition is relative to the edge's CURRENT route, so the pass can only
  * trade a bend for nothing worse:
  *  1. orthogonal; the first segment leaves the source outward, the last enters the target inward;
  *  2. no end defect: no end segment along its own outline for more than layout.alongOutlineMinPx,
  *     no segment through its own source or target (the DI08/DI09 measures); the endpoint is a side
- *     midpoint or the current endpoint, so DI07 stays clean;
+ *     midpoint, a projection port or the current endpoint, so DI07 stays clean;
  *  3. both end segments at least layout.endStubPx long once the route bends;
  *  4. clear of every foreign node box by bendRuleLimits.shapeClearance (a box containing an
  *     endpoint — its expanded subprocess — and groups excepted);
  *  5. inside its region — the innermost expanded container holding both endpoints, else the
  *     participant's lane stack, else the pool body right of its header — by regionInset;
  *  6. per edge not worse than the current route in: crossings with non-adjacent flows, horizontal
- *     run on an inner lane line (laneLineHugPx), collinear overlap with any flow, parallel crowding
+ *     run on an inner lane line (laneLineHugPx), length of collinear overlap with any flow — two
+ *     parallel legs closer than collinearPx count as one line, whichever nodes they touch, because
+ *     the crowding measure below skips legs at a shared node and a 2.5 px offset still reads as
+ *     one stroke (sparse-lanes f3) — parallel crowding
  *     (crowdingPx, as scripts/bench/flow-metrics.mjs counts it), hits on external node labels
  *     (coordMap.nodeLabels), side conflicts (in and out on the same side of a node), and overlap
  *     with the line a message flow will take at a message-flow node's centre;
  *  7. length at most lengthFactor × the current length + lengthSlackPx;
  *  8. at a node carrying a message flow, no NEW port on top or bottom — routeMessageFlows runs after
- *     this pass and docks there.
+ *     this pass and docks there; this holds for projection ports as well.
  *
  * Candidates: for every port pair the 0-, 1- and 2-bend shapes (straight, L, and Z/U with the
  * corridor on a corridorStepPx grid within corridorReachPx of the ends); only when none of them is
@@ -63,6 +71,8 @@ const DEFAULT_LIMITS = Object.freeze({
   corridorReachPx: 120,
   corridorStepPx: 5,
   messageFlowLinePx: 3,
+  collinearPx: 4,
+  portCornerMarginPx: 15,
 });
 
 /**
@@ -223,18 +233,27 @@ function crossings(entry, pts, entries) {
   }
   return n;
 }
-/** Collinear (< 1 px apart) overlap length with every other flow, adjacent ones included. */
-function collinearOverlap(entry, pts, entries) {
+/**
+ * Length two segments run on top of each other: both horizontal (or both vertical), closer than
+ * `tolerance` px — at that distance two strokes read as one line — and overlapping by more than
+ * 1 px. 0 otherwise. Shared with scripts/bench/flow-metrics.mjs (overlapLen), so the guard and
+ * the ratchet measure the same thing.
+ */
+export function collinearRun(s, q, tolerance) {
+  const sh = Math.abs(s[0].y - s[1].y) < EPS, qh = Math.abs(q[0].y - q[1].y) < EPS;
+  const sv = Math.abs(s[0].x - s[1].x) < EPS, qv = Math.abs(q[0].x - q[1].x) < EPS;
+  let v = 0;
+  if (sh && qh && Math.abs(s[0].y - q[0].y) < tolerance) v = overlap1d(s[0].x, s[1].x, q[0].x, q[1].x);
+  else if (sv && qv && Math.abs(s[0].x - q[0].x) < tolerance) v = overlap1d(s[0].y, s[1].y, q[0].y, q[1].y);
+  return v > 1 ? v : 0;
+}
+/** Length this route runs on top of every other flow (collinearRun), adjacent ones included. */
+function collinearOverlap(entry, pts, entries, tolerance) {
   let t = 0;
   const A = segsOf(pts);
   for (const o of entries) {
     if (o.id === entry.id) continue;
-    for (const s of A) for (const q of segsOf(o.points)) {
-      const sh = Math.abs(s[0].y - s[1].y) < EPS, qh = Math.abs(q[0].y - q[1].y) < EPS;
-      const sv = Math.abs(s[0].x - s[1].x) < EPS, qv = Math.abs(q[0].x - q[1].x) < EPS;
-      if (sh && qh && Math.abs(s[0].y - q[0].y) < 1) { const v = overlap1d(s[0].x, s[1].x, q[0].x, q[1].x); if (v > 1) t += v; }
-      if (sv && qv && Math.abs(s[0].x - q[0].x) < 1) { const v = overlap1d(s[0].y, s[1].y, q[0].y, q[1].y); if (v > 1) t += v; }
-    }
+    for (const s of A) for (const q of segsOf(o.points)) t += collinearRun(s, q, tolerance);
   }
   return t;
 }
@@ -383,14 +402,40 @@ function sidePenalty(pts, entry, ctx) {
 
 // ── candidates ──────────────────────────────────────────────────────────
 
-function portsOf(box, point, fixed, noNewTopBottom) {
+/**
+ * Where the counterpart's centre (or its current endpoint) projects onto `side` of a rectangle, if
+ * that point lies on the side at least `margin` from both corners. The point is on the outline by
+ * construction — a rectangle's side is straight — so no second clip is needed.
+ */
+function projectionOnSide(box, side, q, margin) {
+  if (side === 'left' || side === 'right') {
+    if (q.y < box.y + margin - EPS || q.y > box.y + box.h - margin + EPS) return null;
+    return { x: side === 'left' ? box.x : box.x + box.w, y: q.y };
+  }
+  if (q.x < box.x + margin - EPS || q.x > box.x + box.w - margin + EPS) return null;
+  return { x: q.x, y: side === 'top' ? box.y : box.y + box.h };
+}
+
+/**
+ * Candidate ports of one end: the current endpoint, every side midpoint and — on a rectangle only —
+ * the projections of `towards` (the counterpart's centre and current endpoint) onto each side. An
+ * event or a gateway keeps its midpoints/vertices: a projection would be off the circle/diamond.
+ */
+function portsOf(box, point, fixed, noNewTopBottom, { rect = false, towards = [], margin = 0 } = {}) {
   const current = [{ p: point, side: sideOf(point, box), moved: false }];
   if (fixed) return current;
-  const mids = SIDES
-    .filter((s) => !(noNewTopBottom && (s === 'top' || s === 'bottom')))
-    .map((s) => ({ p: sideMidpoint(box, s), side: s, moved: true }))
-    .filter((m) => !(Math.abs(m.p.x - point.x) < EPS && Math.abs(m.p.y - point.y) < EPS));
-  return [...current, ...mids];
+  const sides = SIDES.filter((s) => !(noNewTopBottom && (s === 'top' || s === 'bottom')));
+  const out = [...current];
+  const seen = new Set([`${point.x},${point.y}`]);
+  const add = (p, side) => {
+    const k = `${p.x},${p.y}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ p, side, moved: true });
+  };
+  for (const s of sides) add(sideMidpoint(box, s), s);
+  if (rect) for (const s of sides) for (const q of towards) { const p = projectionOnSide(box, s, q, margin); if (p) add(p, s); }
+  return out;
 }
 
 /** The 0/1/2-bend shapes for one port pair; `out`/`inn` are travel directions. */
@@ -427,7 +472,7 @@ function makeChecker(entry, entries, ctx, cfg) {
     len: pathLen(curPts),
     hug: laneLineHug(curPts, lines, limits.laneLineHugPx),
     cross: crossings(entry, curPts, entries),
-    over: collinearOverlap(entry, curPts, entries),
+    over: collinearOverlap(entry, curPts, entries, limits.collinearPx),
     crowd: guards.crowding ? crowdPairs(entry, curPts, entries, limits.crowdingPx) : 0,
     side: guards.sideConflicts ? sideConflicts(entry, curPts, entries) : 0,
     mf: guards.messageFlowPorts ? messageFlowLineOverlap(curPts, ctx, limits.messageFlowLinePx) : 0,
@@ -446,7 +491,7 @@ function makeChecker(entry, entries, ctx, cfg) {
     for (const s of S) for (const o of obstacles) if (!segmentClearOfBox(s, o, limits.shapeClearance)) return false;
     if (laneLineHug(pts, lines, limits.laneLineHugPx) > cur.hug + EPS) return false;
     if (crossings(entry, pts, entries) > cur.cross) return false;
-    if (collinearOverlap(entry, pts, entries) > cur.over + EPS) return false;
+    if (collinearOverlap(entry, pts, entries, limits.collinearPx) > cur.over + EPS) return false;
     if (guards.crowding && crowdPairs(entry, pts, entries, limits.crowdingPx) > cur.crowd) return false;
     if (guards.sideConflicts && sideConflicts(entry, pts, entries) > cur.side) return false;
     if (guards.messageFlowPorts && messageFlowLineOverlap(pts, ctx, limits.messageFlowLinePx) > cur.mf + EPS) return false;
@@ -467,9 +512,13 @@ function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = nu
   if (!curSegs.length) return null;
   const { check, obstacles, sb, tb } = makeChecker(entry, entries, ctx, cfg);
   const mfGuard = cfg.guards.messageFlowPorts;
-  const sPorts = portsOf(sb, cur[0], ctx.attached.has(entry.source), mfGuard && ctx.mfNodes.has(entry.source))
+  const centre = (b) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+  const margin = cfg.limits.portCornerMarginPx;
+  const sPorts = portsOf(sb, cur[0], ctx.attached.has(entry.source), mfGuard && ctx.mfNodes.has(entry.source),
+    { rect: ctx.shapeOf(entry.source) === 'rect', towards: [centre(tb), cur[cur.length - 1]], margin })
     .map((q) => ({ ...q, dir: q.side ? OUTWARD[q.side] : dirOf(curSegs[0]) }));
-  let tPorts = portsOf(tb, cur[cur.length - 1], false, mfGuard && ctx.mfNodes.has(entry.target))
+  let tPorts = portsOf(tb, cur[cur.length - 1], false, mfGuard && ctx.mfNodes.has(entry.target),
+    { rect: ctx.shapeOf(entry.target) === 'rect', towards: [centre(sb), cur[0]], margin })
     .map((q) => ({ ...q, dir: q.side ? INWARD[q.side] : dirOf(curSegs[curSegs.length - 1]) }));
   if (targetSide) tPorts = tPorts.filter((q) => entrySideOfDir(q.dir) === targetSide);
 

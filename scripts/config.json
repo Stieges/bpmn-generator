@@ -180,7 +180,9 @@
       "crowdingPx": 10,
       "corridorReachPx": 120,
       "corridorStepPx": 5,
-      "messageFlowLinePx": 3
+      "messageFlowLinePx": 3,
+      "collinearPx": 4,
+      "portCornerMarginPx": 15
     }
   },
   "elk": {
