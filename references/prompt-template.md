@@ -101,12 +101,17 @@ Extract a structured Logic-Core JSON from the process description below.
 
 ### Multi-Pool (Collaboration)
 - If the process involves distinct organizations/participants communicating:
-  - Use the "pools" array with separate process for each participant
+  - Use the "pools" array with separate process for each participant whose own steps you model
+  - A participant whose steps you do NOT model (an external partner such as a customer, supplier or
+    authority that only sends or receives messages) is a black-box participant: put it in the
+    top-level `collapsedPools` array as `{ "id": "...", "name": "..." }`. **Never** add a pool with
+    an empty `nodes` list — the schema rejects it. A message flow to or from it names its id directly.
   - Add "messageFlows" for cross-pool communication
+  - A message flow is named with `name`, **not** `label` (`label` exists only on sequence-flow `edges`)
   - Message flows connect sendTask/intermediateThrowEvent → receiveTask/intermediateCatchEvent
   - **Never** use a gateway (exclusiveGateway, parallelGateway, etc.) as `source` or `target` of a messageFlow — per OMG §7.6.2 Table 7.4, gateways are not InteractionNodes. If a flow needs to message-out after merging branches, insert a sendTask (or intermediateThrowEvent) AFTER the gateway and use that as the message-flow source.
-  - **Never** use a `subProcess`, `transaction`, `adHocSubProcess` or `callActivity` as `source` or `target` of a messageFlow — per OMG §7.6.2 Table 7.4 these are not InteractionNodes either (`Activity` extends `FlowNode` only, unlike `Task` and `Event`). Point the flow at a node **inside** the subprocess (a sendTask/receiveTask, or a message start/end event), or at a black-box Pool. Collapsing the subprocess does not make it legal — `isExpanded` is a rendering attribute, not a semantic one.
-  - Valid messageFlow source/target types: `sendTask`, `receiveTask`, `userTask`, `serviceTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `intermediateThrowEvent`, `intermediateCatchEvent`, `startEvent` (catch), `endEvent` (throw), or a Pool/Participant ID directly. A node nested inside a subprocess is a valid endpoint and is addressed by its own id.
+  - **Never** use a `subProcess`, `transaction`, `adHocSubProcess` or `callActivity` as `source` or `target` of a messageFlow — per OMG §7.6.2 Table 7.4 these are not InteractionNodes either (`Activity` extends `FlowNode` only, unlike `Task` and `Event`). Point the flow at a node **inside** the subprocess (a sendTask/receiveTask, or a message start/end event), or at a black-box participant (`collapsedPools`). Collapsing the subprocess does not make it legal — `isExpanded` is a rendering attribute, not a semantic one.
+  - Valid messageFlow source/target types: `sendTask`, `receiveTask`, `userTask`, `serviceTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `intermediateThrowEvent`, `intermediateCatchEvent`, `startEvent` (catch), `endEvent` (throw), or the id of a black-box participant in `collapsedPools`. A node nested inside a subprocess is a valid endpoint and is addressed by its own id.
 
 ### Boundary Events
 - If a task has a deadline/timer → add boundaryEvent with "attachedTo": "<task_id>", "marker": "timer"
@@ -138,7 +143,7 @@ Respond with ONLY valid JSON matching the Logic-Core schema. No explanation, no 
 The JSON MUST use one of these two root shapes. Do NOT wrap in `process`, `data`, `result`, or any other envelope key — the root object is the Logic-Core itself.
 
 ### Root shape A — Single process (use when one participant/pool is enough):
-```json
+```
 {
   "nodes": [ { "id": "...", "type": "...", "name": "...", "lane": "..." }, ... ],
   "edges": [ { "id": "...", "source": "...", "target": "...", "label": "..." }, ... ],
@@ -147,20 +152,45 @@ The JSON MUST use one of these two root shapes. Do NOT wrap in `process`, `data`
 ```
 
 ### Root shape B — Collaboration (use when ≥2 participants exchange messages):
+Every participant whose steps you model is a pool; an external partner you do not model is a
+`collapsedPools` entry. Copy this shape:
 ```json
 {
   "pools": [
     {
-      "id": "Pool_Customer",
-      "name": "Customer",
-      "nodes": [ ... ],
-      "edges": [ ... ],
-      "lanes": [ ... ]
+      "id": "Pool_Sales",
+      "name": "Sales",
+      "nodes": [
+        {"id": "start_order", "type": "startEvent", "name": "Order received", "marker": "message"},
+        {"id": "task_forward", "type": "sendTask", "name": "Forward order"},
+        {"id": "end_sales", "type": "endEvent", "name": "Order forwarded"}
+      ],
+      "edges": [
+        {"id": "f1", "source": "start_order", "target": "task_forward"},
+        {"id": "f2", "source": "task_forward", "target": "end_sales"}
+      ]
     },
-    { "id": "Pool_Service", "name": "Service", "nodes": [...], "edges": [...], "lanes": [...] }
+    {
+      "id": "Pool_Warehouse",
+      "name": "Warehouse",
+      "nodes": [
+        {"id": "start_pick", "type": "startEvent", "name": "Order arrived", "marker": "message"},
+        {"id": "task_ship", "type": "sendTask", "name": "Ship goods"},
+        {"id": "end_ship", "type": "endEvent", "name": "Goods shipped"}
+      ],
+      "edges": [
+        {"id": "f3", "source": "start_pick", "target": "task_ship"},
+        {"id": "f4", "source": "task_ship", "target": "end_ship"}
+      ]
+    }
+  ],
+  "collapsedPools": [
+    {"id": "Pool_Customer", "name": "Customer"}
   ],
   "messageFlows": [
-    { "id": "mf1", "source": "<sendTask_id_in_poolA>", "target": "<receiveTask_id_in_poolB>", "label": "Request" }
+    {"id": "mf1", "source": "Pool_Customer", "target": "start_order", "name": "Order"},
+    {"id": "mf2", "source": "task_forward", "target": "start_pick", "name": "Picking order"},
+    {"id": "mf3", "source": "task_ship", "target": "Pool_Customer", "name": "Delivery"}
   ]
 }
 ```
