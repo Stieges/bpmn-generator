@@ -30,14 +30,6 @@ export const INSTANTIATE_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field === 'ins
 const EVENT_DEF_MAP = Object.fromEntries(MARKER_BY_EVENT_DEFINITION);
 
 /**
- * The Logic-Core `role` of an Activity, read from its `resources` (ResourceRole list), or
- * `undefined`. The one form this generator writes and the only one read back: exactly one
- * `bpmn:Performer` or `bpmn:HumanPerformer`, without a `resourceAssignmentExpression`, whose
- * `resourceRef` names a resource with a non-empty `name`. `import.js`'s `readRoleFromDom` states
- * the same rule over the raw DOM; change both together.
- */
-
-/**
  * One sequence flow as a Logic-Core edge — at process level and inside a container alike, so a
  * nested flow keeps its condition and its default mark exactly as a top-level one does.
  * `siblings` is the flowElements of the flow's own container: the element naming it as `default`
@@ -55,6 +47,13 @@ function edgeFromFlow(el, siblings = []) {
   return edge;
 }
 
+/**
+ * The Logic-Core `role` of an Activity, read from its `resources` (ResourceRole list), or
+ * `undefined`. The one form this generator writes and the only one read back: exactly one
+ * `bpmn:Performer` or `bpmn:HumanPerformer`, without a `resourceAssignmentExpression`, whose
+ * `resourceRef` names a resource with a non-empty `name`. `import.js`'s `readRoleFromDom` states
+ * the same rule over the raw DOM; change both together.
+ */
 function readRole(resourceRoles) {
   const roles = resourceRoles ?? [];
   if (roles.length !== 1) return undefined;
