@@ -479,6 +479,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `isInterrupting="false"` at every nesting depth (only `false`: `true` is the XSD default, like
   `cancelActivity`), both importers read it back, and the field-fidelity fence covers it (row
   `isInterrupting`, `roundTrip: 'lossy'` — a literal `true` comes back absent).
+- **SVG and XML agree on conditional and default flows (#84, #85).** Which sequence flows carry a
+  `conditionExpression` and which one is its source's `default` is now decided once, in
+  `resolveFlowSemantics` (`scripts/bpmn/topology.js`); `bpmn-xml.js` writes from it and `svg.js`
+  draws from it, by bpmn-js 18.6.2's rule: the conditional diamond only on a flow with a condition
+  leaving an activity, the default slash on the flow a gateway or activity names as `default`.
+  Before, the SVG drew a diamond for `isConditional` with no condition in the XML, and no slash for
+  the default the serialiser infers on an unmarked diverging XOR/OR gateway. A flow marked
+  `isConditional` with a `label` and no `condition` now gets the label as its conditionExpression
+  body, so both renderers show it as conditional; `isConditional` with neither has nothing to write
+  and draws nothing. The slash and the diamond have bpmn-js's geometry and size; the slash used to
+  sit on the source point, inside the gateway outline.
+- **Conditions and default flows inside a subprocess are written and read back.** A container's
+  flows were written with id, name, source and target only, so `condition` and `isDefault` were
+  lost at every depth below the process. They now come from the same decision as a process's flows
+  (`resolveFlowSemantics`), both importers read them back at every depth, and the SVG draws their
+  markers. Consequence: a diverging XOR/OR gateway inside a subprocess now gets the same inferred
+  default and label-conditions as one at process level (`example-onboarding`,
+  `subprocess-child-fidelity`).
+- **SVG symbols that were wrong or missing (#85).** An event-based gateway draws two rings when it
+  is exclusive and not instantiating, and an outlined plus in one ring when it is parallel (was: one
+  ring and a pentagon for all three); an instantiating receive task draws the ring-and-envelope
+  start symbol; a collapsed transaction draws the [+] marker. Each follows the matching handler of
+  bpmn-js 18.6.2's `BpmnRenderer`.
+- **Grandchildren of nested expanded subprocesses are drawn in the SVG.** The DI had their shapes;
+  the SVG drew one nesting level only.
+- **Artifacts stay inside their participant (#86).** A participant without lanes is grown around
+  the artifacts `placeArtifacts` puts below their anchors (ELK never saw them), and an unassociated
+  artifact goes below its own process — in the lane of its lowest node — instead of below the whole
+  collaboration, i.e. under the last participant. Both raised DI03. New fixture
+  `tests/fixtures/artifacts-laneless-pool.json`, fenced by the DI check.
 - **The legacy importer decodes XML character data like the primary one.** `bpmnToLogicCoreLegacy`
   (`scripts/bpmn/import.js`) decoded only the five named entities in attributes and nothing in
   element text, so a name written as `&#38;` came back as `Check A &#38; B` and `x<1` in a
@@ -1176,6 +1206,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **Every SVG element carries its id.** A node's markup is one `<g data-element-id="…">` group and a
+  connection's path has a `data-element-id` attribute, as in bpmn-js, so a consumer can find an
+  element without re-deriving its geometry. Nothing is drawn differently; every SVG golden changes.
+- **An unattached group has a bounded default size (#86):** `config.json → shape.group` is 200 × 120
+  (was 300 × 300, which made a one-task participant several times taller than its content).
+- **The SVG's symbols are fenced against bpmn-js.** `scripts/bpmn/symbol-fidelity.test.js` derives,
+  for every element of every top-level fixture and of `tests/fixtures/symbols/symbol-catalog.json`
+  (one example of every element class), the structure bpmn-js 18.6.2 draws from our XML — rings,
+  dashes, icon, bottom markers, source-end marker — and compares it with our SVG. No browser.
 - **The SVG canvas includes external node labels.** The canvas size now accounts for the label boxes
   of events, gateways, data objects and stores, with the layout switches on or off. Every committed
   fixture renders byte-identical with both switches off; a label reaching further than the canvas
@@ -1236,6 +1275,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
 
+- **Multiple and parallel-multiple events are drawn but not serialised (#87).** The SVG shows the
+  pentagon or plus; the XML carries no event definition, so bpmn.io shows a plain event. The
+  symbol-fidelity fence pins the difference, so the fix will turn it red.
+- **`isAdHoc` is drawn but not serialised.** The SVG draws the tilde; the XML has a plain
+  `subProcess` (the `isAdHoc` row in `types.js`, `adHocSubProcess` is `announced`). Pinned like #87.
 - **Layout limits left open by the edge and message-flow work**, each tracked:
   - `boundary-event-shapes` still has one sequence-flow crossing between boundary-event shapes (#71).
   - A message-flow jog keeps clearance from shapes only; it ignores groups and labels (#72).

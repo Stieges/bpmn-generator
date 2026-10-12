@@ -753,6 +753,10 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   ASCII NCName, so the BPMN importer has the same latent defect against foreign files. Neither
   `/api/v1/import` nor the MCP `import_bpmn` tool has a test, and `scripts/bpmn/import.js` swallows
   every moddle error with a bare `catch {}`
+- Multiple and parallel-multiple events (`marker: multiple | parallelMultiple`) are drawn in the
+  SVG but the XML carries no event definition, so bpmn.io shows a plain event (#87). Likewise
+  `isAdHoc`: the SVG draws the tilde, the XML has a plain `subProcess` (`adHocSubProcess` is
+  `announced`). `scripts/bpmn/symbol-fidelity.test.js` pins both, so a fix turns it red
 - Rule placeholders: M05-M06 (Style) registered with severity=OFF (POS tagger problem; tracked in ROADMAP)
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
