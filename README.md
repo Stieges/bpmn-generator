@@ -165,7 +165,8 @@ everything needed:
   `bpmn/import.js`, `bpmn/redesign-cli.js` and their import closure), `config.json`, `package.json`
 
 The bundle holds what the skill runs and nothing else: the orchestrator, the HTTP and MCP servers,
-`agents/`, `robustness/` and the DMN and scenario CLIs need a checkout or the npm package. The
+`agents/` and the DMN and scenario CLIs need a checkout or the npm package, `robustness/` a
+checkout. The
 build walks the imports from every entry point and aborts if one reaches a module it does not
 bundle. `npm install` inside the unpacked `scripts/` is still required.
 
