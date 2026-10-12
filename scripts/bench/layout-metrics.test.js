@@ -306,6 +306,7 @@ const same = (row) => ({ default: row, on: row });
 // kreditantrag 1) are ELK's and stand in every mode.
 const BUDGET_PLAIN = {
   'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
+  'artifacts-laneless-pool.json':       same(r({})),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
   'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 227 }),
                                           on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, labelLabel: 1, overlapLen: 786 }) },
@@ -355,6 +356,7 @@ const BUDGET_PLAIN = {
 // 184 → 0 (f3).
 const BUDGET_DEFAULT = {
   'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
+  'artifacts-laneless-pool.json':       r({}),
   'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 10 }),
   'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 187 }),
   'deadlock-process.json':              null,
@@ -428,6 +430,7 @@ const NONE = d(0, 0);
 const dir = (row, on = row) => ({ default: NONE, off: NONE, on: NONE, plain: row, 'plain-on': on });
 const DIRECTION = {
   'all-element-classes.json':           dir(NONE),
+  'artifacts-laneless-pool.json':       dir(NONE),
   'boundary-event-shapes.json':         dir(d(2, 0)),
   'bpmn-generator-pipeline.json':       dir(d(7, 2), d(12, 6)),
   'deadlock-process.json':              { default: null, off: null, on: null, plain: null, 'plain-on': null },
