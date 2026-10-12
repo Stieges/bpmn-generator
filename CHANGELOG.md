@@ -492,9 +492,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   body, so both renderers show it as conditional; `isConditional` with neither has nothing to write
   and draws nothing. A condition is written only where OMG admits one (§10.3.1): on a flow leaving
   an Activity or an exclusive, inclusive or complex gateway — a flow leaving a parallel or
-  event-based gateway or an event gets none, whatever was authored. A default flow gets none either:
-  OMG ignores its condition (§10.5), so the default wins. S15 reports a condition either limit
-  drops. The slash and the diamond have bpmn-js's geometry and size; the slash used to sit on the
+  event-based gateway or an event gets none, whatever was authored. A flow marked `isDefault` gets
+  none either: OMG ignores its condition (§10.5), so the default wins. The default the generator
+  infers for an unmarked diverging XOR/OR gateway is chosen only among flows without an authored
+  condition (the last such flow), and none is inferred when every flow has one — an inferred
+  default never takes a condition away. S15 reports a condition either limit drops. The slash and the diamond have bpmn-js's geometry and size; the slash used to sit on the
   source point, inside the gateway outline.
 - **Conditions and default flows inside a subprocess are written and read back.** A container's
   flows were written with id, name, source and target only, so `condition` and `isDefault` were

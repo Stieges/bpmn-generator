@@ -56,7 +56,8 @@ function gatewayDirections(nodes, edges) {
  * Two inferences live here, both pre-existing serialiser behaviour (removal is queued as plan
  * "Root fix", backlog item 7, in the edge-field rows of `types.js`):
  *   - a diverging exclusive/inclusive gateway with more than one outgoing flow and none marked
- *     `isDefault` gets its LAST outgoing flow as default;
+ *     `isDefault` gets its LAST outgoing flow WITHOUT an authored condition as default (none when
+ *     every outgoing flow has one);
  *   - every other outgoing flow of such a gateway gets a condition, its body `condition` or else
  *     `label` (or empty).
  * An explicit `condition` gives any flow a condition. A flow marked `isConditional` with a `label`
@@ -70,7 +71,9 @@ function gatewayDirections(nodes, edges) {
  *   - only a flow leaving an Activity or an exclusive, inclusive or complex Gateway gets one
  *     (§10.3.1; the `condition` row's `allowed`) — a parallel or event-based gateway's flows and an
  *     event's flows get none, whatever was authored;
- *   - a default flow gets none: its condition is ignored (§10.5), so the default wins.
+ *   - a default flow gets none: its condition is ignored (§10.5), so the default wins — which can
+ *     only happen for an AUTHORED `isDefault`, because the inferred default is chosen only among
+ *     flows without an authored condition, and is not inferred at all when every flow has one.
  * S15 reports an authored condition either limit drops.
  *
  * Pure: gateway directions are computed, not read from or written to `_direction`.
@@ -87,14 +90,23 @@ export function resolveFlowSemantics(nodes = [], edges = []) {
     && (n.type === 'exclusiveGateway' || n.type === 'inclusiveGateway')
     && dirs.get(n.id) === 'Diverging';
 
+  // A condition the AUTHOR wrote: `condition`, or `isConditional` with a label.
+  const authoredCondition = (e) => !!(e.condition || (e.isConditional && e.label));
+
   const defaultBySource = new Map();
   for (const e of edges) {
     if (e.isDefault) defaultBySource.set(e.source, e.id);
   }
+  // The inferred default is chosen only among flows WITHOUT an authored condition — the last one,
+  // as before, when it is unconditioned, else the last unconditioned one, else none. An inferred
+  // default never overrides a condition the author wrote; "the default wins" is reserved for an
+  // authored `isDefault` (review of #84: two fully conditioned branches lost the second condition).
   for (const n of nodes) {
     if (!isConditionalSplit(n) || defaultBySource.has(n.id)) continue;
     const outs = edges.filter((e) => e.source === n.id);
-    if (outs.length > 1) defaultBySource.set(n.id, outs[outs.length - 1].id);
+    if (outs.length < 2) continue;
+    const free = outs.filter((e) => !authoredCondition(e));
+    if (free.length > 0) defaultBySource.set(n.id, free[free.length - 1].id);
   }
 
   const defaultIds = new Set(defaultBySource.values());
@@ -103,7 +115,7 @@ export function resolveFlowSemantics(nodes = [], edges = []) {
   for (const e of edges) {
     const source = byId.get(e.source);
     if (!source || !conditionSources.has(source.type) || defaultIds.has(e.id)) continue;
-    const needsCondition = e.condition || (e.isConditional && e.label) || isConditionalSplit(source);
+    const needsCondition = authoredCondition(e) || isConditionalSplit(source);
     if (needsCondition) conditionById.set(e.id, e.condition || e.label || '');
   }
   return { defaultBySource, conditionById };

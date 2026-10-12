@@ -864,7 +864,8 @@ export const OMG_EDGE_FIELD_SCOPE = [
   { field: 'isDefault', attr: 'default', type: 'boolean', on: 'sourceGateway', allowed: domain('Edge', 'isDefault'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'The serialiser FABRICATES it: when a diverging XOR or OR gateway has more than one '
-      + 'outgoing flow and none is marked, `buildDefaultFlowMap` makes the LAST one the default. So '
+      + 'outgoing flow and none is marked, `buildDefaultFlowMap` makes the LAST one without an '
+      + 'authored condition the default (none when every one has a condition). So '
       + 'an edge that carried no `isDefault` can come back carrying one, and which edge that is '
       + 'depends on array order. An explicitly marked edge survives, at every depth — a '
       + 'container\'s own flows get the same decision (`resolveFlowSemantics`), written by the '

@@ -774,7 +774,7 @@ const SOUNDNESS_CHECKS = [
   },
   {
     id: 'S15',
-    description: 'A per-node field must sit on a node class OMG defines it on — isForCompensation '
+    description: 'A per-node or per-edge field must sit where OMG defines it — isForCompensation '
       + 'is an Activity attribute, implementation belongs to the five invoking Task types, '
       + 'triggeredByEvent to SubProcess and its Transaction specialization, calledElement to '
       + 'CallActivity, scriptFormat and the script body to ScriptTask, isCollection to '
@@ -786,7 +786,9 @@ const SOUNDNESS_CHECKS = [
       + 'sequence-flow condition only on a non-default flow leaving an Activity or an exclusive, '
       + 'inclusive or complex Gateway',
     ref: {
-      omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity)',
+      omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity), '
+        + '§10.3.1 (Sequence Flow conditionExpression), §10.3.5 (StartEvent isInterrupting in an Event '
+        + 'Sub-Process), §10.5 (a default flow\'s condition is ignored)',
       cmof: 'Activity.isForCompensation (BPMN20.cmof:1095), SubProcess.triggeredByEvent (:1147, '
         + 'inherited by Transaction :1233), '
         + 'CallActivity.calledElement (:1188), ScriptTask.scriptFormat (:1251), '
@@ -847,10 +849,12 @@ const SOUNDNESS_CHECKS = [
               + `allows a conditionExpression only on a flow leaving ${conditionSpec.scope}. The condition `
               + 'is dropped when the BPMN is written, so it has no effect — remove it, or branch at a '
               + 'gateway that evaluates conditions.');
-          } else if (defaultBySource.get(e.source) === e.id) {
-            msgs.push(`Flow "${e.id}" is the default flow of "${src.id}" and carries ${authored}, but OMG `
-              + 'ignores the condition of a default flow — the default wins, and the condition is '
-              + 'dropped when the BPMN is written. Remove the condition, or the default mark.');
+          } else if (e.isDefault && defaultBySource.get(e.source) === e.id) {
+            // Authored defaults only: an inferred default is never chosen among flows with an
+            // authored condition (resolveFlowSemantics), so it cannot collide with one.
+            msgs.push(`Flow "${e.id}" is marked as the default flow of "${src.id}" and carries ${authored}, `
+              + 'but OMG ignores the condition of a default flow — the default wins, and the condition '
+              + 'is dropped when the BPMN is written. Remove the default mark or the condition.');
           }
         }
         for (const node of (nodes || [])) {
