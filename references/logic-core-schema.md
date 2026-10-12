@@ -1,5 +1,29 @@
 # Logic-Core JSON Schema Reference v2.0
 
+Load this before extracting or editing any Logic-Core: it is the field-by-field contract the
+schema gate (`references/input-schema.json`) enforces.
+
+## Contents
+
+- [Overview](#overview)
+- [Schema Modes](#schema-modes)
+- [Top-Level Fields](#top-level-fields)
+- [NodeObject](#nodeobject)
+- [EdgeObject](#edgeobject)
+- [LaneObject](#laneobject)
+- [MessageFlowObject (cross-pool communication)](#messageflowobject-cross-pool-communication)
+- [Minimal Example (no lanes)](#minimal-example-no-lanes)
+- [Example with Lanes](#example-with-lanes)
+- [Example with Parallel Gateway (split + join)](#example-with-parallel-gateway-split--join)
+- [Example: Multi-Pool with Message Flows](#example-multi-pool-with-message-flows)
+- [Example: Boundary Timer Event](#example-boundary-timer-event)
+- [Common Anti-Patterns (Reviewer checklist)](#common-anti-patterns-reviewer-checklist)
+- [CollapsedPoolObject (Black-Box Participant)](#collapsedpoolobject-black-box-participant)
+- [AssociationObject](#associationobject)
+- [Process Documentation](#process-documentation)
+- [Method & Style Rules (Bruce Silver)](#method--style-rules-bruce-silver)
+- [Example: Method & Style Collaboration (1 expanded + 2 collapsed)](#example-method--style-collaboration-1-expanded--2-collapsed)
+
 ## Overview
 
 The Logic-Core is the intermediate representation between LLM output and BPMN 2.0 XML.
@@ -108,33 +132,45 @@ roles or systems as lanes or pools today, model them that way — see
 
 ### Node Type Values
 
-| Type                     | BPMN Element            | When to use                                  |
-|--------------------------|-------------------------|----------------------------------------------|
-| `startEvent`             | Start Event             | Process trigger, one per process             |
-| `endEvent`               | End Event               | Process termination, at least one            |
-| `intermediateCatchEvent` | Catch Event             | Waiting for message/timer mid-process        |
-| `intermediateThrowEvent` | Throw Event             | Sending signal/message mid-process           |
-| `boundaryEvent`          | Boundary Event          | Attached to task, requires `attachedTo`      |
-| `task`                   | Task                    | Generic activity                             |
-| `userTask`               | User Task               | Human action (form, decision, approval)      |
-| `serviceTask`            | Service Task            | Automated system call, API, integration      |
-| `scriptTask`             | Script Task             | Automated script/rule execution              |
-| `sendTask`               | Send Task               | Send message to external participant         |
-| `receiveTask`            | Receive Task            | Wait for incoming message                    |
-| `manualTask`             | Manual Task             | Physical/offline activity                    |
-| `businessRuleTask`       | Business Rule Task      | DMN decision, rule engine call               |
-| `subProcess`             | Sub-Process (collapsed) | Collapsed activity grouping >3 sub-steps     |
-| `transaction`            | Transaction             | Sub-process that completes or is cancelled as a unit |
-| `callActivity`           | Call Activity           | Reusable called process                      |
-| `exclusiveGateway`       | XOR Gateway             | Exactly one path chosen, name as question    |
-| `parallelGateway`        | AND Gateway             | All paths execute simultaneously             |
-| `inclusiveGateway`       | OR Gateway              | One or more paths chosen                     |
-| `eventBasedGateway`      | Event Gateway           | Path chosen by first event received          |
-| `complexGateway`         | Complex Gateway         | Custom merging/splitting logic               |
-| `dataObjectReference`    | Data Object             | Document/artifact flowing through process    |
-| `dataStoreReference`     | Data Store              | Database/persistent storage                  |
-| `textAnnotation`         | Text Annotation         | Explanatory note attached via association     |
-| `group`                  | Group                   | Visual grouping (no execution semantics)      |
+| Type                     | BPMN element / visual                      | When to use                                  |
+|--------------------------|--------------------------------------------|----------------------------------------------|
+| `startEvent`             | Start event — thin circle                  | Process trigger, one per process             |
+| `endEvent`               | End event — thick circle                   | Process termination, at least one            |
+| `intermediateCatchEvent` | Catch event — double circle                | Waiting for message/timer mid-process        |
+| `intermediateThrowEvent` | Throw event — double circle, filled marker | Sending signal/message mid-process           |
+| `boundaryEvent`          | Boundary event — on the activity's border  | Timer/error/… on an activity, requires `attachedTo` |
+| `task`                   | Task — rounded rectangle                   | Generic activity, type unspecified           |
+| `userTask`               | User task — person icon                    | Human action with IT support (form, approval) |
+| `serviceTask`            | Service task — gear icon                   | Automated system call, API, integration      |
+| `scriptTask`             | Script task — script icon                  | Script executed by the engine                |
+| `sendTask`               | Send task — filled envelope                | Send message to external participant         |
+| `receiveTask`            | Receive task — outlined envelope           | Wait for incoming message                    |
+| `manualTask`             | Manual task — hand icon                    | Physical/offline activity, no IT             |
+| `businessRuleTask`       | Business rule task — table icon            | DMN decision, rule engine call (`decisionRef`, see `references/dmn.md`) |
+| `subProcess`             | Sub-process — `[+]` when collapsed         | Grouping of >3 sub-steps (`isExpanded: true` to draw the inside) |
+| `transaction`            | Transaction — double border                | Sub-process that completes or is cancelled as a unit |
+| `callActivity`           | Call activity — thick border               | Reusable called process (`calledElement`)    |
+| `exclusiveGateway`       | XOR gateway — diamond with ✕               | Exactly one path chosen, name as question    |
+| `parallelGateway`        | AND gateway — diamond with +               | All paths execute simultaneously             |
+| `inclusiveGateway`       | OR gateway — diamond with ○                | One or more paths chosen                     |
+| `eventBasedGateway`      | Event gateway — diamond with pentagon      | Path chosen by first event received          |
+| `complexGateway`         | Complex gateway — diamond with ✱           | Custom merging/splitting logic               |
+| `dataObjectReference`    | Data object — page with folded corner      | Document/data passed within one case         |
+| `dataStoreReference`     | Data store — cylinder                      | Database/persistent storage                  |
+| `textAnnotation`         | Text annotation — open bracket with text   | Explanatory note attached via association    |
+| `group`                  | Group — dashed rounded rectangle           | Visual grouping (no execution semantics)     |
+
+### Activity markers
+
+Drawn at the bottom centre of a task or subprocess:
+
+| Marker        | Field                         | Visual                  |
+|---------------|-------------------------------|-------------------------|
+| Standard loop | `loopType: "standard"`        | circular arrow          |
+| MI parallel   | `multiInstance: "parallel"`   | three vertical bars     |
+| MI sequential | `multiInstance: "sequential"` | three horizontal bars   |
+| Ad-hoc        | `isAdHoc: true`               | tilde                   |
+| Compensation  | `isCompensation: true`        | double rewind           |
 
 ### Event Marker Values
 
@@ -156,6 +192,16 @@ Set `marker` on event nodes to specify the trigger type:
 | `parallelMultiple` | Plus +         | Multiple triggers (all must fire)    |
 
 If `marker` is not set, the pipeline infers it from the event name (e.g. "Frist abgelaufen" → timer).
+
+Which markers the generator draws per event type:
+
+| Event type          | Markers |
+|---------------------|---------|
+| Start               | none, message, timer, signal, conditional, error, escalation, compensation |
+| End                 | none, message, signal, error, escalation, compensation, cancel, terminate, multiple |
+| Intermediate catch  | message, timer, signal, conditional, link, error, escalation, compensation, cancel |
+| Intermediate throw  | message, signal, link, escalation, compensation |
+| Boundary            | timer, error, message, signal, escalation, compensation, cancel, conditional |
 
 ### Referencing a definition: `messageRef`, `signalRef`, `errorRef`, `escalationRef`
 
@@ -201,6 +247,16 @@ field set explicitly.
 | `isHappyPath`   | No       | `true` → ElkJS prioritizes this edge as main flow axis       |
 | `isDefault`     | No       | `true` → Default flow (diagonal slash marker at source)      |
 | `isConditional` | No       | `true` → Conditional flow (diamond marker at source)         |
+
+How each connection is drawn:
+
+| Connection       | Line              | Source marker  | Target marker               |
+|------------------|-------------------|----------------|-----------------------------|
+| Sequence flow    | solid             | —              | filled triangle             |
+| Default flow     | solid             | diagonal slash | filled triangle             |
+| Conditional flow | solid             | open diamond   | filled triangle             |
+| Message flow     | dashed            | open circle    | open triangle               |
+| Association      | dotted            | —              | open chevron (if `directed`) |
 
 ---
 
@@ -442,6 +498,9 @@ is unknown or out of scope (Bruce Silver "Method & Style" best practice).
 A diagram should have **one expanded pool** (your process) and N collapsed pools
 for external parties. Message Flows connect to collapsed pools as a whole.
 
+**Rendering:** a thin horizontal band with the name centred; in the XML a `<participant>` without
+`processRef` (OMG §9.3). Message flows name the collapsed pool's `id` as `source` or `target`.
+
 **Position:** The order in which pools and collapsed pools are declared does **not**
 determine their position in the diagram. By default the generator stacks all
 participants so that the ones exchanging messages sit next to each other — a
@@ -477,6 +536,18 @@ there are just more crossings, and the DI check reports them as DI05.
 **Usage:** Associations connect Data Objects, Data Stores, and Text Annotations
 to flow nodes. They are dotted lines, not sequence flows.
 
+In the XML an `<association>` (with `associationDirection`) sits in the process's `<artifacts>`,
+next to the TextAnnotation or Group it connects — never in `<flowElements>` (OMG §10.7).
+
+```json
+{
+  "associations": [
+    { "id": "assoc1", "source": "task_erfassen", "target": "do_akte", "directed": true },
+    { "id": "assoc2", "source": "ann_hinweis", "target": "task_pruefen" }
+  ]
+}
+```
+
 ---
 
 ## Process Documentation
@@ -509,7 +580,7 @@ The following rules are enforced by the pipeline validator and reviewer:
 7. **Every flow path terminates** at an endEvent
 8. **Max 7-10 elements per level** — use subProcess for complexity
 9. **Default flow**: Mark exactly one outgoing edge from XOR gateways as `isDefault: true`
-10. **Lanes = specific roles**, not departments ("Sachbearbeiter", nicht "Abteilung")
+10. **Lanes = functional roles or departments**, never people ("Sachbearbeiter", nicht "Max Müller")
 
 ---
 

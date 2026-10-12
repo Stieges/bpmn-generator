@@ -1,5 +1,27 @@
 # BPMN Fachliches Regelwerk
 
+## Contents
+
+- [Architektur](#architektur)
+- [Quellen](#quellen)
+- [Schicht 1: Soundness (ERROR, sechs Regeln WARNING)](#schicht-1-soundness-error-sechs-regeln-warning)
+- [Schicht 2: Style (WARNING)](#schicht-2-style-warning)
+- [Schicht 3: Pragmatik (INFO)](#schicht-3-pragmatik-info)
+- [Schicht 4: Workflow-Net Soundness (opt-in, ERROR/WARNING)](#schicht-4-workflow-net-soundness-opt-in-errorwarning)
+- [Schicht 5: Process Optimization Advisory (opt-in, ADVISORY)](#schicht-5-process-optimization-advisory-opt-in-advisory)
+- [Regel-Profile](#regel-profile)
+- [Regel-Objekt Schema](#regel-objekt-schema)
+- [Regel M01: Objekt+Verb-Heuristik](#regel-m01-objektverb-heuristik)
+- [Regel M10: Lane/Pool Name Length](#regel-m10-lanepool-name-length)
+- [Rule M11: decisionRef Placement](#rule-m11-decisionref-placement)
+- [Rule S14: MessageFlow endpoints are InteractionNodes, and a container is not one](#rule-s14-messageflow-endpoints-are-interactionnodes-and-a-container-is-not-one)
+- [Rule S15: a per-node or per-edge field must sit where OMG defines it](#rule-s15-a-per-node-or-per-edge-field-must-sit-where-omg-defines-it)
+- [Rule S16: a definition reference must name a definition of the right type](#rule-s16-a-definition-reference-must-name-a-definition-of-the-right-type)
+- [Rule S17: an event with several candidate definitions and no reference is ambiguous](#rule-s17-an-event-with-several-candidate-definitions-and-no-reference-is-ambiguous)
+- [Scenario rules SC01–SC06 — three rule sets, one pipeline](#scenario-rules-sc01sc06--three-rule-sets-one-pipeline)
+- [DMN Rules — a separate engine, three layers, two modes](#dmn-rules--a-separate-engine-three-layers-two-modes)
+- [Erweiterung](#erweiterung)
+
 Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **40 registrierte Regeln**, davon 38 aktiv (M05/M06 stehen auf `severity: OFF`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
 
 ## Architektur

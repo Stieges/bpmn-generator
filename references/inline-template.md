@@ -1,5 +1,12 @@
 # Inline Mode Template
 
+## Contents
+
+- [Overview](#overview)
+- [Usage in Claude.ai](#usage-in-claudeai)
+- [Template](#template)
+- [Notes for Claude](#notes-for-claude)
+
 ## Overview
 
 When Claude Code is not available (e.g., Claude.ai web interface), use this template
@@ -7,6 +14,10 @@ to generate a self-contained HTML artifact with ElkJS running in the browser.
 
 The template embeds ElkJS from CDN, runs the full layout algorithm client-side,
 and renders the SVG — NO manual coordinate estimation needed.
+
+It produces an **SVG preview only** — no BPMN XML, no validation. Never hand-write BPMN XML or
+coordinates as a substitute: when the user needs a `.bpmn` file, recommend running the pipeline
+(`SKILL.md`, "Core commands") wherever Node.js is available.
 
 ## Usage in Claude.ai
 

@@ -1,5 +1,20 @@
 # HTTP API Reference
 
+## Contents
+
+- [Conventions](#conventions)
+- [POST /api/v1/generate](#post-apiv1generate)
+- [DMN diagnostics (DD01–DD03)](#dmn-diagnostics-dd01dd03)
+- [Petri-net integrity diagnostics (NC01–NC06)](#petri-net-integrity-diagnostics-nc01nc06)
+- [POST /api/v1/validate](#post-apiv1validate)
+- [POST /api/v1/import](#post-apiv1import)
+- [POST /api/v1/orchestrate](#post-apiv1orchestrate)
+- [POST /api/v1/chat](#post-apiv1chat)
+- [POST /api/v1/telemetry](#post-apiv1telemetry)
+- [GET /api/v1/config](#get-apiv1config)
+- [GET /health](#get-health)
+- [GET /](#get-)
+
 Complete reference for the BPMN Generator HTTP API. For a high-level overview see the README's "HTTP API" section.
 
 ## Conventions

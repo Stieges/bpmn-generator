@@ -1,8 +1,60 @@
 # OMG BPMN 2.0.2 Compliance Mapping
 
+## Contents
+
+- [What the generated XML guarantees](#what-the-generated-xml-guarantees)
+- [Specification Sources](#specification-sources)
+- [Chapter 7 — Infrastructure](#chapter-7--infrastructure)
+- [Chapter 8 — Common Elements](#chapter-8--common-elements)
+- [Chapter 9 — Collaboration](#chapter-9--collaboration)
+- [Chapter 10 — Process](#chapter-10--process)
+- [Chapter 12 — DI (Diagram Interchange)](#chapter-12--di-diagram-interchange)
+- [Chapter 13 — Extended Elements](#chapter-13--extended-elements)
+- [Event Definitions (OMG Table 10.87)](#event-definitions-omg-table-1087)
+- [Gateway Types (OMG §10.5)](#gateway-types-omg-105)
+- [Activity Types (OMG §10.2)](#activity-types-omg-102)
+- [Bottom Markers (OMG §10.2.2)](#bottom-markers-omg-1022)
+- [OMG 2.0.2 Compliance Sprint (March 2026)](#omg-202-compliance-sprint-march-2026)
+- [Still Open](#still-open)
+- [bpmn-moddle Integration (March 2026)](#bpmn-moddle-integration-march-2026)
+
 Mapping of OMG BPMN 2.0.2 (formal/2013-12-09, ISO/IEC 19510:2013) requirements to our code.
 
 **Status Legend:** Implemented | Placeholder | Partial
+
+---
+
+## What the generated XML guarantees
+
+A summary for answering "is this file valid BPMN?"; the chapters below give the code location of
+each point.
+
+| Feature | OMG reference |
+|---------|---------------|
+| Single `<laneSet>` per process | §10.5 |
+| `gatewayDirection` Diverging/Converging/Mixed, `default` attribute on XOR gateways | §10.5.1 |
+| `conditionExpression` as a child element, not an attribute | §10.3.1 |
+| `<incoming>`/`<outgoing>` references on every flow node | §10.2.1 |
+| Top-level `<message>`/`<signal>`/`<error>`/`<escalation>` definitions, referenced via `messageRef`/`errorRef`/… | §8.4, §9, §10.4 |
+| Event definitions as child elements (`messageEventDefinition`, `timerEventDefinition`, …) | §10.4 |
+| Loop / multi-instance characteristics as child elements | §10.2.2 |
+| Boundary events with `attachedToRef` and `cancelActivity` | §10.4.4 |
+| `<documentation>` on process and nodes | §8.3.1 |
+| Artifacts (TextAnnotation, Group, Association) in `<artifacts>`, never in `<flowElements>` | §10.7 |
+| TextAnnotation content as a `<text>` child, never a `name` attribute | §10.7.3 |
+| Group label via `categoryValueRef` → `Category`/`CategoryValue`, never a `name` attribute | §10.7.2 |
+| Collapsed pool: `<participant>` without `processRef` | §9.3 |
+| DI: `isHorizontal="true"` on pool/lane shapes, label bounds as `<dc:Bounds>`, edge endpoints clipped to the shape outline | §12.1 |
+| Every file re-parsed through bpmn-moddle before it is written (`--strict` makes any warning fatal) | — |
+
+**Why the artifact rules matter if you ever hand-write XML:** an Artifact (TextAnnotation, Group,
+Association) extends `BaseElement`, which declares only `id` — `name` is introduced further down by
+`FlowElement`, and Artifacts never inherit from it. Most XML libraries write the attribute anyway
+without complaint, so a `name` on a TextAnnotation produces no error and an empty box in every real
+BPMN tool. This shipped once; see Chapter 10 below.
+
+Not written: vendor extensions (`camunda:`, `zeebe:`). The generator's own extensions (`decisionRef`,
+`system`) go into `extensionElements` under its own namespace.
 
 ---
 
