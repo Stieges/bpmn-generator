@@ -1240,6 +1240,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **The SVG looks like bpmn.io.** Every symbol is drawn with bpmn-js 18.6.2's own glyph geometry
+  (`scripts/bpmn/pathmap.js`, its `PathMap` templates) and the scale, position and stroke its
+  `BpmnRenderer` handler uses: event icons (envelope, clock with hands and ticks, error zigzag,
+  compensation, link, cancel, …), task icons (two cogs on white discs, the business-rule table),
+  task markers in bpmn-js's order and offsets (compensation and loop sit where bpmn.io puts them),
+  gateway symbols (filled X, plus and star), the data object's page and collection bars, the data
+  store's stacked rims. Colours are bpmn-js's (`#22242a` strokes and text on white, no grey pool or
+  lane header), stroke widths and dashes too: sequence flows 2, message flows 1.5 dashed `10, 11`,
+  associations dotted (`0, 5`, round caps), transactions 1.5 with an inner border, event
+  subprocesses dotted (`0, 5.5`, width 2.5), non-interrupting events dashed `6`, groups
+  `10, 6, 0, 6`. Text is laid out as bpmn-js lays it out — task names centred with padding 7 and
+  broken by Text.js's rule (no more hyphenated breaks), container titles centred at the top in
+  regular weight, pool and lane names in regular weight, annotations left-top. Connections are
+  drawn above shapes, as in bpmn.io. Colours, stroke widths, dash patterns and fonts live in
+  `config.json` (`color`, `strokeWidth`, `symbols`). The BPMN XML is unchanged; every SVG golden
+  and every SVG hash changes. `symbol-fidelity.test.js` now also asserts stroke widths per class,
+  dash patterns, and the order and x offset of every task marker, from bpmn-js's tables.
 - **Every node and connection in the SVG carries its id.** A node's markup (event, gateway,
   activity, data object/store, annotation, group) is one `<g data-element-id="…">` group, and the
   path of a sequence flow, message flow or association has a `data-element-id` attribute, as in
