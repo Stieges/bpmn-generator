@@ -1246,6 +1246,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **The npm package no longer ships `robustness/`.** The benchmark subsystem writes its fixtures
+  and reports to `../../tests` and only works in a repository checkout; nothing else in the package
+  imports it (checked against the import closure of every file `npm pack` includes). Run it from a
+  checkout: `cd scripts/robustness && node cli.js run`.
 - **The skill bundle is `bpmn-generator.skill` and holds exactly what `SKILL.md` runs.** `npm run
   build:skill` now writes `bpmn-generator.skill` (no version in the name; was
   `bpmn-generator-v3.skill`). Its `scripts/` part is the import closure of the CLIs `SKILL.md` tells

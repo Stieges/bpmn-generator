@@ -36,7 +36,6 @@
     "config.json",
     "THIRD_PARTY_NOTICES.md",
     "agents/",
-    "robustness/",
     "references/",
     "!**/*.test.js"
   ],
