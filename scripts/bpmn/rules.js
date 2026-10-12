@@ -23,7 +23,7 @@ import {
   OMG_NODE_FIELD_SCOPE, isFieldOutOfScope, isFieldWrongType, resolveDefinitionRef,
   edgeFieldSpec, writesIsInterrupting,
 } from './types.js';
-import { resolveFlowSemantics, resolveLaneId } from './topology.js';
+import { resolveFlowSemantics, resolveLaneId, emptyLeafLanes } from './topology.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
@@ -1251,17 +1251,7 @@ const STYLE_CHECKS = [
     ref: { omg: '§10.8 Lanes', note: 'generator convention: a role without a step is a modelling gap' },
     scope: 'process',
     check: (proc) => {
-      const lanes = proc.lanes || [];
-      if (!lanes.length) return { pass: true };
-      const used = new Set((proc.nodes || []).filter(n => !isArtifact(n.type)).map(n => resolveLaneId(proc, n)).filter(Boolean));
-      const empty = [];
-      const walk = (ls) => {
-        for (const l of ls) {
-          if (l.children?.length) walk(l.children);
-          else if (!used.has(l.id)) empty.push(l);
-        }
-      };
-      walk(lanes);
+      const empty = emptyLeafLanes(proc);
       return empty.length === 0
         ? { pass: true }
         : { pass: false, messages: empty.map(l => `Lane "${l.name ?? l.id}" has no element at the top level — its work is hidden in a subprocess or missing`) };

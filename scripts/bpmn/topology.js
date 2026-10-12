@@ -3,7 +3,7 @@
  * Pre-processing steps before ELK layout.
  */
 
-import { isGateway, edgeFieldSpec } from './types.js';
+import { isGateway, edgeFieldSpec, isArtifact } from './types.js';
 
 /**
  * Infer gateway directions (Diverging/Converging/Mixed) based on edge counts.
@@ -372,6 +372,26 @@ export function resolveLaneId(container, node) {
     if (id) return id;
   }
   return undefined;
+}
+
+/**
+ * Leaf lanes of a process (nested `children` walked) with no element at its top level — a lane is
+ * a role, and one without a step shows a role that does nothing in the diagram. Membership through
+ * resolveLaneId; artifacts do not count as steps. The one definition for rule M12 and the
+ * extraction-quality comparison (robustness/reference-compare.js).
+ * @returns {object[]} the empty lane objects, in declaration order
+ */
+export function emptyLeafLanes(proc) {
+  const used = new Set((proc.nodes || []).filter(n => !isArtifact(n.type)).map(n => resolveLaneId(proc, n)).filter(Boolean));
+  const empty = [];
+  const walk = (lanes) => {
+    for (const l of lanes || []) {
+      if (l.children?.length) walk(l.children);
+      else if (!used.has(l.id)) empty.push(l);
+    }
+  };
+  walk(proc.lanes);
+  return empty;
 }
 
 /**
