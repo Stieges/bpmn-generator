@@ -5,7 +5,18 @@ import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const frontendDir = join(__dirname, '..', 'frontend');
+// The web frontend is optional: it is not part of this repository or the npm package. Without it
+// `GET /` answers a 404 hint instead of failing on the missing file.
+const DEFAULT_FRONTEND_DIR = join(__dirname, '..', 'frontend');
+let frontendDir = DEFAULT_FRONTEND_DIR;
+
+/** Test hook: serve the frontend from `dir`. `null` restores the default. */
+export function _setFrontendDir(dir) { frontendDir = dir ?? DEFAULT_FRONTEND_DIR; }
+
+const NO_FRONTEND = {
+  error: 'Not Found',
+  message: 'No web frontend is installed on this server. The HTTP API is under /api/v1/; GET /health reports status.',
+};
 
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
@@ -310,7 +321,9 @@ const server = createServer(async (req, res) => {
 
   // Frontend static files
   if (method === 'GET' && (url === '/' || url === '/index.html')) {
-    const body = readFileSync(join(frontendDir, 'index.html'));
+    let body;
+    try { body = readFileSync(join(frontendDir, 'index.html')); }
+    catch { return json(res, 404, NO_FRONTEND); } // no stack, no server path
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(body);
   }

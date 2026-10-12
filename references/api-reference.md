@@ -525,3 +525,16 @@ Liveness probe. Pre-auth, not rate-limited.
 ```bash
 curl http://localhost:3000/health
 ```
+
+---
+
+## GET /
+
+Serves a web frontend's `index.html` (and `/static/…`, `/examples/…`) from a `frontend/` directory
+next to `scripts/`, when one is installed. Neither the repository nor the npm package ships one.
+Pre-auth, not rate-limited.
+
+**Response 404 (no frontend installed):**
+```json
+{ "error": "Not Found", "message": "No web frontend is installed on this server. The HTTP API is under /api/v1/; GET /health reports status." }
+```
