@@ -13,16 +13,45 @@ const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validate = ajv.compile(schema);
 
+// The root is a oneOf of SingleProcess and Collaboration, and ajv reports the errors of both: a
+// collaboration with one bad message flow opens with SingleProcess's "must have required property
+// 'nodes'", and the real cause comes later. A Logic-Core with `pools` is meant as a Collaboration,
+// any other object as a SingleProcess — its errors are that branch's alone.
+const validateBranch = {
+  Collaboration: ajv.getSchema(`${schema.$id}#/$defs/Collaboration`),
+  SingleProcess: ajv.getSchema(`${schema.$id}#/$defs/SingleProcess`),
+};
+
+const asGateErrors = (errors) => (errors || []).map(e => ({
+  path: e.instancePath || '(root)',
+  message: e.message,
+  params: e.params,
+}));
+
 export function validateLogicCoreSchema(input) {
-  const valid = validate(input);
-  return {
-    valid,
-    errors: valid ? [] : (validate.errors || []).map(e => ({
-      path: e.instancePath || '(root)',
-      message: e.message,
-      params: e.params,
-    })),
-  };
+  if (validate(input)) return { valid: true, errors: [] };
+  const all = validate.errors;
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    const branch = validateBranch[Array.isArray(input.pools) || 'pools' in input ? 'Collaboration' : 'SingleProcess'];
+    // A branch the input passes cannot explain the failure (it would then match both): keep all.
+    if (branch && !branch(input)) return { valid: false, errors: asGateErrors(branch.errors) };
+  }
+  return { valid: false, errors: asGateErrors(all) };
+}
+
+/**
+ * Gate errors as text for a person or an LLM: one line per error, `path: message`, plus the
+ * offending property, missing property or limit where ajv names one; beyond `max`, one line
+ * counting the rest.
+ */
+export function formatSchemaErrors(errors, max = 10) {
+  const detail = (p = {}) => p.additionalProperty ?? p.missingProperty ?? p.allowedValues?.join(', ') ?? null;
+  const lines = errors.slice(0, max).map((e) => {
+    const d = detail(e.params);
+    return `${e.path}: ${e.message}${d !== null && !String(e.message).includes(`'${d}'`) ? ` (${d})` : ''}`;
+  });
+  if (errors.length > max) lines.push(`… and ${errors.length - max} more`);
+  return lines.join('\n');
 }
 
 const validateRefinementOption = ajv.compile(VISUAL_REFINEMENT_OPTION_SCHEMA);
