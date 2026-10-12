@@ -133,7 +133,7 @@ function inferEventMarker(name) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-function renderTaskIcon(type, ox, oy) {
+function renderTaskIcon(type, ox, oy, node = {}) {
   const s = CLR.stroke, f = CLR.fill;
   switch (type) {
     case 'userTask': {
@@ -177,6 +177,16 @@ function renderTaskIcon(type, ox, oy) {
         + `</g>`;
     }
     case 'receiveTask': {
+      // Instantiating: bpmn-js 18.6.2 ('bpmn:ReceiveTask') draws a ring (centre 14/14, r 10) with a
+      // small envelope (PathMap TASK_TYPE_INSTANTIATING_SEND at 7.77/9.52) — the start-variant
+      // symbol (#85). `instantiate` reaches the XML through the generic field loop (types.js).
+      if (node.instantiate === true) {
+        const ex = rn(ox + 7.77), ey = rn(oy + 9.52);
+        return `<g>`
+          + `<circle cx="${ox + 14}" cy="${oy + 14}" r="${Math.round(14 - 20 * 0.22)}" fill="${f}" stroke="${s}" stroke-width="1"/>`
+          + `<path d="m ${ex},${ey} l 0,8.4 l 12.6,0 l 0,-8.4 z l 6.3,3.6 l 6.3,-3.6" fill="${f}" stroke="${s}" stroke-width="1"/>`
+          + `</g>`;
+      }
       // Inverse of send: unfilled envelope
       const sx = ox + 6, sy = oy + 5;
       return `<g>`

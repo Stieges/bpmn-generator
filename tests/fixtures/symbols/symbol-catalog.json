@@ -1,0 +1,4442 @@
+{
+ "pools": [
+  {
+   "id": "Pool_start_none",
+   "name": "start_none",
+   "nodes": [
+    {
+     "id": "start_none",
+     "type": "startEvent",
+     "name": "start none"
+    },
+    {
+     "id": "ref_end_Pool_start_none",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f2_Pool_start_none",
+     "source": "start_none",
+     "target": "ref_end_Pool_start_none"
+    }
+   ]
+  },
+  {
+   "id": "Pool_start_message",
+   "name": "start_message",
+   "nodes": [
+    {
+     "id": "start_message",
+     "type": "startEvent",
+     "name": "start message",
+     "marker": "message"
+    },
+    {
+     "id": "ref_end_Pool_start_message",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f2_Pool_start_message",
+     "source": "start_message",
+     "target": "ref_end_Pool_start_message"
+    }
+   ]
+  },
+  {
+   "id": "Pool_start_timer",
+   "name": "start_timer",
+   "nodes": [
+    {
+     "id": "start_timer",
+     "type": "startEvent",
+     "name": "start timer",
+     "marker": "timer"
+    },
+    {
+     "id": "ref_end_Pool_start_timer",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f2_Pool_start_timer",
+     "source": "start_timer",
+     "target": "ref_end_Pool_start_timer"
+    }
+   ]
+  },
+  {
+   "id": "Pool_start_conditional",
+   "name": "start_conditional",
+   "nodes": [
+    {
+     "id": "start_conditional",
+     "type": "startEvent",
+     "name": "start conditional",
+     "marker": "conditional"
+    },
+    {
+     "id": "ref_end_Pool_start_conditional",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f2_Pool_start_conditional",
+     "source": "start_conditional",
+     "target": "ref_end_Pool_start_conditional"
+    }
+   ]
+  },
+  {
+   "id": "Pool_start_signal",
+   "name": "start_signal",
+   "nodes": [
+    {
+     "id": "start_signal",
+     "type": "startEvent",
+     "name": "start signal",
+     "marker": "signal"
+    },
+    {
+     "id": "ref_end_Pool_start_signal",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f2_Pool_start_signal",
+     "source": "start_signal",
+     "target": "ref_end_Pool_start_signal"
+    }
+   ]
+  },
+  {
+   "id": "Pool_start_multiple",
+   "name": "start_multiple",
+   "nodes": [
+    {
+     "id": "start_multiple",
+     "type": "startEvent",
+     "name": "start multiple",
+     "marker": "multiple"
+    },
+    {
+     "id": "ref_end_Pool_start_multiple",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f2_Pool_start_multiple",
+     "source": "start_multiple",
+     "target": "ref_end_Pool_start_multiple"
+    }
+   ]
+  },
+  {
+   "id": "Pool_start_parallelMultiple",
+   "name": "start_parallelMultiple",
+   "nodes": [
+    {
+     "id": "start_parallelMultiple",
+     "type": "startEvent",
+     "name": "start parallelMultiple",
+     "marker": "parallelMultiple"
+    },
+    {
+     "id": "ref_end_Pool_start_parallelMultiple",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f2_Pool_start_parallelMultiple",
+     "source": "start_parallelMultiple",
+     "target": "ref_end_Pool_start_parallelMultiple"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_none",
+   "name": "catch_none",
+   "nodes": [
+    {
+     "id": "catch_none",
+     "type": "intermediateCatchEvent",
+     "name": "catch none"
+    },
+    {
+     "id": "ref_start_Pool_catch_none",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_none",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_none",
+     "source": "ref_start_Pool_catch_none",
+     "target": "catch_none"
+    },
+    {
+     "id": "ref_f2_Pool_catch_none",
+     "source": "catch_none",
+     "target": "ref_end_Pool_catch_none"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_message",
+   "name": "catch_message",
+   "nodes": [
+    {
+     "id": "catch_message",
+     "type": "intermediateCatchEvent",
+     "name": "catch message",
+     "marker": "message"
+    },
+    {
+     "id": "ref_start_Pool_catch_message",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_message",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_message",
+     "source": "ref_start_Pool_catch_message",
+     "target": "catch_message"
+    },
+    {
+     "id": "ref_f2_Pool_catch_message",
+     "source": "catch_message",
+     "target": "ref_end_Pool_catch_message"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_timer",
+   "name": "catch_timer",
+   "nodes": [
+    {
+     "id": "catch_timer",
+     "type": "intermediateCatchEvent",
+     "name": "catch timer",
+     "marker": "timer"
+    },
+    {
+     "id": "ref_start_Pool_catch_timer",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_timer",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_timer",
+     "source": "ref_start_Pool_catch_timer",
+     "target": "catch_timer"
+    },
+    {
+     "id": "ref_f2_Pool_catch_timer",
+     "source": "catch_timer",
+     "target": "ref_end_Pool_catch_timer"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_conditional",
+   "name": "catch_conditional",
+   "nodes": [
+    {
+     "id": "catch_conditional",
+     "type": "intermediateCatchEvent",
+     "name": "catch conditional",
+     "marker": "conditional"
+    },
+    {
+     "id": "ref_start_Pool_catch_conditional",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_conditional",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_conditional",
+     "source": "ref_start_Pool_catch_conditional",
+     "target": "catch_conditional"
+    },
+    {
+     "id": "ref_f2_Pool_catch_conditional",
+     "source": "catch_conditional",
+     "target": "ref_end_Pool_catch_conditional"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_link",
+   "name": "catch_link",
+   "nodes": [
+    {
+     "id": "catch_link",
+     "type": "intermediateCatchEvent",
+     "name": "catch link",
+     "marker": "link"
+    },
+    {
+     "id": "ref_start_Pool_catch_link",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_link",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_link",
+     "source": "ref_start_Pool_catch_link",
+     "target": "catch_link"
+    },
+    {
+     "id": "ref_f2_Pool_catch_link",
+     "source": "catch_link",
+     "target": "ref_end_Pool_catch_link"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_signal",
+   "name": "catch_signal",
+   "nodes": [
+    {
+     "id": "catch_signal",
+     "type": "intermediateCatchEvent",
+     "name": "catch signal",
+     "marker": "signal"
+    },
+    {
+     "id": "ref_start_Pool_catch_signal",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_signal",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_signal",
+     "source": "ref_start_Pool_catch_signal",
+     "target": "catch_signal"
+    },
+    {
+     "id": "ref_f2_Pool_catch_signal",
+     "source": "catch_signal",
+     "target": "ref_end_Pool_catch_signal"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_multiple",
+   "name": "catch_multiple",
+   "nodes": [
+    {
+     "id": "catch_multiple",
+     "type": "intermediateCatchEvent",
+     "name": "catch multiple",
+     "marker": "multiple"
+    },
+    {
+     "id": "ref_start_Pool_catch_multiple",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_multiple",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_multiple",
+     "source": "ref_start_Pool_catch_multiple",
+     "target": "catch_multiple"
+    },
+    {
+     "id": "ref_f2_Pool_catch_multiple",
+     "source": "catch_multiple",
+     "target": "ref_end_Pool_catch_multiple"
+    }
+   ]
+  },
+  {
+   "id": "Pool_catch_parallelMultiple",
+   "name": "catch_parallelMultiple",
+   "nodes": [
+    {
+     "id": "catch_parallelMultiple",
+     "type": "intermediateCatchEvent",
+     "name": "catch parallelMultiple",
+     "marker": "parallelMultiple"
+    },
+    {
+     "id": "ref_start_Pool_catch_parallelMultiple",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_catch_parallelMultiple",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_catch_parallelMultiple",
+     "source": "ref_start_Pool_catch_parallelMultiple",
+     "target": "catch_parallelMultiple"
+    },
+    {
+     "id": "ref_f2_Pool_catch_parallelMultiple",
+     "source": "catch_parallelMultiple",
+     "target": "ref_end_Pool_catch_parallelMultiple"
+    }
+   ]
+  },
+  {
+   "id": "Pool_throw_none",
+   "name": "throw_none",
+   "nodes": [
+    {
+     "id": "throw_none",
+     "type": "intermediateThrowEvent",
+     "name": "throw none"
+    },
+    {
+     "id": "ref_start_Pool_throw_none",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_throw_none",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_throw_none",
+     "source": "ref_start_Pool_throw_none",
+     "target": "throw_none"
+    },
+    {
+     "id": "ref_f2_Pool_throw_none",
+     "source": "throw_none",
+     "target": "ref_end_Pool_throw_none"
+    }
+   ]
+  },
+  {
+   "id": "Pool_throw_message",
+   "name": "throw_message",
+   "nodes": [
+    {
+     "id": "throw_message",
+     "type": "intermediateThrowEvent",
+     "name": "throw message",
+     "marker": "message"
+    },
+    {
+     "id": "ref_start_Pool_throw_message",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_throw_message",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_throw_message",
+     "source": "ref_start_Pool_throw_message",
+     "target": "throw_message"
+    },
+    {
+     "id": "ref_f2_Pool_throw_message",
+     "source": "throw_message",
+     "target": "ref_end_Pool_throw_message"
+    }
+   ]
+  },
+  {
+   "id": "Pool_throw_escalation",
+   "name": "throw_escalation",
+   "nodes": [
+    {
+     "id": "throw_escalation",
+     "type": "intermediateThrowEvent",
+     "name": "throw escalation",
+     "marker": "escalation"
+    },
+    {
+     "id": "ref_start_Pool_throw_escalation",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_throw_escalation",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_throw_escalation",
+     "source": "ref_start_Pool_throw_escalation",
+     "target": "throw_escalation"
+    },
+    {
+     "id": "ref_f2_Pool_throw_escalation",
+     "source": "throw_escalation",
+     "target": "ref_end_Pool_throw_escalation"
+    }
+   ]
+  },
+  {
+   "id": "Pool_throw_link",
+   "name": "throw_link",
+   "nodes": [
+    {
+     "id": "throw_link",
+     "type": "intermediateThrowEvent",
+     "name": "throw link",
+     "marker": "link"
+    },
+    {
+     "id": "ref_start_Pool_throw_link",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_throw_link",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_throw_link",
+     "source": "ref_start_Pool_throw_link",
+     "target": "throw_link"
+    },
+    {
+     "id": "ref_f2_Pool_throw_link",
+     "source": "throw_link",
+     "target": "ref_end_Pool_throw_link"
+    }
+   ]
+  },
+  {
+   "id": "Pool_throw_compensation",
+   "name": "throw_compensation",
+   "nodes": [
+    {
+     "id": "throw_compensation",
+     "type": "intermediateThrowEvent",
+     "name": "throw compensation",
+     "marker": "compensation"
+    },
+    {
+     "id": "ref_start_Pool_throw_compensation",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_throw_compensation",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_throw_compensation",
+     "source": "ref_start_Pool_throw_compensation",
+     "target": "throw_compensation"
+    },
+    {
+     "id": "ref_f2_Pool_throw_compensation",
+     "source": "throw_compensation",
+     "target": "ref_end_Pool_throw_compensation"
+    }
+   ]
+  },
+  {
+   "id": "Pool_throw_signal",
+   "name": "throw_signal",
+   "nodes": [
+    {
+     "id": "throw_signal",
+     "type": "intermediateThrowEvent",
+     "name": "throw signal",
+     "marker": "signal"
+    },
+    {
+     "id": "ref_start_Pool_throw_signal",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_throw_signal",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_throw_signal",
+     "source": "ref_start_Pool_throw_signal",
+     "target": "throw_signal"
+    },
+    {
+     "id": "ref_f2_Pool_throw_signal",
+     "source": "throw_signal",
+     "target": "ref_end_Pool_throw_signal"
+    }
+   ]
+  },
+  {
+   "id": "Pool_throw_multiple",
+   "name": "throw_multiple",
+   "nodes": [
+    {
+     "id": "throw_multiple",
+     "type": "intermediateThrowEvent",
+     "name": "throw multiple",
+     "marker": "multiple"
+    },
+    {
+     "id": "ref_start_Pool_throw_multiple",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_throw_multiple",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_throw_multiple",
+     "source": "ref_start_Pool_throw_multiple",
+     "target": "throw_multiple"
+    },
+    {
+     "id": "ref_f2_Pool_throw_multiple",
+     "source": "throw_multiple",
+     "target": "ref_end_Pool_throw_multiple"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_none",
+   "name": "end_none",
+   "nodes": [
+    {
+     "id": "end_none",
+     "type": "endEvent",
+     "name": "end none"
+    },
+    {
+     "id": "ref_start_Pool_end_none",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_none",
+     "source": "ref_start_Pool_end_none",
+     "target": "end_none"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_message",
+   "name": "end_message",
+   "nodes": [
+    {
+     "id": "end_message",
+     "type": "endEvent",
+     "name": "end message",
+     "marker": "message"
+    },
+    {
+     "id": "ref_start_Pool_end_message",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_message",
+     "source": "ref_start_Pool_end_message",
+     "target": "end_message"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_escalation",
+   "name": "end_escalation",
+   "nodes": [
+    {
+     "id": "end_escalation",
+     "type": "endEvent",
+     "name": "end escalation",
+     "marker": "escalation"
+    },
+    {
+     "id": "ref_start_Pool_end_escalation",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_escalation",
+     "source": "ref_start_Pool_end_escalation",
+     "target": "end_escalation"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_error",
+   "name": "end_error",
+   "nodes": [
+    {
+     "id": "end_error",
+     "type": "endEvent",
+     "name": "end error",
+     "marker": "error"
+    },
+    {
+     "id": "ref_start_Pool_end_error",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_error",
+     "source": "ref_start_Pool_end_error",
+     "target": "end_error"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_cancel",
+   "name": "end_cancel",
+   "nodes": [
+    {
+     "id": "end_cancel",
+     "type": "endEvent",
+     "name": "end cancel",
+     "marker": "cancel"
+    },
+    {
+     "id": "ref_start_Pool_end_cancel",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_cancel",
+     "source": "ref_start_Pool_end_cancel",
+     "target": "end_cancel"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_compensation",
+   "name": "end_compensation",
+   "nodes": [
+    {
+     "id": "end_compensation",
+     "type": "endEvent",
+     "name": "end compensation",
+     "marker": "compensation"
+    },
+    {
+     "id": "ref_start_Pool_end_compensation",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_compensation",
+     "source": "ref_start_Pool_end_compensation",
+     "target": "end_compensation"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_signal",
+   "name": "end_signal",
+   "nodes": [
+    {
+     "id": "end_signal",
+     "type": "endEvent",
+     "name": "end signal",
+     "marker": "signal"
+    },
+    {
+     "id": "ref_start_Pool_end_signal",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_signal",
+     "source": "ref_start_Pool_end_signal",
+     "target": "end_signal"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_terminate",
+   "name": "end_terminate",
+   "nodes": [
+    {
+     "id": "end_terminate",
+     "type": "endEvent",
+     "name": "end terminate",
+     "marker": "terminate"
+    },
+    {
+     "id": "ref_start_Pool_end_terminate",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_terminate",
+     "source": "ref_start_Pool_end_terminate",
+     "target": "end_terminate"
+    }
+   ]
+  },
+  {
+   "id": "Pool_end_multiple",
+   "name": "end_multiple",
+   "nodes": [
+    {
+     "id": "end_multiple",
+     "type": "endEvent",
+     "name": "end multiple",
+     "marker": "multiple"
+    },
+    {
+     "id": "ref_start_Pool_end_multiple",
+     "type": "startEvent",
+     "name": "ref start"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_end_multiple",
+     "source": "ref_start_Pool_end_multiple",
+     "target": "end_multiple"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_message_int",
+   "name": "evsub_message_int",
+   "nodes": [
+    {
+     "id": "evsub_message_int",
+     "type": "subProcess",
+     "name": "message int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_message_int_s",
+       "type": "startEvent",
+       "name": "message",
+       "marker": "message",
+       "isInterrupting": true
+      },
+      {
+       "id": "evsub_message_int_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_message_int_f",
+       "source": "evsub_message_int_s",
+       "target": "evsub_message_int_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_message_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_message_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_message_int",
+     "source": "ref_start_Pool_evsub_message_int",
+     "target": "evsub_message_int"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_message_int",
+     "source": "evsub_message_int",
+     "target": "ref_end_Pool_evsub_message_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_timer_int",
+   "name": "evsub_timer_int",
+   "nodes": [
+    {
+     "id": "evsub_timer_int",
+     "type": "subProcess",
+     "name": "timer int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_timer_int_s",
+       "type": "startEvent",
+       "name": "timer",
+       "marker": "timer",
+       "isInterrupting": true
+      },
+      {
+       "id": "evsub_timer_int_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_timer_int_f",
+       "source": "evsub_timer_int_s",
+       "target": "evsub_timer_int_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_timer_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_timer_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_timer_int",
+     "source": "ref_start_Pool_evsub_timer_int",
+     "target": "evsub_timer_int"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_timer_int",
+     "source": "evsub_timer_int",
+     "target": "ref_end_Pool_evsub_timer_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_error_int",
+   "name": "evsub_error_int",
+   "nodes": [
+    {
+     "id": "evsub_error_int",
+     "type": "subProcess",
+     "name": "error int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_error_int_s",
+       "type": "startEvent",
+       "name": "error",
+       "marker": "error",
+       "isInterrupting": true
+      },
+      {
+       "id": "evsub_error_int_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_error_int_f",
+       "source": "evsub_error_int_s",
+       "target": "evsub_error_int_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_error_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_error_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_error_int",
+     "source": "ref_start_Pool_evsub_error_int",
+     "target": "evsub_error_int"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_error_int",
+     "source": "evsub_error_int",
+     "target": "ref_end_Pool_evsub_error_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_escalation_int",
+   "name": "evsub_escalation_int",
+   "nodes": [
+    {
+     "id": "evsub_escalation_int",
+     "type": "subProcess",
+     "name": "escalation int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_escalation_int_s",
+       "type": "startEvent",
+       "name": "escalation",
+       "marker": "escalation",
+       "isInterrupting": true
+      },
+      {
+       "id": "evsub_escalation_int_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_escalation_int_f",
+       "source": "evsub_escalation_int_s",
+       "target": "evsub_escalation_int_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_escalation_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_escalation_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_escalation_int",
+     "source": "ref_start_Pool_evsub_escalation_int",
+     "target": "evsub_escalation_int"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_escalation_int",
+     "source": "evsub_escalation_int",
+     "target": "ref_end_Pool_evsub_escalation_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_conditional_int",
+   "name": "evsub_conditional_int",
+   "nodes": [
+    {
+     "id": "evsub_conditional_int",
+     "type": "subProcess",
+     "name": "conditional int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_conditional_int_s",
+       "type": "startEvent",
+       "name": "conditional",
+       "marker": "conditional",
+       "isInterrupting": true
+      },
+      {
+       "id": "evsub_conditional_int_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_conditional_int_f",
+       "source": "evsub_conditional_int_s",
+       "target": "evsub_conditional_int_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_conditional_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_conditional_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_conditional_int",
+     "source": "ref_start_Pool_evsub_conditional_int",
+     "target": "evsub_conditional_int"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_conditional_int",
+     "source": "evsub_conditional_int",
+     "target": "ref_end_Pool_evsub_conditional_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_signal_int",
+   "name": "evsub_signal_int",
+   "nodes": [
+    {
+     "id": "evsub_signal_int",
+     "type": "subProcess",
+     "name": "signal int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_signal_int_s",
+       "type": "startEvent",
+       "name": "signal",
+       "marker": "signal",
+       "isInterrupting": true
+      },
+      {
+       "id": "evsub_signal_int_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_signal_int_f",
+       "source": "evsub_signal_int_s",
+       "target": "evsub_signal_int_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_signal_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_signal_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_signal_int",
+     "source": "ref_start_Pool_evsub_signal_int",
+     "target": "evsub_signal_int"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_signal_int",
+     "source": "evsub_signal_int",
+     "target": "ref_end_Pool_evsub_signal_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_message_nonint",
+   "name": "evsub_message_nonint",
+   "nodes": [
+    {
+     "id": "evsub_message_nonint",
+     "type": "subProcess",
+     "name": "message non-int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_message_nonint_s",
+       "type": "startEvent",
+       "name": "message",
+       "marker": "message",
+       "isInterrupting": false
+      },
+      {
+       "id": "evsub_message_nonint_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_message_nonint_f",
+       "source": "evsub_message_nonint_s",
+       "target": "evsub_message_nonint_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_message_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_message_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_message_nonint",
+     "source": "ref_start_Pool_evsub_message_nonint",
+     "target": "evsub_message_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_message_nonint",
+     "source": "evsub_message_nonint",
+     "target": "ref_end_Pool_evsub_message_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_timer_nonint",
+   "name": "evsub_timer_nonint",
+   "nodes": [
+    {
+     "id": "evsub_timer_nonint",
+     "type": "subProcess",
+     "name": "timer non-int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_timer_nonint_s",
+       "type": "startEvent",
+       "name": "timer",
+       "marker": "timer",
+       "isInterrupting": false
+      },
+      {
+       "id": "evsub_timer_nonint_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_timer_nonint_f",
+       "source": "evsub_timer_nonint_s",
+       "target": "evsub_timer_nonint_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_timer_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_timer_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_timer_nonint",
+     "source": "ref_start_Pool_evsub_timer_nonint",
+     "target": "evsub_timer_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_timer_nonint",
+     "source": "evsub_timer_nonint",
+     "target": "ref_end_Pool_evsub_timer_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_escalation_nonint",
+   "name": "evsub_escalation_nonint",
+   "nodes": [
+    {
+     "id": "evsub_escalation_nonint",
+     "type": "subProcess",
+     "name": "escalation non-int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_escalation_nonint_s",
+       "type": "startEvent",
+       "name": "escalation",
+       "marker": "escalation",
+       "isInterrupting": false
+      },
+      {
+       "id": "evsub_escalation_nonint_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_escalation_nonint_f",
+       "source": "evsub_escalation_nonint_s",
+       "target": "evsub_escalation_nonint_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_escalation_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_escalation_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_escalation_nonint",
+     "source": "ref_start_Pool_evsub_escalation_nonint",
+     "target": "evsub_escalation_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_escalation_nonint",
+     "source": "evsub_escalation_nonint",
+     "target": "ref_end_Pool_evsub_escalation_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_conditional_nonint",
+   "name": "evsub_conditional_nonint",
+   "nodes": [
+    {
+     "id": "evsub_conditional_nonint",
+     "type": "subProcess",
+     "name": "conditional non-int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_conditional_nonint_s",
+       "type": "startEvent",
+       "name": "conditional",
+       "marker": "conditional",
+       "isInterrupting": false
+      },
+      {
+       "id": "evsub_conditional_nonint_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_conditional_nonint_f",
+       "source": "evsub_conditional_nonint_s",
+       "target": "evsub_conditional_nonint_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_conditional_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_conditional_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_conditional_nonint",
+     "source": "ref_start_Pool_evsub_conditional_nonint",
+     "target": "evsub_conditional_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_conditional_nonint",
+     "source": "evsub_conditional_nonint",
+     "target": "ref_end_Pool_evsub_conditional_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_signal_nonint",
+   "name": "evsub_signal_nonint",
+   "nodes": [
+    {
+     "id": "evsub_signal_nonint",
+     "type": "subProcess",
+     "name": "signal non-int",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evsub_signal_nonint_s",
+       "type": "startEvent",
+       "name": "signal",
+       "marker": "signal",
+       "isInterrupting": false
+      },
+      {
+       "id": "evsub_signal_nonint_e",
+       "type": "endEvent",
+       "name": "End"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evsub_signal_nonint_f",
+       "source": "evsub_signal_nonint_s",
+       "target": "evsub_signal_nonint_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_signal_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_signal_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_signal_nonint",
+     "source": "ref_start_Pool_evsub_signal_nonint",
+     "target": "evsub_signal_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_signal_nonint",
+     "source": "evsub_signal_nonint",
+     "target": "ref_end_Pool_evsub_signal_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_message_int",
+   "name": "bnd_message_int",
+   "nodes": [
+    {
+     "id": "host_bnd_message_int",
+     "type": "task",
+     "name": "host bnd_message_int"
+    },
+    {
+     "id": "bnd_message_int",
+     "type": "boundaryEvent",
+     "name": "bnd_message_int",
+     "marker": "message",
+     "attachedTo": "host_bnd_message_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_message_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_message_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_message_int",
+     "source": "ref_start_Pool_bnd_message_int",
+     "target": "host_bnd_message_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_message_int",
+     "source": "host_bnd_message_int",
+     "target": "ref_end_Pool_bnd_message_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_timer_int",
+   "name": "bnd_timer_int",
+   "nodes": [
+    {
+     "id": "host_bnd_timer_int",
+     "type": "task",
+     "name": "host bnd_timer_int"
+    },
+    {
+     "id": "bnd_timer_int",
+     "type": "boundaryEvent",
+     "name": "bnd_timer_int",
+     "marker": "timer",
+     "attachedTo": "host_bnd_timer_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_timer_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_timer_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_timer_int",
+     "source": "ref_start_Pool_bnd_timer_int",
+     "target": "host_bnd_timer_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_timer_int",
+     "source": "host_bnd_timer_int",
+     "target": "ref_end_Pool_bnd_timer_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_error_int",
+   "name": "bnd_error_int",
+   "nodes": [
+    {
+     "id": "host_bnd_error_int",
+     "type": "task",
+     "name": "host bnd_error_int"
+    },
+    {
+     "id": "bnd_error_int",
+     "type": "boundaryEvent",
+     "name": "bnd_error_int",
+     "marker": "error",
+     "attachedTo": "host_bnd_error_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_error_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_error_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_error_int",
+     "source": "ref_start_Pool_bnd_error_int",
+     "target": "host_bnd_error_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_error_int",
+     "source": "host_bnd_error_int",
+     "target": "ref_end_Pool_bnd_error_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_escalation_int",
+   "name": "bnd_escalation_int",
+   "nodes": [
+    {
+     "id": "host_bnd_escalation_int",
+     "type": "task",
+     "name": "host bnd_escalation_int"
+    },
+    {
+     "id": "bnd_escalation_int",
+     "type": "boundaryEvent",
+     "name": "bnd_escalation_int",
+     "marker": "escalation",
+     "attachedTo": "host_bnd_escalation_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_escalation_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_escalation_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_escalation_int",
+     "source": "ref_start_Pool_bnd_escalation_int",
+     "target": "host_bnd_escalation_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_escalation_int",
+     "source": "host_bnd_escalation_int",
+     "target": "ref_end_Pool_bnd_escalation_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_conditional_int",
+   "name": "bnd_conditional_int",
+   "nodes": [
+    {
+     "id": "host_bnd_conditional_int",
+     "type": "task",
+     "name": "host bnd_conditional_int"
+    },
+    {
+     "id": "bnd_conditional_int",
+     "type": "boundaryEvent",
+     "name": "bnd_conditional_int",
+     "marker": "conditional",
+     "attachedTo": "host_bnd_conditional_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_conditional_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_conditional_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_conditional_int",
+     "source": "ref_start_Pool_bnd_conditional_int",
+     "target": "host_bnd_conditional_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_conditional_int",
+     "source": "host_bnd_conditional_int",
+     "target": "ref_end_Pool_bnd_conditional_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_signal_int",
+   "name": "bnd_signal_int",
+   "nodes": [
+    {
+     "id": "host_bnd_signal_int",
+     "type": "task",
+     "name": "host bnd_signal_int"
+    },
+    {
+     "id": "bnd_signal_int",
+     "type": "boundaryEvent",
+     "name": "bnd_signal_int",
+     "marker": "signal",
+     "attachedTo": "host_bnd_signal_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_signal_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_signal_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_signal_int",
+     "source": "ref_start_Pool_bnd_signal_int",
+     "target": "host_bnd_signal_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_signal_int",
+     "source": "host_bnd_signal_int",
+     "target": "ref_end_Pool_bnd_signal_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_multiple_int",
+   "name": "bnd_multiple_int",
+   "nodes": [
+    {
+     "id": "host_bnd_multiple_int",
+     "type": "task",
+     "name": "host bnd_multiple_int"
+    },
+    {
+     "id": "bnd_multiple_int",
+     "type": "boundaryEvent",
+     "name": "bnd_multiple_int",
+     "marker": "multiple",
+     "attachedTo": "host_bnd_multiple_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_multiple_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_multiple_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_multiple_int",
+     "source": "ref_start_Pool_bnd_multiple_int",
+     "target": "host_bnd_multiple_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_multiple_int",
+     "source": "host_bnd_multiple_int",
+     "target": "ref_end_Pool_bnd_multiple_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_parallelMultiple_int",
+   "name": "bnd_parallelMultiple_int",
+   "nodes": [
+    {
+     "id": "host_bnd_parallelMultiple_int",
+     "type": "task",
+     "name": "host bnd_parallelMultiple_int"
+    },
+    {
+     "id": "bnd_parallelMultiple_int",
+     "type": "boundaryEvent",
+     "name": "bnd_parallelMultiple_int",
+     "marker": "parallelMultiple",
+     "attachedTo": "host_bnd_parallelMultiple_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_parallelMultiple_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_parallelMultiple_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_parallelMultiple_int",
+     "source": "ref_start_Pool_bnd_parallelMultiple_int",
+     "target": "host_bnd_parallelMultiple_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_parallelMultiple_int",
+     "source": "host_bnd_parallelMultiple_int",
+     "target": "ref_end_Pool_bnd_parallelMultiple_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_compensation_int",
+   "name": "bnd_compensation_int",
+   "nodes": [
+    {
+     "id": "host_bnd_compensation_int",
+     "type": "task",
+     "name": "host bnd_compensation_int"
+    },
+    {
+     "id": "bnd_compensation_int",
+     "type": "boundaryEvent",
+     "name": "bnd_compensation_int",
+     "marker": "compensation",
+     "attachedTo": "host_bnd_compensation_int",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_compensation_int",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_compensation_int",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_compensation_int",
+     "source": "ref_start_Pool_bnd_compensation_int",
+     "target": "host_bnd_compensation_int"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_compensation_int",
+     "source": "host_bnd_compensation_int",
+     "target": "ref_end_Pool_bnd_compensation_int"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_message_nonint",
+   "name": "bnd_message_nonint",
+   "nodes": [
+    {
+     "id": "host_bnd_message_nonint",
+     "type": "task",
+     "name": "host bnd_message_nonint"
+    },
+    {
+     "id": "bnd_message_nonint",
+     "type": "boundaryEvent",
+     "name": "bnd_message_nonint",
+     "marker": "message",
+     "attachedTo": "host_bnd_message_nonint",
+     "cancelActivity": false
+    },
+    {
+     "id": "ref_start_Pool_bnd_message_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_message_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_message_nonint",
+     "source": "ref_start_Pool_bnd_message_nonint",
+     "target": "host_bnd_message_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_message_nonint",
+     "source": "host_bnd_message_nonint",
+     "target": "ref_end_Pool_bnd_message_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_timer_nonint",
+   "name": "bnd_timer_nonint",
+   "nodes": [
+    {
+     "id": "host_bnd_timer_nonint",
+     "type": "task",
+     "name": "host bnd_timer_nonint"
+    },
+    {
+     "id": "bnd_timer_nonint",
+     "type": "boundaryEvent",
+     "name": "bnd_timer_nonint",
+     "marker": "timer",
+     "attachedTo": "host_bnd_timer_nonint",
+     "cancelActivity": false
+    },
+    {
+     "id": "ref_start_Pool_bnd_timer_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_timer_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_timer_nonint",
+     "source": "ref_start_Pool_bnd_timer_nonint",
+     "target": "host_bnd_timer_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_timer_nonint",
+     "source": "host_bnd_timer_nonint",
+     "target": "ref_end_Pool_bnd_timer_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_escalation_nonint",
+   "name": "bnd_escalation_nonint",
+   "nodes": [
+    {
+     "id": "host_bnd_escalation_nonint",
+     "type": "task",
+     "name": "host bnd_escalation_nonint"
+    },
+    {
+     "id": "bnd_escalation_nonint",
+     "type": "boundaryEvent",
+     "name": "bnd_escalation_nonint",
+     "marker": "escalation",
+     "attachedTo": "host_bnd_escalation_nonint",
+     "cancelActivity": false
+    },
+    {
+     "id": "ref_start_Pool_bnd_escalation_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_escalation_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_escalation_nonint",
+     "source": "ref_start_Pool_bnd_escalation_nonint",
+     "target": "host_bnd_escalation_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_escalation_nonint",
+     "source": "host_bnd_escalation_nonint",
+     "target": "ref_end_Pool_bnd_escalation_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_conditional_nonint",
+   "name": "bnd_conditional_nonint",
+   "nodes": [
+    {
+     "id": "host_bnd_conditional_nonint",
+     "type": "task",
+     "name": "host bnd_conditional_nonint"
+    },
+    {
+     "id": "bnd_conditional_nonint",
+     "type": "boundaryEvent",
+     "name": "bnd_conditional_nonint",
+     "marker": "conditional",
+     "attachedTo": "host_bnd_conditional_nonint",
+     "cancelActivity": false
+    },
+    {
+     "id": "ref_start_Pool_bnd_conditional_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_conditional_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_conditional_nonint",
+     "source": "ref_start_Pool_bnd_conditional_nonint",
+     "target": "host_bnd_conditional_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_conditional_nonint",
+     "source": "host_bnd_conditional_nonint",
+     "target": "ref_end_Pool_bnd_conditional_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_signal_nonint",
+   "name": "bnd_signal_nonint",
+   "nodes": [
+    {
+     "id": "host_bnd_signal_nonint",
+     "type": "task",
+     "name": "host bnd_signal_nonint"
+    },
+    {
+     "id": "bnd_signal_nonint",
+     "type": "boundaryEvent",
+     "name": "bnd_signal_nonint",
+     "marker": "signal",
+     "attachedTo": "host_bnd_signal_nonint",
+     "cancelActivity": false
+    },
+    {
+     "id": "ref_start_Pool_bnd_signal_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_signal_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_signal_nonint",
+     "source": "ref_start_Pool_bnd_signal_nonint",
+     "target": "host_bnd_signal_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_signal_nonint",
+     "source": "host_bnd_signal_nonint",
+     "target": "ref_end_Pool_bnd_signal_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_multiple_nonint",
+   "name": "bnd_multiple_nonint",
+   "nodes": [
+    {
+     "id": "host_bnd_multiple_nonint",
+     "type": "task",
+     "name": "host bnd_multiple_nonint"
+    },
+    {
+     "id": "bnd_multiple_nonint",
+     "type": "boundaryEvent",
+     "name": "bnd_multiple_nonint",
+     "marker": "multiple",
+     "attachedTo": "host_bnd_multiple_nonint",
+     "cancelActivity": false
+    },
+    {
+     "id": "ref_start_Pool_bnd_multiple_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_multiple_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_multiple_nonint",
+     "source": "ref_start_Pool_bnd_multiple_nonint",
+     "target": "host_bnd_multiple_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_multiple_nonint",
+     "source": "host_bnd_multiple_nonint",
+     "target": "ref_end_Pool_bnd_multiple_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_parallelMultiple_nonint",
+   "name": "bnd_parallelMultiple_nonint",
+   "nodes": [
+    {
+     "id": "host_bnd_parallelMultiple_nonint",
+     "type": "task",
+     "name": "host bnd_parallelMultiple_nonint"
+    },
+    {
+     "id": "bnd_parallelMultiple_nonint",
+     "type": "boundaryEvent",
+     "name": "bnd_parallelMultiple_nonint",
+     "marker": "parallelMultiple",
+     "attachedTo": "host_bnd_parallelMultiple_nonint",
+     "cancelActivity": false
+    },
+    {
+     "id": "ref_start_Pool_bnd_parallelMultiple_nonint",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_parallelMultiple_nonint",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_parallelMultiple_nonint",
+     "source": "ref_start_Pool_bnd_parallelMultiple_nonint",
+     "target": "host_bnd_parallelMultiple_nonint"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_parallelMultiple_nonint",
+     "source": "host_bnd_parallelMultiple_nonint",
+     "target": "ref_end_Pool_bnd_parallelMultiple_nonint"
+    }
+   ]
+  },
+  {
+   "id": "Pool_bnd_cancel",
+   "name": "bnd_cancel",
+   "nodes": [
+    {
+     "id": "host_bnd_cancel",
+     "type": "transaction",
+     "name": "Transaction host",
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "hc_s",
+       "type": "startEvent",
+       "name": "S"
+      },
+      {
+       "id": "hc_e",
+       "type": "endEvent",
+       "name": "E"
+      }
+     ],
+     "edges": [
+      {
+       "id": "hc_f",
+       "source": "hc_s",
+       "target": "hc_e"
+      }
+     ]
+    },
+    {
+     "id": "bnd_cancel_int",
+     "type": "boundaryEvent",
+     "name": "bnd_cancel_int",
+     "marker": "cancel",
+     "attachedTo": "host_bnd_cancel",
+     "cancelActivity": true
+    },
+    {
+     "id": "ref_start_Pool_bnd_cancel",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_bnd_cancel",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_bnd_cancel",
+     "source": "ref_start_Pool_bnd_cancel",
+     "target": "host_bnd_cancel"
+    },
+    {
+     "id": "ref_f2_Pool_bnd_cancel",
+     "source": "host_bnd_cancel",
+     "target": "ref_end_Pool_bnd_cancel"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_task",
+   "name": "t_task",
+   "nodes": [
+    {
+     "id": "t_task",
+     "type": "task",
+     "name": "task"
+    },
+    {
+     "id": "ref_start_Pool_t_task",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_task",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_task",
+     "source": "ref_start_Pool_t_task",
+     "target": "t_task"
+    },
+    {
+     "id": "ref_f2_Pool_t_task",
+     "source": "t_task",
+     "target": "ref_end_Pool_t_task"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_userTask",
+   "name": "t_userTask",
+   "nodes": [
+    {
+     "id": "t_userTask",
+     "type": "userTask",
+     "name": "userTask"
+    },
+    {
+     "id": "ref_start_Pool_t_userTask",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_userTask",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_userTask",
+     "source": "ref_start_Pool_t_userTask",
+     "target": "t_userTask"
+    },
+    {
+     "id": "ref_f2_Pool_t_userTask",
+     "source": "t_userTask",
+     "target": "ref_end_Pool_t_userTask"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_serviceTask",
+   "name": "t_serviceTask",
+   "nodes": [
+    {
+     "id": "t_serviceTask",
+     "type": "serviceTask",
+     "name": "serviceTask"
+    },
+    {
+     "id": "ref_start_Pool_t_serviceTask",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_serviceTask",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_serviceTask",
+     "source": "ref_start_Pool_t_serviceTask",
+     "target": "t_serviceTask"
+    },
+    {
+     "id": "ref_f2_Pool_t_serviceTask",
+     "source": "t_serviceTask",
+     "target": "ref_end_Pool_t_serviceTask"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_sendTask",
+   "name": "t_sendTask",
+   "nodes": [
+    {
+     "id": "t_sendTask",
+     "type": "sendTask",
+     "name": "sendTask"
+    },
+    {
+     "id": "ref_start_Pool_t_sendTask",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_sendTask",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_sendTask",
+     "source": "ref_start_Pool_t_sendTask",
+     "target": "t_sendTask"
+    },
+    {
+     "id": "ref_f2_Pool_t_sendTask",
+     "source": "t_sendTask",
+     "target": "ref_end_Pool_t_sendTask"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_receiveTask",
+   "name": "t_receiveTask",
+   "nodes": [
+    {
+     "id": "t_receiveTask",
+     "type": "receiveTask",
+     "name": "receiveTask"
+    },
+    {
+     "id": "ref_start_Pool_t_receiveTask",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_receiveTask",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_receiveTask",
+     "source": "ref_start_Pool_t_receiveTask",
+     "target": "t_receiveTask"
+    },
+    {
+     "id": "ref_f2_Pool_t_receiveTask",
+     "source": "t_receiveTask",
+     "target": "ref_end_Pool_t_receiveTask"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_manualTask",
+   "name": "t_manualTask",
+   "nodes": [
+    {
+     "id": "t_manualTask",
+     "type": "manualTask",
+     "name": "manualTask"
+    },
+    {
+     "id": "ref_start_Pool_t_manualTask",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_manualTask",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_manualTask",
+     "source": "ref_start_Pool_t_manualTask",
+     "target": "t_manualTask"
+    },
+    {
+     "id": "ref_f2_Pool_t_manualTask",
+     "source": "t_manualTask",
+     "target": "ref_end_Pool_t_manualTask"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_scriptTask",
+   "name": "t_scriptTask",
+   "nodes": [
+    {
+     "id": "t_scriptTask",
+     "type": "scriptTask",
+     "name": "scriptTask"
+    },
+    {
+     "id": "ref_start_Pool_t_scriptTask",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_scriptTask",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_scriptTask",
+     "source": "ref_start_Pool_t_scriptTask",
+     "target": "t_scriptTask"
+    },
+    {
+     "id": "ref_f2_Pool_t_scriptTask",
+     "source": "t_scriptTask",
+     "target": "ref_end_Pool_t_scriptTask"
+    }
+   ]
+  },
+  {
+   "id": "Pool_t_businessRuleTask",
+   "name": "t_businessRuleTask",
+   "nodes": [
+    {
+     "id": "t_businessRuleTask",
+     "type": "businessRuleTask",
+     "name": "businessRuleTask"
+    },
+    {
+     "id": "ref_start_Pool_t_businessRuleTask",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_t_businessRuleTask",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_t_businessRuleTask",
+     "source": "ref_start_Pool_t_businessRuleTask",
+     "target": "t_businessRuleTask"
+    },
+    {
+     "id": "ref_f2_Pool_t_businessRuleTask",
+     "source": "t_businessRuleTask",
+     "target": "ref_end_Pool_t_businessRuleTask"
+    }
+   ]
+  },
+  {
+   "id": "Pool_recv_instantiate",
+   "name": "recv_instantiate",
+   "nodes": [
+    {
+     "id": "recv_instantiate",
+     "type": "receiveTask",
+     "name": "receive instantiate",
+     "instantiate": true
+    },
+    {
+     "id": "ref_start_Pool_recv_instantiate",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_recv_instantiate",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_recv_instantiate",
+     "source": "ref_start_Pool_recv_instantiate",
+     "target": "recv_instantiate"
+    },
+    {
+     "id": "ref_f2_Pool_recv_instantiate",
+     "source": "recv_instantiate",
+     "target": "ref_end_Pool_recv_instantiate"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_task_loop",
+   "name": "am_task_loop",
+   "nodes": [
+    {
+     "id": "am_task_loop",
+     "type": "task",
+     "name": "task loop",
+     "loopType": "standard"
+    },
+    {
+     "id": "ref_start_Pool_am_task_loop",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_task_loop",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_task_loop",
+     "source": "ref_start_Pool_am_task_loop",
+     "target": "am_task_loop"
+    },
+    {
+     "id": "ref_f2_Pool_am_task_loop",
+     "source": "am_task_loop",
+     "target": "ref_end_Pool_am_task_loop"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_task_mip",
+   "name": "am_task_mip",
+   "nodes": [
+    {
+     "id": "am_task_mip",
+     "type": "task",
+     "name": "task MI parallel",
+     "multiInstance": "parallel"
+    },
+    {
+     "id": "ref_start_Pool_am_task_mip",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_task_mip",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_task_mip",
+     "source": "ref_start_Pool_am_task_mip",
+     "target": "am_task_mip"
+    },
+    {
+     "id": "ref_f2_Pool_am_task_mip",
+     "source": "am_task_mip",
+     "target": "ref_end_Pool_am_task_mip"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_task_mis",
+   "name": "am_task_mis",
+   "nodes": [
+    {
+     "id": "am_task_mis",
+     "type": "task",
+     "name": "task MI sequential",
+     "multiInstance": "sequential"
+    },
+    {
+     "id": "ref_start_Pool_am_task_mis",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_task_mis",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_task_mis",
+     "source": "ref_start_Pool_am_task_mis",
+     "target": "am_task_mis"
+    },
+    {
+     "id": "ref_f2_Pool_am_task_mis",
+     "source": "am_task_mis",
+     "target": "ref_end_Pool_am_task_mis"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_task_comp",
+   "name": "am_task_comp",
+   "nodes": [
+    {
+     "id": "am_task_comp",
+     "type": "task",
+     "name": "task compensation",
+     "isCompensation": true
+    },
+    {
+     "id": "ref_start_Pool_am_task_comp",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_task_comp",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_task_comp",
+     "source": "ref_start_Pool_am_task_comp",
+     "target": "am_task_comp"
+    },
+    {
+     "id": "ref_f2_Pool_am_task_comp",
+     "source": "am_task_comp",
+     "target": "ref_end_Pool_am_task_comp"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_userTask_loop",
+   "name": "am_userTask_loop",
+   "nodes": [
+    {
+     "id": "am_userTask_loop",
+     "type": "userTask",
+     "name": "userTask loop",
+     "loopType": "standard"
+    },
+    {
+     "id": "ref_start_Pool_am_userTask_loop",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_userTask_loop",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_userTask_loop",
+     "source": "ref_start_Pool_am_userTask_loop",
+     "target": "am_userTask_loop"
+    },
+    {
+     "id": "ref_f2_Pool_am_userTask_loop",
+     "source": "am_userTask_loop",
+     "target": "ref_end_Pool_am_userTask_loop"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_userTask_mip",
+   "name": "am_userTask_mip",
+   "nodes": [
+    {
+     "id": "am_userTask_mip",
+     "type": "userTask",
+     "name": "userTask MI parallel",
+     "multiInstance": "parallel"
+    },
+    {
+     "id": "ref_start_Pool_am_userTask_mip",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_userTask_mip",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_userTask_mip",
+     "source": "ref_start_Pool_am_userTask_mip",
+     "target": "am_userTask_mip"
+    },
+    {
+     "id": "ref_f2_Pool_am_userTask_mip",
+     "source": "am_userTask_mip",
+     "target": "ref_end_Pool_am_userTask_mip"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_userTask_mis",
+   "name": "am_userTask_mis",
+   "nodes": [
+    {
+     "id": "am_userTask_mis",
+     "type": "userTask",
+     "name": "userTask MI sequential",
+     "multiInstance": "sequential"
+    },
+    {
+     "id": "ref_start_Pool_am_userTask_mis",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_userTask_mis",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_userTask_mis",
+     "source": "ref_start_Pool_am_userTask_mis",
+     "target": "am_userTask_mis"
+    },
+    {
+     "id": "ref_f2_Pool_am_userTask_mis",
+     "source": "am_userTask_mis",
+     "target": "ref_end_Pool_am_userTask_mis"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_userTask_comp",
+   "name": "am_userTask_comp",
+   "nodes": [
+    {
+     "id": "am_userTask_comp",
+     "type": "userTask",
+     "name": "userTask compensation",
+     "isCompensation": true
+    },
+    {
+     "id": "ref_start_Pool_am_userTask_comp",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_userTask_comp",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_userTask_comp",
+     "source": "ref_start_Pool_am_userTask_comp",
+     "target": "am_userTask_comp"
+    },
+    {
+     "id": "ref_f2_Pool_am_userTask_comp",
+     "source": "am_userTask_comp",
+     "target": "ref_end_Pool_am_userTask_comp"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_serviceTask_loop",
+   "name": "am_serviceTask_loop",
+   "nodes": [
+    {
+     "id": "am_serviceTask_loop",
+     "type": "serviceTask",
+     "name": "serviceTask loop",
+     "loopType": "standard"
+    },
+    {
+     "id": "ref_start_Pool_am_serviceTask_loop",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_serviceTask_loop",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_serviceTask_loop",
+     "source": "ref_start_Pool_am_serviceTask_loop",
+     "target": "am_serviceTask_loop"
+    },
+    {
+     "id": "ref_f2_Pool_am_serviceTask_loop",
+     "source": "am_serviceTask_loop",
+     "target": "ref_end_Pool_am_serviceTask_loop"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_serviceTask_mip",
+   "name": "am_serviceTask_mip",
+   "nodes": [
+    {
+     "id": "am_serviceTask_mip",
+     "type": "serviceTask",
+     "name": "serviceTask MI parallel",
+     "multiInstance": "parallel"
+    },
+    {
+     "id": "ref_start_Pool_am_serviceTask_mip",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_serviceTask_mip",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_serviceTask_mip",
+     "source": "ref_start_Pool_am_serviceTask_mip",
+     "target": "am_serviceTask_mip"
+    },
+    {
+     "id": "ref_f2_Pool_am_serviceTask_mip",
+     "source": "am_serviceTask_mip",
+     "target": "ref_end_Pool_am_serviceTask_mip"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_serviceTask_mis",
+   "name": "am_serviceTask_mis",
+   "nodes": [
+    {
+     "id": "am_serviceTask_mis",
+     "type": "serviceTask",
+     "name": "serviceTask MI sequential",
+     "multiInstance": "sequential"
+    },
+    {
+     "id": "ref_start_Pool_am_serviceTask_mis",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_serviceTask_mis",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_serviceTask_mis",
+     "source": "ref_start_Pool_am_serviceTask_mis",
+     "target": "am_serviceTask_mis"
+    },
+    {
+     "id": "ref_f2_Pool_am_serviceTask_mis",
+     "source": "am_serviceTask_mis",
+     "target": "ref_end_Pool_am_serviceTask_mis"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_serviceTask_comp",
+   "name": "am_serviceTask_comp",
+   "nodes": [
+    {
+     "id": "am_serviceTask_comp",
+     "type": "serviceTask",
+     "name": "serviceTask compensation",
+     "isCompensation": true
+    },
+    {
+     "id": "ref_start_Pool_am_serviceTask_comp",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_serviceTask_comp",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_serviceTask_comp",
+     "source": "ref_start_Pool_am_serviceTask_comp",
+     "target": "am_serviceTask_comp"
+    },
+    {
+     "id": "ref_f2_Pool_am_serviceTask_comp",
+     "source": "am_serviceTask_comp",
+     "target": "ref_end_Pool_am_serviceTask_comp"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_task_loop_comp",
+   "name": "am_task_loop_comp",
+   "nodes": [
+    {
+     "id": "am_task_loop_comp",
+     "type": "task",
+     "name": "loop + compensation",
+     "loopType": "standard",
+     "isCompensation": true
+    },
+    {
+     "id": "ref_start_Pool_am_task_loop_comp",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_task_loop_comp",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_task_loop_comp",
+     "source": "ref_start_Pool_am_task_loop_comp",
+     "target": "am_task_loop_comp"
+    },
+    {
+     "id": "ref_f2_Pool_am_task_loop_comp",
+     "source": "am_task_loop_comp",
+     "target": "ref_end_Pool_am_task_loop_comp"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_task_mip_comp",
+   "name": "am_task_mip_comp",
+   "nodes": [
+    {
+     "id": "am_task_mip_comp",
+     "type": "task",
+     "name": "MI par + compensation",
+     "multiInstance": "parallel",
+     "isCompensation": true
+    },
+    {
+     "id": "ref_start_Pool_am_task_mip_comp",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_task_mip_comp",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_task_mip_comp",
+     "source": "ref_start_Pool_am_task_mip_comp",
+     "target": "am_task_mip_comp"
+    },
+    {
+     "id": "ref_f2_Pool_am_task_mip_comp",
+     "source": "am_task_mip_comp",
+     "target": "ref_end_Pool_am_task_mip_comp"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_call_loop",
+   "name": "am_call_loop",
+   "nodes": [
+    {
+     "id": "am_call_loop",
+     "type": "callActivity",
+     "name": "call loop",
+     "loopType": "standard"
+    },
+    {
+     "id": "ref_start_Pool_am_call_loop",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_call_loop",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_call_loop",
+     "source": "ref_start_Pool_am_call_loop",
+     "target": "am_call_loop"
+    },
+    {
+     "id": "ref_f2_Pool_am_call_loop",
+     "source": "am_call_loop",
+     "target": "ref_end_Pool_am_call_loop"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_call_mip",
+   "name": "am_call_mip",
+   "nodes": [
+    {
+     "id": "am_call_mip",
+     "type": "callActivity",
+     "name": "call MI parallel",
+     "multiInstance": "parallel"
+    },
+    {
+     "id": "ref_start_Pool_am_call_mip",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_call_mip",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_call_mip",
+     "source": "ref_start_Pool_am_call_mip",
+     "target": "am_call_mip"
+    },
+    {
+     "id": "ref_f2_Pool_am_call_mip",
+     "source": "am_call_mip",
+     "target": "ref_end_Pool_am_call_mip"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_sub_loop",
+   "name": "am_sub_loop",
+   "nodes": [
+    {
+     "id": "am_sub_loop",
+     "type": "subProcess",
+     "name": "sub loop",
+     "loopType": "standard"
+    },
+    {
+     "id": "ref_start_Pool_am_sub_loop",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_sub_loop",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_sub_loop",
+     "source": "ref_start_Pool_am_sub_loop",
+     "target": "am_sub_loop"
+    },
+    {
+     "id": "ref_f2_Pool_am_sub_loop",
+     "source": "am_sub_loop",
+     "target": "ref_end_Pool_am_sub_loop"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_sub_mip",
+   "name": "am_sub_mip",
+   "nodes": [
+    {
+     "id": "am_sub_mip",
+     "type": "subProcess",
+     "name": "sub MI parallel",
+     "multiInstance": "parallel"
+    },
+    {
+     "id": "ref_start_Pool_am_sub_mip",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_sub_mip",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_sub_mip",
+     "source": "ref_start_Pool_am_sub_mip",
+     "target": "am_sub_mip"
+    },
+    {
+     "id": "ref_f2_Pool_am_sub_mip",
+     "source": "am_sub_mip",
+     "target": "ref_end_Pool_am_sub_mip"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_sub_mis",
+   "name": "am_sub_mis",
+   "nodes": [
+    {
+     "id": "am_sub_mis",
+     "type": "subProcess",
+     "name": "sub MI sequential",
+     "multiInstance": "sequential"
+    },
+    {
+     "id": "ref_start_Pool_am_sub_mis",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_sub_mis",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_sub_mis",
+     "source": "ref_start_Pool_am_sub_mis",
+     "target": "am_sub_mis"
+    },
+    {
+     "id": "ref_f2_Pool_am_sub_mis",
+     "source": "am_sub_mis",
+     "target": "ref_end_Pool_am_sub_mis"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_sub_comp",
+   "name": "am_sub_comp",
+   "nodes": [
+    {
+     "id": "am_sub_comp",
+     "type": "subProcess",
+     "name": "sub compensation",
+     "isCompensation": true
+    },
+    {
+     "id": "ref_start_Pool_am_sub_comp",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_sub_comp",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_sub_comp",
+     "source": "ref_start_Pool_am_sub_comp",
+     "target": "am_sub_comp"
+    },
+    {
+     "id": "ref_f2_Pool_am_sub_comp",
+     "source": "am_sub_comp",
+     "target": "ref_end_Pool_am_sub_comp"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_sub_adhoc",
+   "name": "am_sub_adhoc",
+   "nodes": [
+    {
+     "id": "am_sub_adhoc",
+     "type": "subProcess",
+     "name": "sub ad-hoc",
+     "isAdHoc": true
+    },
+    {
+     "id": "ref_start_Pool_am_sub_adhoc",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_sub_adhoc",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_sub_adhoc",
+     "source": "ref_start_Pool_am_sub_adhoc",
+     "target": "am_sub_adhoc"
+    },
+    {
+     "id": "ref_f2_Pool_am_sub_adhoc",
+     "source": "am_sub_adhoc",
+     "target": "ref_end_Pool_am_sub_adhoc"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_sub_adhoc_loop",
+   "name": "am_sub_adhoc_loop",
+   "nodes": [
+    {
+     "id": "am_sub_adhoc_loop",
+     "type": "subProcess",
+     "name": "ad-hoc + loop",
+     "isAdHoc": true,
+     "loopType": "standard"
+    },
+    {
+     "id": "ref_start_Pool_am_sub_adhoc_loop",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_sub_adhoc_loop",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_sub_adhoc_loop",
+     "source": "ref_start_Pool_am_sub_adhoc_loop",
+     "target": "am_sub_adhoc_loop"
+    },
+    {
+     "id": "ref_f2_Pool_am_sub_adhoc_loop",
+     "source": "am_sub_adhoc_loop",
+     "target": "ref_end_Pool_am_sub_adhoc_loop"
+    }
+   ]
+  },
+  {
+   "id": "Pool_am_sub_loop_mip_comp",
+   "name": "am_sub_loop_mip_comp",
+   "nodes": [
+    {
+     "id": "am_sub_loop_mip_comp",
+     "type": "subProcess",
+     "name": "sub MI par + comp",
+     "multiInstance": "parallel",
+     "isCompensation": true
+    },
+    {
+     "id": "ref_start_Pool_am_sub_loop_mip_comp",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_am_sub_loop_mip_comp",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_am_sub_loop_mip_comp",
+     "source": "ref_start_Pool_am_sub_loop_mip_comp",
+     "target": "am_sub_loop_mip_comp"
+    },
+    {
+     "id": "ref_f2_Pool_am_sub_loop_mip_comp",
+     "source": "am_sub_loop_mip_comp",
+     "target": "ref_end_Pool_am_sub_loop_mip_comp"
+    }
+   ]
+  },
+  {
+   "id": "Pool_sub_collapsed",
+   "name": "sub_collapsed",
+   "nodes": [
+    {
+     "id": "sub_collapsed",
+     "type": "subProcess",
+     "name": "subprocess collapsed"
+    },
+    {
+     "id": "ref_start_Pool_sub_collapsed",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_sub_collapsed",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_sub_collapsed",
+     "source": "ref_start_Pool_sub_collapsed",
+     "target": "sub_collapsed"
+    },
+    {
+     "id": "ref_f2_Pool_sub_collapsed",
+     "source": "sub_collapsed",
+     "target": "ref_end_Pool_sub_collapsed"
+    }
+   ]
+  },
+  {
+   "id": "Pool_sub_expanded",
+   "name": "sub_expanded",
+   "nodes": [
+    {
+     "id": "sub_expanded",
+     "type": "subProcess",
+     "name": "subprocess expanded",
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "sub_expanded_s",
+       "type": "startEvent",
+       "name": "S"
+      },
+      {
+       "id": "sub_expanded_t",
+       "type": "task",
+       "name": "Task"
+      },
+      {
+       "id": "sub_expanded_e",
+       "type": "endEvent",
+       "name": "E"
+      }
+     ],
+     "edges": [
+      {
+       "id": "sub_expanded_f1",
+       "source": "sub_expanded_s",
+       "target": "sub_expanded_t"
+      },
+      {
+       "id": "sub_expanded_f2",
+       "source": "sub_expanded_t",
+       "target": "sub_expanded_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_sub_expanded",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_sub_expanded",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_sub_expanded",
+     "source": "ref_start_Pool_sub_expanded",
+     "target": "sub_expanded"
+    },
+    {
+     "id": "ref_f2_Pool_sub_expanded",
+     "source": "sub_expanded",
+     "target": "ref_end_Pool_sub_expanded"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_collapsed",
+   "name": "evsub_collapsed",
+   "nodes": [
+    {
+     "id": "evsub_collapsed",
+     "type": "subProcess",
+     "name": "event subprocess collapsed",
+     "isEventSubProcess": true
+    },
+    {
+     "id": "ref_start_Pool_evsub_collapsed",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_collapsed",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_collapsed",
+     "source": "ref_start_Pool_evsub_collapsed",
+     "target": "evsub_collapsed"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_collapsed",
+     "source": "evsub_collapsed",
+     "target": "ref_end_Pool_evsub_collapsed"
+    }
+   ]
+  },
+  {
+   "id": "Pool_evsub_expanded",
+   "name": "evsub_expanded",
+   "nodes": [
+    {
+     "id": "evsub_expanded",
+     "type": "subProcess",
+     "name": "event subprocess expanded",
+     "isEventSubProcess": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "evx_s",
+       "type": "startEvent",
+       "name": "S",
+       "marker": "message",
+       "isInterrupting": false
+      },
+      {
+       "id": "evx_e",
+       "type": "endEvent",
+       "name": "E"
+      }
+     ],
+     "edges": [
+      {
+       "id": "evx_f",
+       "source": "evx_s",
+       "target": "evx_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_evsub_expanded",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_evsub_expanded",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_evsub_expanded",
+     "source": "ref_start_Pool_evsub_expanded",
+     "target": "evsub_expanded"
+    },
+    {
+     "id": "ref_f2_Pool_evsub_expanded",
+     "source": "evsub_expanded",
+     "target": "ref_end_Pool_evsub_expanded"
+    }
+   ]
+  },
+  {
+   "id": "Pool_tx_collapsed",
+   "name": "tx_collapsed",
+   "nodes": [
+    {
+     "id": "tx_collapsed",
+     "type": "transaction",
+     "name": "transaction collapsed"
+    },
+    {
+     "id": "ref_start_Pool_tx_collapsed",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_tx_collapsed",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_tx_collapsed",
+     "source": "ref_start_Pool_tx_collapsed",
+     "target": "tx_collapsed"
+    },
+    {
+     "id": "ref_f2_Pool_tx_collapsed",
+     "source": "tx_collapsed",
+     "target": "ref_end_Pool_tx_collapsed"
+    }
+   ]
+  },
+  {
+   "id": "Pool_tx_expanded",
+   "name": "tx_expanded",
+   "nodes": [
+    {
+     "id": "tx_expanded",
+     "type": "transaction",
+     "name": "transaction expanded",
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "tx_expanded_s",
+       "type": "startEvent",
+       "name": "S"
+      },
+      {
+       "id": "tx_expanded_t",
+       "type": "task",
+       "name": "Task"
+      },
+      {
+       "id": "tx_expanded_e",
+       "type": "endEvent",
+       "name": "E"
+      }
+     ],
+     "edges": [
+      {
+       "id": "tx_expanded_f1",
+       "source": "tx_expanded_s",
+       "target": "tx_expanded_t"
+      },
+      {
+       "id": "tx_expanded_f2",
+       "source": "tx_expanded_t",
+       "target": "tx_expanded_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_tx_expanded",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_tx_expanded",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_tx_expanded",
+     "source": "ref_start_Pool_tx_expanded",
+     "target": "tx_expanded"
+    },
+    {
+     "id": "ref_f2_Pool_tx_expanded",
+     "source": "tx_expanded",
+     "target": "ref_end_Pool_tx_expanded"
+    }
+   ]
+  },
+  {
+   "id": "Pool_adhoc_expanded",
+   "name": "adhoc_expanded",
+   "nodes": [
+    {
+     "id": "adhoc_expanded",
+     "type": "subProcess",
+     "name": "ad-hoc expanded",
+     "isAdHoc": true,
+     "isExpanded": true,
+     "nodes": [
+      {
+       "id": "adhoc_expanded_s",
+       "type": "startEvent",
+       "name": "S"
+      },
+      {
+       "id": "adhoc_expanded_t",
+       "type": "task",
+       "name": "Task"
+      },
+      {
+       "id": "adhoc_expanded_e",
+       "type": "endEvent",
+       "name": "E"
+      }
+     ],
+     "edges": [
+      {
+       "id": "adhoc_expanded_f1",
+       "source": "adhoc_expanded_s",
+       "target": "adhoc_expanded_t"
+      },
+      {
+       "id": "adhoc_expanded_f2",
+       "source": "adhoc_expanded_t",
+       "target": "adhoc_expanded_e"
+      }
+     ]
+    },
+    {
+     "id": "ref_start_Pool_adhoc_expanded",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_adhoc_expanded",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_adhoc_expanded",
+     "source": "ref_start_Pool_adhoc_expanded",
+     "target": "adhoc_expanded"
+    },
+    {
+     "id": "ref_f2_Pool_adhoc_expanded",
+     "source": "adhoc_expanded",
+     "target": "ref_end_Pool_adhoc_expanded"
+    }
+   ]
+  },
+  {
+   "id": "Pool_call_plain",
+   "name": "call_plain",
+   "nodes": [
+    {
+     "id": "call_plain",
+     "type": "callActivity",
+     "name": "call activity",
+     "calledElement": "Other"
+    },
+    {
+     "id": "ref_start_Pool_call_plain",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_call_plain",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_call_plain",
+     "source": "ref_start_Pool_call_plain",
+     "target": "call_plain"
+    },
+    {
+     "id": "ref_f2_Pool_call_plain",
+     "source": "call_plain",
+     "target": "ref_end_Pool_call_plain"
+    }
+   ]
+  },
+  {
+   "id": "Pool_gw_exclusive",
+   "name": "gw_exclusive",
+   "nodes": [
+    {
+     "id": "src_gw_exclusive",
+     "type": "task",
+     "name": "in gw_exclusive"
+    },
+    {
+     "id": "gw_exclusive",
+     "type": "exclusiveGateway",
+     "name": "exclusive"
+    },
+    {
+     "id": "a_gw_exclusive",
+     "type": "task",
+     "name": "A"
+    },
+    {
+     "id": "b_gw_exclusive",
+     "type": "task",
+     "name": "B"
+    },
+    {
+     "id": "ref_start_Pool_gw_exclusive",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_gw_exclusive",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_gw_exclusive_gw_exclusive",
+     "source": "src_gw_exclusive",
+     "target": "gw_exclusive"
+    },
+    {
+     "id": "f_gw_exclusive_a_gw_exclusive",
+     "source": "gw_exclusive",
+     "target": "a_gw_exclusive",
+     "label": "x"
+    },
+    {
+     "id": "f_gw_exclusive_b_gw_exclusive",
+     "source": "gw_exclusive",
+     "target": "b_gw_exclusive",
+     "label": "y"
+    }
+   ]
+  },
+  {
+   "id": "Pool_gw_parallel",
+   "name": "gw_parallel",
+   "nodes": [
+    {
+     "id": "src_gw_parallel",
+     "type": "task",
+     "name": "in gw_parallel"
+    },
+    {
+     "id": "gw_parallel",
+     "type": "parallelGateway",
+     "name": "parallel"
+    },
+    {
+     "id": "a_gw_parallel",
+     "type": "task",
+     "name": "A"
+    },
+    {
+     "id": "b_gw_parallel",
+     "type": "task",
+     "name": "B"
+    },
+    {
+     "id": "ref_start_Pool_gw_parallel",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_gw_parallel",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_gw_parallel_gw_parallel",
+     "source": "src_gw_parallel",
+     "target": "gw_parallel"
+    },
+    {
+     "id": "f_gw_parallel_a_gw_parallel",
+     "source": "gw_parallel",
+     "target": "a_gw_parallel",
+     "label": "x"
+    },
+    {
+     "id": "f_gw_parallel_b_gw_parallel",
+     "source": "gw_parallel",
+     "target": "b_gw_parallel",
+     "label": "y"
+    }
+   ]
+  },
+  {
+   "id": "Pool_gw_inclusive",
+   "name": "gw_inclusive",
+   "nodes": [
+    {
+     "id": "src_gw_inclusive",
+     "type": "task",
+     "name": "in gw_inclusive"
+    },
+    {
+     "id": "gw_inclusive",
+     "type": "inclusiveGateway",
+     "name": "inclusive"
+    },
+    {
+     "id": "a_gw_inclusive",
+     "type": "task",
+     "name": "A"
+    },
+    {
+     "id": "b_gw_inclusive",
+     "type": "task",
+     "name": "B"
+    },
+    {
+     "id": "ref_start_Pool_gw_inclusive",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_gw_inclusive",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_gw_inclusive_gw_inclusive",
+     "source": "src_gw_inclusive",
+     "target": "gw_inclusive"
+    },
+    {
+     "id": "f_gw_inclusive_a_gw_inclusive",
+     "source": "gw_inclusive",
+     "target": "a_gw_inclusive",
+     "label": "x"
+    },
+    {
+     "id": "f_gw_inclusive_b_gw_inclusive",
+     "source": "gw_inclusive",
+     "target": "b_gw_inclusive",
+     "label": "y"
+    }
+   ]
+  },
+  {
+   "id": "Pool_gw_eventbased",
+   "name": "gw_eventbased",
+   "nodes": [
+    {
+     "id": "src_gw_eventbased",
+     "type": "task",
+     "name": "in gw_eventbased"
+    },
+    {
+     "id": "gw_eventbased",
+     "type": "eventBasedGateway",
+     "name": "eventbased"
+    },
+    {
+     "id": "a_gw_eventbased",
+     "type": "intermediateCatchEvent",
+     "name": "A",
+     "marker": "message"
+    },
+    {
+     "id": "b_gw_eventbased",
+     "type": "intermediateCatchEvent",
+     "name": "B",
+     "marker": "timer"
+    },
+    {
+     "id": "ref_start_Pool_gw_eventbased",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_gw_eventbased",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_gw_eventbased_gw_eventbased",
+     "source": "src_gw_eventbased",
+     "target": "gw_eventbased"
+    },
+    {
+     "id": "f_gw_eventbased_a_gw_eventbased",
+     "source": "gw_eventbased",
+     "target": "a_gw_eventbased",
+     "label": "x"
+    },
+    {
+     "id": "f_gw_eventbased_b_gw_eventbased",
+     "source": "gw_eventbased",
+     "target": "b_gw_eventbased",
+     "label": "y"
+    }
+   ]
+  },
+  {
+   "id": "Pool_gw_eventbased_par",
+   "name": "gw_eventbased_par",
+   "nodes": [
+    {
+     "id": "src_gw_eventbased_par",
+     "type": "task",
+     "name": "in gw_eventbased_par"
+    },
+    {
+     "id": "gw_eventbased_par",
+     "type": "eventBasedGateway",
+     "name": "eventbased_par",
+     "eventGatewayType": "Parallel",
+     "instantiate": true
+    },
+    {
+     "id": "a_gw_eventbased_par",
+     "type": "intermediateCatchEvent",
+     "name": "A",
+     "marker": "message"
+    },
+    {
+     "id": "b_gw_eventbased_par",
+     "type": "intermediateCatchEvent",
+     "name": "B",
+     "marker": "timer"
+    },
+    {
+     "id": "ref_start_Pool_gw_eventbased_par",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_gw_eventbased_par",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_gw_eventbased_par_gw_eventbased_par",
+     "source": "src_gw_eventbased_par",
+     "target": "gw_eventbased_par"
+    },
+    {
+     "id": "f_gw_eventbased_par_a_gw_eventbased_par",
+     "source": "gw_eventbased_par",
+     "target": "a_gw_eventbased_par",
+     "label": "x"
+    },
+    {
+     "id": "f_gw_eventbased_par_b_gw_eventbased_par",
+     "source": "gw_eventbased_par",
+     "target": "b_gw_eventbased_par",
+     "label": "y"
+    }
+   ]
+  },
+  {
+   "id": "Pool_gw_eventbased_inst",
+   "name": "gw_eventbased_inst",
+   "nodes": [
+    {
+     "id": "src_gw_eventbased_inst",
+     "type": "task",
+     "name": "in gw_eventbased_inst"
+    },
+    {
+     "id": "gw_eventbased_inst",
+     "type": "eventBasedGateway",
+     "name": "eventbased_inst",
+     "instantiate": true
+    },
+    {
+     "id": "a_gw_eventbased_inst",
+     "type": "intermediateCatchEvent",
+     "name": "A",
+     "marker": "message"
+    },
+    {
+     "id": "b_gw_eventbased_inst",
+     "type": "intermediateCatchEvent",
+     "name": "B",
+     "marker": "timer"
+    },
+    {
+     "id": "ref_start_Pool_gw_eventbased_inst",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_gw_eventbased_inst",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_gw_eventbased_inst_gw_eventbased_inst",
+     "source": "src_gw_eventbased_inst",
+     "target": "gw_eventbased_inst"
+    },
+    {
+     "id": "f_gw_eventbased_inst_a_gw_eventbased_inst",
+     "source": "gw_eventbased_inst",
+     "target": "a_gw_eventbased_inst",
+     "label": "x"
+    },
+    {
+     "id": "f_gw_eventbased_inst_b_gw_eventbased_inst",
+     "source": "gw_eventbased_inst",
+     "target": "b_gw_eventbased_inst",
+     "label": "y"
+    }
+   ]
+  },
+  {
+   "id": "Pool_gw_complex",
+   "name": "gw_complex",
+   "nodes": [
+    {
+     "id": "src_gw_complex",
+     "type": "task",
+     "name": "in gw_complex"
+    },
+    {
+     "id": "gw_complex",
+     "type": "complexGateway",
+     "name": "complex"
+    },
+    {
+     "id": "a_gw_complex",
+     "type": "task",
+     "name": "A"
+    },
+    {
+     "id": "b_gw_complex",
+     "type": "task",
+     "name": "B"
+    },
+    {
+     "id": "ref_start_Pool_gw_complex",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_gw_complex",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_gw_complex_gw_complex",
+     "source": "src_gw_complex",
+     "target": "gw_complex"
+    },
+    {
+     "id": "f_gw_complex_a_gw_complex",
+     "source": "gw_complex",
+     "target": "a_gw_complex",
+     "label": "x"
+    },
+    {
+     "id": "f_gw_complex_b_gw_complex",
+     "source": "gw_complex",
+     "target": "b_gw_complex",
+     "label": "y"
+    }
+   ]
+  },
+  {
+   "id": "Pool_dflt",
+   "name": "dflt",
+   "nodes": [
+    {
+     "id": "src_dflt",
+     "type": "task",
+     "name": "in default"
+    },
+    {
+     "id": "gw_dflt",
+     "type": "exclusiveGateway",
+     "name": "default flow"
+    },
+    {
+     "id": "a_dflt",
+     "type": "task",
+     "name": "cond"
+    },
+    {
+     "id": "b_dflt",
+     "type": "task",
+     "name": "default"
+    },
+    {
+     "id": "ref_start_Pool_dflt",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_dflt",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_dflt_gw_dflt",
+     "source": "src_dflt",
+     "target": "gw_dflt"
+    },
+    {
+     "id": "f_gw_dflt_a_dflt",
+     "source": "gw_dflt",
+     "target": "a_dflt",
+     "label": "x"
+    },
+    {
+     "id": "flow_default",
+     "source": "gw_dflt",
+     "target": "b_dflt",
+     "isDefault": true,
+     "label": "default"
+    }
+   ]
+  },
+  {
+   "id": "Pool_incl_dflt",
+   "name": "incl_dflt",
+   "nodes": [
+    {
+     "id": "src_incl",
+     "type": "task",
+     "name": "in"
+    },
+    {
+     "id": "gw_incl_dflt",
+     "type": "inclusiveGateway",
+     "name": "incl default"
+    },
+    {
+     "id": "a_incl",
+     "type": "task",
+     "name": "cond"
+    },
+    {
+     "id": "b_incl",
+     "type": "task",
+     "name": "default"
+    },
+    {
+     "id": "ref_start_Pool_incl_dflt",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_incl_dflt",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_src_incl_gw_incl_dflt",
+     "source": "src_incl",
+     "target": "gw_incl_dflt"
+    },
+    {
+     "id": "f_gw_incl_dflt_a_incl",
+     "source": "gw_incl_dflt",
+     "target": "a_incl",
+     "label": "x"
+    },
+    {
+     "id": "flow_default_incl",
+     "source": "gw_incl_dflt",
+     "target": "b_incl",
+     "isDefault": true
+    }
+   ]
+  },
+  {
+   "id": "Pool_Connectors",
+   "name": "Konnektoren",
+   "nodes": [
+    {
+     "id": "c_t1",
+     "type": "task",
+     "name": "source"
+    },
+    {
+     "id": "c_t2",
+     "type": "task",
+     "name": "plain target"
+    },
+    {
+     "id": "c_t3",
+     "type": "task",
+     "name": "conditional target"
+    },
+    {
+     "id": "c_t4",
+     "type": "task",
+     "name": "default target"
+    },
+    {
+     "id": "c_gw",
+     "type": "exclusiveGateway",
+     "name": "gw"
+    },
+    {
+     "id": "c_ann",
+     "type": "textAnnotation",
+     "name": "Annotation"
+    },
+    {
+     "id": "c_ann2",
+     "type": "textAnnotation",
+     "name": "Annotation 2"
+    },
+    {
+     "id": "m_thr",
+     "type": "intermediateThrowEvent",
+     "name": "throw",
+     "marker": "message"
+    },
+    {
+     "id": "ref_start_Pool_Connectors",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_Connectors",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "flow_plain",
+     "source": "c_t1",
+     "target": "c_t2"
+    },
+    {
+     "id": "flow_conditional",
+     "source": "c_t1",
+     "target": "c_t3",
+     "isConditional": true,
+     "label": "cond"
+    },
+    {
+     "id": "flow_to_gw",
+     "source": "c_t1",
+     "target": "c_gw"
+    },
+    {
+     "id": "flow_default_gw",
+     "source": "c_gw",
+     "target": "c_t4",
+     "isDefault": true
+    }
+   ]
+  },
+  {
+   "id": "Pool_Connectors2",
+   "name": "Nachrichtenfluss",
+   "nodes": [
+    {
+     "id": "m_send",
+     "type": "sendTask",
+     "name": "sender"
+    },
+    {
+     "id": "m_recv",
+     "type": "receiveTask",
+     "name": "receiver"
+    },
+    {
+     "id": "m_ev",
+     "type": "intermediateCatchEvent",
+     "name": "catch",
+     "marker": "message"
+    },
+    {
+     "id": "ref_start_Pool_Connectors2",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_Connectors2",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "f_m_send_m_ev",
+     "source": "m_send",
+     "target": "m_ev"
+    },
+    {
+     "id": "f_m_ev_m_recv",
+     "source": "m_ev",
+     "target": "m_recv"
+    }
+   ]
+  },
+  {
+   "id": "Pool_Data",
+   "name": "Daten & Artefakte",
+   "nodes": [
+    {
+     "id": "d_task",
+     "type": "task",
+     "name": "task"
+    },
+    {
+     "id": "data_object",
+     "type": "dataObjectReference",
+     "name": "Data Object"
+    },
+    {
+     "id": "data_collection",
+     "type": "dataObjectReference",
+     "name": "Data Collection",
+     "isCollection": true
+    },
+    {
+     "id": "data_store",
+     "type": "dataStoreReference",
+     "name": "Data Store"
+    },
+    {
+     "id": "text_annotation",
+     "type": "textAnnotation",
+     "name": "Text Annotation"
+    },
+    {
+     "id": "group_el",
+     "type": "group",
+     "name": "Group"
+    },
+    {
+     "id": "d_task2",
+     "type": "task",
+     "name": "grouped task"
+    },
+    {
+     "id": "ref_start_Pool_Data",
+     "type": "startEvent",
+     "name": "ref start"
+    },
+    {
+     "id": "ref_end_Pool_Data",
+     "type": "endEvent",
+     "name": "ref end"
+    }
+   ],
+   "edges": [
+    {
+     "id": "ref_f1_Pool_Data",
+     "source": "ref_start_Pool_Data",
+     "target": "d_task"
+    },
+    {
+     "id": "ref_f2_Pool_Data",
+     "source": "d_task",
+     "target": "ref_end_Pool_Data"
+    }
+   ]
+  }
+ ],
+ "collapsedPools": [
+  {
+   "id": "BlackBox",
+   "name": "Black Box"
+  }
+ ],
+ "messageFlows": [
+  {
+   "id": "mf_task",
+   "source": "m_send",
+   "target": "BlackBox",
+   "name": "to black box"
+  },
+  {
+   "id": "mf_ev",
+   "source": "BlackBox",
+   "target": "m_ev",
+   "name": "from black box"
+  }
+ ],
+ "associations": [
+  {
+   "id": "assoc_plain",
+   "source": "c_ann",
+   "target": "c_t2"
+  },
+  {
+   "id": "assoc_directed",
+   "source": "c_t3",
+   "target": "c_ann2",
+   "directed": true
+  },
+  {
+   "id": "dassoc_in",
+   "source": "data_object",
+   "target": "d_task",
+   "directed": true
+  },
+  {
+   "id": "dassoc_out",
+   "source": "d_task",
+   "target": "data_collection",
+   "directed": true
+  },
+  {
+   "id": "dassoc_store",
+   "source": "data_store",
+   "target": "d_task",
+   "directed": true
+  },
+  {
+   "id": "assoc_note",
+   "source": "text_annotation",
+   "target": "d_task2"
+  }
+ ]
+}

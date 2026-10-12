@@ -811,7 +811,8 @@ export const OMG_EDGE_FIELD_SCOPE = [
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'writeSite', roundTrip: 'lossy',
     reason: 'The label is also FABRICATED INTO `condition`: when the source is a diverging XOR or '
       + 'OR gateway and the edge is not the default, `buildProcess` copies `label` into a '
-      + '`<bpmn:conditionExpression>` (bpmn-xml.js, the `needsCondition` branch). The label itself '
+      + '`<bpmn:conditionExpression>` (`resolveFlowSemantics` in topology.js, which bpmn-xml.js '
+      + 'writes from). The label itself '
       + 'survives as `name`, but the re-imported Logic-Core carries a `condition` the author never '
       + 'wrote, so LC -> XML -> LC is not idempotent for such an edge. At depth >= 1 nothing is '
       + 'fabricated, because the child-edge branch of `buildFlowNode` writes no '
@@ -838,11 +839,12 @@ export const OMG_EDGE_FIELD_SCOPE = [
       + '`buildProcess` then writes `default` onto that element whatever it is.' },
   { field: 'isConditional', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: domain('Edge', 'isConditional'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
-    reason: 'Render-only: `svg.js` draws the conditional-flow diamond at the source end and '
-      + 'nothing serialises it, so the preview is right and every real tool sees an ordinary flow. '
-      + 'OMG expresses it as the PRESENCE of a conditionExpression on a flow leaving an Activity, '
-      + 'so implementing it means emitting one. Decided and queued (plan "Root fix", backlog '
-      + 'item 6).' },
+    reason: 'Without effect, by decision (#84): OMG expresses a conditional flow as the PRESENCE '
+      + 'of a conditionExpression on a flow leaving an Activity, so the flag itself has nothing to '
+      + 'serialise. The marker follows the condition instead — `svg.js` draws the diamond exactly '
+      + 'where `resolveFlowSemantics` gives the flow a conditionExpression and the source is an '
+      + 'Activity, as bpmn-js does. Author `condition` to get both; `isConditional` alone used to '
+      + 'draw a diamond the XML did not carry, and now draws nothing.' },
   { field: 'isHappyPath', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: domain('Edge', 'isHappyPath'), scope: 'a FlowNode',
     shape: 'layoutOnly', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Layout input, not model content: `topology.js`\'s `identifyHappyPathNodes` reads it to '
