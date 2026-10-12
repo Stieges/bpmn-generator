@@ -107,11 +107,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A Business Rule Task's decision table in its BPMN documentation.** `runPipeline(lc, { decisions:
   [DecisionCore…] })`, CLI `node bpmn/pipeline.js lc.json out --decisions a.json,b.dmn` (`.dmn`
   imported, routed by content): every `businessRuleTask` with a `decisionRef` gets a plain-text
-  section — title, hit policy, an aligned table (one sentence per rule above 100 characters) —
-  between `=== BEGIN generated: DMN decision …` / `=== END …` marker lines, after the author's own
+  section — title, hit policy, one sentence per rule — between `=== BEGIN generated: DMN decision …` / `=== END …` marker lines, after the author's own
   documentation. Every run replaces the section, so import → regenerate never duplicates it (both
-  importers keep it as text). Matching is `scenarios/bridge.js`'s; an unresolved reference reads
-  "Calls decision: <ref> (table not supplied)". The SVG tooltip and the `--doc` Markdown show it.
+  importers keep it as text). The rules are written as sentences ("Rule 1: WHEN Claim amount < 1000
+  THEN level = "auto""), not as an aligned table, which falls apart in the proportional font of
+  Camunda's properties panel. A decision decided by a literal expression shows its type and FEEL
+  text — here and in the `--doc` Markdown, table SVG and HTML. Matching is `scenarios/bridge.js`'s,
+  with a new `includeLiteralExpressions` option the scenario pipeline leaves off (SC02/SC03 keep
+  their meaning); an unresolved reference reads "Calls decision: <ref> (table not supplied)". The
+  SVG tooltip and the `--doc` Markdown show it.
   Without `decisions` the output is byte-identical (goldens and the output-hash fence unchanged).
   `bpmn/pipeline.js` now imports `cross/decision-doc.js` — the one import outside `bpmn/`, fenced so
   that no DMN or cross-notation rule module is in `runPipeline`'s import closure.
@@ -1392,6 +1396,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Things this release deliberately leaves open. They are listed here because the CHANGELOG is what a
 release reader sees, and each of them is a gap someone could otherwise mistake for a guarantee.
 
+- **elkjs mis-lays-out a `structuredClone`-built graph under Jest.** Under Jest's VM modules (how
+  `npm test` runs), `structuredClone` creates its objects in Node's outer realm, and the bundled
+  elkjs lays such a graph out differently, or — fully cloned — not at all (no coordinates). Plain
+  `node` is unaffected (one realm), so this is not a production defect; it surfaced when a first
+  draft of `cross/decision-doc.js` cloned with `structuredClone` and changed the BPMN layout in
+  tests only. The pipeline clones Logic-Core with `JSON.parse(JSON.stringify(…))`. Minimal
+  reproduction, skipped by design: `scripts/bpmn/elk-realm.test.js`.
+- **SC02 reports a `decisionRef` to a decision decided by a literal expression** as resolving to no
+  decision, because the scenario pipeline's bridge matches decision tables only. Kept as it is on
+  purpose (SC02/SC03 and the table analysis are defined over tables); the documentation section of
+  `--decisions` does show such a decision.
 - **Multiple and parallel-multiple events are drawn but not serialised (#87).** The SVG shows the
   pentagon or plus; the XML carries no event definition, so bpmn.io shows a plain event. The
   symbol-fidelity fence pins the difference, so the fix will turn it red.
