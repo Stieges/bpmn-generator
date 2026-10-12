@@ -38,8 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { enumerateCollaboration } from './collaboration.js';
 import { analyzeDecisionTable } from './decision-table.js';
 import { resolveBridge } from './bridge.js';
-import { validateDecisionCoreSchema } from '../dmn/schema-gate.js';
-import { dmnToDecisionCore, formatImportReport, NOT_DMN_ROOT } from '../dmn/import.js';
+import { loadDecisionFile, decisionPaths } from '../dmn/load-decisions.js';
 import { formatCollaborationResult, describeEnumerationCompleteness } from './format.js';
 import { withProcessId } from '../bpmn/topology.js';
 import { runBpmnScenarioRules } from '../bpmn/scenario-rules.js';
@@ -226,41 +225,6 @@ async function readJsonInput(arg, { allowStdin = true } = {}) {
   return JSON.parse(raw);
 }
 
-/**
- * Load one `--decisions` entry. The format is decided by the CONTENT — first non-whitespace
- * character `<` means XML, anything else JSON — never by the extension, which lies in both
- * directions. A DMN import prints its report unconditionally (stderr) and hands its finding count
- * back so `--strict` can fold it in.
- *
- * @returns {Promise<{ dc: object, importFindings: number }>}
- */
-async function loadDecisionFile(p) {
-  const raw = readFileSync(resolve(p), 'utf8');
-  // A UTF-8 BOM (U+FEFF) is what Windows editors prepend; JSON.parse rejects it.
-  const text = raw.replace(/^\uFEFF/, '');
-  if (!text.trimStart().startsWith('<')) {
-    try {
-      return { dc: JSON.parse(text), importFindings: 0 };
-    } catch (e) {
-      throw new Error(`${p} is not valid JSON (${e.message})`);
-    }
-  }
-
-  const { dc, report } = await dmnToDecisionCore(text);
-  if (!dc) {
-    const first = report.parserWarnings[0] ?? '';
-    throw new Error(NOT_DMN_ROOT.test(first)
-      ? `${p} is not a DMN document (well-formed XML, but the root is not DMN 1.3 <definitions>)`
-      : `${p} is not XML (${first.split('\n').pop().trim() || 'parse failed'})`);
-  }
-  console.error(formatImportReport(report, { file: p }));
-  const gate = validateDecisionCoreSchema(dc);
-  if (!gate.valid) {
-    throw new Error(`${p}: the imported Decision-Core fails its schema (${gate.errors.map((e) => `${e.path} ${e.message}`).join('; ')})`);
-  }
-  return { dc, importFindings: report.lossless ? 0 : Math.max(1, report.counts.unrepresented) };
-}
-
 async function main() {
   const args = process.argv.slice(2);
   const positional = [];
@@ -304,7 +268,7 @@ async function main() {
   const decisionCores = [];
   let importFindings = 0;
   if (decisionsArg) {
-    const paths = decisionsArg.split(',').map((p) => p.trim()).filter(Boolean);
+    const paths = decisionPaths(decisionsArg);
     for (const p of paths) {
       try {
         const loaded = await loadDecisionFile(p);

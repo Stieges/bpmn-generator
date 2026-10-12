@@ -65,14 +65,29 @@ describe('import graph — the move adds no cycle', () => {
     .map((f) => ({ file: `${dir}/${f}`, specifiers: [...readFileSync(join(SCRIPTS, dir, f), 'utf8').matchAll(/^\s*(?:import|export)\s[^;]*?from\s+'([^']+)'/gm)].map((m) => m[1]) }));
   const offenders = (dir, forbidden) => sources(dir).filter((s) => s.specifiers.some((p) => forbidden.test(p))).map((s) => s.file);
 
-  test('bpmn/ imports neither dmn/, cross/ nor scenarios/', () => {
-    expect(offenders('bpmn', /^\.\.\/(dmn|cross|scenarios)\//)).toEqual([]);
+  test('bpmn/ imports neither dmn/, cross/ nor scenarios/ — except pipeline.js the decision-table text', () => {
+    // bpmn/pipeline.js -> cross/decision-doc.js writes a Business Rule Task's decision table into its
+    // documentation (runPipeline's `decisions` option). Text, not a rule: rule-catalog.test.js fences
+    // that no rule module outside bpmn/ is in runPipeline's import closure.
+    expect(offenders('bpmn', /^\.\.\/(dmn|cross|scenarios)\//)).toEqual(['bpmn/pipeline.js']);
+    const external = sources('bpmn').flatMap((s) => s.specifiers.filter((p) => /^\.\.\/(dmn|cross|scenarios)\//.test(p)));
+    expect(external).toEqual(['../cross/decision-doc.js']);
+  });
+  test('bpmn/ loads outside modules dynamically only for the CLI\'s --decisions files', () => {
+    const dynamic = readdirSync(join(SCRIPTS, 'bpmn')).filter((f) => f.endsWith('.js') && !f.endsWith('.test.js'))
+      .flatMap((f) => [...readFileSync(join(SCRIPTS, 'bpmn', f), 'utf8').matchAll(/import\(\s*'(\.\.\/[^']+)'\s*\)/g)].map((m) => `${f} -> ${m[1]}`));
+    expect(dynamic).toEqual(['pipeline.js -> ../dmn/load-decisions.js']);
   });
   test('dmn/ imports neither bpmn/, cross/ nor scenarios/', () => {
     expect(offenders('dmn', /^\.\.\/(bpmn|cross|scenarios)\//)).toEqual([]);
   });
-  test('cross/ imports only shared/', () => {
-    expect(sources('cross').flatMap((s) => s.specifiers)).toEqual(['../shared/rule-catalog.js']);
+  test('cross/rules.js imports only shared/; cross/decision-doc.js only the table text, the bridge and the gate', () => {
+    const byFile = Object.fromEntries(sources('cross').map((s) => [s.file, s.specifiers]));
+    expect(Object.keys(byFile).sort()).toEqual(['cross/decision-doc.js', 'cross/rules.js']);
+    expect(byFile['cross/rules.js']).toEqual(['../shared/rule-catalog.js']);
+    expect(byFile['cross/decision-doc.js'].sort()).toEqual([
+      '../dmn/constants.js', '../dmn/schema-gate.js', '../dmn/table-text.js', '../dmn/table.js', '../scenarios/bridge.js',
+    ]);
   });
   test('scenarios/pipeline.js is the one caller of the three scenario rule modules', () => {
     const callers = ['bpmn', 'dmn', 'cross', 'scenarios', 'shared'].flatMap(sources)
