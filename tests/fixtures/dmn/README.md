@@ -38,7 +38,7 @@ attribute for it).
 
 `hitPolicy` and `preferredOrientation` are both declared `use="optional"` with an explicit XSD
 default (`UNIQUE`, `Rule-as-Row` respectively) — the schema treats them identically
-(`docs/superpowers/research/dmn13-xsd-ground-truth.md` §D8). Any asymmetry in what dmn-moddle emits
+(`references/omg-spec/normative/dmn/DMN13.xsd`). Any asymmetry in what dmn-moddle emits
 on write is **library behaviour**, not something the XSD justifies. Observed by running
 `dmn-moddle@12.0.1`'s `toXML` directly (Task 5, Step 3):
 

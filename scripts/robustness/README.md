@@ -10,7 +10,7 @@ export AIHUB_KEY=...
 node scripts/robustness/cli.js run --n=100
 ```
 
-See `docs/superpowers/specs/2026-05-16-pipeline-robustness-via-synthetic-data-design.md` for the full design.
+See `docs/ROBUSTNESS-STACK.md` for the full design.
 
 ## CLI
 

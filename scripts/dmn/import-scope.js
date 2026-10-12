@@ -747,7 +747,7 @@ export const DMN_ELEMENT_COVERAGE = [
     xsdElement: 'DMNShape', xsdFile: 'DMNDI13', moddleType: 'dmndi:DMNShape', disposition: 'reported', code: 'IM06',
     reason: 'A node\'s bounds on a diagram, plus `@isCollapsed` (whether a decision service is drawn '
       + 'collapsed) and the decision-service divider line. Worth naming `isCollapsed` explicitly: '
-      + 'docs/superpowers/plans/2026-07-30-dmn-integration.md Stage 5 instructs the importer to read '
+      + 'the DMN integration plan (Stage 5) instructed the importer to read '
       + 'it, and that instruction is VOID — Decision-Core has no `isCollapsed` property and its '
       + 'schema forbids extras, so there is no target for the read. It is moot twice over, since the '
       + 'only thing it can sit on is a <decisionService>, which is itself dropped.',

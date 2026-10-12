@@ -243,10 +243,10 @@ bpmn-generator/
 │   ├── prompt-template.md                LLM prompt templates + few-shot patterns
 │   ├── inline-template.md                HTML template for browser-side ElkJS
 │   ├── omg-spec/                         Normative DMN 1.3 XSDs
-│   └── review-set/                       Fixtures for visual review
+│   └── review-set/                       Third-party fixtures for visual review (sources and licenses in its README)
 ├── rules/                                Rule profiles (default, strict, DMN default/best-practice; custom/)
 ├── scripts/                              Pipeline modules (see above)
-├── docs/                                 Screenshots, guides, design specs and plans
+├── docs/                                 Screenshots and guides
 └── tests/
     ├── fixtures/                         Test inputs (Logic-Core, Decision-Core) + golden files
     └── bench/                            Benchmark outputs (e.g. the bpmn-auto-layout comparison)
@@ -406,8 +406,6 @@ const result = await runPipeline(logicCore, { visualRefinement: { laneCompaction
 ```
 
 `visualRefinement` is `true`, `false` or an object with the keys `laneCompaction` and `edgeLabelCollisionRepair` (booleans); any other key or a non-boolean value is rejected (`TypeError` in the library, `schema_error` over HTTP and MCP). The same option is accepted by `POST /api/v1/generate`, `POST /api/v1/orchestrate` and the MCP tools `generate_bpmn` and `orchestrate_bpmn` (schema `$defs/VisualRefinementOption` in [`references/api-schema.json`](references/api-schema.json)); `validate_bpmn` has no geometry and ignores it. Omitted, the `config.json` defaults apply.
-
-Design spec: [`docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md`](docs/superpowers/specs/2026-04-21-bpmn-visual-refinement-pass-design.md)
 
 ## Multi-Agent Orchestration
 
@@ -609,8 +607,7 @@ Currently covers Decision-Core validation, DRD layout, and DMN 1.3 serialization
 the DMN integration), plus import of DMN XML back to Decision-Core with a structured loss report.
 The importer reads no DMNDI, so every diagram is reported (IM06) and even a file this generator
 wrote imports as not lossless; `--strict` therefore suits foreign files. The tool surface (MCP,
-HTTP) is not yet implemented — see `docs/superpowers/plans/2026-07-30-dmn-integration.md` for
-what's still open.
+HTTP) is not yet implemented — see [ROADMAP.md](ROADMAP.md) for what's still open.
 
 ## Known Limitations
 

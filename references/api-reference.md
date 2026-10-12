@@ -160,8 +160,8 @@ curl -X POST http://localhost:3000/api/v1/generate \
 
 `scripts/dmn/di-check.js`'s `checkDmnDiagramIntegrity` plays the same role for a DRD that
 `di-check.js` plays for a BPMN diagram — its own code namespace so the two can appear side by side.
-Not yet reachable over HTTP or MCP (Stage 7 of `docs/superpowers/plans/2026-07-30-dmn-integration.md`
-adds the tool surface); today it is `runDmnPipeline(dc).diagnostics`, called directly or via the CLI
+Not yet reachable over HTTP or MCP (the DMN tool surface is still open, see `ROADMAP.md`);
+today it is `runDmnPipeline(dc).diagnostics`, called directly or via the CLI
 (`node dmn/pipeline.js`).
 
 | Code | Severity | Meaning |

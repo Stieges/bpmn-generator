@@ -20,7 +20,7 @@ import { orderedRequirements } from './requirement-order.js';
  * the source (e.g. an InputData) at the larger y and the target (e.g. the Decision that requires
  * it) at the smaller y, with no y-flip needed on this module's side — confirmed empirically against
  * this project's installed elkjs, both for a 3-node chain and for a branching graph (see
- * docs/superpowers/research/dmn-external-ground-truth.md §C.10 and layout.test.js).
+ * layout.test.js).
  *
  * @param {object} dc - Decision-Core JSON
  * @returns {object} ELK graph

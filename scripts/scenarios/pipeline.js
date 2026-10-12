@@ -1,8 +1,7 @@
 /**
  * Scenario-Enumeration Pipeline — Orchestrator + CLI + Public API (runScenarioPipeline).
  *
- * Phase F of `docs/superpowers/plans/2026-08-01-scenario-enumeration.md`. Mirrors
- * `scripts/dmn/pipeline.js`'s shape and idiom (which itself mirrors `scripts/bpmn/pipeline.js`):
+ * Mirrors `scripts/dmn/pipeline.js`'s shape and idiom (which itself mirrors `scripts/bpmn/pipeline.js`):
  * a pure orchestrator function plus a thin CLI wrapper around it. This module does ONLY
  * integration — it calls Tasks 1-6's six modules in the right order and assembles their
  * outputs. No new computation, no new judgment: any check that looks like a decision belongs

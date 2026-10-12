@@ -2,8 +2,7 @@
  * Phase A — scenario enumeration tests.
  *
  * The scenario counts asserted here are hand-traced, not recorded from a run. Where one
- * of them fails, the traversal is wrong, not the expectation — see the report at
- * .superpowers/sdd/2026-08-01-scenario-enumeration/task-1-report.md for the traces.
+ * of them fails, the traversal is wrong, not the expectation.
  */
 
 import { describe, test, expect } from '@jest/globals';

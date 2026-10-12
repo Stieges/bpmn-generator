@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Pipeline Robustness CLI.
- * See docs/superpowers/specs/2026-05-16-pipeline-robustness-via-synthetic-data-design.md
+ * See docs/ROBUSTNESS-STACK.md for the design.
  */
 
 import { readFileSync } from 'fs';
