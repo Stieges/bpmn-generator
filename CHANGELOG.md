@@ -1246,6 +1246,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **`SKILL.md` advises what to build.** New section "Advising the user: what to build, and how":
+  pools, lanes, roles and IT systems by purpose of the diagram (business, integration, audit), and
+  a "Which construct when" table (subprocess kinds, gateways and their pairing, exception handling,
+  timers, message events vs. send/receive tasks, loops, task types, data and annotations, level of
+  detail) naming the rule that warns on a wrong choice. The skill asks for the diagram's purpose
+  when the text leaves it open. The title drops its old version ("BPMN Generator").
 - **The npm package no longer ships `robustness/`.** The benchmark subsystem writes its fixtures
   and reports to `../../tests` and only works in a repository checkout; nothing else in the package
   imports it (checked against the import closure of every file `npm pack` includes). Run it from a
