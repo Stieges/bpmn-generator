@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0-rc.2] - 2026-10-12
+
+Second release candidate, published as a GitHub pre-release only (not on npm). It fixes the
+LLM path (text → BPMN): the extraction prompt contradicted the input schema, refined and amended
+models skipped the schema gate, and the agents judged by different rule profiles. It adds retry
+against an unstable LLM endpoint, a measure of extraction quality, two lane rules and opt-in
+aligned message-flow ports.
+
+### Changes from rc.1 to watch for
+
+- **Two new style rules, M12 and M13** (WARNING). An empty lane, a step without a lane, or a lane
+  that is not declared is now reported. With `--strict` (or a profile that raises them) such a
+  model is refused where rc.1 let it pass. No committed fixture has a finding. Switch them off in a
+  profile (`"overrides": { "M12": { "severity": "OFF" }, "M13": { "severity": "OFF" } }`) if you
+  need rc.1's behaviour.
+- **The orchestrator's reviewer and layout pass apply the caller's `ruleProfile` and `mode`**, as
+  compliance already did. Under a stricter profile, `/api/v1/orchestrate` and `orchestrate_bpmn`
+  now refine on the profile's errors, and `validation` agrees with `compliance`.
+- **LLM calls are retried** (3 retries with backoff by default, `config.json → llm.retry`). A request
+  to `/api/v1/orchestrate` or `/api/v1/chat` against a failing endpoint now takes longer before it
+  answers `502 llm_error`: up to `(retries + 1) × timeout` plus the waits.
+- **`schema_error` responses list the errors of the intended root shape only** (a Logic-Core with
+  `pools` is judged as a collaboration). The response format is unchanged.
+- **Default diagram output is unchanged.** Aligned message-flow ports are opt-in
+  (`layout.alignParticipantPorts`, default `false`).
+
 ### Fixed
 
 - **The extraction prompt contradicted the input schema.** The Master Extraction Prompt (the part
