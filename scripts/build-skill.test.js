@@ -1,6 +1,12 @@
 import { describe, test, expect } from '@jest/globals';
 import path from 'path';
-import { hasSegment, includeScriptFile, includeReferenceFile } from './build-skill.mjs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { fileURLToPath } from 'url';
+import {
+  hasSegment, includeScriptFile, includeReferenceFile,
+  collectIncludes, skillEntryPoints, relativeImports, reachableModules,
+} from './build-skill.mjs';
 
 // The skill bundle's exclusions must hold on Windows too: a substring test for '/node_modules/'
 // never matches a backslash-separated path, and the bundle then carried all of node_modules.
@@ -44,4 +50,77 @@ describe('build-skill — path-segment exclusions are platform-independent', () 
       expect(includeReferenceFile('input-schema.json', 'input-schema.json')).toBe(true);
     });
   }
+});
+
+// The bundle must be able to import its own entry points. The earlier rule (every .js except
+// agents/ and robustness/) shipped orchestrator.js, http-server.js and mcp-bpmn-server.js,
+// which all import agents/, so three bundled scripts failed at import.
+describe('build-skill — the bundle is closed under its own imports', () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const files = collectIncludes(repoRoot);
+  const bundled = new Set(files);
+
+  test('every CLI SKILL.md tells the skill to run is bundled', () => {
+    const entries = skillEntryPoints(readFileSync(path.join(repoRoot, 'SKILL.md'), 'utf8'));
+    expect(entries).toEqual(expect.arrayContaining(['bpmn/pipeline.js', 'bpmn/import.js', 'bpmn/redesign-cli.js']));
+    for (const e of entries) expect(bundled).toContain(`scripts/${e}`);
+  });
+
+  test('every module a bundled module imports is bundled too', () => {
+    const missing = [];
+    for (const f of files.filter(f => f.endsWith('.js'))) {
+      const src = readFileSync(path.join(repoRoot, f), 'utf8');
+      for (const spec of relativeImports(src)) {
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(f), spec));
+        if (!bundled.has(target)) missing.push(`${f} -> ${target}`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  test('the bundle contains every module reachable from the bundled entry points', () => {
+    const entries = files.filter(f => f.startsWith('scripts/') && f.endsWith('.js'))
+      .map(f => f.slice('scripts/'.length));
+    for (const m of reachableModules(path.join(repoRoot, 'scripts'), entries)) {
+      expect(bundled).toContain(`scripts/${m}`);
+    }
+  });
+
+  test('the runtime-read files ship; the agent-dependent servers and agents/ do not', () => {
+    for (const f of ['scripts/config.json', 'scripts/package.json',
+      'references/input-schema.json', 'references/ontology.jsonld', 'references/prompt-template.md']) {
+      expect(bundled).toContain(f);
+    }
+    for (const f of ['scripts/orchestrator.js', 'scripts/http-server.js', 'scripts/mcp-bpmn-server.js']) {
+      expect(bundled).not.toContain(f);
+    }
+    expect(files.filter(f => hasSegment(f, 'agents') || hasSegment(f, 'robustness') || f.endsWith('.test.js')))
+      .toEqual([]);
+  });
+
+  test('relativeImports sees static, re-export and literal dynamic imports, not bare specifiers', () => {
+    const src = "import a from './a.js';\nimport { b } from '../b.js';\nexport { c } from './c.js';\n" +
+      "const d = await import('./d.js');\nimport e from 'elkjs';\nimport f from 'node:fs';";
+    expect(relativeImports(src).sort()).toEqual(['../b.js', './a.js', './c.js', './d.js']);
+  });
+
+  const fakeRepo = (entrySrc, extra = {}) => {
+    const root = mkdtempSync(path.join(tmpdir(), 'skill-'));
+    mkdirSync(path.join(root, 'scripts', 'agents'), { recursive: true });
+    mkdirSync(path.join(root, 'references'));
+    writeFileSync(path.join(root, 'SKILL.md'), 'Run `node entry.js in out`.');
+    writeFileSync(path.join(root, 'scripts', 'entry.js'), entrySrc);
+    for (const [rel, src] of Object.entries(extra)) writeFileSync(path.join(root, 'scripts', rel), src);
+    return root;
+  };
+
+  test('an entry point that reaches an excluded module aborts the build', () => {
+    const root = fakeRepo("import { x } from './agents/x.js';\n", { 'agents/x.js': 'export const x = 1;\n' });
+    expect(() => collectIncludes(root)).toThrow(/agents\/x\.js/);
+  });
+
+  test('an import of a file that does not exist aborts the build', () => {
+    const root = fakeRepo("import { y } from './gone.js';\n");
+    expect(() => collectIncludes(root)).toThrow(/gone\.js is imported but does not exist/);
+  });
 });
