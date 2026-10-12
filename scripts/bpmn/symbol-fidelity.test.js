@@ -29,6 +29,9 @@ import path from 'path';
 import { BpmnModdle } from 'bpmn-moddle';
 
 import { runPipeline } from './pipeline.js';
+import { generateSvg } from './svg.js';
+import { generateBpmnXml } from './bpmn-xml.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
 import { SYM, SHAPE } from './constants.js';
 import {
   renderEventMarker, renderTaskIcon, renderGatewaySymbol, renderDataObjectShape,
@@ -635,5 +638,41 @@ describe('#86 — artifacts stay inside their participant', () => {
     const g = r.coordMap.coords.block;
     expect({ w: g.w, h: g.h }).toEqual({ w: SHAPE.group.w, h: SHAPE.group.h });
     expect(SHAPE.group.w * SHAPE.group.h).toBeLessThanOrEqual(200 * 120);
+  });
+});
+
+describe('element colours are validated and escaped', () => {
+  // A value that would end an attribute if it were written raw.
+  const quoted = '#fff" data-x="1<';
+  const model = (color) => ({
+    id: 'P', nodes: [
+      { id: 's', type: 'startEvent', color },
+      { id: 't', type: 'userTask', name: 'Pruefen', color, loopType: 'standard' },
+      { id: 'g', type: 'exclusiveGateway', color },
+      { id: 'd', type: 'dataObjectReference', name: 'Akte', color },
+      { id: 'e', type: 'endEvent', marker: 'message', color },
+    ],
+    edges: [{ id: 'f1', source: 's', target: 't' }, { id: 'f2', source: 't', target: 'g' }, { id: 'f3', source: 'g', target: 'e' }],
+  });
+
+  test('the schema gate accepts hex colours and refuses anything else', () => {
+    expect(validateLogicCoreSchema(model({ fill: '#ffe0b2', stroke: '#E65100' })).valid).toBe(true);
+    expect(validateLogicCoreSchema(model({ fill: '#abc' })).valid).toBe(true);
+    for (const v of [quoted, 'red', 'rgb(0,0,0)', '#ffff', '']) {
+      expect([v, validateLogicCoreSchema(model({ fill: v })).valid]).toEqual([v, false]);
+    }
+  });
+
+  test('a colour that bypassed the gate reaches no attribute unescaped — SVG and BPMN XML', async () => {
+    const good = await runPipeline(model({ fill: '#ffe0b2', stroke: '#e65100' }));
+    // The same geometry, the model's colours swapped after layout: the renderers alone are under test.
+    const lc = model({ fill: quoted, stroke: quoted });
+    const svg = generateSvg(JSON.parse(JSON.stringify(lc)), good.coordMap);
+    expect(svg.includes(quoted)).toBe(false);
+    expect(svg).toContain('#fff&quot; data-x=&quot;1&lt;');
+    const xml = await generateBpmnXml(JSON.parse(JSON.stringify(lc)), good.coordMap);
+    expect(xml.includes(quoted)).toBe(false);
+    // bpmn-moddle escapes attribute values itself (as character references).
+    expect(xml).toMatch(/bioc:fill="#fff(?:&#34;|&quot;) data-x=(?:&#34;|&quot;)1(?:&lt;|&#60;)"/);
   });
 });

@@ -16,6 +16,7 @@
  */
 
 import { CLR } from './constants.js';
+import { esc } from '../shared/utils.js';
 import { scaledPath, num } from './pathmap.js';
 
 /**
@@ -23,7 +24,8 @@ import { scaledPath, num } from './pathmap.js';
  * `getFillColor`, which colour an icon like the element that carries it.
  */
 function palette(col) {
-  return { S: col?.stroke || CLR.stroke, F: col?.fill || CLR.fill };
+  // Escaped here, once: every colour this module writes goes into an attribute.
+  return { S: esc(col?.stroke || CLR.stroke), F: esc(col?.fill || CLR.fill) };
 }
 
 /** `path`/`circle` bound to one element's palette, so every glyph part is coloured like it. */

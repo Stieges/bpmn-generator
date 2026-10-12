@@ -140,6 +140,7 @@
     "fillOpacity": 0.95,
     "laneFillOpacity": 0.25,
     "connectionCornerRadius": 5,
+    "firstBaselineFactor": 0.75,
     "dash": {
       "nonInterrupting": "6",
       "eventSubProcess": "0, 5.5",

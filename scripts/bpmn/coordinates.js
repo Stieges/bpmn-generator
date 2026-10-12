@@ -682,6 +682,11 @@ function semanticShorten(line, maxLength) {
   return kept.join('');
 }
 
+/*
+ * edgeLabelLayout and semanticShorten port diagram-js 15.3.0 `lib/util/Text.js` (`layoutNext`,
+ * `semanticShorten`). Copyright (c) 2014-present Camunda Services GmbH, MIT license — see
+ * THIRD_PARTY_NOTICES.md.
+ */
 /**
  * An edge label's text layout: its lines (broken exactly as bpmn-js Text.js `layoutNext` breaks
  * them, with Arial widths instead of a DOM measurement) and the box they need, `w` × `h` px.

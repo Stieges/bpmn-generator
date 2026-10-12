@@ -162,10 +162,10 @@
         "has_join": { "type": "boolean", "description": "Hint for gateway direction inference" },
         "color": {
           "type": "object",
-          "description": "BPMN-in-Color (bioc:) visualization",
+          "description": "BPMN-in-Color (bioc:) visualization. CSS hex colours only (#rgb or #rrggbb).",
           "properties": {
-            "fill": { "type": "string" },
-            "stroke": { "type": "string" }
+            "fill": { "type": "string", "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" },
+            "stroke": { "type": "string", "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" }
           },
           "additionalProperties": false
         },
