@@ -139,6 +139,7 @@
     "_comment": "Look of the SVG renderer, aligned with bpmn-js 18.6.2 (lib/draw/BpmnRenderer.js, TextRenderer.js). Colour #22242a is bpmn-js's default stroke hsl(225, 10%, 15%).",
     "fillOpacity": 0.95,
     "laneFillOpacity": 0.25,
+    "connectionCornerRadius": 5,
     "dash": {
       "nonInterrupting": "6",
       "eventSubProcess": "0, 5.5",

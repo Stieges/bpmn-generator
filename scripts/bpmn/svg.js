@@ -233,10 +233,7 @@ function generateSvg(lc, coordMap) {
       const pts = edgeCoords?.[mfKey];
       if (!pts || pts.length < 2) continue;
 
-      const pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
-                    pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
-
-      out.push(`<path data-element-id="${esc(mfKey)}" d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.messageFlow}" fill="none" stroke-dasharray="${SYM.dash.messageFlow}" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
+      out.push(`<path data-element-id="${esc(mfKey)}" ${connectionPath(pts.map(p => ({ x: tx(p.x), y: ty(p.y) })))} stroke="${CLR.stroke}" stroke-width="${SW.messageFlow}" fill="none" stroke-dasharray="${SYM.dash.messageFlow}" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
       const L = mf.name ? edgeLabels?.[mfKey] : null;
       if (L) renderEdgeLabel(out, L, tx, ty);
     }
@@ -248,10 +245,8 @@ function generateSvg(lc, coordMap) {
     // Route from coordinates.js §5.4 — the same waypoints the DI gets.
     const pts = edgeCoords?.[assoc.id];
     if (!pts || pts.length < 2) continue;
-    const pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
-                  pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
     const markerEnd = assoc.directed ? ` marker-end="url(#assoc-end)"` : '';
-    out.push(`<path data-element-id="${esc(assoc.id)}" d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.association}" fill="none" stroke-dasharray="${SYM.dash.association}" stroke-linecap="round" stroke-linejoin="round"${markerEnd}/>`);
+    out.push(`<path data-element-id="${esc(assoc.id)}" ${connectionPath(pts.map(p => ({ x: tx(p.x), y: ty(p.y) })))} stroke="${CLR.stroke}" stroke-width="${SW.association}" fill="none" stroke-dasharray="${SYM.dash.association}" stroke-linecap="round" stroke-linejoin="round"${markerEnd}/>`);
   }
 
   out.push(`</svg>`);
@@ -343,15 +338,43 @@ function sequenceFlowSourceMarker(edge, source, { defaultBySource, conditionById
   return null;
 }
 
+/**
+ * A connection's `data-waypoints` and `d`: the waypoints exactly as coordMap/DI has them (canvas
+ * frame), and the path drawn through them with bpmn-js's rounded corners — diagram-js
+ * `createLine(points, attrs, radius)` / `drawPath`: at each bend the line stops `r` short of the
+ * corner (r = the configured radius, at most either neighbouring segment's length) and a cubic
+ * curve with control points at r/2 joins it to the next segment. The rounding is drawing only; the
+ * geometry contract is the waypoints, which is why they travel with the path.
+ */
+function connectionPath(points, radius = SYM.connectionCornerRadius) {
+  const len = (dx, dy) => Math.sqrt(dx * dx + dy * dy);
+  const at = (from, to, l) => {
+    const d = len(to.x - from.x, to.y - from.y);
+    return { x: from.x + (to.x - from.x) * (l / d), y: from.y + (to.y - from.y) * (l / d) };
+  };
+  const f = (p) => `${rn(p.x)} ${rn(p.y)}`;
+  const parts = [`M ${f(points[0])}`];
+  for (let i = 1; i < points.length; i++) {
+    const before = points[i - 1], point = points[i], after = points[i + 1];
+    const r = after && radius
+      ? Math.min(radius, len(point.x - before.x, point.y - before.y), len(after.x - point.x, after.y - point.y))
+      : 0;
+    if (!r) { parts.push(`L ${f(point)}`); continue; }
+    parts.push(`L ${f(at(point, before, r))}`);
+    parts.push(`C ${f(at(point, before, r * 0.5))} ${f(at(point, after, r * 0.5))} ${f(at(point, after, r))}`);
+  }
+  const waypoints = points.map(p => `${rn(p.x)},${rn(p.y)}`).join(' ');
+  return `data-waypoints="${waypoints}" d="${parts.join(' ')}"`;
+}
+
 function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels, sourceMarker) {
-  let pathD;
+  let points;
   if (pts.length >= 2) {
-    pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
-            pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
+    points = pts.map(p => ({ x: tx(p.x), y: ty(p.y) }));
   } else {
     const s = coords[edge.source], t = coords[edge.target];
     if (!s || !t) return;
-    pathD = `M ${tx(s.x + s.w/2)} ${ty(s.y + s.h/2)} L ${tx(t.x + t.w/2)} ${ty(t.y + t.h/2)}`;
+    points = [{ x: tx(s.x + s.w / 2), y: ty(s.y + s.h / 2) }, { x: tx(t.x + t.w / 2), y: ty(t.y + t.h / 2) }];
   }
 
   const markerEnd = `marker-end="url(#seq-end)"`;
@@ -359,7 +382,7 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels, sourceMa
                     : sourceMarker === 'conditional' ? `marker-start="url(#seq-conditional-src)"`
                     : '';
 
-  out.push(`<path data-element-id="${esc(edge.id)}" d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" stroke-linecap="round" stroke-linejoin="round" ${markerStart} ${markerEnd}/>`);
+  out.push(`<path data-element-id="${esc(edge.id)}" ${connectionPath(points)} stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" stroke-linecap="round" stroke-linejoin="round" ${markerStart} ${markerEnd}/>`);
 
   // Edge label — its box comes from coordMap.edgeLabels (coordinates.js placeEdgeLabel)
   const L = edge.label ? edgeLabels?.[edge.id] : null;

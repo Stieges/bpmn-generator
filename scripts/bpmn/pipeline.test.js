@@ -5720,15 +5720,17 @@ describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () 
 
 /** All connection polylines in an SVG, keyed by connection kind. */
 function svgConnections(svg) {
+  // The waypoints each connection carries in `data-waypoints` — the path itself rounds its corners
+  // (bpmn-js's corner radius), so its `d` is drawing, not geometry.
   const kinds = {
-    messageFlow: new RegExp(`<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="${CFG.symbols.dash.messageFlow}"`, 'g'),
-    association: new RegExp(`<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="${CFG.symbols.dash.association}"`, 'g'),
-    sequenceFlow: /<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*marker-end="url\(#seq-end\)"/g,
+    messageFlow: new RegExp(`<path data-element-id="[^"]*" data-waypoints="([^"]+)"[^>]*stroke-dasharray="${CFG.symbols.dash.messageFlow}"`, 'g'),
+    association: new RegExp(`<path data-element-id="[^"]*" data-waypoints="([^"]+)"[^>]*stroke-dasharray="${CFG.symbols.dash.association}"`, 'g'),
+    sequenceFlow: /<path data-element-id="[^"]*" data-waypoints="([^"]+)"[^>]*marker-end="url\(#seq-end\)"/g,
   };
   const out = {};
   for (const [kind, re] of Object.entries(kinds)) {
     out[kind] = [...svg.matchAll(re)].map(m =>
-      [...m[1].matchAll(/([-\d.]+) ([-\d.]+)/g)].map(p => [+p[1], +p[2]])
+      [...m[1].matchAll(/([-\d.]+),([-\d.]+)/g)].map(p => [+p[1], +p[2]])
     );
   }
   return out;
