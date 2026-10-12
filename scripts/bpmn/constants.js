@@ -22,6 +22,11 @@ export const MESSAGE_FLOW_FAN = CFG.layout.messageFlowFan;
 export const ARTIFACT_GAP = CFG.layout.artifactGap;
 /** The renderer's look — opacities, dash patterns, fonts — aligned with bpmn-js (config.json → symbols). */
 export const SYM = CFG.symbols;
+/**
+ * Where diagram-js Text.js puts a line's baseline: `lineHeight − lineHeight / 4` below the line's
+ * top, i.e. ¾ of a line height — the "magic number initial offset" of `layoutText`.
+ */
+export const FIRST_BASELINE = CFG.symbols.firstBaselineFactor;
 
 // artifactSize(node) lives in coordinates.js, next to the text layout a text annotation's size
 // depends on; layout.js imports it from there.

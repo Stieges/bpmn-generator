@@ -1259,6 +1259,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.json` (`color`, `strokeWidth`, `symbols`). The BPMN XML is unchanged; every SVG golden
   and every SVG hash changes. `symbol-fidelity.test.js` now also asserts stroke widths per class,
   dash patterns, and the order and x offset of every task marker, from bpmn-js's tables.
+- **Element colour values are validated and escaped.** `color.fill` and `color.stroke` (BPMN-in-Color)
+  must be CSS hex colours (`#rgb` or `#rrggbb`) — `references/input-schema.json` enforces it at the
+  schema gate — and the SVG renderer escapes every colour and dash value it writes into an attribute,
+  so a value that reaches it without passing the gate (a direct library call, an imported file) still
+  cannot leave its attribute. The BPMN XML was already safe: bpmn-moddle escapes attribute values.
+  A Logic-Core with a named or `rgb()` colour is now refused by the gate.
 - **Third-party notices.** `scripts/bpmn/pathmap.js` and parts of `icons.js` carry glyph data and
   renderer parameters from bpmn-js 18.6.2, `svg.js` and `coordinates.js` algorithms from diagram-js
   15.3.0 (both Camunda Services GmbH). Their license texts and the derived files are listed in

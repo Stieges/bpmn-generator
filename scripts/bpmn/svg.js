@@ -5,7 +5,7 @@
 
 import { assignEdgeIds, resolveFlowSemantics } from './topology.js';
 import { isEvent, isGateway, isActivity, isDataArtifact, nodeFieldSpec, writesIsInterrupting, CONTAINER_TYPES } from './types.js';
-import { CLR, SW, SYM, LANE_HEADER_W, TASK_RX, INNER_OUTER_GAP } from './constants.js';
+import { CLR as CLR_CONFIG, SW, SYM, LANE_HEADER_W, TASK_RX, INNER_OUTER_GAP, FIRST_BASELINE } from './constants.js';
 import { esc, rn } from '../shared/utils.js';
 import { edgeLabelBox, edgeLabelTextStyle, edgeLabelLayout, textAnnotationTextStyle } from './coordinates.js';
 
@@ -13,6 +13,14 @@ import {
   renderEventMarker, inferEventMarker, renderTaskIcon, renderTaskMarkers, renderGatewaySymbol,
   renderDataObjectShape, renderDataStoreShape, renderTextAnnotationShape,
 } from './icons.js';
+
+// Every colour and dash pattern this module writes lands in an attribute, so it is escaped here,
+// once, from config — and an element's own colour (`node.color`) through `colorsOf` below.
+const escValues = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, esc(v)])));
+const CLR = escValues(CLR_CONFIG);
+const DASH = escValues(SYM.dash);
+/** An element's fill and stroke: its own `color` (bioc), else config.json's — escaped. */
+const colorsOf = (node) => ({ fill: node.color?.fill ? esc(node.color.fill) : CLR.fill, stroke: node.color?.stroke ? esc(node.color.stroke) : CLR.stroke });
 
 /**
  * Return the effective lane-header strip width for a pool, preferring
@@ -233,7 +241,7 @@ function generateSvg(lc, coordMap) {
       const pts = edgeCoords?.[mfKey];
       if (!pts || pts.length < 2) continue;
 
-      out.push(`<path data-element-id="${esc(mfKey)}" ${connectionPath(pts.map(p => ({ x: tx(p.x), y: ty(p.y) })))} stroke="${CLR.stroke}" stroke-width="${SW.messageFlow}" fill="none" stroke-dasharray="${SYM.dash.messageFlow}" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
+      out.push(`<path data-element-id="${esc(mfKey)}" ${connectionPath(pts.map(p => ({ x: tx(p.x), y: ty(p.y) })))} stroke="${CLR.stroke}" stroke-width="${SW.messageFlow}" fill="none" stroke-dasharray="${DASH.messageFlow}" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
       const L = mf.name ? edgeLabels?.[mfKey] : null;
       if (L) renderEdgeLabel(out, L, tx, ty);
     }
@@ -246,7 +254,7 @@ function generateSvg(lc, coordMap) {
     const pts = edgeCoords?.[assoc.id];
     if (!pts || pts.length < 2) continue;
     const markerEnd = assoc.directed ? ` marker-end="url(#assoc-end)"` : '';
-    out.push(`<path data-element-id="${esc(assoc.id)}" ${connectionPath(pts.map(p => ({ x: tx(p.x), y: ty(p.y) })))} stroke="${CLR.stroke}" stroke-width="${SW.association}" fill="none" stroke-dasharray="${SYM.dash.association}" stroke-linecap="round" stroke-linejoin="round"${markerEnd}/>`);
+    out.push(`<path data-element-id="${esc(assoc.id)}" ${connectionPath(pts.map(p => ({ x: tx(p.x), y: ty(p.y) })))} stroke="${CLR.stroke}" stroke-width="${SW.association}" fill="none" stroke-dasharray="${DASH.association}" stroke-linecap="round" stroke-linejoin="round"${markerEnd}/>`);
   }
 
   out.push(`</svg>`);
@@ -307,7 +315,7 @@ function textLines(lines, cx, baseline, style, fill, extra = '') {
 function centredText(text, x, y, w, h, style, fill, padding = 0) {
   const lines = boxLines(text, style, w, padding);
   const lh = style.fontSize * style.lineHeight;
-  return textLines(lines, x + w / 2, y + (h - lines.length * lh) / 2 + 0.75 * lh, style, fill);
+  return textLines(lines, x + w / 2, y + (h - lines.length * lh) / 2 + FIRST_BASELINE * lh, style, fill);
 }
 
 /**
@@ -319,7 +327,7 @@ function stripLabel(text, x, y, strip, h, style, fill) {
   const lh = style.fontSize * style.lineHeight;
   const cy = rn(y + h / 2);
   return lines.map((line, i) => {
-    const bx = rn(x + (strip - lines.length * lh) / 2 + lh * (0.75 + i));
+    const bx = rn(x + (strip - lines.length * lh) / 2 + lh * (FIRST_BASELINE + i));
     return `<text x="${bx}" y="${cy}" text-anchor="middle" font-size="${style.fontSize}" fill="${fill}" transform="rotate(-90,${bx},${cy})">${esc(line)}</text>`;
   });
 }
@@ -338,6 +346,10 @@ function sequenceFlowSourceMarker(edge, source, { defaultBySource, conditionById
   return null;
 }
 
+/*
+ * connectionPath ports diagram-js 15.3.0 `lib/util/RenderUtil.js` (`drawPath`, `createLine`).
+ * Copyright (c) 2014-present Camunda Services GmbH, MIT license — see THIRD_PARTY_NOTICES.md.
+ */
 /**
  * A connection's `data-waypoints` and `d`: the waypoints exactly as coordMap/DI has them (canvas
  * frame), and the path drawn through them with bpmn-js's rounded corners — diagram-js
@@ -406,7 +418,7 @@ function drawLabelLines(out, centreX, top, lines, tx, ty) {
   const lineH = fontSize * lineHeight;
   const cx = rn(tx(centreX));
   const tspans = lines.map((line, i) =>
-    `<tspan x="${cx}" y="${rn(ty(top) + lineH * (0.75 + i))}">${esc(line)}</tspan>`).join('');
+    `<tspan x="${cx}" y="${rn(ty(top) + lineH * (FIRST_BASELINE + i))}">${esc(line)}</tspan>`).join('');
   out.push(`<text text-anchor="middle" font-size="${fontSize}" fill="${CLR.label}">${tspans}</text>`);
 }
 
@@ -432,8 +444,7 @@ function renderEvent(node, c, tx, ty, label, parent = null) {
   const type   = node.type;
   const x = tx(c.x), y = ty(c.y), w = c.w, h = c.h;
   const o      = [];
-  const fill   = node.color?.fill || CLR.fill;
-  const stroke = node.color?.stroke || CLR.stroke;
+  const { fill, stroke } = colorsOf(node);
 
   const isStart = type === 'startEvent';
   const isEnd   = type === 'endEvent';
@@ -448,7 +459,7 @@ function renderEvent(node, c, tx, ty, label, parent = null) {
     (node.cancelActivity === false && nodeFieldSpec('cancelActivity').allowed.has(type));
 
   const sw = isEnd ? SW.endEvent : isStart ? SW.startEvent : SW.intermediate;
-  const dash = isNonInterrupting ? ` stroke-dasharray="${SYM.dash.nonInterrupting}"` : '';
+  const dash = isNonInterrupting ? ` stroke-dasharray="${DASH.nonInterrupting}"` : '';
   const cx = rn(x + w / 2), cy = rn(y + h / 2);
   const r = Math.round((w + h) / 4);
 
@@ -477,8 +488,7 @@ function renderGateway(node, c, tx, ty, label) {
   const x = tx(c.x), y = ty(c.y), w = c.w, h = c.h;
   const cx = rn(x + w / 2), cy = rn(y + h / 2);
   const o = [];
-  const fill   = node.color?.fill || CLR.fill;
-  const stroke = node.color?.stroke || CLR.stroke;
+  const { fill, stroke } = colorsOf(node);
 
   o.push(`<polygon points="${cx},${y} ${rn(x + w)},${cy} ${cx},${rn(y + h)} ${x},${cy}" fill="${fill}" fill-opacity="${SYM.fillOpacity}" stroke="${stroke}" stroke-width="${SW.gateway}" stroke-linejoin="round"/>`);
   // `isMarkerVisible` is written on every exclusive gateway's DI (bpmn-xml.js buildNodeShapeDI).
@@ -498,8 +508,7 @@ function renderActivity(node, c, tx, ty) {
   const type = node.type || 'task';
   const x = tx(c.x), y = ty(c.y), w = c.w, h = c.h;
   const o = [];
-  const fill   = node.color?.fill || CLR.fill;
-  const stroke = node.color?.stroke || CLR.stroke;
+  const { fill, stroke } = colorsOf(node);
   const isTransaction = type === 'transaction';
   const isEventSub = !!node.isEventSubProcess;
 
@@ -507,7 +516,7 @@ function renderActivity(node, c, tx, ty) {
     : isEventSub ? SW.eventSubProcess
     : isTransaction ? SW.transaction : SW.task;
   // An event subprocess's frame is dotted: a zero-length dash with round caps.
-  const dash = isEventSub ? ` stroke-dasharray="${SYM.dash.eventSubProcess}" stroke-linecap="round"` : '';
+  const dash = isEventSub ? ` stroke-dasharray="${DASH.eventSubProcess}" stroke-linecap="round"` : '';
 
   o.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${TASK_RX}" ry="${TASK_RX}" fill="${fill}" fill-opacity="${SYM.fillOpacity}" stroke="${stroke}" stroke-width="${sw}"${dash}/>`);
 
@@ -522,7 +531,7 @@ function renderActivity(node, c, tx, ty) {
     // Title `center-top` (padding 7), regular weight, as bpmn-js's `renderEmbeddedLabel`
     const st = SYM.containerTitle;
     const lines = boxLines(node.name || '', st, w, st.padding);
-    o.push(...textLines(lines, x + w / 2, y + st.padding + 0.75 * st.fontSize * st.lineHeight, st, CLR.label));
+    o.push(...textLines(lines, x + w / 2, y + st.padding + FIRST_BASELINE * st.fontSize * st.lineHeight, st, CLR.label));
     const markers = renderTaskMarkers(node, w, h, { collapsed: false }, node.color);
     if (markers) o.push(`<g transform="translate(${x},${y})">${markers}</g>`);
     // Internal nodes and edges are rendered by the main generateSvg loop (coords are absolute)
@@ -545,7 +554,7 @@ function renderDataArtifact(node, c, tx, ty, label) {
   const type = node.type;
   const x = tx(c.x), y = ty(c.y), w = c.w, h = c.h;
   const o = [];
-  const stroke = node.color?.stroke || CLR.stroke;
+  const { stroke } = colorsOf(node);
 
   if (type === 'dataObjectReference') {
     // 'bpmn:DataObject' — folded page; a collection adds three bars
@@ -562,14 +571,14 @@ function renderDataArtifact(node, c, tx, ty, label) {
     const st = textAnnotationTextStyle();
     const lh = st.fontSize * st.lineHeight;
     const lines = c.lines ?? [node.name || ''];
-    lines.forEach((line, i) => o.push(`<text x="${rn(x + st.padding)}" y="${rn(y + st.padding + lh * (0.75 + i))}" font-size="${st.fontSize}" fill="${CLR.label}">${esc(line)}</text>`));
+    lines.forEach((line, i) => o.push(`<text x="${rn(x + st.padding)}" y="${rn(y + st.padding + lh * (FIRST_BASELINE + i))}" font-size="${st.fontSize}" fill="${CLR.label}">${esc(line)}</text>`));
   } else if (type === 'group') {
     // 'bpmn:Group' — dashed rounded frame; its name is an external label centred on the top edge
     // (bpmn-js `getExternalLabelMid` for a Group), first baseline ¾ of a line below the frame top.
-    o.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${TASK_RX}" ry="${TASK_RX}" fill="none" stroke="${stroke}" stroke-width="${SW.group}" stroke-dasharray="${SYM.dash.group}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    o.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${TASK_RX}" ry="${TASK_RX}" fill="none" stroke="${stroke}" stroke-width="${SW.group}" stroke-dasharray="${DASH.group}" stroke-linecap="round" stroke-linejoin="round"/>`);
     const st = SYM.externalText;
-    const lines = edgeLabelLayout(node.name || '').lines.filter(Boolean);
-    o.push(...textLines(lines, x + w / 2, y + 0.75 * st.fontSize * st.lineHeight, st, CLR.label));
+    const lines = edgeLabelLayout(node.name || '', { ...edgeLabelTextStyle(), fontSize: st.fontSize, lineHeight: st.lineHeight }).lines.filter(Boolean);
+    o.push(...textLines(lines, x + w / 2, y + FIRST_BASELINE * st.fontSize * st.lineHeight, st, CLR.label));
   }
 
   return o.join('\n');
