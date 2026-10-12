@@ -511,6 +511,7 @@ subset; [references/api-reference.md](references/api-reference.md) lists them pe
 |---|---|
 | `BPMN_API_KEY` | API key, sent as the `X-API-Key` header and compared in constant time. Required when `NODE_ENV=production` — the server refuses to start without it; optional in development |
 | `LLM_BASE_URL_ALLOWLIST` | Comma-separated origins a client may name as `llmConfig.baseUrl`; empty (default) refuses every client `baseUrl` with a `400`. Without one the server's `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` apply |
+| `LLM_EXTRA_BODY` | JSON object of extra request fields for the server's own LLM endpoint, e.g. `{"chat_template_kwargs":{"enable_thinking":false}}` to switch a thinking model off. Never taken from a client's `llmConfig`; a value that is not a JSON object fails the request |
 | `TRUST_PROXY_HOPS` | Number of trusted reverse proxies; the rate limit then keys on the address they recorded in `X-Forwarded-For`. Set it only when the server is reachable exclusively through those proxies |
 | `AUDIT_LOG_PATH` | Audit log file (default below) |
 | `DEAD_LETTER_PATH` | Dead-letter directory (default below) |
