@@ -478,7 +478,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nowhere, so bpmn.io and Camunda showed an interrupting start event. `bpmn-xml.js` now writes
   `isInterrupting="false"` at every nesting depth (only `false`: `true` is the XSD default, like
   `cancelActivity`), both importers read it back, and the field-fidelity fence covers it (row
-  `isInterrupting`, `roundTrip: 'lossy'` — a literal `true` comes back absent).
+  `isInterrupting`, `roundTrip: 'lossy'` — a literal `true` comes back absent). Only on the start
+  event of an event subprocess, the one place OMG gives the attribute meaning (§10.3.5); a `false`
+  anywhere else is dropped, not drawn dashed, and reported by S15.
 - **SVG and XML agree on conditional and default flows (#84, #85).** Which sequence flows carry a
   `conditionExpression` and which one is its source's `default` is now decided once, in
   `resolveFlowSemantics` (`scripts/bpmn/topology.js`); `bpmn-xml.js` writes from it and `svg.js`
@@ -488,8 +490,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the default the serialiser infers on an unmarked diverging XOR/OR gateway. A flow marked
   `isConditional` with a `label` and no `condition` now gets the label as its conditionExpression
   body, so both renderers show it as conditional; `isConditional` with neither has nothing to write
-  and draws nothing. The slash and the diamond have bpmn-js's geometry and size; the slash used to
-  sit on the source point, inside the gateway outline.
+  and draws nothing. A condition is written only where OMG admits one (§10.3.1): on a flow leaving
+  an Activity or an exclusive, inclusive or complex gateway — a flow leaving a parallel or
+  event-based gateway or an event gets none, whatever was authored. A default flow gets none either:
+  OMG ignores its condition (§10.5), so the default wins. S15 reports a condition either limit
+  drops. The slash and the diamond have bpmn-js's geometry and size; the slash used to sit on the
+  source point, inside the gateway outline.
 - **Conditions and default flows inside a subprocess are written and read back.** A container's
   flows were written with id, name, source and target only, so `condition` and `isDefault` were
   lost at every depth below the process. They now come from the same decision as a process's flows
@@ -1206,9 +1212,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
-- **Every SVG element carries its id.** A node's markup is one `<g data-element-id="…">` group and a
-  connection's path has a `data-element-id` attribute, as in bpmn-js, so a consumer can find an
-  element without re-deriving its geometry. Nothing is drawn differently; every SVG golden changes.
+- **Every node and connection in the SVG carries its id.** A node's markup (event, gateway,
+  activity, data object/store, annotation, group) is one `<g data-element-id="…">` group, and the
+  path of a sequence flow, message flow or association has a `data-element-id` attribute, as in
+  bpmn-js, so a consumer can find an element without re-deriving its geometry. Pools, lanes, edge
+  labels and the canvas carry none. Nothing is drawn differently; every SVG golden changes.
 - **An unattached group has a bounded default size (#86):** `config.json → shape.group` is 200 × 120
   (was 300 × 300, which made a one-task participant several times taller than its content).
 - **The SVG's symbols are fenced against bpmn-js.** `scripts/bpmn/symbol-fidelity.test.js` derives,
@@ -1278,7 +1286,7 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 - **Multiple and parallel-multiple events are drawn but not serialised (#87).** The SVG shows the
   pentagon or plus; the XML carries no event definition, so bpmn.io shows a plain event. The
   symbol-fidelity fence pins the difference, so the fix will turn it red.
-- **`isAdHoc` is drawn but not serialised.** The SVG draws the tilde; the XML has a plain
+- **`isAdHoc` is drawn but not serialised (#99).** The SVG draws the tilde; the XML has a plain
   `subProcess` (the `isAdHoc` row in `types.js`, `adHocSubProcess` is `announced`). Pinned like #87.
 - **Layout limits left open by the edge and message-flow work**, each tracked:
   - `boundary-event-shapes` still has one sequence-flow crossing between boundary-event shapes (#71).
