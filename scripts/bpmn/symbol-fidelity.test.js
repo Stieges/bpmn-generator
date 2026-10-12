@@ -372,10 +372,38 @@ describe('#84 — the conditional marker follows the conditionExpression', () =>
     ],
   });
 
-  test('isConditional without a condition: no diamond, no conditionExpression', async () => {
-    const r = await runPipeline(lc({ isConditional: true, label: 'ok' }));
-    expect(r.bpmnXml).not.toMatch(/<bpmn:sequenceFlow id="fa"[^>]*>\s*<bpmn:conditionExpression/);
+  const condOf = (xml, id) => xml.match(new RegExp(`<bpmn:sequenceFlow id="${id}"[^>]*>\\s*<bpmn:conditionExpression[^>]*>([^<]*)<`))?.[1];
+
+  test('isConditional with a label and no condition: the label is the condition, both draw it', async () => {
+    const r = await runPipeline(lc({ isConditional: true, label: 'Betrag > 1000' }));
+    expect(condOf(r.bpmnXml, 'fa')).toBe('Betrag &gt; 1000');
+    expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBe('url(#seq-conditional-src)');
+  });
+
+  test('isConditional with neither label nor condition: nothing to write, nothing drawn', async () => {
+    const r = await runPipeline(lc({ isConditional: true }));
+    expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
     expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBeUndefined();
+  });
+
+  test('inside a subprocess: condition and default are written, read back and drawn', async () => {
+    const inner = lc({ condition: '${ok}', label: 'ok' });
+    const nested = {
+      id: 'Outer', nodes: [
+        { id: 'os', type: 'startEvent' },
+        { id: 'sub', type: 'subProcess', name: 'Pruefung', isExpanded: true, nodes: inner.nodes,
+          edges: [...inner.edges.filter((e) => e.id !== 'fb'), { id: 'fb', source: 't', target: 'b', isDefault: true }] },
+        { id: 'oe', type: 'endEvent' },
+      ],
+      edges: [{ id: 'o1', source: 'os', target: 'sub' }, { id: 'o2', source: 'sub', target: 'oe' }],
+    };
+    const r = await runPipeline(nested);
+    expect(condOf(r.bpmnXml, 'fa')).toBe('${ok}');
+    expect(r.bpmnXml).toMatch(/<bpmn:task id="t"[^>]*default="fb"/);
+    const paths = svgIndex(r.svg).paths;
+    expect(paths.get('fa')['marker-start']).toBe('url(#seq-conditional-src)');
+    expect(paths.get('fb')['marker-start']).toBe('url(#seq-default-src)');
+    expect((await symbolDisagreements(nested)).findings).toEqual([]);
   });
 
   test('a condition on a flow leaving an activity: both carry it', async () => {

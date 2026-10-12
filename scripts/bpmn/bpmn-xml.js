@@ -534,15 +534,28 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
       const childDataObject = buildDataObject(child, childEl);
       if (childDataObject) el.get('flowElements').push(childDataObject);
     }
+    // Conditions and the container's default flows come from the same decision as at process
+    // level (`resolveFlowSemantics`), so a nested flow carries exactly what a top-level one would.
+    // The child branch used to write id, name, sourceRef and targetRef only.
+    const { defaultBySource, conditionById } = resolveFlowSemantics(node.nodes, node.edges || []);
+    const childFlows = new Map();
     for (const subEdge of (node.edges || [])) {
       const seid = subEdge.id;
       const seAttrs = { id: seid };
       if (subEdge.label) seAttrs.name = subEdge.label;
       seAttrs.sourceRef = childMap.get(subEdge.source);
       seAttrs.targetRef = childMap.get(subEdge.target);
+      if (conditionById.has(seid)) {
+        seAttrs.conditionExpression = create('bpmn:FormalExpression', { body: conditionById.get(seid) });
+      }
       const seFlow = create('bpmn:SequenceFlow', seAttrs);
       el.get('flowElements').push(seFlow);
+      childFlows.set(seid, seFlow);
       registerNode({ id: seid, _isEdge: true }, seFlow);
+    }
+    for (const [sourceId, flowId] of defaultBySource) {
+      const srcEl = childMap.get(sourceId), flowEl = childFlows.get(flowId);
+      if (srcEl && flowEl) srcEl.default = flowEl;
     }
   }
 

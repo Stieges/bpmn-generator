@@ -43,7 +43,8 @@ function gatewayDirections(nodes, edges) {
 }
 
 /**
- * Which sequence flows of ONE process level the BPMN XML marks as their source's `default`, and
+ * Which sequence flows of ONE flow-element container — a process, or an expanded or collapsed
+ * subprocess at any depth — the BPMN XML marks as their source's `default`, and
  * which carry a `<bpmn:conditionExpression>` (with its body) — the one place both are decided.
  *
  * `bpmn-xml.js` writes exactly this, and `svg.js` draws its default slash and conditional diamond
@@ -58,12 +59,17 @@ function gatewayDirections(nodes, edges) {
  *     `isDefault` gets its LAST outgoing flow as default;
  *   - every other outgoing flow of such a gateway gets a condition, its body `condition` or else
  *     `label` (or empty).
- * An explicit `condition` gives any flow a condition. An explicit `isDefault` makes the flow its
- * source's default, whatever the source (the last one wins, as in the serialiser it replaces).
+ * An explicit `condition` gives any flow a condition. A flow marked `isConditional` with a `label`
+ * but no `condition` gets the label as its condition body (owner decision on #84): the author said
+ * "conditional" and named the condition, and OMG has no conditional flow without an expression. An
+ * `isConditional` flow with neither gets none — there is nothing to write. An explicit `isDefault`
+ * makes the flow its source's default, whatever the source (the last one wins, as in the
+ * serialiser it replaces).
  *
  * Pure: gateway directions are computed, not read from or written to `_direction`.
- * Called per process level; nested container edges are not serialised with either (the `condition`
- * and `isDefault` rows in `types.js`), so a caller asks only about a process's own edges.
+ * Called once per container with that container's own nodes and edges — the process in
+ * `buildProcess`, every subprocess in `buildFlowNode`'s child branch, and the same two levels in
+ * `svg.js` — so a flow's semantics do not depend on its nesting depth.
  *
  * @returns {{ defaultBySource: Map<string,string>, conditionById: Map<string,string> }}
  */
@@ -87,7 +93,8 @@ export function resolveFlowSemantics(nodes = [], edges = []) {
   const defaultIds = new Set(defaultBySource.values());
   const conditionById = new Map();
   for (const e of edges) {
-    const needsCondition = e.condition || (isConditionalSplit(byId.get(e.source)) && !defaultIds.has(e.id));
+    const needsCondition = e.condition || (e.isConditional && e.label)
+      || (isConditionalSplit(byId.get(e.source)) && !defaultIds.has(e.id));
     if (needsCondition) conditionById.set(e.id, e.condition || e.label || '');
   }
   return { defaultBySource, conditionById };
