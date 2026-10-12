@@ -52,3 +52,25 @@ The 200-sample subset is curated by `scripts/robustness/curate-mad.js` (separate
 4. Commit `tests/fixtures/mad-subset/` to the repo.
 
 After that, `node scripts/robustness/cli.js mad-check` runs the pipeline against each fixture and reports the pass rate — a sanity check that our synthetic generator hasn't drifted toward unrealistic-easy inputs.
+
+## Extraction quality
+
+The robustness runs above feed the pipeline synthetic models. This one measures the LLM path a user
+takes: process text → `orchestrate()` (Modeler prompt, schema gate with repair, reviewer loop) →
+Logic-Core, compared with a reference model of the same process.
+
+```bash
+cd scripts
+node robustness/extraction-eval.js --api-url <url> --model <model> [--api-key <key>] \
+  [--timeout 900] [--retries 3] [--extra-body '{"chat_template_kwargs":{"enable_thinking":false}}'] \
+  --output /tmp/xeval
+```
+
+- Cases: `tests/fixtures/extraction-cases/*.json` — `{ "id", "text", "reference" }`, the reference a
+  fixture file name in `tests/fixtures/` or `null` (then only the reference-free checks run).
+- Comparison (`reference-compare.js`, `compareToReference`): participants (expanded vs. black box),
+  lanes (missing, empty at the top level), activities matched by name (recall, precision, type and
+  lane agreement, a step only inside a subprocess, a step written twice), gateways and boundary
+  events counted. Thresholds in `config.json → extractionQuality`.
+- Output: `<output>.md` (a row per case, then the findings) and `<output>.json` (everything,
+  including every raw LLM answer).

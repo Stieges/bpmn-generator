@@ -55,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `system` field when it is a tool, `collapsedPools` when it is an outside party). The few-shot
   examples that used `lane` without a `lanes` array, and the schema guide's example with a supplier
   as a lane, are fixed. A fence keeps every documented example clear of both rules.
+- **Extraction quality against reference models** (#115). `scripts/robustness/reference-compare.js`
+  (`compareToReference`) compares an extracted Logic-Core with a reference model: participants
+  (black box vs. expanded), lanes (missing, empty at the top level), activities matched by name
+  (recall, precision, type and lane agreement, a step only inside a subprocess, a step written
+  twice), gateways and boundary events. `scripts/robustness/extraction-eval.js` runs the cases of
+  `tests/fixtures/extraction-cases/` (five process descriptions, four with a reference fixture)
+  through `orchestrate()` and writes a Markdown and a JSON report with every raw LLM answer.
 - **Schema repair attempt in the orchestrator** (`maxSchemaRepairs`, default 1): a Modeler output
   the gate rejects goes back once through the refinement prompt with the gate's errors as issues.
   Every rejection is in `history` (`agent: "schema-gate"`).
