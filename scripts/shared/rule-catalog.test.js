@@ -202,10 +202,31 @@ describe('the DMN main catalog', () => {
     expect(registerFindings(BPMN_MAIN, v)).toEqual([]);
   });
 
-  test('nothing under scripts/bpmn/ imports dmn/, cross/ or scenarios/ — a DMN gap cannot reach runPipeline', () => {
+  test('nothing under scripts/bpmn/ imports dmn/, cross/ or scenarios/ — except pipeline.js the decision-table text', () => {
+    // The one exception is the documentation of a Business Rule Task (cross/decision-doc.js): text
+    // derived from a Decision-Core, never a rule. Which rule modules it may reach is fenced below.
     const dir = join(__dirname, '..', 'bpmn');
     const offenders = readdirSync(dir).filter((f) => f.endsWith('.js') && !f.endsWith('.test.js'))
-      .filter((f) => /from\s+'\.\.\/(dmn|cross|scenarios)\//.test(readFileSync(join(dir, f), 'utf8')));
-    expect(offenders).toEqual([]);
+      .flatMap((f) => [...readFileSync(join(dir, f), 'utf8').matchAll(/from\s+'(\.\.\/(?:dmn|cross|scenarios)\/[^']+)'/g)].map((m) => `${f} -> ${m[1]}`));
+    expect(offenders).toEqual(['pipeline.js -> ../cross/decision-doc.js']);
+  });
+
+  test('a DMN gap cannot reach runPipeline: no rule module outside bpmn/ is in its static import closure', () => {
+    const scripts = join(__dirname, '..');
+    const seen = new Set();
+    const visit = (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const src = readFileSync(join(scripts, file), 'utf8');
+      for (const [, spec] of src.matchAll(/^\s*(?:import|export)\s[^;]*?from\s+'(\.{1,2}\/[^']+)'/gm)) {
+        visit(join(dirname(file), spec));
+      }
+    };
+    visit('bpmn/pipeline.js');
+    const reached = [...seen].filter((f) => !f.startsWith('bpmn/') && !f.startsWith('shared/')).sort();
+    expect(reached).toEqual(['cross/decision-doc.js', 'dmn/constants.js', 'dmn/schema-gate.js', 'dmn/table-text.js', 'dmn/table.js', 'scenarios/bridge.js']);
+    for (const ruleModule of ['dmn/rules.js', 'dmn/scenario-rules.js', 'cross/rules.js', 'bpmn/scenario-rules.js']) {
+      expect(seen.has(ruleModule)).toBe(false);
+    }
   });
 });

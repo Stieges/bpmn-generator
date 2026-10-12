@@ -43,6 +43,10 @@ import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, laneLabelFloor } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
+// The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
+// documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
+// reachable from here.
+import { applyDecisionDocumentation, decisionCoreErrors, stripDecisionSection, decisionSectionBody } from '../cross/decision-doc.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // PUBLIC API — programmatic usage via import
@@ -115,6 +119,11 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
  * @param {string|object} [opts.ruleProfile] - Base rule profile (path or object); mode augments it
+ * @param {object[]} [opts.decisions] - Decision-Core documents. When given (even empty), every
+ *   businessRuleTask with a decisionRef gets its decision table in its documentation, as a marked
+ *   section that replaces any earlier one (cross/decision-doc.js). Each document passes the
+ *   Decision-Core schema gate first; a failure blocks like a validation error
+ * @param {string} [opts.locale] - label locale of that section, default config.json -> dmn.labels.locale
  * @returns {Promise<{
  *   bpmnXml: string|null,
  *   svg: string|null,
@@ -134,7 +143,21 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
 async function runPipeline(logicCore, opts = {}) {
   // Deep clone (no mutation of the caller's object) that also gives every id-less edge its id,
   // once, before validation, the net check and layout: nothing downstream invents one (#64).
-  const lc = normalizeEdgeIds(logicCore);
+  let lc = normalizeEdgeIds(logicCore);
+
+  // Decision tables into Business Rule Task documentation — only when the caller supplies the
+  // decision models (cross/decision-doc.js). Text, never geometry; without `decisions` nothing
+  // here runs and the output is byte-identical to a call without the option.
+  if (opts.decisions !== undefined) {
+    if (!Array.isArray(opts.decisions)) throw new TypeError('decisions must be an array of Decision-Core documents');
+    const decisionErrors = decisionCoreErrors(opts.decisions);
+    if (decisionErrors.length) {
+      return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
+        validation: { errors: decisionErrors, warnings: [], advisories: [], metrics: {} } };
+    }
+    lc = applyDecisionDocumentation(lc, opts.decisions, { locale: opts.locale });
+  }
+
   let baseProfile = opts.ruleProfile ?? null;
   if (typeof baseProfile === 'string') baseProfile = loadRuleProfile(baseProfile);
   const profile = profileForMode(baseProfile, opts.mode);
@@ -368,7 +391,16 @@ function generateProcessDoc(lc) {
       lines.push('| Element | Typ | Dokumentation |');
       lines.push('|---------|-----|---------------|');
       for (const n of documented) {
-        lines.push(`| ${n.name || n.id} | ${n.type} | ${(n.documentation || '\u2014').replace(/\n/g, ' ')} |`);
+        // A generated decision section (cross/decision-doc.js) is an aligned text table: squeezed
+        // into one table cell it would be unreadable, so the cell keeps the author's text and the
+        // section follows the table as a preformatted block.
+        const section = decisionSectionBody(n.documentation);
+        const cell = section === null ? (n.documentation || '\u2014') : stripDecisionSection(n.documentation);
+        lines.push(`| ${n.name || n.id} | ${n.type} | ${cell.replace(/\n/g, ' ')} |`);
+      }
+      for (const n of documented) {
+        const section = decisionSectionBody(n.documentation);
+        if (section) lines.push('', `### ${n.name || n.id}`, '', '```text', section, '```');
       }
     }
   }
@@ -531,7 +563,25 @@ export {
 // ═══════════════════════════════════════════════════════════════════════
 
 async function main() {
-  const args       = process.argv.slice(2);
+  const rawArgs    = process.argv.slice(2);
+  // `--decisions <files>` (or `--decisions=<files>`) is the one flag that takes a value; pull it
+  // out first so its value is not read as the input or output path.
+  let decisionsArg = null;
+  const args = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const a = rawArgs[i];
+    if (a === '--decisions') {
+      if (i + 1 >= rawArgs.length) {
+        console.error('✗ --decisions requires a value (comma-separated Decision-Core JSON or .dmn files)');
+        process.exit(1);
+      }
+      decisionsArg = rawArgs[++i];
+    } else if (a.startsWith('--decisions=')) {
+      decisionsArg = a.slice('--decisions='.length);
+    } else {
+      args.push(a);
+    }
+  }
   const flags      = args.filter(a => a.startsWith('--'));
   const positional = args.filter(a => !a.startsWith('--'));
   const inputArg   = positional[0];
@@ -546,7 +596,7 @@ async function main() {
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
     process.exit(1);
   }
   if (refine && noRefine) {
@@ -596,6 +646,23 @@ async function main() {
     process.exit(1);
   }
 
+  // --decisions: Decision-Core JSON or .dmn files (routed by content, dmn/load-decisions.js), whose
+  // tables go into the documentation of the Business Rule Tasks that call them.
+  let decisions;
+  if (decisionsArg !== null) {
+    // Loaded on demand: it pulls in the DMN importer (dmn-moddle), which no other BPMN run needs.
+    const { loadDecisionFile, decisionPaths } = await import('../dmn/load-decisions.js');
+    decisions = [];
+    for (const p of decisionPaths(decisionsArg)) {
+      try {
+        decisions.push((await loadDecisionFile(p)).dc);
+      } catch (e) {
+        console.error(`✗ ${e.message}`);
+        process.exit(1);
+      }
+    }
+  }
+
   // --refine switches every refinement pass on, --no-refine every pass off; with neither flag
   // opts.visualRefinement stays undefined and the per-pass defaults in
   // config.json -> visualRefinement decide. --wrap likewise only ever asks for wrapping; the
@@ -604,6 +671,7 @@ async function main() {
     ...(refine ? { visualRefinement: true } : noRefine ? { visualRefinement: false } : {}),
     ...(wrap ? { elkWrapping: 'auto' } : {}),
     ...switchOpts,
+    ...(decisions ? { decisions } : {}),
   };
 
   // Drill-down mode: generate parent + per-subprocess diagrams
@@ -786,7 +854,10 @@ async function main() {
   // Documentation export (optional)
   if (generateDoc) {
     const docPath = `${outputBase}.md`;
-    writeFileSync(docPath, generateProcessDoc(parsedInput), 'utf8');
+    // The documentation the pipeline wrote, decision sections included (cross/decision-doc.js is
+    // pure, so this is the same text runPipeline put into the XML and the SVG tooltips).
+    const docInput = decisions ? applyDecisionDocumentation(parsedInput, decisions) : parsedInput;
+    writeFileSync(docPath, generateProcessDoc(docInput), 'utf8');
     console.log(`✓ Process doc → ${docPath}`);
   }
 

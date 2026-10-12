@@ -14,6 +14,9 @@ import { validateDecisionCoreSchema } from './schema-gate.js';
 import { runPipeline } from '../bpmn/pipeline.js';
 import { validateLogicCoreSchema } from '../bpmn/schema-gate.js';
 import { runScenarioPipeline } from '../scenarios/pipeline.js';
+import { layoutDecisionTable } from './table.js';
+import { formatTableMarkdown } from './table-text.js';
+import { applyDecisionDocumentation } from '../cross/decision-doc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GUIDE = path.join(__dirname, '..', '..', 'references', 'dmn.md');
@@ -62,5 +65,28 @@ describe('references/dmn.md — every JSON example runs', () => {
     dc.nodes.find((n) => n.decisionTable).decisionTable.rules.pop();
     const result = runScenarioPipeline(logicCores[0], [dc]);
     expect(result.issues.map((i) => i.rule)).toContain('SC04');
+  });
+});
+
+describe('references/dmn.md — the tables it shows are the ones the pipeline writes', () => {
+  const guide = readFileSync(GUIDE, 'utf8');
+  // The guide indents a block inside a numbered list by three spaces; that is Markdown, not content.
+  const fenced = (lang) => [...guide.matchAll(new RegExp('```' + lang + '\\n([\\s\\S]*?)```', 'g'))]
+    .map((m) => m[1].replace(/^ {3}/gm, '').replace(/\n\s*$/, ''));
+
+  test('tests/fixtures/dmn/claim-approval.json is the guide\'s Decision-Core, unchanged', () => {
+    const fixture = JSON.parse(readFileSync(path.join(__dirname, '..', '..', 'tests', 'fixtures', 'dmn', 'claim-approval.json'), 'utf8'));
+    expect(fixture).toEqual(decisionCores[0]);
+  });
+
+  test('"Confirm the table first" shows exactly formatTableMarkdown\'s output', () => {
+    const decision = decisionCores[0].nodes.find((n) => n.decisionTable);
+    expect(fenced('markdown')).toEqual([formatTableMarkdown(layoutDecisionTable(decision))]);
+  });
+
+  test('"The table in the task\'s documentation" shows exactly the generated section', () => {
+    const out = applyDecisionDocumentation(logicCores[0], decisionCores);
+    const task = out.nodes.find((n) => n.decisionRef);
+    expect(fenced('text')).toEqual([task.documentation]);
   });
 });
