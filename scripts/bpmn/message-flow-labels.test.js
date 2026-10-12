@@ -167,6 +167,47 @@ describe('participant outlines and the move bound', () => {
     for (const L of participantOutlines(cm, lc)) expect(m.y < L.y && L.y < m.y + m.h && m.x < L.x1 && L.x0 < m.x + m.w).toBe(false);
   });
 
+  describe(`clearance: lines and shapes keep layout.messageFlowLabelClearancePx (${CFG.layout.messageFlowLabelClearancePx} px) off a label`, () => {
+    const clr = CFG.layout.messageFlowLabelClearancePx;
+    // One message flow between two participants 100 px apart; its label above the corridor leg at 150.
+    const setup = (otherY) => {
+      const lc = { pools: [{ id: 'A', nodes: [{ id: 'a', type: 'task' }] }, { id: 'B', nodes: [{ id: 'b', type: 'task' }] }],
+        messageFlows: [{ id: 'm', source: 'a', target: 'b', name: 'Assessment request' }] };
+      const route = [P(300, 100), P(300, 150), P(100, 150), P(100, 200)];
+      const L = placeEdgeLabel('Assessment request', route, { preferred: [route[1], route[2]] });
+      const top = edgeLabelBox(L).y;
+      const cm = {
+        coords: { a: { x: 250, y: 20, w: 100, h: 80 }, b: { x: 50, y: 200, w: 100, h: 80 } },
+        poolCoords: { A: { x: 0, y: 0, w: 500, h: 100 }, B: { x: 0, y: 200, w: 500, h: 100 } },
+        laneCoords: {}, nodeLabels: {},
+        // A foreign line `otherY` px above the label's top edge, across it.
+        edgeCoords: { m: route, other: [P(150, top - otherY), P(260, top - otherY)] },
+        edgeLabels: { m: L },
+      };
+      return { lc, cm };
+    };
+    test('a foreign line closer than the clearance (but not touching) makes the label move', () => {
+      const { lc, cm } = setup(clr / 2);
+      expect(unclearMessageFlowLabels(cm, lc)).toEqual(['m']);
+      const out = repairMessageFlowLabels(cm, lc);
+      expect(out.m).not.toBe(cm.edgeLabels.m);
+      expect(unclearMessageFlowLabels({ ...cm, edgeLabels: out }, lc)).toEqual([]);
+    });
+    test('a foreign line exactly the clearance away is fine; the own leg at layout.edgeLabelGap is too', () => {
+      const { lc, cm } = setup(clr);
+      expect(unclearMessageFlowLabels(cm, lc)).toEqual([]);
+      expect(repairMessageFlowLabels(cm, lc)).toBe(cm.edgeLabels);
+    });
+    test('a shape closer than the clearance counts as in the way', () => {
+      const { lc, cm } = setup(50);
+      const b = edgeLabelBox(cm.edgeLabels.m);
+      cm.coords.near = { x: b.x + b.w + clr / 2, y: b.y, w: 40, h: b.h };
+      expect(unclearMessageFlowLabels(cm, lc)).toEqual(['m']);
+      cm.coords.near = { ...cm.coords.near, x: b.x + b.w + clr };
+      expect(unclearMessageFlowLabels(cm, lc)).toEqual([]);
+    });
+  });
+
   test(`no candidate farther than layout.messageFlowLabelMaxMovePx (${CFG.layout.messageFlowLabelMaxMovePx} px): the label stays`, () => {
     const { lc, cm } = fanned();
     // A wall over everything within reach of rep's label; the far end of its legs is free but out of range.

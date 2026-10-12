@@ -182,6 +182,7 @@
     "messageFlowLabelRepair": true,
     "messageFlowLabelSlidePx": 10,
     "messageFlowLabelMaxMovePx": 150,
+    "messageFlowLabelClearancePx": 4,
     "messageFlowLabelMaxGapGrowthPx": 80,
     "bendRuleLimits": {
       "shapeClearance": 8,
