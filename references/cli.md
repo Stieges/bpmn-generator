@@ -32,6 +32,7 @@ node bpmn/pipeline.js <input.json | -> [output-basename] [flags]
 | `--strict` | every warning is fatal: rule engine, diagram integrity (DI), Petri-net translation (NC), XML serialisation. Exit 1, no files written. **Use it before every delivery.** |
 | `--optimize` | `optimize` mode: adds the opt-in optimisation advisories (O01–O04). Also `--mode=optimize` / `--mode=soll` |
 | `--doc` | also writes `<output>.md`, a prose documentation of the process |
+| `--decisions <a.json,b.dmn>` | Decision-Core JSON or `.dmn` files (routed by content); every `businessRuleTask` with a `decisionRef` gets its decision table in its documentation, as a marked section replaced on every run (`references/dmn.md`). Also `--decisions=<files>` |
 | `--dot` | also writes `<output>.dot` (Graphviz) |
 | `--import-dot` | the input is a `.dot` file written by `--dot`; converts it back to Logic-Core |
 | `--drill-down` | writes the parent diagram plus one `<output>_<subprocessId>.bpmn/.svg` per subprocess (bypasses the DI/NC gates) |
@@ -63,11 +64,15 @@ Details and caveats: `references/round-trip.md`.
 ## DMN, scenarios, redesign
 
 ```bash
-node dmn/pipeline.js <input.json | -> [output-basename] [--strict] [--best-practice]
+node dmn/pipeline.js <input.json | -> [output-basename] [--strict] [--best-practice] [--doc]
 node dmn/import.js <input.dmn | -> [output.json] [--strict]
 node scenarios/pipeline.js <input.json | -> [output-basename] [--decisions <a.dmn,b.json>] [--strict]
 node bpmn/redesign-cli.js <input.json> <transform> [options] [--apply] [-o out.json]
 ```
+
+`dmn/pipeline.js` writes the `.dmn` file and the DRD as `.svg`; `--doc` adds `.md` (per decision:
+question, inputs, outputs, the decision table), `.tables.svg` and `.tables.html` (every decision
+table, drawn like dmn.io's table view; the HTML uses inline styles only, for a wiki page).
 
 Details: `references/dmn.md` (the first three) and `references/redesign-toolbox.md` (the last).
 
@@ -75,9 +80,9 @@ Details: `references/dmn.md` (the first three) and `references/redesign-toolbox.
 
 | Command | Writes | Exit ≠ 0 when |
 |---------|--------|---------------|
-| `bpmn/pipeline.js` | `.bpmn`, `.svg` (+ `.md`, `.dot` on request) | schema gate fails, an ERROR finding, or any warning under `--strict` |
+| `bpmn/pipeline.js` | `.bpmn`, `.svg` (+ `.md`, `.dot` on request) | schema gate fails, an ERROR finding, or any warning under `--strict`; a `--decisions` file that cannot be read or fails the Decision-Core schema |
 | `bpmn/import.js` | Logic-Core JSON | the input is not parseable BPMN |
-| `dmn/pipeline.js` | `.dmn` | schema gate fails, an ERROR finding, or any warning under `--strict` |
+| `dmn/pipeline.js` | `.dmn`, `.svg` (+ `.md`, `.tables.svg`, `.tables.html` with `--doc`) | schema gate fails, an ERROR finding, or any warning under `--strict` |
 | `dmn/import.js` | Decision-Core JSON | not XML / not DMN, or a lossy import under `--strict` |
 | `scenarios/pipeline.js` | `.scenarios.json`, `.scenarios.md` | invalid input; under `--strict` also any finding, an incomplete enumeration or a lossy DMN import |
 | `bpmn/redesign-cli.js` | the transformed Logic-Core (only with `--apply`) | the transform refuses |

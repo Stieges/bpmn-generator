@@ -188,15 +188,18 @@ scripts/
 │                 (BPMN → Logic-Core) · schema-gate.js · types.js · constants.js ·
 │                 optimize.js (O01–O04, opt-in) · scenario-rules.js (SC01, SC06)
 │                 redesign-cli.js, redesign.js, redesign-core.js — redesign toolbox (opt-in)
-├── dmn/          DMN 1.3 pipeline (opt-in, not reached by runPipeline)
+├── dmn/          DMN 1.3 pipeline (opt-in; runPipeline reaches only the table text)
 │                 pipeline.js (runDmnPipeline + CLI) · rules.js (19 DMN rules) · layout.js ·
-│                 coordinates.js · di-check.js (DD01–DD03) · dmn-xml.js · import.js +
+│                 coordinates.js · di-check.js (DD01–DD03) · dmn-xml.js · svg.js + pathmap.js
+│                 (DRD SVG) · table.js, table-text.js, table-svg.js, table-html.js, doc.js
+│                 (decision tables) · load-decisions.js · import.js +
 │                 import-scope.js (DMN → Decision-Core, IM01–IM09) · scenario-rules.js (SC04, SC05)
 ├── scenarios/    Scenario enumeration (opt-in): pipeline.js (runScenarioPipeline + CLI),
 │                 enumerate.js, collaboration.js, decision-table.js, bridge.js, format.js
-├── cross/        Cross-notation rules: rules.js (SC02, SC03 — decisionRef ↔ DMN)
+├── cross/        Cross-notation: rules.js (SC02, SC03 — decisionRef ↔ DMN), decision-doc.js
+│                 (a Business Rule Task's decision table in its documentation)
 ├── shared/       Format-independent core: utils.js (config), ontology.js, rule-profile.js,
-│                 rule-catalog.js, resource-paths.js, geometry.js, outbound-url.js (SSRF guard),
+│                 rule-catalog.js, resource-paths.js, geometry.js, text-layout.js, outbound-url.js (SSRF guard),
 │                 safe-text.js, entry-point.js, version.js
 ├── agents/       Multi-agent orchestration: modeler.js, reviewer.js, layout.js, compliance.js,
 │                 chat.js, prompt-sections.js, llm-provider.js
@@ -213,8 +216,10 @@ scripts/
 Run `cd scripts && npm test` for the current test count (Jest, ES Modules) — it changes often enough
 that a number here would go stale immediately; CI enforces it stays green.
 
-The import graph is acyclic. `dmn/` never imports `bpmn/` and vice versa; `shared/` imports
-neither; `scenarios/` and `cross/` are the only places the two notations meet.
+The import graph is acyclic. `dmn/` never imports `bpmn/`; `bpmn/` imports only
+`cross/decision-doc.js` (from `pipeline.js`, for the `decisions` option — no rule module of another
+notation is in `runPipeline`'s import closure); `shared/` imports neither; `scenarios/` and `cross/`
+are the only places the two notations meet.
 
 ## Repo Structure
 
@@ -343,7 +348,7 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **Routing repair** — fewest-bends rule, crossing repair with an obstacle-aware orthogonal router, re-routing of flows through foreign shapes, event and gateway labels kept off flows
 - **Ontology** — node types, markers and the rule catalog in one JSON-LD file ([`references/ontology.jsonld`](references/ontology.jsonld)), exported as `bpmn-generator/ontology`
 - **Redesign toolbox** (5 deterministic process transforms with preview/apply, no LLM — see [Redesign Toolbox](#redesign-toolbox-opt-in))
-- **DMN 1.3** decision models with DRD layout and an importer with a loss report — see [DMN Support](#dmn-support-opt-in)
+- **DMN 1.3** decision models with DRD layout, DRD and decision-table SVG, decision tables as Markdown/HTML, and an importer with a loss report — see [DMN Support](#dmn-support-opt-in)
 - **Scenario enumeration** over BPMN processes and DMN decision tables — see [Scenario Enumeration](#scenario-enumeration-opt-in)
 - **OMG BPMN 2.0.2 compliant** XML output (ISO/IEC 19510:2013)
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)
@@ -571,16 +576,24 @@ takes no rule profile, so these rules are not profile-switchable yet. Bounds liv
 
 Alongside the BPMN pipeline, `scripts/dmn/` generates DMN 1.3 decision models: JSON Decision-Core
 → schema gate → rule engine → ElkJS DRD (Decision Requirements Diagram) layout → coordinate
-mapping → diagram integrity check → DMN 1.3 XML + DMNDI (via `dmn-moddle`). Output validates
-against the normative `DMN13.xsd`.
+mapping → diagram integrity check → DMN 1.3 XML + DMNDI (via `dmn-moddle`) and the DRD as SVG,
+drawn from the same coordinates as the DMNDI, the way dmn.io draws it. Output validates against
+the normative `DMN13.xsd`.
 
-This is a separate, sibling subsystem — `dmn/` never imports from `bpmn/` and isn't reached by
-`runPipeline`. It has its own rule engine (19 DMN rules, 3 layers — see the "DMN rule set" section
+This is a separate, sibling subsystem — `dmn/` never imports from `bpmn/`, and `runPipeline` reaches
+it only for the opt-in `decisions` option (the decision table as text, never a DMN rule). It has its
+own rule engine (19 DMN rules, 3 layers — see the "DMN rule set" section
 of [`CLAUDE.md`](CLAUDE.md) for the layer breakdown), its own CLI, and its own test coverage.
 
 ```bash
-# JSON Decision-Core → DMN 1.3 XML
+# JSON Decision-Core → DMN 1.3 XML + DRD SVG
 node dmn/pipeline.js input.json output-basename
+
+# Plus the decision tables as Markdown, SVG and HTML (output.md, output.tables.svg, output.tables.html)
+node dmn/pipeline.js input.json output --doc
+
+# A Business Rule Task's decision table into its BPMN documentation (JSON or .dmn, by content)
+node bpmn/pipeline.js process.json output --decisions decision.json
 
 # Enable the opt-in best_practice rule layer
 node dmn/pipeline.js input.json output --best-practice
@@ -595,8 +608,9 @@ node dmn/import.js input.dmn output.json
 Currently covers Decision-Core validation, DRD layout, and DMN 1.3 serialization (Stages 1-4 of
 the DMN integration), plus import of DMN XML back to Decision-Core with a structured loss report.
 The importer reads no DMNDI, so every diagram is reported (IM06) and even a file this generator
-wrote imports as not lossless; `--strict` therefore suits foreign files. SVG rendering is not yet
-implemented — see `docs/superpowers/plans/2026-07-30-dmn-integration.md` for what's still open.
+wrote imports as not lossless; `--strict` therefore suits foreign files. The tool surface (MCP,
+HTTP) is not yet implemented — see `docs/superpowers/plans/2026-07-30-dmn-integration.md` for
+what's still open.
 
 ## Known Limitations
 

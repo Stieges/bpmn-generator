@@ -14,11 +14,11 @@ description: >
 # BPMN Generator
 
 Turns a process description into **OMG BPMN 2.0.2** XML + SVG, and a decision description into
-**DMN 1.3** XML. You extract a JSON model; the pipeline validates, lays out and serialises it.
+**DMN 1.3** XML + SVG. You extract a JSON model; the pipeline validates, lays out and serialises it.
 
 ```
 User text ──[you: extraction]──> Logic-Core JSON ──[pipeline]──> validation ─> ElkJS layout ─> .bpmn + .svg
-Rule text ──[you: extraction]──> Decision-Core JSON ──[dmn pipeline]──> validation ─> layout ─> .dmn
+Rule text ──[you: extraction]──> Decision-Core JSON ──[dmn pipeline]──> validation ─> layout ─> .dmn + .svg
 ```
 
 **You never write coordinates.** Layout is 100 % algorithmic; the JSON carries topology only.
@@ -53,7 +53,9 @@ what, in what order), an **IT/integration** view (which systems exchange what), 
 - **IT systems** depend on the view: an attribute of a `serviceTask`, a system lane, a collapsed
   pool, or an expanded pool — ask which picture is wanted.
 - **Decisions by rules** belong in a DMN decision table behind a `businessRuleTask`, not in a
-  cascade of gateways — see `references/dmn.md`.
+  cascade of gateways — see `references/dmn.md`. **Show the decision table as Markdown in the chat
+  and let the user confirm it before you generate any file**; then generate, then report the rule
+  and scenario findings (`references/dmn.md`, "Confirm the table first").
 - Do not fill the `role` and `system` fields during extraction yet; they do not change the drawing.
 
 The full guide (construct-by-construct table with the rule that warns on a wrong choice) is in
@@ -117,7 +119,8 @@ gate.** Warnings are not noise — they are the alarm.
 4. Only then present the output. If a warning is a deliberate, justified exception, say so
    explicitly to the user — do not silently ship past it.
 
-The same gate applies to DMN: `node dmn/pipeline.js <input>.json <output> --strict`.
+The same gate applies to DMN: `node dmn/pipeline.js <input>.json <output> --strict` — after the
+user has confirmed the decision table you showed them as Markdown.
 
 ---
 
@@ -129,11 +132,13 @@ Run from `scripts/`:
 node bpmn/pipeline.js process.json out --strict      # Logic-Core → out.bpmn + out.svg
 node bpmn/pipeline.js process.json out --optimize    # same, plus optimisation advisories
 node bpmn/import.js existing.bpmn extracted.json     # BPMN XML → Logic-Core (round trip)
-node dmn/pipeline.js decision.json out --strict      # Decision-Core → out.dmn (no SVG yet)
+node dmn/pipeline.js decision.json out --strict      # Decision-Core → out.dmn + out.svg (DRD)
+node dmn/pipeline.js decision.json out --doc         # plus out.md, out.tables.svg, out.tables.html
+node bpmn/pipeline.js process.json out --decisions decision.json   # table into the task's documentation
 ```
 
 Outputs: `*.bpmn` opens in Camunda Modeler, bpmn.io, ADONIS, Signavio; `*.svg` in a browser or
-Office; `*.dmn` in dmn.io or Camunda Modeler. Keep the Logic-Core JSON — it is the source for every
+Office; `*.dmn` in dmn.io or Camunda Modeler; `*.tables.html` pastes into a wiki page. Keep the Logic-Core JSON — it is the source for every
 later amendment. All flags: `references/cli.md`.
 
 **No Node.js available** (e.g. Claude.ai without code execution): use the ElkJS HTML template in
