@@ -273,9 +273,9 @@ passes this gate.** Warnings are not noise — they are the alarm.
    ```
    - The schema-gate (`references/input-schema.json`) rejects malformed structure with a
      precise field path and exits non-zero — fix every reported field.
-   - `--strict` makes every warning fatal (exit non-zero, no files written), across three
-     independent checks: rule-engine warnings, diagram (DI) integrity, and BPMN
-     serialisation (the round trip of the generated XML through bpmn-moddle — this is what
+   - `--strict` makes every warning fatal (exit non-zero, no files written), across four
+     independent checks: rule-engine warnings, diagram (DI) integrity, Petri-net translation
+     (NC) integrity, and BPMN serialisation (the round trip of the generated XML through bpmn-moddle — this is what
      catches an invalid element, e.g. an annotation carrying an illegal attribute).
 3. **Resolve every warning** and re-run until `--strict` exits `0`. Delivering a diagram
    with unresolved warnings is not allowed.

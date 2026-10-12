@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 28 bpmn-pipeline + 12 dmn (growing) + 8 shared + 1 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 28 bpmn-pipeline + 12 dmn (growing) + 10 shared + 1 cross-notation + 7 agent +
 9 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -104,6 +104,10 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   geometry.js                (straight-segment clip maths: clipStraight, clipToRect — shared by
                                bpmn/coordinates.js and dmn/coordinates.js; the orthogonal clip
                                helpers stay in bpmn/ — see dmn-integration plan's Stage 3 note)
+  entry-point.js             (no deps beyond node: — isMainModule, the CLI guard every entry script uses;
+                               symlink- and Windows-safe, unlike comparing import.meta.url to argv[1])
+  version.js                 (no deps beyond node: — PACKAGE_VERSION, read once from ../package.json;
+                               'unknown' if unreadable)
 
 Standalone tooling (top-level scripts/)
   http-server.js             HTTP API (/api/v1/generate, /orchestrate, /chat)
@@ -681,7 +685,7 @@ node bpmn/import.js existing.bpmn extracted.json
 # With documentation export:
 node bpmn/pipeline.js input.json output --doc
 
-# Abort (no files written) on any unresolved warning — rule engine, DI, or serialization:
+# Abort (no files written) on any unresolved warning — rule engine, DI, NC, or serialization:
 node bpmn/pipeline.js input.json output --strict
 
 # Enable the opt-in Optimization Advisory layer (soll/optimize mode):
