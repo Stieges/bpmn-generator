@@ -1,0 +1,40 @@
+{
+  "pools": [
+    {
+      "id": "Pool_Antrag",
+      "name": "Antragsbearbeitung",
+      "nodes": [
+        { "id": "start", "type": "startEvent", "name": "Antrag eingegangen" },
+        { "id": "pruefen", "type": "task", "name": "Antrag pruefen" },
+        { "id": "end", "type": "endEvent", "name": "Antrag geprueft" },
+        { "id": "formular", "type": "dataObjectReference", "name": "Antragsformular" },
+        { "id": "anlagen", "type": "dataObjectReference", "name": "Anlagen", "isCollection": true },
+        { "id": "register", "type": "dataStoreReference", "name": "Antragsregister" },
+        { "id": "hinweis", "type": "textAnnotation", "name": "Vier-Augen-Prinzip" },
+        { "id": "block", "type": "group", "name": "Pruefblock" }
+      ],
+      "edges": [
+        { "id": "f1", "source": "start", "target": "pruefen" },
+        { "id": "f2", "source": "pruefen", "target": "end" }
+      ]
+    },
+    {
+      "id": "Pool_Archiv",
+      "name": "Archiv",
+      "nodes": [
+        { "id": "a_start", "type": "startEvent", "name": "Akte erhalten" },
+        { "id": "ablegen", "type": "task", "name": "Akte ablegen" },
+        { "id": "a_end", "type": "endEvent", "name": "Akte abgelegt" }
+      ],
+      "edges": [
+        { "id": "a1", "source": "a_start", "target": "ablegen" },
+        { "id": "a2", "source": "ablegen", "target": "a_end" }
+      ]
+    }
+  ],
+  "associations": [
+    { "id": "as_formular", "source": "formular", "target": "pruefen", "directed": true },
+    { "id": "as_anlagen", "source": "pruefen", "target": "anlagen", "directed": true },
+    { "id": "as_register", "source": "register", "target": "pruefen", "directed": true }
+  ]
+}

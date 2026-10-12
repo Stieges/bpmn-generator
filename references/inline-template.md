@@ -48,7 +48,7 @@ const SHAPE={startEvent:{w:36,h:36},endEvent:{w:36,h:36},intermediateCatchEvent:
   exclusiveGateway:{w:50,h:50},parallelGateway:{w:50,h:50},
   inclusiveGateway:{w:50,h:50},eventBasedGateway:{w:50,h:50},complexGateway:{w:50,h:50},
   dataObjectReference:{w:36,h:50},dataStoreReference:{w:50,h:50},
-  textAnnotation:{w:100,h:30},group:{w:300,h:300}};
+  textAnnotation:{w:100,h:30},group:{w:200,h:120}};
 
 const SW={startEvent:2,endEvent:4,intermediate:1.5,task:2,callActivity:5,
   gateway:2,pool:1.5,lane:1.5,connection:1.5};

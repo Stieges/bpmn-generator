@@ -120,6 +120,7 @@ function buildCoordinateMap(elkResult, lc) {
   //        invisible in every BPMN tool.
   const boundaryHosts = placeBoundaryEvents(coords, allProcesses);
   placeArtifacts(coords, allProcesses, lc, artifactBands);
+  growLanelessPools(coords, poolCoords, allProcesses);
 
   //        Their sequence flows were routed by ELK from the HOST, so the stored
   //        route starts at the wrong shape and keeps a backtracking bend.
@@ -1139,12 +1140,14 @@ function enforceOrthogonal(pts) {
  * Anchor: the associated element, stacked below it. Below rather than above,
  * because §5.0 derives the lane band from node positions afterwards and grows
  * it downwards — placing an artifact above its anchor would push it out of the
- * top of the pool. Artifacts without any association go below the process,
- * left-aligned, in declaration order — unless an expanded subprocess declares
- * them: then they go into the band layout.js kept free at that subprocess's
- * bottom, so they stay inside the container that owns them (DI06). Stacking
- * below the whole collaboration put them outside both the subprocess and the
- * participant.
+ * top of the pool. Artifacts without any association go below their OWN
+ * process, left-aligned, in declaration order, in the lane of the process's
+ * lowest node — unless an expanded subprocess declares them: then they go into
+ * the band layout.js kept free at that subprocess's bottom, so they stay inside
+ * the container that owns them (DI06). Stacking below the whole collaboration
+ * put them outside both the subprocess and the participant, and stacking them
+ * below every process at once put them under the LAST participant whichever
+ * one owned them (#86).
  */
 function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
   const associations = lc.associations || [];
@@ -1177,7 +1180,7 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
       const anchor = coords[partnerOf[node.id]];
       const containerId = containerOf[node.id];
       if (!anchor && artifactBands[containerId]) { bandOrphans.push({ node, sz, containerId }); continue; }
-      if (!anchor) { orphans.push({ node, sz }); continue; }
+      if (!anchor) { orphans.push({ node, sz, proc }); continue; }
 
       const anchorId = partnerOf[node.id];
       // An artifact belongs to the lane of what it annotates. Without this it
@@ -1225,12 +1228,51 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
   }
 
   if (orphans.length === 0) return;
-  const placed = Object.values(coords);
-  let x = placed.length ? Math.min(...placed.map(c => c.x)) : 0;
-  const y = (placed.length ? Math.max(...placed.map(c => c.y + c.h)) : 0) + ARTIFACT_GAP;
-  for (const { node, sz } of orphans) {
-    coords[node.id] = withLines({ x, y, w: sz.w, h: sz.h }, sz);
-    x += sz.w + ARTIFACT_GAP;
+  // Per process: below that process's own content, in the lane of its lowest node, so §5.0 grows
+  // that lane's band around them (with lanes) or growLanelessPools grows the participant (without).
+  for (const proc of allProcesses) {
+    const own = orphans.filter(o => o.proc === proc);
+    if (own.length === 0) continue;
+    const placedNodes = flattenProcessNodes(proc.nodes).filter(n => coords[n.id] && !own.some(o => o.node === n));
+    const placed = placedNodes.map(n => coords[n.id]);
+    let x = placed.length ? Math.min(...placed.map(c => c.x)) : 0;
+    const y = (placed.length ? Math.max(...placed.map(c => c.y + c.h)) : 0) + ARTIFACT_GAP;
+    const lowest = placedNodes.filter(n => (proc.nodes || []).includes(n))
+      .sort((a, b) => (coords[b.id].y + coords[b.id].h) - (coords[a.id].y + coords[a.id].h))[0];
+    const lane = lowest ? laneOfNode(lowest, proc) : null;
+    for (const { node, sz } of own) {
+      if (lane) node.lane ??= lane;
+      coords[node.id] = withLines({ x, y, w: sz.w, h: sz.h }, sz);
+      x += sz.w + ARTIFACT_GAP;
+    }
+  }
+}
+
+/**
+ * Grow a participant without lanes around everything it owns (#86).
+ *
+ * Its box is ELK's, and ELK never saw the artifacts — placeArtifacts puts them below their anchors
+ * (or below the process) afterwards. A participant WITH lanes is re-derived from its lane bands in
+ * §5.0, which already grow around every node of the lane, artifacts included; a lane-less one had
+ * no such step, so a data object stacked under a task in a one-row pool landed below the pool
+ * (DI03). Grows only, and only around the artifacts — right and bottom, with the padding and label
+ * room a lane band gets — so a participant whose content already fits is left exactly as ELK made it. §5.0b2 restacks the
+ * participants afterwards, so a taller one cannot overlap the next.
+ */
+function growLanelessPools(coords, poolCoords, allProcesses) {
+  for (const proc of allProcesses) {
+    if ((proc.lanes || []).length > 0) continue;
+    const pc = poolCoords[proc.id];
+    if (!pc) continue;
+    // The process's own artifacts only: everything else ELK sized the participant for already (an
+    // artifact inside an expanded subprocess lives in the band layout.js reserved there), and
+    // measuring it again with lane-band padding would grow participants that were never broken.
+    const boxes = (proc.nodes || []).filter(n => isArtifact(n.type)).map(n => coords[n.id]).filter(Boolean);
+    if (boxes.length === 0) continue;
+    const bottom = Math.max(...boxes.map(c => c.y + c.h)) + LANE_PADDING + EXTERNAL_LABEL_H;
+    const right = Math.max(...boxes.map(c => c.x + c.w)) + LANE_PADDING;
+    if (bottom > pc.y + pc.h) pc.h = bottom - pc.y;
+    if (right > pc.x + pc.w) pc.w = right - pc.x;
   }
 }
 
