@@ -14,6 +14,7 @@
  * CLI:
  *   node orchestrator.js --input logic-core.json --output /tmp/result
  *   node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL --output /tmp/result
+ *   (--timeout <seconds>: LLM request timeout, default 120)
  */
 
 import { modelerAgent } from './agents/modeler.js';
@@ -238,10 +239,16 @@ if (isMain) {
   const apiKey = flag('--api-key');
   const model = flag('--model');
   const enableLayoutReview = args.includes('--layout-review');
+  const timeoutArg = flag('--timeout');
+  const timeoutSec = timeoutArg === null ? null : Number(timeoutArg);
+  if (timeoutArg !== null && !(Number.isFinite(timeoutSec) && timeoutSec > 0)) {
+    console.error(`--timeout takes a positive number of seconds, got: ${timeoutArg}`);
+    process.exit(1);
+  }
 
   if (!inputPath && !textInput) {
     console.error('Usage: node orchestrator.js --input <logic-core.json> [--output <base>]');
-    console.error('       node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL');
+    console.error('       node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL [--timeout <seconds>]');
     process.exit(1);
   }
 
@@ -258,7 +265,9 @@ if (isMain) {
       process.exit(1);
     }
     const { createLlmProvider } = await import('./agents/llm-provider.js');
-    options.llmProvider = createLlmProvider({ baseUrl: apiUrl, apiKey, model });
+    // A thinking model or a slow endpoint can need more than the provider's default (120 s).
+    options.llmProvider = createLlmProvider({ baseUrl: apiUrl, apiKey, model,
+      ...(timeoutSec !== null && { timeout: Math.round(timeoutSec * 1000) }) });
   }
 
   try {
