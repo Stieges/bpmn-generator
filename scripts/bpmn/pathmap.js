@@ -1,3 +1,9 @@
+/*
+ * Contains data derived from bpmn-js 18.6.2 (lib/draw/PathMap.js).
+ * Copyright (c) 2014-present Camunda Services GmbH. Used under the bpmn.io license (MIT-based);
+ * the full text is in THIRD_PARTY_NOTICES.md.
+ */
+
 /**
  * BPMN glyph paths — the path templates of bpmn-js 18.6.2 (`lib/draw/PathMap.js`, bpmn.io license,
  * MIT-based), and its `getScaledPath`, so our SVG draws an icon with the same geometry bpmn.io

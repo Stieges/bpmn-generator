@@ -1253,10 +1253,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `10, 6, 0, 6`. Text is laid out as bpmn-js lays it out — task names centred with padding 7 and
   broken by Text.js's rule (no more hyphenated breaks), container titles centred at the top in
   regular weight, pool and lane names in regular weight, annotations left-top. Connections are
-  drawn above shapes, as in bpmn.io. Colours, stroke widths, dash patterns and fonts live in
+  drawn above shapes and with bpmn-js's rounded corners (radius 5, `symbols.connectionCornerRadius`);
+  the rounding is drawing only — each connection path carries its exact waypoints in
+  `data-waypoints`, which is what the geometry fence now compares with the DI. Colours, stroke widths, dash patterns and fonts live in
   `config.json` (`color`, `strokeWidth`, `symbols`). The BPMN XML is unchanged; every SVG golden
   and every SVG hash changes. `symbol-fidelity.test.js` now also asserts stroke widths per class,
   dash patterns, and the order and x offset of every task marker, from bpmn-js's tables.
+- **Third-party notices.** `scripts/bpmn/pathmap.js` and parts of `icons.js` carry glyph data and
+  renderer parameters from bpmn-js 18.6.2, `svg.js` and `coordinates.js` algorithms from diagram-js
+  15.3.0 (both Camunda Services GmbH). Their license texts and the derived files are listed in
+  `scripts/THIRD_PARTY_NOTICES.md`, which the npm package now ships.
 - **Every node and connection in the SVG carries its id.** A node's markup (event, gateway,
   activity, data object/store, annotation, group) is one `<g data-element-id="…">` group, and the
   path of a sequence flow, message flow or association has a `data-element-id` attribute, as in

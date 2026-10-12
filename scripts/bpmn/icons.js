@@ -1,3 +1,9 @@
+/*
+ * Contains renderer parameters derived from bpmn-js 18.6.2 (lib/draw/BpmnRenderer.js).
+ * Copyright (c) 2014-present Camunda Services GmbH. Used under the bpmn.io license (MIT-based);
+ * the full text is in THIRD_PARTY_NOTICES.md.
+ */
+
 /**
  * BPMN Icons — event icons, task-type icons, task markers and gateway symbols, drawn the way
  * bpmn-js 18.6.2 draws them (`lib/draw/BpmnRenderer.js`; glyph paths from `pathmap.js`).
