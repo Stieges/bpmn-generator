@@ -11,7 +11,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  layoutDecisionTable, layoutDecisionTables, describeHitPolicy, decisionsWithTables, isAnyEntry,
+  layoutDecisionTable, layoutDecisionTables, layoutLiteralExpression, describeHitPolicy, decisionsWithLogic, isAnyEntry,
 } from './table.js';
 import { formatTableMarkdown, formatTablePlainText, escapeMarkdownCell } from './table-text.js';
 import { generateTablesSvg } from './table-svg.js';
@@ -146,10 +146,12 @@ describe('table.js — geometry, computed once', () => {
     expect(m.rows[0].cells[1].lines.length).toBeGreaterThan(1);
   });
 
-  test('stacking: every table below the previous one, stackGap apart, inside the margin', () => {
+  test('stacking: every decision below the previous one, stackGap apart, inside the margin', () => {
     const dc = loadFixture('roundtrip-all-fields.json');
     const stack = layoutDecisionTables(dc);
-    expect(stack.tables.map((t) => t.decisionId)).toEqual(decisionsWithTables(dc).map((n) => n.id));
+    expect(stack.tables.map((t) => t.decisionId)).toEqual(decisionsWithLogic(dc).map((n) => n.id));
+    // tables and literal expressions both, in document order
+    expect(stack.tables.map((t) => t.kind)).toEqual(decisionsWithLogic(dc).map((n) => (n.decisionTable ? 'table' : 'literal')));
     expect(stack.tables[0].geometry.y).toBe(S.margin);
     for (let i = 1; i < stack.tables.length; i++) {
       const prev = stack.tables[i - 1].geometry;
@@ -161,6 +163,20 @@ describe('table.js — geometry, computed once', () => {
 
   test('a decision without a table cannot be laid out as one', () => {
     expect(() => layoutDecisionTable({ id: 'x', type: 'decision', name: 'X', expression: '1' })).toThrow(/no decisionTable/);
+    expect(() => layoutLiteralExpression({ id: 'x', type: 'decision', name: 'X' })).toThrow(/no expression/);
+  });
+
+  test('a literal expression: title, "Literal expression (type: …)", the FEEL text in one box under it', () => {
+    const node = loadFixture('discount-decision.json').nodes.find((n) => n.id === 'dec_finalPercentage');
+    const m = layoutLiteralExpression(node, { x: 5, y: 7 });
+    expect(m).toMatchObject({ kind: 'literal', name: 'Final percentage', typeRef: 'number', expression: node.expression });
+    expect(m.subtitle).toBe('Literal expression (type: number)');
+    const g = m.geometry;
+    expect(g.title).toMatchObject({ x: 5, y: 7, w: g.w });
+    expect(g.body).toMatchObject({ x: 5, y: 7 + g.title.h, w: g.w });
+    expect(g.h).toBe(g.title.h + g.body.h);
+    expect(g.body.lines.join(' ')).toBe(node.expression);
+    expect(layoutLiteralExpression({ ...node, typeRef: undefined }, { locale: 'de' }).subtitle).toBe('Literaler Ausdruck');
   });
 });
 
@@ -201,37 +217,29 @@ describe('table-text.js — Markdown', () => {
   });
 });
 
-describe('table-text.js — plain text for a BPMN documentation', () => {
-  test('aligned table: group line WHEN … || THEN, "||" between inputs and outputs', () => {
+describe('table-text.js — plain text for a BPMN documentation: one sentence per rule', () => {
+  test('"Rule n: WHEN <label> <test> AND … THEN <output> = <value>", "any" inputs left out', () => {
     expect(formatTablePlainText(layoutDecisionTable(claimDecision()))).toEqual([
-      '  | WHEN          |                      || THEN',
-      'U | Claim amount  | Customer segment     || level',
-      '  | number        | "premium","standard" || "auto","clerk","manager"',
-      '--+---------------+----------------------++-------------------------',
-      '1 | < 1000        | –                    || "auto"',
-      '2 | [1000..10000) | "premium"            || "clerk"',
-      '3 | [1000..10000) | "standard"           || "manager"',
-      '4 | >= 10000      | –                    || "manager"',
-    ]);
-  });
-
-  test('wider than plainTextMaxWidth → one sentence per rule, "any" inputs left out', () => {
-    expect(formatTablePlainText(layoutDecisionTable(claimDecision()), { maxWidth: 40 })).toEqual([
       'Rule 1: WHEN Claim amount < 1000 THEN level = "auto"',
-      'Rule 2: WHEN Claim amount in [1000..10000) AND Customer segment = "premium" THEN level = "clerk"',
-      'Rule 3: WHEN Claim amount in [1000..10000) AND Customer segment = "standard" THEN level = "manager"',
+      'Rule 2: WHEN Claim amount [1000..10000) AND Customer segment "premium" THEN level = "clerk"',
+      'Rule 3: WHEN Claim amount [1000..10000) AND Customer segment "standard" THEN level = "manager"',
       'Rule 4: WHEN Claim amount >= 10000 THEN level = "manager"',
     ]);
   });
 
-  test('sentences carry annotations; a rule matching anything has no WHEN; German words', () => {
+  test('annotations in parentheses; a rule matching anything has no WHEN; German words', () => {
     const m = layoutDecisionTable(decision(simpleTable({ annotations: [{ name: 'n' }], rules: [{ when: ['-'], then: ['"x"'], annotations: ['why'] }] })), { locale: 'de' });
-    expect(formatTablePlainText(m, { maxWidth: 1 })).toEqual(['Regel 1: DANN class = "x" (why)']);
+    expect(formatTablePlainText(m)).toEqual(['Regel 1: DANN class = "x" (why)']);
   });
 
-  test('no line of the aligned form ends in a separator', () => {
-    const m = layoutDecisionTable(loadFixture('discount-decision.json').nodes.find((n) => n.id === 'dec_discountLevel'));
-    for (const line of formatTablePlainText(m)) expect(line).not.toMatch(/[|\s]$/);
+  test('a wide table is still sentences — no column alignment that a proportional font would break', () => {
+    const wide = decision(simpleTable({
+      inputs: Array.from({ length: 6 }, (_, i) => ({ label: `Input number ${i}`, expression: `i${i}` })),
+      rules: [{ when: ['1', '-', '3', '-', '5', '-'], then: ['"x"'] }],
+    }));
+    expect(formatTablePlainText(layoutDecisionTable(wide))).toEqual([
+      'Rule 1: WHEN Input number 0 1 AND Input number 2 3 AND Input number 4 5 THEN class = "x"',
+    ]);
   });
 });
 
@@ -243,7 +251,7 @@ describe('table-svg.js and table-html.js — translations of the one layout', ()
     const svg = generateTablesSvg(s);
     const drawn = [...svg.matchAll(/<rect class="dmn-(?:head|cell) ([a-z]+)" x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g)]
       .map((m) => `${m[1]} ${m[2]},${m[3]} ${m[4]}x${m[5]}`);
-    const want = s.tables.flatMap((t) => [
+    const want = s.tables.filter((t) => t.kind === 'table').flatMap((t) => [
       ...t.columns.map((c) => `${c.role} ${c.head.x},${c.head.y} ${c.head.w}x${c.head.h}`),
       ...t.rows.flatMap((r) => r.cells.map((c) => `${c.role} ${c.x},${c.y} ${c.w}x${c.h}`)),
     ]);
@@ -268,14 +276,31 @@ describe('table-svg.js and table-html.js — translations of the one layout', ()
     dc.nodes.find((n) => n.id === 'dec_discountLevel').decisionTable.rules[0].then = ['"<b>&"'];
     const s = layoutDecisionTables(dc);
     const html = generateTablesHtml(s, { title: dc.name });
-    expect(html.match(/<table /g)).toHaveLength(s.tables.length);
+    const tables = s.tables.filter((t) => t.kind === 'table');
+    expect(html.match(/<table /g)).toHaveLength(tables.length);
     const widths = [...html.matchAll(/<col style="width:(\d+)px;">/g)].map((m) => +m[1]);
-    expect(widths).toEqual(s.tables.flatMap((t) => t.columns.map((c) => c.w)));
+    expect(widths).toEqual(tables.flatMap((t) => t.columns.map((c) => c.w)));
     expect(html).toContain('&quot;&lt;b&gt;&amp;&quot;');
     expect(html).not.toContain('<b>&');
     expect(html).toMatch(/<th [^>]*><div[^>]*>When<\/div><div[^>]*>Order value<\/div><div[^>]*>number<\/div><\/th>/);
     expect(html).toContain(`${DMN_TABLE_STYLE.doubleLineGap}px double`);
     expect(html).not.toMatch(/<style|<script|class="/);
+  });
+
+  test('a literal-expression decision is drawn too: its boxes from the model, its FEEL text escaped', () => {
+    const dc = loadFixture('discount-decision.json');
+    const lit = dc.nodes.find((n) => n.id === 'dec_finalPercentage');
+    lit.expression = 'if a < b then "x" else "y"';
+    const s = layoutDecisionTables(dc);
+    const m = s.tables.find((t) => t.decisionId === 'dec_finalPercentage');
+    const svg = generateTablesSvg(s);
+    const b = m.geometry.body;
+    expect(svg).toContain(`<rect class="dmn-expression" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}"`);
+    expect(svg).toContain('if a &lt; b then &quot;x&quot; else &quot;y&quot;');
+    expect(svg).toContain('Literal expression (type: number)');
+    const html = generateTablesHtml(s);
+    expect(html).toContain('data-element-id="dec_finalPercentage"');
+    expect(html).toContain('if a &lt; b then &quot;x&quot; else &quot;y&quot;');
   });
 
   test('SVG escapes every text', () => {
@@ -297,6 +322,6 @@ describe('doc.js — the --doc Markdown', () => {
     expect(md).toContain('- **Outputs:** level (string, "none","bronze","silver")');
     expect(md).toContain('| U | When: Order value *(number)* | Then: level *("none","bronze","silver")* | Annotation |');
     expect(md).toContain('## Decision: Final percentage');
-    expect(md).toContain('**Expression:** `base(discountLevel) + loyaltyBonus(customerSince)`');
+    expect(md).toContain('**Literal expression (type: number):** `base(discountLevel) + loyaltyBonus(customerSince)`');
   });
 });

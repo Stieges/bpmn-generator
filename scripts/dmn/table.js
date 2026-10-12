@@ -10,6 +10,10 @@
  * same Arial measurement and diagram-js line breaking the DRD and BPMN renderers use), row heights
  * from the wrapped lines.
  *
+ * A decision decided by a literal expression gets its own small model (`layoutLiteralExpression`:
+ * title, "Literal expression (type: …)", the FEEL text in one box), so the stacked views
+ * (`layoutDecisionTables`) show every decision that has logic.
+ *
  * The renderers only translate this model, the same contract as a diagram's coordMap:
  *   - table-text.js  — Markdown (pipe table) and plain text (BPMN documentation) — words only;
  *   - table-svg.js   — the decision tables as SVG, every box from `geometry`;
@@ -191,6 +195,7 @@ export function layoutDecisionTable(node, { x = 0, y = 0, locale } = {}) {
 
   const firstOutput = columns.findIndex((c) => c.role === 'output');
   return {
+    kind: 'table',
     decisionId: node.id,
     name: node.name ?? node.id,
     question: node.question ?? null,
@@ -209,22 +214,76 @@ export function layoutDecisionTable(node, { x = 0, y = 0, locale } = {}) {
   };
 }
 
+/** "Literal expression (type: number)" — the line under a literal expression's title. */
+export function literalExpressionLine(typeRef, labels = dmnLabels()) {
+  return typeRef ? `${labels.literalExpression} (${labels.type}: ${typeRef})` : labels.literalExpression;
+}
+
+/**
+ * Lay out one decision decided by a literal expression (`node.expression`): the same title box as a
+ * table (decision name; under it "Literal expression (type: …)") over one box holding the FEEL text,
+ * wrapped. Width from the text, between `minColumnWidth` × 3 and `maxColumnWidth` × 2.
+ *
+ * @returns {object} `{ kind: 'literal', decisionId, name, typeRef, expression, subtitle, labels, geometry }`
+ */
+export function layoutLiteralExpression(node, { x = 0, y = 0, locale } = {}) {
+  if (typeof node.expression !== 'string') throw new Error(`layoutLiteralExpression: decision "${node.id}" has no expression`);
+  const labels = dmnLabels(locale);
+  const S = DMN_TABLE_STYLE;
+  const pad = S.cellPadding;
+  const tPad = S.title.padding;
+  const subtitle = literalExpressionLine(node.typeRef, labels);
+  const want = Math.max(natural(node.name ?? node.id, 'title') + 2 * tPad, natural(subtitle, 'hitPolicy') + 2 * tPad,
+    natural(node.expression, 'cell') + 2 * pad) + 2;
+  const w = Math.ceil(Math.min(2 * S.maxColumnWidth, Math.max(3 * S.minColumnWidth, want)));
+  const nameLines = wrap(node.name ?? node.id, 'title', w - 2 * tPad);
+  const policyLines = wrap(subtitle, 'hitPolicy', w - 2 * tPad);
+  const titleH = Math.max(S.title.height,
+    Math.ceil(2 * tPad + nameLines.length * lineH('title') + policyLines.length * lineH('hitPolicy')));
+  const lines = wrap(node.expression, 'cell', w - 2 * pad);
+  const bodyH = Math.ceil(lines.length * lineH('cell') + 2 * pad);
+  return {
+    kind: 'literal',
+    decisionId: node.id,
+    name: node.name ?? node.id,
+    typeRef: node.typeRef ?? null,
+    expression: node.expression,
+    subtitle,
+    labels,
+    geometry: {
+      x, y, w, h: titleH + bodyH,
+      title: { x, y, w, h: titleH, nameLines, policyLines, padding: tPad },
+      body: { x, y: y + titleH, w, h: bodyH, lines, padding: pad },
+    },
+  };
+}
+
 /** Every decision of a Decision-Core that carries a decision table, in document order. */
 export function decisionsWithTables(dc) {
   return (dc.nodes ?? []).filter((n) => n.type === 'decision' && n.decisionTable);
 }
 
 /**
- * All decision tables of a Decision-Core stacked top to bottom, `dmn.table.stackGap` apart, inside
- * a `dmn.table.margin` frame: `{ size: { w, h }, tables: [model…] }`. Each model's geometry is
- * already absolute on that canvas.
+ * Every decision of a Decision-Core with decision logic the views can show — a decision table or a
+ * literal expression — in document order.
+ */
+export function decisionsWithLogic(dc) {
+  return (dc.nodes ?? []).filter((n) => n.type === 'decision' && (n.decisionTable || typeof n.expression === 'string'));
+}
+
+/**
+ * All decisions of a Decision-Core stacked top to bottom, `dmn.table.stackGap` apart, inside a
+ * `dmn.table.margin` frame: `{ size: { w, h }, tables: [model…] }` — a table model for a decision
+ * table, a literal-expression model (`kind: 'literal'`) for a literal expression. Each model's
+ * geometry is already absolute on that canvas.
  */
 export function layoutDecisionTables(dc, { locale } = {}) {
   const S = DMN_TABLE_STYLE;
   const tables = [];
   let y = S.margin;
-  for (const node of decisionsWithTables(dc)) {
-    const model = layoutDecisionTable(node, { x: S.margin, y, locale });
+  for (const node of decisionsWithLogic(dc)) {
+    const at = { x: S.margin, y, locale };
+    const model = node.decisionTable ? layoutDecisionTable(node, at) : layoutLiteralExpression(node, at);
     tables.push(model);
     y += model.geometry.h + S.stackGap;
   }

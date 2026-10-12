@@ -55,21 +55,17 @@ const task = (lc, id = 'task_evaluateApproval') => lc.nodes.find((n) => n.id ===
 const count = (text, needle) => String(text).split(needle).length - 1;
 
 describe('applyDecisionDocumentation', () => {
-  test('a resolved task gets a marked section: title line, hit policy, aligned table', () => {
+  test('a resolved task gets a marked section: title line, hit policy, one sentence per rule', () => {
     const lc = claimProcess();
     const out = applyDecisionDocumentation(lc, [claimDc()]);
     expect(task(out).documentation).toBe([
       DECISION_DOC_BEGIN,
       'Decision: Approval level (dec_approvalLevel) — generated from Definitions_claimApproval',
       'Hit policy: UNIQUE (U) – exactly one rule can match',
-      '  | WHEN          |                      || THEN',
-      'U | Claim amount  | Customer segment     || level',
-      '  | number        | "premium","standard" || "auto","clerk","manager"',
-      '--+---------------+----------------------++-------------------------',
-      '1 | < 1000        | –                    || "auto"',
-      '2 | [1000..10000) | "premium"            || "clerk"',
-      '3 | [1000..10000) | "standard"           || "manager"',
-      '4 | >= 10000      | –                    || "manager"',
+      'Rule 1: WHEN Claim amount < 1000 THEN level = "auto"',
+      'Rule 2: WHEN Claim amount [1000..10000) AND Customer segment "premium" THEN level = "clerk"',
+      'Rule 3: WHEN Claim amount [1000..10000) AND Customer segment "standard" THEN level = "manager"',
+      'Rule 4: WHEN Claim amount >= 10000 THEN level = "manager"',
       DECISION_DOC_END,
     ].join('\n'));
     expect(task(out, 'task_review').documentation).toBe('Four eyes.');
@@ -96,6 +92,20 @@ describe('applyDecisionDocumentation', () => {
     expect(task(out).documentation).toBe(`${DECISION_DOC_BEGIN}\nCalls decision: dec_approvalLevel (table not supplied)\n${DECISION_DOC_END}`);
   });
 
+  test('a decision decided by a literal expression shows its type and FEEL text', () => {
+    const dc = load('dmn/discount-decision.json');
+    const lc = claimProcess();
+    task(lc).decisionRef = 'dec_finalPercentage';
+    expect(task(applyDecisionDocumentation(lc, [dc])).documentation).toBe([
+      DECISION_DOC_BEGIN,
+      'Decision: Final percentage (dec_finalPercentage) \u2014 generated from Definitions_discount',
+      'Literal expression (type: number): base(discountLevel) + loyaltyBonus(customerSince)',
+      DECISION_DOC_END,
+    ].join('\n'));
+    expect(task(applyDecisionDocumentation(lc, [dc], { locale: 'de' })).documentation)
+      .toContain('Literaler Ausdruck (Typ: number): base(discountLevel)');
+  });
+
   test('a decision two models define is reported as ambiguous, naming both', () => {
     const a = claimDc();
     const b = claimDc();
@@ -107,7 +117,7 @@ describe('applyDecisionDocumentation', () => {
   test('German labels', () => {
     const out = applyDecisionDocumentation(claimProcess(), [claimDc()], { locale: 'de' });
     expect(task(out).documentation).toContain('Entscheidung: Approval level (dec_approvalLevel) — erzeugt aus Definitions_claimApproval');
-    expect(task(out).documentation).toContain('  | WENN ');
+    expect(task(out).documentation).toContain('Regel 2: WENN Claim amount [1000..10000) UND Customer segment "premium" DANN level = "clerk"');
     expect(applyDecisionDocumentation(claimProcess(), [], { locale: 'de' }).nodes[1].documentation)
       .toContain('Ruft Entscheidung auf: dec_approvalLevel (Tabelle nicht mitgeliefert)');
   });
@@ -178,7 +188,7 @@ describe('runPipeline({ decisions })', () => {
   test('the SVG tooltip of the task carries the section, escaped', async () => {
     const r = await runPipeline(claimProcess(), { decisions: [claimDc()] });
     expect(r.svg).toContain('<title>=== BEGIN generated: DMN decision');
-    expect(r.svg).toContain('1 | &lt; 1000');
+    expect(r.svg).toContain('Rule 1: WHEN Claim amount &lt; 1000');
   });
 
   test('a Decision-Core that fails its schema blocks the run with a [decisions #i] error', async () => {

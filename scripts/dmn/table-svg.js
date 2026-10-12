@@ -97,6 +97,20 @@ function renderTable(model) {
   return out.join('\n');
 }
 
+/** A literal expression: the title box, then one box with the FEEL text (table.js layoutLiteralExpression). */
+function renderLiteral(model) {
+  const { title: t, body: b } = model.geometry;
+  return [
+    `<g class="dmn-literal-expression" data-element-id="${esc(model.decisionId)}">`,
+    `<rect x="${rn(t.x)}" y="${rn(t.y)}" width="${rn(t.w)}" height="${rn(t.h)}" fill="${C.background}" stroke="${C.border}"/>`,
+    ...textBlock(t.nameLines, 'title', t.x + t.padding, t.y + t.padding, 'start', C.color),
+    ...textBlock(t.policyLines, 'hitPolicy', t.x + t.padding, t.y + t.padding + t.nameLines.length * lh('title'), 'start', C.subtleColor),
+    `<rect class="dmn-expression" x="${rn(b.x)}" y="${rn(b.y)}" width="${rn(b.w)}" height="${rn(b.h)}" fill="${C.outputCellFill}" stroke="${C.border}"/>`,
+    ...textBlock(b.lines, 'cell', b.x + b.padding, b.y + b.padding, 'start', C.color),
+    '</g>',
+  ].join('\n');
+}
+
 /**
  * @param {{ size: {w:number,h:number}, tables: object[] }} stack - layoutDecisionTables' result
  * @returns {string} SVG document
@@ -107,7 +121,7 @@ export function generateTablesSvg(stack) {
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${C.fontFamily}">`,
     `<rect width="${W}" height="${H}" fill="${C.background}"/>`,
-    ...stack.tables.map(renderTable),
+    ...stack.tables.map((m) => (m.kind === 'literal' ? renderLiteral(m) : renderTable(m))),
     '</svg>',
   ].join('\n');
 }

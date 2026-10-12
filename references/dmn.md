@@ -156,7 +156,7 @@ cat approval.json | node dmn/pipeline.js - approval --strict           # Decisio
 | `approval.dmn` | DMN 1.3 XML with its diagram (DMNDI) |
 | `approval.svg` | the DRD as an image — the same coordinates as the DMNDI, drawn as dmn.io draws them |
 | `approval.md` (`--doc`) | per decision: heading, question, inputs and outputs, the decision table |
-| `approval.tables.svg` (`--doc`) | every decision table, stacked, drawn like dmn.io's table view |
+| `approval.tables.svg` (`--doc`) | every decision table, stacked, drawn like dmn.io's table view; a decision decided by a literal expression as its name, type and FEEL text |
 | `approval.tables.html` (`--doc`) | the same tables as HTML with inline styles — pastes into Confluence or a wiki |
 
 The words in the Markdown, SVG and HTML tables (When/And/Then, the hit-policy meanings, "any") are
@@ -236,19 +236,17 @@ had:
 === BEGIN generated: DMN decision (bpmn-generator) — replaced on every run ===
 Decision: Approval level (dec_approvalLevel) — generated from Definitions_claimApproval
 Hit policy: UNIQUE (U) – exactly one rule can match
-  | WHEN          |                      || THEN
-U | Claim amount  | Customer segment     || level
-  | number        | "premium","standard" || "auto","clerk","manager"
---+---------------+----------------------++-------------------------
-1 | < 1000        | –                    || "auto"
-2 | [1000..10000) | "premium"            || "clerk"
-3 | [1000..10000) | "standard"           || "manager"
-4 | >= 10000      | –                    || "manager"
+Rule 1: WHEN Claim amount < 1000 THEN level = "auto"
+Rule 2: WHEN Claim amount [1000..10000) AND Customer segment "premium" THEN level = "clerk"
+Rule 3: WHEN Claim amount [1000..10000) AND Customer segment "standard" THEN level = "manager"
+Rule 4: WHEN Claim amount >= 10000 THEN level = "manager"
 === END generated: DMN decision ===
 ```
 
-A table wider than 100 characters is written as one sentence per rule instead
-(`Rule 2: WHEN Claim amount in [1000..10000) AND Customer segment = "premium" THEN level = "clerk"`).
+One sentence per rule, not a table: the Camunda properties panel shows documentation in a
+proportional font, where aligned columns fall apart. An input that matches anything is left out of
+its sentence. A decision decided by a literal expression gets
+`Literal expression (type: number): <FEEL text>` instead of rules.
 Every run **replaces** the section, so importing the `.bpmn` and generating it again never
 duplicates it; do not edit inside the markers — write your own notes above them. A `decisionRef`
 none of the given models defines reads `Calls decision: <id> (table not supplied)`; one that two

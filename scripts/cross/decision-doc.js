@@ -11,8 +11,12 @@
  *     === BEGIN generated: DMN decision (bpmn-generator) — replaced on every run ===
  *     Decision: Approval level (dec_approvalLevel) — generated from Definitions_claimApproval
  *     Hit policy: UNIQUE (U) – exactly one rule can match
- *     <the table, dmn/table-text.js formatTablePlainText>
+ *     Rule 1: WHEN Claim amount < 1000 THEN level = "auto"
+ *     …                                     (dmn/table-text.js formatTablePlainText)
  *     === END generated: DMN decision ===
+ *
+ * A decision decided by a literal expression gets its expression instead of a table:
+ * "Literal expression (type: number): <FEEL text>".
  *
  * The two marker lines make the section findable again: both importers read documentation as text
  * and keep the section, and the next run REPLACES it (stripDecisionSection) instead of appending a
@@ -20,9 +24,9 @@
  * "Calls decision: <ref> (table not supplied)"; one that more than one model defines names them.
  *
  * Which decision a task calls is decided by scripts/scenarios/bridge.js `resolveBridge` — the same
- * matching the scenario pipeline judges SC02/SC03 on, not a second copy of it. Like the bridge, only
- * decisions with a decision table count (a decision decided by a literal expression is reported as
- * not supplied).
+ * matching the scenario pipeline judges SC02/SC03 on, not a second copy of it — called with
+ * `includeLiteralExpressions`, which the scenario pipeline leaves off, so its rules keep their
+ * meaning while a task calling a literal-expression decision still gets that decision shown.
  *
  * Text, not geometry: nothing here touches a coordinate, so the geometry contract is untouched, and
  * without `decisions` the pipeline's output is byte-identical to before (the goldens and the
@@ -30,7 +34,7 @@
  */
 
 import { resolveBridge, linkKey } from '../scenarios/bridge.js';
-import { layoutDecisionTable } from '../dmn/table.js';
+import { layoutDecisionTable, literalExpressionLine } from '../dmn/table.js';
 import { formatTablePlainText } from '../dmn/table-text.js';
 import { dmnLabels } from '../dmn/constants.js';
 import { validateDecisionCoreSchema } from '../dmn/schema-gate.js';
@@ -83,13 +87,14 @@ function sectionLines(entry, locale) {
     return [`${labels.callsDecision}: ${ref} (${labels.ambiguous} ${where})`];
   }
   const d = entry.decision;
+  const title = `${labels.decision}: ${d.decisionName} (${d.decisionId}) \u2014 ${labels.generatedFrom} ${d.decisionCoreId}`;
+  if (!d.decisionTable) {
+    // A literal expression (bridge entry from includeLiteralExpressions): its type and FEEL text.
+    return [title, `${literalExpressionLine(d.typeRef, labels)}: ${String(d.expression).replace(/\s*[\r\n]+\s*/g, ' ')}`];
+  }
   const node = { id: d.decisionId, name: d.decisionName, decisionTable: d.decisionTable };
   const model = layoutDecisionTable(node, { locale });
-  return [
-    `${labels.decision}: ${d.decisionName} (${d.decisionId}) — ${labels.generatedFrom} ${d.decisionCoreId}`,
-    model.hitPolicyText,
-    ...formatTablePlainText(model),
-  ];
+  return [title, model.hitPolicyText, ...formatTablePlainText(model)];
 }
 
 /** The complete generated section, marker lines included. */
@@ -137,7 +142,7 @@ export function applyDecisionDocumentation(lc, decisionCores, { locale } = {}) {
   // in another realm under Jest's VM modules, which changed the layout (measured) there.
   const out = JSON.parse(JSON.stringify(lc));
   dmnLabels(locale); // an unknown locale fails here, before anything is written
-  const { byKey } = resolveBridge(out, decisionCores ?? []);
+  const { byKey } = resolveBridge(out, decisionCores ?? [], { includeLiteralExpressions: true });
   const visit = (node, poolId) => {
     const occurrence = poolId !== undefined ? { poolId, nodeId: node.id } : { nodeId: node.id };
     const entry = byKey.get(linkKey(occurrence));

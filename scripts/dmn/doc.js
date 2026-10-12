@@ -12,6 +12,7 @@
 
 import { dmnLabels } from './constants.js';
 import { escapeMarkdownCell, formatTableMarkdown } from './table-text.js';
+import { literalExpressionLine } from './table.js';
 
 const code = (s) => `\`${String(s).replace(/`/g, 'ˋ')}\``;
 
@@ -48,7 +49,7 @@ export function generateDmnMarkdown(dc, stack, { locale } = {}) {
       out.push(`- **${labels.outputs}:** ${clauseList(t.outputs ?? [], (o) => o.name || t.outputLabel || node.name)}`, '');
       out.push(formatTableMarkdown(model, { headingLevel: 0 }));
     } else if (node.expression != null) {
-      out.push(`**${labels.expression}:** ${code(node.expression)}`);
+      out.push(`**${escapeMarkdownCell(literalExpressionLine(node.typeRef, labels))}:** ${code(node.expression)}`);
     }
   }
   return `${out.join('\n')}\n`;

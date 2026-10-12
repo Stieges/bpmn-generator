@@ -64,6 +64,21 @@ function renderTable(model) {
   return out.join('\n');
 }
 
+/** A literal expression: title and type line, then the FEEL text in one bordered box. */
+function renderLiteral(model) {
+  const g = model.geometry;
+  return [
+    `<div style="margin:0 0 ${S.stackGap}px 0;" data-element-id="${esc(model.decisionId)}">`,
+    `<div style="border:1px solid ${esc(S.border)};border-bottom:none;padding:${S.title.padding}px;width:${g.w}px;box-sizing:border-box;background:${esc(S.background)};">`,
+    `<div style="font-size:${S.title.fontSize}px;">${esc(model.name)}</div>`,
+    `<div style="font-size:${S.hitPolicy.fontSize}px;color:${esc(S.subtleColor)};">${esc(model.subtitle)}</div>`,
+    '</div>',
+    `<div style="border:1px solid ${esc(S.border)};padding:${S.cellPadding}px;width:${g.w}px;box-sizing:border-box;`
+      + `background:${esc(S.outputCellFill)};font-size:${S.cell.fontSize}px;white-space:pre-wrap;">${esc(model.expression)}</div>`,
+    '</div>',
+  ].join('\n');
+}
+
 /**
  * @param {{ tables: object[] }} stack - layoutDecisionTables' result
  * @param {object} [opts]
@@ -77,7 +92,7 @@ export function generateTablesHtml(stack, { title = '' } = {}) {
     `<title>${esc(title)}</title>`,
     '</head>',
     `<body style="margin:${S.margin}px;font-family:${esc(S.fontFamily)};color:${esc(S.color)};background:${esc(S.background)};">`,
-    ...stack.tables.map(renderTable),
+    ...stack.tables.map((m) => (m.kind === 'literal' ? renderLiteral(m) : renderTable(m))),
     '</body></html>',
     '',
   ].join('\n');

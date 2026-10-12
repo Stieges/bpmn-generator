@@ -6,15 +6,15 @@
  *       ("U" over the rule numbers, "When: <label> *(<values|type>)*", "And: …", "Then: …",
  *       "Annotation" only when a rule has one) and one row per rule, "–" for "any".
  *   formatTablePlainText(model) — the plain-text form for a BPMN `documentation` (plain text in
- *       bpmn.io and Camunda Modeler): an aligned table with a group line "WHEN … || THEN …" and
- *       "||" between inputs and outputs; when that is wider than `dmn.table.plainTextMaxWidth`
- *       characters, one sentence per rule instead ("Rule 1: WHEN … AND … THEN … = …").
+ *       bpmn.io and Camunda Modeler): one sentence per rule, "Rule 1: WHEN <label> <test> AND …
+ *       THEN <output> = <value> (<annotation>)", inputs that match anything left out. Sentences,
+ *       not an aligned table: Camunda's properties panel shows documentation in a proportional
+ *       font, where column alignment falls apart (owner decision, 2026-10-12).
  *
  * Words only: what a column is called, what "any" reads as and how the hit policy is spelled out
  * all come from the model (table.js), which takes them from `config.json → dmn.labels`.
  */
 
-import { DMN_TABLE_STYLE } from './constants.js';
 import { oneLine } from './table.js';
 
 // ── Markdown ─────────────────────────────────────────────────────────────────────────────────
@@ -61,48 +61,12 @@ export function formatTableMarkdown(model, { headingLevel = 3 } = {}) {
 
 // ── Plain text ───────────────────────────────────────────────────────────────────────────────
 
-const pad = (s, n) => s + ' '.repeat(Math.max(0, n - [...s].length));
-
-/** The aligned table, line by line; `null` when one of its lines is wider than `maxWidth`. */
-function alignedTable(model, maxWidth) {
-  const { columns, rows, labels } = model;
-  const firstInput = columns.findIndex((c) => c.role === 'input');
-  const firstOutput = columns.findIndex((c) => c.role === 'output');
-  const group = columns.map((c, i) => (i === firstInput ? labels.whenGroup : i === firstOutput ? labels.thenGroup : ''));
-  const head = columns.map((c) => oneLine(c.label));
-  const detail = columns.map((c) => oneLine(c.detail));
-  const body = rows.map((r) => r.cells.map((c) => oneLine(c.text)));
-  const all = [group, head, detail, ...body];
-  const widths = columns.map((_, i) => Math.max(...all.map((line) => [...line[i]].length)));
-
-  // Trailing empty cells are dropped with their separators, so no line ends in a bare '|'.
-  const join = (cells) => {
-    let last = cells.length - 1;
-    while (last > 0 && !cells[last]) last--;
-    return cells.slice(0, last + 1).map((cell, i) => {
-      const sep = i === 0 ? '' : (i === firstOutput ? ' || ' : ' | ');
-      return sep + pad(cell, widths[i]);
-    }).join('').trimEnd();
-  };
-  const rule = columns.map((_, i) => {
-    const sep = i === 0 ? '' : (i === firstOutput ? '-++-' : '-+-');
-    return sep + '-'.repeat(widths[i]);
-  }).join('');
-
-  const lines = [join(group), join(head)];
-  if (detail.some(Boolean)) lines.push(join(detail));
-  lines.push(rule, ...body.map(join));
-  return lines.some((l) => [...l].length > maxWidth) ? null : lines;
-}
-
-/** "Claim amount < 1000", "Segment = \"premium\"", "Amount in [1000..10000)". */
-function condition(label, test) {
-  const t = oneLine(test).trim();
-  if (/^(<=|>=|<|>|=|!=)/.test(t)) return `${label} ${t}`;
-  if (/^[[(\]]/.test(t) || /,/.test(t) || /^not\s*\(/.test(t)) return `${label} in ${t}`;
-  return `${label} = ${t}`;
-}
-
+/**
+ * One sentence per rule: "Rule 1: WHEN <label> <test> AND … THEN <output> = <value> (<annotation>)".
+ * An input test is written as the table has it, after its column label ("Claim amount < 1000",
+ * "Customer segment \"premium\"") — no operator is inserted, so no word outside the label table
+ * appears and the unary test is not reinterpreted.
+ */
 function sentences(model) {
   const { columns, rows, labels } = model;
   return rows.map((row) => {
@@ -111,7 +75,7 @@ function sentences(model) {
     const notes = [];
     row.cells.forEach((cell, i) => {
       const col = columns[i];
-      if (col.role === 'input' && !cell.any) conds.push(condition(oneLine(col.label), cell.text));
+      if (col.role === 'input' && !cell.any) conds.push(`${oneLine(col.label)} ${oneLine(cell.text).trim()}`);
       if (col.role === 'output') results.push(col.label ? `${oneLine(col.label)} = ${oneLine(cell.text)}` : oneLine(cell.text));
       if (col.role === 'annotation' && cell.text.trim()) notes.push(oneLine(cell.text));
     });
@@ -123,11 +87,8 @@ function sentences(model) {
 
 /**
  * @param {object} model - layoutDecisionTable's result
- * @param {object} [opts]
- * @param {number} [opts.maxWidth] - default `config.json → dmn.table.plainTextMaxWidth`
- * @returns {string[]} lines, without the title (the caller writes its own)
+ * @returns {string[]} one sentence per rule, without the title (the caller writes its own)
  */
-export function formatTablePlainText(model, { maxWidth = DMN_TABLE_STYLE.plainTextMaxWidth } = {}) {
-  return alignedTable(model, maxWidth) ?? sentences(model);
+export function formatTablePlainText(model) {
+  return sentences(model);
 }
-
