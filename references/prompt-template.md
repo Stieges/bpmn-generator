@@ -89,7 +89,9 @@ Extract a structured Logic-Core JSON from the process description below.
 - Set "has_join": true on join gateways
 
 ### Lanes (roles), systems and external partners
-- Only add lanes if distinct roles/departments are explicitly mentioned
+- When the text names two or more roles, departments or acting systems that perform steps,
+  declare one lane per role in `lanes` and assign every top-level node to one — a model without
+  lanes is then wrong, even if the steps are all there. One actor named, or none: no lanes.
 - Use functional role names, NOT personal names ("Sachbearbeiter" not "Max Müller")
 - When a process has lanes, **every** top-level node (task, event, gateway, subprocess) gets the
   `lane` of a lane declared in that process's `lanes` array — no node without a lane, no lane id

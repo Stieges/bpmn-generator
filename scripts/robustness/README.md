@@ -68,6 +68,11 @@ node robustness/extraction-eval.js --api-url <url> --model <model> [--api-key <k
 
 - Cases: `tests/fixtures/extraction-cases/*.json` — `{ "id", "text", "reference" }`, the reference a
   fixture file name in `tests/fixtures/` or `null` (then only the reference-free checks run).
+  Optional: `"expect": { "lanes": [...] }` (the lanes the text calls for, for a case without a
+  reference) and `"notInText": [...]` (reference steps the text does not describe — excluded from
+  recall and precision, so a short text does not count against the model).
+- `--runs <n>` runs each case n times; the report adds mean and range per case. One run is a
+  tendency; three or more show how much a model varies.
 - Comparison (`reference-compare.js`, `compareToReference`): participants (expanded vs. black box),
   lanes (missing, empty at the top level), activities matched by name (recall, precision, type and
   lane agreement, a step only inside a subprocess, a step written twice), gateways and boundary

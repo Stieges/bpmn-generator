@@ -76,6 +76,11 @@ describe('Logic-Core examples assign every step to a declared lane', () => {
   test('the Master prompt says so, and says where a system goes', () => {
     const master = extractPromptSection('Master Extraction Prompt');
     expect(master).toMatch(/\*\*every\*\* top-level node/);
+    // Lanes are required, not merely allowed, once the text names two or more actors: an LLM read
+    // "only add lanes if …" as permission to leave them out and modelled no lane although the text
+    // named three roles.
+    expect(master).toMatch(/two or more roles[^\n]*\n?[^\n]*declare one lane per role/);
+    expect(master).not.toMatch(/Only add lanes if/);
     expect(master).toMatch(/"system": "<name>"/);
     expect(master).toMatch(/never a lane/);
   });

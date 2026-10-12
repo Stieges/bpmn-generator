@@ -89,6 +89,46 @@ describe('compareToReference', () => {
     expect(r.metrics.activities.recall).toBeLessThan(1);
   });
 
+  const withoutLanes = (lc) => {
+    const copy = JSON.parse(JSON.stringify(lc));
+    for (const p of copy.pools || [copy]) {
+      delete p.lanes;
+      for (const n of p.nodes) delete n.lane;
+    }
+    return copy;
+  };
+
+  test('a candidate without any lane where the reference has lanes: no-lanes first, then each missing lane', () => {
+    const ref = load('example-urlaubsantrag.json');
+    const r = compareToReference(withoutLanes(ref), ref);
+    expect(r.findings[0].kind).toBe('no-lanes');
+    expect(r.findings.filter((f) => f.kind === 'missing-lane')).toHaveLength(3);
+  });
+
+  test('expected lanes without a reference model: no-lanes and missing-lane all the same', () => {
+    const expect_ = { lanes: ['Mitarbeiter', 'Vorgesetzter', 'Personalabteilung'] };
+    const bare = compareToReference(withoutLanes(load('example-urlaubsantrag.json')), null, { expect: expect_ });
+    expect(kinds(bare)).toEqual(['missing-lane', 'no-lanes']);
+    const laned = compareToReference(load('example-urlaubsantrag.json'), null, { expect: expect_ });
+    expect(laned.findings).toEqual([]);
+  });
+
+  test('notInText: reference steps the text does not describe count neither for recall nor against precision', () => {
+    const ref = load('example-schadenmeldung.json');
+    const sub = ['Schadenhöhe ermitteln', 'Betrugsindikatoren prüfen'];
+    // A candidate without the subprocess's inner steps …
+    const cand = JSON.parse(JSON.stringify(ref));
+    const strip = (c) => { for (const n of c.nodes || []) { if (n.nodes) { n.nodes = n.nodes.filter((x) => !sub.includes(x.name)); strip(n); } } };
+    for (const p of cand.pools) strip(p);
+    expect(compareToReference(cand, ref).metrics.activities.recall).toBeLessThan(1);
+    const r = compareToReference(cand, ref, { notInText: sub });
+    expect(r.metrics.activities.recall).toBe(1);
+    expect(r.metrics.activities.excluded).toBe(2);
+    expect(r.findings.filter((f) => f.kind === 'missing-activity')).toEqual([]);
+    // … and the reference itself, which has them: precision stays 1.
+    expect(compareToReference(ref, ref, { notInText: sub }).metrics.activities.precision).toBe(1);
+  });
+
   test('without a reference, only the checks that need none run', () => {
     const r = compareToReference(load('example-urlaubsantrag.json'), null);
     expect(r.metrics.activities.recall).toBeNull();
