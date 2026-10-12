@@ -3,7 +3,16 @@
 [![CI](https://github.com/Stieges/bpmn-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/Stieges/bpmn-generator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-BPMN 2.0 diagram generator — converts natural language process descriptions or structured JSON into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013). Also generates DMN 1.3 decision models (opt-in, see [DMN Support](#dmn-support-opt-in)).
+BPMN 2.0 diagram generator — converts natural language process descriptions or structured JSON into OMG-compliant BPMN 2.0.2 XML files and SVG previews (ISO/IEC 19510:2013). Also generates DMN 1.3 decision models (opt-in, see [DMN Support](#dmn-support-opt-in)) and enumerates the scenarios a process admits (see [Scenario Enumeration](#scenario-enumeration-opt-in)).
+
+### What's new in 4.0
+
+4.0 changes the default output: lane compaction, edge-label repair, the bend rule, node labels that
+avoid flows and the repair of flows through foreign shapes are all on by default, and boundary events
+face their target. Rule profiles, HTTP inputs and outbound URLs are hardened, and several options
+were removed or renamed (`dynamicLaneHeader`, `visualRefinement.enabled`, the wrapping keys). Every
+default change names its rollback switch. The migration notes are the **Breaking** section of the
+top entry in [CHANGELOG.md](CHANGELOG.md); read it before upgrading.
 
 ## Why this one
 
@@ -38,7 +47,7 @@ Full gallery: [docs/screenshots/](docs/screenshots/). All SVGs regenerated from 
 |---|---|---|---|---|
 | Multi-pool with lanes + message flows | **✅ verified** | ✅ | ❌ (bpmn-auto-layout limitation) | ? |
 | Strict JSON Schema input gate (ajv) | **✅** | n/a | partial | partial |
-| Soundness check | WF-Net (3 rules) | POWL by construction | none | none |
+| Soundness check | WF-Net (3 rules, opt-in) | POWL by construction | none | none |
 | Configurable rule engine | **40 BPMN rules, 5 layers, JSON profiles** | limited | none | none |
 | MCP server | **✅** | ❌ | ❌ | ❌ |
 | Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
@@ -72,12 +81,15 @@ Think of it as going from **0% → 80%** in seconds. The remaining 20% is domain
 
 ```
 User Text → [Phase 1] Intent Extraction (LLM → JSON Logic-Core)
-          → [Phase 2] Validation (40 BPMN rules, 5 layers, deadlock detection)
-          → [Phase 3] Auto-Layout (ElkJS Sugiyama layered algorithm)
+          → [Phase 2] Validation (40 BPMN rules, 5 layers; deadlock detection in the opt-in WF layer)
+          → [Phase 3] Auto-Layout (ElkJS Sugiyama layered algorithm + routing repair passes)
           → [Phase 4] Serialization → BPMN 2.0 XML + SVG
 ```
 
-The LLM **never** handles coordinates. Layout is 100% algorithmic.
+The LLM **never** handles coordinates. Layout is 100% algorithmic. Two integrity passes run on
+every generate call and report separately from the rule engine: the Petri-net translation check
+(NC01–NC06, `result.netDiagnostics`) and the post-layout diagram check (DI01–DI11,
+`result.diagnostics`) — a green rule engine says nothing about the drawing.
 
 ## Quick Start
 
@@ -119,6 +131,22 @@ npm test
 | `--no-refine` | Switch every visual-refinement pass off (mutually exclusive with `--refine`) |
 | `--wrap` | Wrap long chains (> 20 nodes) into rows with ELK; independent of `--refine` |
 | `--drill-down` | Emit the parent diagram plus one diagram per expanded subprocess |
+| `--no-bend-rule` / `--bend-rule` | Switch the bend rule off / force it on (on by default) |
+| `--no-label-avoidance` / `--label-avoidance` | Switch off / force on moving event and gateway labels off flows (on by default) |
+| `--no-foreign-shape-repair` / `--foreign-shape-repair` | Switch off / force on re-routing flows that run through a foreign shape (on by default) |
+
+All CLI examples in this README run from `scripts/`, like the Quick Start. The CLI also gates on
+the two integrity passes: an ERROR from the diagram check (DI) or the net check (NC) aborts, and
+`--strict` makes their warnings fatal too (NC INFO findings are printed, never fatal).
+
+### Install as a package
+
+`bpmn-generator` (directory `scripts/`) exports `.` (`runPipeline` and the pipeline modules),
+`./import` (`bpmnToLogicCore`), `./validate` (`validateLogicCore`), `./orchestrator`
+(`orchestrate`) and `./ontology` (the vocabulary, see below). The package also ships the CLIs
+(`bpmn/`, `dmn/`, `scenarios/`), the HTTP and MCP servers and `config.json`. The `rules/` profiles
+live outside the package: in an npm install, MCP profile names are refused and file profiles are
+read by path.
 
 ## Usage as Claude Code Skill
 
@@ -133,131 +161,85 @@ Copy `SKILL.md` to `.claude/skills/operative/bpmn-prozess-erstellen.md` and adju
 everything needed:
 - `SKILL.md` — Skill definition
 - `references/` — Schema, prompt templates, inline template
-- `scripts/` — Pipeline modules, import.js, package.json
+- `scripts/` — the pipeline modules (BPMN, DMN, scenarios), `config.json`, `package.json`
+
+The bundle leaves out `agents/` and `robustness/`, so the orchestrator and the HTTP and MCP servers
+need a checkout or the npm package; `npm install` inside the unpacked `scripts/` is still required.
 
 ## Module Architecture
 
+The subsystems and their key files. The full per-module inventory, with every module's
+dependencies, is the **Architecture** section of [CLAUDE.md](CLAUDE.md) — kept in one place so it
+cannot drift in three.
+
 ```
 scripts/
-├── bpmn/               Core BPMN pipeline (runs on every generate call)
-│   ├── pipeline.js     Orchestrator + CLI (public API: runPipeline)
-│   ├── validate.js     Validation wrapper → rules.js
-│   ├── rules.js        Rule engine (40 BPMN rules, 5 layers, profile support) — see `references/fachliches-regelwerk.md`
-│   ├── scenario-rules.js SC01/SC06 (BPMN rules of the scenario pipeline)
-│   ├── optimize.js     Optimization Advisory layer (O01-O04, opt-in via optimize/soll mode)
-│   ├── topology.js     Gateway directions, topological sort, lane ordering
-│   ├── layout.js       ELK graph construction + layout execution
-│   ├── coordinates.js  Coordinate maps, edge clipping, pool equalization
-│   ├── di-check.js     Post-layout diagram integrity pass (DI01–DI11)
-│   ├── bpmn-xml.js     BPMN 2.0 XML generation (DI, top-level defs)
-│   ├── svg.js          SVG rendering (pools, lanes, activities, events)
-│   ├── icons.js        Event markers, task icons, bottom markers
-│   ├── dot.js           DOT export (Logic-Core → Graphviz) + import
-│   ├── types.js         Type predicates, BPMN XML tag mapping
-│   ├── import.js         BPMN XML → Logic-Core (DOM parser)
-│   ├── moddle-import.js  BPMN XML → Logic-Core (bpmn-moddle path)
-│   └── redesign*.js      Deterministic redesign toolbox (5 transforms, CLI-driven, opt-in)
-├── dmn/                DMN 1.3 pipeline (opt-in, not reached by runPipeline)
-│   ├── pipeline.js      Orchestrator + CLI (public API: runDmnPipeline)
-│   ├── schema-gate.js    ajv gate for Decision-Core input
-│   ├── rules.js          DMN rule engine (19 DMN rules, 3 layers, 2 modes)
-│   ├── scenario-rules.js  SC04/SC05 (DMN rules of the scenario pipeline)
-│   ├── layout.js          DRD ELK layout (decisionCoreToElk, runDmnElkLayout)
-│   ├── coordinates.js      DRD coordinate mapping (buildDmnDiagrams)
-│   ├── di-check.js          Diagram integrity check (DD01-DD03)
-│   └── dmn-xml.js            DMN 1.3 XML + DMNDI generation via dmn-moddle
-├── shared/             Format-independent core, used by both bpmn/ and dmn/
-│   ├── utils.js          Config loader, visual constants, helpers
-│   ├── rule-profile.js    Profile machinery shared by both rule engines
-│   ├── rule-catalog.js    Rule registers joined with the ontology's rule metadata
-│   ├── resource-paths.js  Where references/ lives in each layout
-│   ├── ontology.js        Loads + validates references/ontology.jsonld (VOCABULARY)
-│   └── geometry.js        Straight-segment clip maths (clipStraight, clipToRect)
-├── cross/              Cross-notation rules (SC02/SC03)
-│   └── rules.js          decisionRef ↔ Decision-Core consistency
-├── agents/             Multi-agent orchestration
-│   ├── modeler.js       LLM-powered: text→JSON, refine, amend
-│   ├── reviewer.js       Deterministic: validateLogicCore() wrapper
-│   ├── layout.js          runPipeline() + optional vision review
-│   ├── compliance.js       Deterministic: runRules() gate
-│   └── llm-provider.js      OpenAI-compatible fetch abstraction (cloud + local)
-├── orchestrator.js    Multi-agent state machine + CLI
-├── prepare-training-data.js  Training data ETL (BPMN→LC, filter, JSONL)
-├── evaluate-slm.js     SLM evaluation (pipeline-based metrics)
-├── mcp-bpmn-server.js  MCP server (4 tools)
-├── http-server.js      HTTP API (8 endpoints)
-├── config.json         Externalized constants (shapes, colors, gaps)
-└── package.json        Runtime deps: elkjs, bpmn-moddle, dmn-moddle, @modelcontextprotocol/sdk, ajv, ajv-formats
+├── bpmn/         Core BPMN pipeline (runs on every generate call)
+│                 pipeline.js (runPipeline + CLI) · validate.js / rules.js (40 BPMN rules) ·
+│                 workflow-net.js + net-check.js (Petri net, NC01–NC06) · topology.js ·
+│                 layout.js (ElkJS) · coordinates.js · edge-simplify.js, orthogonal-router.js,
+│                 bend-rule.js (routing repair) · visual-refinement.js · di-check.js (DI01–DI11) ·
+│                 bpmn-xml.js · svg.js · icons.js · dot.js · import.js / moddle-import.js
+│                 (BPMN → Logic-Core) · schema-gate.js · types.js · constants.js ·
+│                 optimize.js (O01–O04, opt-in) · scenario-rules.js (SC01, SC06)
+│                 redesign-cli.js, redesign.js, redesign-core.js — redesign toolbox (opt-in)
+├── dmn/          DMN 1.3 pipeline (opt-in, not reached by runPipeline)
+│                 pipeline.js (runDmnPipeline + CLI) · rules.js (19 DMN rules) · layout.js ·
+│                 coordinates.js · di-check.js (DD01–DD03) · dmn-xml.js · import.js +
+│                 import-scope.js (DMN → Decision-Core, IM01–IM09) · scenario-rules.js (SC04, SC05)
+├── scenarios/    Scenario enumeration (opt-in): pipeline.js (runScenarioPipeline + CLI),
+│                 enumerate.js, collaboration.js, decision-table.js, bridge.js, format.js
+├── cross/        Cross-notation rules: rules.js (SC02, SC03 — decisionRef ↔ DMN)
+├── shared/       Format-independent core: utils.js (config), ontology.js, rule-profile.js,
+│                 rule-catalog.js, resource-paths.js, geometry.js, outbound-url.js (SSRF guard),
+│                 safe-text.js, entry-point.js, version.js
+├── agents/       Multi-agent orchestration: modeler.js, reviewer.js, layout.js, compliance.js,
+│                 chat.js, prompt-sections.js, llm-provider.js
+├── robustness/   Synthetic-data + benchmarking subsystem (see its README.md)
+├── orchestrator.js           Multi-agent state machine + CLI
+├── http-server.js            HTTP API (8 endpoints)
+├── mcp-bpmn-server.js        MCP server (4 tools)
+├── audit.js, delivery.js     Audit log, webhook delivery + dead letter
+├── evaluate-slm.js, prepare-training-data.js   SLM evaluation and training-data prep
+├── config.json               Externalized constants (shapes, colors, gaps, switches)
+└── package.json              Runtime deps: elkjs, bpmn-moddle, dmn-moddle, @modelcontextprotocol/sdk, ajv, ajv-formats
 ```
 
 Run `cd scripts && npm test` for the current test count (Jest, ES Modules) — it changes often enough
 that a number here would go stale immediately; CI enforces it stays green.
 
-**Dependency graph** (acyclic; `dmn/` never imports `bpmn/`, and vice versa):
-```
-shared/utils.js, shared/resource-paths.js ← (no deps)
-shared/rule-profile.js ← shared/resource-paths, ajv
-shared/rule-catalog.js ← shared/ontology
-shared/geometry.js ← (no deps)
-shared/ontology.js ← shared/resource-paths, ajv (loads references/ontology.jsonld)
-bpmn/types.js ← shared/ontology
-bpmn/rules.js ← bpmn/types, bpmn/workflow-net, shared/rule-profile, shared/rule-catalog
-bpmn/workflow-net.js ← bpmn/types
-bpmn/scenario-rules.js ← bpmn/workflow-net, shared/rule-catalog
-bpmn/validate.js ← bpmn/rules
-bpmn/topology.js ← bpmn/types
-bpmn/layout.js ← bpmn/types, shared/utils, bpmn/topology, elkjs
-bpmn/coordinates.js ← bpmn/types, shared/utils, bpmn/topology, shared/geometry
-bpmn/icons.js ← shared/utils
-bpmn/bpmn-xml.js ← bpmn/types, shared/utils, bpmn/topology, bpmn/icons
-bpmn/svg.js ← bpmn/types, shared/utils, bpmn/icons
-bpmn/dot.js ← bpmn/types
-bpmn/pipeline.js ← all of the above bpmn/ modules
-dmn/schema-gate.js ← shared/resource-paths
-dmn/rules.js ← shared/rule-profile, shared/utils, shared/rule-catalog
-dmn/layout.js ← dmn/constants, dmn/requirement-order, shared/utils, elkjs
-dmn/coordinates.js ← dmn/constants, dmn/requirement-order, shared/geometry
-dmn/dmn-xml.js ← shared/utils, dmn/requirement-order, dmn-moddle
-dmn/requirement-order.js ← (no deps)
-dmn/scenario-rules.js ← shared/rule-catalog
-cross/rules.js ← shared/rule-catalog
-dmn/import.js ← dmn/import-scope, dmn/requirement-order, dmn/schema-gate, shared/resource-paths, dmn-moddle
-dmn/pipeline.js ← all of the above dmn/ modules except import
-scenarios/pipeline.js ← scenarios/*, bpmn/workflow-net, bpmn/scenario-rules, dmn/scenario-rules, dmn/import, cross/rules
-```
+The import graph is acyclic. `dmn/` never imports `bpmn/` and vice versa; `shared/` imports
+neither; `scenarios/` and `cross/` are the only places the two notations meet.
 
 ## Repo Structure
 
 ```
 bpmn-generator/
-├── README.md                             This file
-├── LICENSE                               MIT License
-├── CHANGELOG.md                          Version history
-├── CONTRIBUTING.md                       Contribution guide
-├── THIRD-PARTY-NOTICES.md                Dependency licenses
+├── README.md, CHANGELOG.md, ROADMAP.md   Overview, version history, roadmap
 ├── SKILL.md                              Claude Code skill definition
-├── CLAUDE.md                             Project instructions for Claude Code
-├── ROADMAP.md                            Development roadmap (K0-K8, M1-M6, L1-L6)
-├── COMPATIBILITY.md                      bpmn.io compatibility report
-├── bpmn-generator-v3.skill               Portable ZIP archive (generated, gitignored — `npm run build:skill`)
-├── .github/workflows/ci.yml             GitHub Actions CI
+├── CLAUDE.md, AGENTS.md                  Instructions for coding agents
+├── CONTRIBUTING.md, SECURITY.md          Contribution guide, threat model + dependency policy
+├── COMPATIBILITY.md, EVALUATION.md       bpmn.io compatibility report, benchmark + competitor matrix
+├── LICENSE, THIRD-PARTY-NOTICES.md       MIT license, dependency licenses
+├── .github/                              CI workflows and the docs gate
 ├── references/
-│   ├── logic-core-schema.md              JSON schema documentation (prose)
-│   ├── input-schema.json                 Formal JSON Schema (draft 2020-12)
-│   ├── decision-core-schema.json         Formal JSON Schema for DMN Decision-Core input
+│   ├── input-schema.json                 Logic-Core JSON Schema (draft 2020-12); prose in logic-core-schema.md
+│   ├── decision-core-schema.json         Decision-Core (DMN) JSON Schema
+│   ├── ontology.jsonld                   Vocabulary + rule catalog (node types, markers, rules, layers)
+│   ├── rule-profile-schema.json          Schema every rule profile must pass
+│   ├── api-reference.md, api-schema.json HTTP/MCP reference and the response contract
+│   ├── fachliches-regelwerk.md           Rule documentation (authoritative catalog, per-rule sources)
+│   ├── omg-compliance.md                 OMG BPMN 2.0.2 compliance mapping
 │   ├── prompt-template.md                LLM prompt templates + few-shot patterns
 │   ├── inline-template.md                HTML template for browser-side ElkJS
-│   ├── fachliches-regelwerk.md           Rule documentation (authoritative catalog — per-rule source citations)
-│   ├── omg-compliance.md                 OMG BPMN 2.0.2 compliance mapping
-│   └── review-set/                       Test fixtures for visual review
-├── rules/
-│   ├── default-profile.json              Default BPMN rule profile (all layers active)
-│   ├── strict-profile.json               Strict BPMN profile (warnings → errors)
-│   ├── dmn-default-profile.json          Default DMN profile (soundness + semantics)
-│   └── dmn-best-practice-profile.json    Adds the opt-in DMN best_practice layer
+│   ├── omg-spec/                         Normative DMN 1.3 XSDs
+│   └── review-set/                       Fixtures for visual review
+├── rules/                                Rule profiles (default, strict, DMN default/best-practice; custom/)
 ├── scripts/                              Pipeline modules (see above)
+├── docs/                                 Screenshots, guides, design specs and plans
 └── tests/
-    └── fixtures/                         Test input files (JSON Logic-Core, DMN Decision-Core)
+    ├── fixtures/                         Test inputs (Logic-Core, Decision-Core) + golden files
+    └── bench/                            Benchmark outputs (e.g. the bpmn-auto-layout comparison)
 ```
 
 ## Rule Engine
@@ -272,20 +254,31 @@ bpmn-generator/
 | Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Liveness, boundedness, deadlock-freedom (opt-in) |
 | Optimization | ADVISORY | O01-O04 | Redesign opportunities — `optimize`/`soll` mode only (opt-in); each names a transform in the redesign toolbox |
 
-```bash
-# Default profile (all layers active):
-node bpmn/pipeline.js input.json output
+Two more rule sets exist beside it: 19 DMN rules, 3 layers (see [DMN Support](#dmn-support-opt-in))
+and 2 cross-notation rules, 1 layer (SC02/SC03, see [Scenario Enumeration](#scenario-enumeration-opt-in)).
 
-# Strict profile (style warnings → errors):
-# (programmatic: runPipeline(lc, { ruleProfile: 'rules/strict-profile.json' }))
-```
+**Profiles** (`rules/*.json`) switch layers and rules and override severities. How each interface
+takes one:
 
-See `references/fachliches-regelwerk.md` for full rule documentation.
+| Interface | `ruleProfile` |
+|---|---|
+| CLI | none — the CLI runs the built-in defaults (no profile) |
+| Library | `runPipeline(lc, { ruleProfile: '../rules/strict-profile.json' })` (a path) or an inline object |
+| HTTP | an inline object only; it may raise soundness rules, never disable the soundness layer or lower one of its rules |
+| MCP | a profile *name* resolved inside the repository's `rules/` (refused in an npm install, which has no `rules/`) |
+
+Every profile passes a size/depth bound and `references/rule-profile-schema.json` before a rule
+reads it. A profile file that is not JSON, an unknown severity, or `ADVISORY` outside the
+optimization layer refuses the profile; an unknown rule id or layer is a warning. The WF layer is
+opt-in: it runs only when a profile enables `workflow_net` (`rules/default-profile.json` leaves it
+off). See
+[`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md) for full rule
+documentation.
 
 ## Programmatic API
 
 ```javascript
-import { runPipeline } from './pipeline.js';
+import { runPipeline } from 'bpmn-generator';   // in a checkout: './bpmn/pipeline.js'
 
 const logicCore = { nodes: [...], edges: [...] };
 const result = await runPipeline(logicCore);
@@ -293,8 +286,10 @@ const result = await runPipeline(logicCore);
 // result.bpmnXml    — BPMN 2.0 XML string (or null on validation error)
 // result.svg        — SVG string
 // result.coordMap   — coordinate map
-// result.diagnostics — post-layout DI integrity ({ ok, issues }) — separate from validation,
-//                       since the rule engine never sees a coordinate
+// result.diagnostics — post-layout DI integrity, DI01–DI11 ({ ok, issues }) — separate from
+//                       validation, since the rule engine never sees a coordinate
+// result.netDiagnostics — Petri-net translation integrity, NC01–NC06 ({ ok, issues }; null when
+//                       validation failed) — whether the net the WF rules judge is the model
 // result.validation — { errors, warnings, advisories, metrics, xmlWarnings }
 //                       xmlWarnings comes from re-parsing the generated XML through bpmn-moddle —
 //                       it is what --strict's serialization check gates on
@@ -303,10 +298,10 @@ const result = await runPipeline(logicCore);
 Individual modules can be imported directly:
 
 ```javascript
-import { validateLogicCore } from './validate.js';
-import { generateBpmnXml } from './bpmn-xml.js';
-import { generateSvg } from './svg.js';
-import { logicCoreToDot, dotToLogicCore } from './dot.js';
+import { validateLogicCore } from './bpmn/validate.js';
+import { generateBpmnXml } from './bpmn/bpmn-xml.js';
+import { generateSvg } from './bpmn/svg.js';
+import { logicCoreToDot, dotToLogicCore } from './bpmn/dot.js';
 ```
 
 ### Reading the ontology from another package
@@ -339,13 +334,18 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
 - **Configurable rule engine** (40 BPMN rules, 5 layers, JSON profiles — 2 registered as placeholders)
-- **Redesign toolbox** (5 deterministic process transforms with preview/apply, no LLM — see below)
+- **Integrity checks on every run** — Petri-net translation (NC01–NC06) and post-layout diagram geometry (DI01–DI11), reported apart from the rule engine
+- **Routing repair** — fewest-bends rule, crossing repair with an obstacle-aware orthogonal router, re-routing of flows through foreign shapes, event and gateway labels kept off flows
+- **Ontology** — node types, markers and the rule catalog in one JSON-LD file ([`references/ontology.jsonld`](references/ontology.jsonld)), exported as `bpmn-generator/ontology`
+- **Redesign toolbox** (5 deterministic process transforms with preview/apply, no LLM — see [Redesign Toolbox](#redesign-toolbox-opt-in))
+- **DMN 1.3** decision models with DRD layout and an importer with a loss report — see [DMN Support](#dmn-support-opt-in)
+- **Scenario enumeration** over BPMN processes and DMN decision tables — see [Scenario Enumeration](#scenario-enumeration-opt-in)
 - **OMG BPMN 2.0.2 compliant** XML output (ISO/IEC 19510:2013)
 - **BPMN-in-Color** (bioc: namespace — per-node fill/stroke in XML + SVG)
 - **Documentation View** (SVG tooltips + `--doc` Markdown companion)
-- **Happy-Path Y-Leveling** (post-layout alignment, configurable)
+- **Happy-Path Y-Leveling** (post-layout alignment, opt-in via `layout.happyPathLeveling`)
 - **Visual refinement** (lane compaction and edge-label repair on by default, `--no-refine` switches them off — see below)
-- **MCP Server** (generate, validate, import as MCP tools)
+- **MCP Server** (generate, validate, import, orchestrate as MCP tools)
 - **bpmn.io compatible** (verified with bpmn-js viewer)
 
 ### Visual Refinement
@@ -413,10 +413,10 @@ Modeler (LLM) → Reviewer → Layout/Pipeline → Compliance → Done
 
 ```bash
 # Review-only (no LLM needed):
-node scripts/orchestrator.js --input logic-core.json --output /tmp/result
+node orchestrator.js --input logic-core.json --output /tmp/result
 
 # Full cycle with LLM (text → BPMN):
-node scripts/orchestrator.js --text "Process description..." \
+node orchestrator.js --text "Process description..." \
   --api-url https://api.example.com/v1 --api-key KEY --model gpt-4.1 \
   --output /tmp/result
 ```
@@ -435,12 +435,15 @@ const result = await orchestrate('Process description...', { llmProvider });
 
 The BPMN Generator can be used as an MCP (Model Context Protocol) server, exposing four tools:
 
-| Tool | Description |
-|------|-------------|
-| `generate_bpmn` | Logic-Core JSON → BPMN 2.0 XML + SVG |
-| `validate_bpmn` | Validate Logic-Core without generating output |
-| `import_bpmn` | BPMN 2.0 XML → Logic-Core JSON |
-| `orchestrate_bpmn` | Multi-agent review + generate + compliance |
+| Tool | Description | Optional parameters (besides the required input) |
+|------|-------------|------|
+| `generate_bpmn` | Logic-Core JSON → BPMN 2.0 XML + SVG | `mode`, `ruleProfile` (a name), `poolOrder`, `drillDown`, `include`, `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` |
+| `validate_bpmn` | Validate Logic-Core without generating output | `mode`, `ruleProfile` |
+| `import_bpmn` | BPMN 2.0 XML → Logic-Core JSON | — |
+| `orchestrate_bpmn` | Multi-agent review + generate + compliance | `mode`, `ruleProfile`, `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` |
+
+Every Logic-Core argument passes the same JSON Schema gate as the HTTP API. Parameter details:
+[references/api-reference.md](references/api-reference.md).
 
 ### Configuration
 
@@ -477,7 +480,7 @@ See [references/api-reference.md](references/api-reference.md) for full request/
 ### Start
 
 ```bash
-PORT=3000 node scripts/http-server.js
+PORT=3000 node http-server.js        # from scripts/; BPMN_API_KEY is required when NODE_ENV=production
 ```
 
 ### Request
@@ -488,12 +491,76 @@ curl -X POST http://localhost:3000/api/v1/generate \
   -d '{"logicCore": {...}, "clientId": "my-app", "callbackUrl": "https://..."}'
 ```
 
-Optional fields: `callbackUrl` (async delivery with retry), `clientId` (audit), `correlationId` (tracking).
+Optional fields on `/api/v1/generate`: `mode` (`document`/`optimize`), `poolOrder`
+(`auto`/`declared`), `ruleProfile` (inline object), `visualRefinement`, `bendRule`,
+`nodeLabelsAvoidFlows`, `foreignShapeRepair`, `callbackUrl` (async delivery with retry),
+`clientId` (audit), `correlationId` (tracking, `^[A-Za-z0-9_-]{1,64}$`). The other endpoints take a
+subset; [references/api-reference.md](references/api-reference.md) lists them per endpoint.
+
+### Security defaults
+
+| Variable | Effect |
+|---|---|
+| `BPMN_API_KEY` | API key, sent as the `X-API-Key` header and compared in constant time. Required when `NODE_ENV=production` — the server refuses to start without it; optional in development |
+| `LLM_BASE_URL_ALLOWLIST` | Comma-separated origins a client may name as `llmConfig.baseUrl`; empty (default) refuses every client `baseUrl` with a `400`. Without one the server's `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` apply |
+| `TRUST_PROXY_HOPS` | Number of trusted reverse proxies; the rate limit then keys on the address they recorded in `X-Forwarded-For`. Set it only when the server is reachable exclusively through those proxies |
+| `AUDIT_LOG_PATH` | Audit log file (default below) |
+| `DEAD_LETTER_PATH` | Dead-letter directory (default below) |
+| `BPMN_CONFIG` | JSON file merged over `config.json` (see [Visual Refinement](#visual-refinement)) |
+
+Fixed limits: 10 MB request body, 30 requests per minute per client. Every Logic-Core input passes
+the JSON Schema gate; `callbackUrl` and an allowlisted `baseUrl` pass an SSRF guard (http/https
+only, no credentials, internal and special-purpose addresses refused, connection pinned to the
+checked address, redirects never followed). See [SECURITY.md](SECURITY.md) for the threat model.
 
 ### Observability
 
-- **Audit log:** `audit/bpmn-generator.jsonl` (append-only JSON Lines, metadata only)
-- **Dead letter:** `dead-letter/` (failed callback deliveries)
+- **Audit log:** `<os.tmpdir>/bpmn-generator/audit/bpmn-generator.jsonl` by default, or `AUDIT_LOG_PATH` (append-only JSON Lines, metadata only). `npm run demo` writes it to an `audit/` directory next to the server instead
+- **Dead letter:** `<os.tmpdir>/bpmn-generator/dead-letter/` by default, or `DEAD_LETTER_PATH` — one `<uuid>.json` per failed callback delivery
+
+## Redesign Toolbox (opt-in)
+
+Five deterministic transforms of a Logic-Core model, no LLM: `parallelize`, `mergeTasks`, `relane`,
+`reorderKnockouts`, `isolateException`. Each optimization advisory (O01–O04, `--optimize`) names the
+transform that addresses it. Preview is the default; nothing is written without `--apply`, and a
+transform that would break soundness or touch a protected node refuses (non-zero exit, no file).
+
+```bash
+# Preview: is the transform feasible, and why (not)?
+node bpmn/redesign-cli.js input.json parallelize --nodes task_a,task_b
+
+# Apply and write (default output: input.soll.json, or -o out.json)
+node bpmn/redesign-cli.js input.json relane --node task_a --lane Backoffice --apply
+```
+
+Required options per transform: `mergeTasks` `--nodes` + `--name`, `relane` `--node` + `--lane`,
+`reorderKnockouts` `--nodes` + `--order`, `isolateException` `--end`, `--attach-to`, `--marker`,
+`--cancel-activity true|false`; `--policy '{"protectNodes":[…],"protectLanes":[…]}'` protects
+elements from any transform. Run the CLI without arguments for the full usage text (German).
+
+## Scenario Enumeration (opt-in)
+
+`scripts/scenarios/` enumerates every distinct path a token can take through a process or a
+collaboration (cycles bounded per backward edge, parallel interleavings collapsed to one canonical
+order), resolves each BPMN `decisionRef` against DMN decision tables, and analyzes those tables for
+gaps and overlaps. Output is a JSON and a Markdown view, grouped around the happy path.
+
+```bash
+# Logic-Core → output.scenarios.json + output.scenarios.md
+node scenarios/pipeline.js input.json output
+
+# With DMN decisions (Decision-Core JSON or DMN XML, comma-separated, routed by content)
+node scenarios/pipeline.js input.json output --decisions table.dmn,other.json
+
+# Abort (no files written) on any finding, an incomplete enumeration or a lossy DMN import
+node scenarios/pipeline.js input.json output --strict
+```
+
+It reports six rules, SC01–SC06: a branch no scenario takes (SC01), a `decisionRef` that resolves to
+no or to several DMN decisions (SC02/SC03, the cross-notation rule set), a decision-table gap or an
+overlap under hit policy UNIQUE (SC04/SC05), and improper completion (SC06). The scenario pipeline
+takes no rule profile, so these rules are not profile-switchable yet. Bounds live in
+`config.json → scenarios`.
 
 ## DMN Support (opt-in)
 
@@ -525,6 +592,12 @@ the DMN integration), plus import of DMN XML back to Decision-Core with a struct
 The importer reads no DMNDI, so every diagram is reported (IM06) and even a file this generator
 wrote imports as not lossless; `--strict` therefore suits foreign files. SVG rendering is not yet
 implemented — see `docs/superpowers/plans/2026-07-30-dmn-integration.md` for what's still open.
+
+## Known Limitations
+
+Open layout issues, importer round-trip gaps and the rules that are not profile-switchable are
+listed under **Known Limitations** in [CLAUDE.md](CLAUDE.md) and **Known limitations** in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## OMG Compliance
 
