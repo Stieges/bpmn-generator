@@ -30,6 +30,8 @@
     "*.js",
     "bpmn/",
     "dmn/",
+    "scenarios/",
+    "cross/",
     "shared/",
     "config.json",
     "agents/",
