@@ -633,7 +633,9 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    every raw LLM answer).
 2. Read recall/precision and the findings (empty lane, step only inside a subprocess, duplicate
    step, black box vs. expanded pool). Thresholds: `robustness/config.json → extractionQuality`.
-3. A new case: add `{ "id", "text", "reference": "<fixture>.json" | null }` to that directory.
+3. A new case: add `{ "id", "text", "reference": "<fixture>.json" | null }` to that directory;
+   optional `expect.lanes` (lanes the text calls for, without a reference) and `notInText` (reference
+   steps the text does not describe). `--runs <n>` for mean and range over several runs.
 
 ## Rule Engine
 

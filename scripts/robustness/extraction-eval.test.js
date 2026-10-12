@@ -7,7 +7,7 @@ import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadCases, runExtractionEval, formatReport } from './extraction-eval.js';
+import { loadCases, runExtractionEval, formatReport, summarizeRuns } from './extraction-eval.js';
 import { LlmProviderError } from '../agents/llm-provider.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
@@ -32,6 +32,46 @@ describe('extraction-eval', () => {
     const md = formatReport(results, { model: 'fake' });
     expect(md).toContain('| urlaubsantrag | ok |');
     expect(md).toContain('fake');
+  }, 120000);
+
+  test('case options reach the comparison: expected lanes and steps the text does not describe', () => {
+    const cases = loadCases(casesDir, root);
+    expect(cases.find((c) => c.id === 'adressaenderung').expect.lanes).toHaveLength(3);
+    expect(cases.find((c) => c.id === 'schadenmeldung').notInText).toEqual(['Schadenhöhe ermitteln', 'Betrugsindikatoren prüfen']);
+  });
+
+  test('a case without a reference but with expected lanes: an answer without lanes is no-lanes', async () => {
+    const cases = loadCases(casesDir, root).filter((c) => c.id === 'adressaenderung');
+    const plain = JSON.parse(readFileSync(join(root, 'simple-approval.json'), 'utf8'));
+    for (const p of plain.pools) { delete p.lanes; for (const n of p.nodes) delete n.lane; }
+    const [r] = await runExtractionEval(cases, { llmProvider: async () => JSON.stringify(plain) });
+    expect(r.comparison.findings[0].kind).toBe('no-lanes');
+  }, 60000);
+
+  test('runs: every case n times, summarised as mean and range', async () => {
+    const cases = loadCases(casesDir, root).filter((c) => c.id === 'urlaubsantrag');
+    const ref = cases[0].reference;
+    const weaker = JSON.parse(JSON.stringify(ref));
+    const p = weaker.pools[0];
+    const drop = new Set(['u_konto', 'u_plan']);
+    const next = (id) => p.edges.find((e) => e.source === id).target;
+    for (const e of p.edges) while (drop.has(e.target)) e.target = next(e.target);
+    p.edges = p.edges.filter((e) => !drop.has(e.source));
+    p.nodes = p.nodes.filter((n) => !drop.has(n.id));
+    let call = 0;
+    // Alternate per run: the first run gets the reference, the second the weaker model.
+    const llm = async () => JSON.stringify(call++ % 2 === 0 ? ref : weaker);
+    const results = await runExtractionEval(cases, { llmProvider: llm, runs: 2 });
+    expect(results.map((r) => r.run)).toEqual([1, 2]);
+    const [s] = summarizeRuns(results);
+    expect(s.id).toBe('urlaubsantrag');
+    expect(s.runs).toBe(2);
+    expect(s.status).toEqual({ ok: 2 });
+    expect(s.recall.min).toBeCloseTo(5 / 7, 6);
+    expect(s.recall.max).toBe(1);
+    expect(s.recall.mean).toBeCloseTo((1 + 5 / 7) / 2, 6);
+    const md = formatReport(results, { model: 'fake' });
+    expect(md).toMatch(/\| urlaubsantrag \| ok 2\/2 \|/);
   }, 120000);
 
   test('an endpoint that keeps failing: llm_error per case, the run goes on', async () => {

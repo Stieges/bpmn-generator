@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Extraction left out lanes although the text named the roles.** The Master Extraction Prompt only
+  allowed lanes ("only add lanes if distinct roles/departments are explicitly mentioned"), and an LLM
+  modelled none for a text naming three roles. It now requires one lane per role once the text names
+  two or more roles, departments or acting systems that perform steps. Rules M12/M13 cannot catch a
+  model with no lanes at all — they never see the text — so the extraction-quality measure does.
+
+### Added
+
+- **Extraction quality: missing lanes, steps the text does not describe, several runs.**
+  `compareToReference` reports `no-lanes` (the reference has lanes, the candidate none) before the
+  single `missing-lane` findings; a case without a reference can name the lanes its text calls for
+  (`expect.lanes`); `notInText` lists reference steps the text does not describe, which then count
+  neither for recall nor against precision (`metrics.activities.excluded`). `extraction-eval.js
+  --runs <n>` runs each case n times and reports mean and range per case. The leave-request case
+  expects its three lanes; the claims case excludes the two subprocess steps its text leaves out.
+
 ## [4.0.0-rc.2] - 2026-10-12
 
 Second release candidate, published as a GitHub pre-release only (not on npm). It fixes the

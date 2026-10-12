@@ -18,7 +18,11 @@
  *    activities with near-equal names (`duplicateMatch`): a duplicate step;
  *  - control flow: gateways by type and boundary events by marker, counted.
  *
- * Without a reference (`null`) only the checks that need none run: empty lanes, duplicate steps.
+ * Without a reference (`null`) only the checks that need none run: empty lanes, duplicate steps,
+ * and — when the case names them (`opts.expect.lanes`) — the lanes the text calls for.
+ * A candidate with no lane at all where lanes are expected is `no-lanes`, the first finding.
+ * `opts.notInText` lists reference activities the case's text does not describe: they count
+ * neither for recall nor, when a candidate has them anyway, against precision.
  * Thresholds: robustness/config.json → extractionQuality.
  */
 
@@ -162,13 +166,26 @@ function adjacentDuplicates(lc, threshold) {
 /**
  * @param {object} candidate - the extracted Logic-Core
  * @param {object|null} reference - the reference Logic-Core, or null
- * @param {{ nameMatch?: number, duplicateMatch?: number }} [opts] - thresholds over the config
+ * @param {{ nameMatch?: number, duplicateMatch?: number, expect?: { lanes?: string[] }, notInText?: string[] }} [opts]
+ *   thresholds over the config; the lanes a case expects without a reference model; reference
+ *   activities its text does not describe
  * @returns {{ metrics: object, findings: { kind: string, message: string }[] }}
  */
 export function compareToReference(candidate, reference, opts = {}) {
   const { nameMatch, duplicateMatch } = { ...DEFAULTS, ...opts };
   const findings = [];
   const add = (kind, message) => findings.push({ kind, message });
+  const candL = lanesOf(candidate);
+  // Lanes the reference has (or, without one, the case expects): matched by name. A candidate
+  // without any lane gets `no-lanes` first — the one finding that says what went wrong.
+  const checkLanes = (wanted) => {
+    const match = matchByName(wanted, candL, nameMatch);
+    if (wanted.length && !candL.length) {
+      findings.unshift({ kind: 'no-lanes', message: `No lane at all; ${wanted.length} expected (${wanted.join(', ')})` });
+    }
+    wanted.forEach((l, i) => { if (!match.has(i)) add('missing-lane', `Lane "${l}" is missing`); });
+    return match;
+  };
 
   // Reference-free: empty lanes, adjacent duplicates.
   for (const proc of processesOf(candidate)) {
@@ -181,11 +198,15 @@ export function compareToReference(candidate, reference, opts = {}) {
     add('duplicate-step', `"${a.name}" and "${b.name}" follow each other and name the same step`);
   }
 
-  const cand = activitiesOf(candidate);
+  const allCand = activitiesOf(candidate);
   const metrics = {
-    activities: { candidate: cand.length, reference: null, matched: null, recall: null, precision: null, typeAgreement: null, laneAgreement: null },
+    activities: { candidate: allCand.length, reference: null, matched: null, recall: null, precision: null, typeAgreement: null, laneAgreement: null, excluded: 0 },
   };
-  if (!reference) return { metrics, findings };
+  if (!reference) {
+    const wanted = opts.expect?.lanes ?? [];
+    if (wanted.length) metrics.lanes = { reference: wanted.length, candidate: candL.length, matched: checkLanes(wanted).size };
+    return { metrics, findings };
+  }
 
   // Participants
   const refP = participantsOf(reference), candP = participantsOf(candidate);
@@ -199,14 +220,19 @@ export function compareToReference(candidate, reference, opts = {}) {
   metrics.participants = { reference: refP.length, candidate: candP.length, matched: pMatch.size };
 
   // Lanes
-  const refL = lanesOf(reference), candL = lanesOf(candidate);
-  const lMatch = matchByName(refL, candL, nameMatch);
+  const refL = lanesOf(reference);
+  const lMatch = checkLanes(refL);
   const laneMap = new Map([...lMatch].map(([i, j]) => [refL[i], candL[j]]));
-  refL.forEach((l, i) => { if (!lMatch.has(i)) add('missing-lane', `Lane "${l}" is missing`); });
   metrics.lanes = { reference: refL.length, candidate: candL.length, matched: lMatch.size };
 
-  // Activities
-  const ref = activitiesOf(reference);
+  // Activities — without the ones the text does not describe, and without candidate activities
+  // that are one of those (a model may know more than the text; that is not an invented step).
+  const notInText = opts.notInText ?? [];
+  const described = (a) => !notInText.some((n) => nameSimilarity(n, a.name) >= nameMatch);
+  const allRef = activitiesOf(reference);
+  const ref = allRef.filter(described);
+  const cand = allCand.filter(described);
+  metrics.activities.excluded = allRef.length - ref.length;
   const aMatch = matchByName(ref.map((a) => a.name), cand.map((a) => a.name), nameMatch);
   let sameType = 0, sameLane = 0, laned = 0;
   ref.forEach((r, i) => {
@@ -227,7 +253,7 @@ export function compareToReference(candidate, reference, opts = {}) {
   });
   const m = aMatch.size;
   metrics.activities = {
-    candidate: cand.length, reference: ref.length, matched: m,
+    candidate: cand.length, reference: ref.length, matched: m, excluded: allRef.length - ref.length,
     recall: ref.length ? m / ref.length : 1,
     precision: cand.length ? m / cand.length : 1,
     typeAgreement: m ? sameType / m : null,
