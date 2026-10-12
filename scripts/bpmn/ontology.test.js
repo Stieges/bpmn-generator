@@ -322,7 +322,8 @@ import { renderTaskIcon, renderEventMarker } from './icons.js';
 import { SHAPE } from './constants.js';
 
 const schemaJson = JSON.parse(readFileSync(join(__dirname, '..', '..', 'references', 'input-schema.json'), 'utf8'));
-const svgSrc = readFileSync(join(__dirname, 'svg.js'), 'utf8');
+// svg.js draws the shapes, icons.js the symbols inside them (gateway symbols, data shapes) — together the renderer.
+const svgSrc = readFileSync(join(__dirname, 'svg.js'), 'utf8') + readFileSync(join(__dirname, 'icons.js'), 'utf8');
 const read = (p) => readFileSync(join(__dirname, '..', '..', p), 'utf8');
 
 // One probe per place a new type must reach. Order = the order a failure lists them in.
@@ -331,7 +332,7 @@ const PROBES = (v) => ({
     'input-schema.json NodeType': (t) => schemaJson.$defs.NodeType.enum.includes(t),
     'BPMN element (bpmnXmlTag)': (t) => { try { return !!T.bpmnXmlTag(t); } catch { return false; } },
     'shape size (config.json)': (t) => !!SHAPE[t],
-    'task icon (icons.js)': (t) => !v.nodeTypes.find(n => n.name === t).classes.has('Task') || t === 'task' || renderTaskIcon(t, 0, 0) !== null,
+    'task icon (icons.js)': (t) => !v.nodeTypes.find(n => n.name === t).classes.has('Task') || t === 'task' || renderTaskIcon(t) !== null,
     'rendering (svg.js)': (t) => {
       const cls = v.nodeTypes.find(n => n.name === t).classes;
       return !(cls.has('Gateway') || cls.has('Artifact')) || svgSrc.includes(`'${t}'`);
@@ -344,7 +345,7 @@ const PROBES = (v) => ({
   marker: {
     'input-schema.json EventMarker': (m) => schemaJson.$defs.EventMarker.enum.includes(m),
     'event definition': (m) => T.EVENT_DEFINITION_BY_MARKER.has(m),
-    'marker icon (icons.js / svg.js)': (m) => m === 'terminate' || renderEventMarker(m, 0, 0, 10, false) !== '',
+    'marker icon (icons.js / svg.js)': (m) => m === 'terminate' || renderEventMarker(m, 36, 36, false) !== '',
   },
 });
 

@@ -29,12 +29,10 @@ import path from 'path';
 import { BpmnModdle } from 'bpmn-moddle';
 
 import { runPipeline } from './pipeline.js';
-import { SHAPE, SW, CLR, INNER_OUTER_GAP } from './constants.js';
+import { SYM, SHAPE } from './constants.js';
 import {
-  renderEventMarker, renderTaskIcon, renderLoopMarker, renderMIParallelMarker,
-  renderMISequentialMarker, renderSubProcessMarker, renderAdHocMarker, renderCompensationMarker,
+  renderEventMarker, renderTaskIcon, renderGatewaySymbol, renderDataObjectShape,
 } from './icons.js';
-import { rn } from '../shared/utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(__dirname, '..', '..', 'tests', 'fixtures');
@@ -47,30 +45,45 @@ const DRAWABLE = /<(circle|rect|line|path|polygon|ellipse)\b([^>]*?)\/?>/g;
 const attrsOf = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 const shapesIn = (markup) => [...markup.matchAll(DRAWABLE)].map((m) => ({ tag: m[1], a: attrsOf(m[2]) }));
 
+/** The content of the balanced `<g …>` that starts at `start` in `s`, and where it ends. */
+function balancedGroup(s, start) {
+  const open = s.indexOf('>', start) + 1;
+  let depth = 1, i = open;
+  while (depth > 0) {
+    const o = s.indexOf('<g', i), c = s.indexOf('</g>', i);
+    if (o !== -1 && o < c) { depth++; i = o + 2; } else { depth--; i = c + 4; }
+  }
+  return { inner: s.slice(open, i - 4), end: i };
+}
+
 /** `id` → the markup of its `<g data-element-id>` group (nodes) or `<path data-element-id>` (connections). */
 function svgIndex(svg) {
   const groups = new Map();
-  const opener = /<g data-element-id="([^"]*)">/g;
-  for (const m of svg.matchAll(opener)) {
-    let depth = 1, i = m.index + m[0].length;
-    while (depth > 0) {
-      const open = svg.indexOf('<g', i), close = svg.indexOf('</g>', i);
-      if (open !== -1 && open < close) { depth++; i = open + 2; } else { depth--; i = close + 4; }
-    }
-    groups.set(m[1], svg.slice(m.index + m[0].length, i - 4));
-  }
+  for (const m of svg.matchAll(/<g data-element-id="([^"]*)">/g)) groups.set(m[1], balancedGroup(svg, m.index).inner);
   const paths = new Map([...svg.matchAll(/<path data-element-id="([^"]*)"([^>]*)\/>/g)].map((m) => [m[1], attrsOf(m[2])]));
   return { groups, paths };
 }
 
-/** Bottom-marker groups of an activity, by kind, in drawn order. */
-const MARKER_KIND = new Map([
-  [renderLoopMarker(0, 0), 'loop'], [renderMIParallelMarker(0, 0), 'mi-parallel'],
-  [renderMISequentialMarker(0, 0), 'mi-sequential'], [renderSubProcessMarker(0, 0), 'subprocess'],
-  [renderAdHocMarker(0, 0), 'adhoc'], [renderCompensationMarker(0, 0), 'compensation'],
-]);
-const MARKER_GROUP = /<g transform="translate\([^)]*\)">(.*?)<\/g>/g;
-const bottomMarkers = (frag) => [...frag.matchAll(MARKER_GROUP)].map((m) => MARKER_KIND.get(m[1]) ?? `unknown:${m[1]}`);
+/**
+ * An element's markup split the way svg.js writes it: `base`, the shape in canvas coordinates, and
+ * `inner`, the element-relative `<g transform="translate(x, y)">` holding icon and markers (`''` if none).
+ */
+function splitElement(frag) {
+  const at = frag.indexOf('<g transform="translate(');
+  if (at < 0) return { base: frag, inner: '', origin: null };
+  const { inner, end } = balancedGroup(frag, at);
+  const [, x, y] = frag.slice(at).match(/translate\(([\d.-]+),([\d.-]+)\)/);
+  return { base: frag.slice(0, at) + frag.slice(end), inner, origin: { x: +x, y: +y } };
+}
+
+/** The `data-marker` groups of an activity's inner markup, in drawn order, with their markup. */
+const markersIn = (inner) => [...inner.matchAll(/<g data-marker="([^"]+)">/g)]
+  .map((m) => ({ name: m[1], markup: balancedGroup(inner, m.index).inner }));
+const withoutMarkers = (inner) => {
+  let out = inner;
+  for (const { name, markup } of markersIn(inner)) out = out.replace(`<g data-marker="${name}">${markup}</g>`, '');
+  return out;
+};
 
 // ── reading the XML ──────────────────────────────────────────────────────────────────────────────
 
@@ -115,34 +128,16 @@ function expectedEventIcon(el) {
 }
 
 /**
- * Handlers 'bpmn:StartEvent' (dashed when !isInterrupting), 'bpmn:IntermediateEvent' (two rings,
- * never dashed), 'bpmn:BoundaryEvent' (two rings, dashed when !cancelActivity), 'bpmn:EndEvent'.
- * The icon is filled for a throw event (`isThrowEvent`: IntermediateThrowEvent, EndEvent).
+ * Handlers 'bpmn:StartEvent' (dashed when !isInterrupting, stroke 2), 'bpmn:IntermediateEvent' (two
+ * rings, never dashed, stroke 1.5), 'bpmn:BoundaryEvent' (two rings, dashed when !cancelActivity,
+ * stroke 1.5), 'bpmn:EndEvent' (stroke 4). The icon is filled for a throw event (`isThrowEvent`).
  */
 function expectedEvent(el) {
   const twoRings = is(el, 'bpmn:IntermediateCatchEvent', 'bpmn:IntermediateThrowEvent', 'bpmn:BoundaryEvent');
   const dashed = is(el, 'bpmn:StartEvent') ? !el.isInterrupting
     : is(el, 'bpmn:BoundaryEvent') ? !el.cancelActivity : false;
-  return { rings: twoRings ? 2 : 1, dashed, icon: expectedEventIcon(el) };
-}
-
-/**
- * Gateway handlers. 'bpmn:ExclusiveGateway' draws its X only when the DI says `isMarkerVisible`;
- * 'bpmn:EventBasedGateway' draws a ring at offset 0.20·h always, then for `Parallel` an outlined
- * plus, else a second ring at offset 0.26·h unless `instantiate`, and the pentagon.
- */
-function expectedGateway(el, di, w, h) {
-  if (is(el, 'bpmn:EventBasedGateway')) {
-    const ring = (off) => Math.round((w + h) / 4 - off);
-    const parallel = el.eventGatewayType === 'Parallel';
-    const rings = parallel || el.instantiate ? [ring(h * 0.20)] : [ring(h * 0.20), ring(h * 0.26)];
-    return { inner: parallel ? 'plus-outline' : 'pentagon', rings };
-  }
-  if (is(el, 'bpmn:ExclusiveGateway')) return { inner: di?.isMarkerVisible ? 'x' : 'none' };
-  if (is(el, 'bpmn:ParallelGateway')) return { inner: 'plus' };
-  if (is(el, 'bpmn:InclusiveGateway')) return { inner: 'circle' };
-  if (is(el, 'bpmn:ComplexGateway')) return { inner: 'asterisk' };
-  return { inner: 'none' };
+  const strokeWidth = is(el, 'bpmn:EndEvent') ? 4 : is(el, 'bpmn:StartEvent') ? 2 : 1.5;
+  return { rings: twoRings ? 2 : 1, dashed, strokeWidth, icon: expectedEventIcon(el) };
 }
 
 /** The task-type handlers ('bpmn:UserTask' …); 'bpmn:ReceiveTask' switches on `instantiate`. */
@@ -153,26 +148,42 @@ const TASK_ICON = [
 ];
 
 /**
- * `renderSubProcess` (SubProcess, Transaction, CallActivity): dashed border for an event
- * subprocess, [+] when collapsed; 'bpmn:Transaction' adds an inner border; 'bpmn:CallActivity' a
- * 5-wide one. `renderTaskMarkers`: compensation, ad-hoc (the AdHocSubProcess CLASS), loop or MI.
+ * `renderSubProcess` (SubProcess, Transaction, CallActivity): an event subprocess's frame is dotted
+ * (dash '0, 5.5', stroke 2.5), [+] when collapsed; 'bpmn:Transaction' strokes 1.5 and adds an
+ * inner border; 'bpmn:CallActivity' strokes 5; any other activity 2 (`shapeStyle`).
+ *
+ * `renderTaskMarkers`, ported independently of icons.js so marker ORDER and POSITION are checked:
+ * the markers in bpmn-js's push order — [+], compensation, ad-hoc, then loop/MI — and each
+ * marker's x offset from the activity's centre, from its offset table and the adjustments it makes.
  */
-function expectedActivity(el, di) {
+function expectedActivity(el, di, { adHoc = false } = {}) {
   const container = is(el, 'bpmn:SubProcess', 'bpmn:CallActivity');
   const expanded = container && !!di?.isExpanded;
-  const markers = new Set();
-  if (container && !expanded) markers.add('subprocess');
-  if (el.isForCompensation) markers.add('compensation');
-  if (is(el, 'bpmn:AdHocSubProcess')) markers.add('adhoc');
+  const collapsed = container && !expanded;
+  const o = collapsed
+    ? { seq: -21, parallel: -22, compensation: -25, loop: -18, adhoc: 10 }
+    : { seq: -5, parallel: -6, compensation: -7, loop: 0, adhoc: -8 };
+  const markers = collapsed ? ['sub-process'] : [];
+  if (el.isForCompensation) markers.push('compensation');
+  if (is(el, 'bpmn:AdHocSubProcess') || adHoc) {
+    markers.push('adhoc');
+    if (!collapsed) o.compensation -= 18;
+  }
   const loop = el.loopCharacteristics;
-  if (loop?.$type === 'bpmn:StandardLoopCharacteristics') markers.add('loop');
-  if (loop?.$type === 'bpmn:MultiInstanceLoopCharacteristics') markers.add(loop.isSequential ? 'mi-sequential' : 'mi-parallel');
+  if (loop) {
+    o.compensation -= 18;
+    if (markers.includes('adhoc')) Object.assign(o, { seq: -23, loop: -18, parallel: -24 });
+    markers.push(loop.$type === 'bpmn:StandardLoopCharacteristics' ? 'loop' : loop.isSequential ? 'sequential' : 'parallel');
+  }
+  if (markers.includes('compensation') && markers.length === 1) o.compensation = -8;
+  // The x where each marker's path or rect starts, relative to the activity's centre.
+  const offsetX = { 'sub-process': -7.5, compensation: o.compensation, adhoc: o.adhoc, loop: o.loop, sequential: o.seq, parallel: o.parallel };
   const icon = TASK_ICON.find(([t]) => el.$type === t)?.[1] ?? null;
+  const strokeWidth = is(el, 'bpmn:CallActivity') ? 5 : el.triggeredByEvent ? 2.5 : is(el, 'bpmn:Transaction') ? 1.5 : 2;
   return {
-    icon, instantiate: icon === 'receiveTask' && !!el.instantiate, markers, expanded,
+    icon, instantiate: icon === 'receiveTask' && !!el.instantiate, markers, offsetX, expanded, strokeWidth,
     dashed: is(el, 'bpmn:SubProcess') && !!el.triggeredByEvent,
     innerBorder: is(el, 'bpmn:Transaction'),
-    thick: is(el, 'bpmn:CallActivity'),
   };
 }
 
@@ -212,88 +223,87 @@ async function symbolDisagreements(lc) {
     if (!di.has(id)) continue;   // not on the main diagram — see readXml
     const node = lcNodes.get(id);
     const frag = groups.get(id);
-    const shapes = frag ? shapesIn(frag) : [];
 
+    const bounds = di.get(id)?.bounds;
+    const w = bounds?.width, h = bounds?.height;
     if (is(el, 'bpmn:Event')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('event');
       const want = expectedEvent(el);
-      const outer = shapes[0];
-      const r0 = +outer.a.r;
-      let rings = 0;
-      while (shapes[rings]?.tag === 'circle' && +shapes[rings].a.r >= r0 - INNER_OUTER_GAP - 0.01) rings++;
-      if (rings !== want.rings) say(id, 'ring count', rings, want.rings);
-      const dashed = 'stroke-dasharray' in outer.a;
+      const { base, inner } = splitElement(frag);
+      const rings = shapesIn(base).filter((x) => x.tag === 'circle');
+      if (rings.length !== want.rings) say(id, 'ring count', rings.length, want.rings);
+      const dashed = 'stroke-dasharray' in rings[0].a;
       if (dashed !== want.dashed) say(id, 'dashed ring', dashed, want.dashed);
-
+      if (+rings[0].a['stroke-width'] !== want.strokeWidth) say(id, 'ring stroke width', +rings[0].a['stroke-width'], want.strokeWidth);
       // #87, pinned: the XML carries no definition for these markers, our SVG still draws one.
       let icon = want.icon;
       if (['multiple', 'parallelMultiple'].includes(node?.marker)) {
         if (want.icon !== null) say(id, '#87 is fixed — unpin it here', want.icon, null);
         icon = node.marker;
       }
-      const filled = is(el, 'bpmn:IntermediateThrowEvent', 'bpmn:EndEvent');
-      const cx = +outer.a.cx, cy = +outer.a.cy;
-      const iconMarkup = icon === null ? ''
-        : icon === 'terminate' ? `<circle cx="${cx}" cy="${cy}" r="${rn(r0 * 0.55)}" fill="${CLR.stroke}"/>`
-        : renderEventMarker(icon, cx, cy, r0, filled);
-      if (icon && !frag.includes(iconMarkup)) say(id, 'icon', 'another or none', icon);
-      if (shapes.length !== rings + shapesIn(iconMarkup).length) say(id, 'symbols beside rings and icon', shapes.length - rings, shapesIn(iconMarkup).length);
+      const throwing = is(el, 'bpmn:IntermediateThrowEvent', 'bpmn:EndEvent');
+      const expected = icon ? renderEventMarker(icon, w, h, throwing, node?.color) : '';
+      if (inner !== expected) say(id, 'icon', inner ? 'another' : 'none', icon);
     } else if (is(el, 'bpmn:Gateway')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('gateway');
-      const want = expectedGateway(el, di.get(id), SHAPE[node?.type]?.w ?? 50, SHAPE[node?.type]?.h ?? 50);
-      const inner = shapes.slice(1);
-      const lines = inner.filter((s) => s.tag === 'line');
-      const circles = inner.filter((s) => s.tag === 'circle');
-      let got = 'none';
+      const { base, inner } = splitElement(frag);
+      const diamond = shapesIn(base)[0];
+      if (diamond?.tag !== 'polygon' || +diamond.a['stroke-width'] !== 2) say(id, 'diamond, stroke 2', diamond?.a['stroke-width'], 2);
+      // The symbol from the XML's own fields, as the gateway handlers read them.
+      const sem = { eventGatewayType: el.eventGatewayType, instantiate: !!el.instantiate };
+      const type = el.$type.replace('bpmn:', '').replace(/^./, (c) => c.toLowerCase());
+      const expected = renderGatewaySymbol(type, w, h, sem, { markerVisible: !!di.get(id)?.isMarkerVisible }, node?.color);
+      if (inner !== expected) say(id, 'inner symbol', inner ? 'another' : 'none', type);
       if (is(el, 'bpmn:EventBasedGateway')) {
-        got = inner.some((s) => s.tag === 'path') ? 'plus-outline' : inner.some((s) => s.tag === 'polygon') ? 'pentagon' : 'none';
-        const radii = circles.map((c) => +c.a.r);
-        if (JSON.stringify(radii) !== JSON.stringify(want.rings)) say(id, 'ring radii', radii, want.rings);
-      } else if (lines.length === 4) got = 'asterisk';
-      else if (lines.length === 2) got = lines.every((l) => l.a.x1 !== l.a.x2 && l.a.y1 !== l.a.y2) ? 'x' : 'plus';
-      else if (circles.length === 1 && inner.length === 1) got = 'circle';
-      if (got !== want.inner) say(id, 'inner symbol', got, want.inner);
+        // The structure, independently of icons.js: rings at offsets 0.20·h (+0.26·h unless parallel or instantiating)
+        const ring = (off) => Math.round((w + h) / 4 - off);
+        const wantRings = el.eventGatewayType === 'Parallel' || el.instantiate ? [ring(h * 0.20)] : [ring(h * 0.20), ring(h * 0.26)];
+        const radii = shapesIn(inner).filter((x) => x.tag === 'circle').map((c) => +c.a.r);
+        if (JSON.stringify(radii) !== JSON.stringify(wantRings)) say(id, 'ring radii', radii, wantRings);
+      }
     } else if (is(el, 'bpmn:Activity')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('activity');
-      const want = expectedActivity(el, di.get(id));
-      // Pinned: `isAdHoc` is unserialised (types.js), svg.js draws the tilde regardless.
-      if (node?.isAdHoc && !want.expanded) want.markers.add('adhoc');
-      const body = shapesIn(frag.replace(MARKER_GROUP, ''));   // everything but the bottom markers
-      const rects = body.filter((s) => s.tag === 'rect');
+      // Pinned: `isAdHoc` is unserialised (#99), svg.js draws the tilde regardless.
+      const want = expectedActivity(el, di.get(id), { adHoc: !!node?.isAdHoc });
+      const { base, inner } = splitElement(frag);
+      const rects = shapesIn(base).filter((x) => x.tag === 'rect');
       const main = rects[0];
       const dashed = 'stroke-dasharray' in main.a;
       if (dashed !== want.dashed) say(id, 'dashed border', dashed, want.dashed);
-      const inner = rects.length > 1;
-      if (inner !== want.innerBorder) say(id, 'inner (transaction) border', inner, want.innerBorder);
-      const thick = main.a['stroke-width'] === String(SW.callActivity);
-      if (thick !== want.thick) say(id, 'thick (call activity) border', thick, want.thick);
-      const markers = bottomMarkers(frag);
-      const sorted = (xs) => [...xs].sort();
-      if (JSON.stringify(sorted(markers)) !== JSON.stringify(sorted(want.markers))) say(id, 'bottom markers', sorted(markers), sorted(want.markers));
-      const iconMarkup = want.icon && !want.expanded
-        ? renderTaskIcon(want.icon, +main.a.x, +main.a.y, { instantiate: want.instantiate }) ?? '' : '';
-      if (iconMarkup && !frag.includes(iconMarkup)) say(id, 'task icon', 'another or none', want.instantiate ? 'receiveTask (instantiate)' : want.icon);
-      const expectedBody = (want.innerBorder ? 2 : 1) + shapesIn(iconMarkup).length;
-      if (body.length !== expectedBody) say(id, 'symbols beside border and icon', body.length, expectedBody);
+      if (+main.a['stroke-width'] !== want.strokeWidth) say(id, 'border stroke width', +main.a['stroke-width'], want.strokeWidth);
+      const innerBorder = rects.length > 1;
+      if (innerBorder !== want.innerBorder) say(id, 'inner (transaction) border', innerBorder, want.innerBorder);
+      if (shapesIn(base).length !== rects.length) say(id, 'symbols outside the element group', shapesIn(base).length - rects.length, 0);
+      const markers = markersIn(inner);
+      const names = markers.map((m) => m.name);
+      if (JSON.stringify(names) !== JSON.stringify(want.markers)) say(id, 'bottom markers (in order)', names, want.markers);
+      for (const m of markers) {
+        const start = m.markup.match(/(?:x="|d="m ?)([\d.-]+)/);
+        const got = start ? Math.round((+start[1] - w / 2) * 1000) / 1000 : null;
+        if (got !== want.offsetX[m.name]) say(id, `${m.name} marker x offset from centre`, got, want.offsetX[m.name]);
+      }
+      const iconMarkup = want.icon && !want.expanded ? renderTaskIcon(want.icon, { instantiate: want.instantiate }, node?.color) ?? '' : '';
+      if (withoutMarkers(inner) !== iconMarkup) say(id, 'task icon', withoutMarkers(inner) ? 'another' : 'none', want.icon);
     } else if (is(el, 'bpmn:DataObjectReference')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('data');
-      // renderDataObject: the collection marker when the DataObject `isCollection`
-      const collection = shapes.filter((s) => s.tag === 'line').length === 3;
-      const want = !!el.dataObjectRef?.isCollection;
-      if (collection !== want) say(id, 'collection marker', collection, want);
+      // renderDataObject: the page, plus the collection bars when the DataObject `isCollection`
+      const { inner } = splitElement(frag);
+      const expected = renderDataObjectShape(w, h, { collection: !!el.dataObjectRef?.isCollection, fillOpacity: SYM.fillOpacity }, node?.color);
+      if (inner !== expected) say(id, 'data object (collection marker)', inner, !!el.dataObjectRef?.isCollection);
     } else if (is(el, 'bpmn:DataStoreReference')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('data');
-      if (!shapes.some((s) => s.tag === 'ellipse')) say(id, 'data store cylinder', false, true);
+      if (shapesIn(splitElement(frag).inner).length !== 1) say(id, 'data store: one path (cylinder with rims)', false, true);
     } else if (is(el, 'bpmn:Group')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('artifact');
-      // 'bpmn:Group': a dashed rounded rectangle
-      if (!(shapes[0]?.tag === 'rect' && 'stroke-dasharray' in shapes[0].a)) say(id, 'dashed group frame', false, true);
+      // 'bpmn:Group': a rounded rectangle, stroke 1.5, dash '10, 6, 0, 6'
+      const g = shapesIn(frag)[0];
+      if (!(g?.tag === 'rect' && g.a['stroke-dasharray'] === '10, 6, 0, 6' && +g.a['stroke-width'] === 1.5)) say(id, 'group frame', g?.a, 'dash 10, 6, 0, 6 / 1.5');
     } else if (is(el, 'bpmn:TextAnnotation')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('artifact');
@@ -305,17 +315,23 @@ async function symbolDisagreements(lc) {
         : p['marker-start'] === 'url(#seq-conditional-src)' ? 'conditional' : null;
       const want = expectedSequenceFlowMarker(el);
       if (got !== want) say(id, 'source-end marker', got, want);
+      // drawConnectionSegments → lineStyle: stroke 2, solid
+      if (+p['stroke-width'] !== 2 || 'stroke-dasharray' in p) say(id, 'solid line, stroke 2', p['stroke-width'], 2);
     } else if (is(el, 'bpmn:MessageFlow')) {
       const p = paths.get(id);
       if (!p) { say(id, 'drawn', false, true); continue; }
       seen.add('messageFlow');
-      if (!('stroke-dasharray' in p) || !p['marker-start'] || !p['marker-end']) say(id, 'dashed, circle start, open arrow end', false, true);
+      // 'bpmn:MessageFlow': dash '10, 11', stroke 1.5, circle at the start, open arrow at the end
+      if (p['stroke-dasharray'] !== '10, 11' || +p['stroke-width'] !== 1.5 || !p['marker-start'] || !p['marker-end']) {
+        say(id, 'dash 10, 11 / stroke 1.5 / both markers', [p['stroke-dasharray'], p['stroke-width']], ['10, 11', 1.5]);
+      }
     } else if (is(el, 'bpmn:Association')) {
       const p = paths.get(id);
       if (!p) { say(id, 'drawn', false, true); continue; }
       seen.add('association');
-      // renderAssociation: end marker for direction One or Both, start marker for Both
+      // renderAssociation: dotted (dash '0, 5', round caps), end marker for One or Both, start for Both
       const dir = el.associationDirection;
+      if (p['stroke-dasharray'] !== '0, 5' || p['stroke-linecap'] !== 'round') say(id, 'dotted line', p['stroke-dasharray'], '0, 5');
       if (!!p['marker-end'] !== (dir === 'One' || dir === 'Both')) say(id, 'association end marker', !!p['marker-end'], dir);
       if (!!p['marker-start'] !== (dir === 'Both')) say(id, 'association start marker', !!p['marker-start'], dir);
     }
