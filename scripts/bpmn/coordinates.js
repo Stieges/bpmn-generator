@@ -1252,11 +1252,11 @@ function fanOut(corridorY, index, total) {
 }
 
 /**
- * y of the gap between the participant the flow leaves and the next one in the
- * direction of travel. Falls back to the midpoint when no gap can be identified
- * (single participant, or a flow that stays inside one band).
+ * The gap between the participant the flow leaves and the next one in the direction of travel, as
+ * `{ top, bottom }`, or null when none can be identified (single participant, or a flow that stays
+ * inside one band).
  */
-function participantGapY(fromY, toY, poolCoords) {
+function participantGap(fromY, toY, poolCoords) {
   const bands = Object.values(poolCoords)
     .filter(p => Number.isFinite(p.y) && Number.isFinite(p.h))
     .map(p => ({ top: p.y, bottom: p.y + p.h }))
@@ -1264,14 +1264,24 @@ function participantGapY(fromY, toY, poolCoords) {
 
   const downward = toY > fromY;
   const idx = bands.findIndex(b => fromY >= b.top - 1 && fromY <= b.bottom + 1);
-  if (idx === -1) return (fromY + toY) / 2;
+  if (idx === -1) return null;
 
   const neighbour = downward ? bands[idx + 1] : bands[idx - 1];
-  if (!neighbour) return (fromY + toY) / 2;
+  if (!neighbour) return null;
 
   return downward
-    ? (bands[idx].bottom + neighbour.top) / 2
-    : (neighbour.bottom + bands[idx].top) / 2;
+    ? { top: bands[idx].bottom, bottom: neighbour.top }
+    : { top: neighbour.bottom, bottom: bands[idx].top };
+}
+
+/**
+ * y of the gap between the participant the flow leaves and the next one in the
+ * direction of travel. Falls back to the midpoint when no gap can be identified
+ * (single participant, or a flow that stays inside one band).
+ */
+function participantGapY(fromY, toY, poolCoords) {
+  const g = participantGap(fromY, toY, poolCoords);
+  return g ? (g.top + g.bottom) / 2 : (fromY + toY) / 2;
 }
 
 /**
@@ -1858,7 +1868,14 @@ function jogLeg(px, py, farY, obstacles) {
  */
 function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable, align = null) {
   let { sx, sy, ex, ey } = messageFlowPorts(srcCoord, tgtCoord);
-  const straight = (x) => ({ corridors: [], points: [{ x, y: sy }, { x, y: ey }] });
+  // An aligned flow without a corridor leg has nothing to carry its label: `labelSeg` is the stretch
+  // of its vertical at x in the gap next to the source's participant, where the corridor leg would
+  // have been.
+  const gapSeg = (x) => {
+    const g = align && participantGap(sy, ey, poolCoords);
+    return g && g.bottom > g.top ? { labelSeg: [{ x, y: g.top }, { x, y: g.bottom }] } : {};
+  };
+  const straight = (x) => ({ corridors: [], points: [{ x, y: sy }, { x, y: ey }], ...gapSeg(x) });
   if (align) {
     const [end, x0, shape, mov] = align.target
       ? ['target', sx, srcCoord, movable.source] : ['source', ex, tgtCoord, movable.target];
@@ -1894,7 +1911,8 @@ function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable,
     // Down one column (a centre-aligned pair that a shifted port column clears): the corridor
     // point is collinear and drops out, so the flow takes no fan slot in the corridor.
     const straight = Math.abs(head[head.length - 1].x - direct) < 1e-6;
-    return { corridors: straight ? [] : [c], points: [...head, { x: direct, corridor: c }, { x: direct, y: ey }] };
+    return { corridors: straight ? [] : [c], points: [...head, { x: direct, corridor: c }, { x: direct, y: ey }],
+      ...(straight ? gapSeg(direct) : {}) };
   }
   const t = participantGapY(ey, sy, poolCoords);
   if (Math.abs(t - c) > 1) {
@@ -2037,11 +2055,14 @@ function routeMessageFlows(coordMap, lc, { alignParticipantPorts = CFG.layout?.a
     // phantom position, far from the flow it belongs to.
     const k = plan.points.findIndex((p, i) => 'corridor' in p && plan.points[i + 1]
       && 'corridor' in plan.points[i + 1] && plan.points[i + 1].corridor === p.corridor);
-    const [a, b] = k >= 0
-      ? [resolve(plan.points[k], key), resolve(plan.points[k + 1], key)]
-      : [pts[0], pts[pts.length - 1]];
+    // An aligned flow without a corridor leg (plan.labelSeg; its corridor points, if any, are
+    // collinear — a zero-length leg): beside its stretch in the participant gap.
+    const gapLabel = plan.labelSeg && (k < 0 || plan.points[k].x === plan.points[k + 1].x);
+    const [a, b] = gapLabel ? plan.labelSeg
+      : k >= 0 ? [resolve(plan.points[k], key), resolve(plan.points[k + 1], key)]
+        : [pts[0], pts[pts.length - 1]];
     const place = (extra) => placeEdgeLabel(mf.name, pts, {
-      preferred: k >= 0 ? [a, b] : null,
+      preferred: k >= 0 || gapLabel ? [a, b] : null,
       fallback: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
       ...extra,
     });
