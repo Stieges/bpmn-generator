@@ -14,7 +14,9 @@
  * CLI:
  *   node orchestrator.js --input logic-core.json --output /tmp/result
  *   node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL --output /tmp/result
- *   (--timeout <seconds>: LLM request timeout, default 120)
+ *   (--timeout <seconds>: LLM request timeout, default 120; --retries <n>: attempts after the first
+ *   on a transport error or 408/429/5xx, default config.json → llm.retry; --extra-body '<json>':
+ *   extra request fields, e.g. '{"chat_template_kwargs":{"enable_thinking":false}}')
  */
 
 import { modelerAgent } from './agents/modeler.js';
@@ -245,10 +247,25 @@ if (isMain) {
     console.error(`--timeout takes a positive number of seconds, got: ${timeoutArg}`);
     process.exit(1);
   }
+  const retriesArg = flag('--retries');
+  const retries = retriesArg === null ? null : Number(retriesArg);
+  if (retriesArg !== null && !(Number.isInteger(retries) && retries >= 0)) {
+    console.error(`--retries takes a whole number ≥ 0, got: ${retriesArg}`);
+    process.exit(1);
+  }
+  const extraBodyArg = flag('--extra-body');
+  let extraBody = null;
+  if (extraBodyArg !== null) {
+    try { extraBody = JSON.parse(extraBodyArg); } catch { extraBody = null; }
+    if (!extraBody || typeof extraBody !== 'object' || Array.isArray(extraBody)) {
+      console.error(`--extra-body takes a JSON object, got: ${extraBodyArg}`);
+      process.exit(1);
+    }
+  }
 
   if (!inputPath && !textInput) {
     console.error('Usage: node orchestrator.js --input <logic-core.json> [--output <base>]');
-    console.error('       node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL [--timeout <seconds>]');
+    console.error('       node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL [--timeout <seconds>] [--retries <n>] [--extra-body <json>]');
     process.exit(1);
   }
 
@@ -267,7 +284,12 @@ if (isMain) {
     const { createLlmProvider } = await import('./agents/llm-provider.js');
     // A thinking model or a slow endpoint can need more than the provider's default (120 s).
     options.llmProvider = createLlmProvider({ baseUrl: apiUrl, apiKey, model,
-      ...(timeoutSec !== null && { timeout: Math.round(timeoutSec * 1000) }) });
+      ...(timeoutSec !== null && { timeout: Math.round(timeoutSec * 1000) }),
+      ...(retries !== null && { retry: { retries } }),
+      ...(extraBody && { extraBody }),
+      onRetry: ({ attempt, retries: n, status, delayMs }) => console.error(
+        `\u21bb LLM ${status ?? 'unreachable'}, retry ${attempt}/${n} in ${(delayMs / 1000).toFixed(1)} s`),
+    });
   }
 
   try {

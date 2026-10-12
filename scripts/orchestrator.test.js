@@ -540,11 +540,116 @@ describe('chatAgent', () => {
   });
 });
 
+// Retry against an unstable endpoint (config.json → llm.retry): transport errors and the statuses
+// in `statuses` are tried again with exponential backoff, honouring Retry-After up to a cap; other
+// failures are not. `request`, `sleep` and `random` are injected, so nothing waits.
+describe('createLlmProvider — retry', () => {
+  const okResponse = (content = 'ok') => ({ ok: true, status: 200, headers: new Map(), json: async () => ({ choices: [{ message: { content } }] }) });
+  const failResponse = (status, headers = {}) => ({ ok: false, status, headers: new Map(Object.entries(headers)), text: async () => 'upstream body' });
+  const scriptedRequest = (...steps) => {
+    const calls = [];
+    const request = async (url, init) => {
+      calls.push(JSON.parse(init.body));
+      const step = steps[Math.min(calls.length - 1, steps.length - 1)];
+      if (step instanceof Error) throw step;
+      return step;
+    };
+    return { request, calls };
+  };
+  const make = (request, extra = {}) => {
+    const sleeps = [];
+    const provider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm', request,
+      sleep: async (ms) => { sleeps.push(ms); }, random: () => 0.5,
+      retry: { retries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryAfterMaxMs: 60000, statuses: [408, 429, 500, 502, 503, 504] },
+      ...extra });
+    return { provider, sleeps };
+  };
+
+  test('502, 502, 200: the answer arrives after two waits that grow', async () => {
+    const { request, calls } = scriptedRequest(failResponse(502), failResponse(502), okResponse('done'));
+    const { provider, sleeps } = make(request);
+    expect(await provider('s', 'u')).toBe('done');
+    expect(calls).toHaveLength(3);
+    expect(sleeps).toHaveLength(2);
+    expect(sleeps[1]).toBeGreaterThan(sleeps[0]);
+  });
+
+  test('429 with Retry-After waits as long as the endpoint asks, up to the cap', async () => {
+    const short = scriptedRequest(failResponse(429, { 'retry-after': '7' }), okResponse());
+    const a = make(short.request);
+    await a.provider('s', 'u');
+    expect(a.sleeps).toEqual([7000]);
+    const long = scriptedRequest(failResponse(429, { 'retry-after': '3600' }), okResponse());
+    const b = make(long.request);
+    await b.provider('s', 'u');
+    expect(b.sleeps).toEqual([60000]);
+  });
+
+  test('503 every time: LlmProviderError after retries + 1 attempts, the body not in the message', async () => {
+    const { LlmProviderError } = await import('./agents/llm-provider.js');
+    const { request, calls } = scriptedRequest(failResponse(503));
+    const { provider } = make(request);
+    const err = await provider('s', 'u').catch((e) => e);
+    expect(err).toBeInstanceOf(LlmProviderError);
+    expect(err.status).toBe(503);
+    expect(err.attempts).toBe(4);
+    expect(calls).toHaveLength(4);
+    expect(err.message).toBe('LLM endpoint returned 503 (4 attempts)');
+    expect(err.message).not.toContain('upstream body');
+  });
+
+  test.each([400, 401, 404])('%i is not retried', async (status) => {
+    const { request, calls } = scriptedRequest(failResponse(status));
+    const { provider, sleeps } = make(request);
+    await expect(provider('s', 'u')).rejects.toThrow(`returned ${status}`);
+    expect(calls).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+  });
+
+  test('a transport error is retried', async () => {
+    const { request, calls } = scriptedRequest(new Error('ECONNRESET'), okResponse('back'));
+    const { provider } = make(request);
+    expect(await provider('s', 'u')).toBe('back');
+    expect(calls).toHaveLength(2);
+  });
+
+  test('retries: 0 makes one attempt', async () => {
+    const { request, calls } = scriptedRequest(failResponse(502), okResponse());
+    const { provider } = make(request, { retry: { retries: 0 } });
+    await expect(provider('s', 'u')).rejects.toThrow('returned 502');
+    expect(calls).toHaveLength(1);
+  });
+
+  test('onRetry hears every retry', async () => {
+    const seen = [];
+    const { request } = scriptedRequest(failResponse(502), okResponse());
+    const { provider } = make(request, { onRetry: (r) => seen.push(r) });
+    await provider('s', 'u');
+    expect(seen).toEqual([{ attempt: 1, retries: 3, status: 502, delayMs: expect.any(Number) }]);
+  });
+
+  test('extraBody goes into the request, and cannot replace model or messages', async () => {
+    const { request, calls } = scriptedRequest(okResponse());
+    const { provider } = make(request, { extraBody: { chat_template_kwargs: { enable_thinking: false }, model: 'other', messages: [] } });
+    await provider('s', 'u');
+    expect(calls[0].chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(calls[0].model).toBe('m');
+    expect(calls[0].messages).toHaveLength(2);
+  });
+
+  test('an answer with only reasoning content says so', async () => {
+    const { request } = scriptedRequest({ ok: true, status: 200, headers: new Map(),
+      json: async () => ({ choices: [{ message: { content: null, reasoning_content: 'thinking…' } }] }) });
+    const { provider } = make(request);
+    await expect(provider('s', 'u')).rejects.toThrow(/only reasoning content/);
+  });
+});
+
 describe('createLlmProvider — failures', () => {
   test('a non-2xx answer throws LlmProviderError carrying the status, not the body in the message', async () => {
     const { LlmProviderError } = await import('./agents/llm-provider.js');
     global.fetch = jest.fn(async () => ({ ok: false, status: 503, text: async () => 'upstream secret detail' }));
-    const provider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm' });
+    const provider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm', retry: { retries: 0 } });
     const err = await provider('s', 'u').catch((e) => e);
     expect(err).toBeInstanceOf(LlmProviderError);
     expect(err.status).toBe(503);
@@ -554,7 +659,7 @@ describe('createLlmProvider — failures', () => {
   test('the orchestrator keeps the provider error as the cause', async () => {
     const { LlmProviderError } = await import('./agents/llm-provider.js');
     global.fetch = jest.fn(async () => ({ ok: false, status: 500, text: async () => 'x' }));
-    const llmProvider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm' });
+    const llmProvider = createLlmProvider({ baseUrl: 'http://localhost:1234/v1', apiKey: 'k', model: 'm', retry: { retries: 0 } });
     const err = await orchestrate('text', { llmProvider }).catch((e) => e);
     expect(err.cause).toBeInstanceOf(LlmProviderError);
   });

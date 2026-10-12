@@ -235,13 +235,26 @@ function json(res, status, data) {
 
 // Resolves an LLM config from environment variables, or null if no key is set.
 // Reads process.env on every call so key/model changes are picked up at request time.
+// LLM_EXTRA_BODY (JSON object, operator-set): extra request fields for the server's own endpoint,
+// e.g. {"chat_template_kwargs":{"enable_thinking":false}}. Never taken from a client's llmConfig —
+// that would let a client put arbitrary fields into a request made with the server's key.
 export function resolveEnvLlmConfig() {
   if (!process.env.OPENAI_API_KEY) return null;
-  return {
+  const config = {
     baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   };
+  const raw = process.env.LLM_EXTRA_BODY;
+  if (raw) {
+    let extraBody;
+    try { extraBody = JSON.parse(raw); } catch { extraBody = null; }
+    if (!extraBody || typeof extraBody !== 'object' || Array.isArray(extraBody)) {
+      throw new Error('LLM_EXTRA_BODY must be a JSON object');
+    }
+    config.extraBody = extraBody;
+  }
+  return config;
 }
 
 const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1';

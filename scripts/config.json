@@ -1,4 +1,13 @@
 {
+  "llm": {
+    "retry": {
+      "retries": 3,
+      "baseDelayMs": 2000,
+      "maxDelayMs": 30000,
+      "retryAfterMaxMs": 60000,
+      "statuses": [408, 429, 500, 502, 503, 504]
+    }
+  },
   "shape": {
     "startEvent": {
       "w": 36,
