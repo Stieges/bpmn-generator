@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extraction; a Logic-Core from the reviewer loop or the layout loop went downstream unchecked. Every
   Modeler output now passes the gate. A rejected refinement or amendment is dropped, and the run
   goes on with the last valid model.
+- **Orchestrator: one model from layout to result.** After the last layout pass the Modeler was
+  still asked for an amendment, so the returned `logicCore` was not the model in `bpmnXml`, and
+  compliance judged a model nobody had laid out. An amended model also skipped the reviewer, so an
+  amendment could break soundness unnoticed. Now no amendment follows the last layout pass, and an
+  amendment with reviewer errors is dropped, so the run keeps its model and layout. The layout
+  review's answer is checked: `feedback` must be an array, items need a string `issue` and
+  `suggestion`, and only `requiresLogicCoreChange === true` is structural (the string `"false"` was
+  truthy). A failed review is noted in `history` (`reviewError`) and no longer swallowed, and no
+  longer crashes the run on an object instead of an array.
+- **One rule profile for every agent.** The reviewer and the layout pass used the default profile;
+  only compliance applied the caller's `ruleProfile`. Under a stricter profile `validation` said
+  fine while `compliance` said not compliant, and the refinement loop, which listens to the
+  reviewer, never saw those errors. Reviewer, layout and compliance now resolve the same profile and
+  `mode` (`resolveRuleProfile` in `bpmn/rules.js`, also used by `runPipeline`).
 - **Schema errors of the wrong branch.** For a Logic-Core that fails the schema,
   `validateLogicCoreSchema` reported the errors of both root shapes, so a collaboration opened with
   SingleProcess's "must have required property 'nodes'". It now reports the errors of the shape the

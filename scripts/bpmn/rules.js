@@ -1443,6 +1443,16 @@ function profileForMode(baseProfile, mode = 'document') {
 }
 
 /**
+ * The profile a run judges by: a path is read through the safe loader, an object is used as it is
+ * (it passes assertRuleProfile in profileForMode), and the mode is applied. The one derivation for
+ * runPipeline and the orchestrator's reviewer and compliance agents, so all three judge a model by
+ * the same rules.
+ */
+function resolveRuleProfile(given = null, mode = 'document') {
+  return profileForMode(typeof given === 'string' ? loadRuleProfile(given) : given, mode);
+}
+
+/**
  * Run all rules against a Logic-Core document.
  * @param {object} lc - Logic-Core JSON
  * @param {object|null} profile - Rule profile (or null for defaults)
@@ -1555,4 +1565,4 @@ function classifyResult(result, severity, errors, warnings, infos, prefix) {
   }
 }
 
-export { checkRuleProfile, RULES, RULE_REGISTER, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES, loadRuleProfile, profileForMode, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };
+export { checkRuleProfile, RULES, RULE_REGISTER, SOUNDNESS_RULES, STYLE_RULES, PRAGMATICS_RULES, WORKFLOW_NET_RULES, OPTIMIZATION_RULES, loadRuleProfile, profileForMode, resolveRuleProfile, runRules, buildAdjacency, countIncoming, traceReachable, isReachableWithout };

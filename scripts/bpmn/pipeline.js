@@ -29,7 +29,7 @@ import { fileURLToPath } from 'url';
 import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
-import { profileForMode, loadRuleProfile } from './rules.js';
+import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
@@ -158,9 +158,7 @@ async function runPipeline(logicCore, opts = {}) {
     lc = applyDecisionDocumentation(lc, opts.decisions, { locale: opts.locale });
   }
 
-  let baseProfile = opts.ruleProfile ?? null;
-  if (typeof baseProfile === 'string') baseProfile = loadRuleProfile(baseProfile);
-  const profile = profileForMode(baseProfile, opts.mode);
+  const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
     return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null, validation: { errors, warnings, advisories, metrics } };
