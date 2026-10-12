@@ -171,6 +171,7 @@ export async function orchestrate(input, options = {}) {
       state.history.push({
         agent: 'layout', iteration: i,
         feedbackCount: state.layoutFeedback.length,
+        ...(layout.layoutReviewError && { reviewError: layout.layoutReviewError }),
         ts: new Date().toISOString(),
       });
 
@@ -183,14 +184,33 @@ export async function orchestrate(input, options = {}) {
     // Structural layout feedback → amend via Modeler
     const structural = state.layoutFeedback.filter(f => f.requiresLogicCoreChange);
     if (structural.length === 0) break;
+    // An amendment is only worth making when a layout pass follows it: after the last one it would
+    // return a logicCore that is not the model in bpmnXml, and compliance would judge a model
+    // nobody laid out.
+    if (i === maxLayoutIterations - 1) break;
 
     if (options.llmProvider) {
       try {
         state.layoutFeedback = structural;
-        state.logicCore = await gatedModelerCall(state, 'amend');
+        const amended = await gatedModelerCall(state, 'amend');
         state.layoutFeedback = []; // Reset after amendment
+        // The amended model passes the reviewer, as the first one did: an amendment that breaks
+        // soundness is dropped, and the run keeps the model and the layout it already has.
+        const review = await reviewerAgent({ ...state, logicCore: amended });
+        state.history.push({
+          agent: 'reviewer', phase: 'amend', iteration: i,
+          isValid: review.isValid, issueCount: review.reviewIssues.length, ts: new Date().toISOString(),
+        });
+        if (!review.isValid) {
+          state.history.push({ agent: 'modeler', phase: 'amend', iteration: i,
+            error: 'amendment dropped: the reviewer found errors in it', ts: new Date().toISOString() });
+          break;
+        }
+        state.logicCore = amended;
+        state.reviewIssues = review.reviewIssues;
         state.history.push({ agent: 'modeler', phase: 'amend', iteration: i, ts: new Date().toISOString() });
       } catch (err) {
+        state.layoutFeedback = [];
         state.history.push({ agent: 'modeler', phase: 'amend', iteration: i, error: err.message, ts: new Date().toISOString() });
         break; // Cannot amend, proceed with current layout
       }

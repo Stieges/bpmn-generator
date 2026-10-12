@@ -387,6 +387,90 @@ describe('orchestrate — schema gate on every Modeler output', () => {
   });
 });
 
+// The layout loop and the profile the agents judge by. What orchestrate returns must be one model:
+// the logicCore that was laid out into bpmnXml and judged by the reviewer and compliance alike.
+describe('orchestrate — layout loop and rule profile', () => {
+  const structuralFeedback = JSON.stringify({ feedback: [{ issue: 'Too long', suggestion: 'Split it', requiresLogicCoreChange: true }] });
+  const renamed = (lc, name) => {
+    const copy = JSON.parse(JSON.stringify(lc));
+    const task = copy.pools[0].nodes.find((n) => /Task$|^task$/.test(n.type));
+    task.name = name;
+    return copy;
+  };
+
+  test('no amendment after the last layout pass: the returned model is the laid-out one', async () => {
+    const lc = loadFixture('simple-approval.json');
+    let amendments = 0;
+    const llm = async (_s, user) => {
+      if (String(user).startsWith('SVG diagram')) return structuralFeedback;
+      amendments++;
+      return JSON.stringify(renamed(lc, `Antrag bearbeiten ${amendments}`));
+    };
+    const result = await orchestrate(JSON.parse(JSON.stringify(lc)), { llmProvider: llm, enableLayoutReview: true, maxLayoutIterations: 2 });
+    expect(amendments).toBe(1);
+    expect(result.history.filter((h) => h.agent === 'layout')).toHaveLength(2);
+    expect(result.bpmnXml).toContain('Antrag bearbeiten 1');
+    expect(JSON.stringify(result.logicCore)).toContain('Antrag bearbeiten 1');
+  });
+
+  test('an amendment the reviewer rejects is dropped, and the earlier model and layout stay', async () => {
+    const lc = loadFixture('simple-approval.json');
+    // Schema-valid, but without its end events: unsound.
+    const broken = JSON.parse(JSON.stringify(lc));
+    broken.pools[0].nodes = broken.pools[0].nodes.filter((n) => n.type !== 'endEvent');
+    const endIds = new Set(lc.pools[0].nodes.filter((n) => n.type === 'endEvent').map((n) => n.id));
+    broken.pools[0].edges = broken.pools[0].edges.filter((e) => !endIds.has(e.target));
+    const llm = async (_s, user) => (String(user).startsWith('SVG diagram') ? structuralFeedback : JSON.stringify(broken));
+    const result = await orchestrate(JSON.parse(JSON.stringify(lc)), { llmProvider: llm, enableLayoutReview: true, maxLayoutIterations: 3 });
+    expect(result.logicCore).toEqual(lc);
+    expect(result.bpmnXml).toMatch(/endEvent/);
+    expect(result.history.some((h) => h.agent === 'reviewer' && h.phase === 'amend' && h.isValid === false)).toBe(true);
+    expect(result.compliance.isCompliant).toBe(true);
+  });
+
+  test.each([
+    ['an object instead of an array', JSON.stringify({ feedback: { issue: 'x', suggestion: 'y', requiresLogicCoreChange: true } })],
+    ['prose', 'The layout looks fine to me.'],
+  ])('a layout review answering %s does not break the run, and history says so', async (_, answer) => {
+    const lc = loadFixture('simple-approval.json');
+    const llm = async () => answer;
+    const result = await orchestrate(JSON.parse(JSON.stringify(lc)), { llmProvider: llm, enableLayoutReview: true });
+    expect(result.bpmnXml).toMatch(/definitions/);
+    expect(result.history.find((h) => h.agent === 'layout').reviewError).toEqual(expect.any(String));
+  });
+
+  test('requiresLogicCoreChange "false" (a string) is not a structural change', async () => {
+    const lc = loadFixture('simple-approval.json');
+    let amendments = 0;
+    const llm = async (_s, user) => {
+      if (String(user).startsWith('SVG diagram')) {
+        return JSON.stringify({ feedback: [{ issue: 'x', suggestion: 'y', requiresLogicCoreChange: 'false' }] });
+      }
+      amendments++;
+      return JSON.stringify(lc);
+    };
+    await orchestrate(JSON.parse(JSON.stringify(lc)), { llmProvider: llm, enableLayoutReview: true });
+    expect(amendments).toBe(0);
+  });
+
+  test('reviewer, layout and compliance judge by the same profile', async () => {
+    // A decision gateway named without a question mark: M02, a WARNING by default, an ERROR in the
+    // strict profile. Before, the reviewer and the layout validation used the default profile and
+    // only compliance the caller's — so validation said "fine", compliance said "not compliant", and
+    // the refinement loop, which listens to the reviewer, never ran.
+    const lc = loadFixture('simple-approval.json');
+    const gw = lc.pools[0].nodes.find((n) => n.type === 'exclusiveGateway');
+    gw.name = 'Entscheidung';
+    const strict = JSON.parse(readFileSync(resolve(__dirname, '../rules/strict-profile.json'), 'utf8'));
+    const review = await reviewerAgent({ logicCore: lc, options: { ruleProfile: strict } });
+    expect(review.isValid).toBe(false);
+    const result = await orchestrate(JSON.parse(JSON.stringify(lc)), { ruleProfile: strict });
+    const m02 = (list) => list.some((m) => m.includes('should be a question'));
+    expect(m02(result.validation.errors)).toBe(true);
+    expect(m02(result.compliance.errors)).toBe(true);
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════
 // §6  LLM Provider (unit)
 // ═══════════════════════════════════════════════════════════════

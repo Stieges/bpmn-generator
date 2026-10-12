@@ -1,9 +1,14 @@
 /**
- * Layout Agent — Runs the BPMN pipeline (ELK layout → XML + SVG).
- * Optionally reviews the SVG via a vision-capable LLM.
+ * Layout Agent — Runs the BPMN pipeline (ELK layout → XML + SVG) with the caller's rule profile and
+ * mode, the ones the reviewer and compliance apply.
+ * Optionally reviews the diagram via an LLM: the SVG markup goes as text (the first 50 000
+ * characters), not as an image.
  *
  * Without enableLayoutReview: just generates and returns done: true.
- * With enableLayoutReview: sends SVG to vision LLM for feedback.
+ * With enableLayoutReview: asks the LLM for feedback. Its answer is checked: `feedback` must be an
+ * array, an item needs a string `issue` and `suggestion`, and only `requiresLogicCoreChange === true`
+ * counts as structural. A review that fails — the call, the JSON, the shape — leaves no feedback and
+ * says why in `layoutReviewError`; it never fails the run.
  */
 
 import { runPipeline } from '../bpmn/pipeline.js';
@@ -25,24 +30,35 @@ For each issue, respond with:
 Respond as JSON: { "feedback": [...] }
 If the layout looks good, respond: { "feedback": [] }`;
 
+/** `{ feedback, error }` — feedback items that hold their shape; error says why there are none. */
 async function reviewLayout(llmProvider, svg) {
+  let raw;
   try {
-    const raw = await llmProvider(
+    raw = await llmProvider(
       LAYOUT_REVIEW_PROMPT,
       `SVG diagram (${svg.length} chars):\n${svg.slice(0, 50_000)}`,
       { responseFormat: { type: 'json_object' } },
     );
-
-    const parsed = JSON.parse(raw.trim().startsWith('{') ? raw : raw.match(/```json\s*\n([\s\S]*?)\n```/)?.[1] || '{"feedback":[]}');
-    return parsed.feedback || [];
-  } catch {
-    return []; // Vision review failed — proceed without feedback
+  } catch (err) {
+    return { feedback: [], error: `layout review call failed: ${err.message}` };
   }
+  const text = String(raw ?? '');
+  const json = text.trim().startsWith('{') ? text : text.match(/```(?:json)?\s*\n([\s\S]*?)\n```/)?.[1];
+  if (!json) return { feedback: [], error: 'layout review answer is not JSON' };
+  let parsed;
+  try { parsed = JSON.parse(json); } catch { return { feedback: [], error: 'layout review answer is not valid JSON' }; }
+  if (!Array.isArray(parsed?.feedback)) return { feedback: [], error: 'layout review answer has no feedback array' };
+  const feedback = parsed.feedback
+    .filter((f) => f && typeof f.issue === 'string' && typeof f.suggestion === 'string')
+    .map((f) => ({ issue: f.issue, suggestion: f.suggestion, requiresLogicCoreChange: f.requiresLogicCoreChange === true }));
+  const dropped = parsed.feedback.length - feedback.length;
+  return { feedback, error: dropped ? `${dropped} layout review item(s) without a string issue and suggestion dropped` : null };
 }
 
 export async function layoutAgent(state) {
   const result = await runPipeline(state.logicCore, {
     mode: state.options?.mode,
+    ruleProfile: state.options?.ruleProfile,
     visualRefinement: state.options?.visualRefinement,
     bendRule: state.options?.bendRule,
     nodeLabelsAvoidFlows: state.options?.nodeLabelsAvoidFlows,
@@ -65,8 +81,9 @@ export async function layoutAgent(state) {
 
   // Optional vision-based layout review
   if (state.options?.enableLayoutReview && state.options?.llmProvider) {
-    const feedback = await reviewLayout(state.options.llmProvider, result.svg);
+    const { feedback, error } = await reviewLayout(state.options.llmProvider, result.svg);
     update.layoutFeedback = feedback;
+    update.layoutReviewError = error;
     const structural = feedback.filter(f => f.requiresLogicCoreChange);
     update.done = structural.length === 0;
   }
