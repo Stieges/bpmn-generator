@@ -15,9 +15,8 @@
  * field passes through (schema, write site, both read sites) — not every level of the model. Fields
  * that belong to a process, a pool or a lane (`lanes`, a pool's `name`, a process's `documentation`)
  * have no row in either table and no case here, so the four-places class remains unfenced at
- * container level. That was the brief's scope, not an oversight; it is tracked as backlog item 9 in
- * `docs/superpowers/plans/2026-08-03-field-authority-and-spanning-fence.md`. Do not read the file
- * name as total coverage.
+ * container level. That was the brief's scope, not an oversight, and remains an open gap. Do not
+ * read the file name as total coverage.
  *
  * This fence is different in exactly one respect, and it is the respect that matters: **its oracle
  * is execution.** It runs the real `runPipeline`, re-reads the real XML through `bpmnToLogicCore`

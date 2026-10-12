@@ -130,13 +130,13 @@ bioc:stroke/bioc:fill attributes on BPMNShape elements, per-node colors in SVG r
 
 ~~Event logs → Process Discovery → Logic-Core.~~
 
-**Rationale:** Process Mining is a pre-processor (event log → variants → Logic-Core), not part of the BPMN Generator. The pipeline consumes finished Logic-Core JSON — where it comes from (LLM, Process Mining, manual) is not its scope. Belongs in iwf-knowledge or a separate tool.
+**Rationale:** Process Mining is a pre-processor (event log → variants → Logic-Core), not part of the BPMN Generator. The pipeline consumes finished Logic-Core JSON — where it comes from (LLM, Process Mining, manual) is not its scope. Belongs in a separate tool.
 
 ### M7 — Visual Refinement Pass | DONE
 
 Post-layout polish: edge-label collision repair via bbox-nudge and lane padding compaction (up to 29 % smaller area; 10–29 % on the seven golden fixtures, some diagrams unchanged), plus ELK MULTI_EDGE wrapping for wide pipelines (>20 nodes). Each pass has its own switch in `config.json → visualRefinement`; with 4.0.0 both `laneCompaction` and `edgeLabelCollisionRepair` are on by default, `--refine` / `--no-refine` switch every pass. Wrapping later became its own opt-in switch (`layout.elkWrapping`, default off). The dynamic lane-header pass was dropped again: bpmn.io draws headers at a fixed width.
 
-**Files:** scripts/bpmn/visual-refinement.js (new), scripts/shared/utils.js (wrapText extension), scripts/bpmn/pipeline.js (flag wiring), scripts/bpmn/layout.js (wrapping hint), scripts/bpmn/coordinates.js (per-pool laneHeaderWidth), config.json. Spec + plan in docs/superpowers/.
+**Files:** scripts/bpmn/visual-refinement.js (new), scripts/shared/utils.js (wrapText extension), scripts/bpmn/pipeline.js (flag wiring), scripts/bpmn/layout.js (wrapping hint), scripts/bpmn/coordinates.js (per-pool laneHeaderWidth), config.json.
 
 ---
 

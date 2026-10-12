@@ -1595,8 +1595,7 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 
 ### Added
 - **Scenario enumeration — every path a token can take, listed instead of drawn.**
-  A new opt-in subsystem, `scripts/scenarios/`, implementing
-  `docs/superpowers/plans/2026-08-01-scenario-enumeration.md`. The rule engine only ever sees the
+  A new opt-in subsystem, `scripts/scenarios/`. The rule engine only ever sees the
   generated Logic-Core, never the text it came from, so it cannot notice that an XOR should have
   been an AND. This lists the distinct executions so a reviewer can spot a missing or wrong
   scenario in a list, where it is findable, rather than in a diagram, where it is not.
@@ -1635,8 +1634,7 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
     not a question this subsystem is allowed to answer.
 - **DMN 1.3 XML + DMNDI generation — a real `.dmn` file now exists.**
   `scripts/dmn/dmn-xml.js` (`generateDmnXml`, `validateDmnXml`) and `scripts/dmn/pipeline.js`
-  (`runDmnPipeline` + CLI), completing Stages 3–4 of
-  `docs/superpowers/plans/2026-07-30-dmn-integration.md`.
+  (`runDmnPipeline` + CLI), completing Stages 3–4 of the DMN integration.
   - New runtime dependency: `dmn-moddle@12.0.1`, symmetric to `bpmn-moddle` on the DMN side —
     GATE 1, its three transitive dependencies identical to the already-installed `bpmn-moddle`'s.
   - Requirements nest under their target element with the `href`-wrapper form
@@ -1684,8 +1682,7 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
     this rule wrongly rejected `knowledgeSource → businessKnowledgeModel`, which Table 2 permits.
   - Deliberately out of scope: `decisionService`, boxed-expression types beyond decision table and
     literal expression, `itemDefinition`, and completeness/overlap analysis.
-  **This does not yet produce a `.dmn` file** — that is Stage 4 of
-  `docs/superpowers/plans/2026-07-30-dmn-integration.md`. Counted separately from the BPMN engine;
+  **This does not yet produce a `.dmn` file** — that is Stage 4 of the DMN integration. Counted separately from the BPMN engine;
   the docs gate routes a claim to the DMN engine only when its line says "DMN".
 - **`scripts/shared/rule-profile.js`** — `loadRuleProfile`, `isRuleEnabled` and `getEffectiveSeverity` lifted
   out of `rules.js` and shared by both engines. Nothing about them was BPMN-specific, and a severity

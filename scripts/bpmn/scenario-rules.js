@@ -27,8 +27,7 @@
  *
  * **No fachliche/business-sense judgment. Ever.** If a check would ask "is this a reasonable
  * process", it does not belong here — that question is explicitly out of scope for the whole
- * scenario-enumeration plan (`docs/superpowers/plans/2026-08-01-scenario-enumeration.md`,
- * "Bewusst nicht in diesem Vorhaben"). And no rule beyond these six without checking with the
+ * scenario-enumeration subsystem. And no rule beyond these six without checking with the
  * plan owner first: this module's entire value is narrowness, and adding a seventh rule here
  * without that discipline is exactly how "objectively wrong only" erodes into "wrong in this
  * module's opinion".

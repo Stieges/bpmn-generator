@@ -4,9 +4,7 @@
  * Lives in shared/, not bpmn/, because a second notation (DMN's DRD) now needs it too: DMN
  * requirement connections (information/knowledge/authority) are, like a BPMN Association, unstyled
  * straight lines between two shape borders — no orthogonal routing. shared/ takes what a second
- * notation demonstrably imports, not everything that could be phrased format-independently; see
- * docs/superpowers/specs/2026-07-31-dmn-drd-and-serialisation-design.md, "Where the boundary
- * actually runs, and why it leaves pure code behind", for the full argument. The three
+ * notation demonstrably imports, not everything that could be phrased format-independently. The three
  * orthogonal-routing helpers (clipOrthogonal and its BPMN-shape-specific siblings) stay in
  * scripts/bpmn/coordinates.js — see the comment there for why they did not travel with these two.
  *

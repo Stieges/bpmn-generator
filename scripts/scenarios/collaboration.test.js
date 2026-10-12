@@ -2,8 +2,7 @@
  * Phase A2 — multi-pool scenario enumeration tests.
  *
  * As in `enumerate.test.js`, the counts are hand-traced rather than recorded from a run;
- * where one fails, the traversal is wrong, not the expectation. The traces are in
- * .superpowers/sdd/2026-08-01-scenario-enumeration/task-2-report.md.
+ * where one fails, the traversal is wrong, not the expectation.
  */
 
 import { describe, test, expect } from '@jest/globals';

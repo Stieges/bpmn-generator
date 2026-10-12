@@ -1605,9 +1605,7 @@ function placeBoundaryEvents(coords, allProcesses) {
 // requirement connections are straight lines (DMN 1.3 §6.2.2 prescribes arrowheads and line style,
 // not routing), so DMN only ever needed the straight clip. A diamond is, in this repository, a
 // BPMN gateway and nothing else — DMN has none, ArchiMate has none — so under the broader rule
-// clipDiamondOrthogonal would sit in shared/ unused forever. See
-// docs/superpowers/specs/2026-07-31-dmn-drd-and-serialisation-design.md, "Where the boundary
-// actually runs, and why it leaves pure code behind".
+// clipDiamondOrthogonal would sit in shared/ unused forever.
 
 /**
  * Orthogonal clipping: project endpoint onto shape boundary while keeping

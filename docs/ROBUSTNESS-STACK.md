@@ -126,12 +126,6 @@ tests/
     └── .gitkeep
 
 docs/
-├── superpowers/
-│   ├── specs/
-│   │   ├── 2026-05-16-pipeline-robustness-via-synthetic-data-design.md
-│   │   └── 2026-05-16-layout-reviewer-agent-design.md (companion: M1 revival)
-│   └── plans/
-│       └── 2026-05-16-pipeline-robustness-via-synthetic-data.md (3364 lines, 35 tasks)
 └── ROBUSTNESS-STACK.md (this document)
 ```
 
@@ -406,7 +400,7 @@ Two safety mechanisms in the spec, not in code yet:
 
 ## 7 Phase-by-Phase Implementation History
 
-The implementation followed a detailed plan in `docs/superpowers/plans/2026-05-16-pipeline-robustness-via-synthetic-data.md` (3364 lines, 35 tasks). Each task was implemented by a fresh subagent following TDD (write failing test, run it, implement, run it again, commit).
+The implementation followed a detailed plan (3364 lines, 35 tasks). Each task was implemented by a fresh subagent following TDD (write failing test, run it, implement, run it again, commit).
 
 ### Phase 1 — Foundation (5 tasks)
 
@@ -563,7 +557,7 @@ node scripts/robustness/curate-mad.js --src ~/Downloads/mad-raw.jsonl --n 200
 
 ## 9 Companion: Layout Reviewer Agent (Spec Only)
 
-A separate spec was brainstormed and committed in this branch but not implemented: `docs/superpowers/specs/2026-05-16-layout-reviewer-agent-design.md`. It revives ROADMAP item M1 (Layout Feedback Loop) and complements the robustness stack:
+A separate spec was brainstormed but not implemented. It revives ROADMAP item M1 (Layout Feedback Loop) and complements the robustness stack:
 
 - **Robustness stack:** detects pipeline failures (what the pipeline can't handle)
 - **Layout Reviewer Agent:** improves pipeline outputs (makes valid outputs look better)
@@ -643,6 +637,3 @@ The stack is built to be re-run repeatedly. Each run finds fewer new failures as
   - `references/input-schema.json` — Logic-Core JSON schema consumed by pre-filter and structure-gen prompt
   - `references/omg-compliance.md` — OMG BPMN 2.0.2 compliance reference
   - `CLAUDE.md` — project context
-  - Spec: `docs/superpowers/specs/2026-05-16-pipeline-robustness-via-synthetic-data-design.md`
-  - Plan: `docs/superpowers/plans/2026-05-16-pipeline-robustness-via-synthetic-data.md`
-  - Companion spec: `docs/superpowers/specs/2026-05-16-layout-reviewer-agent-design.md`
