@@ -1242,6 +1242,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence about `eventBasedGateway` race semantics.
 
 ### Changed
+- **The skill bundle is `bpmn-generator.skill` and holds exactly what `SKILL.md` runs.** `npm run
+  build:skill` now writes `bpmn-generator.skill` (no version in the name; was
+  `bpmn-generator-v3.skill`). Its `scripts/` part is the import closure of the CLIs `SKILL.md` tells
+  the skill to run (`bpmn/pipeline.js`, `bpmn/import.js`, `bpmn/redesign-cli.js`) plus `config.json`
+  and `package.json`. The old rule (every `.js` except `agents/` and `robustness/`) shipped
+  `orchestrator.js`, `http-server.js` and `mcp-bpmn-server.js`, which all import `agents/` and so
+  failed at import inside the bundle; they, and the DMN/scenario modules no skill instruction runs,
+  are no longer bundled. A module the closure reaches but the bundle excludes aborts the build.
 - **The SVG looks like bpmn.io.** Every symbol is drawn with bpmn-js 18.6.2's own glyph geometry
   (`scripts/bpmn/pathmap.js`, its `PathMap` templates) and the scale, position and stroke its
   `BpmnRenderer` handler uses: event icons (envelope, clock with hands and ticks, error zigzag,

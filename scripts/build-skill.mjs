@@ -1,24 +1,36 @@
 #!/usr/bin/env node
-import { readdirSync, statSync, unlinkSync, realpathSync } from 'fs';
+import { readdirSync, statSync, unlinkSync, realpathSync, readFileSync, existsSync } from 'fs';
 import { join, relative, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
-const outName = 'bpmn-generator-v3.skill';
+const outName = 'bpmn-generator.skill';
 const outPath = join(repoRoot, outName);
 
-// Inclusion rules: SKILL.md + scripts/*.js (no tests, no agents/, no robustness/, no node_modules)
-//                  + scripts/config.json + scripts/package.json
-//                  + references/*.md + references/*.json (no omg-spec/, no review-set/)
+// What goes into the bundle
+// -------------------------
+// SKILL.md tells the skill to run exactly the CLIs it names as `node <dir>/<file>.js` (today
+// bpmn/pipeline.js, bpmn/import.js and bpmn/redesign-cli.js). Those are the bundle's entry points,
+// and the scripts/ part of the bundle is their static import closure (`import … from './x.js'`,
+// `export … from`, and `import('./x.js')` with a literal), plus config.json and package.json,
+// which shared/utils.js and shared/version.js read at runtime. references/*.md|json|jsonld (no
+// omg-spec/, no review-set/) ship as before: resource-paths.js resolves the schemas, the prompt
+// template and the ontology from there.
+//
+// Why a closure rather than "every .js except agents/ and robustness/": that rule bundled
+// orchestrator.js, http-server.js and mcp-bpmn-server.js, all three of which import agents/, so
+// three of the bundle's own scripts failed at import. The skill never runs them (SKILL.md names
+// none; the HTTP API and the MCP server are run from a checkout or the npm package), so they stay
+// out rather than pulling the LLM agents into a skill whose extraction the host model does itself.
+// A module the closure reaches but `includeScriptFile` refuses (agents/, robustness/, a test)
+// aborts the build: a bundle that cannot import its own entry point is never written.
 //
 // Directory exclusions compare whole path segments, split on both `/` and `\`. A substring
 // test such as `full.includes('/node_modules/')` assumes POSIX separators and never matches a
-// Windows path, so node_modules/, agents/ and robustness/ would all land in the zip — and the
-// resulting argument list exceeds the Windows command-line limit. The segments are taken from
-// the path *relative to the walked root*, so a checkout that itself sits under a directory
-// called e.g. `agents` excludes nothing by accident.
+// Windows path. The segments are taken from the path *relative to the walked root*, so a
+// checkout that itself sits under a directory called e.g. `agents` excludes nothing by accident.
 export function hasSegment(path, seg) {
   return path.split(/[\\/]/).includes(seg);
 }
@@ -36,15 +48,65 @@ export function includeReferenceFile(rel, name) {
   return name.endsWith('.md') || name.endsWith('.json') || name.endsWith('.jsonld');
 }
 
-function collectIncludes() {
-  const scriptsDir = join(repoRoot, 'scripts');
-  const referencesDir = join(repoRoot, 'references');
+const NODE_CLI_RE = /\bnode\s+((?:[\w-]+\/)*[\w-]+\.js)\b/g;
+
+/** The CLIs SKILL.md tells the skill to run, as paths relative to scripts/, first-seen order. */
+export function skillEntryPoints(skillMdText) {
+  return [...new Set([...skillMdText.matchAll(NODE_CLI_RE)].map(m => m[1]))];
+}
+
+const IMPORT_RES = [
+  /\bimport\s+(?:[^'"]*?\s+from\s+)?['"](\.[^'"]+)['"]/g,
+  /\bexport\s+(?:[^'"]*?\s+from\s+)?['"](\.[^'"]+)['"]/g,
+  /\bimport\(\s*['"](\.[^'"]+)['"]\s*\)/g,
+];
+
+/** First-party relative specifiers a source imports: static, re-export, literal dynamic import. */
+export function relativeImports(src) {
+  const out = [];
+  for (const re of IMPORT_RES) for (const m of src.matchAll(re)) out.push(m[1]);
+  return out;
+}
+
+const toPosix = p => p.split(/[\\/]/).join('/');
+
+/**
+ * Breadth-first import closure from `entries` (paths relative to `scriptsDir`). Returns every
+ * reachable module as a POSIX path relative to `scriptsDir`, sorted. Throws on an import that
+ * resolves to no file or leaves `scriptsDir`.
+ */
+export function reachableModules(scriptsDir, entries) {
+  const seen = new Set();
+  const queue = entries.map(e => resolve(scriptsDir, e));
+  while (queue.length) {
+    const abs = queue.shift();
+    if (seen.has(abs)) continue;
+    const rel = relative(scriptsDir, abs);
+    if (rel.startsWith('..')) throw new Error(`build-skill: an import leaves scripts/: ${toPosix(rel)}`);
+    if (!existsSync(abs)) throw new Error(`build-skill: ${toPosix(rel)} is imported but does not exist`);
+    seen.add(abs);
+    for (const spec of relativeImports(readFileSync(abs, 'utf8'))) queue.push(resolve(dirname(abs), spec));
+  }
+  return [...seen].map(a => toPosix(relative(scriptsDir, a))).sort();
+}
+
+/** The bundle's file list, relative to the repo root, POSIX separators. */
+export function collectIncludes(root = repoRoot) {
+  const scriptsDir = join(root, 'scripts');
+  const referencesDir = join(root, 'references');
+  const entries = skillEntryPoints(readFileSync(join(root, 'SKILL.md'), 'utf8'));
+  if (entries.length === 0) throw new Error('build-skill: SKILL.md names no `node <file>.js` entry point');
+  const modules = reachableModules(scriptsDir, entries);
+  const refused = modules.filter(rel => !includeScriptFile(rel, rel.split('/').pop()));
+  if (refused.length) {
+    throw new Error(`build-skill: the skill's entry points (${entries.join(', ')}) reach modules ` +
+      `the bundle excludes: ${refused.join(', ')}`);
+  }
   return [
     'SKILL.md',
-    ...walk(scriptsDir, (full, name) => includeScriptFile(relative(scriptsDir, full), name))
-      .map(f => relative(repoRoot, f)),
+    ...[...modules, 'config.json', 'package.json'].map(rel => `scripts/${rel}`),
     ...walk(referencesDir, (full, name) => includeReferenceFile(relative(referencesDir, full), name))
-      .map(f => relative(repoRoot, f)),
+      .map(f => toPosix(relative(root, f))),
   ];
 }
 

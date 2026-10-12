@@ -156,15 +156,18 @@ Copy `SKILL.md` to `.claude/skills/operative/bpmn-prozess-erstellen.md` and adju
 
 ### As a portable .skill file
 
-`cd scripts && npm run build:skill` produces `bpmn-generator-v3.skill` at the repo root (gitignored
+`cd scripts && npm run build:skill` produces `bpmn-generator.skill` at the repo root (gitignored
 — rebuild on demand, not committed). The ZIP can be shared with other projects and contains
 everything needed:
 - `SKILL.md` — Skill definition
 - `references/` — Schema, prompt templates, inline template
-- `scripts/` — the pipeline modules (BPMN, DMN, scenarios), `config.json`, `package.json`
+- `scripts/` — the modules the CLIs named in `SKILL.md` import (`bpmn/pipeline.js`,
+  `bpmn/import.js`, `bpmn/redesign-cli.js` and their import closure), `config.json`, `package.json`
 
-The bundle leaves out `agents/` and `robustness/`, so the orchestrator and the HTTP and MCP servers
-need a checkout or the npm package; `npm install` inside the unpacked `scripts/` is still required.
+The bundle holds what the skill runs and nothing else: the orchestrator, the HTTP and MCP servers,
+`agents/`, `robustness/` and the DMN and scenario CLIs need a checkout or the npm package. The
+build walks the imports from every entry point and aborts if one reaches a module it does not
+bundle. `npm install` inside the unpacked `scripts/` is still required.
 
 ## Module Architecture
 
