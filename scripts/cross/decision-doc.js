@@ -12,6 +12,7 @@
  *     Decision: Approval level (dec_approvalLevel) — generated from Definitions_claimApproval
  *     Hit policy: UNIQUE (U) – exactly one rule can match
  *     Rule 1: WHEN Claim amount < 1000 THEN level = "auto"
+ *     Rule 2: WHEN Claim amount in [1000..10000) AND Customer segment = "premium" THEN level = "clerk"
  *     …                                     (dmn/table-text.js formatTablePlainText)
  *     === END generated: DMN decision ===
  *
@@ -42,25 +43,50 @@ import { validateDecisionCoreSchema } from '../dmn/schema-gate.js';
 export const DECISION_DOC_BEGIN = '=== BEGIN generated: DMN decision (bpmn-generator) — replaced on every run ===';
 export const DECISION_DOC_END = '=== END generated: DMN decision ===';
 
-const BEGIN_RE = /^=== BEGIN generated: DMN decision\b.*$/m;
-const END_RE = /^=== END generated: DMN decision\b.*$/m;
+/** A line of `text`, without the `\r` of a CRLF line ending. */
+const bare = (line) => line.replace(/\r$/, '');
+
+/**
+ * Split `text` into author chunks and generated sections. A section starts at a line that IS the
+ * BEGIN marker (whole-line equality — an author line that merely starts like it is author text) and
+ * ends at the next line that IS the END marker. A BEGIN without its END (hand-truncated) ends at the
+ * first blank line or the next BEGIN, whichever comes first — the generated section never contains a
+ * blank line (decisionSection asserts it), so author text after a blank line is never eaten.
+ *
+ * @returns {{ chunks: string[][], sections: string[][] }} author chunks (lines) and section bodies
+ *   (the lines between the markers)
+ */
+function splitSections(text) {
+  const lines = String(text ?? '').split('\n');
+  const chunks = [[]];
+  const sections = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (bare(lines[i]) !== DECISION_DOC_BEGIN) { chunks[chunks.length - 1].push(lines[i]); continue; }
+    let j = i + 1;
+    while (j < lines.length && bare(lines[j]) !== DECISION_DOC_END && bare(lines[j]) !== DECISION_DOC_BEGIN
+      && bare(lines[j]).trim() !== '') j++;
+    const closed = j < lines.length && bare(lines[j]) === DECISION_DOC_END;
+    sections.push(lines.slice(i + 1, j).map(bare));
+    i = closed ? j : j - 1;
+    chunks.push([]);
+  }
+  return { chunks, sections };
+}
 
 /**
  * `text` without its generated decision section(s), and without the blank lines that separated
- * them from the author's text. A BEGIN line without its END (hand-truncated) drops everything from
- * BEGIN on — the section is the generator's, and a half of it is still not the author's.
+ * them from the author's text; the author's chunks around a section are joined by one blank line.
  */
 export function stripDecisionSection(text) {
-  let s = String(text ?? '');
-  for (;;) {
-    const begin = BEGIN_RE.exec(s);
-    if (!begin) break;
-    const rest = s.slice(begin.index);
-    const end = END_RE.exec(rest);
-    const stop = end ? begin.index + end.index + end[0].length : s.length;
-    s = s.slice(0, begin.index).replace(/\s+$/, '') + (stop < s.length ? `\n\n${s.slice(stop).replace(/^\s+/, '')}` : '');
-  }
-  return s.replace(/\s+$/, '');
+  return splitSections(text).chunks
+    .map((c) => c.join('\n').replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, ''))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/** Does `text` contain a generated section (a line that is exactly the BEGIN marker)? */
+export function hasDecisionSection(text) {
+  return splitSections(text).sections.length > 0;
 }
 
 /**
@@ -69,28 +95,29 @@ export function stripDecisionSection(text) {
  * Markdown of scripts/bpmn/pipeline.js).
  */
 export function decisionSectionBody(text) {
-  const s = String(text ?? '');
-  const begin = BEGIN_RE.exec(s);
-  if (!begin) return null;
-  const after = s.slice(begin.index + begin[0].length);
-  const end = END_RE.exec(after);
-  return (end ? after.slice(0, end.index) : after).replace(/^\n/, '').replace(/\s+$/, '');
+  const { sections } = splitSections(text);
+  return sections.length ? sections[0].join('\n') : null;
 }
+
+/** One line: a line break and the blanks around it become one space. */
+const oneLine = (v) => String(v ?? '').replace(/\s*[\r\n]+\s*/g, ' ');
 
 /** The section body for one bridge outcome (resolved / unresolved / ambiguous). */
 function sectionLines(entry, locale) {
   const labels = dmnLabels(locale);
-  const ref = entry.occurrence.decisionRef;
+  const ref = oneLine(entry.occurrence.decisionRef);
   if (entry.status === 'unresolved') return [`${labels.callsDecision}: ${ref} (${labels.tableNotSupplied})`];
   if (entry.status === 'ambiguous') {
-    const where = [...new Set(entry.candidates.map((c) => c.decisionCoreId))].join(', ');
+    const where = [...new Set(entry.candidates.map((c) => oneLine(c.decisionCoreId)))].join(', ');
     return [`${labels.callsDecision}: ${ref} (${labels.ambiguous} ${where})`];
   }
   const d = entry.decision;
-  const title = `${labels.decision}: ${d.decisionName} (${d.decisionId}) \u2014 ${labels.generatedFrom} ${d.decisionCoreId}`;
+  // Every interpolated value on one line: a name carrying a line break (say, followed by the END
+  // marker) would otherwise split the section and break replace-on-every-run.
+  const title = `${labels.decision}: ${oneLine(d.decisionName)} (${oneLine(d.decisionId)}) \u2014 ${labels.generatedFrom} ${oneLine(d.decisionCoreId)}`;
   if (!d.decisionTable) {
     // A literal expression (bridge entry from includeLiteralExpressions): its type and FEEL text.
-    return [title, `${literalExpressionLine(d.typeRef, labels)}: ${String(d.expression).replace(/\s*[\r\n]+\s*/g, ' ')}`];
+    return [title, `${oneLine(literalExpressionLine(d.typeRef, labels))}: ${oneLine(d.expression)}`];
   }
   const node = { id: d.decisionId, name: d.decisionName, decisionTable: d.decisionTable };
   const model = layoutDecisionTable(node, { locale });
@@ -99,7 +126,14 @@ function sectionLines(entry, locale) {
 
 /** The complete generated section, marker lines included. */
 export function decisionSection(entry, { locale } = {}) {
-  return [DECISION_DOC_BEGIN, ...sectionLines(entry, locale), DECISION_DOC_END].join('\n');
+  const body = sectionLines(entry, locale);
+  // The invariant splitSections relies on: no blank line, no line break and no marker line inside.
+  for (const line of body) {
+    if (line.trim() === '' || /[\r\n]/.test(line) || line === DECISION_DOC_BEGIN || line === DECISION_DOC_END) {
+      throw new Error(`decisionSection: a generated line would break the section markers: ${JSON.stringify(line)}`);
+    }
+  }
+  return [DECISION_DOC_BEGIN, ...body, DECISION_DOC_END].join('\n');
 }
 
 /**
@@ -148,7 +182,7 @@ export function applyDecisionDocumentation(lc, decisionCores, { locale } = {}) {
     const entry = byKey.get(linkKey(occurrence));
     if (node.type === 'businessRuleTask' && entry) {
       node.documentation = withSection(node.documentation, decisionSection(entry, { locale }));
-    } else if (node.documentation && BEGIN_RE.test(node.documentation)) {
+    } else if (node.documentation && hasDecisionSection(node.documentation)) {
       const own = stripDecisionSection(node.documentation);
       if (own) node.documentation = own; else delete node.documentation;
     }
