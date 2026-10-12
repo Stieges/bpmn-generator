@@ -3,101 +3,98 @@
   <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
   <marker id="seq-end" viewBox="0 0 20 20" refX="11" refY="10"
     markerWidth="10" markerHeight="10" orient="auto">
-    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
+    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
   </marker>
   <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
   <marker id="seq-default-src" viewBox="0 0 20 20" refX="0" refY="10"
-    markerWidth="13.3" markerHeight="13.3" orient="auto">
-    <path d="M 6 4 L 10 16" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 6 4 L 10 16" fill="none" stroke="#22242a" stroke-width="2" stroke-linecap="round"/>
   </marker>
   <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
   <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="-1" refY="10"
-    markerWidth="13.3" markerHeight="13.3" orient="auto">
-    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="2" stroke-linejoin="round"/>
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
   </marker>
   <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
   <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
     markerWidth="20" markerHeight="20" orient="auto">
-    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-dasharray="10000, 1"/>
   </marker>
   <!-- Message flow: open arrowhead at target -->
   <marker id="msg-end" viewBox="0 0 20 20" refX="8.5" refY="5"
     markerWidth="20" markerHeight="20" orient="auto">
-    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#000000" stroke-width="1" stroke-linecap="butt"/>
+    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10000, 1"/>
   </marker>
   <!-- Association: open chevron -->
   <marker id="assoc-end" viewBox="0 0 20 20" refX="11" refY="10"
     markerWidth="10" markerHeight="10" orient="auto">
-    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#000000" stroke-width="1.5"/>
+    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#22242a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10000, 1"/>
   </marker>
 </defs>
-<rect width="952" height="790" fill="#fafafa"/>
-<rect x="50" y="50" width="852" height="680" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
-<rect x="50" y="50" width="30" height="680" fill="#e8e8e8" stroke="#000000" stroke-width="1.5"/>
-<text x="65" y="390" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="bold" fill="#000000" transform="rotate(-90,65,390)">Dense Edges</text>
-<rect x="80" y="50" width="822" height="680" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
-<rect x="80" y="50" width="30" height="680" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
-<text x="95" y="390" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,390)">Team</text>
-<path data-element-id="f0" d="M 206 390 L 286.5 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f1" d="M 311.5 365 L 311.5 110 L 496 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="403.8" y="101.9">Option Alpha</tspan></text>
-<path data-element-id="f2" d="M 323.5 377 L 323.5 250 L 496 250" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="409.8" y="241.9">Option Beta</tspan></text>
-<path data-element-id="f3" d="M 335.5 390 L 496 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="415.8" y="381.9">Option Gamma</tspan></text>
-<path data-element-id="f4" d="M 323.5 402 L 323.5 530 L 496 530" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="409.8" y="521.9">Option Delta</tspan></text>
-<path data-element-id="f5" d="M 311 414.5 L 311 670 L 496 670" stroke="#000000" stroke-width="1.5" fill="none" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="403.5" y="661.9">Option Epsilon</tspan></text>
-<path data-element-id="f6" d="M 596 110 L 700.5 110 L 700.5 365" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f7" d="M 596 250 L 688.5 250 L 688.5 377" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f8" d="M 596 390 L 676.5 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f9" d="M 596 530 L 688.5 530 L 688.5 402" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f10" d="M 596 670 L 701 670 L 701 415" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f11" d="M 725.5 390 L 806 390" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect width="952" height="790" fill="#ffffff"/>
+<rect x="50" y="50" width="852" height="680" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="1.5"/>
+<path d="M 80 50 L 80 730" stroke="#22242a" stroke-width="1.5" fill="none"/>
+<text x="68.6" y="390" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,68.6,390)">Dense Edges</text>
+<rect x="80" y="50" width="822" height="680" fill="#ffffff" fill-opacity="0.25" stroke="#22242a" stroke-width="1.5"/>
+<text x="98.6" y="390" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,98.6,390)">Team</text>
 <g data-element-id="s1">
-<circle cx="188" cy="389.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="188" y="427.4">Start</tspan></text>
+<circle cx="188" cy="389.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="188" y="427.4">Start</tspan></text>
 </g>
 <g data-element-id="gw">
-<polygon points="311,364.5 336,389.5 311,414.5 286,389.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<line x1="302" y1="380.5" x2="320" y2="398.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<line x1="320" y1="380.5" x2="302" y2="398.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="279.6" y="434.4">Welche?</tspan></text>
+<polygon points="311,364.5 336,389.5 311,414.5 286,389.5" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
+<g transform="translate(286,364.5)"><path d="m 16,15 7.429,9.714 -7.429,9.714 3.429,0 5.714,-7.464 5.714,7.464 3.429,0 -7.429,-9.714 7.429,-9.714 -3.429,0 -5.714,7.464 -5.714,-7.464 -3.429,0 z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="279.6" y="434.4">Welche?</tspan></text>
 </g>
 <g data-element-id="t1">
-<rect x="496" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 511,82 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 513.162,83.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 504.1,78.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="546" y="119" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante A</text>
+<rect x="496" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="546" y="113.6" text-anchor="middle" font-size="12" fill="#22242a">Variante A</text>
+<g transform="translate(496,70)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="t2">
-<rect x="496" y="210" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 511,222 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 513.162,223.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 504.1,218.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="546" y="259" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante B</text>
+<rect x="496" y="210" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="546" y="253.6" text-anchor="middle" font-size="12" fill="#22242a">Variante B</text>
+<g transform="translate(496,210)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="t3">
-<rect x="496" y="350" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 511,362 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 513.162,363.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 504.1,358.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="546" y="399" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante C</text>
+<rect x="496" y="350" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="546" y="393.6" text-anchor="middle" font-size="12" fill="#22242a">Variante C</text>
+<g transform="translate(496,350)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="t4">
-<rect x="496" y="490" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 511,502 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 513.162,503.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 504.1,498.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="546" y="539" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante D</text>
+<rect x="496" y="490" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="546" y="533.6" text-anchor="middle" font-size="12" fill="#22242a">Variante D</text>
+<g transform="translate(496,490)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="t5">
-<rect x="496" y="630" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 511,642 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 513.162,643.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 504.1,638.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="546" y="679" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Variante E</text>
+<rect x="496" y="630" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="546" y="673.6" text-anchor="middle" font-size="12" fill="#22242a">Variante E</text>
+<g transform="translate(496,630)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="gwJ">
-<polygon points="701,364.5 726,389.5 701,414.5 676,389.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<line x1="692" y1="380.5" x2="710" y2="398.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<line x1="710" y1="380.5" x2="692" y2="398.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+<polygon points="701,364.5 726,389.5 701,414.5 676,389.5" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
+<g transform="translate(676,364.5)"><path d="m 16,15 7.429,9.714 -7.429,9.714 3.429,0 5.714,-7.464 5.714,7.464 3.429,0 -7.429,-9.714 7.429,-9.714 -3.429,0 -5.714,7.464 -5.714,-7.464 -3.429,0 z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
 
 </g>
 <g data-element-id="e1">
-<circle cx="824" cy="389.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="824" y="427.4">Ende</tspan></text>
+<circle cx="824" cy="389.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="4"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="824" y="427.4">Ende</tspan></text>
 </g>
+<path data-element-id="f0" data-waypoints="206,390 286.5,390" d="M 206 390 L 286.5 390" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f1" data-waypoints="311.5,365 311.5,110 496,110" d="M 311.5 365 L 311.5 115 C 311.5 112.5 314 110 316.5 110 L 496 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="403.8" y="101.9">Option Alpha</tspan></text>
+<path data-element-id="f2" data-waypoints="323.5,377 323.5,250 496,250" d="M 323.5 377 L 323.5 255 C 323.5 252.5 326 250 328.5 250 L 496 250" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="409.8" y="241.9">Option Beta</tspan></text>
+<path data-element-id="f3" data-waypoints="335.5,390 496,390" d="M 335.5 390 L 496 390" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="415.8" y="381.9">Option Gamma</tspan></text>
+<path data-element-id="f4" data-waypoints="323.5,402 323.5,530 496,530" d="M 323.5 402 L 323.5 525 C 323.5 527.5 326 530 328.5 530 L 496 530" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="409.8" y="521.9">Option Delta</tspan></text>
+<path data-element-id="f5" data-waypoints="311,414.5 311,670 496,670" d="M 311 414.5 L 311 665 C 311 667.5 313.5 670 316 670 L 496 670" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="403.5" y="661.9">Option Epsilon</tspan></text>
+<path data-element-id="f6" data-waypoints="596,110 700.5,110 700.5,365" d="M 596 110 L 695.5 110 C 698 110 700.5 112.5 700.5 115 L 700.5 365" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f7" data-waypoints="596,250 688.5,250 688.5,377" d="M 596 250 L 683.5 250 C 686 250 688.5 252.5 688.5 255 L 688.5 377" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f8" data-waypoints="596,390 676.5,390" d="M 596 390 L 676.5 390" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f9" data-waypoints="596,530 688.5,530 688.5,402" d="M 596 530 L 683.5 530 C 686 530 688.5 527.5 688.5 525 L 688.5 402" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f10" data-waypoints="596,670 701,670 701,415" d="M 596 670 L 696 670 C 698.5 670 701 667.5 701 665 L 701 415" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f11" data-waypoints="725.5,390 806,390" d="M 725.5 390 L 806 390" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 </svg>
