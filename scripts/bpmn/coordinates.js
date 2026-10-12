@@ -8,6 +8,7 @@ import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, P
 import { CFG } from '../shared/utils.js';
 import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
+import { layoutText, lineWidth } from '../shared/text-layout.js';
 
 /**
  * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
@@ -624,95 +625,23 @@ function buildCoordinateMap(elkResult, lc) {
 // 90 px). A box sized any other way puts bpmn.io's text somewhere else than ours — and a label
 // that wraps there but not here hangs down across the very flow it names.
 
-/**
- * Advance widths of Arial (Helvetica-, Liberation Sans- and Arimo-compatible), 1/1000 em, for
- * printable ASCII 32–126 in code-point order. Identical to what Chrome measures. No kerning, so
- * the estimate is never narrower than what a browser draws.
- */
-const ARIAL_ASCII_WIDTHS = [
-  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
-  556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
-  1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
-  667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
-  333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
-  556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
-];
-const ARIAL_EXTRA_WIDTHS = { '\u2192': 1000, '\u2026': 1000, '\u2013': 556, '\u2014': 1000, '\u00DF': 611 };
-
-function arialCharWidth(ch) {
-  const c = ch.codePointAt(0);
-  if (c >= 32 && c <= 126) return ARIAL_ASCII_WIDTHS[c - 32];
-  if (ARIAL_EXTRA_WIDTHS[ch] !== undefined) return ARIAL_EXTRA_WIDTHS[ch];
-  // Accented Latin letters: the base letter's advance (ä = a, Ö = O, …).
-  const b = ch.normalize('NFD').codePointAt(0);
-  if (b >= 32 && b <= 126) return ARIAL_ASCII_WIDTHS[b - 32];
-  return 1000;
-}
+// The Arial advance widths, `lineWidth` and the bpmn-js line breaking live in
+// ../shared/text-layout.js since the DMN renderers lay out text the same way; dmn/ must not
+// depend on bpmn/.
 
 function edgeLabelTextStyle() {
   const t = CFG.layout?.edgeLabelText ?? {};
   return { fontSize: t.fontSize ?? 11, lineHeight: t.lineHeight ?? 1.2, wrapWidth: t.wrapWidth ?? 90 };
 }
 
-/** Rendered width of one line, px. Leading/trailing blanks collapse in SVG and do not count. */
-function lineWidth(text, fontSize) {
-  let w = 0;
-  for (const ch of text.trim()) w += arialCharWidth(ch);
-  return (w * fontSize) / 1000;
-}
-
-/** bpmn-js Text.js `semanticShorten`: cut a line at a blank, hyphen or soft hyphen. */
-function semanticShorten(line, maxLength) {
-  const parts = line.split(/(\s|-|\u00AD)/g);
-  const kept = [];
-  let length = 0;
-  if (parts.length > 1) {
-    let part;
-    while ((part = parts.shift())) {
-      if (part.length + length < maxLength) {
-        kept.push(part);
-        length += part.length;
-      } else {
-        if (part === '-' || part === '\u00AD') kept.pop();
-        break;
-      }
-    }
-  }
-  if (kept[kept.length - 1] === '\u00AD') kept[kept.length - 1] = '-';
-  return kept.join('');
-}
-
-/*
- * edgeLabelLayout and semanticShorten port diagram-js 15.3.0 `lib/util/Text.js` (`layoutNext`,
- * `semanticShorten`). Copyright (c) 2014-present Camunda Services GmbH, MIT license — see
- * THIRD_PARTY_NOTICES.md.
- */
 /**
  * An edge label's text layout: its lines (broken exactly as bpmn-js Text.js `layoutNext` breaks
  * them, with Arial widths instead of a DOM measurement) and the box they need, `w` × `h` px.
  * `style` defaults to the edge-label style; artifactSize passes a text annotation's.
+ * See layoutText in ../shared/text-layout.js.
  */
 function edgeLabelLayout(text, style = edgeLabelTextStyle()) {
-  const { fontSize, lineHeight, wrapWidth } = style;
-  const pending = String(text ?? '').split(/\u00AD?\r?\n/);
-  const lines = [];
-  let w = 0;
-  while (pending.length) {
-    const original = pending.shift();
-    let fit = original;
-    for (;;) {
-      const fw = fit ? lineWidth(fit, fontSize) : 0;
-      if (fit === ' ' || fit === '' || fw < Math.round(wrapWidth) || fit.length < 2) {
-        if (fit.length < original.length) pending.unshift(original.slice(fit.length).trim());
-        lines.push(fit.trim());
-        w = Math.max(w, fw);
-        break;
-      }
-      const length = Math.max(fit.length * (wrapWidth / fw), 1);
-      fit = semanticShorten(fit, length) || fit.slice(0, Math.max(Math.round(length - 1), 1));
-    }
-  }
-  return { lines, w, h: Math.ceil(lines.length * fontSize * lineHeight) };
+  return layoutText(text, style);
 }
 
 // ─────────────────────────────────────────────────────────────────────
