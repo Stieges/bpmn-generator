@@ -339,7 +339,6 @@ const PROBES = (v) => ({
     },
     'import, both paths': (t) => T.SUPPORTED_NODE_TYPES.has(t),
     'prompt-template.md': (t) => read('references/prompt-template.md').includes(t),
-    'SKILL.md': (t) => read('SKILL.md').includes('`' + t + '`'),
     'logic-core-schema.md': (t) => read('references/logic-core-schema.md').includes('`' + t + '`'),
   },
   marker: {
@@ -361,7 +360,7 @@ describe('completeness — a new type cannot slip past any place', () => {
     const v = buildVocabulary(onto);
     const places = checkCompleteness(v, PROBES(v)).filter(f => f.name === 'fooTask').map(f => f.place);
     expect(places).toEqual(expect.arrayContaining(['input-schema.json NodeType', 'shape size (config.json)',
-      'task icon (icons.js)', 'import, both paths', 'prompt-template.md', 'SKILL.md', 'logic-core-schema.md']));
+      'task icon (icons.js)', 'import, both paths', 'prompt-template.md', 'logic-core-schema.md']));
   });
 
   test('a marker added only to the ontology is reported at every place', () => {
@@ -480,7 +479,9 @@ describe('format and ontology agree', () => {
 
 // ── Task 8: prompt, docs and skill template stay in line with the ontology ──
 // Prompt token rule: a type-name candidate is a backticked token or a token right after `→`.
-// Doc table rule: SKILL.md and logic-core-schema.md node-type table, first column backticked types.
+// Doc table rule: the logic-core-schema.md node-type table, first column backticked types. SKILL.md
+// carries no node-type table of its own any more — progressive disclosure keeps the one table in the
+// reference file SKILL.md tells the model to read before extracting, so there is no second copy to drift.
 // omg-compliance rule: every supported type's label appears in references/omg-compliance.md.
 // Skill template rule: inline-template.md SHAPE keys include every supported type; isArtifact equals the Artifact class.
 const md = (p) => readFileSync(join(__dirname, '..', '..', p), 'utf8');
@@ -510,7 +511,7 @@ describe('prompt and docs follow the ontology', () => {
     expect([...new Set(tokens)].filter(t => !ALL_TYPES.has(t))).toEqual([]);
     expect([...supported].filter(t => !p.includes(t))).toEqual([]);
   });
-  for (const file of ['SKILL.md', 'references/logic-core-schema.md']) {
+  for (const file of ['references/logic-core-schema.md']) {
     test(`${file}: the node-type table lists exactly the supported types`, () => {
       expect([...firstColumnTypes(md(file))].sort()).toEqual([...supported].sort());
     });
