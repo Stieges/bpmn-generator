@@ -1023,7 +1023,7 @@ const M01_ENGLISH_VERBS = new Set([
 // Returns true when a task label does NOT look like Objekt+Verb / Verb+Object.
 function violatesVerbObject(name) {
   const cleaned = String(name)
-    .replace(/\([^)]*\)/g, ' ')   // (meta) entfernen, z.B. "(KVNeo)"
+    .replace(/\([^)]*\)/g, ' ')   // (meta) entfernen, z.B. "(CRM)"
     .replace(/\[[^\]]*\]/g, ' ')  // [meta] entfernen
     .replace(/[/\n]+/g, ' ')      // Slash/Newline → Leerzeichen ("erfassen/ändern")
     .replace(/\s+/g, ' ')
