@@ -24,7 +24,7 @@ rollback switch, is the top entry of [CHANGELOG.md](CHANGELOG.md); this is the o
 | Security | Rule profiles schema-gated and bounded, HTTP soundness floor, MCP profiles by name; SSRF guard for callbacks and LLM base URLs; `LLM_BASE_URL_ALLOWLIST`, `TRUST_PROXY_HOPS`, bounded client text |
 | Packaging | npm package ships the DMN, scenario and cross-notation modules; docs gate checks claims against the code |
 
-Still open after 4.0: DMN SVG rendering and tool surface (DMN integration plan, Stages 6–7), the
+Still open after 4.0: the DMN tool surface over HTTP and MCP (DMN integration plan, Stage 7), the
 layout issues listed in CLAUDE.md's Known Limitations (#71–#78), and profile switches for
 SC01–SC06.
 

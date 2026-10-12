@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0-rc.1] - 2026-10-12
+
+Release candidate for 4.0.0, published as a GitHub pre-release only (not on npm). The first
+release since 3.6.0; every entry below is new since then.
+
+### Migrating from 3.6.0
+
+The details and every rollback switch are in the Breaking entries below; this is the checklist.
+
+- **Default output changed.** Lane compaction, edge-label repair, the bend rule, node labels that
+  avoid flows and the repair of flows through foreign shapes are on by default, and boundary events
+  face their target. Every `.bpmn`/`.svg` produced with default options differs from 3.6.0. To
+  switch the new passes off: CLI `--no-refine --no-bend-rule --no-label-avoidance
+  --no-foreign-shape-repair`, the same keys over HTTP, MCP and `runPipeline`, or project-wide in a
+  file named by `BPMN_CONFIG`. Edge-label placement and the boundary-event side have no switch.
+- **`visualRefinement` keys.** `enabled` is ignored; `elkWrapping` and `elkWrappingNodeThreshold`
+  moved to `layout.*`; `dynamicLaneHeader` (and its width keys) is removed; `--refine` no longer
+  wraps (use `--wrap`); an unknown pass key in the object form is an error.
+- **Colours.** `color.fill` / `color.stroke` accept only `#rgb` / `#rrggbb`.
+- **CLI gates.** `--strict` also aborts on the new diagram warnings (DI08–DI11) and net-check
+  warnings. Without it, duplicate node ids across sibling containers now abort (NC06; the file
+  written before was invalid), and a `⚠ Petri-net diagnostics:` block can appear on stdout.
+- **HTTP API and MCP.** `ruleProfile` is an inline object over HTTP and a profile name over MCP,
+  never a path; HTTP profiles may only raise soundness rules; `correlationId` is
+  `^[A-Za-z0-9_-]{1,64}$`; a client `llmConfig.baseUrl` needs `LLM_BASE_URL_ALLOWLIST`; provider
+  failures are `502 llm_error`; dead-letter files are `<uuid>.json`; non-object JSON bodies are a
+  `400`.
+- **Rule profiles.** A profile file that is not JSON aborts; an unknown severity, or `ADVISORY`
+  outside the optimization layer, refuses the profile.
+- **Packaging.** The npm package no longer contains `robustness/` (run it from a checkout); the
+  skill bundle is `bpmn-generator.skill` (was `bpmn-generator-v3.skill`).
+
 ### Breaking
 - **`color.fill` / `color.stroke` accept only hex colours `#rgb` or `#rrggbb`.** Named and `rgb()`
   values are refused by the schema gate — convert them to hex. See `references/logic-core-schema.md`.
@@ -1757,7 +1789,7 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   already fired; nothing read it, so invalid output reported success and exited 0. No behaviour
   change without the flag beyond the added output.
 
-## [3.6.0] — 2026-07-29
+### Earlier 3.6.0 entries (recorded 2026-07-29)
 
 > **Gap notice.** No entries were recorded here between `[3.3.0]` and `[3.6.0]`, although
 > six releases and several feature merges shipped in that time: v3.4 (#15), v3.5 (#16),
@@ -1765,7 +1797,7 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
 > entries are not reconstructed retroactively — the pull requests are the record for
 > that period. The docs gate added below exists to stop this recurring.
 
-### Added
+#### Added
 - **DI integrity check** (`scripts/di-check.js`) — a post-layout pass over the produced
   geometry, reported under `result.diagnostics` (separate from `validation`, which never
   sees a coordinate). Codes DI01 (identical participant positions), DI02 (overlapping
@@ -1793,7 +1825,7 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   integrity against the running code instead of trusting the prose; see `CLAUDE.md` →
   Docs gate.
 
-### Fixed
+#### Fixed
 - Participant id collision when a collaboration had more than one laned pool (all
   shared the ELK id `'pool'`).
 - Participant stacking collapsing onto identical positions from four participants on.
@@ -1818,29 +1850,29 @@ release reader sees, and each of them is a gap someone could otherwise mistake f
   `orchestrate_bpmn` did); `generate_bpmn`'s `drillDown` ignored `mode`, so
   drill-down plus `optimize` returned no advisories.
 - `/api/v1/orchestrate` dropped `diagnostics` from its response even though the
-    orchestrator computed it and the MCP `orchestrate_bpmn` tool already returned it.
-  - Published npm package threw on first import — `schema-gate.js` and
-    `agents/prompt-sections.js` each read a file from `references/`, outside the package
-    root, and `package.json`'s `files` cannot reach outside it. Fixed with a `prepack` copy
-    step plus a dual-path runtime fallback.
+  orchestrator computed it and the MCP `orchestrate_bpmn` tool already returned it.
+- Published npm package threw on first import — `schema-gate.js` and
+  `agents/prompt-sections.js` each read a file from `references/`, outside the package
+  root, and `package.json`'s `files` cannot reach outside it. Fixed with a `prepack` copy
+  step plus a dual-path runtime fallback.
 
-  ### Changed
-  - `diagnostics.ok` means "no ERROR-severity finding" — WARNING-severity findings (DI05)
-    are reported but do not fail the gate.
-  - The CLI now aborts and writes no files when an ERROR-severity geometry finding is
-    present, alongside the existing validation-error abort.
-  - Laned pools now get their frame drawn in the SVG at all (a missing `poolCoords`
-    entry meant it was silently skipped before); the lane header band sits inside the
-    lane, matching the emitted DI and bpmn.io.
+#### Changed
+- `diagnostics.ok` means "no ERROR-severity finding" — WARNING-severity findings (DI05)
+  are reported but do not fail the gate.
+- The CLI now aborts and writes no files when an ERROR-severity geometry finding is
+  present, alongside the existing validation-error abort.
+- Laned pools now get their frame drawn in the SVG at all (a missing `poolCoords`
+  entry meant it was silently skipped before); the lane header band sits inside the
+  lane, matching the emitted DI and bpmn.io.
 
-  ## [3.3.0] — 2026-05-18
+## [3.3.0] — 2026-05-18
 
-  ### Added
-  - **SSRF complete coverage** — `callbackUrl` validation now blocks IPv4 link-local (169.254.x, including AWS metadata endpoint), IPv6 unique-local (fc00::/7), and IPv6 link-local (fe80::/10). Hostnames are DNS-resolved and the resolved IPs are re-checked against the same denylist, closing the `evil.com → 127.0.0.1` bypass.
-  - **Production auth gate** — `BPMN_API_KEY` env var becomes mandatory when `NODE_ENV=production`. Server `startupCheck()` throws and refuses to bind. Dev mode (default) prints a prominent warning.
-  - **JSON Schema strict-gate** — `scripts/schema-gate.js` validates every `body.logicCore` at the HTTP API entry (`/generate`, `/validate`, `/orchestrate` when logicCore is provided) using ajv draft-2020-12. LLM-generated Logic-Core from `orchestrator.js` is also gated before reaching the layout phase.
-  - **`AUDIT_LOG_PATH` and `DEAD_LETTER_PATH` env vars** — runtime paths configurable for Docker / read-only filesystem deployments. Default: `os.tmpdir()/bpmn-generator/{audit,dead-letter}/`.
-  - **`$schemaVersion` field** in `references/input-schema.json` — optional, `const: "1.0"`, backward-compatible (absent value still accepted).
+### Added
+- **SSRF complete coverage** — `callbackUrl` validation now blocks IPv4 link-local (169.254.x, including AWS metadata endpoint), IPv6 unique-local (fc00::/7), and IPv6 link-local (fe80::/10). Hostnames are DNS-resolved and the resolved IPs are re-checked against the same denylist, closing the `evil.com → 127.0.0.1` bypass.
+- **Production auth gate** — `BPMN_API_KEY` env var becomes mandatory when `NODE_ENV=production`. Server `startupCheck()` throws and refuses to bind. Dev mode (default) prints a prominent warning.
+- **JSON Schema strict-gate** — `scripts/schema-gate.js` validates every `body.logicCore` at the HTTP API entry (`/generate`, `/validate`, `/orchestrate` when logicCore is provided) using ajv draft-2020-12. LLM-generated Logic-Core from `orchestrator.js` is also gated before reaching the layout phase.
+- **`AUDIT_LOG_PATH` and `DEAD_LETTER_PATH` env vars** — runtime paths configurable for Docker / read-only filesystem deployments. Default: `os.tmpdir()/bpmn-generator/{audit,dead-letter}/`.
+- **`$schemaVersion` field** in `references/input-schema.json` — optional, `const: "1.0"`, backward-compatible (absent value still accepted).
 - **`lane.nodeIds`** added to the schema — was supported by code (`topology.js`, `coordinates.js`, rule WF-L1) but missing from the JSON schema. Schema now declares it.
 - **SECURITY.md** at repo root — threat model, deployment guidance, vulnerability reporting.
 - **`ajv` + `ajv-formats`** as direct runtime dependencies (were already transitively present via bpmn-moddle — zero `node_modules` size delta).
