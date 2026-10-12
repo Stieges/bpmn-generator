@@ -48,7 +48,7 @@ Full gallery: [docs/screenshots/](docs/screenshots/). All SVGs regenerated from 
 | Multi-pool with lanes + message flows | **✅ verified** | ✅ | ❌ (bpmn-auto-layout limitation) | ? |
 | Strict JSON Schema input gate (ajv) | **✅** | n/a | partial | partial |
 | Soundness check | WF-Net (3 rules, opt-in) | POWL by construction | none | none |
-| Configurable rule engine | **40 BPMN rules, 5 layers, JSON profiles** | limited | none | none |
+| Configurable rule engine | **42 BPMN rules, 5 layers, JSON profiles** | limited | none | none |
 | MCP server | **✅** | ❌ | ❌ | ❌ |
 | Stack | Node.js / ES Modules | Python / Streamlit | Python + Vue.js | React + OpenAI |
 | License | MIT | GPL-3.0 | MIT-ish | unclear |
@@ -81,7 +81,7 @@ Think of it as going from **0% → 80%** in seconds. The remaining 20% is domain
 
 ```
 User Text → [Phase 1] Intent Extraction (LLM → JSON Logic-Core)
-          → [Phase 2] Validation (40 BPMN rules, 5 layers; deadlock detection in the opt-in WF layer)
+          → [Phase 2] Validation (42 BPMN rules, 5 layers; deadlock detection in the opt-in WF layer)
           → [Phase 3] Auto-Layout (ElkJS Sugiyama layered algorithm + routing repair passes)
           → [Phase 4] Serialization → BPMN 2.0 XML + SVG
 ```
@@ -180,7 +180,7 @@ cannot drift in three.
 ```
 scripts/
 ├── bpmn/         Core BPMN pipeline (runs on every generate call)
-│                 pipeline.js (runPipeline + CLI) · validate.js / rules.js (40 BPMN rules) ·
+│                 pipeline.js (runPipeline + CLI) · validate.js / rules.js (42 BPMN rules) ·
 │                 workflow-net.js + net-check.js (Petri net, NC01–NC06) · topology.js ·
 │                 layout.js (ElkJS) · coordinates.js · edge-simplify.js, orthogonal-router.js,
 │                 bend-rule.js (routing repair) · visual-refinement.js · di-check.js (DI01–DI11) ·
@@ -254,12 +254,12 @@ bpmn-generator/
 
 ## Rule Engine
 
-40 BPMN rules across 5 layers with configurable severity via JSON profiles (2 are registered as placeholders; SC01 and SC06 run in the scenario pipeline and are not profile-switchable yet). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
+42 BPMN rules across 5 layers with configurable severity via JSON profiles (2 are registered as placeholders; SC01 and SC06 run in the scenario pipeline and are not profile-switchable yet). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
 
 | Layer | Severity | Rules | Examples |
 |-------|----------|-------|----------|
 | Soundness | ERROR | S01-S17 | Start/End events, deadlocks, boundary events |
-| Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
+| Style | WARNING | M01-M13 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Liveness, boundedness, deadlock-freedom (opt-in) |
 | Optimization | ADVISORY | O01-O04 | Redesign opportunities — `optimize`/`soll` mode only (opt-in); each names a transform in the redesign toolbox |
@@ -343,7 +343,7 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **Round-tripping** (BPMN XML → Logic-Core JSON → BPMN XML)
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
-- **Configurable rule engine** (40 BPMN rules, 5 layers, JSON profiles — 2 registered as placeholders)
+- **Configurable rule engine** (42 BPMN rules, 5 layers, JSON profiles — 2 registered as placeholders)
 - **Integrity checks on every run** — Petri-net translation (NC01–NC06) and post-layout diagram geometry (DI01–DI11), reported apart from the rule engine
 - **Routing repair** — fewest-bends rule, crossing repair with an obstacle-aware orthogonal router, re-routing of flows through foreign shapes, event and gateway labels kept off flows
 - **Ontology** — node types, markers and the rule catalog in one JSON-LD file ([`references/ontology.jsonld`](references/ontology.jsonld)), exported as `bpmn-generator/ontology`

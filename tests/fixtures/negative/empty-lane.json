@@ -1,0 +1,31 @@
+{
+  "id": "Process_Leave",
+  "name": "Leave request",
+  "lanes": [
+    { "id": "lane_employee", "name": "Employee" },
+    { "id": "lane_manager", "name": "Manager" },
+    { "id": "lane_hr", "name": "HR" }
+  ],
+  "nodes": [
+    { "id": "start", "type": "startEvent", "name": "Leave wanted", "lane": "lane_employee" },
+    { "id": "submit", "type": "userTask", "name": "Submit request", "lane": "lane_employee" },
+    { "id": "agree", "type": "subProcess", "name": "Agree request", "lane": "lane_employee", "isExpanded": false,
+      "nodes": [
+        { "id": "a_start", "type": "startEvent", "name": "Request submitted" },
+        { "id": "a_review", "type": "userTask", "name": "Review request" },
+        { "id": "a_end", "type": "endEvent", "name": "Request decided" }
+      ],
+      "edges": [
+        { "id": "a_f1", "source": "a_start", "target": "a_review" },
+        { "id": "a_f2", "source": "a_review", "target": "a_end" }
+      ] },
+    { "id": "book", "type": "serviceTask", "name": "Book leave", "lane": "lane_hr" },
+    { "id": "end", "type": "endEvent", "name": "Leave approved", "lane": "lane_hr" }
+  ],
+  "edges": [
+    { "id": "f1", "source": "start", "target": "submit" },
+    { "id": "f2", "source": "submit", "target": "agree" },
+    { "id": "f3", "source": "agree", "target": "book" },
+    { "id": "f4", "source": "book", "target": "end" }
+  ]
+}

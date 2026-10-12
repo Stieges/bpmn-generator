@@ -5,7 +5,7 @@ Created by: Daniel Stiegler + Claude
 
 ## 1 Current State (v4.0.0)
 
-The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (40 BPMN rules, 5 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
+The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (42 BPMN rules, 5 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
 
 ### 1.0 What 4.0 delivers
 
@@ -17,7 +17,7 @@ rollback switch, is the top entry of [CHANGELOG.md](CHANGELOG.md); this is the o
 | Layout defaults | Lane compaction and edge-label repair on by default; bend rule (fewest bends, then enter in flow direction), node labels that avoid flows and repair of flows through foreign shapes on by default, each with a per-call and a project-wide (`BPMN_CONFIG`) switch; boundary events face their target; `dynamicLaneHeader` removed, ELK wrapping its own opt-in switch |
 | Routing repair | Crossing repair with an obstacle-aware orthogonal router (`orthogonal-router.js`), stuck-end repair, message-flow labels with collision repair |
 | Integrity checks | Diagram check extended to DI01–DI11; new Petri-net translation check NC01–NC06 (`result.netDiagnostics`), gated by the CLI |
-| Ontology | `references/ontology.jsonld` holds the vocabulary and the rule catalog; three rule sets (40 BPMN rules, 5 layers; 19 DMN rules, 3 layers; 2 cross-notation rules, 1 layer) |
+| Ontology | `references/ontology.jsonld` holds the vocabulary and the rule catalog; three rule sets (42 BPMN rules, 5 layers; 19 DMN rules, 3 layers; 2 cross-notation rules, 1 layer) |
 | DMN | DMN 1.3 pipeline (Decision-Core → DRD layout → DMN XML + DMNDI) and an importer with a structured loss report |
 | Scenarios | Scenario enumeration over processes and collaborations, DMN decision-table analysis, SC01–SC06 |
 | Model fidelity | `role`/`system` on activities, top-level definition references (#53), subprocess-child and artifact round trip, SVG symbols fenced against bpmn-js |
@@ -34,7 +34,7 @@ SC01–SC06.
 |---------|---------|--------|
 | Pipeline Architecture | 4 phases: LLM→JSON→ELK→XML/SVG | Done |
 | Modular Architecture | ES modules in subsystems (`bpmn/`, `dmn/`, `scenarios/`, `cross/`, `shared/`, `agents/`, `robustness/`), acyclic dependency graph | Done |
-| Rule Engine | 40 BPMN rules in 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization), configurable JSON profiles | Done |
+| Rule Engine | 42 BPMN rules in 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization), configurable JSON profiles | Done |
 | Flat Layout | Global Sugiyama layout owns x; lanes own the y axis (`coordinates.js` §5.0a). ELK partitioning is deliberately not used for lanes — it orders layers, not bands | Done |
 | Topological Sorting | Nodes in happy-path order, ELK Model Order | Done |
 | Lane Ordering by Flow | Start lane on top, end lane at bottom | Done |

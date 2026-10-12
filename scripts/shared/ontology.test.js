@@ -84,9 +84,9 @@ describe('rules in the ontology', () => {
     expect(validateOntology(o).join(' ')).toMatch(/additional properties.*\[bg:rule-S01\]/);
   });
 
-  test('rule counts per rule set: BPMN 40/5, DMN 19/3, cross-notation 2/1; scenario = SC01–SC06', () => {
+  test('rule counts per rule set: BPMN 42/5, DMN 19/3, cross-notation 2/1; scenario = SC01–SC06', () => {
     const count = (rs) => [VOCABULARY.ruleSets[rs].rules.length, VOCABULARY.ruleSets[rs].layers.length];
-    expect(count('BPMN')).toEqual([40, 5]);
+    expect(count('BPMN')).toEqual([42, 5]);
     expect(count('DMN')).toEqual([19, 3]);
     expect(count(CROSS_NOTATION)).toEqual([2, 1]);
     const scenario = VOCABULARY.rules.filter((r) => r.runsIn === 'scenario');

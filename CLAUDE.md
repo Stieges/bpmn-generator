@@ -321,7 +321,7 @@ membership instead of coordinates.
 | File | Purpose |
 |------|---------|
 | `scripts/bpmn/pipeline.js` | Orchestrator + CLI + Public API (`runPipeline`) |
-| `scripts/bpmn/rules.js` | Rule engine of the BPMN rule set: 40 BPMN rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in) — 38 run here, SC01/SC06 in the scenario pipeline; M05/M06 severity=OFF. Counts per rule set: `VOCABULARY.ruleSets` (`scripts/shared/ontology.js`). Layer and default severity of every rule come from `references/ontology.jsonld` via `buildRuleCatalog`; the code keeps only the checks (`RULE_REGISTER`). |
+| `scripts/bpmn/rules.js` | Rule engine of the BPMN rule set: 42 BPMN rules, 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization; last two opt-in) — 40 run here, SC01/SC06 in the scenario pipeline; M05/M06 severity=OFF. Counts per rule set: `VOCABULARY.ruleSets` (`scripts/shared/ontology.js`). Layer and default severity of every rule come from `references/ontology.jsonld` via `buildRuleCatalog`; the code keeps only the checks (`RULE_REGISTER`). |
 | `scripts/bpmn/optimize.js` | `runOptimizationAnalysis` — graph-heuristic redesign advisories (O01–O04) + Lean metrics; opt-in via `optimize`/`soll` mode |
 | `scripts/bpmn/redesign.js` | Five deterministic redesign transforms (`parallelize`, `mergeTasks`, `relane`, `reorderKnockouts`, `isolateException`), each as a `preview*` (feasible? why/why not) + `apply*` pair; no LLM |
 | `scripts/bpmn/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
@@ -626,12 +626,12 @@ Rules, their layers, default severities and run locations live in `references/on
 (`bg:Rule`, `bg:Layer`, `bg:Severity`, `bg:Notation`); the code holds only each rule's check. Three
 rule sets — one per notation plus one across notations — and every count below is per rule set.
 
-### BPMN rule set — 40 BPMN rules, 5 layers
+### BPMN rule set — 42 BPMN rules, 5 layers
 
 | Layer | Default Severity | Rules | Focus |
 |-------|-----------------|-------|-------|
 | Soundness | ERROR | S01-S17 | Structural correctness (OMG compliance) |
-| Style | WARNING | M01-M11 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
+| Style | WARNING | M01-M13 (M05/M06 severity=OFF) | Readability (Bruce Silver Method & Style) |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Petri-Net soundness |
 | Optimization | ADVISORY | O01-O04 | Redesign advisories — `optimize`/`soll` mode only (opt-in); Reijers 2005 + BABOK Lean. Emits `validation.advisories` + `metrics.optimization` |
@@ -665,8 +665,8 @@ behaviour silently. Thresholds in `config.json → dmn`.
 SC01–SC06 run only in the scenario pipeline (`scripts/scenarios/pipeline.js`), which takes no
 profile — they are not profile-switchable yet (see Known Limitations).
 
-Every rule-count claim in the docs names its rule set right at the number — "40 BPMN rules, 5
-layers", "19 DMN rules, 3 layers", "2 cross-notation rules, 1 layer" (German: "40 BPMN-Regeln in 5
+Every rule-count claim in the docs names its rule set right at the number — "42 BPMN rules, 5
+layers", "19 DMN rules, 3 layers", "2 cross-notation rules, 1 layer" (German: "42 BPMN-Regeln in 5
 Schichten"). The docs gate counts each rule set from `references/ontology.jsonld` and fails a claim
 that does not name its rule set there: a sentence a reader cannot attribute is the ambiguity worth
 failing on.
