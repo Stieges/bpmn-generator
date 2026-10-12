@@ -525,8 +525,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`scripts/bpmn/coordinates.js`), runs right after `routeMessageFlows` and before node-label
   avoidance: a message-flow label whose box reaches into a route (its own or any other), a shape, a
   node label, another edge label or a participant header (pool or lane header strip, a black-box
-  participant whole), or crosses a lane separator or a participant's top or bottom outline, moves to
-  the nearest clear spot beside one of its own segments — `layout.edgeLabelGap` px off it, either
+  participant whole), or crosses a lane separator or a participant's top or bottom outline — or comes
+  closer than `layout.messageFlowLabelClearancePx` (4) px to any route, shape, header, separator or
+  outline — moves to the nearest clear spot beside one of its own segments — `layout.edgeLabelGap` px off it, either
   side, slid along it in `layout.messageFlowLabelSlidePx` (10) px steps, at most
   `layout.messageFlowLabelMaxMovePx` (150) px from where it was. Where the gap between two
   participants is too narrow for any such spot, `growParticipantGapsForLabels` grows that gap (at
@@ -536,7 +537,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second run moves nothing); the box stays in `coordMap.edgeLabels`, so DI and SVG keep agreeing.
   Default output changes for four committed fixtures (`bpmn-generator-pipeline`,
   `example-kreditantrag`, `example-schadenmeldung`, `realistic-collaboration`), in some modes with a
-  wider participant gap (35–96 px); no message-flow label is left on anything in any fixture or mode,
+  wider participant gap (35–80 px per gap); no message-flow label is left on anything in any fixture or mode,
   and the layout ratchet's `labelLabel` is now 0 for every fixture and mode. Where a gap grew, the
   message flows sharing a port column there run longer side by side (bench `overlapLen` up, no new
   pair). Switch: `layout.messageFlowLabelRepair` (default `true`), per call `runPipeline(lc, {
