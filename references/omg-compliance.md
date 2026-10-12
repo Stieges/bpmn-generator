@@ -87,7 +87,7 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 |-------------|------------|--------|---------------|
 | §10.2.1 | Process, SubProcess, laneSet as child of process | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.2.2 | Loop / Multi-Instance Characteristics | Implemented | bpmn-xml.js:generateBpmnXml |
-| §10.3.1 | Sequence Flow with conditionExpression (child element) | Implemented | bpmn-xml.js:generateBpmnXml |
+| §10.3.1 | Sequence Flow with conditionExpression (child element); the SVG's conditional marker only where it is written and the source is an Activity | Implemented | topology.js:resolveFlowSemantics, bpmn-xml.js:generateBpmnXml, svg.js |
 | §10.3.1 | incoming/outgoing references on FlowNodes | Implemented | bpmn-xml.js:generateBpmnXml |
 | Start Event (§10.4.2) | Start Event (at least 1 per process) | Implemented | rules.js:S01 |
 | End Event (§10.4.2) | End Event (at least 1 per process) | Implemented | rules.js:S02 |
@@ -98,7 +98,7 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 | §10.2.1 | SubProcess `flowElements` are content, `isExpanded` is presentation (DI only) | Implemented | bpmn-xml.js:buildFlowNode |
 | §10.5 | LaneSet (one laneSet per Process) | Implemented | bpmn-xml.js:generateBpmnXml |
 | §10.5.1 | gatewayDirection attribute (Diverging/Converging/Mixed) | Implemented | topology.js:inferGatewayDirections |
-| §10.5.1 | Default Flow on XOR/Inclusive Gateway | Implemented | bpmn-xml.js:generateBpmnXml |
+| §10.5.1 | Default Flow on XOR/Inclusive Gateway — XML `default` and SVG slash from one decision | Implemented | topology.js:resolveFlowSemantics, bpmn-xml.js:generateBpmnXml, svg.js |
 | §10.5.1 | conditionExpression on non-default outgoing flows | Implemented | bpmn-xml.js:generateBpmnXml |
 | Data Object Reference (§10.6) | Data Objects | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact |
 | Data Store Reference (§10.6) | Data Stores | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact |
@@ -151,7 +151,7 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 | Exclusive Gateway (XOR) | Implemented | Implemented | S05 (Deadlock) | svg.js, topology.js, rules.js |
 | Parallel Gateway (AND) | Implemented | Implemented | S05 (Join) | svg.js, topology.js |
 | Inclusive Gateway (OR) | Implemented | Implemented | S06 (Deadlock) | svg.js, topology.js, rules.js |
-| Event-Based Gateway | Implemented | Implemented | — | svg.js, topology.js |
+| Event-Based Gateway (exclusive: double ring unless `instantiate`; parallel: outlined plus) | Implemented | Implemented | — | svg.js, topology.js |
 | Complex Gateway | Implemented | Implemented | — | svg.js, topology.js |
 
 ## Activity Types (OMG §10.2)
@@ -163,13 +163,13 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 | Service Task | Implemented | Implemented | — | icons.js |
 | Script Task | Implemented | Implemented | — | icons.js |
 | Send Task | Implemented | Implemented | — | icons.js |
-| Receive Task | Implemented | Implemented | — | icons.js |
+| Receive Task (`instantiate`: ring-and-envelope start symbol) | Implemented | Implemented | — | icons.js |
 | Manual Task | Implemented | Implemented | — | icons.js |
 | Business Rule Task | Implemented | Implemented | — | icons.js |
 | Sub-Process | Implemented | [+] Marker | Implemented | svg.js |
 | Expanded Sub-Process | Implemented | Inline Rendering | — | svg.js, bpmn-xml.js |
 | Call Activity | Implemented | Bold border | Implemented | svg.js |
-| Transaction | Implemented | Double border | Implemented | types.js:L31, svg.js:L405 |
+| Transaction | Implemented | Double border, [+] Marker when collapsed | Implemented | types.js:L31, svg.js:L405 |
 
 ## Bottom Markers (OMG §10.2.2)
 
@@ -223,7 +223,7 @@ All 6 DI gaps were already substantially resolved. Only polishing (edge routing,
 | C7 | Link Events (name attribute) | Closed | bpmn-xml.js (linkName on linkEventDefinition), import.js (linkName extraction) |
 | C8 | Escalation Events | Already implemented | icons.js, bpmn-xml.js |
 | C9 | Conditional Events (condition body) | Closed | bpmn-xml.js (condition child element), import.js (conditionExpression extraction) |
-| C10 | Multiple Events | Already implemented | icons.js (multiple/parallelMultiple) |
+| C10 | Multiple Events | Partial — drawn in the SVG only, the XML carries no event definitions (#87) | icons.js (multiple/parallelMultiple) |
 
 ### Category E — Import Gaps
 
