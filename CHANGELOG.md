@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **`color.fill` / `color.stroke` accept only hex colours `#rgb` or `#rrggbb`.** Named and `rgb()`
+  values are refused by the schema gate — convert them to hex. See `references/logic-core-schema.md`.
 - **Bend rule and node labels that avoid flows are on by default.** `layout.bendRule` and
   `layout.nodeLabelsAvoidFlows` default to `true`: default output changes (fewer bends, flows enter
   activities and events in flow direction, event and gateway labels move off flows). Rollback, per
