@@ -1,27 +1,48 @@
 # BPMN Generator Skill — Roadmap & Changelog
 
-Version 3.6.0 | Last updated: July 2026
+Version 4.0.0 (release candidate) | Last updated: October 2026
 Created by: Daniel Stiegler + Claude
 
-## 1 Current State (v3.6.0)
+## 1 Current State (v4.0.0)
 
 The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2 XML (ISO/IEC 19510:2013) and SVG preview via a 4-phase pipeline: Intent Extraction (LLM → JSON Logic-Core) → Validation (40 BPMN rules, 5 layers) → ElkJS Auto-Layout (Sugiyama) → BPMN XML + SVG Serialization.
+
+### 1.0 What 4.0 delivers
+
+4.0 is the first release since 3.6.0. The item-level list, including every breaking change and its
+rollback switch, is the top entry of [CHANGELOG.md](CHANGELOG.md); this is the overview.
+
+| Area | Delivered in 4.0 |
+|------|------------------|
+| Layout defaults | Lane compaction and edge-label repair on by default; bend rule (fewest bends, then enter in flow direction), node labels that avoid flows and repair of flows through foreign shapes on by default, each with a per-call and a project-wide (`BPMN_CONFIG`) switch; boundary events face their target; `dynamicLaneHeader` removed, ELK wrapping its own opt-in switch |
+| Routing repair | Crossing repair with an obstacle-aware orthogonal router (`orthogonal-router.js`), stuck-end repair, message-flow labels with collision repair |
+| Integrity checks | Diagram check extended to DI01–DI11; new Petri-net translation check NC01–NC06 (`result.netDiagnostics`), gated by the CLI |
+| Ontology | `references/ontology.jsonld` holds the vocabulary and the rule catalog; three rule sets (40 BPMN rules, 5 layers; 19 DMN rules, 3 layers; 2 cross-notation rules, 1 layer) |
+| DMN | DMN 1.3 pipeline (Decision-Core → DRD layout → DMN XML + DMNDI) and an importer with a structured loss report |
+| Scenarios | Scenario enumeration over processes and collaborations, DMN decision-table analysis, SC01–SC06 |
+| Model fidelity | `role`/`system` on activities, top-level definition references (#53), subprocess-child and artifact round trip, SVG symbols fenced against bpmn-js |
+| Security | Rule profiles schema-gated and bounded, HTTP soundness floor, MCP profiles by name; SSRF guard for callbacks and LLM base URLs; `LLM_BASE_URL_ALLOWLIST`, `TRUST_PROXY_HOPS`, bounded client text |
+| Packaging | npm package ships the DMN, scenario and cross-notation modules; docs gate checks claims against the code |
+
+Still open after 4.0: DMN SVG rendering and tool surface (DMN integration plan, Stages 6–7), the
+layout issues listed in CLAUDE.md's Known Limitations (#71–#78), and profile switches for
+SC01–SC06.
 
 ### 1.1 Implemented Features
 
 | Feature | Details | Status |
 |---------|---------|--------|
 | Pipeline Architecture | 4 phases: LLM→JSON→ELK→XML/SVG | Done |
-| Modular Architecture | 13 ES modules, acyclic dependency graph | Done |
+| Modular Architecture | ES modules in subsystems (`bpmn/`, `dmn/`, `scenarios/`, `cross/`, `shared/`, `agents/`, `robustness/`), acyclic dependency graph | Done |
 | Rule Engine | 40 BPMN rules in 5 layers (Soundness/Style/Pragmatics/Workflow-Net/Optimization), configurable JSON profiles | Done |
-| Flat Layout + Partitioning | Global Sugiyama layout, lanes as constraints | Done |
+| Flat Layout | Global Sugiyama layout owns x; lanes own the y axis (`coordinates.js` §5.0a). ELK partitioning is deliberately not used for lanes — it orders layers, not bands | Done |
 | Topological Sorting | Nodes in happy-path order, ELK Model Order | Done |
 | Lane Ordering by Flow | Start lane on top, end lane at bottom | Done |
 | Layer Constraints | StartEvent→FIRST, EndEvent→LAST | Done |
 | Orthogonal Sequence Flows | 90-degree routing + edge clipping on shapes | Done |
 | Multi-Pool Collaboration | Multiple participants + message flows | Done |
 | Collapsed Pools (Black-Box) | Participant without processRef, 60px band | Done |
-| Deadlock Detection | XOR-Split → AND-Join + Inclusive-GW detection | Done |
+| Deadlock Detection | XOR-Split → AND-Join + Inclusive-GW detection (S-layer); full WF-net check WF01–WF03 opt-in | Done |
 | OMG XML Compliance | LaneSet, gatewayDirection, conditionExpr, incoming/outgoing, top-level defs, DI Label Bounds | Done |
 | Round-Tripping (import.js) | BPMN XML → Logic-Core JSON → BPMN XML | Done (text annotations/groups added 2026-07-29 — the primary importer used to drop them silently) |
 | Inline Mode (ElkJS CDN) | HTML artifact with browser-side layout | Done |
@@ -45,38 +66,9 @@ The BPMN Generator Skill converts natural language into OMG-compliant BPMN 2.0.2
 
 ### 1.2 Module Architecture
 
-```
-scripts/
-├── pipeline.js        Orchestrator + CLI
-│   ├── validate.js    Validation Wrapper → rules.js
-│   ├── rules.js       Rule Engine (40 BPMN rules, 5 layers, profiles)
-│   ├── topology.js    Gateway directions, topological sorting, lane ordering
-│   ├── layout.js      ELK graph construction + layout execution
-│   ├── coordinates.js Coordinate maps, edge clipping, pool equalization
-│   ├── bpmn-xml.js    BPMN 2.0 XML generation (DI, top-level defs)
-│   ├── svg.js         SVG rendering (pools, lanes, activities, events)
-│   ├── icons.js       Event markers, task icons, bottom markers
-│   ├── dot.js         DOT export/import (Graphviz)
-│   ├── types.js       Type predicates, BPMN XML tag mapping
-│   └── utils.js       Config loader, visual constants, utility functions
-├── import.js          BPMN XML → Logic-Core JSON (async, delegates to moddle-import.js)
-├── moddle-import.js   bpmn-moddle adapter: fromXML() → Logic-Core JSON
-├── orchestrator.js    Multi-Agent State Machine + CLI
-├── agents/
-│   ├── modeler.js     LLM-based: Text→JSON, Refine, Amend
-│   ├── reviewer.js    Deterministic: validateLogicCore() wrapper
-│   ├── layout.js      runPipeline() + optional vision review
-│   ├── compliance.js  Deterministic: runRules() gate
-│   └── llm-provider.js OpenAI-compatible fetch abstraction
-├── mcp-bpmn-server.js MCP Server (4 tools)
-├── http-server.js     HTTP API (8 endpoints)
-├── config.json        Externalized constants (shapes, colors, spacings)
-├── workflow-net.js     Petri-Net Soundness Checker (WF01-WF03)
-├── prepare-training-data.js  L1 Training Data ETL (BPMN→LC, filter, JSONL)
-├── evaluate-slm.js    L1 SLM Evaluation (pipeline-based metrics)
-├── pipeline.test.js   224 tests (Jest, ES Modules)
-└── orchestrator.test.js 32 tests (Agents + State Machine)
-```
+The module inventory and dependency graph are maintained in one place, the **Architecture**
+section of [CLAUDE.md](CLAUDE.md); the README carries a subsystem overview. (The 13-module tree
+that stood here described 3.x before the `bpmn/`, `dmn/` and `shared/` split.)
 
 ---
 
@@ -152,7 +144,7 @@ Post-layout polish: edge-label collision repair via bbox-nudge and lane padding 
 
 ### L4 — A2A/MCP Integration | DONE
 
-MCP server with 3 tools: `generate_bpmn`, `validate_bpmn`, `import_bpmn`. Uses `@modelcontextprotocol/sdk`. Configurable via `claude_desktop_config.json`.
+MCP server with 3 tools: `generate_bpmn`, `validate_bpmn`, `import_bpmn` (a fourth, `orchestrate_bpmn`, came with L3). Uses `@modelcontextprotocol/sdk`. Configurable via `claude_desktop_config.json`.
 
 **Files:** scripts/mcp-bpmn-server.js (new), package.json, README.md
 
@@ -164,7 +156,7 @@ MCP server with 3 tools: `generate_bpmn`, `validate_bpmn`, `import_bpmn`. Uses `
 
 ### L7 — Multi-User HTTP Service | DONE
 
-HTTP API gateway (`http-server.js`) with 4 endpoints: generate, validate, import, health. Node.js native `http`, no new dependencies. Callback delivery with 3x retry + dead letter (`delivery.js`). Append-only audit log (`audit.js`, JSON Lines, metadata only). Runs in parallel with the MCP server (Stdio).
+HTTP API gateway (`http-server.js`) with 4 endpoints: generate, validate, import, health (8 today: orchestrate, chat, telemetry and config followed). Node.js native `http`, no new dependencies. Callback delivery with 3x retry + dead letter (`delivery.js`). Append-only audit log (`audit.js`, JSON Lines, metadata only). Runs in parallel with the MCP server (Stdio).
 
 **Files:** scripts/http-server.js (new), scripts/delivery.js (new), scripts/audit.js (new), README.md
 
@@ -202,7 +194,7 @@ Ad-hoc subprocesses as containers for LLM decisions, deploy to Camunda Zeebe.
 
 ## 5 Placeholder Rules — Assessment
 
-6 registered placeholders in rules.js (`check: () => ({ pass: true })`):
+At the time of this assessment, 6 placeholders were registered in rules.js (`check: () => ({ pass: true })`). M07, M08, P02 and P03 have since been implemented; M05 and M06 remain registered with severity OFF.
 
 ### IMPLEMENT
 
@@ -243,7 +235,7 @@ Test suite green after all changes (current count verified via `npm test`).
 | Limitation | Cause | Resolution in |
 |------------|-------|---------------|
 | Cross-lane backflows | Process-inherent backflows cannot be straightened. ELK optimizes, but the topology forces the backflow. | L3 Layout Agent (vision review opt-in) |
-| Edge crossing on synthetic paths | Synthetic paths (not ELK-routed) have no crossing avoidance. | M2 (Leveling) |
+| Edge crossing on synthetic paths | Synthetic paths (not ELK-routed) had no crossing avoidance. | Largely addressed in 4.0: crossing repair with the orthogonal router and foreign-shape repair; remaining cases tracked as #71–#78 |
 | Inline mode without task icons | HTML inline template renders simplified shapes. For full fidelity: pipeline.js. | — (by design) |
 | Formal soundness only for XOR/AND | WF-Net check covers XOR/AND gateways. OR gateways warning only, event-based GW skipped. | — (classical WF-Net limitation) |
 | Language analysis rules (M05/M06) | German labels require POS tagger — no reliable npm package available. | — (deferred) |
