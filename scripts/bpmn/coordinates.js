@@ -2127,9 +2127,9 @@ function participantOutlines(coordMap, lc) {
 /**
  * The judge of repairMessageFlowLabels, shared with growParticipantGapsForLabels so both call the
  * same label "clear". `keys`: the labelled message flows with a route, in lc.messageFlows order.
- * `staticClear(box)`: off every route, shape (a container wrapping the box whole excepted), node
- * label, non-message-flow edge label and participant header, across no lane separator and no
- * participant outline. `clear(k, box, labels)`: that, and off every other message-flow label in
+ * `staticClear(box)`: at least `layout.messageFlowLabelClearancePx` off every route, shape (a
+ * container wrapping the box whole excepted), participant header, lane separator and participant
+ * outline, and off every node label and non-message-flow edge label. `clear(k, box, labels)`: that, and off every other message-flow label in
  * `labels`.
  */
 function messageFlowLabelJudge(coordMap, lc) {
@@ -2146,13 +2146,20 @@ function messageFlowLabelJudge(coordMap, lc) {
   const nodeBoxes = Object.values(nodeLabels);
   const routes = Object.values(edgeCoords).filter(pts => pts && pts.length >= 2);
   const fixedLabels = Object.entries(labels0).filter(([id]) => !mfKeys.has(id)).map(([, L]) => edgeLabelBox(L));
-  const staticClear = (box) =>
-    !routes.some(pts => labelHitsRoute(box, pts))
-    && !shapes.some(([id, s]) => boxesOverlap(s, box) && !(containers.has(id) && boxWithin(s, box)))
-    && !nodeBoxes.some(b => boxesOverlap(b, box))
-    && !fixedLabels.some(b => boxesOverlap(b, box))
-    && !headers.some(b => boxesOverlap(b, box))
-    && !boxCrossesLines(box, lines);
+  // Lines and shapes keep `layout.messageFlowLabelClearancePx` off the box: they are judged against
+  // the box grown by it on every side. A line exactly that far away only touches the grown box, which
+  // does not count — so the own segment the label sits beside at `layout.edgeLabelGap` still passes.
+  const c = CFG.layout?.messageFlowLabelClearancePx ?? 0;
+  const grow = (box) => ({ x: box.x - c, y: box.y - c, w: box.w + 2 * c, h: box.h + 2 * c });
+  const staticClear = (box) => {
+    const wide = grow(box);
+    return !routes.some(pts => labelHitsRoute(wide, pts))
+      && !shapes.some(([id, s]) => boxesOverlap(s, wide) && !(containers.has(id) && boxWithin(s, wide)))
+      && !nodeBoxes.some(b => boxesOverlap(b, box))
+      && !fixedLabels.some(b => boxesOverlap(b, box))
+      && !headers.some(b => boxesOverlap(b, wide))
+      && !boxCrossesLines(wide, lines);
+  };
   const clear = (k, box, labels) => staticClear(box)
     && !keys.some(o => o !== k && labels[o] && boxesOverlap(edgeLabelBox(labels[o]), box));
   return { keys, staticClear, clear };
@@ -2176,8 +2183,9 @@ function unclearMessageFlowLabels(coordMap, lc) {
  * or any other: sequence flow, message flow, association), overlaps no shape (a container —
  * expanded subprocess, group — that wraps the box whole is not in its way), no node label
  * (coordMap.nodeLabels), no other edge label and no participant header (participantHeaders), and
- * crosses no inner lane separator and no participant's top or bottom outline (participantOutlines).
- * Only message-flow labels move; every other box is an obstacle.
+ * crosses no inner lane separator and no participant's top or bottom outline (participantOutlines) —
+ * and keeps `layout.messageFlowLabelClearancePx` from every route, shape, header, separator and
+ * outline. Only message-flow labels move; every other box is an obstacle.
  *
  * Candidates keep the placement rule of every edge label (besideSegment): the box beside one of its
  * own axis-parallel segments, `layout.edgeLabelGap` px clear of it, on either side (above/below a

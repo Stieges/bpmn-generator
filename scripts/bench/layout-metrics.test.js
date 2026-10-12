@@ -301,8 +301,10 @@ const same = (row) => ({ default: row, on: row });
 // #88 also grows a participant gap a label cannot fit in (growParticipantGapsForLabels): the message
 // flows sharing a port column there get longer legs, and with them the collinear overlap they already
 // had — no new pair. bpmn-generator-pipeline overlapLen (mf5/mf6/mf7 into one node) default
-// 187 → 240, off 172 → 255, on 112 → 232, plain 227 → 280, plain-on 786 → 906;
-// example-schadenmeldung off (mf321/322/324/325) 110 → 176.
+// 187 → 270, off 172 → 255, on 112 → 232, plain 227 → 310, plain-on 786 → 906;
+// example-schadenmeldung off (mf321/322/324/325) 110 → 242. With layout.messageFlowLabelClearancePx
+// two more gaps grow: bpmn-generator-pipeline default/plain the one above Pool_Generator (61 px),
+// example-schadenmeldung off the one above Process_Schaden 22 → 44 px.
 // on rows: compaction's lane-line legs re-routed — bpmn-generator-pipeline fo2, fo3, fo9, fo16,
 // fo17; long-lane-names f2, f3; multi-pool-collaboration sf3, sf5; realistic-collaboration inf8,
 // asf3, def2, def3; sparse-lanes f3, f4, f5.
@@ -313,7 +315,7 @@ const BUDGET_PLAIN = {
   'all-element-classes.json':           same(r({ bendsMax: 2, offOver5: 2 })),
   'artifacts-laneless-pool.json':       same(r({})),
   'boundary-event-shapes.json':         same(r({ crossings: 1, bendsMax: 2, offOver5: 9 })),
-  'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 280 }),
+  'bpmn-generator-pipeline.json':       { default: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 310 }),
                                           on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 14, overlapLen: 906 }) },
   'deadlock-process.json':              { default: null, on: null },
   'dense-edge-labels.json':             same(r({ bendsMax: 1, offOver5: 4 })),
@@ -363,7 +365,7 @@ const BUDGET_DEFAULT = {
   'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
   'artifacts-laneless-pool.json':       r({}),
   'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 10 }),
-  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 240 }),
+  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 270 }),
   'deadlock-process.json':              null,
   'dense-edge-labels.json':             r({ bendsMax: 1, offOver5: 4 }),
   'example-bestellung-versand.json':   r({ crossings: 2, bendsMax: 3, offOver5: 6, overlapLen: 197 }),
@@ -411,7 +413,7 @@ Object.assign(BUDGET['example-bestellung-versand.json'], {
 Object.assign(BUDGET['example-kreditantrag.json'], {
   on: r({ crossings: 1, bendsMax: 4, offOver5: 11, overlapLen: 62 }) });
 Object.assign(BUDGET['example-schadenmeldung.json'], {
-  off: r({ bendsMax: 2, offOver5: 6, overlapLen: 176 }) });
+  off: r({ bendsMax: 2, offOver5: 6, overlapLen: 242 }) });
 Object.assign(BUDGET['realistic-collaboration.json'], {
   off: r({ bendsMax: 2, offOver5: 4, overlapLen: 356 }),
   on: r({ bendsMax: 4, mfCrowd: 6, offOver5: 4, overlapLen: 586 }) });
