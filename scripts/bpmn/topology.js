@@ -3,7 +3,7 @@
  * Pre-processing steps before ELK layout.
  */
 
-import { isGateway } from './types.js';
+import { isGateway, edgeFieldSpec } from './types.js';
 
 /**
  * Infer gateway directions (Diverging/Converging/Mixed) based on edge counts.
@@ -66,6 +66,13 @@ function gatewayDirections(nodes, edges) {
  * makes the flow its source's default, whatever the source (the last one wins, as in the
  * serialiser it replaces).
  *
+ * Two limits on conditions, both OMG's (review of #84):
+ *   - only a flow leaving an Activity or an exclusive, inclusive or complex Gateway gets one
+ *     (§10.3.1; the `condition` row's `allowed`) — a parallel or event-based gateway's flows and an
+ *     event's flows get none, whatever was authored;
+ *   - a default flow gets none: its condition is ignored (§10.5), so the default wins.
+ * S15 reports an authored condition either limit drops.
+ *
  * Pure: gateway directions are computed, not read from or written to `_direction`.
  * Called once per container with that container's own nodes and edges — the process in
  * `buildProcess`, every subprocess in `buildFlowNode`'s child branch, and the same two levels in
@@ -91,10 +98,12 @@ export function resolveFlowSemantics(nodes = [], edges = []) {
   }
 
   const defaultIds = new Set(defaultBySource.values());
+  const conditionSources = edgeFieldSpec('condition').allowed;
   const conditionById = new Map();
   for (const e of edges) {
-    const needsCondition = e.condition || (e.isConditional && e.label)
-      || (isConditionalSplit(byId.get(e.source)) && !defaultIds.has(e.id));
+    const source = byId.get(e.source);
+    if (!source || !conditionSources.has(source.type) || defaultIds.has(e.id)) continue;
+    const needsCondition = e.condition || (e.isConditional && e.label) || isConditionalSplit(source);
     if (needsCondition) conditionById.set(e.id, e.condition || e.label || '');
   }
   return { defaultBySource, conditionById };

@@ -11,8 +11,7 @@ import {
   isGateway, isBoundaryEvent, isBpmnArtifact,
   OMG_NODE_FIELD_SCOPE, nodeFieldSpec, matchesFieldType, bpmnXmlTag,
   EVENT_DEFINITION_BY_MARKER, FLOW_NODE_TYPES,
-  resolveDefinitionRef,
-} from './types.js';
+  resolveDefinitionRef, writesIsInterrupting } from './types.js';
 
 import { LANE_HEADER_W } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
@@ -332,7 +331,7 @@ function buildDataObject(node, refEl) {
   return dataObject;
 }
 
-function buildFlowNode(node, topLevelDefsMap, registerNode) {
+function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
   const attrs = buildNodeAttrs(node);
 
   // Gateway direction
@@ -357,8 +356,9 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     attrs.cancelActivity = false;
   }
   // `isInterrupting` is the start-event twin of the branch above: default true in the XSD, so only
-  // `false` is written, and the class guard comes from the table row (#83).
-  if (node.isInterrupting === false && fieldAllowedOn(node, 'isInterrupting')) {
+  // `false` is written — and only on the start event of an event subprocess, the one place OMG gives
+  // it meaning (`writesIsInterrupting`, types.js; #83).
+  if (writesIsInterrupting(node, parent)) {
     attrs.isInterrupting = false;
   }
 
@@ -524,7 +524,7 @@ function buildFlowNode(node, topLevelDefsMap, registerNode) {
     inferGatewayDirections(node.nodes, node.edges || []);
     const childMap = new Map();
     for (const child of node.nodes) {
-      const childEl = buildFlowNode(child, topLevelDefsMap, registerNode);
+      const childEl = buildFlowNode(child, topLevelDefsMap, registerNode, node);
       childMap.set(child.id, childEl);
       el.get('flowElements').push(childEl);
       // A nested data object needs its DataObject in the subprocess's own flowElements — a

@@ -21,7 +21,9 @@ import {
   isEvent, isGateway, isBoundaryEvent, isArtifact, isContainerNode, CONTAINER_TYPES, TASK_TYPES,
   isActivity, isInteractionNode, isSequenceFlowExempt,
   OMG_NODE_FIELD_SCOPE, isFieldOutOfScope, isFieldWrongType, resolveDefinitionRef,
+  edgeFieldSpec, writesIsInterrupting,
 } from './types.js';
+import { resolveFlowSemantics } from './topology.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
@@ -779,7 +781,10 @@ const SOUNDNESS_CHECKS = [
       + 'DataObjectReference, cancelActivity to BoundaryEvent, eventGatewayType to '
       + 'EventBasedGateway, instantiate to EventBasedGateway and ReceiveTask, loop and '
       + 'multi-instance characteristics to an Activity, a role (performer) to an Activity, a '
-      + 'system (generator extension) to a Task, and decisionRef to a businessRuleTask',
+      + 'system (generator extension) to a Task, and decisionRef to a businessRuleTask; '
+      + 'isInterrupting means something only on the start event of an event subprocess, and a '
+      + 'sequence-flow condition only on a non-default flow leaving an Activity or an exclusive, '
+      + 'inclusive or complex Gateway',
     ref: {
       omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity)',
       cmof: 'Activity.isForCompensation (BPMN20.cmof:1095), SubProcess.triggeredByEvent (:1147, '
@@ -823,8 +828,39 @@ const SOUNDNESS_CHECKS = [
       // Recursive, because `buildFlowNode` is: a subprocess child reaches the serialiser through
       // the same function and is dropped by the same guard, so a rule that only walked the top
       // level would be silent about exactly the nesting level CLAUDE.md says gets forgotten.
-      const walk = (nodes) => {
+      const walk = (nodes, edges, parent) => {
+        // The two scopes a class set cannot state (review of #84/#83), each dropped by the writer:
+        // `isInterrupting` needs the parent to be an event subprocess (OMG §10.3.5), and a
+        // condition needs a source that may carry one and a flow that is not its source's default
+        // (OMG §10.3.1, §10.5). `resolveFlowSemantics` is the writer's own decision, so this
+        // reports exactly what it drops.
+        const byId = new Map((nodes || []).map((n) => [n.id, n]));
+        const { defaultBySource } = resolveFlowSemantics(nodes || [], edges || []);
+        const conditionSpec = edgeFieldSpec('condition');
+        for (const e of (edges || [])) {
+          const authored = e.condition ? `condition ${JSON.stringify(e.condition)}`
+            : (e.isConditional && e.label) ? `isConditional with the label ${JSON.stringify(e.label)} as its condition` : null;
+          const src = byId.get(e.source);
+          if (!authored || !src) continue;
+          if (!conditionSpec.allowed.has(src.type)) {
+            msgs.push(`Flow "${e.id}" leaves "${src.id}", a ${src.type}, and carries ${authored}, but OMG `
+              + `allows a conditionExpression only on a flow leaving ${conditionSpec.scope}. The condition `
+              + 'is dropped when the BPMN is written, so it has no effect — remove it, or branch at a '
+              + 'gateway that evaluates conditions.');
+          } else if (defaultBySource.get(e.source) === e.id) {
+            msgs.push(`Flow "${e.id}" is the default flow of "${src.id}" and carries ${authored}, but OMG `
+              + 'ignores the condition of a default flow — the default wins, and the condition is '
+              + 'dropped when the BPMN is written. Remove the condition, or the default mark.');
+          }
+        }
         for (const node of (nodes || [])) {
+          if (node.isInterrupting === false && node.type === 'startEvent' && !writesIsInterrupting(node, parent)) {
+            msgs.push(`Node "${node.id}" (${node.name || ''}) is a start event outside an event `
+              + 'subprocess and carries "isInterrupting": false, but OMG gives isInterrupting meaning '
+              + 'only on the start event of an event subprocess. The field is dropped when the BPMN is '
+              + 'written, so it has no effect — remove it, or mark the enclosing subprocess '
+              + '`isEventSubProcess`.');
+          }
           // `enforcedBy: 'table'` and nothing else. The table now covers every `$defs.Node`
           // property, but this rule's message says the field "is dropped when the BPMN is written",
           // and that sentence is only TRUE for the rows whose write site actually consults
@@ -872,10 +908,10 @@ const SOUNDNESS_CHECKS = [
                 + `it has no effect — write a real ${spec.type}.${whyNotCoerced}`);
             }
           }
-          if (node.nodes) walk(node.nodes);
+          if (node.nodes) walk(node.nodes, node.edges, node);
         }
       };
-      walk(proc.nodes);
+      walk(proc.nodes, proc.edges, null);
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
