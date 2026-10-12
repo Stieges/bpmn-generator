@@ -6418,7 +6418,7 @@ describe('geometry contract — the two renderers agree', () => {
         // (lib/draw/TextRenderer.js) keeps a BPMNLabel's centre-x and top and re-sizes it to the
         // laid-out text; diagram-js Text#layoutText (lib/util/Text.js) sets the first baseline at
         // lineHeight − lineHeight/4 = 0.75 × (fontSize × lineHeight) below that top, one line height
-        // per further line. The Arial width table in coordinates.js (ARIAL_ASCII_WIDTHS) stands in
+        // per further line. The Arial width table in shared/text-layout.js (ARIAL_ASCII_WIDTHS) stands in
         // for Text.js's DOM measurement — standard Arial advance widths, identical to what Chrome
         // measures. The SVG must put the same lines there, under the one canvas offset its
         // connections use.
