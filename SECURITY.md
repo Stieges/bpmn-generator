@@ -112,6 +112,8 @@ PORT=3000
 # behind one reverse proxy that appends the client address to X-Forwarded-For —
 # only when the server is reachable exclusively through that proxy:
 TRUST_PROXY_HOPS=1
+# only for a thinking model on the server's own endpoint (operator-only, never from a client):
+# LLM_EXTRA_BODY={"chat_template_kwargs":{"enable_thinking":false}}
 # only if clients must name their own LLM endpoint (comma-separated origins):
 # LLM_BASE_URL_ALLOWLIST=https://llm.example.com
 ```

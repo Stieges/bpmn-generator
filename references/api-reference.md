@@ -391,7 +391,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 - `visualRefinement` (optional, boolean or object) — which refinement passes run. `true` / `false` switch both; an object switches single passes over the server's defaults: `{ "laneCompaction": false }`. Passes: `edgeLabelCollisionRepair` (default on), `laneCompaction` (default on). Anything else → `400 schema_error`. Schema: `references/api-schema.json` `$defs/VisualRefinementOption`. Not accepted by `/api/v1/validate`, which runs no layout.
 - `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` (optional, booleans) — as for `/api/v1/generate`; forwarded to the layout phase. Checked, with `visualRefinement`, before any LLM or callback work: an invalid value is a `400 schema_error` and nothing else runs.
 - `llmConfig` is required when `userText` is given; if omitted, the server falls back to `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` env vars when present. A client `llmConfig` needs `apiKey` and `model`; **omit `baseUrl`** to use the server-configured endpoint (`OPENAI_BASE_URL`, else `https://api.openai.com/v1`). A client `baseUrl` is accepted only when the operator lists its origin in `LLM_BASE_URL_ALLOWLIST` (comma-separated, empty by default) and it then passes the same address check as `callbackUrl`.
-- `timeout` optional, clamped to (0, 300000], default 120000.
+- `timeout` optional, clamped to (0, 300000], default 120000. A transport error or a 408/429/5xx answer is retried with backoff (`config.json → llm.retry`, by default 3 retries, Retry-After honoured up to 60 s), so one LLM call can take up to `(retries + 1) × timeout` plus the waits before the request answers `502 llm_error`.
 
 **Response 200:**
 ```json

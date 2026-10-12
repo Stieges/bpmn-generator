@@ -33,6 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the gate rejects goes back once through the refinement prompt with the gate's errors as issues.
   Every rejection is in `history` (`agent: "schema-gate"`).
 - **`--timeout <seconds>`** on `node orchestrator.js` for the LLM request (default 120 s).
+- **Retry against an unstable LLM endpoint.** `createLlmProvider` retries a transport error, a
+  timeout or a 408/429/500/502/503/504 answer with exponential backoff and jitter, honouring
+  `Retry-After` up to a cap (`config.json → llm.retry`: 3 retries, 2 s base, 30 s cap, Retry-After
+  up to 60 s; per instance `retry`, `{ retries: 0 }` for one attempt). Other failures stay final at
+  once. The error after the last attempt names the attempts (`LLM endpoint returned 503 (4
+  attempts)`, `attempts` on `LlmProviderError`). It rides out a short outage or a burst of rate
+  limiting, not an endpoint without capacity for minutes. CLI `--retries <n>`, with one stderr line
+  per retry. Applies to the HTTP server and `evaluate-slm.js` too, so an LLM request there can now
+  take up to `(retries + 1) × timeout` plus the waits.
+- **Extra request fields for an endpoint** (`extraBody` on `createLlmProvider`, CLI
+  `--extra-body '<json>'`, HTTP server `LLM_EXTRA_BODY` for its own endpoint only), e.g.
+  `{"chat_template_kwargs":{"enable_thinking":false}}`. They cannot replace `model`, `messages`,
+  `response_format` or `temperature`. An answer with only reasoning content and no content now says
+  so instead of "empty response".
 
 ## [4.0.0-rc.1] - 2026-10-12
 
