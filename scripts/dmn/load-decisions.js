@@ -25,7 +25,7 @@ import { dmnToDecisionCore, formatImportReport, NOT_DMN_ROOT } from './import.js
 export async function loadDecisionFile(p, { log = console.error } = {}) {
   const raw = readFileSync(resolve(p), 'utf8');
   // A UTF-8 BOM (U+FEFF) is what Windows editors prepend; JSON.parse rejects it.
-  const text = raw.replace(/^﻿/, '');
+  const text = raw.replace(/^\uFEFF/, '');
   if (!text.trimStart().startsWith('<')) {
     let dc;
     try {
