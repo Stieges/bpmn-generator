@@ -36,6 +36,25 @@ const EVENT_DEF_MAP = Object.fromEntries(MARKER_BY_EVENT_DEFINITION);
  * `resourceRef` names a resource with a non-empty `name`. `import.js`'s `readRoleFromDom` states
  * the same rule over the raw DOM; change both together.
  */
+
+/**
+ * One sequence flow as a Logic-Core edge — at process level and inside a container alike, so a
+ * nested flow keeps its condition and its default mark exactly as a top-level one does.
+ * `siblings` is the flowElements of the flow's own container: the element naming it as `default`
+ * is one of them.
+ */
+function edgeFromFlow(el, siblings = []) {
+  const edge = {
+    id: el.id,
+    source: el.sourceRef?.id || el.sourceRef,
+    target: el.targetRef?.id || el.targetRef,
+  };
+  if (el.name) edge.label = el.name;
+  if (el.conditionExpression?.body) edge.condition = el.conditionExpression.body;
+  if (siblings.some(other => other.default?.id === el.id || other.default === el.id)) edge.isDefault = true;
+  return edge;
+}
+
 function readRole(resourceRoles) {
   const roles = resourceRoles ?? [];
   if (roles.length !== 1) return undefined;
@@ -424,11 +443,7 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
         node.nodes = [...subFlowNodes.map(nodeFromElement), ...subArtifacts];
       }
       if (subFlowNodes.length > 0) {
-        node.edges = subSeqFlows.map(sf => {
-          const se = { id: sf.id, source: sf.sourceRef?.id || sf.sourceRef, target: sf.targetRef?.id || sf.targetRef };
-          if (sf.name) se.label = sf.name;
-          return se;
-        });
+        node.edges = subSeqFlows.map(sf => edgeFromFlow(sf, el.flowElements));
       }
       // Gated on the container having content, mirroring the write side exactly: `bpmn-xml.js`
       // emits `isExpanded` only for a container with children (`node.isExpanded && node.nodes`), so
@@ -467,25 +482,7 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
   const edges = [];
   for (const el of proc.flowElements || []) {
     if (el.$type !== 'bpmn:SequenceFlow') continue;
-    const edge = {
-      id: el.id,
-      source: el.sourceRef?.id || el.sourceRef,
-      target: el.targetRef?.id || el.targetRef,
-    };
-    if (el.name) edge.label = el.name;
-
-    // Condition expression
-    if (el.conditionExpression?.body) edge.condition = el.conditionExpression.body;
-
-    // Default flow detection
-    for (const other of proc.flowElements || []) {
-      if (other.default?.id === el.id || other.default === el.id) {
-        edge.isDefault = true;
-        break;
-      }
-    }
-
-    edges.push(edge);
+    edges.push(edgeFromFlow(el, proc.flowElements));
   }
 
   const result = { id: processId, name: processName, nodes, edges, lanes };

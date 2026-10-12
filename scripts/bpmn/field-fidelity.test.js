@@ -285,8 +285,10 @@ const SAMPLES = {
   edges: [{
     label: 'a child edge carrying condition and isDefault',
     value: [
-      { id: 'kid_f1', source: 'kid_s', target: 'kid_t', label: 'Ja', condition: PLAIN, isDefault: true },
-      { id: 'kid_f2', source: 'kid_t', target: 'kid_e' },
+      // The marked flow leaves the task: OMG grants `default` to an Activity or a Gateway, never to
+      // an Event, so a mark on the start event's flow would have nowhere to be written.
+      { id: 'kid_f1', source: 'kid_s', target: 'kid_t', label: 'Ja' },
+      { id: 'kid_f2', source: 'kid_t', target: 'kid_e', condition: PLAIN, isDefault: true },
     ],
     extra: {
       nodes: [
@@ -652,7 +654,7 @@ function reportBothPaths(blocks) {
 }
 
 /**
- * The 16 `roundTrip: 'lossy'` contracts.
+ * The 15 `roundTrip: 'lossy'` contracts.
  *
  * WHY THEY LIVE HERE and not beside the row in `types.js`. The brief left the choice open between a
  * per-row assertion function in `types.js` and a lookup keyed by field in the test. Three things
@@ -788,7 +790,7 @@ const LOSSY_CONTRACTS = {
   },
 
   edges: {
-    quote: 'written with id, name, sourceRef and targetRef only',
+    quote: 'so do the fabrications the `label` and `isDefault` rows record',
     assert: (ctx) => {
       const authored = ctx.value;
       const back = walkEdges(ctx.lc);
@@ -797,8 +799,13 @@ const LOSSY_CONTRACTS = {
         sameAs(ctx, got && { id: got.id, source: got.source, target: got.target, label: got.label },
           { id: want.id, source: want.source, target: want.target, label: want.label },
           `child edge ${want.id}: id/source/target/name survive`);
-        if (want.condition !== undefined) sameAs(ctx, got?.condition, undefined, `child edge ${want.id}: condition is lost`);
-        if (want.isDefault !== undefined) sameAs(ctx, got?.isDefault, undefined, `child edge ${want.id}: isDefault is lost`);
+        if (want.condition !== undefined) sameAs(ctx, got?.condition, want.condition, `child edge ${want.id}: condition survives`);
+        if (want.isDefault !== undefined) {
+          const srcType = (ctx.input.nodes ?? []).find((n) => n.id === want.source)?.type;
+          const writable = DEFAULT_FLOW_SOURCE_TYPES.has(srcType);
+          sameAs(ctx, got?.isDefault, writable ? want.isDefault : undefined,
+            `child edge ${want.id}: isDefault ${writable ? 'survives' : 'has no `default` to live on'}`);
+        }
       }
     },
   },
@@ -841,32 +848,24 @@ const LOSSY_CONTRACTS = {
   },
 
   label: {
-    quote: 'At depth >= 1 nothing is fabricated',
+    quote: 'The same holds at every depth',
     assert: (ctx) => {
       sameAs(ctx, ctx.out?.label, ctx.value, 'the label itself survives as `name`');
       // The fabrication the row records: the label is copied into a conditionExpression the author
-      // never wrote. `buildProcess` does it for a diverging XOR/OR source only, and the child-edge
-      // branch of `buildFlowNode` writes no conditionExpression at all — so at depth 1 nothing is
-      // fabricated either, which is the neighbouring `condition` row's mechanism seen from here.
-      const fabricates = ctx.depth === 0 && ['exclusiveGateway', 'inclusiveGateway'].includes(ctx.type);
+      // never wrote — for a diverging XOR/OR source, at any depth (a container's flows are written
+      // from the same decision as a process's).
+      const fabricates = ['exclusiveGateway', 'inclusiveGateway'].includes(ctx.type);
       sameAs(ctx, ctx.out?.condition, fabricates ? ctx.value : undefined,
         fabricates ? 'the label is fabricated into a condition the author never wrote' : 'no fabrication');
     },
   },
 
-  condition: {
-    quote: 'Lost at depth >= 1',
-    assert: (ctx) => {
-      sameAs(ctx, ctx.out?.condition, ctx.depth === 0 ? ctx.value : undefined);
-    },
-  },
-
   isDefault: {
-    quote: 'An explicitly marked edge does survive — at depth 0 only',
+    quote: 'An explicitly marked edge survives, at every depth',
     assert: (ctx) => {
-      const fabricator = ['exclusiveGateway', 'inclusiveGateway'].includes(ctx.type) && ctx.depth === 0;
+      const fabricator = ['exclusiveGateway', 'inclusiveGateway'].includes(ctx.type);
       if (ctx.value === true) {
-        sameAs(ctx, ctx.out?.isDefault, ctx.depth === 0 ? true : undefined, 'an explicitly marked edge survives at depth 0');
+        sameAs(ctx, ctx.out?.isDefault, true, 'an explicitly marked edge survives at every depth');
         return;
       }
       // Nothing authored: the last outgoing edge of a diverging XOR/OR gateway comes back marked.

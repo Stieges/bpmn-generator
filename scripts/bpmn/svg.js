@@ -232,18 +232,20 @@ function generateSvg(lc, coordMap) {
   // child's contents, then its own edges. Recursive because the DI is: a grandchild of two nested
   // expanded subprocesses has its BPMNShape, and drawing one level only left it out of the SVG.
   const renderContents = (node) => {
+    const childById = new Map(node.nodes.map(n => [n.id, n]));
+    const semantics = resolveFlowSemantics(node.nodes, node.edges || []);
     for (const child of node.nodes) {
       const cc = coords[child.id];
       if (!cc) continue;
       out.push(renderNode(child, cc, tx, ty, nodeLabels[child.id]));
       if (child.isExpanded && child.nodes) renderContents(child);
     }
-    // Internal sequence flows. No source-end marker: a nested flow is written without
-    // `conditionExpression` and its container without `default` (the `condition` and `isDefault`
-    // rows in types.js), so a marker here would be drawn for semantics the XML does not carry.
+    // Internal sequence flows, their source-end marker decided exactly as at process level —
+    // `bpmn-xml.js` writes a nested flow's condition and its container's default from the same call.
     for (const subEdge of (node.edges || [])) {
       const pts = edgeCoords[subEdge.id] || [];
-      renderSequenceFlow(out, subEdge, pts, coords, tx, ty, edgeLabels, null);
+      const marker = sequenceFlowSourceMarker(subEdge, childById.get(subEdge.source), semantics);
+      renderSequenceFlow(out, subEdge, pts, coords, tx, ty, edgeLabels, marker);
     }
   };
   for (const node of allNodes) {

@@ -265,6 +265,21 @@ function bpmnToLogicCoreLegacy(xml) {
   return { id: 'Process_1', name: 'Empty', nodes: [], edges: [], lanes: [] };
 }
 
+/**
+ * One `<sequenceFlow>` as a Logic-Core edge — at process level and inside a container alike, so a
+ * nested flow keeps its condition and its default mark exactly as a top-level one does.
+ * `siblings` is the children of the flow's own container: the element naming it as `default` is
+ * one of them.
+ */
+function edgeFromSeqFlow(sf, siblings = []) {
+  const edge = { id: sf.attrs.id, source: sf.attrs.sourceRef, target: sf.attrs.targetRef };
+  if (sf.attrs.name) edge.label = sf.attrs.name;
+  const condExpr = findChild(sf, 'conditionExpression');
+  if (condExpr?.text) edge.condition = condExpr.text;
+  if (siblings.some(n => n.attrs?.default === sf.attrs.id)) edge.isDefault = true;
+  return edge;
+}
+
 function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Set(), resourcesById = {}) {
   const processId = proc.attrs.id;
   const processName = proc.attrs.name || findPartNameForProcess(processId, partMap) || processId;
@@ -458,11 +473,7 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
         // `edges: []` here and with no `edges` key at all from moddle-import.js — a divergence the
         // `nodes` row's contract implicitly denies, and one no fence sample reaches.
         if (subFlowNodes.some(c => !isBpmnArtifact(stripNs(c.tag)))) {
-          node.edges = subSeqFlows.map(sf => {
-            const se = { id: sf.attrs.id, source: sf.attrs.sourceRef, target: sf.attrs.targetRef };
-            if (sf.attrs.name) se.label = sf.attrs.name;
-            return se;
-          });
+          node.edges = subSeqFlows.map(sf => edgeFromSeqFlow(sf, child.children));
         }
       }
       // Gated on the container having content — see the same gate, and the same reason, in
@@ -481,27 +492,7 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
   // Sequence flows
   const edges = [];
   for (const sf of findChildren(proc, 'sequenceFlow')) {
-    const edge = {
-      id: sf.attrs.id,
-      source: sf.attrs.sourceRef,
-      target: sf.attrs.targetRef,
-    };
-    if (sf.attrs.name) edge.label = sf.attrs.name;
-
-    // Condition expression
-    const condExpr = findChild(sf, 'conditionExpression');
-    if (condExpr?.text) edge.condition = condExpr.text;
-
-    // Default flow detection
-    // Check if any gateway has this flow as default
-    for (const n of proc.children) {
-      if (n.attrs.default === sf.attrs.id) {
-        edge.isDefault = true;
-        break;
-      }
-    }
-
-    edges.push(edge);
+    edges.push(edgeFromSeqFlow(sf, proc.children));
   }
 
   const result = { id: processId, name: processName, nodes, edges, lanes };

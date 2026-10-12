@@ -623,11 +623,11 @@ export const OMG_NODE_FIELD_SCOPE = [
       + 'behaviour change that needs its own red-first test.' },
   { field: 'edges', attr: 'flowElements', type: 'array', on: 'self', allowed: domain('Node', 'edges'), scope: 'a subProcess or a transaction',
     shape: 'childElement', writeSite: 'buildFlowNode', enforcedBy: 'none', roundTrip: 'lossy',
-    reason: 'A nested sequence flow is written with id, name, sourceRef and targetRef only — the '
-      + 'child-edge branch of `buildFlowNode` has no conditionExpression and no per-container '
-      + '`default`, so `condition` and `isDefault` are lost at depth >= 1 while surviving at depth '
-      + '0. Decided and queued (plan "Root fix", Stage 6). enforcedBy none: same ungated recursion '
-      + 'as `nodes`.' },
+    reason: 'A nested sequence flow is written exactly like a top-level one — condition and the '
+      + 'container\'s `default` included, from `resolveFlowSemantics` — so every authored field '
+      + 'comes back, and so do the fabrications the `label` and `isDefault` rows record: a nested '
+      + 'diverging XOR/OR gateway gains a default and conditions the author never wrote. '
+      + 'enforcedBy none: same ungated recursion as `nodes`.' },
 
   // ── shape: 'eventDefinition' ───────────────────────────────────────────────────────────────────
   // These four are properties of the `<bpmn:*EventDefinition>` an Event carries, not of the Event.
@@ -814,37 +814,40 @@ export const OMG_EDGE_FIELD_SCOPE = [
       + '`<bpmn:conditionExpression>` (`resolveFlowSemantics` in topology.js, which bpmn-xml.js '
       + 'writes from). The label itself '
       + 'survives as `name`, but the re-imported Logic-Core carries a `condition` the author never '
-      + 'wrote, so LC -> XML -> LC is not idempotent for such an edge. At depth >= 1 nothing is '
-      + 'fabricated, because the child-edge branch of `buildFlowNode` writes no '
-      + 'conditionExpression at all — the neighbouring `condition` row records that loss from '
-      + 'the other side. Removal is decided and '
+      + 'wrote, so LC -> XML -> LC is not idempotent for such an edge. The same holds at every '
+      + 'depth: a nested flow is written from the same decision as a top-level one. (A flow marked '
+      + '`isConditional` with a label and no condition gets the label as its condition too — by '
+      + 'decision, see the `isConditional` row.) Removal of the gateway fabrication is decided and '
       + 'queued (plan "Root fix", backlog item 7); three goldens move when it lands.' },
+  // Written at every depth: `buildProcess` for a process's flows, `buildFlowNode`'s child branch for
+  // a container's, both from `resolveFlowSemantics`; both importers read it back at every depth.
+  // enforcedBy none: a conditionExpression is written from any source class.
   { field: 'condition', attr: 'conditionExpression', type: 'string', on: 'sequenceFlow', allowed: domain('Edge', 'condition'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
-    shape: 'childElement', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'lossy',
-    reason: 'Exact at depth 0. Lost at depth >= 1: the child-edge branch of `buildFlowNode` writes '
-      + 'id, name, sourceRef and targetRef only, so a condition on an edge inside a subProcess or '
-      + 'transaction never reaches the XML. Decided and queued (plan "Root fix", Stage 6). '
-      + 'enforcedBy none: `buildProcess` writes a conditionExpression from any source class.' },
+    shape: 'childElement', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'exact',
+    reason: 'enforcedBy none: `resolveFlowSemantics` gives a conditionExpression to a flow from any '
+      + 'source class, and the writers (`buildProcess`, and `buildFlowNode` for a container\'s '
+      + 'flows) write it whatever the source is.' },
   { field: 'isDefault', attr: 'default', type: 'boolean', on: 'sourceGateway', allowed: domain('Edge', 'isDefault'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'The serialiser FABRICATES it: when a diverging XOR or OR gateway has more than one '
       + 'outgoing flow and none is marked, `buildDefaultFlowMap` makes the LAST one the default. So '
       + 'an edge that carried no `isDefault` can come back carrying one, and which edge that is '
-      + 'depends on array order. An explicitly marked edge does survive — at depth 0 only: the '
-      + 'child-edge branch of `buildFlowNode` writes no per-container `default`, so both the '
-      + 'fabrication and the honest mark are absent at depth >= 1 (the `edges` row records the '
-      + 'same loss from the container\'s side). Removal is decided and '
+      + 'depends on array order. An explicitly marked edge survives, at every depth — a '
+      + 'container\'s own flows get the same decision (`resolveFlowSemantics`), written by the '
+      + 'child branch of `buildFlowNode`, so the fabrication applies inside a container too. '
+      + 'Removal is decided and '
       + 'queued (plan "Root fix", backlog item 7); three goldens move when it lands. enforcedBy '
-      + 'none: `buildDefaultFlowMap` records `isDefault` from a source of any class, and '
-      + '`buildProcess` then writes `default` onto that element whatever it is.' },
+      + 'none: `resolveFlowSemantics` records `isDefault` from a source of any class, and the '
+      + 'writer then puts `default` onto that element whatever it is.' },
   { field: 'isConditional', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: domain('Edge', 'isConditional'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'unserialised', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
-    reason: 'Without effect, by decision (#84): OMG expresses a conditional flow as the PRESENCE '
-      + 'of a conditionExpression on a flow leaving an Activity, so the flag itself has nothing to '
-      + 'serialise. The marker follows the condition instead — `svg.js` draws the diamond exactly '
-      + 'where `resolveFlowSemantics` gives the flow a conditionExpression and the source is an '
-      + 'Activity, as bpmn-js does. Author `condition` to get both; `isConditional` alone used to '
-      + 'draw a diamond the XML did not carry, and now draws nothing.' },
+    reason: 'The flag itself is not serialised, by decision (#84): OMG expresses a conditional '
+      + 'flow as the PRESENCE of a conditionExpression, so there is no attribute to write. Its '
+      + 'effect is: with a `label` and no `condition`, `resolveFlowSemantics` writes the label as '
+      + 'the conditionExpression body, and the re-import carries that as `condition`, not as this '
+      + 'flag. Without a label (and without `condition`) it has nothing to write and draws nothing. '
+      + '`svg.js` draws the diamond exactly where the flow has a conditionExpression and leaves an '
+      + 'Activity, as bpmn-js does.' },
   { field: 'isHappyPath', attr: null, type: 'boolean', on: 'sequenceFlow', allowed: domain('Edge', 'isHappyPath'), scope: 'a FlowNode',
     shape: 'layoutOnly', writeSite: 'none', enforcedBy: 'none', roundTrip: 'none',
     reason: 'Layout input, not model content: `topology.js`\'s `identifyHappyPathNodes` reads it to '
