@@ -755,7 +755,7 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   every moddle error with a bare `catch {}`
 - Multiple and parallel-multiple events (`marker: multiple | parallelMultiple`) are drawn in the
   SVG but the XML carries no event definition, so bpmn.io shows a plain event (#87). Likewise
-  `isAdHoc`: the SVG draws the tilde, the XML has a plain `subProcess` (`adHocSubProcess` is
+  `isAdHoc` (#99): the SVG draws the tilde, the XML has a plain `subProcess` (`adHocSubProcess` is
   `announced`). `scripts/bpmn/symbol-fidelity.test.js` pins both, so a fix turns it red
 - Rule placeholders: M05-M06 (Style) registered with severity=OFF (POS tagger problem; tracked in ROADMAP)
 - No Camunda extensions (`camunda:` namespace)
