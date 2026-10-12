@@ -8,12 +8,14 @@ Source: https://github.com/bpmn-io/bpmn-js (`lib/draw/PathMap.js`, `lib/draw/Bpm
 
 Derived material in this package:
 
-- `bpmn/pathmap.js` — the glyph path templates of `PathMap.js` and its `getScaledPath` (verbatim data).
+- `bpmn/pathmap.js` — the glyph path templates of `PathMap.js` (verbatim data) and `scaledPath`, a port
+  of its `getScaledPath` (code, rewritten from it).
 - `bpmn/icons.js` — the scale, position, fill and stroke parameters each `BpmnRenderer.js` handler
   passes for event icons, task icons, task markers (`renderTaskMarkers` offsets), gateway symbols
   and data shapes.
 
-This package contains neither bpmn-js's rendering code nor its watermark; it draws its own SVG.
+Apart from that port of `getScaledPath`, this package contains no bpmn-js code and not its
+watermark; it draws its own SVG.
 
 ```
 Copyright (c) 2014-present Camunda Services GmbH
@@ -50,13 +52,14 @@ Source: https://github.com/bpmn-io/dmn-js (`packages/dmn-js-drd/src/draw/PathMap
 Derived material in this package:
 
 - `dmn/pathmap.js` — the `KNOWLEDGE_SOURCE` and `BUSINESS_KNOWLEDGE_MODEL` path templates of
-  `PathMap.js`, its `getScaledPath`, and the scale and start position `DrdRenderer.js` passes for
-  each (verbatim data).
+  `PathMap.js` and the scale and start position `DrdRenderer.js` passes for each (verbatim data),
+  and `drdScaledPath`, a port of `PathMap.js`'s `getScaledPath` (code, rewritten from it).
 - `dmn/svg.js` — the marker shapes, reference points and scales of `DrdRenderer.js`'s
   `createMarker` (information, knowledge and authority requirement ends; also recorded in
   `config.json → dmn.edge`) and the 22 px corner radius of an input data shape.
 
-This package contains neither dmn-js's rendering code nor its watermark; it draws its own SVG.
+Apart from that port of `getScaledPath`, this package contains no dmn-js code and not its
+watermark; it draws its own SVG.
 dmn-js-drd is distributed under the same bpmn.io license as bpmn-js, quoted in full above
 (Copyright (c) 2014-present Camunda Services GmbH).
 

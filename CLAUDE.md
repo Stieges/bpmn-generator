@@ -246,7 +246,9 @@ protected is kept: no rule module of another rule set — `dmn/rules.js`, `dmn/s
 `cross/rules.js`, `bpmn/scenario-rules.js` — is in `runPipeline`'s static import closure, so a DMN
 or cross-notation register gap still cannot break a BPMN run. Fenced by
 `shared/rule-registers.test.js` (exactly this edge, plus the CLI's dynamic import of
-`dmn/load-decisions.js`) and `shared/rule-catalog.test.js` (the closure). Do not add a second edge
+`dmn/load-decisions.js`) and `shared/rule-catalog.test.js` (the closure). The closure check is a
+static scan of `import … from` statements: a dynamic `import()` is not followed, which is why the
+one dynamic import is pinned by name in `rule-registers.test.js`. Do not add a second edge
 without the same argument.
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.

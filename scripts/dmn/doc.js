@@ -14,7 +14,16 @@ import { dmnLabels } from './constants.js';
 import { escapeMarkdownCell, formatTableMarkdown } from './table-text.js';
 import { literalExpressionLine } from './table.js';
 
-const code = (s) => `\`${String(s).replace(/`/g, 'ˋ')}\``;
+/**
+ * A fenced code block holding `text` verbatim: the fence is one backtick longer than the longest
+ * backtick run in the text (at least three), so no character of a FEEL expression is changed and a
+ * blank line inside it does not end the block.
+ */
+function codeBlock(text, lang = 'feel') {
+  const longest = Math.max(0, ...[...String(text).matchAll(/`+/g)].map((m) => m[0].length));
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  return `${fence}${lang}\n${String(text).replace(/\r\n?/g, '\n')}\n${fence}`;
+}
 
 function clauseList(items, nameOf) {
   return items.map((it) => {
@@ -49,7 +58,7 @@ export function generateDmnMarkdown(dc, stack, { locale } = {}) {
       out.push(`- **${labels.outputs}:** ${clauseList(t.outputs ?? [], (o) => o.name || t.outputLabel || node.name)}`, '');
       out.push(formatTableMarkdown(model, { headingLevel: 0 }));
     } else if (node.expression != null) {
-      out.push(`**${escapeMarkdownCell(literalExpressionLine(node.typeRef, labels))}:** ${code(node.expression)}`);
+      out.push(`**${escapeMarkdownCell(literalExpressionLine(node.typeRef, labels))}:**`, '', codeBlock(node.expression));
     }
   }
   return `${out.join('\n')}\n`;
