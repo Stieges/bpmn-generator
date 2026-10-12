@@ -6,14 +6,14 @@
     <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
   </marker>
   <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
-  <marker id="seq-default-src" viewBox="0 0 20 20" refX="6" refY="10"
-    markerWidth="10" markerHeight="10" orient="auto">
-    <path d="M 6 3 L 10 17" stroke="#000000" stroke-width="1.5"/>
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="0" refY="10"
+    markerWidth="13.3" markerHeight="13.3" orient="auto">
+    <path d="M 6 4 L 10 16" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
   </marker>
   <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
-  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="1" refY="10"
-    markerWidth="12" markerHeight="12" orient="auto">
-    <path d="M 1 10 L 8 6 L 15 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="-1" refY="10"
+    markerWidth="13.3" markerHeight="13.3" orient="auto">
+    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="2" stroke-linejoin="round"/>
   </marker>
   <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
   <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
@@ -38,109 +38,163 @@
 <rect x="80" y="50" width="4082" height="844" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
 <rect x="80" y="50" width="30" height="844" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="95" y="472" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,472)">Team</text>
-<path d="M 206 110 L 286 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 386 110 L 466 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 110 L 646 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 746 110 L 826 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 926 110 L 1006 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1056 150 L 1056 251" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1106 291 L 1186 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1286 291 L 1366 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1466 291 L 1546 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1646 291 L 1726 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1826 291 L 1906 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1956 331 L 1956 432" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 2006 472 L 2086 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 2186 472 L 2266 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 2366 472 L 2446 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 2546 472 L 2626 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 2726 472 L 2806 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 2856 512 L 2856 613" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 2906 653 L 2986 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 3086 653 L 3166 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 3266 653 L 3346 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 3446 653 L 3526 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 3626 653 L 3706 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 3756 693 L 3756 794" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 3806 834 L 3886 834" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 3986 834 L 4066 834" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f0" d="M 206 110 L 286 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f1" d="M 386 110 L 466 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f2" d="M 566 110 L 646 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f3" d="M 746 110 L 826 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f4" d="M 926 110 L 1006 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f5" d="M 1056 150 L 1056 251" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f6" d="M 1106 291 L 1186 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f7" d="M 1286 291 L 1366 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f8" d="M 1466 291 L 1546 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f9" d="M 1646 291 L 1726 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f10" d="M 1826 291 L 1906 291" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f11" d="M 1956 331 L 1956 432" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f12" d="M 2006 472 L 2086 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f13" d="M 2186 472 L 2266 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f14" d="M 2366 472 L 2446 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f15" d="M 2546 472 L 2626 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f16" d="M 2726 472 L 2806 472" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f17" d="M 2856 512 L 2856 613" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f18" d="M 2906 653 L 2986 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f19" d="M 3086 653 L 3166 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f20" d="M 3266 653 L 3346 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f21" d="M 3446 653 L 3526 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f22" d="M 3626 653 L 3706 653" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f23" d="M 3756 693 L 3756 794" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f24" d="M 3806 834 L 3886 834" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="f25" d="M 3986 834 L 4066 834" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<g data-element-id="s">
 <circle cx="188" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="188" y="147.4">Start</tspan></text>
+</g>
+<g data-element-id="t1">
 <rect x="286" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 301,82 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 303.162,83.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 294.1,78.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="336" y="119" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 1</text>
+</g>
+<g data-element-id="t2">
 <rect x="466" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 481,82 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 483.162,83.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 474.1,78.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="516" y="119" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 2</text>
+</g>
+<g data-element-id="t3">
 <rect x="646" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 661,82 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 663.162,83.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 654.1,78.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="696" y="119" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 3</text>
+</g>
+<g data-element-id="t4">
 <rect x="826" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 841,82 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 843.162,83.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 834.1,78.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="876" y="119" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 4</text>
+</g>
+<g data-element-id="t5">
 <rect x="1006" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1021,82 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1023.162,83.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1014.1,78.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1056" y="119" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 5</text>
+</g>
+<g data-element-id="t6">
 <rect x="1006" y="251" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1021,263 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1023.162,264.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1014.1,259.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1056" y="300" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 6</text>
+</g>
+<g data-element-id="t7">
 <rect x="1186" y="251" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1201,263 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1203.162,264.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1194.1,259.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1236" y="300" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 7</text>
+</g>
+<g data-element-id="t8">
 <rect x="1366" y="251" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1381,263 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1383.162,264.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1374.1,259.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1416" y="300" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 8</text>
+</g>
+<g data-element-id="t9">
 <rect x="1546" y="251" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1561,263 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1563.162,264.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1554.1,259.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1596" y="300" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 9</text>
+</g>
+<g data-element-id="t10">
 <rect x="1726" y="251" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1741,263 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1743.162,264.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1734.1,259.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1776" y="300" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 10</text>
+</g>
+<g data-element-id="t11">
 <rect x="1906" y="251" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1921,263 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1923.162,264.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1914.1,259.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1956" y="300" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 11</text>
+</g>
+<g data-element-id="t12">
 <rect x="1906" y="432" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 1921,444 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 1923.162,445.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 1914.1,440.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="1956" y="481" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 12</text>
+</g>
+<g data-element-id="t13">
 <rect x="2086" y="432" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 2101,444 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 2103.162,445.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 2094.1,440.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="2136" y="481" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 13</text>
+</g>
+<g data-element-id="t14">
 <rect x="2266" y="432" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 2281,444 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 2283.162,445.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 2274.1,440.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="2316" y="481" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 14</text>
+</g>
+<g data-element-id="t15">
 <rect x="2446" y="432" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 2461,444 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 2463.162,445.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 2454.1,440.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="2496" y="481" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 15</text>
+</g>
+<g data-element-id="t16">
 <rect x="2626" y="432" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 2641,444 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 2643.162,445.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 2634.1,440.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="2676" y="481" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 16</text>
+</g>
+<g data-element-id="t17">
 <rect x="2806" y="432" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 2821,444 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 2823.162,445.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 2814.1,440.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="2856" y="481" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 17</text>
+</g>
+<g data-element-id="t18">
 <rect x="2806" y="613" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 2821,625 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 2823.162,626.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 2814.1,621.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="2856" y="662" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 18</text>
+</g>
+<g data-element-id="t19">
 <rect x="2986" y="613" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 3001,625 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 3003.162,626.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 2994.1,621.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="3036" y="662" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 19</text>
+</g>
+<g data-element-id="t20">
 <rect x="3166" y="613" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 3181,625 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 3183.162,626.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 3174.1,621.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="3216" y="662" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 20</text>
+</g>
+<g data-element-id="t21">
 <rect x="3346" y="613" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 3361,625 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 3363.162,626.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 3354.1,621.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="3396" y="662" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 21</text>
+</g>
+<g data-element-id="t22">
 <rect x="3526" y="613" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 3541,625 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 3543.162,626.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 3534.1,621.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="3576" y="662" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 22</text>
+</g>
+<g data-element-id="t23">
 <rect x="3706" y="613" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 3721,625 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 3723.162,626.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 3714.1,621.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="3756" y="662" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 23</text>
+</g>
+<g data-element-id="t24">
 <rect x="3706" y="794" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 3721,806 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 3723.162,807.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 3714.1,802.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="3756" y="843" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 24</text>
+</g>
+<g data-element-id="t25">
 <rect x="3886" y="794" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 3901,806 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 3903.162,807.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 3894.1,802.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="3936" y="843" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Schritt 25</text>
+</g>
+<g data-element-id="e">
 <circle cx="4084" cy="833.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="4084" y="871.4">Ende</tspan></text>
+</g>
 </svg>

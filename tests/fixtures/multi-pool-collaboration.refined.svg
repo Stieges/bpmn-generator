@@ -6,14 +6,14 @@
     <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
   </marker>
   <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
-  <marker id="seq-default-src" viewBox="0 0 20 20" refX="6" refY="10"
-    markerWidth="10" markerHeight="10" orient="auto">
-    <path d="M 6 3 L 10 17" stroke="#000000" stroke-width="1.5"/>
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="0" refY="10"
+    markerWidth="13.3" markerHeight="13.3" orient="auto">
+    <path d="M 6 4 L 10 16" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
   </marker>
   <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
-  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="1" refY="10"
-    markerWidth="12" markerHeight="12" orient="auto">
-    <path d="M 1 10 L 8 6 L 15 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="-1" refY="10"
+    markerWidth="13.3" markerHeight="13.3" orient="auto">
+    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="2" stroke-linejoin="round"/>
   </marker>
   <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
   <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
@@ -47,56 +47,80 @@
 <rect x="80" y="517" width="1162" height="160" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
 <rect x="80" y="517" width="30" height="160" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
 <text x="95" y="597" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,597)">Manager</text>
-<path d="M 206 110 L 286 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 386 110 L 466 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 566 110 L 646 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 206 445 L 286 445" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 386 445 L 466.5 445" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 491 469.5 L 491 617 L 656 617" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="cf1" d="M 206 110 L 286 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="cf2" d="M 386 110 L 466 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="cf3" d="M 566 110 L 646 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="sf1" d="M 206 445 L 286 445" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="sf2" d="M 386 445 L 466.5 445" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="sf3" d="M 491 469.5 L 491 617 L 656 617" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="573.5" y="608.9">Yes</tspan></text>
-<path d="M 503.5 457 L 676 457" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="sf4" d="M 503.5 457 L 676 457" stroke="#000000" stroke-width="1.5" fill="none" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="589.8" y="448.9">No</tspan></text>
-<path d="M 756 617 L 861 617 L 861 354.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 776 457 L 848.5 457 L 848.5 342" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 885.5 330 L 966 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 1066 330 L 1146 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path d="M 336 150 L 336 213 L 188 213 L 188 426.5" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
+<path data-element-id="sf5" d="M 756 617 L 861 617 L 861 354.5" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="sf6" d="M 776 457 L 848.5 457 L 848.5 342" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="sf7" d="M 885.5 330 L 966 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="sf8" d="M 1066 330 L 1146 330" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<path data-element-id="mf1" d="M 336 150 L 336 213 L 188 213 L 188 426.5" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="262" y="204.9">Request</tspan></text>
-<path d="M 1016 290 L 1016 227 L 516 227 L 516 150" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
+<path data-element-id="mf2" d="M 1016 290 L 1016 227 L 516 227 L 516 150" stroke="#000000" stroke-width="1.5" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="766" y="218.9">Response</tspan></text>
+<g data-element-id="c_start">
 <circle cx="188" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="188" y="147.4">Need identified</tspan></text>
+</g>
+<g data-element-id="c_submit">
 <rect x="286" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 292,75 l 0,14 l 21,0 l 0,-14 z l 10.5,6 l 10.5,-6" fill="#000000" stroke="#ffffff" stroke-width="0.5"/></g>
 <text x="336" y="119" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Submit request</text>
+</g>
+<g data-element-id="c_wait">
 <rect x="466" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 472,75 l 0,14 l 21,0 l 0,-14 z l 10.5,6 l 10.5,-6" fill="#ffffff" stroke="#000000" stroke-width="1"/></g>
 <text x="516" y="112" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Receive</text>
 <text x="516" y="126" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">decision</text>
+</g>
+<g data-element-id="c_end">
 <circle cx="664" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="664" y="147.4">Decision received</tspan></text>
+</g>
+<g data-element-id="s_start">
 <circle cx="188" cy="444.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="188" y="482.4">Request received</tspan></text>
+</g>
+<g data-element-id="s_review">
 <rect x="286" y="405" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 301,417 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 303.162,418.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 294.1,413.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="336" y="454" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Review request</text>
+</g>
+<g data-element-id="s_gw">
 <polygon points="491,419.5 516,444.5 491,469.5 466,444.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <line x1="482" y1="435.5" x2="500" y2="453.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
 <line x1="500" y1="435.5" x2="482" y2="453.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="491" y="405.4">Valid?</tspan></text>
+</g>
+<g data-element-id="s_approve">
 <rect x="656" y="577" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 674,601 v -1.713 c 0.352,-0.071 0.704,-0.178 1.048,-0.321 0.344,-0.145 0.666,-0.321 0.966,-0.521 l 1.194,1.18 1.567,-1.577 -1.195,-1.18 c 0.403,-0.614 0.683,-1.299 0.825,-2.018 l 1.622,-0.01 v -2.22 l -1.637,0.01 c -0.073,-0.352 -0.178,-0.7 -0.324,-1.044 -0.145,-0.344 -0.321,-0.664 -0.523,-0.962 l 1.131,-1.136 -1.583,-1.563 -1.13,1.136 c -0.614,-0.401 -1.303,-0.681 -2.023,-0.822 l 0.009,-1.619 h -2.241 l 0.004,1.631 c -0.354,0.074 -0.705,0.18 -1.05,0.324 -0.344,0.144 -0.665,0.321 -0.964,0.52 l -1.17,-1.158 -1.567,1.579 1.168,1.157 c -0.403,0.613 -0.683,1.298 -0.825,2.017 l -1.659,0.003 v 2.222 l 1.672,-0.006 c 0.073,0.351 0.18,0.702 0.324,1.045 0.145,0.344 0.321,0.664 0.523,0.961 l -1.199,1.197 1.584,1.56 1.196,-1.193 c 0.614,0.403 1.303,0.682 2.023,0.823 l 0.001,1.699 h 2.227 z m 0.221,-3.996 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 674.221,597.004 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 679,605 v -1.713 c 0.352,-0.071 0.704,-0.178 1.048,-0.321 0.344,-0.145 0.666,-0.321 0.966,-0.521 l 1.194,1.18 1.567,-1.577 -1.195,-1.18 c 0.403,-0.614 0.683,-1.299 0.825,-2.018 l 1.622,-0.01 v -2.22 l -1.637,0.01 c -0.073,-0.352 -0.178,-0.7 -0.324,-1.044 -0.145,-0.344 -0.321,-0.664 -0.523,-0.962 l 1.131,-1.136 -1.583,-1.563 -1.13,1.136 c -0.614,-0.401 -1.303,-0.681 -2.023,-0.822 l 0.009,-1.619 h -2.241 l 0.004,1.631 c -0.354,0.074 -0.705,0.18 -1.05,0.324 -0.344,0.144 -0.665,0.321 -0.964,0.52 l -1.17,-1.158 -1.567,1.579 1.168,1.157 c -0.403,0.613 -0.683,1.298 -0.825,2.017 l -1.659,0.003 v 2.222 l 1.672,-0.006 c 0.073,0.351 0.18,0.702 0.324,1.045 0.145,0.344 0.321,0.664 0.523,0.961 l -1.199,1.197 1.584,1.56 1.196,-1.193 c 0.614,0.403 1.303,0.682 2.023,0.823 l 0.001,1.699 h 2.227 z m 0.221,-3.996 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 679.221,601.004 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="706" y="626" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Approve request</text>
+</g>
+<g data-element-id="s_reject">
 <rect x="676" y="417" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 691,429 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 693.162,430.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 684.1,425.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
 <text x="726" y="466" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Reject request</text>
+</g>
+<g data-element-id="s_merge">
 <polygon points="861,304.5 886,329.5 861,354.5 836,329.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <line x1="852" y1="320.5" x2="870" y2="338.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
 <line x1="870" y1="320.5" x2="852" y2="338.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
 
+</g>
+<g data-element-id="s_notify">
 <rect x="966" y="290" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
 <g><path d="m 972,295 l 0,14 l 21,0 l 0,-14 z l 10.5,6 l 10.5,-6" fill="#000000" stroke="#ffffff" stroke-width="0.5"/></g>
 <text x="1016" y="339" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Send decision</text>
+</g>
+<g data-element-id="s_end">
 <circle cx="1164" cy="329.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
 <text text-anchor="middle" font-size="11" fill="#000000"><tspan x="1164" y="367.4">Request closed</tspan></text>
+</g>
 </svg>
