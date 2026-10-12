@@ -3,77 +3,77 @@
   <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
   <marker id="seq-end" viewBox="0 0 20 20" refX="11" refY="10"
     markerWidth="10" markerHeight="10" orient="auto">
-    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
+    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
   </marker>
   <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
   <marker id="seq-default-src" viewBox="0 0 20 20" refX="0" refY="10"
-    markerWidth="13.3" markerHeight="13.3" orient="auto">
-    <path d="M 6 4 L 10 16" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 6 4 L 10 16" fill="none" stroke="#22242a" stroke-width="2" stroke-linecap="round"/>
   </marker>
   <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
   <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="-1" refY="10"
-    markerWidth="13.3" markerHeight="13.3" orient="auto">
-    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="#ffffff" stroke="#000000" stroke-width="2" stroke-linejoin="round"/>
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
   </marker>
   <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
   <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
     markerWidth="20" markerHeight="20" orient="auto">
-    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-dasharray="10000, 1"/>
   </marker>
   <!-- Message flow: open arrowhead at target -->
   <marker id="msg-end" viewBox="0 0 20 20" refX="8.5" refY="5"
     markerWidth="20" markerHeight="20" orient="auto">
-    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#000000" stroke-width="1" stroke-linecap="butt"/>
+    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10000, 1"/>
   </marker>
   <!-- Association: open chevron -->
   <marker id="assoc-end" viewBox="0 0 20 20" refX="11" refY="10"
     markerWidth="10" markerHeight="10" orient="auto">
-    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#000000" stroke-width="1.5"/>
+    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#22242a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10000, 1"/>
   </marker>
 </defs>
-<rect width="982" height="370" fill="#fafafa"/>
-<rect x="50" y="50" width="882" height="260" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
-<rect x="50" y="50" width="30" height="260" fill="#e8e8e8" stroke="#000000" stroke-width="1.5"/>
-<text x="65" y="180" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="bold" fill="#000000" transform="rotate(-90,65,180)">Main Pool</text>
-<rect x="80" y="50" width="852" height="260" fill="#ffffff" fill-opacity="0.25" stroke="#000000" stroke-width="1.5"/>
-<rect x="80" y="50" width="30" height="260" fill="#f0f0f0" stroke="#000000" stroke-width="1.5"/>
-<text x="95" y="180" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#000000" transform="rotate(-90,95,180)">Default Lane</text>
-<path data-element-id="f1" d="M 206 250 L 286 250" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f2" d="M 336 210 L 336 123 L 446.5 123" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f3" d="M 483.5 110 L 656 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="569.8" y="101.9">Yes</tspan></text>
-<path data-element-id="f4" d="M 483.5 135 L 483.5 237 L 636 237" stroke="#000000" stroke-width="1.5" fill="none" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="559.8" y="228.9">No</tspan></text>
-<path data-element-id="f5" d="M 636 263 L 386 263" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
-<path data-element-id="f6" d="M 756 110 L 836 110" stroke="#000000" stroke-width="1.5" fill="none"  marker-end="url(#seq-end)"/>
+<rect width="982" height="370" fill="#ffffff"/>
+<rect x="50" y="50" width="882" height="260" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="1.5"/>
+<path d="M 80 50 L 80 310" stroke="#22242a" stroke-width="1.5" fill="none"/>
+<text x="68.6" y="180" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,68.6,180)">Main Pool</text>
+<rect x="80" y="50" width="852" height="260" fill="#ffffff" fill-opacity="0.25" stroke="#22242a" stroke-width="1.5"/>
+<text x="98.6" y="180" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,98.6,180)">Default Lane</text>
 <g data-element-id="start1">
-<circle cx="188" cy="249.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="188" y="287.4">Document</tspan><tspan x="188" y="300.6">submitted</tspan></text>
+<circle cx="188" cy="249.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="188" y="287.4">Document</tspan><tspan x="188" y="300.6">submitted</tspan></text>
 </g>
 <g data-element-id="task1">
-<rect x="286" y="210" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 301,222 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 303.162,223.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 294.1,218.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="336" y="259" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Review document</text>
+<rect x="286" y="210" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="336" y="246.4" text-anchor="middle" font-size="12" fill="#22242a">Review</text>
+<text x="336" y="260.8" text-anchor="middle" font-size="12" fill="#22242a">document</text>
+<g transform="translate(286,210)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="gw1">
-<polygon points="471,97.5 496,122.5 471,147.5 446,122.5" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<line x1="462" y1="113.5" x2="480" y2="131.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<line x1="480" y1="113.5" x2="462" y2="131.5" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="471" y="83.4">Approved?</tspan></text>
+<polygon points="471,97.5 496,122.5 471,147.5 446,122.5" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
+<g transform="translate(446,97.5)"><path d="m 16,15 7.429,9.714 -7.429,9.714 3.429,0 5.714,-7.464 5.714,7.464 3.429,0 -7.429,-9.714 7.429,-9.714 -3.429,0 -5.714,7.464 -5.714,-7.464 -3.429,0 z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="471" y="83.4">Approved?</tspan></text>
 </g>
 <g data-element-id="task2">
-<rect x="656" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 674,94 v -1.713 c 0.352,-0.071 0.704,-0.178 1.048,-0.321 0.344,-0.145 0.666,-0.321 0.966,-0.521 l 1.194,1.18 1.567,-1.577 -1.195,-1.18 c 0.403,-0.614 0.683,-1.299 0.825,-2.018 l 1.622,-0.01 v -2.22 l -1.637,0.01 c -0.073,-0.352 -0.178,-0.7 -0.324,-1.044 -0.145,-0.344 -0.321,-0.664 -0.523,-0.962 l 1.131,-1.136 -1.583,-1.563 -1.13,1.136 c -0.614,-0.401 -1.303,-0.681 -2.023,-0.822 l 0.009,-1.619 h -2.241 l 0.004,1.631 c -0.354,0.074 -0.705,0.18 -1.05,0.324 -0.344,0.144 -0.665,0.321 -0.964,0.52 l -1.17,-1.158 -1.567,1.579 1.168,1.157 c -0.403,0.613 -0.683,1.298 -0.825,2.017 l -1.659,0.003 v 2.222 l 1.672,-0.006 c 0.073,0.351 0.18,0.702 0.324,1.045 0.145,0.344 0.321,0.664 0.523,0.961 l -1.199,1.197 1.584,1.56 1.196,-1.193 c 0.614,0.403 1.303,0.682 2.023,0.823 l 0.001,1.699 h 2.227 z m 0.221,-3.996 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 674.221,90.004 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 679,98 v -1.713 c 0.352,-0.071 0.704,-0.178 1.048,-0.321 0.344,-0.145 0.666,-0.321 0.966,-0.521 l 1.194,1.18 1.567,-1.577 -1.195,-1.18 c 0.403,-0.614 0.683,-1.299 0.825,-2.018 l 1.622,-0.01 v -2.22 l -1.637,0.01 c -0.073,-0.352 -0.178,-0.7 -0.324,-1.044 -0.145,-0.344 -0.321,-0.664 -0.523,-0.962 l 1.131,-1.136 -1.583,-1.563 -1.13,1.136 c -0.614,-0.401 -1.303,-0.681 -2.023,-0.822 l 0.009,-1.619 h -2.241 l 0.004,1.631 c -0.354,0.074 -0.705,0.18 -1.05,0.324 -0.344,0.144 -0.665,0.321 -0.964,0.52 l -1.17,-1.158 -1.567,1.579 1.168,1.157 c -0.403,0.613 -0.683,1.298 -0.825,2.017 l -1.659,0.003 v 2.222 l 1.672,-0.006 c 0.073,0.351 0.18,0.702 0.324,1.045 0.145,0.344 0.321,0.664 0.523,0.961 l -1.199,1.197 1.584,1.56 1.196,-1.193 c 0.614,0.403 1.303,0.682 2.023,0.823 l 0.001,1.699 h 2.227 z m 0.221,-3.996 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 679.221,94.004 c -1.789,0.75 -3.858,-0.093 -4.61,-1.874 -0.752,-1.783 0.091,-3.846 1.88,-4.596 1.788,-0.749 3.857,0.093 4.609,1.874 0.752,1.782 -0.091,3.846 -1.879,4.596 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="706" y="112" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Approve</text>
-<text x="706" y="126" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">document</text>
+<rect x="656" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="706" y="106.4" text-anchor="middle" font-size="12" fill="#22242a">Approve</text>
+<text x="706" y="120.8" text-anchor="middle" font-size="12" fill="#22242a">document</text>
+<g transform="translate(656,70)"><circle cx="11" cy="11" r="5" fill="#ffffff" stroke="none"/><path d="m 12,18 v -1.71335 c 0.352326,-0.0705 0.703932,-0.17838 1.047628,-0.32133 0.344416,-0.14465 0.665822,-0.32133 0.966377,-0.52145 l 1.19431,1.18005 1.567487,-1.57688 -1.195028,-1.18014 c 0.403376,-0.61394 0.683079,-1.29908 0.825447,-2.01824 l 1.622133,-0.01 v -2.2196 l -1.636514,0.01 c -0.07333,-0.35153 -0.178319,-0.70024 -0.323564,-1.04372 -0.145244,-0.34406 -0.321407,-0.6644 -0.522735,-0.96217 l 1.131035,-1.13631 -1.583305,-1.56293 -1.129598,1.13589 c -0.614052,-0.40108 -1.302883,-0.68093 -2.022633,-0.82247 l 0.0093,-1.61852 h -2.241173 l 0.0042,1.63124 c -0.353763,0.0736 -0.705369,0.17977 -1.049785,0.32371 -0.344415,0.14437 -0.665102,0.32092 -0.9635006,0.52046 l -1.1698628,-1.15823 -1.5667691,1.5792 1.1684265,1.15669 c -0.4026573,0.61283 -0.68308,1.29797 -0.8247287,2.01713 l -1.6588041,0.003 v 2.22174 l 1.6724648,-0.006 c 0.073327,0.35077 0.1797598,0.70243 0.3242851,1.04472 0.1452428,0.34448 0.3214064,0.6644 0.5227339,0.96066 l -1.1993431,1.19723 1.5840256,1.56011 1.1964668,-1.19348 c 0.6140517,0.40346 1.3028827,0.68232 2.0233517,0.82331 l 7.19e-4,1.69892 h 2.226848 z m 0.221462,-3.9957 c -1.788948,0.7502 -3.8576,-0.0928 -4.6097055,-1.87438 -0.7521065,-1.78321 0.090598,-3.84627 1.8802645,-4.59604 1.78823,-0.74936 3.856881,0.0929 4.608987,1.87437 0.752106,1.78165 -0.0906,3.84612 -1.879546,4.59605 z" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="15" r="5" fill="#ffffff" stroke="none"/><path d="m 17,22 v -1.71335 c 0.352326,-0.0705 0.703932,-0.17838 1.047628,-0.32133 0.344416,-0.14465 0.665822,-0.32133 0.966377,-0.52145 l 1.19431,1.18005 1.567487,-1.57688 -1.195028,-1.18014 c 0.403376,-0.61394 0.683079,-1.29908 0.825447,-2.01824 l 1.622133,-0.01 v -2.2196 l -1.636514,0.01 c -0.07333,-0.35153 -0.178319,-0.70024 -0.323564,-1.04372 -0.145244,-0.34406 -0.321407,-0.6644 -0.522735,-0.96217 l 1.131035,-1.13631 -1.583305,-1.56293 -1.129598,1.13589 c -0.614052,-0.40108 -1.302883,-0.68093 -2.022633,-0.82247 l 0.0093,-1.61852 h -2.241173 l 0.0042,1.63124 c -0.353763,0.0736 -0.705369,0.17977 -1.049785,0.32371 -0.344415,0.14437 -0.665102,0.32092 -0.9635006,0.52046 l -1.1698628,-1.15823 -1.5667691,1.5792 1.1684265,1.15669 c -0.4026573,0.61283 -0.68308,1.29797 -0.8247287,2.01713 l -1.6588041,0.003 v 2.22174 l 1.6724648,-0.006 c 0.073327,0.35077 0.1797598,0.70243 0.3242851,1.04472 0.1452428,0.34448 0.3214064,0.6644 0.5227339,0.96066 l -1.1993431,1.19723 1.5840256,1.56011 1.1964668,-1.19348 c 0.6140517,0.40346 1.3028827,0.68232 2.0233517,0.82331 l 7.19e-4,1.69892 h 2.226848 z m 0.221462,-3.9957 c -1.788948,0.7502 -3.8576,-0.0928 -4.6097055,-1.87438 -0.7521065,-1.78321 0.090598,-3.84627 1.8802645,-4.59604 1.78823,-0.74936 3.856881,0.0929 4.608987,1.87437 0.752106,1.78165 -0.0906,3.84612 -1.879546,4.59605 z" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="task3">
-<rect x="636" y="210" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="2"/>
-<g><path d="m 651,222 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.622 -4.357,-4.622 -2.552,0 -4.288,2.068 -4.288,4.622 0,1.348 0.974,2.562 1.896,3.405 -0.529,0.187 -5.669,2.097 -5.794,4.756 v 6.718 h 17 v -6.718 c 0,-2.298 -5.528,-4.595 -6.051,-4.776 z m -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#000000" stroke-width="0.5"/><path d="m 653.162,223.009 c 0,2.447 -2.158,4.431 -4.821,4.431 -2.665,0 -4.822,-1.981 -4.822,-4.431" fill="none" stroke="#000000" stroke-width="0.5"/><path d="m 644.1,218.2 c 0,0 2.251,-2.358 4.274,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.791 -4.191,-4.136 -3.575,0.001 -4.208,3.367 -4.207,4.348 z" fill="#000000" stroke="#000000" stroke-width="0.5"/></g>
-<text x="686" y="259" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#000000">Revise document</text>
+<rect x="636" y="210" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="686" y="246.4" text-anchor="middle" font-size="12" fill="#22242a">Revise</text>
+<text x="686" y="260.8" text-anchor="middle" font-size="12" fill="#22242a">document</text>
+<g transform="translate(636,210)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
 </g>
 <g data-element-id="end1">
-<circle cx="854" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#000000" stroke-width="4"/>
-<text text-anchor="middle" font-size="11" fill="#000000"><tspan x="854" y="147.4">Document</tspan><tspan x="854" y="160.6">approved</tspan></text>
+<circle cx="854" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="4"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="854" y="147.4">Document</tspan><tspan x="854" y="160.6">approved</tspan></text>
 </g>
+<path data-element-id="f1" data-waypoints="206,250 286,250" d="M 206 250 L 286 250" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f2" data-waypoints="336,210 336,123 446.5,123" d="M 336 210 L 336 128 C 336 125.5 338.5 123 341 123 L 446.5 123" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f3" data-waypoints="483.5,110 656,110" d="M 483.5 110 L 656 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="569.8" y="101.9">Yes</tspan></text>
+<path data-element-id="f4" data-waypoints="483.5,135 483.5,237 636,237" d="M 483.5 135 L 483.5 232 C 483.5 234.5 486 237 488.5 237 L 636 237" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="559.8" y="228.9">No</tspan></text>
+<path data-element-id="f5" data-waypoints="636,263 386,263" d="M 636 263 L 386 263" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f6" data-waypoints="756,110 836,110" d="M 756 110 L 836 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 </svg>
