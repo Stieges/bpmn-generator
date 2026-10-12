@@ -6,8 +6,9 @@
  *       ("U" over the rule numbers, "When: <label> *(<values|type>)*", "And: …", "Then: …",
  *       "Annotation" only when a rule has one) and one row per rule, "–" for "any".
  *   formatTablePlainText(model) — the plain-text form for a BPMN `documentation` (plain text in
- *       bpmn.io and Camunda Modeler): one sentence per rule, "Rule 1: WHEN <label> <test> AND …
- *       THEN <output> = <value> (<annotation>)", inputs that match anything left out. Sentences,
+ *       bpmn.io and Camunda Modeler): one sentence per rule, "Rule 1: WHEN <label> [=|in|is one
+ *       of] <test> AND … THEN <output> = <value> (<annotation>)", inputs that match anything left
+ *       out. Sentences,
  *       not an aligned table: Camunda's properties panel shows documentation in a proportional
  *       font, where column alignment falls apart (owner decision, 2026-10-12).
  *
@@ -62,10 +63,24 @@ export function formatTableMarkdown(model, { headingLevel = 3 } = {}) {
 // ── Plain text ───────────────────────────────────────────────────────────────────────────────
 
 /**
- * One sentence per rule: "Rule 1: WHEN <label> <test> AND … THEN <output> = <value> (<annotation>)".
- * An input test is written as the table has it, after its column label ("Claim amount < 1000",
- * "Customer segment \"premium\"") — no operator is inserted, so no word outside the label table
- * appears and the unary test is not reinterpreted.
+ * "Claim amount < 1000", "Claim amount in [1000..10000)", "Segment is one of \"a\",\"b\"",
+ * "Segment = \"premium\"": the unary test as the table has it, after its column label, with a
+ * connector only where the test brings no operator of its own — a comparison or `not(…)` stands as
+ * it is, an interval gets `inRange`, a comma list `oneOf`, a single value `equals` (all from the
+ * label table). The test itself is never rewritten.
+ */
+function condition(label, test, labels) {
+  const t = oneLine(test).trim();
+  const op = /^(?:[<>]=?|!?=|not\s*\()/.test(t) ? ''
+    : /^[[\]()]/.test(t) ? labels.inRange
+      : /,/.test(t) ? labels.oneOf
+        : labels.equals;
+  return op ? `${label} ${op} ${t}` : `${label} ${t}`;
+}
+
+/**
+ * One sentence per rule: "Rule 1: WHEN <condition> AND … THEN <output> = <value> (<annotation>)",
+ * an input that matches anything left out (see `condition` for how a test is phrased).
  */
 function sentences(model) {
   const { columns, rows, labels } = model;
@@ -75,7 +90,7 @@ function sentences(model) {
     const notes = [];
     row.cells.forEach((cell, i) => {
       const col = columns[i];
-      if (col.role === 'input' && !cell.any) conds.push(`${oneLine(col.label)} ${oneLine(cell.text).trim()}`);
+      if (col.role === 'input' && !cell.any) conds.push(condition(oneLine(col.label), cell.text, labels));
       if (col.role === 'output') results.push(col.label ? `${oneLine(col.label)} = ${oneLine(cell.text)}` : oneLine(cell.text));
       if (col.role === 'annotation' && cell.text.trim()) notes.push(oneLine(cell.text));
     });

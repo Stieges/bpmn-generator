@@ -218,11 +218,11 @@ describe('table-text.js — Markdown', () => {
 });
 
 describe('table-text.js — plain text for a BPMN documentation: one sentence per rule', () => {
-  test('"Rule n: WHEN <label> <test> AND … THEN <output> = <value>", "any" inputs left out', () => {
+  test('"Rule n: WHEN <condition> AND … THEN <output> = <value>", "any" inputs left out', () => {
     expect(formatTablePlainText(layoutDecisionTable(claimDecision()))).toEqual([
       'Rule 1: WHEN Claim amount < 1000 THEN level = "auto"',
-      'Rule 2: WHEN Claim amount [1000..10000) AND Customer segment "premium" THEN level = "clerk"',
-      'Rule 3: WHEN Claim amount [1000..10000) AND Customer segment "standard" THEN level = "manager"',
+      'Rule 2: WHEN Claim amount in [1000..10000) AND Customer segment = "premium" THEN level = "clerk"',
+      'Rule 3: WHEN Claim amount in [1000..10000) AND Customer segment = "standard" THEN level = "manager"',
       'Rule 4: WHEN Claim amount >= 10000 THEN level = "manager"',
     ]);
   });
@@ -232,13 +232,31 @@ describe('table-text.js — plain text for a BPMN documentation: one sentence pe
     expect(formatTablePlainText(m)).toEqual(['Regel 1: DANN class = "x" (why)']);
   });
 
+  test.each([
+    ['= for a single value', '"premium"', 'Segment = "premium"'],
+    ['in for an interval', '[1..10)', 'Segment in [1..10)'],
+    ['in for an open interval', ']1..10]', 'Segment in ]1..10]'],
+    ['is one of for a list', '"a","b"', 'Segment is one of "a","b"'],
+    ['nothing for a comparison', '>= 5', 'Segment >= 5'],
+    ['nothing for not(…)', 'not("a")', 'Segment not("a")'],
+    ['nothing for != ', '!= 3', 'Segment != 3'],
+  ])('connector: %s', (_, test, phrase) => {
+    const m = layoutDecisionTable(decision(simpleTable({ inputs: [{ label: 'Segment', expression: 's' }], rules: [{ when: [test], then: ['1'] }] })));
+    expect(formatTablePlainText(m)).toEqual([`Rule 1: WHEN ${phrase} THEN class = 1`]);
+  });
+
+  test('German connectors come from the label table', () => {
+    const m = layoutDecisionTable(decision(simpleTable({ inputs: [{ label: 'S', expression: 's' }], rules: [{ when: ['"a","b"'], then: ['1'] }] })), { locale: 'de' });
+    expect(formatTablePlainText(m)).toEqual(['Regel 1: WENN S ist eines von "a","b" DANN class = 1']);
+  });
+
   test('a wide table is still sentences — no column alignment that a proportional font would break', () => {
     const wide = decision(simpleTable({
       inputs: Array.from({ length: 6 }, (_, i) => ({ label: `Input number ${i}`, expression: `i${i}` })),
       rules: [{ when: ['1', '-', '3', '-', '5', '-'], then: ['"x"'] }],
     }));
     expect(formatTablePlainText(layoutDecisionTable(wide))).toEqual([
-      'Rule 1: WHEN Input number 0 1 AND Input number 2 3 AND Input number 4 5 THEN class = "x"',
+      'Rule 1: WHEN Input number 0 = 1 AND Input number 2 = 3 AND Input number 4 = 5 THEN class = "x"',
     ]);
   });
 });
@@ -322,6 +340,14 @@ describe('doc.js — the --doc Markdown', () => {
     expect(md).toContain('- **Outputs:** level (string, "none","bronze","silver")');
     expect(md).toContain('| U | When: Order value *(number)* | Then: level *("none","bronze","silver")* | Annotation |');
     expect(md).toContain('## Decision: Final percentage');
-    expect(md).toContain('**Literal expression (type: number):** `base(discountLevel) + loyaltyBonus(customerSince)`');
+    expect(md).toContain('**Literal expression (type: number):**\n\n```feel\nbase(discountLevel) + loyaltyBonus(customerSince)\n```');
+  });
+
+  test('a multi-line literal expression with backticks stays verbatim in a longer fence', () => {
+    const dc = loadFixture('discount-decision.json');
+    const expr = 'if a\n\nthen ```x``` else `y`';
+    dc.nodes.find((n) => n.id === 'dec_finalPercentage').expression = expr;
+    const md = generateDmnMarkdown(dc, layoutDecisionTables(dc));
+    expect(md).toContain(`\`\`\`\`feel\n${expr}\n\`\`\`\``);
   });
 });

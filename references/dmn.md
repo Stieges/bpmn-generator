@@ -237,15 +237,16 @@ had:
 Decision: Approval level (dec_approvalLevel) — generated from Definitions_claimApproval
 Hit policy: UNIQUE (U) – exactly one rule can match
 Rule 1: WHEN Claim amount < 1000 THEN level = "auto"
-Rule 2: WHEN Claim amount [1000..10000) AND Customer segment "premium" THEN level = "clerk"
-Rule 3: WHEN Claim amount [1000..10000) AND Customer segment "standard" THEN level = "manager"
+Rule 2: WHEN Claim amount in [1000..10000) AND Customer segment = "premium" THEN level = "clerk"
+Rule 3: WHEN Claim amount in [1000..10000) AND Customer segment = "standard" THEN level = "manager"
 Rule 4: WHEN Claim amount >= 10000 THEN level = "manager"
 === END generated: DMN decision ===
 ```
 
 One sentence per rule, not a table: the Camunda properties panel shows documentation in a
 proportional font, where aligned columns fall apart. An input that matches anything is left out of
-its sentence. A decision decided by a literal expression gets
+its sentence; a test without an operator of its own reads `= value`, `in [range]` or
+`is one of a,b`. A decision decided by a literal expression gets
 `Literal expression (type: number): <FEEL text>` instead of rules.
 Every run **replaces** the section, so importing the `.bpmn` and generating it again never
 duplicates it; do not edit inside the markers — write your own notes above them. A `decisionRef`
