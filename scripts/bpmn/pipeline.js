@@ -113,6 +113,7 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
  * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (true)
+ * @param {boolean} [opts.alignParticipantPorts] - a message flow to or from a participant (black-box or expanded pool as endpoint) docks level with its other end, not at the middle of the band (routeMessageFlows); default config.json -> layout.alignParticipantPorts (false)
  * @param {boolean} [opts.messageFlowLabelRepair] - message-flow labels off routes, shapes, labels, headers and lane separators (repairMessageFlowLabels); default config.json -> layout.messageFlowLabelRepair (true)
  * @param {boolean} [opts.nodeLabelsAvoidFlows] - event and gateway labels off their flows (placeNodeLabelsAvoidingFlows); default config.json -> layout.nodeLabelsAvoidFlows (true)
  * @param {boolean} [opts.foreignShapeRepair] - the stuck-end pass also re-routes a sequence flow through a foreign shape (reclipStuckEnds' foreignShapes, #91); default config.json -> layout.foreignShapeRepair (true)
@@ -327,7 +328,10 @@ async function runPipeline(logicCore, opts = {}) {
 
   // Message flows LAST: their horizontal leg has to sit in the gap between two
   // participants, so every pass that can still move a participant must be done.
-  routeMessageFlows(coordMap, lc);
+  // layout.alignParticipantPorts (off by default): a flow to or from a participant docks level with
+  // its other end instead of at the middle of the participant's band.
+  const routeOpts = { alignParticipantPorts: opts.alignParticipantPorts ?? (CFG.layout?.alignParticipantPorts === true) };
+  routeMessageFlows(coordMap, lc, routeOpts);
 
   // Message-flow label repair (repairMessageFlowLabels, #88): routeMessageFlows placed each label
   // without the ones after it, and the edge-label repair above ran before any message flow existed.
@@ -344,7 +348,7 @@ async function runPipeline(logicCore, opts = {}) {
     // narrow: grow that gap (participants below move down rigidly), route message flows again and
     // repair again — inside growParticipantGapsForLabels, so message flows still follow the last
     // pass that moves a participant. Kept only where it clears the label.
-    growParticipantGapsForLabels(coordMap, lc);
+    growParticipantGapsForLabels(coordMap, lc, routeOpts);
   }
 
   // Node labels away from flows (placeNodeLabelsAvoidingFlows): an event's or a gateway's label

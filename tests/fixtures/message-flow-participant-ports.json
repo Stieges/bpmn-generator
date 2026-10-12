@@ -1,0 +1,29 @@
+{
+  "pools": [
+    {
+      "id": "Process_Order",
+      "name": "Order handling",
+      "nodes": [
+        { "id": "start", "type": "startEvent", "name": "Order received", "marker": "message" },
+        { "id": "t_ack", "type": "sendTask", "name": "Send acknowledgement" },
+        { "id": "t_check", "type": "userTask", "name": "Check order" },
+        { "id": "t_pack", "type": "userTask", "name": "Prepare shipment" },
+        { "id": "t_invoice", "type": "sendTask", "name": "Send invoice" },
+        { "id": "end", "type": "endEvent", "name": "Order shipped" }
+      ],
+      "edges": [
+        { "id": "f1", "source": "start", "target": "t_ack" },
+        { "id": "f2", "source": "t_ack", "target": "t_check" },
+        { "id": "f3", "source": "t_check", "target": "t_pack" },
+        { "id": "f4", "source": "t_pack", "target": "t_invoice" },
+        { "id": "f5", "source": "t_invoice", "target": "end" }
+      ]
+    }
+  ],
+  "collapsedPools": [{ "id": "Pool_Customer", "name": "Customer" }],
+  "messageFlows": [
+    { "id": "mf_in", "source": "Pool_Customer", "target": "start", "name": "Order" },
+    { "id": "mf_ack", "source": "t_ack", "target": "Pool_Customer", "name": "Acknowledgement" },
+    { "id": "mf_inv", "source": "t_invoice", "target": "Pool_Customer", "name": "Invoice" }
+  ]
+}
