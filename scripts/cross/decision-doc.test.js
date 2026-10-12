@@ -63,8 +63,8 @@ describe('applyDecisionDocumentation', () => {
       'Decision: Approval level (dec_approvalLevel) — generated from Definitions_claimApproval',
       'Hit policy: UNIQUE (U) – exactly one rule can match',
       'Rule 1: WHEN Claim amount < 1000 THEN level = "auto"',
-      'Rule 2: WHEN Claim amount [1000..10000) AND Customer segment "premium" THEN level = "clerk"',
-      'Rule 3: WHEN Claim amount [1000..10000) AND Customer segment "standard" THEN level = "manager"',
+      'Rule 2: WHEN Claim amount in [1000..10000) AND Customer segment = "premium" THEN level = "clerk"',
+      'Rule 3: WHEN Claim amount in [1000..10000) AND Customer segment = "standard" THEN level = "manager"',
       'Rule 4: WHEN Claim amount >= 10000 THEN level = "manager"',
       DECISION_DOC_END,
     ].join('\n'));
@@ -117,7 +117,7 @@ describe('applyDecisionDocumentation', () => {
   test('German labels', () => {
     const out = applyDecisionDocumentation(claimProcess(), [claimDc()], { locale: 'de' });
     expect(task(out).documentation).toContain('Entscheidung: Approval level (dec_approvalLevel) — erzeugt aus Definitions_claimApproval');
-    expect(task(out).documentation).toContain('Regel 2: WENN Claim amount [1000..10000) UND Customer segment "premium" DANN level = "clerk"');
+    expect(task(out).documentation).toContain('Regel 2: WENN Claim amount in [1000..10000) UND Customer segment = "premium" DANN level = "clerk"');
     expect(applyDecisionDocumentation(claimProcess(), [], { locale: 'de' }).nodes[1].documentation)
       .toContain('Ruft Entscheidung auf: dec_approvalLevel (Tabelle nicht mitgeliefert)');
   });
@@ -151,6 +151,58 @@ describe('applyDecisionDocumentation', () => {
     const out = applyDecisionDocumentation(lc, [claimDc()]);
     expect(task(out, 'task_review').documentation).toBe('Four eyes.');
     expect(task(out, 'task_pay').documentation).toBeUndefined();
+  });
+});
+
+describe('stripDecisionSection — only the generator\'s own lines go', () => {
+  const section = `${DECISION_DOC_BEGIN}\nRule 1: x\n${DECISION_DOC_END}`;
+
+  test('an author line that merely starts like the marker is author text', () => {
+    const own = '=== BEGIN generated: DMN decision notes from the workshop\nkeep me';
+    expect(stripDecisionSection(own)).toBe(own);
+    expect(stripDecisionSection(`${own}\n\n${section}`)).toBe(own);
+    expect(decisionSectionBody(own)).toBeNull();
+  });
+
+  test('a BEGIN without END ends at the first blank line: the author text after it survives', () => {
+    expect(stripDecisionSection(`mine\n\n${DECISION_DOC_BEGIN}\nRule 1: x\n\nstill mine\nand this`)).toBe('mine\n\nstill mine\nand this');
+  });
+
+  test('a BEGIN without END, then a full section: the author text between them survives', () => {
+    const text = `${DECISION_DOC_BEGIN}\nRule 1: half\n\nbetween the two\n\n${section}`;
+    expect(stripDecisionSection(text)).toBe('between the two');
+    const text2 = `${DECISION_DOC_BEGIN}\nRule 1: half\n${section}`;
+    expect(stripDecisionSection(text2)).toBe('');
+  });
+
+  test('CRLF documentation (a Windows editor) is handled like LF', () => {
+    expect(stripDecisionSection(`mine\r\n\r\n${section.replace(/\n/g, '\r\n')}`)).toBe('mine');
+  });
+
+  test('a generated section contains no blank line and no marker line (the invariant the split relies on)', () => {
+    for (const dc of [claimDc(), load('dmn/discount-decision.json')]) {
+      for (const ref of ['dec_approvalLevel', 'dec_finalPercentage', 'dec_missing']) {
+        const lc = claimProcess();
+        task(lc).decisionRef = ref;
+        const body = task(applyDecisionDocumentation(lc, [dc])).documentation.split('\n').slice(1, -1);
+        for (const line of body) {
+          expect(line.trim()).not.toBe('');
+          expect([DECISION_DOC_BEGIN, DECISION_DOC_END]).not.toContain(line);
+        }
+      }
+    }
+  });
+
+  test('a decision name with a line break and the END marker cannot split the section: regenerating is byte-identical', () => {
+    const dc = claimDc();
+    dc.nodes.find((n) => n.id === 'dec_approvalLevel').name = `Approval\n${DECISION_DOC_END}\nlevel`;
+    const lc = claimProcess();
+    task(lc).documentation = 'Owned by claims.';
+    const once = applyDecisionDocumentation(lc, [dc]);
+    const twice = applyDecisionDocumentation(once, [dc]);
+    expect(task(twice).documentation).toBe(task(once).documentation);
+    expect(task(once).documentation).toContain(`Decision: Approval ${DECISION_DOC_END} level (dec_approvalLevel)`);
+    expect(task(once).documentation.split('\n').filter((l) => l === DECISION_DOC_END)).toHaveLength(1);
   });
 });
 
