@@ -11,9 +11,12 @@ const outPath = join(repoRoot, outName);
 
 // What goes into the bundle
 // -------------------------
-// SKILL.md tells the skill to run exactly the CLIs it names as `node <dir>/<file>.js` (today
-// bpmn/pipeline.js, bpmn/import.js and bpmn/redesign-cli.js). Those are the bundle's entry points,
-// and the scripts/ part of the bundle is their static import closure (`import … from './x.js'`,
+// The skill runs exactly the CLIs its instructions name as `node <dir>/<file>.js` — in SKILL.md and
+// in the reference files SKILL.md points to, which ship in the bundle and which progressive
+// disclosure means the skill reads instead of SKILL.md for anything beyond the core commands (today
+// bpmn/pipeline.js, bpmn/import.js, bpmn/redesign-cli.js, dmn/pipeline.js, dmn/import.js and
+// scenarios/pipeline.js). Those are the bundle's entry points, minus `NOT_SKILL_CLIS`, and the
+// scripts/ part of the bundle is their static import closure (`import … from './x.js'`,
 // `export … from`, and `import('./x.js')` with a literal), plus config.json and package.json,
 // which shared/utils.js and shared/version.js read at runtime. references/*.md|json|jsonld (no
 // omg-spec/, no review-set/) ship as before: resource-paths.js resolves the schemas, the prompt
@@ -50,9 +53,20 @@ export function includeReferenceFile(rel, name) {
 
 const NODE_CLI_RE = /\bnode\s+((?:[\w-]+\/)*[\w-]+\.js)\b/g;
 
-/** The CLIs SKILL.md tells the skill to run, as paths relative to scripts/, first-seen order. */
-export function skillEntryPoints(skillMdText) {
-  return [...new Set([...skillMdText.matchAll(NODE_CLI_RE)].map(m => m[1]))];
+// CLIs the reference files document but the skill never runs: both import agents/ and are started
+// from a repository checkout or the npm package (references/api-reference.md, references/cli.md).
+// Named here rather than skipped silently, so a new command in a reference file either reaches the
+// bundle or fails the build.
+export const NOT_SKILL_CLIS = new Set(['http-server.js', 'mcp-bpmn-server.js']);
+
+/**
+ * The CLIs the given instruction texts (SKILL.md, then the bundled reference files) tell the skill
+ * to run, as paths relative to scripts/, first-seen order. A `scripts/` prefix (a command written
+ * for the repository root) is dropped; `NOT_SKILL_CLIS` are left out.
+ */
+export function skillEntryPoints(...texts) {
+  const found = texts.flatMap(t => [...t.matchAll(NODE_CLI_RE)].map(m => m[1].replace(/^scripts\//, '')));
+  return [...new Set(found)].filter(e => !NOT_SKILL_CLIS.has(e));
 }
 
 const IMPORT_RES = [
@@ -94,7 +108,10 @@ export function reachableModules(scriptsDir, entries) {
 export function collectIncludes(root = repoRoot) {
   const scriptsDir = join(root, 'scripts');
   const referencesDir = join(root, 'references');
-  const entries = skillEntryPoints(readFileSync(join(root, 'SKILL.md'), 'utf8'));
+  const references = walk(referencesDir, (full, name) => includeReferenceFile(relative(referencesDir, full), name));
+  const instructionTexts = [join(root, 'SKILL.md'), ...references.filter(f => f.endsWith('.md'))]
+    .map(f => readFileSync(f, 'utf8'));
+  const entries = skillEntryPoints(...instructionTexts);
   if (entries.length === 0) throw new Error('build-skill: SKILL.md names no `node <file>.js` entry point');
   const modules = reachableModules(scriptsDir, entries);
   const refused = modules.filter(rel => !includeScriptFile(rel, rel.split('/').pop()));
@@ -105,8 +122,7 @@ export function collectIncludes(root = repoRoot) {
   return [
     'SKILL.md',
     ...[...modules, 'config.json', 'package.json'].map(rel => `scripts/${rel}`),
-    ...walk(referencesDir, (full, name) => includeReferenceFile(relative(referencesDir, full), name))
-      .map(f => toPosix(relative(root, f))),
+    ...references.map(f => toPosix(relative(root, f))),
   ];
 }
 

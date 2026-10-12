@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import {
   hasSegment, includeScriptFile, includeReferenceFile,
-  collectIncludes, skillEntryPoints, relativeImports, reachableModules,
+  collectIncludes, skillEntryPoints, relativeImports, reachableModules, NOT_SKILL_CLIS,
 } from './build-skill.mjs';
 
 // The skill bundle's exclusions must hold on Windows too: a substring test for '/node_modules/'
@@ -60,10 +60,30 @@ describe('build-skill — the bundle is closed under its own imports', () => {
   const files = collectIncludes(repoRoot);
   const bundled = new Set(files);
 
-  test('every CLI SKILL.md tells the skill to run is bundled', () => {
-    const entries = skillEntryPoints(readFileSync(path.join(repoRoot, 'SKILL.md'), 'utf8'));
-    expect(entries).toEqual(expect.arrayContaining(['bpmn/pipeline.js', 'bpmn/import.js', 'bpmn/redesign-cli.js']));
+  // SKILL.md keeps only the core commands; the rest moved into the reference files it links to
+  // (progressive disclosure). Discovery reads both, so every CLI documented anywhere in the
+  // bundle's instructions ships.
+  const instructionTexts = ['SKILL.md', ...files.filter(f => f.startsWith('references/') && f.endsWith('.md'))]
+    .map(f => readFileSync(path.join(repoRoot, f), 'utf8'));
+
+  test('every CLI SKILL.md or a bundled reference file tells the skill to run is bundled', () => {
+    const entries = skillEntryPoints(...instructionTexts);
+    expect(entries).toEqual(expect.arrayContaining([
+      'bpmn/pipeline.js', 'bpmn/import.js', 'bpmn/redesign-cli.js',
+      'dmn/pipeline.js', 'dmn/import.js', 'scenarios/pipeline.js',
+    ]));
     for (const e of entries) expect(bundled).toContain(`scripts/${e}`);
+  });
+
+  test('the server CLIs the reference files document are named as not run by the skill, never bundled', () => {
+    expect([...NOT_SKILL_CLIS].sort()).toEqual(['http-server.js', 'mcp-bpmn-server.js']);
+    for (const e of NOT_SKILL_CLIS) expect(bundled).not.toContain(`scripts/${e}`);
+  });
+
+  test('skillEntryPoints reads several texts, drops a scripts/ prefix and the server CLIs', () => {
+    expect(skillEntryPoints('run `node bpmn/pipeline.js a b`', 'or `node scripts/dmn/import.js x`',
+      'start `node scripts/http-server.js` and `node mcp-bpmn-server.js`', 'again `node bpmn/pipeline.js`'))
+      .toEqual(['bpmn/pipeline.js', 'dmn/import.js']);
   });
 
   test('every module a bundled module imports is bundled too', () => {
@@ -117,6 +137,13 @@ describe('build-skill — the bundle is closed under its own imports', () => {
   test('an entry point that reaches an excluded module aborts the build', () => {
     const root = fakeRepo("import { x } from './agents/x.js';\n", { 'agents/x.js': 'export const x = 1;\n' });
     expect(() => collectIncludes(root)).toThrow(/agents\/x\.js/);
+  });
+
+  test('a CLI named only in a reference file becomes an entry point', () => {
+    const root = fakeRepo("export const e = 1;\n", { 'other.js': "import { y } from './dep.js';\n", 'dep.js': 'export const y = 1;\n' });
+    writeFileSync(path.join(root, 'references', 'guide.md'), 'Run `node other.js in out`.');
+    expect(collectIncludes(root)).toEqual(expect.arrayContaining(
+      ['scripts/entry.js', 'scripts/other.js', 'scripts/dep.js', 'references/guide.md']));
   });
 
   test('an import of a file that does not exist aborts the build', () => {

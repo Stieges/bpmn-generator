@@ -160,15 +160,16 @@ Copy `SKILL.md` to `.claude/skills/operative/bpmn-prozess-erstellen.md` and adju
 — rebuild on demand, not committed). The ZIP can be shared with other projects and contains
 everything needed:
 - `SKILL.md` — Skill definition
-- `references/` — Schema, prompt templates, inline template
-- `scripts/` — the modules the CLIs named in `SKILL.md` import (`bpmn/pipeline.js`,
-  `bpmn/import.js`, `bpmn/redesign-cli.js` and their import closure), `config.json`, `package.json`
+- `references/` — schemas, prompt templates, the modelling, DMN, CLI, round-trip and redesign
+  guides SKILL.md links to, the inline template
+- `scripts/` — the modules the CLIs named in `SKILL.md` and its reference files import
+  (`bpmn/pipeline.js`, `bpmn/import.js`, `bpmn/redesign-cli.js`, `dmn/pipeline.js`,
+  `dmn/import.js`, `scenarios/pipeline.js` and their import closure), `config.json`, `package.json`
 
-The bundle holds what the skill runs and nothing else: the orchestrator, the HTTP and MCP servers,
-`agents/` and the DMN and scenario CLIs need a checkout or the npm package, `robustness/` a
-checkout. The
-build walks the imports from every entry point and aborts if one reaches a module it does not
-bundle. `npm install` inside the unpacked `scripts/` is still required.
+The bundle holds what the skill runs and nothing else: the orchestrator, the HTTP and MCP servers
+and `agents/` need a checkout or the npm package, `robustness/` a checkout. The build walks the
+imports from every entry point and aborts if one reaches a module it does not bundle.
+`npm install --omit=dev` inside the unpacked `scripts/` is still required.
 
 ## Module Architecture
 
