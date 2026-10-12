@@ -20,13 +20,57 @@ import { modelerAgent } from './agents/modeler.js';
 import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
-import { validateLogicCoreSchema } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, formatSchemaErrors } from './bpmn/schema-gate.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { isMainModule } from './shared/entry-point.js';
 
+const ts = () => new Date().toISOString();
+
+/**
+ * One Modeler call whose output passes the schema gate — the rule "no LLM output downstream without
+ * schema validation" holds for extract, refine and amend alike, not only for the first extraction.
+ * A rejected output gets up to `options.maxSchemaRepairs` (default 1) repair attempts: the gate's
+ * errors become the issues of the refinement prompt, with the rejected JSON as the current one —
+ * the same prompt the reviewer loop uses, so no second prompt has to agree with the schema. Every
+ * rejection is in `state.history` (`agent: 'schema-gate'`). Returns the valid Logic-Core; throws
+ * when none came back, with `state.logicCore`, `reviewIssues` and `layoutFeedback` as before the
+ * call, so a caller in a loop can go on with the last valid model.
+ */
+async function gatedModelerCall(state, phase) {
+  const repairs = state.options.maxSchemaRepairs ?? 1;
+  const saved = { logicCore: state.logicCore, reviewIssues: state.reviewIssues, layoutFeedback: state.layoutFeedback };
+  const restore = () => Object.assign(state, saved);
+  try {
+    let { logicCore } = await modelerAgent(state);
+    for (let attempt = 0; ; attempt++) {
+      const check = validateLogicCoreSchema(logicCore);
+      if (check.valid) {
+        Object.assign(state, { reviewIssues: saved.reviewIssues, layoutFeedback: saved.layoutFeedback });
+        return logicCore;
+      }
+      state.history.push({ agent: 'schema-gate', phase, attempt, errorCount: check.errors.length,
+        errors: formatSchemaErrors(check.errors, 5), ts: ts() });
+      if (attempt >= repairs) throw new Error(`Logic-Core failed schema validation:\n${formatSchemaErrors(check.errors)}`);
+      // The refinement prompt (modeler.js detectMode: issues and a current model, no layout feedback).
+      Object.assign(state, {
+        logicCore,
+        reviewIssues: check.errors.map((e) => ({ severity: 'ERROR', problem: `Schema: ${formatSchemaErrors([e])}` })),
+        layoutFeedback: [],
+      });
+      ({ logicCore } = await modelerAgent(state));
+      state.history.push({ agent: 'modeler', phase: 'schema-repair', of: phase, attempt: attempt + 1, ts: ts() });
+    }
+  } catch (err) {
+    restore();
+    throw err;
+  }
+}
+
 /**
  * @param {string|object} input - process description (needs `options.llmProvider`) or Logic-Core
- * @param {object} [options] - besides the loop bounds, `llmProvider`, `ruleProfile` and `mode`, the
+ * @param {object} [options] - besides the loop bounds (`maxReviewIterations`, `maxLayoutIterations`,
+ *   `maxSchemaRepairs` — repair attempts for a Modeler output the schema gate rejects, default 1),
+ *   `llmProvider`, `ruleProfile` and `mode`, the
  *   per-call layout options `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows` and
  *   `foreignShapeRepair`, which the layout agent forwards to runPipeline unchanged. Callers on a client surface gate them first
  *   (`validateLayoutOptions` in bpmn/schema-gate.js).
@@ -54,8 +98,7 @@ export async function orchestrate(input, options = {}) {
   // Phase 1: Modeler (only when text input + LLM available)
   if (state.userText && options.llmProvider) {
     try {
-      const result = await modelerAgent(state);
-      state.logicCore = result.logicCore;
+      state.logicCore = await gatedModelerCall(state, 'extract');
       state.history.push({ agent: 'modeler', phase: 'extract', ts: new Date().toISOString() });
     } catch (err) {
       state.history.push({ agent: 'modeler', phase: 'extract', error: err.message, ts: new Date().toISOString() });
@@ -67,13 +110,13 @@ export async function orchestrate(input, options = {}) {
     throw new Error('No logicCore — provide text + llmProvider, or a logicCore object');
   }
 
-  // Schema-strict gate: catch malformed Logic-Core (especially LLM-generated) before
-  // it reaches reviewer/layout phases. Structural defects here are the LLM's fault,
-  // not the pipeline's, and we want them caught at the boundary.
+  // Schema-strict gate for a Logic-Core passed in directly (a Modeler output has passed it in
+  // gatedModelerCall already): caught at the boundary, before reviewer and layout; not repaired —
+  // there is no LLM to ask, and the caller's input is the caller's to fix.
   const schemaCheck = validateLogicCoreSchema(state.logicCore);
   if (!schemaCheck.valid) {
     state.history.push({ agent: 'schema-gate', phase: 'reject', errors: schemaCheck.errors, ts: new Date().toISOString() });
-    throw new Error(`Logic-Core failed schema validation: ${JSON.stringify(schemaCheck.errors.slice(0, 3))}`);
+    throw new Error(`Logic-Core failed schema validation:\n${formatSchemaErrors(schemaCheck.errors)}`);
   }
 
   // Phase 2: Review loop
@@ -101,8 +144,7 @@ export async function orchestrate(input, options = {}) {
     // Try to fix issues via Modeler (requires LLM)
     if (options.llmProvider) {
       try {
-        const fix = await modelerAgent(state);
-        state.logicCore = fix.logicCore;
+        state.logicCore = await gatedModelerCall(state, 'refine');
         state.history.push({ agent: 'modeler', phase: 'refine', iteration: i, ts: new Date().toISOString() });
       } catch (err) {
         state.history.push({ agent: 'modeler', phase: 'refine', iteration: i, error: err.message, ts: new Date().toISOString() });
@@ -142,8 +184,7 @@ export async function orchestrate(input, options = {}) {
     if (options.llmProvider) {
       try {
         state.layoutFeedback = structural;
-        const amend = await modelerAgent(state);
-        state.logicCore = amend.logicCore;
+        state.logicCore = await gatedModelerCall(state, 'amend');
         state.layoutFeedback = []; // Reset after amendment
         state.history.push({ agent: 'modeler', phase: 'amend', iteration: i, ts: new Date().toISOString() });
       } catch (err) {

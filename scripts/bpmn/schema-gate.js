@@ -46,9 +46,11 @@ export function validateLogicCoreSchema(input) {
  */
 export function formatSchemaErrors(errors, max = 10) {
   const detail = (p = {}) => p.additionalProperty ?? p.missingProperty ?? p.allowedValues?.join(', ') ?? null;
+  // Paths and property names come from the rejected document (an LLM's, a client's): bounded.
   const lines = errors.slice(0, max).map((e) => {
     const d = detail(e.params);
-    return `${e.path}: ${e.message}${d !== null && !String(e.message).includes(`'${d}'`) ? ` (${d})` : ''}`;
+    const extra = d !== null && !String(e.message).includes(`'${d}'`) ? ` (${boundText(String(d), RESPONSE_TEXT_MAX)})` : '';
+    return `${boundText(String(e.path), RESPONSE_TEXT_MAX)}: ${e.message}${extra}`;
   });
   if (errors.length > max) lines.push(`… and ${errors.length - max} more`);
   return lines.join('\n');

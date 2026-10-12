@@ -295,6 +295,98 @@ describe('orchestrate', () => {
   });
 });
 
+// Every Logic-Core the Modeler returns passes the schema gate — extract, refine and amend alike —
+// and a rejected one gets maxSchemaRepairs (default 1) repair attempts with the gate's errors.
+describe('orchestrate — schema gate on every Modeler output', () => {
+  // An external partner as a pool with no nodes, and a message flow named with `label`: what an LLM
+  // following the old collaboration example produced.
+  const badCollab = {
+    pools: [
+      { id: 'Pool_Bank', name: 'Bank', nodes: [{ id: 'start', type: 'startEvent', name: 'Application received', marker: 'message' },
+        { id: 'end', type: 'endEvent', name: 'Done' }], edges: [{ id: 'f1', source: 'start', target: 'end' }] },
+      { id: 'Pool_Customer', name: 'Customer', nodes: [], edges: [] },
+    ],
+    messageFlows: [{ id: 'mf1', source: 'Pool_Customer', target: 'start', label: 'Application' }],
+  };
+  const goodCollab = {
+    pools: [badCollab.pools[0]],
+    collapsedPools: [{ id: 'Pool_Customer', name: 'Customer' }],
+    messageFlows: [{ id: 'mf1', source: 'Pool_Customer', target: 'start', name: 'Application' }],
+  };
+  // Answers in order, then the last one again; records every system prompt it was given.
+  const scripted = (...answers) => {
+    const prompts = [];
+    const llm = async (systemPrompt) => {
+      prompts.push(systemPrompt);
+      return JSON.stringify(answers[Math.min(prompts.length - 1, answers.length - 1)]);
+    };
+    return { llm, prompts };
+  };
+
+  test('extract rejected, the repair attempt valid: the run succeeds with the repaired model', async () => {
+    const { llm, prompts } = scripted(badCollab, goodCollab);
+    const result = await orchestrate('A bank receives a credit application from a customer.', { llmProvider: llm });
+    expect(result.logicCore.collapsedPools).toEqual(goodCollab.collapsedPools);
+    expect(result.bpmnXml).toMatch(/definitions/);
+    expect(result.history.find((h) => h.agent === 'schema-gate')).toMatchObject({ phase: 'extract', attempt: 0 });
+    expect(result.history.some((h) => h.agent === 'modeler' && h.phase === 'schema-repair')).toBe(true);
+    // The repair prompt is the refinement prompt, carrying the invalid JSON and the real causes.
+    expect(prompts[1]).toContain('/messageFlows/0: must NOT have additional properties (label)');
+    expect(prompts[1]).toContain('/pools/1/nodes: must NOT have fewer than 1 items');
+    expect(prompts[1]).toContain('"Pool_Customer"');
+  });
+
+  test('extract still rejected after the repair: abort, naming the real causes only', async () => {
+    const { llm, prompts } = scripted(badCollab);
+    const err = await orchestrate('text', { llmProvider: llm }).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain('Logic-Core failed schema validation');
+    expect(err.message).toContain('/messageFlows/0');
+    expect(err.message).toContain('/pools/1/nodes');
+    expect(err.message).not.toContain("required property 'nodes'");
+    expect(prompts).toHaveLength(2);
+  });
+
+  test('maxSchemaRepairs: 0 aborts on the first rejection', async () => {
+    const { llm, prompts } = scripted(badCollab);
+    await expect(orchestrate('text', { llmProvider: llm, maxSchemaRepairs: 0 })).rejects.toThrow('failed schema validation');
+    expect(prompts).toHaveLength(1);
+  });
+
+  test('a refinement the gate rejects is not used: the last valid model goes on to layout', async () => {
+    // Schema-valid but unsound (no start or end event), so the reviewer asks for a refinement; the
+    // LLM answers with an invalid collaboration every time.
+    const unsound = { nodes: [{ id: 't1', type: 'task', name: 'Do stuff' }], edges: [] };
+    const { llm } = scripted(badCollab);
+    const result = await orchestrate(JSON.parse(JSON.stringify(unsound)), { llmProvider: llm, maxReviewIterations: 2 });
+    expect(result.logicCore).toEqual(unsound);
+    expect(result.history.some((h) => h.agent === 'schema-gate' && h.phase === 'refine')).toBe(true);
+    expect(result.history.some((h) => h.agent === 'modeler' && h.phase === 'refine' && h.error)).toBe(true);
+    expect(result.history.some((h) => h.agent === 'layout')).toBe(true);
+    expect(result.compliance).toBeDefined();
+  });
+
+  test('an amendment the gate rejects is not used either', async () => {
+    // The layout review asks for a structural change; every amendment comes back invalid.
+    const lc = loadFixture('simple-approval.json');
+    const llm = async (_system, user) => (String(user).startsWith('SVG diagram')
+      ? JSON.stringify({ feedback: [{ issue: 'Too long', suggestion: 'Split it', requiresLogicCoreChange: true }] })
+      : JSON.stringify(badCollab));
+    const result = await orchestrate(JSON.parse(JSON.stringify(lc)), { llmProvider: llm, enableLayoutReview: true });
+    expect(result.logicCore).toEqual(lc);
+    expect(result.history.some((h) => h.agent === 'schema-gate' && h.phase === 'amend')).toBe(true);
+    expect(result.history.some((h) => h.agent === 'modeler' && h.phase === 'amend' && h.error)).toBe(true);
+    expect(result.bpmnXml).toMatch(/definitions/);
+  });
+
+  test('a Logic-Core passed in directly is not repaired: the gate rejects it with the real causes', async () => {
+    const err = await orchestrate(JSON.parse(JSON.stringify(badCollab))).catch((e) => e);
+    expect(err.message).toContain('Logic-Core failed schema validation');
+    expect(err.message).toContain('/messageFlows/0');
+    expect(err.message).not.toContain("required property 'nodes'");
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════
 // §6  LLM Provider (unit)
 // ═══════════════════════════════════════════════════════════════
