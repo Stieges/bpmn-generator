@@ -1,7 +1,40 @@
 # Prompt Templates for BPMN Intent Extraction v2.0
 
+Load this when extracting, reviewing or amending a Logic-Core. The blocks inside the code fences are
+prompt text: placeholders such as `{{USER_TEXT}}` are filled in, the rest is used verbatim.
+
+## Contents
+
+- [Two-Agent Pattern (production quality)](#two-agent-pattern-production-quality)
+- [Master Extraction Prompt](#master-extraction-prompt)
+- [Refinement / Correction Prompt](#refinement--correction-prompt)
+- [Amendment Prompt (editing existing diagrams)](#amendment-prompt-editing-existing-diagrams)
+- [Chat Discovery Prompt](#chat-discovery-prompt)
+- [Reviewer Agent Prompt](#reviewer-agent-prompt)
+- [Method & Style Validation Rules (for Reviewer Agent)](#method--style-validation-rules-for-reviewer-agent)
+- [Few-Shot Examples for Complex Patterns](#few-shot-examples-for-complex-patterns)
+- [Enterprise Few-Shot Patterns (K5)](#enterprise-few-shot-patterns-k5)
+
 These templates are used in the **Intent Extraction Phase** of the pipeline.
 Claude uses these to convert unstructured process descriptions into a Logic-Core JSON.
+
+---
+
+## Two-Agent Pattern (production quality)
+
+For enterprise output, run a Modeler and a Reviewer in a loop:
+
+```
+Modeler:   Text → Logic-Core JSON (draft)             — Master Extraction Prompt
+     ↓
+Reviewer:  Logic-Core → Issues JSON                   — Reviewer Agent Prompt
+     ↓
+  No issues? → run the pipeline (pre-delivery gate in SKILL.md)
+  Issues?    → Modeler applies fixes → repeat (max 3) — Refinement / Correction Prompt
+```
+
+The Reviewer complements the rule engine; it does not replace it. The pipeline's `--strict` run
+remains the gate.
 
 ---
 
