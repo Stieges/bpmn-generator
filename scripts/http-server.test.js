@@ -4,11 +4,11 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup, resolveClientLlmConfig,
-  apiKeyMatches, rateLimitKey, rateLimitAllows, _rateBucketCount } from './http-server.js';
+  apiKeyMatches, rateLimitKey, rateLimitAllows, _rateBucketCount, _setFrontendDir } from './http-server.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { getAuditPath } from './audit.js';
 
@@ -828,5 +828,49 @@ describe('visualRefinement over HTTP', () => {
     const xml = (await res.json()).bpmnXml;
     expect(xml).toBe(lib.bpmnXml);
     expect(xml).not.toBe(none.bpmnXml);
+  });
+});
+
+// The web frontend is not in the repository or the npm package; GET / used to fail on the
+// missing index.html instead of answering.
+describe('GET / — optional web frontend', () => {
+  let dir;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'frontend-')); });
+  afterEach(() => { _setFrontendDir(null); rmSync(dir, { recursive: true, force: true }); });
+
+  test('without a frontend directory: 404 with a short hint, no stack, no path', async () => {
+    _setFrontendDir(join(dir, 'absent'));
+    for (const path of ['/', '/index.html']) {
+      const res = await realFetch(`${baseUrl}${path}`);
+      expect(res.status).toBe(404);
+      const text = await res.text();
+      const data = JSON.parse(text);
+      expect(data.error).toBe('Not Found');
+      expect(data.message).toMatch(/no web frontend/i);
+      expect(data.message).toMatch(/\/api\/v1\//);
+      expect(text).not.toContain(dir);
+      expect(text).not.toMatch(/ENOENT|at \w+ \(|frontend\//);
+    }
+  });
+
+  test('the server keeps answering after a request for the missing frontend', async () => {
+    _setFrontendDir(join(dir, 'absent'));
+    await realFetch(`${baseUrl}/`);
+    const res = await realFetch(`${baseUrl}/health`);
+    expect(res.status).toBe(200);
+  });
+
+  test('with a frontend directory: serves index.html and static files', async () => {
+    mkdirSync(join(dir, 'css'));
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>UI</title>');
+    writeFileSync(join(dir, 'css', 'app.css'), 'body{}');
+    _setFrontendDir(dir);
+    const res = await realFetch(`${baseUrl}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/html');
+    expect(await res.text()).toBe('<!doctype html><title>UI</title>');
+    const css = await realFetch(`${baseUrl}/static/css/app.css`);
+    expect(css.status).toBe(200);
+    expect(css.headers.get('content-type')).toBe('text/css');
   });
 });

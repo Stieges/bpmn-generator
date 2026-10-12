@@ -475,6 +475,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disclosed.
 
 ### Fixed
+- **`GET /` on the HTTP server answers when no web frontend is installed.** The server read
+  `index.html` from a frontend directory that neither the repository nor the npm package contains,
+  and the failed read was never answered. It now returns `404` with a short JSON hint pointing to
+  `/api/v1/` and `/health` (no stack trace, no server path); an installed frontend is still served.
 - **A non-interrupting event-subprocess start event is non-interrupting in the BPMN XML (#83).**
   `isInterrupting: false` on a `startEvent` was drawn as a dashed ring in our SVG and written
   nowhere, so bpmn.io and Camunda showed an interrupting start event. `bpmn-xml.js` now writes
