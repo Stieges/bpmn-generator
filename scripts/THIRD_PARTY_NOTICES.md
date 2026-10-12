@@ -41,6 +41,25 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## dmn-js-drd 17.12.3
+
+Source: https://github.com/bpmn-io/dmn-js (`packages/dmn-js-drd/src/draw/PathMap.js`,
+`packages/dmn-js-drd/src/draw/DrdRenderer.js`), read from the published package
+`dmn-js-drd@17.12.3` (`lib/draw/`).
+
+Derived material in this package:
+
+- `dmn/pathmap.js` — the `KNOWLEDGE_SOURCE` and `BUSINESS_KNOWLEDGE_MODEL` path templates of
+  `PathMap.js`, its `getScaledPath`, and the scale and start position `DrdRenderer.js` passes for
+  each (verbatim data).
+- `dmn/svg.js` — the marker shapes, reference points and scales of `DrdRenderer.js`'s
+  `createMarker` (information, knowledge and authority requirement ends; also recorded in
+  `config.json → dmn.edge`) and the 22 px corner radius of an input data shape.
+
+This package contains neither dmn-js's rendering code nor its watermark; it draws its own SVG.
+dmn-js-drd is distributed under the same bpmn.io license as bpmn-js, quoted in full above
+(Copyright (c) 2014-present Camunda Services GmbH).
+
 ## diagram-js 15.3.0
 
 Source: https://github.com/bpmn-io/diagram-js (`lib/util/RenderUtil.js`, `lib/util/Text.js`).
@@ -48,7 +67,7 @@ Source: https://github.com/bpmn-io/diagram-js (`lib/util/RenderUtil.js`, `lib/ut
 Derived material in this package:
 
 - `bpmn/svg.js` — `connectionPath`, the rounded-corner path of `RenderUtil.js` `drawPath` / `createLine`.
-- `bpmn/coordinates.js` — `edgeLabelLayout`, the line breaking of `Text.js` (`layoutNext`, `semanticShorten`).
+- `shared/text-layout.js` — `layoutText`, the line breaking of `Text.js` (`layoutNext`, `semanticShorten`), used by `bpmn/coordinates.js` (`edgeLabelLayout`) and the DMN renderers.
 
 ```
 The MIT License (MIT)
