@@ -218,6 +218,8 @@ export async function pinnedRequest(raw, {
         resolvePromise({
           ok: status >= 200 && status < 300,
           status,
+          // The fetch Response subset callers read: header lookup (Retry-After), body as text or JSON.
+          headers: { get: (name) => res.headers[String(name).toLowerCase()] ?? null },
           text: async () => text,
           json: async () => JSON.parse(text),
         });

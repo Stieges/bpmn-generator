@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup, resolveClientLlmConfig,
   apiKeyMatches, rateLimitKey, rateLimitAllows, _rateBucketCount, _setFrontendDir } from './http-server.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
+import { CFG } from './shared/utils.js';
 import { getAuditPath } from './audit.js';
 
 let baseUrl;
@@ -163,6 +164,30 @@ describe('resolveEnvLlmConfig', () => {
       apiKey: 'sk-test',
       model: 'qwen2.5',
     });
+  });
+});
+
+describe('LLM_EXTRA_BODY', () => {
+  afterEach(() => { delete process.env.LLM_EXTRA_BODY; });
+
+  test('the operator\'s extra request fields join the server\'s own LLM config', () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    process.env.LLM_EXTRA_BODY = '{"chat_template_kwargs":{"enable_thinking":false}}';
+    expect(resolveEnvLlmConfig().extraBody).toEqual({ chat_template_kwargs: { enable_thinking: false } });
+  });
+
+  test('a value that is not a JSON object is refused, not ignored', () => {
+    process.env.OPENAI_API_KEY = 'sk-test';
+    for (const bad of ['not json', '[1]', '"x"']) {
+      process.env.LLM_EXTRA_BODY = bad;
+      expect(() => resolveEnvLlmConfig()).toThrow('LLM_EXTRA_BODY must be a JSON object');
+    }
+  });
+
+  test('a client cannot pass extra request fields through llmConfig', async () => {
+    const r = await resolveClientLlmConfig({ apiKey: 'k', model: 'm', extraBody: { anything: true } }, {});
+    expect(r.config).toBeDefined();
+    expect(r.config.extraBody).toBeUndefined();
   });
 });
 
@@ -538,6 +563,11 @@ describe('LLM provider failures are not reflected to the client', () => {
   const post = (path, body) => realFetch(`${baseUrl}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
+  // A 500 is retried with backoff (config.json → llm.retry); what is fenced here is the error the
+  // client sees after the last attempt, so one attempt is enough and nothing waits.
+  let savedRetry;
+  beforeAll(() => { savedRetry = CFG.llm.retry; CFG.llm.retry = { ...savedRetry, retries: 0 }; });
+  afterAll(() => { CFG.llm.retry = savedRetry; });
   beforeEach(() => {
     _resetRateLimit();
     process.env.OPENAI_API_KEY = 'env-key';
