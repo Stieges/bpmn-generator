@@ -2277,30 +2277,41 @@ function repairMessageFlowLabels(coordMap, lc) {
 /**
  * Move every participant from `index + 1` on (participantBoxes, sorted by y) down by `delta` px, with
  * everything it owns: its poolCoords and lane bands, its nodes (at every depth, artifacts
- * included) and their node labels, its sequence flows and their labels, and the associations of
- * its nodes. Message flows are not moved — the caller routes them again. In place.
+ * included) and their node labels, and its sequence flows and their labels. An association moves
+ * with them when both its ends moved; when only one did (an artifact in one participant annotating
+ * a node in another), its route is derived again from the two shapes the way §5.4 places every
+ * association (clipStraight), so neither end comes loose. Message flows are not moved — the caller
+ * routes them again. In place.
  */
 function shiftParticipantsBelow(coordMap, lc, boxes, index, delta) {
   const { coords, laneCoords, poolCoords, edgeCoords, edgeLabels, nodeLabels } = coordMap;
   const down = (b) => (b ? { ...b, y: b.y + delta } : b);
   const downPts = (pts) => (pts ? pts.map(p => ({ ...p, y: p.y + delta })) : pts);
   const laneIds = (lanes) => (lanes || []).flatMap(l => [l.id, ...laneIds(l.childLanes)]);
+  const moved = new Set();
   for (const p of boxes.slice(index + 1)) {
     if (poolCoords[p.id]) poolCoords[p.id] = down(poolCoords[p.id]);
     if (!p.proc) continue;
     for (const id of laneIds(p.proc.lanes)) if (laneCoords[id]) laneCoords[id] = down(laneCoords[id]);
-    const nodeIds = new Set(flattenProcessNodes(p.proc.nodes).map(n => n.id));
-    for (const id of nodeIds) {
-      if (coords[id]) coords[id] = down(coords[id]);
-      if (nodeLabels?.[id]) nodeLabels[id] = down(nodeLabels[id]);
+    for (const n of flattenProcessNodes(p.proc.nodes)) {
+      moved.add(n.id);
+      if (coords[n.id]) coords[n.id] = down(coords[n.id]);
+      if (nodeLabels?.[n.id]) nodeLabels[n.id] = down(nodeLabels[n.id]);
     }
-    const edgeIds = [
-      ...flattenProcessEdges(p.proc).map(e => e.id),
-      ...(lc.associations || []).filter(a => nodeIds.has(a.source) || nodeIds.has(a.target)).map(a => a.id),
-    ];
-    for (const id of edgeIds) {
-      if (edgeCoords[id]) edgeCoords[id] = downPts(edgeCoords[id]);
-      if (edgeLabels[id]) edgeLabels[id] = down(edgeLabels[id]);
+    for (const e of flattenProcessEdges(p.proc)) {
+      if (edgeCoords[e.id]) edgeCoords[e.id] = downPts(edgeCoords[e.id]);
+      if (edgeLabels[e.id]) edgeLabels[e.id] = down(edgeLabels[e.id]);
+    }
+  }
+  // Associations once each, after every participant moved: an association between two moved
+  // participants is shifted once, not once per participant.
+  for (const a of (lc.associations || [])) {
+    const both = moved.has(a.source) && moved.has(a.target);
+    if (both) {
+      if (edgeCoords[a.id]) edgeCoords[a.id] = downPts(edgeCoords[a.id]);
+      if (edgeLabels[a.id]) edgeLabels[a.id] = down(edgeLabels[a.id]);
+    } else if ((moved.has(a.source) || moved.has(a.target)) && coords[a.source] && coords[a.target]) {
+      edgeCoords[a.id] = clipStraight(coords[a.source], coords[a.target]);
     }
   }
 }
