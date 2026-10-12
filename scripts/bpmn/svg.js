@@ -4,7 +4,7 @@
  */
 
 import { assignEdgeIds, resolveFlowSemantics } from './topology.js';
-import { isEvent, isGateway, isActivity, isDataArtifact, nodeFieldSpec } from './types.js';
+import { isEvent, isGateway, isActivity, isDataArtifact, nodeFieldSpec, writesIsInterrupting } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
 import { esc, rn, wrapText } from '../shared/utils.js';
 import { edgeLabelBox, edgeLabelTextStyle, textAnnotationTextStyle } from './coordinates.js';
@@ -237,7 +237,7 @@ function generateSvg(lc, coordMap) {
     for (const child of node.nodes) {
       const cc = coords[child.id];
       if (!cc) continue;
-      out.push(renderNode(child, cc, tx, ty, nodeLabels[child.id]));
+      out.push(renderNode(child, cc, tx, ty, nodeLabels[child.id], node));
       if (child.isExpanded && child.nodes) renderContents(child);
     }
     // Internal sequence flows, their source-end marker decided exactly as at process level —
@@ -342,10 +342,10 @@ function drawLabelLines(out, centreX, top, lines, tx, ty) {
 // ─────────────────────────────────────────────────────────────────────
 // NODE RENDERERS
 // ─────────────────────────────────────────────────────────────────────
-function renderNode(node, c, tx, ty, label) {
+function renderNode(node, c, tx, ty, label, parent = null) {
   const type = node.type || 'task';
   let svg;
-  if (isEvent(type))         svg = renderEvent(node, c, tx, ty, label);
+  if (isEvent(type))         svg = renderEvent(node, c, tx, ty, label, parent);
   else if (isGateway(type))  svg = renderGateway(node, c, tx, ty, label);
   else if (isDataArtifact(type)) svg = renderDataArtifact(node, c, tx, ty, label);
   else                       svg = renderActivity(node, c, tx, ty);
@@ -356,7 +356,7 @@ function renderNode(node, c, tx, ty, label) {
 }
 
 // ── Events (OMG spec §10.4) ─────────────────────────────────────────
-function renderEvent(node, c, tx, ty, label) {
+function renderEvent(node, c, tx, ty, label, parent = null) {
   const type   = node.type;
   const cx     = tx(c.x + c.w / 2);
   const cy     = ty(c.y + c.h / 2);
@@ -369,11 +369,11 @@ function renderEvent(node, c, tx, ty, label) {
   const isEnd   = type === 'endEvent';
   const isInter = type.includes('intermediate') || type === 'boundaryEvent';
   const isThrow = type === 'intermediateThrowEvent';
-  // Dashed only where the XML says so: `isInterrupting="false"` is written on a startEvent and
-  // `cancelActivity="false"` on a boundaryEvent, each under its row's class guard (types.js) — the
-  // same guard here, so a field on a class that cannot carry it is not drawn either (#83).
+  // Dashed only where the XML says so: `isInterrupting="false"` on the start event of an event
+  // subprocess (`writesIsInterrupting`) and `cancelActivity="false"` on a boundaryEvent under its
+  // row's class guard (types.js) — the same decisions the writer makes (#83).
   const isNonInterrupting =
-    (node.isInterrupting === false && nodeFieldSpec('isInterrupting').allowed.has(type)) ||
+    writesIsInterrupting(node, parent) ||
     (node.cancelActivity === false && nodeFieldSpec('cancelActivity').allowed.has(type));
 
   const sw = isEnd ? SW.endEvent : isStart ? SW.startEvent : SW.intermediate;

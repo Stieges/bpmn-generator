@@ -482,11 +482,18 @@ export const OMG_NODE_FIELD_SCOPE = [
   // information, and the generic loop skips falsy values. It used to be render-only — `svg.js` drew
   // the dashed ring of a non-interrupting event-subprocess start while the XML said nothing, so
   // bpmn.io and Camunda showed an interrupting start event (#83).
-  { field: 'isInterrupting', attr: 'isInterrupting', type: 'boolean', on: 'self', allowed: domain('Node', 'isInterrupting'), scope: 'a startEvent',
+  //
+  // Narrower than its class: OMG gives the attribute meaning only on the start event of an EVENT
+  // subprocess (§10.3.5, "only applicable for Start Events of Event Sub-Processes; ignored for
+  // other Start Events"), and a row's `allowed` can name a class but not a parent. So `allowed` is
+  // the class and `writesIsInterrupting` adds the parent; the writer, svg.js and S15 all call it.
+  { field: 'isInterrupting', attr: 'isInterrupting', type: 'boolean', on: 'self', allowed: domain('Node', 'isInterrupting'), scope: 'a startEvent of an event subprocess',
     shape: 'attr', writeSite: 'buildFlowNode', enforcedBy: 'table', roundTrip: 'lossy',
     reason: 'Only `isInterrupting: false` is serialised — `true` is the XSD default and is left '
       + 'implicit, so a literal `isInterrupting: true` comes back absent. The semantics survive '
-      + '(no attribute means interrupting); the literal field does not.' },
+      + '(no attribute means interrupting); the literal field does not. And only on the start event '
+      + 'of an event subprocess (`writesIsInterrupting`), where OMG gives it meaning: anywhere else '
+      + '`false` is dropped too, and S15 says so.' },
   // The boolean becomes `gatewayDirection`, and only `Converging` maps back — `Diverging` is
   // recomputed from the graph by `inferGatewayDirections`, and the value actually written comes
   // from that inference (`node._direction`), not from `has_join` itself. Meaning survives; the
@@ -779,6 +786,31 @@ export function nodeFieldSpec(field) {
   return OMG_NODE_FIELD_SCOPE.find((s) => s.field === field);
 }
 
+/** The one row of `OMG_EDGE_FIELD_SCOPE` for `field`, or `undefined` — `nodeFieldSpec`'s twin. */
+export function edgeFieldSpec(field) {
+  return OMG_EDGE_FIELD_SCOPE.find((s) => s.field === field);
+}
+
+/**
+ * Is `parent` written as an event subprocess — `triggeredByEvent="true"` under its row's guard?
+ * `null` for a node at process level.
+ */
+export function isWrittenEventSubProcess(parent) {
+  return !!parent && parent.isEventSubProcess === true && nodeFieldSpec('isEventSubProcess').allowed.has(parent.type);
+}
+
+/**
+ * Does the XML carry `isInterrupting="false"` for `node` inside `parent`? Only for a start event
+ * (the row's class) of an event subprocess (OMG §10.3.5 — the attribute is ignored on any other
+ * start event). The serialiser writes exactly this, svg.js draws its dashed ring from exactly this,
+ * and S15 reports a `false` that this answers `false` for.
+ */
+export function writesIsInterrupting(node, parent) {
+  return node?.isInterrupting === false
+    && nodeFieldSpec('isInterrupting').allowed.has(node.type)
+    && isWrittenEventSubProcess(parent);
+}
+
 /**
  * The same table for `$defs.Edge`'s properties — every one except `id`.
  *
@@ -821,12 +853,14 @@ export const OMG_EDGE_FIELD_SCOPE = [
       + 'queued (plan "Root fix", backlog item 7); three goldens move when it lands.' },
   // Written at every depth: `buildProcess` for a process's flows, `buildFlowNode`'s child branch for
   // a container's, both from `resolveFlowSemantics`; both importers read it back at every depth.
-  // enforcedBy none: a conditionExpression is written from any source class.
+  // `allowed` is enforced there: OMG §10.3.1 admits a conditionExpression only on a flow leaving an
+  // Activity or an exclusive, inclusive or complex Gateway, and a default flow's condition is
+  // ignored (§10.5) — so a default flow is written without one. S15 reports both drops.
   { field: 'condition', attr: 'conditionExpression', type: 'string', on: 'sequenceFlow', allowed: domain('Edge', 'condition'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
-    shape: 'childElement', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'exact',
-    reason: 'enforcedBy none: `resolveFlowSemantics` gives a conditionExpression to a flow from any '
-      + 'source class, and the writers (`buildProcess`, and `buildFlowNode` for a container\'s '
-      + 'flows) write it whatever the source is.' },
+    shape: 'childElement', writeSite: 'buildProcess', enforcedBy: 'table', roundTrip: 'lossy',
+    reason: 'Dropped where OMG gives it no meaning: on a flow whose source may not carry a '
+      + 'condition (outside `allowed`), and on a flow that is its source\'s default — the default '
+      + 'wins, its condition would be ignored. Everywhere else exact, at every depth.' },
   { field: 'isDefault', attr: 'default', type: 'boolean', on: 'sourceGateway', allowed: domain('Edge', 'isDefault'), scope: 'an Activity or a conditional Gateway (exclusive, inclusive, complex)',
     shape: 'attr', writeSite: 'buildProcess', enforcedBy: 'none', roundTrip: 'lossy',
     reason: 'The serialiser FABRICATES it: when a diverging XOR or OR gateway has more than one '

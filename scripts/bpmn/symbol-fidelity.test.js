@@ -355,6 +355,41 @@ describe('#83 — a non-interrupting event-subprocess start event is non-interru
       expect([n.id, new RegExp(`<bpmn:startEvent id="${n.id}"[^>]*isInterrupting="false"`).test(r.bpmnXml)]).toEqual([n.id, true]);
     }
   }, 60000);
+
+  // OMG §10.3.5: isInterrupting is meaningful only on the start event of an event subprocess.
+  const withStart = (container) => ({
+    id: 'P', nodes: [
+      { id: 's', type: 'startEvent' },
+      { id: 'sub', type: 'subProcess', name: 'Sub', isExpanded: true, ...container,
+        nodes: [{ id: 'cs', type: 'startEvent', isInterrupting: false }, { id: 'ce', type: 'endEvent' }],
+        edges: [{ id: 'cf', source: 'cs', target: 'ce' }] },
+      { id: 'e', type: 'endEvent' },
+    ],
+    edges: [{ id: 'f1', source: 's', target: 'sub' }, { id: 'f2', source: 'sub', target: 'e' }],
+  });
+
+  test('a start event of a plain subprocess: not written, not dashed, reported', async () => {
+    const r = await runPipeline(withStart({}));
+    expect(r.bpmnXml).not.toMatch(/isInterrupting/);
+    expect(shapesIn(svgIndex(r.svg).groups.get('cs'))[0].a['stroke-dasharray']).toBeUndefined();
+    expect(r.validation.warnings.join('\n')).toMatch(/Node "cs".*outside an event subprocess.*isInterrupting/);
+  });
+
+  test('a top-level start event: not written, not dashed, reported', async () => {
+    const lc = { id: 'P', nodes: [{ id: 's', type: 'startEvent', isInterrupting: false }, { id: 'e', type: 'endEvent' }],
+      edges: [{ id: 'f', source: 's', target: 'e' }] };
+    const r = await runPipeline(lc);
+    expect(r.bpmnXml).not.toMatch(/isInterrupting/);
+    expect(shapesIn(svgIndex(r.svg).groups.get('s'))[0].a['stroke-dasharray']).toBeUndefined();
+    expect(r.validation.warnings.join('\n')).toMatch(/Node "s".*outside an event subprocess/);
+  });
+
+  test('the start event of an event subprocess: written, dashed, not reported', async () => {
+    const r = await runPipeline(withStart({ isEventSubProcess: true }));
+    expect(r.bpmnXml).toMatch(/<bpmn:startEvent id="cs"[^>]*isInterrupting="false"/);
+    expect(shapesIn(svgIndex(r.svg).groups.get('cs'))[0].a['stroke-dasharray']).toBeDefined();
+    expect(r.validation.warnings.join('\n')).not.toMatch(/outside an event subprocess/);
+  });
 });
 
 describe('#84 — the conditional marker follows the conditionExpression', () => {
@@ -384,6 +419,81 @@ describe('#84 — the conditional marker follows the conditionExpression', () =>
     const r = await runPipeline(lc({ isConditional: true }));
     expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
     expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBeUndefined();
+  });
+
+  // OMG §10.3.1: a conditionExpression only on a flow leaving an Activity or an exclusive,
+  // inclusive or complex Gateway; §10.5: a default flow's condition is ignored — the default wins.
+  const fromSource = (sourceType, edgeExtra, { nested = false } = {}) => {
+    const body = {
+      nodes: [
+        { id: 's', type: 'startEvent' }, { id: 'g', type: sourceType, name: 'Quelle' },
+        { id: 'a', type: 'task', name: 'Annehmen' }, { id: 'b', type: 'task', name: 'Ablehnen' },
+        { id: 'e1', type: 'endEvent' }, { id: 'e2', type: 'endEvent' },
+      ],
+      edges: [
+        { id: 'f0', source: 's', target: 'g' },
+        { id: 'fa', source: 'g', target: 'a', ...edgeExtra },
+        { id: 'fb', source: 'g', target: 'b' },
+        { id: 'fa2', source: 'a', target: 'e1' }, { id: 'fb2', source: 'b', target: 'e2' },
+      ],
+    };
+    if (!nested) return { id: 'P', ...body };
+    return { id: 'P', nodes: [
+      { id: 'os', type: 'startEvent' },
+      { id: 'sub', type: 'subProcess', name: 'Pruefung', isExpanded: true, ...body },
+      { id: 'oe', type: 'endEvent' },
+    ], edges: [{ id: 'o1', source: 'os', target: 'sub' }, { id: 'o2', source: 'sub', target: 'oe' }] };
+  };
+  const dropped = async (lc, warning) => {
+    const r = await runPipeline(lc);
+    expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
+    expect(svgIndex(r.svg).paths.get('fa')['marker-start']).not.toBe('url(#seq-conditional-src)');
+    expect(r.validation.warnings.join('\n')).toMatch(warning);
+    expect((await symbolDisagreements(lc)).findings).toEqual([]);
+  };
+
+  test('a flow leaving a parallel gateway: no condition, no marker, reported', async () => {
+    await dropped(fromSource('parallelGateway', { condition: 'x > 1' }), /Flow "fa" leaves "g", a parallelGateway/);
+  });
+
+  test('a flow leaving a parallel gateway via isConditional + label: likewise', async () => {
+    await dropped(fromSource('parallelGateway', { isConditional: true, label: 'x > 1' }), /Flow "fa" leaves "g", a parallelGateway, and carries isConditional/);
+  });
+
+  test('a flow leaving a start event: no condition, no marker, reported', async () => {
+    const lc = fromSource('task', {});
+    lc.edges.find((e) => e.id === 'f0').condition = 'x > 1';
+    const r = await runPipeline(lc);
+    expect(condOf(r.bpmnXml, 'f0')).toBeUndefined();
+    expect(svgIndex(r.svg).paths.get('f0')['marker-start']).toBeUndefined();
+    expect(r.validation.warnings.join('\n')).toMatch(/Flow "f0" leaves "s", a startEvent/);
+  });
+
+  test('a flow leaving an event-based gateway inside a subprocess: no condition, reported', async () => {
+    const lc = fromSource('eventBasedGateway', { condition: 'x > 1' }, { nested: true });
+    lc.nodes[1].nodes.find((n) => n.id === 'a').type = 'intermediateCatchEvent';
+    lc.nodes[1].nodes.find((n) => n.id === 'a').marker = 'message';
+    lc.nodes[1].nodes.find((n) => n.id === 'b').type = 'intermediateCatchEvent';
+    lc.nodes[1].nodes.find((n) => n.id === 'b').marker = 'timer';
+    await dropped(lc, /Flow "fa" leaves "g", a eventBasedGateway/);
+  });
+
+  test('default and conditional on one flow: the default wins, the condition is dropped and reported', async () => {
+    const lc = fromSource('exclusiveGateway', { condition: 'x > 1', isDefault: true });
+    const r = await runPipeline(lc);
+    expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
+    expect(r.bpmnXml).toMatch(/<bpmn:exclusiveGateway id="g"[^>]*default="fa"/);
+    expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBe('url(#seq-default-src)');
+    expect(r.validation.warnings.join('\n')).toMatch(/Flow "fa" is the default flow of "g"/);
+    expect((await symbolDisagreements(lc)).findings).toEqual([]);
+  });
+
+  test('default and conditional on a flow leaving an activity, nested: the slash, no diamond', async () => {
+    const lc = fromSource('task', { condition: 'x > 1', isDefault: true }, { nested: true });
+    const r = await runPipeline(lc);
+    expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
+    expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBe('url(#seq-default-src)');
+    expect(r.validation.warnings.join('\n')).toMatch(/Flow "fa" is the default flow of "g"/);
   });
 
   test('inside a subprocess: condition and default are written, read back and drawn', async () => {

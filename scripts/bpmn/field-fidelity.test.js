@@ -64,7 +64,7 @@ import path from 'path';
 import { runPipeline } from './pipeline.js';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import {
-  OMG_NODE_FIELD_SCOPE, OMG_EDGE_FIELD_SCOPE, nodeFieldSpec,
+  OMG_NODE_FIELD_SCOPE, OMG_EDGE_FIELD_SCOPE, nodeFieldSpec, edgeFieldSpec,
   DEFAULT_FLOW_SOURCE_TYPES, isArtifact,
 } from './types.js';
 
@@ -183,6 +183,7 @@ describe('the completeness check — no schema field escapes the fence', () => {
 //     the node's name — and a fabrication can only be observed by authoring nothing and finding
 //     something.
 //   - `extra` adds sibling fields to the subject (a `marker` the field depends on).
+//   - `wrapper` merges fields into the depth-1 container (an event subprocess for `isInterrupting`).
 //   - `model` merges into the process itself (the `lanes` a `lane` value must refer to).
 //   - `childless` suppresses the default children a container subject otherwise gets.
 //
@@ -285,16 +286,19 @@ const SAMPLES = {
   edges: [{
     label: 'a child edge carrying condition and isDefault',
     value: [
-      // The marked flow leaves the task: OMG grants `default` to an Activity or a Gateway, never to
-      // an Event, so a mark on the start event's flow would have nowhere to be written.
+      // Both marked flows leave the task: OMG grants `default` and a conditionExpression to a flow
+      // leaving an Activity or a Gateway, never an Event. And on two different flows, because a
+      // default flow's condition is dropped (the default wins), which would hide the condition.
       { id: 'kid_f1', source: 'kid_s', target: 'kid_t', label: 'Ja' },
-      { id: 'kid_f2', source: 'kid_t', target: 'kid_e', condition: PLAIN, isDefault: true },
+      { id: 'kid_f2', source: 'kid_t', target: 'kid_e', condition: PLAIN },
+      { id: 'kid_f3', source: 'kid_t', target: 'kid_e2', isDefault: true },
     ],
     extra: {
       nodes: [
         { id: 'kid_s', type: 'startEvent', name: 'Kind Start' },
         { id: 'kid_t', type: 'userTask', name: 'Kind Schritt' },
         { id: 'kid_e', type: 'endEvent', name: 'Kind Ende' },
+        { id: 'kid_e2', type: 'endEvent', name: 'Kind Ende 2' },
       ],
     },
   }],
@@ -337,9 +341,12 @@ const SAMPLES = {
   role: [{ label: 'a role name with spaces and specials', value: 'Experte XY & Prüfer <2>' }],
   system: [{ label: 'a system name with specials', value: 'SAP S/4 & "Core"' }],
   isAdHoc: [{ label: 'true', value: true }],
+  // `wrapper` merges into the depth-1 container: the attribute is written only on the start event
+  // of an EVENT subprocess, so the samples cover both an event-subprocess parent and a plain one.
   isInterrupting: [
-    { label: 'false (the only value written)', value: false },
-    { label: 'true (the XSD default)', value: true },
+    { label: 'false, in an event subprocess (the only place it is written)', value: false, wrapper: { isEventSubProcess: true } },
+    { label: 'false, elsewhere', value: false },
+    { label: 'true (the XSD default)', value: true, wrapper: { isEventSubProcess: true } },
   ],
   extensions: [{ label: 'a foreign attribute bag', value: { 'acme:owner': 'Fachbereich' } }],
 
@@ -565,7 +572,7 @@ function place(body, placement, sample) {
     ...model,
     nodes: [
       { id: 'outer_s', type: 'startEvent', name: 'Start' },
-      { id: WRAPPER, type: placement.wrapper, name: 'Huelle', isExpanded: true, nodes: body.nodes, edges: body.edges },
+      { id: WRAPPER, type: placement.wrapper, name: 'Huelle', isExpanded: true, nodes: body.nodes, edges: body.edges, ...(sample.wrapper || {}) },
       { id: 'outer_e', type: 'endEvent', name: 'Ende' },
     ],
     edges: [
@@ -654,7 +661,7 @@ function reportBothPaths(blocks) {
 }
 
 /**
- * The 15 `roundTrip: 'lossy'` contracts.
+ * The 16 `roundTrip: 'lossy'` contracts.
  *
  * WHY THEY LIVE HERE and not beside the row in `types.js`. The brief left the choice open between a
  * per-row assertion function in `types.js` and a lookup keyed by field in the test. Three things
@@ -714,9 +721,11 @@ const LOSSY_CONTRACTS = {
   },
 
   isInterrupting: {
-    quote: 'Only `isInterrupting: false` is serialised',
+    quote: 'And only on the start event of an event subprocess',
     assert: (ctx) => {
-      sameAs(ctx, ctx.out?.isInterrupting, ctx.value === false ? false : undefined);
+      const inEventSubProcess = ctx.depth === 1 && ctx.sample.wrapper?.isEventSubProcess === true;
+      sameAs(ctx, ctx.out?.isInterrupting, ctx.value === false && inEventSubProcess ? false : undefined,
+        `in an event subprocess: ${inEventSubProcess}`);
     },
   },
 
@@ -799,7 +808,12 @@ const LOSSY_CONTRACTS = {
         sameAs(ctx, got && { id: got.id, source: got.source, target: got.target, label: got.label },
           { id: want.id, source: want.source, target: want.target, label: want.label },
           `child edge ${want.id}: id/source/target/name survive`);
-        if (want.condition !== undefined) sameAs(ctx, got?.condition, want.condition, `child edge ${want.id}: condition survives`);
+        if (want.condition !== undefined) {
+          const srcType = (ctx.input.nodes ?? []).find((n) => n.id === want.source)?.type;
+          const kept = edgeFieldSpec('condition').allowed.has(srcType) && !want.isDefault;
+          sameAs(ctx, got?.condition, kept ? want.condition : undefined,
+            `child edge ${want.id}: condition ${kept ? 'survives' : 'is dropped (source class or default flow)'}`);
+        }
         if (want.isDefault !== undefined) {
           const srcType = (ctx.input.nodes ?? []).find((n) => n.id === want.source)?.type;
           const writable = DEFAULT_FLOW_SOURCE_TYPES.has(srcType);
@@ -857,6 +871,15 @@ const LOSSY_CONTRACTS = {
       const fabricates = ['exclusiveGateway', 'inclusiveGateway'].includes(ctx.type);
       sameAs(ctx, ctx.out?.condition, fabricates ? ctx.value : undefined,
         fabricates ? 'the label is fabricated into a condition the author never wrote' : 'no fabrication');
+    },
+  },
+
+  condition: {
+    // The fence samples only classes in `allowed`, so of the row's two drops it can reach the
+    // default one: a flow that is its source's default is written without its condition.
+    quote: 'the default wins',
+    assert: (ctx) => {
+      sameAs(ctx, ctx.out?.condition, ctx.input.isDefault ? undefined : ctx.value);
     },
   },
 
