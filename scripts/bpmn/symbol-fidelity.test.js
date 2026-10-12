@@ -484,7 +484,45 @@ describe('#84 — the conditional marker follows the conditionExpression', () =>
     expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
     expect(r.bpmnXml).toMatch(/<bpmn:exclusiveGateway id="g"[^>]*default="fa"/);
     expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBe('url(#seq-default-src)');
-    expect(r.validation.warnings.join('\n')).toMatch(/Flow "fa" is the default flow of "g"/);
+    expect(r.validation.warnings.join('\n')).toMatch(/Flow "fa" is marked as the default flow of "g"/);
+    expect((await symbolDisagreements(lc)).findings).toEqual([]);
+  });
+
+  // The inferred default is chosen only among flows without an authored condition (re-review of
+  // #84): it must never take a condition the author wrote.
+  test('every outgoing flow conditioned, none marked: no inferred default, every condition kept', async () => {
+    const lc = fromSource('exclusiveGateway', { condition: '${x>1}' });
+    lc.edges.find((e) => e.id === 'fb').condition = '${x<=1}';
+    const r = await runPipeline(lc);
+    expect(r.bpmnXml).not.toMatch(/<bpmn:exclusiveGateway id="g"[^>]*default=/);
+    expect(condOf(r.bpmnXml, 'fa')).toBe('${x&gt;1}');
+    expect(condOf(r.bpmnXml, 'fb')).toBe('${x&lt;=1}');
+    expect(svgIndex(r.svg).paths.get('fb')['marker-start']).toBeUndefined();
+    expect(r.validation.warnings.join('\n')).not.toMatch(/default flow of "g"/);
+    expect((await symbolDisagreements(lc)).findings).toEqual([]);
+  });
+
+  test('one unconditioned flow: it becomes the inferred default, the conditions are kept', async () => {
+    const lc = fromSource('exclusiveGateway', {});
+    lc.nodes.push({ id: 'c', type: 'task', name: 'Pruefen' }, { id: 'e3', type: 'endEvent' });
+    lc.edges.find((e) => e.id === 'fb').condition = '${x<=1}';
+    lc.edges.push({ id: 'fc', source: 'g', target: 'c', condition: '${x>9}' }, { id: 'fc2', source: 'c', target: 'e3' });
+    const r = await runPipeline(lc);
+    expect(r.bpmnXml).toMatch(/<bpmn:exclusiveGateway id="g"[^>]*default="fa"/);
+    expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
+    expect(condOf(r.bpmnXml, 'fb')).toBe('${x&lt;=1}');
+    expect(condOf(r.bpmnXml, 'fc')).toBe('${x&gt;9}');
+    expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBe('url(#seq-default-src)');
+    expect(r.validation.warnings.join('\n')).not.toMatch(/default flow of "g"/);
+  });
+
+  test('every outgoing flow conditioned inside a subprocess: no inferred default, conditions kept', async () => {
+    const lc = fromSource('inclusiveGateway', { condition: '${x>1}' }, { nested: true });
+    lc.nodes[1].edges.find((e) => e.id === 'fb').condition = '${y>1}';
+    const r = await runPipeline(lc);
+    expect(r.bpmnXml).not.toMatch(/<bpmn:inclusiveGateway id="g"[^>]*default=/);
+    expect(condOf(r.bpmnXml, 'fa')).toBe('${x&gt;1}');
+    expect(condOf(r.bpmnXml, 'fb')).toBe('${y&gt;1}');
     expect((await symbolDisagreements(lc)).findings).toEqual([]);
   });
 
@@ -493,7 +531,7 @@ describe('#84 — the conditional marker follows the conditionExpression', () =>
     const r = await runPipeline(lc);
     expect(condOf(r.bpmnXml, 'fa')).toBeUndefined();
     expect(svgIndex(r.svg).paths.get('fa')['marker-start']).toBe('url(#seq-default-src)');
-    expect(r.validation.warnings.join('\n')).toMatch(/Flow "fa" is the default flow of "g"/);
+    expect(r.validation.warnings.join('\n')).toMatch(/Flow "fa" is marked as the default flow of "g"/);
   });
 
   test('inside a subprocess: condition and default are written, read back and drawn', async () => {
