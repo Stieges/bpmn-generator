@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, routeMessageFlows, placeEdgeLabel, edgeLabelBox, labelHitsRoute, participantHeaders, participantOutlines } from './coordinates.js';
 import { runPipeline } from './pipeline.js';
 import { CFG } from '../shared/utils.js';
+import { clipStraight } from '../shared/geometry.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const FIXTURES = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
@@ -276,6 +277,33 @@ describe('growParticipantGapsForLabels', () => {
     expect(growParticipantGapsForLabels(cm, lc)).toEqual([]);
     expect(JSON.stringify(cm)).toBe(once);
     expect(repairMessageFlowLabels(cm, lc)).toBe(cm.edgeLabels);
+  });
+
+  test('an association across the grown gap is re-derived from both shapes; one inside a moved participant moves whole', () => {
+    const { lc, cm } = narrow();
+    // An annotation in A on b1 in B (crosses the gap), and one in B on b3 (stays inside B).
+    lc.pools[0].nodes.push({ id: 'noteA', type: 'textAnnotation', name: 'n' });
+    lc.pools[1].nodes.push({ id: 'noteB', type: 'textAnnotation', name: 'm' });
+    lc.associations = [{ id: 'across', source: 'noteA', target: 'b1' }, { id: 'inside', source: 'noteB', target: 'b3' }];
+    cm.coords.noteA = { x: 190, y: 20, w: 50, h: 30 };
+    cm.coords.noteB = { x: 450, y: 165, w: 60, h: 30 };
+    cm.edgeCoords.across = clipStraight(cm.coords.noteA, cm.coords.b1);
+    cm.edgeCoords.inside = clipStraight(cm.coords.noteB, cm.coords.b3);
+    const before = JSON.parse(JSON.stringify(cm));
+    const grown = growParticipantGapsForLabels(cm, lc);
+    expect(grown.length).toBeGreaterThan(0);
+    const d = cm.poolCoords.B.y - before.poolCoords.B.y;
+    expect(d).toBeGreaterThan(0);
+    // Across: starts where it started (noteA did not move), ends on the moved b1 — no loose end.
+    expect(cm.edgeCoords.across).toEqual(clipStraight(cm.coords.noteA, cm.coords.b1));
+    const onOutline = (pt, c) => pt.x >= c.x - 1e-6 && pt.x <= c.x + c.w + 1e-6 && pt.y >= c.y - 1e-6 && pt.y <= c.y + c.h + 1e-6
+      && [pt.x - c.x, c.x + c.w - pt.x, pt.y - c.y, c.y + c.h - pt.y].some(v => Math.abs(v) < 1e-6);
+    expect(onOutline(cm.edgeCoords.across[0], cm.coords.noteA)).toBe(true);
+    expect(onOutline(cm.edgeCoords.across.at(-1), cm.coords.b1)).toBe(true);
+    // Shifted whole instead, its end would hang d px off noteA.
+    expect(onOutline({ ...before.edgeCoords.across[0], y: before.edgeCoords.across[0].y + d }, cm.coords.noteA)).toBe(false);
+    // Inside: shifted once, rigidly, with both its ends.
+    expect(cm.edgeCoords.inside).toEqual(before.edgeCoords.inside.map(p => ({ ...p, y: p.y + d })));
   });
 
   test('a single process has no gap: nothing happens', () => {

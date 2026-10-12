@@ -392,11 +392,13 @@ const BUDGET_DEFAULT = {
 
 // off / on modes with the bend rule on: the default row, except in the five fixtures below. Measured
 // 2026-10-11 when both switches became defaults. off (no compaction, no wrapping) leaves more or less
-// overlap than default because the rule judges different geometry: bpmn-generator-pipeline 172,
-// example-bestellung-versand 262, example-schadenmeldung 110, realistic-collaboration 356 (px).
-// on (refinement + wrapping): bpmn-generator-pipeline offOver5 16, overlapLen 112;
+// overlap than default because the rule judges different geometry: bpmn-generator-pipeline 255,
+// example-bestellung-versand 262, example-schadenmeldung 242, realistic-collaboration 356 (px).
+// on (refinement + wrapping): bpmn-generator-pipeline offOver5 16, overlapLen 232;
 // example-kreditantrag bendsMax 4, offOver5 11; realistic-collaboration bendsMax 4, mfCrowd 6,
-// offOver5 4, overlapLen 586.
+// offOver5 4, overlapLen 586. bpmn-generator-pipeline (172 / 112 when measured) and
+// example-schadenmeldung off (110) rose with #88's grown participant gaps — see the #88 note above
+// the plain rows.
 // #91: realistic-collaboration's seqThrough 1 / crowd 2 (inf8 through in_gw) are gone in every mode
 // — the timer sits on its host's top edge, facing "Send reminder" in the lane above. Its plain-on
 // row would show inf2 through in_remind and the timer without layout.foreignShapeRepair.
