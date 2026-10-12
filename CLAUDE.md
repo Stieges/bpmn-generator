@@ -25,7 +25,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 ## Architecture
 
 7 top-level scripts (standalone tooling) + 29 bpmn-pipeline + 20 dmn (growing) + 11 shared + 2 cross-notation + 7 agent +
-9 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
+11 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
@@ -184,7 +184,11 @@ Agent subsystem (scripts/agents/)
 Robustness subsystem (scripts/robustness/)
   cli.js, curate-mad.js, failure-classifier.js, fixture-persister.js,
   graph-isomorphism.js, mad-validator.js, report-generator.js,
-  stress-tester.js, synthetic-generator.js
+  stress-tester.js, synthetic-generator.js,
+  reference-compare.js     ← ../bpmn/types.js, ../bpmn/topology.js (compareToReference: an extracted
+                             model against a reference — participants, lanes, activities, duplicates)
+  extraction-eval.js       ← ../orchestrator.js, reference-compare.js (text → orchestrate() → compare,
+                             over tests/fixtures/extraction-cases/; CLI, needs an LLM endpoint)
   (+ seed-catalog.json, config.json, README.md)
 
 Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
@@ -358,7 +362,7 @@ membership instead of coordinates.
 | `scripts/evaluate-slm.js` | Evaluation runner against fixture sets |
 | `scripts/prepare-training-data.js` | Training-data prep for SLM eval |
 | `scripts/agents/` | 7 agent modules: chat, compliance, layout, llm-provider, modeler, prompt-sections, reviewer |
-| `scripts/robustness/` | Synthetic-data + benchmarking subsystem (9 modules + config; see `scripts/robustness/README.md`) |
+| `scripts/robustness/` | Synthetic-data + benchmarking subsystem (11 modules + config; see `scripts/robustness/README.md`), incl. the extraction-quality measure (`reference-compare.js`, `extraction-eval.js`) |
 | `scripts/scenarios/enumerate.js` | `enumerateScenarios(proc)` — path enumeration over one process's Petri net. Reuses `bpmnToPN` and the firing primitives from `scripts/bpmn/workflow-net.js`, but runs its own traversal: `checkSoundness` deduplicates markings, which is right for "is the sink reachable?" and wrong for "which distinct paths reach it?". Cycles are bounded per backward edge (graph back edges via DFS colouring — **never** `loopType`/`loopMaximum`, which is one activity repeating, not a rework loop); parallel branches collapse to one canonical order carrying `interleavingCount`. Bounds in `config.json → scenarios` |
 | `scripts/scenarios/format.js` | `formatScenarioResult` / `formatCollaborationResult` — the presentation layer over `enumerate.js`/`collaboration.js`'s output: a complete JSON view (every scenario tagged with its decision sequence, group key, happy-path distance) and a grouped, capped Markdown view. Decision labels are recovered from `t_<gw>_choice_<i>` transition ids against the process's own flattened edges (only XOR/inclusive-gateway SPLITs count, never a merge or pass-through). Happy path is `isHappyPath`-marked when declared, else a deterministic BFS fallback (`deriveHappyPathEdges`) excluding backward and boundary-event-adjacent edges — the output always says which. Grouping key is BPMN gateways only, not DMN choices (see the module doc). Cap in `config.json → scenarios.format.maxGroupsRendered` |
 | `scripts/scenarios/decision-table.js` | `analyzeDecisionTable(table)` — DMN hit-policy-aware branching (UNIQUE exact, FIRST/PRIORITY overestimated-and-flagged, COLLECT/ANY/RULE ORDER/OUTPUT ORDER aggregated not branched) plus gap/overlap analysis over a Decision-Core table's `when`/`then` FEEL-subset text (numbers, dates, strings, intervals, enumerations, `-` wildcard). A column outside that grammar makes its whole rule "unanalyzable", never guessed at column-by-column. Cap in `config.json → scenarios.decisionTable.maxPartitionCells` |
@@ -619,6 +623,17 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    first (one-time curation step, see `scripts/robustness/README.md`); `tests/fixtures/mad-subset-test/`
    alone is not enough.
 4. Reports land in `tests/robustness-reports/` (gitignored — share by attaching).
+
+### Measure extraction quality (text → model through the LLM path)
+
+1. `cd scripts && node robustness/extraction-eval.js --api-url URL --model MODEL [--api-key KEY]
+   [--timeout s] [--retries n] [--extra-body '<json>'] --output /tmp/xeval` — every case of
+   `tests/fixtures/extraction-cases/` (`{ id, text, reference }`) through `orchestrate()`, compared
+   with its reference fixture (`robustness/reference-compare.js`); writes `.md` and `.json` (with
+   every raw LLM answer).
+2. Read recall/precision and the findings (empty lane, step only inside a subprocess, duplicate
+   step, black box vs. expanded pool). Thresholds: `robustness/config.json → extractionQuality`.
+3. A new case: add `{ "id", "text", "reference": "<fixture>.json" | null }` to that directory.
 
 ## Rule Engine
 

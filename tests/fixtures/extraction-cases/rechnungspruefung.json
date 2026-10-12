@@ -1,0 +1,5 @@
+{
+  "id": "rechnungspruefung",
+  "reference": "example-rechnungspruefung.json",
+  "text": "Eingangsrechnungsprüfung in einem Unternehmen mit den Bereichen Posteingang, Buchhaltung, Fachabteilung und Geschäftsleitung. Eine Rechnung geht ein. Der Posteingang digitalisiert sie automatisch (Ergebnis: Eingangsrechnung). Die Buchhaltung erfasst die Rechnungsdaten und prüft, ob eine Bestellung vorhanden ist. Gibt es keine Bestellung, wird die Rechnung abgelehnt. Gibt es eine Bestellung, prüft die Fachabteilung die Rechnung sachlich. Hat sie nach 7 Tagen nicht geprüft, mahnt die Buchhaltung die Fachabteilung („Mahnung versendet“). Ist die Rechnung sachlich nicht korrekt, klärt die Buchhaltung das mit dem Lieferanten und die Fachabteilung prüft erneut. Ist sie korrekt, prüft die Buchhaltung, ob der Betrag über 10.000 EUR liegt. Wenn ja, muss die Geschäftsleitung die Rechnung zuerst freigeben. Danach (bzw. direkt bei kleineren Beträgen) weist die Buchhaltung die Zahlung automatisch an und die Rechnung ist bezahlt."
+}

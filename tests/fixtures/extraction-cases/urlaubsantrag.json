@@ -1,0 +1,5 @@
+{
+  "id": "urlaubsantrag",
+  "reference": "example-urlaubsantrag.json",
+  "text": "Urlaubsantrag mit den Rollen Mitarbeiter, Vorgesetzter und Personalabteilung. Ein Mitarbeiter hat einen Urlaubswunsch und stellt einen Urlaubsantrag über das Urlaubsformular. Der Vorgesetzte prüft den Antrag. Reagiert der Vorgesetzte 3 Tage lang nicht, schickt die Personalabteilung eine Erinnerung an den Vorgesetzten („Erinnerung versendet“). Genehmigt der Vorgesetzte nicht, überarbeitet der Mitarbeiter den Antrag und stellt ihn erneut. Bei Genehmigung prüft die Personalabteilung, ob der Resturlaub ausreicht. Reicht er nicht, endet der Prozess mit „Antrag zurückgezogen“. Reicht er, bucht das System das Urlaubskonto, aktualisiert den Abwesenheitskalender, und die Personalabteilung informiert den Mitarbeiter. Ende: „Urlaub genehmigt“."
+}
