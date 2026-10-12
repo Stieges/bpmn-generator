@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The extraction prompt contradicted the input schema.** The Master Extraction Prompt (the part
+  the Modeler sends to the LLM) named a message flow with `label`, which the schema rejects (only
+  `name`), and never mentioned `collapsedPools`, so an LLM following it returned an external
+  partner as a pool with an empty `nodes` list. Every collaboration with an external partner failed
+  the schema gate. The collaboration example is now a concrete, valid model with a
+  `collapsedPools` entry, and the rules say when to use it. New fence
+  `scripts/agents/prompt-examples.test.js`: every JSON example in the prompt passes the schema.
+- **Refined and amended models skipped the schema gate.** The orchestrator validated only the first
+  extraction; a Logic-Core from the reviewer loop or the layout loop went downstream unchecked. Every
+  Modeler output now passes the gate. A rejected refinement or amendment is dropped, and the run
+  goes on with the last valid model.
+- **Schema errors of the wrong branch.** For a Logic-Core that fails the schema,
+  `validateLogicCoreSchema` reported the errors of both root shapes, so a collaboration opened with
+  SingleProcess's "must have required property 'nodes'". It now reports the errors of the shape the
+  input was meant as (`pools` → collaboration). This also applies to `schema_error` responses over
+  HTTP and MCP, whose format is unchanged. The orchestrator shows every real cause, one per line
+  (`formatSchemaErrors`), not the first three as JSON.
+
+### Added
+
+- **Schema repair attempt in the orchestrator** (`maxSchemaRepairs`, default 1): a Modeler output
+  the gate rejects goes back once through the refinement prompt with the gate's errors as issues.
+  Every rejection is in `history` (`agent: "schema-gate"`).
+- **`--timeout <seconds>`** on `node orchestrator.js` for the LLM request (default 120 s).
+
 ## [4.0.0-rc.1] - 2026-10-12
 
 Release candidate for 4.0.0, published as a GitHub pre-release only (not on npm). The first
