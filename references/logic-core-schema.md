@@ -97,6 +97,7 @@ The Logic-Core supports two modes:
 | `isEventSubProcess` | No    | `true` for event sub-processes (dashed border)           |
 | `isAdHoc`         | No       | `true` for ad-hoc sub-processes (~ marker)               |
 | `isCompensation`  | No       | `true` for compensation tasks (◁◁ marker)                |
+| `color`           | No       | BPMN-in-Color: `{ "fill": "#ffe0b2", "stroke": "#e65100" }`. Hex colours only, `#rgb` or `#rrggbb`; named and `rgb()` values are refused by the schema gate — convert them to hex |
 | `role`            | No       | Who performs an Activity (task, subProcess, transaction, callActivity), e.g. `"Claims handler"`. Written as a `bpmn:humanPerformer` (userTask, manualTask) or `bpmn:performer` pointing at one shared `bpmn:resource` per role name. One role per activity; names compare exactly (`"SAP"` ≠ `"sap"`) |
 | `system`          | No       | Which IT system a task involves (any task type), e.g. `"SAP"`. Written into `extensionElements` under the generator's own namespace (`bg:system`) |
 
