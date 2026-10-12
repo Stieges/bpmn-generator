@@ -3,16 +3,19 @@
 Load this when a process contains a decision made by rules, or when the user asks for DMN, a
 decision table or an "Entscheidungstabelle". The DMN side mirrors the BPMN side: you write a JSON
 model (**Decision-Core**), the pipeline validates it, lays out the decision requirements diagram
-(DRD) and writes DMN 1.3 XML.
+(DRD) and writes DMN 1.3 XML plus the DRD as SVG — and, on request, the decision tables as
+Markdown, SVG and HTML.
 
 ## Contents
 
 - [When a decision table fits](#when-a-decision-table-fits)
 - [From rule text to Decision-Core](#from-rule-text-to-decision-core)
 - [Worked example](#worked-example)
+- [Confirm the table first](#confirm-the-table-first)
 - [Running the DMN pipeline](#running-the-dmn-pipeline)
 - [Viewing the result](#viewing-the-result)
 - [Linking a BPMN task to the decision](#linking-a-bpmn-task-to-the-decision)
+- [The table in the task's documentation](#the-table-in-the-tasks-documentation)
 - [Checking the bridge: scenario analysis](#checking-the-bridge-scenario-analysis)
 - [Importing a DMN file](#importing-a-dmn-file)
 
@@ -104,15 +107,60 @@ premium customers' claims and a manager everyone else's. From 10 000 a manager a
 
 `usingTask` is DMN's own, standardised back-link to the BPMN task that calls the decision.
 
+## Confirm the table first
+
+The order is fixed: **show → confirm → generate → report.**
+
+1. **Show** the decision table to the user as Markdown in the chat, before you write any file, in
+   exactly the form the pipeline writes into `--doc` (so the user sees what they will get). For
+   the worked example:
+
+   ```markdown
+   ### Approval level
+
+   Hit policy: **UNIQUE (U)** – exactly one rule can match
+
+   | U | When: Claim amount *(number)* | And: Customer segment *("premium","standard")* | Then: level *("auto","clerk","manager")* |
+   |--:|:--|:--|:--|
+   | 1 | < 1000 | – | "auto" |
+   | 2 | [1000..10000) | "premium" | "clerk" |
+   | 3 | [1000..10000) | "standard" | "manager" |
+   | 4 | >= 10000 | – | "manager" |
+   ```
+
+   The rules of the form: the first column carries the hit-policy letter (`U`, `F`, `P`, `A`,
+   `R`, `O`, `C`, or `C+`/`C#`/`C<`/`C>` for an aggregated COLLECT) and numbers the rules; inputs
+   are headed `When:`/`And:`, outputs `Then:`/`And:`, each with its allowed values (else its type)
+   in italics; `–` means "any"; an `Annotation` column only if a rule has one. Say in one line what
+   the hit policy means, and that order matters under `FIRST` and `RULE ORDER`.
+2. **Confirm.** Ask whether the rules are right and complete. Change the Decision-Core until the
+   user agrees — a table is cheap to fix in chat and expensive to fix in a file someone already
+   imported.
+3. **Generate** the files (below), with `--strict`.
+4. **Report** what the rules and the scenario analysis found (D/B rules, SC01–SC06), even when
+   nothing blocked — a gap (SC04) or an overlap (SC05) is a question for the user, not a detail.
+
 ## Running the DMN pipeline
 
 Run from `scripts/`:
 
 ```bash
-node dmn/pipeline.js approval.json approval --strict                   # → approval.dmn
+node dmn/pipeline.js approval.json approval --strict                   # → approval.dmn + approval.svg
+node dmn/pipeline.js approval.json approval --strict --doc             # plus .md, .tables.svg, .tables.html
 node dmn/pipeline.js approval.json approval --strict --best-practice   # plus readability rules
 cat approval.json | node dmn/pipeline.js - approval --strict           # Decision-Core from stdin
 ```
+
+| File | Content |
+|------|---------|
+| `approval.dmn` | DMN 1.3 XML with its diagram (DMNDI) |
+| `approval.svg` | the DRD as an image — the same coordinates as the DMNDI, drawn as dmn.io draws them |
+| `approval.md` (`--doc`) | per decision: heading, question, inputs and outputs, the decision table |
+| `approval.tables.svg` (`--doc`) | every decision table, stacked, drawn like dmn.io's table view |
+| `approval.tables.html` (`--doc`) | the same tables as HTML with inline styles — pastes into Confluence or a wiki |
+
+The words in the Markdown, SVG and HTML tables (When/And/Then, the hit-policy meanings, "any") are
+English by default; `config.json → dmn.labels.locale: "de"` switches them to German.
 
 The pre-delivery gate from `SKILL.md` applies unchanged: run with `--strict` and resolve every
 warning before you deliver. The schema gate rejects malformed input with a field path. The rules are
@@ -122,9 +170,10 @@ D01–D11 (soundness and semantics, always on) and, with `--best-practice`, B01�
 
 ## Viewing the result
 
-There is **no SVG for DMN yet** — only the `.dmn` file, which carries its own diagram layout
-(DMNDI). Open it in the dmn-js demo (<https://demo.bpmn.io/dmn>) or in Camunda Modeler, which show
-both the DRD and the decision table. Tell the user so instead of promising a preview image.
+`approval.svg` is the DRD as an image; `--doc` adds the decision tables as image
+(`.tables.svg`), as a page (`.tables.html`) and as Markdown (`.md`). The `.dmn` file itself opens
+in the dmn-js demo (<https://demo.bpmn.io/dmn>) or in Camunda Modeler, which show the DRD and let
+the user edit the decision table.
 
 ## Linking a BPMN task to the decision
 
@@ -168,6 +217,43 @@ link. Camunda's own attributes (`camunda:decisionRef`, `camunda:resultVariable`,
 `camunda:mapDecisionResult` in Camunda 7; `zeebe:calledDecision` in Camunda 8) are **not** written.
 A model meant to execute on Camunda needs the decision reference set once more in Camunda Modeler's
 properties panel. Say so when the user mentions an engine.
+
+## The table in the task's documentation
+
+BPMN tools show nothing of the DMN file, but bpmn.io and Camunda Modeler show a task's
+documentation. Pass the decision models to the BPMN pipeline and every `businessRuleTask` with a
+`decisionRef` gets its decision table in its documentation:
+
+```bash
+node bpmn/pipeline.js process.json claim --strict --decisions approval.json          # or approval.dmn
+node bpmn/pipeline.js process.json claim --strict --decisions a.json,b.dmn --doc     # several models
+```
+
+The section is plain text between two marker lines, after whatever documentation the task already
+had:
+
+```text
+=== BEGIN generated: DMN decision (bpmn-generator) — replaced on every run ===
+Decision: Approval level (dec_approvalLevel) — generated from Definitions_claimApproval
+Hit policy: UNIQUE (U) – exactly one rule can match
+  | WHEN          |                      || THEN
+U | Claim amount  | Customer segment     || level
+  | number        | "premium","standard" || "auto","clerk","manager"
+--+---------------+----------------------++-------------------------
+1 | < 1000        | –                    || "auto"
+2 | [1000..10000) | "premium"            || "clerk"
+3 | [1000..10000) | "standard"           || "manager"
+4 | >= 10000      | –                    || "manager"
+=== END generated: DMN decision ===
+```
+
+A table wider than 100 characters is written as one sentence per rule instead
+(`Rule 2: WHEN Claim amount in [1000..10000) AND Customer segment = "premium" THEN level = "clerk"`).
+Every run **replaces** the section, so importing the `.bpmn` and generating it again never
+duplicates it; do not edit inside the markers — write your own notes above them. A `decisionRef`
+none of the given models defines reads `Calls decision: <id> (table not supplied)`; one that two
+models define says so. Without `--decisions` the documentation is left as it is. The SVG shows the
+documentation as the task's tooltip, and `--doc` prints the table after the element list.
 
 ## Checking the bridge: scenario analysis
 

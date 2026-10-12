@@ -37,7 +37,7 @@ runtime dependency proposed (`dmn-moddle`), see GATE 1.
 | **G3** writer | **`dmn-moddle`** | Symmetric to `bpmn-xml.js`/`moddle-import.js`, one package, no new subtree (§2.2). **Needs approval — GATE 1.** |
 | **G4** bridge | **Both directions, BPMN side first** | Stage 1 gives `businessRuleTask` a `decisionRef` via neutral `extensionElements`; Stage 4 emits the normative `usingTask` from the DMN side (§2.6). No Camunda namespace either way. |
 | **G5** FEEL | **Pass through** | Sufficient for valid DMN (§2.5). Validation is a later, separable capability. |
-| **G6** table rendering | **DRD only in v1**, table deferred | No conformance obligation (§2.4). Revisit after Stage 6. |
+| **G6** table rendering | **DRD only in v1**, table deferred | No conformance obligation (§2.4). Revisit after Stage 6. **Revisited 2026-10-12 (owner):** the table is rendered — one layout (`dmn/table.js`), translated to Markdown, plain text (BPMN documentation), SVG and HTML. |
 | **G7** rule classes | **Structural first**, completeness/overlap deferred | Acyclicity, orphans, missing logic, missing output clause are cheap and catch real errors. Interval algebra over input domains is its own project. |
 | **G8** LLM | **Open — GATE 2** | The one genuinely undecided question. Blocks Stage 7 only; Stages 1–6 are library work and proceed regardless. |
 
@@ -277,13 +277,15 @@ confirm the decision table renders. That is the milestone — not a green test r
 
 ## Stage 6 — SVG
 
-- [ ] `scripts/dmn/svg.js` — four DRG shapes (decision rectangle, input data stadium, knowledge
+- [x] `scripts/dmn/svg.js` — four DRG shapes (decision rectangle, input data stadium, knowledge
       source wavy-bottom, business knowledge model clipped-corner) and three edge styles
       (information solid arrow, knowledge dashed open, authority dashed filled-circle).
-- [ ] **Renderers translate, never compute** — every coordinate comes from `coordMap`. If something
+- [x] **Renderers translate, never compute** — every coordinate comes from `coordMap`. If something
       is missing, add it to `coordMap`.
-- [ ] Guard test: the two renderers agree, mirroring `geometry contract — the two renderers agree`.
-- [ ] Decision-table rendering stays out (G6). Note it in Known Limitations rather than half-building it.
+- [x] Guard test: the two renderers agree, mirroring `geometry contract — the two renderers agree`.
+- [x] ~~Decision-table rendering stays out (G6).~~ Superseded by the owner decision of 2026-10-12:
+      the decision table is rendered (`dmn/table.js` + `table-text.js`, `table-svg.js`, `table-html.js`),
+      and a Business Rule Task carries its table in its BPMN documentation (`cross/decision-doc.js`).
 
 ---
 
@@ -399,7 +401,7 @@ Sources: <https://www.opengroup.org/open-group-archimate-model-exchange-file-for
 ## Not in scope
 
 - FEEL parsing or evaluation (G5). We generate and read expressions as text.
-- Decision table rendering (G6).
+- ~~Decision table rendering (G6).~~ Done on owner decision, 2026-10-12 (see G6).
 - Completeness, overlap and masked-rule analysis (G7).
 - DMN 1.4/1.5/1.6 (G1).
 - `camunda:` extensions in either direction.

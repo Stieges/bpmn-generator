@@ -90,6 +90,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A JSON body that is not an object is a `400`**, and telemetry `details` larger than 8 KiB is a `400`.
 
 ### Added
+- **DRD as SVG (DMN Stage 6).** `node dmn/pipeline.js input.json out` now writes `out.svg` next to
+  `out.dmn`; `runDmnPipeline` returns it as `svg`. `scripts/dmn/svg.js` translates the same
+  `coordMap` the DMNDI carries — no coordinate of its own, not even an offset — and draws the four
+  DRG shapes and three requirement styles as dmn-js 17.12.3 draws them (path data in
+  `scripts/dmn/pathmap.js`, attributed in `THIRD_PARTY_NOTICES.md`). `svg.test.js` fences DMNDI and
+  SVG against the coordMap, the DMN twin of the BPMN renderer-agreement test.
+- **Decision tables as Markdown, SVG and HTML.** `--doc` on the DMN CLI (`runDmnPipeline(dc, { doc:
+  true })`) also writes `out.md` (per decision: question, inputs, outputs, the table),
+  `out.tables.svg` and `out.tables.html` (`markdown`, `tablesSvg`, `tablesHtml`). One layout
+  (`scripts/dmn/table.js`: hit-policy letter over the rule numbers, three-line heads "When/And/Then ·
+  label · allowed values or type", annotation column only when used, column widths from text
+  metrics), translated by `table-text.js`, `table-svg.js` and `table-html.js` (inline styles only,
+  for a wiki page). Every word comes from `config.json → dmn.labels` — `en` by default, `de`
+  available (`dmn.labels.locale`, or `locale` on the call).
+- **A Business Rule Task's decision table in its BPMN documentation.** `runPipeline(lc, { decisions:
+  [DecisionCore…] })`, CLI `node bpmn/pipeline.js lc.json out --decisions a.json,b.dmn` (`.dmn`
+  imported, routed by content): every `businessRuleTask` with a `decisionRef` gets a plain-text
+  section — title, hit policy, an aligned table (one sentence per rule above 100 characters) —
+  between `=== BEGIN generated: DMN decision …` / `=== END …` marker lines, after the author's own
+  documentation. Every run replaces the section, so import → regenerate never duplicates it (both
+  importers keep it as text). Matching is `scenarios/bridge.js`'s; an unresolved reference reads
+  "Calls decision: <ref> (table not supplied)". The SVG tooltip and the `--doc` Markdown show it.
+  Without `decisions` the output is byte-identical (goldens and the output-hash fence unchanged).
+  `bpmn/pipeline.js` now imports `cross/decision-doc.js` — the one import outside `bpmn/`, fenced so
+  that no DMN or cross-notation rule module is in `runPipeline`'s import closure.
+- **The skill confirms a decision table before generating it.** `SKILL.md` and `references/dmn.md`:
+  show the table as Markdown in the chat, let the user confirm, then generate, then report the rule
+  and scenario findings.
 - **`role` and `system` on an activity.** Two optional Logic-Core node fields. `role` (any Activity:
   task, `subProcess`, `transaction`, `callActivity`) is written as BPMN standard — one
   `<bpmn:resource>` per distinct role name (id derived from the name, collision-safe), referenced

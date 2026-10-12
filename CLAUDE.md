@@ -24,13 +24,15 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 29 bpmn-pipeline + 12 dmn (growing) + 10 shared + 1 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 29 bpmn-pipeline + 20 dmn (growing) + 11 shared + 2 cross-notation + 7 agent +
 9 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
 ```
 scripts/bpmn/ — Core Pipeline (run on every generate call)
-  pipeline.js (Orchestrator, public API runPipeline)
+  pipeline.js (Orchestrator, public API runPipeline; its one import outside bpmn/ is
+  │                            ../cross/decision-doc.js, for the opt-in `decisions` option — text, no rule,
+  │                            fenced in shared/rule-registers.test.js and shared/rule-catalog.test.js)
     ├── validate.js          ← rules.js
     ├── rules.js             ← types.js, workflow-net.js, optimize.js
     ├── scenario-rules.js    ← workflow-net.js, ../shared/rule-catalog.js (SC01, SC06 — the BPMN rules of the scenario pipeline; called only by scenarios/pipeline.js)
@@ -103,6 +105,9 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
                                for every outbound request to a client-supplied URL: callbacks, LLM base URLs)
   safe-text.js               (no deps — quoteForMessage / boundText: client text bounded and escaped on
                                its way into a message, a log line or a response)
+  text-layout.js             (no deps — layoutText/lineWidth: Arial advance widths + diagram-js Text.js
+                               line breaking, the one text measurement of both notations; bpmn/coordinates.js
+                               edgeLabelLayout wraps it, the DMN renderers call it)
   geometry.js                (straight-segment clip maths: clipStraight, clipToRect — shared by
                                bpmn/coordinates.js and dmn/coordinates.js; the orthogonal clip
                                helpers stay in bpmn/ — see dmn-integration plan's Stage 3 note)
@@ -120,8 +125,10 @@ Standalone tooling (top-level scripts/)
   delivery.js                Webhook delivery + dead-letter
   orchestrator.js            Multi-agent orchestration
 
-DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
-  pipeline.js (Orchestrator + CLI, public API runDmnPipeline)
+DMN subsystem (scripts/dmn/) — opt-in; runPipeline reaches only the table text (table.js,
+table-text.js, constants.js, schema-gate.js via ../cross/decision-doc.js), never a rule module
+  pipeline.js (Orchestrator + CLI, public API runDmnPipeline → { xml, svg, markdown?, tablesSvg?,
+               tablesHtml?, diagrams, diagnostics, validation }; the three views with `doc: true`)
     ├── schema-gate.js       ← ../shared/resource-paths.js (ajv gate for Decision-Core)
     ├── rules.js             ← ../shared/rule-profile.js, ../shared/utils.js, ../shared/rule-catalog.js (D01–D11 + B01–B06,
     │                          3 layers, 2 modes; own runner `runDmnRules`)
@@ -135,7 +142,22 @@ DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
     ├── di-check.js          (checkDmnDiagramIntegrity — DD01–DD03, mirrors bpmn/di-check.js)
     ├── dmn-xml.js           ← ../shared/utils.js, requirement-order.js, dmn-moddle
     │                          (generateDmnXml, validateDmnXml)
-    └── constants.js         ← ../shared/utils.js (DRD shape sizes, spacing, edge markers, from CFG.dmn)
+    ├── svg.js               ← constants.js, pathmap.js, requirement-order.js, ../shared/utils.js,
+    │                          ../shared/text-layout.js (generateDmnSvg — the DRD as SVG, a pure
+    │                          translation of the coordMap the DMNDI carries; dmn-js 17.12.3 shapes/markers)
+    ├── pathmap.js           (no deps — dmn-js-drd 17.12.3 KNOWLEDGE_SOURCE / BUSINESS_KNOWLEDGE_MODEL
+    │                          templates + getScaledPath)
+    ├── table.js             ← constants.js, ../shared/text-layout.js (layoutDecisionTable(s) — the ONE
+    │                          table layout: hit policy, three-line heads, rows, every box)
+    ├── table-text.js        ← constants.js, table.js (formatTableMarkdown, formatTablePlainText — words only)
+    ├── table-svg.js         ← constants.js, ../shared/utils.js (generateTablesSvg — translates table.js)
+    ├── table-html.js        ← constants.js, ../shared/utils.js (generateTablesHtml — translates table.js)
+    ├── doc.js               ← constants.js, table-text.js (generateDmnMarkdown — the --doc Markdown)
+    └── constants.js         ← ../shared/utils.js (DRD shape sizes, spacing, edge markers, render and table
+                               styles, hit-policy indicators, `dmnLabels(locale)` — every word of the
+                               table views, from CFG.dmn.labels)
+  load-decisions.js          ← schema-gate.js, import.js (loadDecisionFile — a --decisions file, JSON or
+                               DMN routed by content; shared by the bpmn and scenarios CLIs)
   import-scope.js            (no deps — the coverage table: one row per non-abstract global element
                                in DMN13.xsd/DMNDI13.xsd, disposition `mapped`/`reported`/
                                `parser-blind`, plus DMN_NESTED_TYPE_COVERAGE, DMN_XSD_DEFAULTS and
@@ -151,10 +173,11 @@ DMN subsystem (scripts/dmn/) — opt-in, not reached by runPipeline
                                diagram is an IM06 finding — so even a file this generator wrote imports as
                                not lossless. Not reached by runDmnPipeline, but it has its own CLI:
                                `node dmn/import.js <input.dmn | -> [output.json] [--strict]`, and
-                               scenarios/pipeline.js imports through it)
-  (produces a real .dmn file, XSD-validated — see
-   docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: SVG rendering and
-   the tool surface, Stages 6–7.)
+                               load-decisions.js — the scenarios CLI and the BPMN CLI's
+                               --decisions — imports through it)
+  (produces a real .dmn file, XSD-validated, and the DRD as SVG — see
+   docs/superpowers/plans/2026-07-30-dmn-integration.md for what is still open: the tool surface,
+   Stage 7.)
 
 Agent subsystem (scripts/agents/)
   chat.js, compliance.js, layout.js, llm-provider.js, modeler.js, prompt-sections.js, reviewer.js
@@ -190,7 +213,7 @@ Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
                                gateways only, not DMN — see the module doc for why.)
   pipeline.js                ← collaboration.js, decision-table.js, bridge.js, format.js,
                                ../bpmn/scenario-rules.js, ../dmn/scenario-rules.js,
-                               ../cross/rules.js, ../dmn/import.js
+                               ../cross/rules.js, ../dmn/load-decisions.js
                                (runScenarioPipeline — Orchestrator + CLI, mirrors
                                dmn/pipeline.js's idiom. Always routes through the
                                collaboration pair (enumerateCollaboration /
@@ -203,10 +226,16 @@ Scenario subsystem (scripts/scenarios/) — opt-in, not reached by runPipeline
                                scenario rule modules and sorts their findings by rule id.
                                Integration only — no new computation or judgment.)
 
-Cross-notation rules (scripts/cross/) — opt-in, called only by scenarios/pipeline.js
+Cross-notation (scripts/cross/) — opt-in
   rules.js                   ← ../shared/rule-catalog.js (SC02, SC03 — a decisionRef that
                                resolves to no DMN decision / to more than one; layer
-                               `consistency` of the cross-notation rule set)
+                               `consistency` of the cross-notation rule set; called only by
+                               scenarios/pipeline.js)
+  decision-doc.js            ← ../scenarios/bridge.js, ../dmn/table.js, ../dmn/table-text.js,
+                               ../dmn/constants.js, ../dmn/schema-gate.js (applyDecisionDocumentation —
+                               a businessRuleTask's decision table into its documentation, between
+                               two marker lines, replaced on every run; matching is resolveBridge's.
+                               Called only by bpmn/pipeline.js, for runPipeline's `decisions` option)
 ```
 
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
@@ -336,7 +365,11 @@ membership instead of coordinates.
 | `scripts/dmn/import.js` | `dmnToDecisionCore(xml)` → `{ dc, report }` — DMN 1.3 XML → Decision-Core plus a structured loss report (`IM01`–`IM09`, positional paths); `report.lossless` is the one bit a caller branches on, and a failure is a shaped result, never a throw. Reads no DMNDI: Decision-Core is coordinate-free and `layout.js` recomputes the layout on every emit, so every diagram is an IM06 finding. **Consequence worth knowing: a `.dmn` this generator wrote imports as not lossless** (it also generates the `<variable>`/`<literalExpression>` ids it then reports as IM05), so `--strict` on the import CLI or on `scenarios/pipeline.js --decisions` aborts on our own output. The claimable statement is "no finding outside IM05/IM06", asserted by `roundtrip.test.js`. The CLI is `node dmn/import.js <input.dmn \| -> [output.json] [--strict]`: not-XML and not-DMN input exit with a message, `--strict` aborts on a lossy import and writes nothing, and the output passes the Decision-Core schema gate |
 | `scripts/dmn/import-scope.js` | The importer's coverage table — one row per non-abstract global element in `DMN13.xsd`/`DMNDI13.xsd` (`mapped`/`reported`/`parser-blind`), nested-type coverage, XSD defaults and the `IM01`–`IM09` codes. The only exclusion list; `import-coverage.test.js` fences it against the XSDs |
 | `scripts/dmn/requirement-order.js` | `requirementKey`, `orderedRequirements` — the one place a requirement's identity and emitted order are derived, so DMN XML and DRD geometry depend on the model and not on the `dc.requirements` array order (a permutation fence in `requirement-order.test.js`). Dependency-free; used by `layout.js`, `coordinates.js`, `dmn-xml.js` and `import.js` |
-| `scripts/dmn/pipeline.js` | `runDmnPipeline` — Orchestrator + CLI + Public API for the DMN side, gate order schema→rules→layout→coordinates→di-check→serialisation |
+| `scripts/dmn/pipeline.js` | `runDmnPipeline` — Orchestrator + CLI + Public API for the DMN side, gate order schema→rules→layout→coordinates→di-check→serialisation; then the views: `svg` (the DRD) always, `markdown`/`tablesSvg`/`tablesHtml` with `doc: true` (CLI `--doc`: `.md`, `.tables.svg`, `.tables.html`) |
+| `scripts/dmn/svg.js` | `generateDmnSvg` — the DRD as SVG, translating the same `coordMap` the DMNDI carries (no offset: the canvas is anchored at the origin by `coordinates.js`); shapes and markers as dmn-js 17.12.3 draws them (`pathmap.js`). Fenced against the DMNDI by `svg.test.js`, the DMN twin of `geometry contract — the two renderers agree` |
+| `scripts/dmn/table.js` | `layoutDecisionTable(s)` — the one decision-table layout (hit policy letter/name/meaning, three-line heads "When/And/Then · label · values or type", rows, every box from text metrics). `table-text.js` (Markdown; plain text for BPMN documentation with a sentence fallback above `dmn.table.plainTextMaxWidth`), `table-svg.js` and `table-html.js` only translate it. Words: `config.json → dmn.labels[locale]` (`en`, `de`), styles: `dmn.table` |
+| `scripts/cross/decision-doc.js` | `applyDecisionDocumentation(lc, decisionCores)` — runPipeline's `decisions` option (CLI `--decisions`): every `businessRuleTask` with a `decisionRef` gets its decision table in `documentation`, between `=== BEGIN generated: DMN decision …` / `=== END …` marker lines, after the author's text; every run replaces the section (import → regenerate never duplicates it). Matching is `scenarios/bridge.js` `resolveBridge`; unresolved reads "Calls decision: <ref> (table not supplied)". Without `decisions` nothing changes (goldens and the output-hash fence rely on it) |
+| `scripts/shared/text-layout.js` | `layoutText`, `lineWidth` — Arial advance widths and diagram-js `Text.js` line breaking, the one text measurement of both notations |
 | `references/decision-core-schema.json` | Formal JSON Schema for DMN Decision-Core input |
 | `rules/dmn-default-profile.json` | Default DMN profile (semantic: soundness + semantics) |
 | `rules/dmn-best-practice-profile.json` | Adds the opt-in `best_practice` layer |
@@ -715,7 +748,7 @@ node mcp-bpmn-server.js
 
 DMN (mirrors the BPMN CLI's idiom):
 ```bash
-# JSON → DMN 1.3 XML
+# JSON → DMN 1.3 XML + DRD SVG
 node dmn/pipeline.js input.json output-basename
 
 # Stdin:
@@ -726,6 +759,12 @@ node dmn/pipeline.js input.json output --strict
 
 # Enable the opt-in best_practice rule layer:
 node dmn/pipeline.js input.json output --best-practice
+
+# Also write the decision tables: output.md, output.tables.svg, output.tables.html
+node dmn/pipeline.js input.json output --doc
+
+# A Business Rule Task's decision table into its BPMN documentation (JSON or .dmn, by content):
+node bpmn/pipeline.js process.json output --decisions table.dmn,other.json
 
 # DMN 1.3 XML -> Decision-Core JSON, with a loss report on stderr
 node dmn/import.js input.dmn output.json
@@ -739,6 +778,13 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 
 ## Known Limitations
 
+- DMN views: the DRD SVG clips requirement edges at a shape's bounding box (as the DMNDI does), so
+  an edge to a knowledge source or BKM ends at the box, not the wavy/clipped outline; decision tables
+  are drawn rule-as-row only (`preferredOrientation` is carried in the XML, not honoured by the
+  table views); the table SVG measures text with Arial widths — a browser without Arial may wrap a
+  cell differently from the computed box. The BPMN documentation section is written only when
+  `decisions` is given (CLI `--decisions`); a decision decided by a literal expression is reported
+  as "table not supplied", because the bridge matches decisions with a table only
 - Layout, tracked individually: `boundary-event-shapes` still has one sequence-flow crossing
   between boundary-event shapes (#71); a message-flow jog keeps clearance from shapes only, not
   from groups or labels (#72); a sequence flow can run through another edge's label (#73); with
