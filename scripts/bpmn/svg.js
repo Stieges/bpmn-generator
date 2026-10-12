@@ -3,8 +3,8 @@
  * Produces standalone SVG diagrams from coordinate maps.
  */
 
-import { assignEdgeIds } from './topology.js';
-import { isEvent, isGateway, isDataArtifact } from './types.js';
+import { assignEdgeIds, resolveFlowSemantics } from './topology.js';
+import { isEvent, isGateway, isActivity, isDataArtifact, nodeFieldSpec } from './types.js';
 import { CLR, SW, SHAPE, LANE_HEADER_W, LANE_PADDING, TASK_RX, INNER_OUTER_GAP, EXTERNAL_LABEL_H } from './constants.js';
 import { esc, rn, wrapText } from '../shared/utils.js';
 import { edgeLabelBox, edgeLabelTextStyle, textAnnotationTextStyle } from './coordinates.js';
@@ -38,7 +38,6 @@ function generateSvg(lc, coordMap) {
   const nodeLabels = coordMap.nodeLabels ?? {};
   const processes = lc.pools ? lc.pools : [lc];
   const allNodes  = processes.flatMap(p => p.nodes || []);
-  const allEdges  = processes.flatMap(p => p.edges || []);
   const allLanes  = processes.flatMap(p => p.lanes || []);
 
   // Build lane-id → pool-key lookup for laneHeaderW resolution
@@ -86,6 +85,14 @@ function generateSvg(lc, coordMap) {
   const out = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${rn(W)}" height="${rn(H)}" viewBox="0 0 ${rn(W)} ${rn(H)}" font-family="Arial, sans-serif">`);
 
+  // The two source-end markers below have the geometry of bpmn-js 18.6.2's
+  // 'conditional-default-flow-marker' (path M 6 4 L 10 16, ref 0/10) and 'conditional-flow-marker'
+  // (path M 0 10 L 8 6 L 16 10 L 8 14 Z, ref -1/10), stroke 2, 10 units wide on a 2-wide line. A
+  // marker scales with its line's stroke width, so ours gets the box that gives the same absolute
+  // size on our line. The old slash had refX 6 — it sat on the source point, inside the gateway's
+  // outline, and was barely visible (#85).
+  const SRC_MARKER_BOX = rn(10 * 2 / SW.connection);
+
   // §7.2  SVG Defs — markers for all connection types
   out.push(`<defs>
   <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
@@ -94,14 +101,14 @@ function generateSvg(lc, coordMap) {
     <path d="M 1 5 L 11 10 L 1 15 Z" fill="${CLR.stroke}" stroke="${CLR.stroke}" stroke-width="1"/>
   </marker>
   <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
-  <marker id="seq-default-src" viewBox="0 0 20 20" refX="6" refY="10"
-    markerWidth="10" markerHeight="10" orient="auto">
-    <path d="M 6 3 L 10 17" stroke="${CLR.stroke}" stroke-width="1.5"/>
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="0" refY="10"
+    markerWidth="${SRC_MARKER_BOX}" markerHeight="${SRC_MARKER_BOX}" orient="auto">
+    <path d="M 6 4 L 10 16" fill="none" stroke="${CLR.stroke}" stroke-width="2" stroke-linecap="round"/>
   </marker>
   <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
-  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="1" refY="10"
-    markerWidth="12" markerHeight="12" orient="auto">
-    <path d="M 1 10 L 8 6 L 15 10 L 8 14 Z" fill="${CLR.fill}" stroke="${CLR.stroke}" stroke-width="1"/>
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="-1" refY="10"
+    markerWidth="${SRC_MARKER_BOX}" markerHeight="${SRC_MARKER_BOX}" orient="auto">
+    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="${CLR.fill}" stroke="${CLR.stroke}" stroke-width="2" stroke-linejoin="round"/>
   </marker>
   <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
   <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
@@ -176,11 +183,17 @@ function generateSvg(lc, coordMap) {
     out.push(`<text x="${lcx}" y="${lcy}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="${CLR.label}" transform="rotate(-90,${lcx},${lcy})">${esc(lane.name || lane.id)}</text>`);
   }
 
-  // §7.6  Sequence flows
-  for (const edge of allEdges) {
-    const eid = edge.id;
-    const pts = edgeCoords[eid] || [];
-    renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels);
+  // §7.6  Sequence flows. The source-end marker follows what the XML carries, never a field of its
+  // own: `resolveFlowSemantics` is the function `bpmn-xml.js` serialises `default` and
+  // `conditionExpression` from (#84, #85).
+  for (const proc of processes) {
+    const nodeById = new Map((proc.nodes || []).map(n => [n.id, n]));
+    const semantics = resolveFlowSemantics(proc.nodes || [], proc.edges || []);
+    for (const edge of (proc.edges || [])) {
+      const pts = edgeCoords[edge.id] || [];
+      const marker = sequenceFlowSourceMarker(edge, nodeById.get(edge.source), semantics);
+      renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels, marker);
+    }
   }
 
   // §7.7  Message flows (dashed, orthogonal routing, OMG spec Fig 9.5)
@@ -196,7 +209,7 @@ function generateSvg(lc, coordMap) {
       const pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
                     pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
 
-      out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
+      out.push(`<path data-element-id="${esc(mfKey)}" d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" stroke-dasharray="10,12" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
       const L = mf.name ? edgeLabels?.[mfKey] : null;
       if (L) renderEdgeLabel(out, L, tx, ty);
     }
@@ -211,29 +224,33 @@ function generateSvg(lc, coordMap) {
     const pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
                   pts.slice(1).map(p => `L ${tx(p.x)} ${ty(p.y)}`).join(' ');
     const markerEnd = assoc.directed ? ` marker-end="url(#assoc-end)"` : '';
-    out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="1.5" fill="none" stroke-dasharray="0.5,5"${markerEnd}/>`);
+    out.push(`<path data-element-id="${esc(assoc.id)}" d="${pathD}" stroke="${CLR.stroke}" stroke-width="1.5" fill="none" stroke-dasharray="0.5,5"${markerEnd}/>`);
   }
 
   // §7.9  Nodes
+  // Expanded SubProcess: its child nodes, then — for every child that is itself expanded — that
+  // child's contents, then its own edges. Recursive because the DI is: a grandchild of two nested
+  // expanded subprocesses has its BPMNShape, and drawing one level only left it out of the SVG.
+  const renderContents = (node) => {
+    for (const child of node.nodes) {
+      const cc = coords[child.id];
+      if (!cc) continue;
+      out.push(renderNode(child, cc, tx, ty, nodeLabels[child.id]));
+      if (child.isExpanded && child.nodes) renderContents(child);
+    }
+    // Internal sequence flows. No source-end marker: a nested flow is written without
+    // `conditionExpression` and its container without `default` (the `condition` and `isDefault`
+    // rows in types.js), so a marker here would be drawn for semantics the XML does not carry.
+    for (const subEdge of (node.edges || [])) {
+      const pts = edgeCoords[subEdge.id] || [];
+      renderSequenceFlow(out, subEdge, pts, coords, tx, ty, edgeLabels, null);
+    }
+  };
   for (const node of allNodes) {
     const c = coords[node.id];
     if (!c) continue;
     out.push(renderNode(node, c, tx, ty, nodeLabels[node.id]));
-
-    // Expanded SubProcess: render child nodes + edges inside
-    if (node.isExpanded && node.nodes) {
-      for (const child of node.nodes) {
-        const cc = coords[child.id];
-        if (!cc) continue;
-        out.push(renderNode(child, cc, tx, ty, nodeLabels[child.id]));
-      }
-      // Render internal sequence flows
-      for (const subEdge of (node.edges || [])) {
-        const seid = subEdge.id;
-        const pts = edgeCoords[seid] || [];
-        renderSequenceFlow(out, subEdge, pts, coords, tx, ty, edgeLabels);
-      }
-    }
+    if (node.isExpanded && node.nodes) renderContents(node);
   }
 
   out.push(`</svg>`);
@@ -262,7 +279,21 @@ function renderPoolSvg(out, proc, pc, laneCoords, poolCoords, tx, ty) {
   out.push(`<text x="${plcx}" y="${plcy}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="bold" fill="${CLR.label}" transform="rotate(-90,${plcx},${plcy})">${esc(proc.name || 'Process')}</text>`);
 }
 
-function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels) {
+/**
+ * Which source-end marker a top-level sequence flow gets: `'default'`, `'conditional'` or `null` —
+ * bpmn-js 18.6.2's rule (`BpmnRenderer`, handler `'bpmn:SequenceFlow'`) applied to what the XML
+ * carries: the conditional diamond only for a flow with a conditionExpression leaving an Activity,
+ * the default slash for the flow its Gateway or Activity source names as `default`; the slash wins
+ * when both apply. `isConditional` and `isDefault` are not consulted directly — the XML decides.
+ */
+function sequenceFlowSourceMarker(edge, source, { defaultBySource, conditionById }) {
+  if (!source) return null;
+  if (defaultBySource.get(edge.source) === edge.id && (isGateway(source.type) || isActivity(source.type))) return 'default';
+  if (conditionById.has(edge.id) && isActivity(source.type)) return 'conditional';
+  return null;
+}
+
+function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels, sourceMarker) {
   let pathD;
   if (pts.length >= 2) {
     pathD = `M ${tx(pts[0].x)} ${ty(pts[0].y)} ` +
@@ -274,11 +305,11 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels) {
   }
 
   const markerEnd = `marker-end="url(#seq-end)"`;
-  const markerStart = edge.isDefault     ? `marker-start="url(#seq-default-src)"`
-                    : edge.isConditional ? `marker-start="url(#seq-conditional-src)"`
+  const markerStart = sourceMarker === 'default'     ? `marker-start="url(#seq-default-src)"`
+                    : sourceMarker === 'conditional' ? `marker-start="url(#seq-conditional-src)"`
                     : '';
 
-  out.push(`<path d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" ${markerStart} ${markerEnd}/>`);
+  out.push(`<path data-element-id="${esc(edge.id)}" d="${pathD}" stroke="${CLR.stroke}" stroke-width="${SW.connection}" fill="none" ${markerStart} ${markerEnd}/>`);
 
   // Edge label — its box comes from coordMap.edgeLabels (coordinates.js placeEdgeLabel)
   const L = edge.label ? edgeLabels?.[edge.id] : null;
@@ -316,10 +347,10 @@ function renderNode(node, c, tx, ty, label) {
   else if (isGateway(type))  svg = renderGateway(node, c, tx, ty, label);
   else if (isDataArtifact(type)) svg = renderDataArtifact(node, c, tx, ty, label);
   else                       svg = renderActivity(node, c, tx, ty);
-  if (node.documentation) {
-    svg = `<g><title>${esc(node.documentation)}</title>\n${svg}\n</g>`;
-  }
-  return svg;
+  // One group per element, keyed like bpmn-js's `data-element-id`, so a consumer (and
+  // symbol-fidelity.test.js) can find an element's markup without re-deriving its geometry.
+  const title = node.documentation ? `<title>${esc(node.documentation)}</title>\n` : '';
+  return `<g data-element-id="${esc(node.id)}">\n${title}${svg}\n</g>`;
 }
 
 // ── Events (OMG spec §10.4) ─────────────────────────────────────────
@@ -336,7 +367,12 @@ function renderEvent(node, c, tx, ty, label) {
   const isEnd   = type === 'endEvent';
   const isInter = type.includes('intermediate') || type === 'boundaryEvent';
   const isThrow = type === 'intermediateThrowEvent';
-  const isNonInterrupting = node.isInterrupting === false || node.cancelActivity === false;
+  // Dashed only where the XML says so: `isInterrupting="false"` is written on a startEvent and
+  // `cancelActivity="false"` on a boundaryEvent, each under its row's class guard (types.js) — the
+  // same guard here, so a field on a class that cannot carry it is not drawn either (#83).
+  const isNonInterrupting =
+    (node.isInterrupting === false && nodeFieldSpec('isInterrupting').allowed.has(type)) ||
+    (node.cancelActivity === false && nodeFieldSpec('cancelActivity').allowed.has(type));
 
   const sw = isEnd ? SW.endEvent : isStart ? SW.startEvent : SW.intermediate;
   const dash = isNonInterrupting ? ` stroke-dasharray="5,3"` : '';
@@ -391,9 +427,20 @@ function renderGateway(node, c, tx, ty, label) {
     // Bold circle (OMG spec Fig 10.64)
     o.push(`<circle cx="${cx}" cy="${cy}" r="${rn(h * 0.24)}" fill="none" stroke="${stroke}" stroke-width="2.5"/>`);
   } else if (type === 'eventBasedGateway') {
-    // Circle + pentagon (OMG spec Fig 10.73)
-    o.push(`<circle cx="${cx}" cy="${cy}" r="${rn(h * 0.22)}" fill="none" stroke="${stroke}" stroke-width="1.5"/>`);
-    o.push(renderPentagon(cx, cy, h * 0.14, stroke));
+    // OMG spec Fig 10.73-10.75; structure and ring radii from bpmn-js 18.6.2 ('bpmn:EventBasedGateway'):
+    // one ring always; `Parallel` adds an outlined plus and no pentagon; `Exclusive` (the default)
+    // adds the pentagon, and a second ring inside the first unless the gateway instantiates (#85).
+    // Reads the two fields the XML carries — both written by the generic field loop (types.js).
+    const ringR = (offset) => Math.round((w + h) / 4 - offset);
+    o.push(`<circle cx="${cx}" cy="${cy}" r="${ringR(h * 0.20)}" fill="none" stroke="${stroke}" stroke-width="1"/>`);
+    if (node.eventGatewayType === 'Parallel') {
+      o.push(`<path d="${eventGatewayParallelPath(x, y, w, h)}" fill="none" stroke="${stroke}" stroke-width="1"/>`);
+    } else {
+      if (node.instantiate !== true) {
+        o.push(`<circle cx="${cx}" cy="${cy}" r="${ringR(h * 0.26)}" fill="none" stroke="${stroke}" stroke-width="1"/>`);
+      }
+      o.push(renderPentagon(cx, cy, h * 0.14, stroke));
+    }
   } else if (type === 'complexGateway') {
     // Asterisk (OMG spec Fig 10.67)
     for (const a of [0, 45, 90, 135]) {
@@ -407,6 +454,18 @@ function renderGateway(node, c, tx, ty, label) {
   o.push(renderNodeLabel(label, tx, ty));
 
   return o.join('\n');
+}
+
+/**
+ * The outlined plus of a parallel event-based gateway: bpmn-js 18.6.2's PathMap `GATEWAY_PARALLEL`
+ * (30×30, elements 5 / 12.5), scaled by 0.4 of the shape and started at (0.474 w, 0.296 h) — the
+ * parameters its 'bpmn:EventBasedGateway' handler passes to `getScaledPath`.
+ */
+function eventGatewayParallelPath(x, y, w, h) {
+  const xr = (w / 30) * 0.4, yr = (h / 30) * 0.4;
+  const x0 = rn(5 * xr), x1 = rn(12.5 * xr), y0 = rn(5 * yr), y1 = rn(12.5 * yr);
+  const mx = rn(x + w * 0.474), my = rn(y + h * 0.296);
+  return `m ${mx},${my} 0,${y1} -${x1},0 0,${y0} ${x1},0 0,${y1} ${x0},0 0,-${y1} ${x1},0 0,-${y0} -${x1},0 0,-${y1} -${x0},0 z`;
 }
 
 // ── Activities (OMG spec §10.2) ─────────────────────────────────────
@@ -440,7 +499,7 @@ function renderActivity(node, c, tx, ty) {
   }
 
   // Type icon top-left (bpmn-js PathMap glyphs)
-  const icon = renderTaskIcon(type, x, y);
+  const icon = renderTaskIcon(type, x, y, node);
   if (icon) o.push(icon);
 
   // Bottom-center markers (loop, MI, subprocess)
@@ -481,8 +540,9 @@ function renderBottomMarkers(node, cx, bottomY, actX, actW) {
   if (node.multiInstance === 'sequential') {
     markers.push(renderMISequentialMarker(0, 0));
   }
-  // Collapsed subprocess [+] (OMG spec Fig 10.17)
-  if (node.type === 'subProcess' || node.type === 'callActivity') {
+  // Collapsed subprocess [+] (OMG spec Fig 10.17) — a Transaction is a SubProcess, and bpmn-js
+  // draws the marker on a collapsed one too (#85)
+  if (node.type === 'subProcess' || node.type === 'transaction' || node.type === 'callActivity') {
     markers.push(renderSubProcessMarker(0, 0));
   }
   // Ad-hoc ~

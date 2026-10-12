@@ -10,28 +10,87 @@ import { isGateway } from './types.js';
  * OMG spec §10.5.1
  */
 export function inferGatewayDirections(nodes, edges) {
+  const dirs = gatewayDirections(nodes, edges);
+  for (const n of nodes) if (dirs.has(n.id)) n._direction = dirs.get(n.id);
+}
+
+/** The direction `inferGatewayDirections` would assign, per gateway id — without writing it. */
+function gatewayDirections(nodes, edges) {
   const outCount = {}, inCount = {};
   for (const e of edges) {
     outCount[e.source] = (outCount[e.source] || 0) + 1;
     inCount[e.target]  = (inCount[e.target]  || 0) + 1;
   }
+  const dirs = new Map();
   for (const n of nodes) {
     if (!isGateway(n.type)) continue;
     const outs = outCount[n.id] || 0;
     const ins  = inCount[n.id]  || 0;
 
     if (n.has_join && outs <= 1 && ins > 1) {
-      n._direction = 'Converging';
+      dirs.set(n.id, 'Converging');
     } else if (!n.has_join && outs > 1 && ins <= 1) {
-      n._direction = 'Diverging';
+      dirs.set(n.id, 'Diverging');
     } else if (outs > 1 && ins > 1) {
-      n._direction = 'Mixed';
+      dirs.set(n.id, 'Mixed');
     } else if (n.has_join) {
-      n._direction = 'Converging';
+      dirs.set(n.id, 'Converging');
     } else {
-      n._direction = 'Diverging';
+      dirs.set(n.id, 'Diverging');
     }
   }
+  return dirs;
+}
+
+/**
+ * Which sequence flows of ONE process level the BPMN XML marks as their source's `default`, and
+ * which carry a `<bpmn:conditionExpression>` (with its body) — the one place both are decided.
+ *
+ * `bpmn-xml.js` writes exactly this, and `svg.js` draws its default slash and conditional diamond
+ * from exactly this, so the two renderers cannot disagree about a flow's semantics (#84, #85). They
+ * used to: the serialiser inferred a default for an unmarked diverging XOR/OR gateway that the SVG
+ * never drew, and the SVG drew a conditional diamond from `isConditional` for which the XML carried
+ * no condition.
+ *
+ * Two inferences live here, both pre-existing serialiser behaviour (removal is queued as plan
+ * "Root fix", backlog item 7, in the edge-field rows of `types.js`):
+ *   - a diverging exclusive/inclusive gateway with more than one outgoing flow and none marked
+ *     `isDefault` gets its LAST outgoing flow as default;
+ *   - every other outgoing flow of such a gateway gets a condition, its body `condition` or else
+ *     `label` (or empty).
+ * An explicit `condition` gives any flow a condition. An explicit `isDefault` makes the flow its
+ * source's default, whatever the source (the last one wins, as in the serialiser it replaces).
+ *
+ * Pure: gateway directions are computed, not read from or written to `_direction`.
+ * Called per process level; nested container edges are not serialised with either (the `condition`
+ * and `isDefault` rows in `types.js`), so a caller asks only about a process's own edges.
+ *
+ * @returns {{ defaultBySource: Map<string,string>, conditionById: Map<string,string> }}
+ */
+export function resolveFlowSemantics(nodes = [], edges = []) {
+  const dirs = gatewayDirections(nodes, edges);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const isConditionalSplit = (n) => !!n
+    && (n.type === 'exclusiveGateway' || n.type === 'inclusiveGateway')
+    && dirs.get(n.id) === 'Diverging';
+
+  const defaultBySource = new Map();
+  for (const e of edges) {
+    if (e.isDefault) defaultBySource.set(e.source, e.id);
+  }
+  for (const n of nodes) {
+    if (!isConditionalSplit(n) || defaultBySource.has(n.id)) continue;
+    const outs = edges.filter((e) => e.source === n.id);
+    if (outs.length > 1) defaultBySource.set(n.id, outs[outs.length - 1].id);
+  }
+
+  const defaultIds = new Set(defaultBySource.values());
+  const conditionById = new Map();
+  for (const e of edges) {
+    const needsCondition = e.condition || (isConditionalSplit(byId.get(e.source)) && !defaultIds.has(e.id));
+    if (needsCondition) conditionById.set(e.id, e.condition || e.label || '');
+  }
+  return { defaultBySource, conditionById };
 }
 
 /**

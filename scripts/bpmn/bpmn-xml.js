@@ -16,7 +16,7 @@ import {
 
 import { LANE_HEADER_W } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
-import { inferGatewayDirections, assignEdgeIds, withProcessId } from './topology.js';
+import { inferGatewayDirections, assignEdgeIds, withProcessId, resolveFlowSemantics } from './topology.js';
 import { inferEventMarker } from './icons.js';
 import { edgeLabelBox } from './coordinates.js';
 
@@ -611,8 +611,9 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     if (attachedEl) el.attachedToRef = attachedEl;
   }
 
-  // Create sequence flows
-  const defaultFlowIds = new Set(Object.values(defaultFlowMap));
+  // Create sequence flows. Which flows carry a conditionExpression is decided once, in
+  // `resolveFlowSemantics` — the same answer `svg.js` draws its markers from (#84).
+  const { conditionById } = resolveFlowSemantics(nodes, edges);
   const seqFlowMap = new Map();
   for (const edge of edges) {
     const eid = edge.id;
@@ -624,13 +625,8 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     if (edge.label) attrs.name = edge.label;
 
     // Condition expression
-    const sourceNode = nodes.find(n => n.id === edge.source);
-    const needsCondition = edge.condition ||
-      (sourceNode && (sourceNode.type === 'exclusiveGateway' || sourceNode.type === 'inclusiveGateway') &&
-       sourceNode._direction === 'Diverging' && !defaultFlowIds.has(eid));
-    if (needsCondition) {
-      const expr = edge.condition || edge.label || '';
-      attrs.conditionExpression = create('bpmn:FormalExpression', { body: expr });
+    if (conditionById.has(eid)) {
+      attrs.conditionExpression = create('bpmn:FormalExpression', { body: conditionById.get(eid) });
     }
 
     const seqFlow = create('bpmn:SequenceFlow', attrs);
@@ -723,29 +719,11 @@ function buildLane(lane, nodes, flowNodeMap) {
 }
 
 /**
- * Build default flow map for XOR/Inclusive gateways.
+ * Build default flow map (`{ sourceId: edgeId }`) — from `resolveFlowSemantics`, the one place that
+ * decides it, so the SVG's default slash and the XML's `default` attribute cannot disagree (#85).
  */
 function buildDefaultFlowMap(proc) {
-  const nodes = proc.nodes || [];
-  const edges = proc.edges || [];
-  const map = {};
-
-  for (const e of edges) {
-    if (e.isDefault) {
-      map[e.source] = e.id;
-    }
-  }
-  for (const n of nodes) {
-    if ((n.type === 'exclusiveGateway' || n.type === 'inclusiveGateway') &&
-        n._direction === 'Diverging' && !map[n.id]) {
-      const gwOutEdges = edges.filter(e => e.source === n.id);
-      if (gwOutEdges.length > 1) {
-        const defaultEdge = gwOutEdges[gwOutEdges.length - 1];
-        map[n.id] = defaultEdge.id;
-      }
-    }
-  }
-  return map;
+  return Object.fromEntries(resolveFlowSemantics(proc.nodes || [], proc.edges || []).defaultBySource);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

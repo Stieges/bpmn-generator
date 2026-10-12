@@ -5721,9 +5721,9 @@ describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () 
 /** All connection polylines in an SVG, keyed by connection kind. */
 function svgConnections(svg) {
   const kinds = {
-    messageFlow: /<path d="([^"]+)"[^>]*stroke-dasharray="10,12"/g,
-    association: /<path d="([^"]+)"[^>]*stroke-dasharray="0\.5,5"/g,
-    sequenceFlow: /<path d="([^"]+)"[^>]*marker-end="url\(#seq-end\)"/g,
+    messageFlow: /<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="10,12"/g,
+    association: /<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="0\.5,5"/g,
+    sequenceFlow: /<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*marker-end="url\(#seq-end\)"/g,
   };
   const out = {};
   for (const [kind, re] of Object.entries(kinds)) {
@@ -6540,11 +6540,10 @@ describe('geometry contract — the two renderers agree on node labels', () => {
         }
 
         // The SVG draws every line of every box where the box says, under one canvas offset. It
-        // draws nodes two levels deep only (a top-level node and the children of an expanded one;
-        // a grandchild has no shape in the SVG either, while the DI has it), so its labels are
-        // compared at those levels.
-        const drawn = new Set((lc.pools || [lc]).flatMap(p => (p.nodes || []).flatMap(n =>
-          [n.id, ...(n.isExpanded ? (n.nodes || []).map(k => k.id) : [])])));
+        // draws a top-level node and, inside an expanded one, its children at every depth — the
+        // levels the DI draws on the main plane (a grandchild used to be missing from the SVG).
+        const drawnIds = (n) => [n.id, ...(n.isExpanded ? (n.nodes || []).flatMap(drawnIds) : [])];
+        const drawn = new Set((lc.pools || [lc]).flatMap(p => (p.nodes || []).flatMap(drawnIds)));
         const got = svgLabelLines(r.svg);
         const want = [
           ...Object.entries(labels).filter(([id]) => drawn.has(id)).map(([, L]) => L),
