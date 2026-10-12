@@ -12,7 +12,7 @@ import { describe, test, expect } from '@jest/globals';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { repairMessageFlowLabels, placeEdgeLabel, edgeLabelBox, labelHitsRoute, participantHeaders } from './coordinates.js';
+import { repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, routeMessageFlows, placeEdgeLabel, edgeLabelBox, labelHitsRoute, participantHeaders, participantOutlines } from './coordinates.js';
 import { runPipeline } from './pipeline.js';
 import { CFG } from '../shared/utils.js';
 
@@ -137,6 +137,113 @@ describe('repairMessageFlowLabels on hand-built geometry', () => {
   });
 });
 
+describe('participant outlines and the move bound', () => {
+  test('participantOutlines: top and bottom edge of every drawn participant box', () => {
+    const lc = { pools: [{ id: 'A', lanes: [{ id: 'L1' }], nodes: [] }, { id: 'B', nodes: [] }], collapsedPools: [{ id: 'X' }] };
+    const cm = { poolCoords: { A: { x: 0, y: 0, w: 500, h: 100, laneHeaderWidth: 30 }, B: { x: 0, y: 160, w: 500, h: 80 }, X: { x: 0, y: 300, w: 600, h: 60 } },
+      laneCoords: { L1: { x: 30, y: 0, w: 470, h: 100 } } };
+    expect(participantOutlines(cm, lc)).toEqual([
+      { y: 0, x0: 0, x1: 500 }, { y: 100, x0: 0, x1: 500 },
+      { y: 160, x0: 0, x1: 500 }, { y: 240, x0: 0, x1: 500 },
+      { y: 300, x0: 0, x1: 600 }, { y: 360, x0: 0, x1: 600 }]);
+  });
+
+  test('a label across a participant outline moves off it, beside its own leg', () => {
+    const lc = { pools: [{ id: 'A', nodes: [{ id: 'a', type: 'task' }] }, { id: 'B', nodes: [{ id: 'b', type: 'task' }] }],
+      messageFlows: [{ id: 'm', source: 'a', target: 'b', name: 'Assessment request' }] };
+    const route = [P(300, 100), P(300, 150), P(100, 150), P(100, 200)];
+    const cm = {
+      coords: { a: { x: 250, y: 20, w: 100, h: 80 }, b: { x: 50, y: 200, w: 100, h: 80 } },
+      // A's bottom edge at 130 runs through the label above the corridor leg at 150.
+      poolCoords: { A: { x: 0, y: 0, w: 500, h: 130 }, B: { x: 0, y: 190, w: 500, h: 110 } },
+      laneCoords: {}, nodeLabels: {}, edgeCoords: { m: route },
+      edgeLabels: { m: placeEdgeLabel('Assessment request', route, { preferred: [route[1], route[2]] }) },
+    };
+    expect(unclearMessageFlowLabels(cm, lc)).toEqual(['m']);
+    const out = repairMessageFlowLabels(cm, lc);
+    const m = edgeLabelBox(out.m);
+    expect(out.m.side).toBe('below');
+    expect(m.y).toBe(150 + gap);
+    for (const L of participantOutlines(cm, lc)) expect(m.y < L.y && L.y < m.y + m.h && m.x < L.x1 && L.x0 < m.x + m.w).toBe(false);
+  });
+
+  test(`no candidate farther than layout.messageFlowLabelMaxMovePx (${CFG.layout.messageFlowLabelMaxMovePx} px): the label stays`, () => {
+    const { lc, cm } = fanned();
+    // A wall over everything within reach of rep's label; the far end of its legs is free but out of range.
+    const reach = CFG.layout.messageFlowLabelMaxMovePx;
+    cm.coords.wall = { x: cm.edgeLabels.rep.x - reach - 60, y: 60, w: 2 * reach + 120, h: 200 };
+    const out = repairMessageFlowLabels(cm, lc);
+    expect(out.rep).toBe(cm.edgeLabels.rep);
+  });
+});
+
+// Two participants only 30 px apart and two fanned message flows with two-line labels: neither
+// side of either corridor leg has room, and every vertical leg is inside a participant.
+const narrow = () => {
+  const lc = {
+    pools: [
+      { id: 'A', name: 'A', nodes: [{ id: 'a1', type: 'task', name: 'Send' }, { id: 'a2', type: 'task', name: 'Receive' }], edges: [] },
+      { id: 'B', name: 'B', nodes: [{ id: 'b1', type: 'task', name: 'Receive' }, { id: 'b2', type: 'task', name: 'Send' },
+        { id: 'b3', type: 'task', name: 'Next' }], edges: [{ id: 'bf', source: 'b1', target: 'b3' }] },
+    ],
+    messageFlows: [
+      { id: 'req', source: 'a1', target: 'b1', name: 'Assessment request' },
+      { id: 'rep', source: 'b2', target: 'a2', name: 'Assessment report' },
+    ],
+  };
+  const cm = {
+    coords: { a1: { x: 550, y: 20, w: 100, h: 60 }, a2: { x: 80, y: 20, w: 100, h: 60 },
+      b1: { x: 50, y: 150, w: 100, h: 60 }, b2: { x: 580, y: 150, w: 100, h: 60 }, b3: { x: 300, y: 150, w: 100, h: 60 } },
+    poolCoords: { A: { x: 0, y: 0, w: 800, h: 100, laneHeaderWidth: 30 }, B: { x: 0, y: 130, w: 800, h: 100, laneHeaderWidth: 30 } },
+    laneCoords: {},
+    edgeCoords: { bf: [P(150, 180), P(300, 180)] },
+    edgeLabels: {},
+    nodeLabels: {},
+  };
+  routeMessageFlows(cm, lc);
+  cm.edgeLabels = repairMessageFlowLabels(cm, lc);
+  return { lc, cm };
+};
+
+describe('growParticipantGapsForLabels', () => {
+  test('the premise: in a 30 px gap the repaired labels are still not clear', () => {
+    const { lc, cm } = narrow();
+    expect(unclearMessageFlowLabels(cm, lc).length).toBeGreaterThan(0);
+  });
+
+  test('grows the gap, moves the participant below rigidly, routes and repairs again: every label clear', () => {
+    const { lc, cm } = narrow();
+    const before = JSON.parse(JSON.stringify(cm));
+    const grown = growParticipantGapsForLabels(cm, lc);
+    expect(grown.length).toBeGreaterThan(0);
+    expect(unclearMessageFlowLabels(cm, lc)).toEqual([]);
+    const d = cm.poolCoords.B.y - before.poolCoords.B.y;
+    expect(d).toBe(grown.reduce((t, g) => t + g.px, 0));
+    expect(d).toBeLessThanOrEqual(CFG.layout.messageFlowLabelMaxGapGrowthPx);
+    expect(cm.poolCoords.A).toEqual(before.poolCoords.A);
+    for (const id of ['b1', 'b2', 'b3']) expect(cm.coords[id]).toEqual({ ...before.coords[id], y: before.coords[id].y + d });
+    for (const id of ['a1', 'a2']) expect(cm.coords[id]).toEqual(before.coords[id]);
+    expect(cm.edgeCoords.bf).toEqual(before.edgeCoords.bf.map(p => ({ ...p, y: p.y + d })));
+    // Message flows were routed again: they end on the moved participant.
+    expect(cm.edgeCoords.req.at(-1).y).toBe(cm.coords.b1.y);
+  });
+
+  test('idempotent: on its own result it grows nothing and moves nothing', () => {
+    const { lc, cm } = narrow();
+    growParticipantGapsForLabels(cm, lc);
+    const once = JSON.stringify(cm);
+    expect(growParticipantGapsForLabels(cm, lc)).toEqual([]);
+    expect(JSON.stringify(cm)).toBe(once);
+    expect(repairMessageFlowLabels(cm, lc)).toBe(cm.edgeLabels);
+  });
+
+  test('a single process has no gap: nothing happens', () => {
+    const lc = { id: 'P', nodes: [], edges: [], messageFlows: [] };
+    const cm = { coords: {}, poolCoords: {}, laneCoords: {}, edgeCoords: {}, edgeLabels: {}, nodeLabels: {} };
+    expect(growParticipantGapsForLabels(cm, lc)).toEqual([]);
+  });
+});
+
 describe('repairMessageFlowLabels in the pipeline', () => {
   const MODES = { default: {}, off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' } };
   for (const [mode, opts] of Object.entries(MODES)) {
@@ -166,11 +273,13 @@ describe('repairMessageFlowLabels in the pipeline', () => {
   // And no node label sits on a message-flow label afterwards — node-label avoidance runs after the
   // repair and treats every edge label as an obstacle, so it cannot undo it.
   for (const name of FIXTURES) {
-    test(`${name}: a fixed point of the pass; no node label on a message-flow label`, async () => {
+    test(`${name}: a fixed point of the pass, every message-flow label clear, no node label on one`, async () => {
       const lc = load(name);
       const r = await runPipeline(lc, {});
       if (!r.coordMap) return;      // blocked on purpose (deadlock-process)
       expect(repairMessageFlowLabels(r.coordMap, lc)).toBe(r.coordMap.edgeLabels);
+      // Measured over every fixture: no message-flow label is left unclear (#88).
+      expect(unclearMessageFlowLabels(r.coordMap, lc)).toEqual([]);
       for (const mf of lc.messageFlows || []) {
         const L = r.coordMap.edgeLabels[mf.id];
         if (!L) continue;

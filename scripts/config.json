@@ -181,6 +181,8 @@
     "foreignShapeRepair": true,
     "messageFlowLabelRepair": true,
     "messageFlowLabelSlidePx": 10,
+    "messageFlowLabelMaxMovePx": 150,
+    "messageFlowLabelMaxGapGrowthPx": 80,
     "bendRuleLimits": {
       "shapeClearance": 8,
       "regionInset": 10,
