@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { extractPromptSection } from './prompt-sections.js';
 import { promptTemplatePath } from '../shared/resource-paths.js';
 import { validateLogicCoreSchema } from '../bpmn/schema-gate.js';
+import { validateLogicCore } from '../bpmn/validate.js';
 
 const jsonBlocks = (text) => [...text.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => m[1]);
 const isLogicCoreRoot = (o) => !!o && typeof o === 'object' && !Array.isArray(o)
@@ -55,5 +56,27 @@ describe('every Logic-Core example in prompt-template.md', () => {
 
   test.each(all)('block %i passes the input schema', (_, parsed) => {
     expect(errorsOf(parsed)).toEqual([]);
+  });
+});
+
+// The examples teach how to assign roles: a lane on every step of a laned process, no lane without a
+// `lanes` array, no empty lane (rules M12, M13). An example that breaks them teaches the LLM to.
+describe('Logic-Core examples assign every step to a declared lane', () => {
+  const laneFinding = /has no element at the top level|belongs to no lane|does not declare|declares no lanes/;
+  const examples = ['references/prompt-template.md', 'references/logic-core-schema.md'].flatMap((rel) => {
+    const text = readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
+    return jsonBlocks(text).map((b, i) => { try { return [`${rel} #${i}`, JSON.parse(b)]; } catch { return null; } })
+      .filter((x) => x && isLogicCoreRoot(x[1]));
+  });
+
+  test.each(examples)('%s', (_, lc) => {
+    expect(validateLogicCore(lc).warnings.filter((w) => laneFinding.test(w))).toEqual([]);
+  });
+
+  test('the Master prompt says so, and says where a system goes', () => {
+    const master = extractPromptSection('Master Extraction Prompt');
+    expect(master).toMatch(/\*\*every\*\* top-level node/);
+    expect(master).toMatch(/"system": "<name>"/);
+    expect(master).toMatch(/never a lane/);
   });
 });

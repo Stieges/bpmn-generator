@@ -358,9 +358,18 @@ export function resolveLaneId(container, node) {
   if (node.lane) return node.lane;
   if (!container) return undefined;
   const procs = container.pools ? container.pools : [container];
+  // Nested lanes (`children`) carry `nodeIds` too.
+  const find = (lanes) => {
+    for (const l of lanes || []) {
+      if (Array.isArray(l.nodeIds) && l.nodeIds.includes(node.id)) return l.id;
+      const inner = find(l.children);
+      if (inner) return inner;
+    }
+    return undefined;
+  };
   for (const p of procs) {
-    const lane = (p.lanes || []).find(l => Array.isArray(l.nodeIds) && l.nodeIds.includes(node.id));
-    if (lane) return lane.id;
+    const id = find(p.lanes);
+    if (id) return id;
   }
   return undefined;
 }

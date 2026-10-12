@@ -7347,3 +7347,93 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
     expect(Object.keys(on.coordMap.laneCoords).sort()).toEqual(Object.keys(off.coordMap.laneCoords).sort());
   });
 });
+
+// M12 / M13 — who does a step. A lane is a role; a model whose lanes do not partition its steps
+// shows a role with no work (the review step pushed into a collapsed subprocess, which left the
+// manager's lane empty — tests/fixtures/negative/empty-lane.json, after an LLM extraction that every
+// other check called fine), or a step that belongs to no role at all. Neither breaks the BPMN, so
+// both are style WARNINGs.
+describe('M12 / M13 — lanes partition the top-level steps', () => {
+  const laned = (nodes, lanes = [{ id: 'A', name: 'Clerk' }, { id: 'B', name: 'Lead' }]) => ({
+    id: 'P', name: 'P', lanes, nodes,
+    edges: nodes.slice(1).filter((n) => !isArtifactType(n.type)).map((n, i, rest) => ({ id: `f${i}`, source: (i === 0 ? nodes[0] : rest[i - 1]).id, target: n.id })),
+  });
+  const isArtifactType = (t) => ['textAnnotation', 'group', 'dataObjectReference', 'dataStoreReference'].includes(t);
+  const warn = (lc) => validateLogicCore(lc).warnings;
+
+  test('M12: a lane with no element at the top level is reported, once, by name', () => {
+    const lc = JSON.parse(readFileSync(resolve(fixturesDir, 'negative/empty-lane.json'), 'utf8'));
+    const v = validateLogicCore(lc);
+    expect(v.errors).toEqual([]);
+    expect(v.warnings.filter((w) => /has no element at the top level/.test(w))).toEqual([
+      expect.stringContaining('Lane "Manager" has no element at the top level'),
+    ]);
+  });
+
+  test('M12: a lane holding only an annotation is still empty; nested lanes count by their leaves', () => {
+    const lc = laned([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 'e', type: 'endEvent', name: 'End', lane: 'A' },
+      { id: 'n', type: 'textAnnotation', name: 'Note', lane: 'B' },
+    ]);
+    expect(warn(lc).join('\n')).toMatch(/Lane "Lead" has no element at the top level/);
+    const nested = laned([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A1' },
+      { id: 'e', type: 'endEvent', name: 'End', lane: 'B' },
+    ], [{ id: 'A', name: 'Office', children: [{ id: 'A1', name: 'Clerk' }, { id: 'A2', name: 'Assistant' }] }, { id: 'B', name: 'Lead' }]);
+    expect(warn(nested).filter((w) => /has no element/.test(w))).toEqual([expect.stringContaining('Lane "Assistant"')]);
+  });
+
+  test('M12 / M13: lane.nodeIds (format B) counts like node.lane, nested lanes included', () => {
+    const lc = laned([
+      { id: 's', type: 'startEvent', name: 'Start' },
+      { id: 'e', type: 'endEvent', name: 'End' },
+    ], [{ id: 'A', name: 'Office', children: [{ id: 'A1', name: 'Clerk', nodeIds: ['s'] }] }, { id: 'B', name: 'Lead', nodeIds: ['e'] }]);
+    expect(warn(lc).filter((w) => /has no element at the top level|belongs to no lane|does not declare|declares no lanes/.test(w))).toEqual([]);
+  });
+
+  test('M13: a step in an undeclared lane, and a step in no lane, are reported', () => {
+    const lc = laned([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't', type: 'userTask', name: 'Check request', lane: 'X' },
+      { id: 'u', type: 'userTask', name: 'Approve request' },
+      { id: 'e', type: 'endEvent', name: 'End', lane: 'B' },
+    ]);
+    const w = warn(lc);
+    expect(w.filter((m) => /does not declare/.test(m))).toEqual([expect.stringContaining('"t" refers to lane "X"')]);
+    expect(w.filter((m) => /belongs to no lane/.test(m))).toEqual([expect.stringContaining('"u"')]);
+  });
+
+  test('M13: a lane on a node of a process without lanes is reported — it would be dropped silently', () => {
+    const lc = { id: 'P', name: 'P', nodes: [
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'lane_x' },
+      { id: 'e', type: 'endEvent', name: 'End' },
+    ], edges: [{ id: 'f1', source: 's', target: 'e' }] };
+    expect(warn(lc).filter((m) => /declares no lanes/.test(m))).toEqual([expect.stringContaining('"s"')]);
+  });
+
+  test('M13: artifacts, boundary events and subprocess children need no lane', () => {
+    const lc = laned([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 'sub', type: 'subProcess', name: 'Handle case', lane: 'B', isExpanded: false,
+        nodes: [{ id: 'cs', type: 'startEvent' }, { id: 'ce', type: 'endEvent' }], edges: [{ id: 'cf', source: 'cs', target: 'ce' }] },
+      { id: 'b', type: 'boundaryEvent', name: 'Late', attachedTo: 'sub', marker: 'timer' },
+      { id: 'e', type: 'endEvent', name: 'End', lane: 'A' },
+      { id: 'n', type: 'textAnnotation', name: 'Note' },
+    ]);
+    lc.edges.push({ id: 'fb', source: 'b', target: 'e' });
+    expect(warn(lc).filter((m) => /belongs to no lane|does not declare/.test(m))).toEqual([]);
+  });
+
+  test('no top-level fixture has a finding of either rule', () => {
+    const dir = fixturesDir;
+    const hits = readdirSync(dir).filter((f) => f.endsWith('.json')).flatMap((f) => {
+      const lc = JSON.parse(readFileSync(resolve(dir, f), 'utf8'));
+      if (!lc.nodes && !lc.pools) return [];
+      return validateLogicCore(lc).warnings
+        .filter((w) => /has no element at the top level|belongs to no lane|does not declare|declares no lanes/.test(w))
+        .map((w) => `${f}: ${w}`);
+    });
+    expect(hits).toEqual([]);
+  });
+});

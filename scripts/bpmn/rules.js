@@ -1,7 +1,7 @@
 /**
  * BPMN Fachliches Regelwerk — Modulare Regel-Engine
  *
- * The BPMN rule set's `main` partition: S01–S17, M01–M11, P01–P03, WF01–WF03, O01–O04 (SC01/SC06
+ * The BPMN rule set's `main` partition: S01–S17, M01–M13, P01–P03, WF01–WF03, O01–O04 (SC01/SC06
  * belong to the same rule set but run in the scenario pipeline, scripts/bpmn/scenario-rules.js).
  * Each entry here carries id, description, ref, scope and check — never layer or defaultSeverity:
  * those come from references/ontology.jsonld via buildRuleCatalog (scripts/shared/rule-catalog.js),
@@ -23,7 +23,7 @@ import {
   OMG_NODE_FIELD_SCOPE, isFieldOutOfScope, isFieldWrongType, resolveDefinitionRef,
   edgeFieldSpec, writesIsInterrupting,
 } from './types.js';
-import { resolveFlowSemantics } from './topology.js';
+import { resolveFlowSemantics, resolveLaneId } from './topology.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
@@ -1239,6 +1239,62 @@ const STYLE_CHECKS = [
         ? { pass: true }
         : { pass: false, message: 'decisionRef on a non-businessRuleTask has no meaning and is '
             + `dropped when the BPMN is written: ${offenders.join(', ')}` };
+    }
+  },
+  {
+    id: 'M12',
+    description: 'Every lane holds at least one element at the top level of its process',
+    // Our own convention. A lane is a role (OMG §10.8: lanes partition the flow nodes of a process);
+    // a lane with nothing in it at the top level shows a role that does no work in the diagram. In
+    // practice that is the work of the role hidden in a collapsed subprocess, or a role the model
+    // names but forgot — found after an LLM extraction that every other check called fine.
+    ref: { omg: '§10.8 Lanes', note: 'generator convention: a role without a step is a modelling gap' },
+    scope: 'process',
+    check: (proc) => {
+      const lanes = proc.lanes || [];
+      if (!lanes.length) return { pass: true };
+      const used = new Set((proc.nodes || []).filter(n => !isArtifact(n.type)).map(n => resolveLaneId(proc, n)).filter(Boolean));
+      const empty = [];
+      const walk = (ls) => {
+        for (const l of ls) {
+          if (l.children?.length) walk(l.children);
+          else if (!used.has(l.id)) empty.push(l);
+        }
+      };
+      walk(lanes);
+      return empty.length === 0
+        ? { pass: true }
+        : { pass: false, messages: empty.map(l => `Lane "${l.name ?? l.id}" has no element at the top level — its work is hidden in a subprocess or missing`) };
+    }
+  },
+  {
+    id: 'M13',
+    description: 'In a process with lanes, every top-level step belongs to a declared lane',
+    // The layout places a node by its lane. A node in an undeclared lane, or in none, lands in no
+    // band and the diagram says nobody does it; a `lane` on a node of a process with no lanes is
+    // dropped without a word. Artifacts are not steps, a boundary event goes with its host, and a
+    // subprocess's children are not laned.
+    ref: { omg: '§10.8 Lanes', note: 'generator convention: node.lane / lane.nodeIds must resolve to a declared lane' },
+    scope: 'process',
+    check: (proc) => {
+      const steps = (proc.nodes || []).filter(n => !isArtifact(n.type) && !isBoundaryEvent(n));
+      const lanes = proc.lanes || [];
+      const messages = [];
+      if (!lanes.length) {
+        for (const n of steps) {
+          if (n.lane) messages.push(`Node "${n.id}" names lane "${n.lane}", but the process declares no lanes — the assignment is dropped`);
+        }
+      } else {
+        const declared = new Set();
+        const walk = (ls) => { for (const l of ls) { declared.add(l.id); walk(l.children || []); } };
+        walk(lanes);
+        for (const n of steps) {
+          const lane = resolveLaneId(proc, n);
+          if (!lane) messages.push(`Node "${n.id}" belongs to no lane, although the process has lanes`);
+          else if (!declared.has(lane)) messages.push(`Node "${n.id}" refers to lane "${lane}", which the process does not declare`);
+        }
+      }
+      return messages.length === 0 ? { pass: true } : { pass: false, messages };
     }
   },
 ];

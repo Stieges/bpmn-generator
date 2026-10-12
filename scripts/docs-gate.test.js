@@ -280,9 +280,9 @@ describe('docs-gate — checkNumbers', () => {
 });
 
 describe('docs-gate — rule counts come from the ontology', () => {
-  test('the real ontology: BPMN 40/5, DMN 19/3, cross-notation 2/1', async () => {
+  test('the real ontology: BPMN 42/5, DMN 19/3, cross-notation 2/1', async () => {
     const counts = await loadRuleSetCounts();
-    expect(counts.BPMN).toEqual({ rules: 40, layers: 5 });
+    expect(counts.BPMN).toEqual({ rules: 42, layers: 5 });
     expect(counts.DMN).toEqual({ rules: 19, layers: 3 });
     expect(counts['cross-notation']).toEqual({ rules: 2, layers: 1 });
   });

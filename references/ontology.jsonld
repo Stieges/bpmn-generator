@@ -2009,6 +2009,30 @@
       "defaultSeverity": "bg:severity-WARNING",
       "runsIn": "main"
     },
+{
+      "@id": "bg:rule-M12",
+      "@type": "bg:Rule",
+      "name": "M12",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
+{
+      "@id": "bg:rule-M13",
+      "@type": "bg:Rule",
+      "name": "M13",
+      "kind": "specific",
+      "notation": [
+        "bg:notation-BPMN"
+      ],
+      "layer": "bg:layer-BPMN-style",
+      "defaultSeverity": "bg:severity-WARNING",
+      "runsIn": "main"
+    },
     {
       "@id": "bg:rule-P01",
       "@type": "bg:Rule",

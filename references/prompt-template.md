@@ -88,9 +88,22 @@ Extract a structured Logic-Core JSON from the process description below.
   unless the branches lead to different endEvents
 - Set "has_join": true on join gateways
 
-### Lanes
+### Lanes (roles), systems and external partners
 - Only add lanes if distinct roles/departments are explicitly mentioned
 - Use functional role names, NOT personal names ("Sachbearbeiter" not "Max Müller")
+- When a process has lanes, **every** top-level node (task, event, gateway, subprocess) gets the
+  `lane` of a lane declared in that process's `lanes` array — no node without a lane, no lane id
+  that is not declared. Never set `lane` on a node of a process without a `lanes` array. A
+  boundaryEvent needs no `lane` (it sits on its host), nor does a node inside a subprocess.
+- Every declared lane gets at least one top-level node. Do not move a role's steps into a collapsed
+  subprocess if that leaves the role's lane empty at the top level.
+- Decide where an IT system goes:
+  - the text names the system as a participant that performs steps itself (e.g. "Workflow engine
+    (system) checks the data") → a lane for that system with its `serviceTask`s;
+  - the system is only the tool a role works with → no lane; set `"system": "<name>"` on the task
+    (and `"role": "<name>"` if useful);
+  - an outside party (customer, supplier, authority, or an external system you only exchange
+    messages with) → a `collapsedPools` entry, never a lane.
 
 ### Lane and pool naming
 - **Keep names short (≤ 25 characters)**. Use role or department labels: "Einkauf", "Compliance", "QA Team".
@@ -396,6 +409,10 @@ User text: "Der Sachbearbeiter bearbeitet den Antrag. Wenn die Bearbeitung läng
 Expected Logic-Core fragment:
 ```json
 {
+  "lanes": [
+    { "id": "lane_sb", "name": "Sachbearbeiter" },
+    { "id": "lane_tl", "name": "Teamleiter" }
+  ],
   "nodes": [
     { "id": "task_bearbeiten", "type": "userTask", "name": "Antrag bearbeiten", "lane": "lane_sb" },
     { "id": "timer_frist", "type": "boundaryEvent", "name": "5 Tage Frist", "marker": "timer", "attachedTo": "task_bearbeiten", "cancelActivity": false },
@@ -475,13 +492,17 @@ Zwei verschiedene Personen muessen einen Vorgang pruefen/genehmigen.
 
 ```json
 {
+  "lanes": [
+    { "id": "lane_erstpruefer", "name": "Erstpruefer" },
+    { "id": "lane_zweitpruefer", "name": "Zweitpruefer" }
+  ],
   "nodes": [
     { "id": "task_erstpruefer", "type": "userTask", "name": "Antrag pruefen (Erstpruefer)", "lane": "lane_erstpruefer" },
-    { "id": "gw_erstpruefung", "type": "exclusiveGateway", "name": "Erstpruefung bestanden?" },
+    { "id": "gw_erstpruefung", "type": "exclusiveGateway", "name": "Erstpruefung bestanden?", "lane": "lane_erstpruefer" },
     { "id": "task_zweitpruefer", "type": "userTask", "name": "Antrag pruefen (Zweitpruefer)", "lane": "lane_zweitpruefer" },
-    { "id": "gw_zweitpruefung", "type": "exclusiveGateway", "name": "Zweitpruefung bestanden?" },
-    { "id": "task_genehmigen", "type": "serviceTask", "name": "Antrag genehmigen" },
-    { "id": "task_ablehnen", "type": "userTask", "name": "Ablehnung dokumentieren" }
+    { "id": "gw_zweitpruefung", "type": "exclusiveGateway", "name": "Zweitpruefung bestanden?", "lane": "lane_zweitpruefer" },
+    { "id": "task_genehmigen", "type": "serviceTask", "name": "Antrag genehmigen", "lane": "lane_zweitpruefer" },
+    { "id": "task_ablehnen", "type": "userTask", "name": "Ablehnung dokumentieren", "lane": "lane_erstpruefer" }
   ],
   "edges": [
     { "id": "f1", "source": "task_erstpruefer", "target": "gw_erstpruefung", "isHappyPath": true },
@@ -502,11 +523,15 @@ die Notiz als offenen Punkt fest, statt eine Dauer zu erfinden.
 
 ```json
 {
+  "lanes": [
+    { "id": "lane_sachbearbeiter", "name": "Sachbearbeiter" },
+    { "id": "lane_teamleiter", "name": "Teamleiter" }
+  ],
   "nodes": [
-    { "id": "task_bearbeiten", "type": "userTask", "name": "Vorgang bearbeiten" },
+    { "id": "task_bearbeiten", "type": "userTask", "name": "Vorgang bearbeiten", "lane": "lane_sachbearbeiter" },
     { "id": "evt_frist", "type": "boundaryEvent", "name": "Frist abgelaufen", "attachedTo": "task_bearbeiten", "marker": "timer", "cancelActivity": false },
     { "id": "task_eskalieren", "type": "userTask", "name": "Vorgang eskalieren", "lane": "lane_teamleiter" },
-    { "id": "end_eskaliert", "type": "endEvent", "name": "Eskalation abgeschlossen", "marker": "escalation" },
+    { "id": "end_eskaliert", "type": "endEvent", "name": "Eskalation abgeschlossen", "marker": "escalation", "lane": "lane_teamleiter" },
     { "id": "an_frist", "type": "textAnnotation", "name": "Fristdauer im Text nicht spezifiziert — Rueckfrage noetig" }
   ],
   "edges": [

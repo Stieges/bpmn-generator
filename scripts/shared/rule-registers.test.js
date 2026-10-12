@@ -33,7 +33,7 @@ describe('every rule has a code entry and an ontology entry, in the right module
     // The expected set comes from the ontology, not from the five known partitions — otherwise a
     // rule of a supported notation with no owning module would never be fenced.
     expect(inCode).toEqual(expectedRuleIds(VOCABULARY));
-    expect(inCode).toHaveLength(61);
+    expect(inCode).toHaveLength(63);
   });
 
   test('a supported notation whose rule has no owning module is reported as only in the ontology', () => {

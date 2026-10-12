@@ -14,6 +14,8 @@
 - [Regel M01: Objekt+Verb-Heuristik](#regel-m01-objektverb-heuristik)
 - [Regel M10: Lane/Pool Name Length](#regel-m10-lanepool-name-length)
 - [Rule M11: decisionRef Placement](#rule-m11-decisionref-placement)
+- [Rule M12: no empty lane](#rule-m12-no-empty-lane)
+- [Rule M13: every step in a declared lane](#rule-m13-every-step-in-a-declared-lane)
 - [Rule S14: MessageFlow endpoints are InteractionNodes, and a container is not one](#rule-s14-messageflow-endpoints-are-interactionnodes-and-a-container-is-not-one)
 - [Rule S15: a per-node or per-edge field must sit where OMG defines it](#rule-s15-a-per-node-or-per-edge-field-must-sit-where-omg-defines-it)
 - [Rule S16: a definition reference must name a definition of the right type](#rule-s16-a-definition-reference-must-name-a-definition-of-the-right-type)
@@ -290,6 +292,8 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 | M09 | Lane-Node-Zuweisung: Format B (lane.nodeIds) ohne Format A (node.lane) | OMG §10.5 | implementiert |
 | M10 | Lane- und Pool-Namen: max. 25 Zeichen | Silver §4.2 | implementiert |
 | M11 | `decisionRef` only on a businessRuleTask | generator convention (no OMG attribute exists) | implementiert |
+| M12 | Every lane holds at least one element at the top level | OMG §10.8 Lanes; generator convention | implementiert |
+| M13 | In a process with lanes, every top-level step belongs to a declared lane | OMG §10.8 Lanes; generator convention | implementiert |
 
 ## Schicht 3: Pragmatik (INFO)
 
@@ -425,7 +429,7 @@ Its notation, kind (`specific` or `crossNotation`), layer, default severity and 
 exists on one side only, sits in the module of another rule set, or carries its own `layer` or
 `defaultSeverity` makes that import fail with the rule named.
 
-Three rule sets, one per notation plus one across notations: 40 BPMN rules, 5 layers; 19 DMN rules,
+Three rule sets, one per notation plus one across notations: 42 BPMN rules, 5 layers; 19 DMN rules,
 3 layers; 2 cross-notation rules, 1 layer. Layers are named per notation (BPMN `soundness` and DMN
 `soundness` are two layers) and by purpose, never by where a rule runs.
 
@@ -515,6 +519,56 @@ Camunda binding it does not have. See `EXTENSION_NS` in `scripts/shared/utils.js
 
 **Referenz:** OMG BPMN 2.0.2 §10.2.5 (Business Rule Task); OMG DMN 1.3 `tDecision` for the
 standardised reverse link.
+
+---
+
+## Rule M12: no empty lane
+
+**Layer:** Style | **Default Severity:** WARNING | **Scope:** process
+
+A lane is a role: it partitions the flow nodes of a process by who performs them (OMG §10.8). A leaf
+lane with no element at the top level of its process shows a role that does nothing in the diagram.
+Two causes come up in practice: the role's work sits inside a collapsed subprocess, so the top
+level hides it, or the model names a role it never gives a step. Both were found after an LLM
+extraction that every other check called fine — the approval loop of a leave request moved into a
+collapsed subprocess, which left the manager's lane empty (`tests/fixtures/negative/empty-lane.json`).
+
+Lane membership is read the one way the generator reads it everywhere (`resolveLaneId` in
+`scripts/bpmn/topology.js`: `node.lane`, else `lane.nodeIds`, nested lanes included). Artifacts
+(annotations, groups, data references) are not steps and do not fill a lane. A parent lane counts
+through its leaves. One finding per empty lane.
+
+**Why WARNING.** The BPMN is valid with an empty lane; the model is incomplete or hides work.
+
+| Bewertung | Model | Grund |
+|-----------|-------|-------|
+| gut | every lane holds at least one task, event or gateway | every role shows its work |
+| schlecht | lane "Manager" empty, its review inside the collapsed subprocess "Agree request" | the reader sees a role without work |
+
+**Referenz:** OMG BPMN 2.0.2 §10.8 (Lanes); generator convention.
+
+---
+
+## Rule M13: every step in a declared lane
+
+**Layer:** Style | **Default Severity:** WARNING | **Scope:** process
+
+The layout puts a node into the band of its lane. In a process with lanes, a top-level step whose
+lane is not declared, or that has no lane at all, lands in no band, and the diagram says nobody
+does it. In a process without lanes, a `lane` on a node is dropped without a word. M13 reports all
+three, one finding per node. Artifacts are not steps, a boundary event goes with its host, and the
+children of a subprocess are not laned, so none of them is checked.
+
+**Why WARNING.** The BPMN is still valid; the role assignment is not what the model says.
+
+| Bewertung | Model | Grund |
+|-----------|-------|-------|
+| gut | lanes `A`, `B`; every node has `lane: "A"` or `"B"` | each step has its role |
+| schlecht | a node with `lane: "X"`, no lane `X` declared | lands in no band |
+| schlecht | a node without `lane` in a process with lanes | belongs to nobody |
+| schlecht | `lane: "lane_sb"` on nodes of a process with no `lanes` array | the assignment is dropped |
+
+**Referenz:** OMG BPMN 2.0.2 §10.8 (Lanes); generator convention.
 
 ---
 

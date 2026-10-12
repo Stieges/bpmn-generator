@@ -332,17 +332,17 @@ How each connection is drawn:
   "id": "Process_Rechnungsverarbeitung",
   "name": "Rechnungsverarbeitung",
   "lanes": [
-    { "id": "lane_lieferant",   "name": "Lieferant" },
+    { "id": "lane_posteingang", "name": "Posteingang" },
     { "id": "lane_buchhaltung", "name": "Buchhaltung" },
     { "id": "lane_freigabe",    "name": "Freigabe" }
   ],
   "nodes": [
-    { "id": "start",          "type": "startEvent",       "name": "Rechnung eingegangen", "lane": "lane_lieferant" },
+    { "id": "start",          "type": "startEvent",       "name": "Rechnung eingegangen", "lane": "lane_posteingang" },
     { "id": "task_erfassen",  "type": "userTask",         "name": "Rechnung erfassen",    "lane": "lane_buchhaltung" },
     { "id": "task_pruefen",   "type": "userTask",         "name": "Rechnung prüfen",      "lane": "lane_buchhaltung" },
     { "id": "gw_korrekt",     "type": "exclusiveGateway", "name": "Rechnung korrekt?",    "lane": "lane_buchhaltung" },
     { "id": "task_freigeben", "type": "userTask",         "name": "Rechnung freigeben",   "lane": "lane_freigabe" },
-    { "id": "task_zurueck",   "type": "userTask",         "name": "Rückfrage stellen",    "lane": "lane_lieferant" },
+    { "id": "task_zurueck",   "type": "userTask",         "name": "Rückfrage stellen",    "lane": "lane_buchhaltung" },
     { "id": "task_bezahlen",  "type": "serviceTask",      "name": "Zahlung anweisen",     "lane": "lane_buchhaltung" },
     { "id": "end",            "type": "endEvent",         "name": "Rechnung bezahlt",     "lane": "lane_buchhaltung" }
   ],

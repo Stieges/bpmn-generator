@@ -43,6 +43,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Rules M12 and M13: lanes partition the top-level steps** (style, WARNING; the BPMN rule set
+  now has 42 BPMN rules, 5 layers). M12 reports a lane with no element at the top level: a role
+  whose work is hidden in a collapsed subprocess, or a role the model forgot. Found after an LLM
+  extraction that every other check called fine. M13 reports a top-level step whose lane is not
+  declared or that has no lane in a process with lanes (it lands in no band), and a `lane` on a node
+  of a process without lanes (it was dropped without a word). Lane membership reads `node.lane`
+  and `lane.nodeIds`; `resolveLaneId` now also finds `nodeIds` of nested lanes. No top-level
+  fixture has a finding. The Master Extraction Prompt now says every top-level node of a laned
+  process gets a declared lane, and where an IT system goes (a lane when it acts itself, the
+  `system` field when it is a tool, `collapsedPools` when it is an outside party). The few-shot
+  examples that used `lane` without a `lanes` array, and the schema guide's example with a supplier
+  as a lane, are fixed. A fence keeps every documented example clear of both rules.
 - **Schema repair attempt in the orchestrator** (`maxSchemaRepairs`, default 1): a Modeler output
   the gate rejects goes back once through the refinement prompt with the gate's errors as issues.
   Every rejection is in `history` (`agent: "schema-gate"`).
