@@ -198,21 +198,37 @@ export function findDecisionRefs(lc) {
  *
  * @param {object[]} decisionCores - array of Decision-Core documents (each shaped like
  *   `tests/fixtures/dmn/discount-decision.json`). May be empty.
+ * @param {object} [opts]
+ * @param {boolean} [opts.includeLiteralExpressions=false] - also return decisions decided by a
+ *   literal expression (`node.expression`), carrying `expression` (and `typeRef`) instead of
+ *   `decisionTable`. Off by default, and off for the scenario pipeline: SC02/SC03 and the table
+ *   analysis are defined over decision TABLES, and turning it on there would change what SC02
+ *   reports. cross/decision-doc.js turns it on, because a task's documentation should show
+ *   whatever logic its decision has.
  * @returns {DecisionTableEntry[]} in encounter order (document order, then node order
  *   within each document).
  */
-export function findDecisionTables(decisionCores) {
+export function findDecisionTables(decisionCores, { includeLiteralExpressions = false } = {}) {
   const out = [];
   (decisionCores || []).forEach((dc, index) => {
     if (!dc || typeof dc !== 'object') return;
     const decisionCoreId = typeof dc.id === 'string' && dc.id.length > 0 ? dc.id : `#${index}`;
     for (const node of dc.nodes || []) {
-      if (node.type === 'decision' && node.decisionTable) {
+      if (node.type !== 'decision') continue;
+      if (node.decisionTable) {
         out.push({
           decisionId: node.id,
           decisionCoreId,
           decisionName: node.name,
           decisionTable: node.decisionTable,
+        });
+      } else if (includeLiteralExpressions && typeof node.expression === 'string') {
+        out.push({
+          decisionId: node.id,
+          decisionCoreId,
+          decisionName: node.name,
+          expression: node.expression,
+          ...(node.typeRef ? { typeRef: node.typeRef } : {}),
         });
       }
     }
@@ -226,11 +242,14 @@ export function findDecisionTables(decisionCores) {
  * @param {object} lc - a Logic-Core document (collaboration or flat single-process).
  * @param {object[]} decisionCores - an array of Decision-Core documents. May be empty —
  *   an empty array is valid input, and simply means every occurrence found is unresolved.
+ * @param {object} [opts]
+ * @param {boolean} [opts.includeLiteralExpressions=false] - see findDecisionTables; off keeps the
+ *   result exactly what the scenario pipeline has always judged.
  * @returns {BridgeResult}
  */
-export function resolveBridge(lc, decisionCores) {
+export function resolveBridge(lc, decisionCores, { includeLiteralExpressions = false } = {}) {
   const occurrences = findDecisionRefs(lc);
-  const decisions = findDecisionTables(decisionCores);
+  const decisions = findDecisionTables(decisionCores, { includeLiteralExpressions });
 
   // Group decisions by id so a collision across Decision-Core documents is visible in
   // O(1) per lookup rather than a full re-scan per occurrence.

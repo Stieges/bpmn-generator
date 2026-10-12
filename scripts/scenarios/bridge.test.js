@@ -320,3 +320,49 @@ describe('node types that can carry nested nodes besides subProcess', () => {
     expect(occurrences[0].ancestry).toEqual(['txn']);
   });
 });
+
+describe('includeLiteralExpressions — for the documentation, never for the scenario rules', () => {
+  // A decision decided by a literal expression. The scenario pipeline's SC02/SC03 and table
+  // analysis are defined over decision tables, so the default stays "tables only"; only
+  // cross/decision-doc.js asks for literal expressions too.
+  const literalCore = () => ({
+    id: 'Defs_lit', namespace: 'http://x/lit',
+    nodes: [{ id: 'LitDecision', type: 'decision', name: 'Lit', typeRef: 'number', expression: 'a + b' }],
+  });
+  const lc = () => ({ id: 'P', nodes: [{ id: 't', type: 'businessRuleTask', name: 'T', decisionRef: 'LitDecision' }], edges: [] });
+
+  test('off (the default): a literal-expression decision is not found, the reference stays unresolved', () => {
+    expect(findDecisionTables([literalCore()])).toEqual([]);
+    const r = resolveBridge(lc(), [literalCore()]);
+    expect(r.resolved).toEqual([]);
+    expect(r.unresolved).toHaveLength(1);
+  });
+
+  test('on: it resolves, carrying expression and typeRef instead of a table', () => {
+    const r = resolveBridge(lc(), [literalCore()], { includeLiteralExpressions: true });
+    expect(r.unresolved).toEqual([]);
+    expect(r.resolved[0].decision).toEqual({
+      decisionId: 'LitDecision', decisionCoreId: 'Defs_lit', decisionName: 'Lit', expression: 'a + b', typeRef: 'number',
+    });
+  });
+
+  test('on: a table in one model and an expression in another under one id is ambiguous', () => {
+    const r = resolveBridge(lc(), [literalCore(), decisionCore('Defs_tab', 'LitDecision')], { includeLiteralExpressions: true });
+    expect(r.ambiguous).toHaveLength(1);
+    expect(resolveBridge(lc(), [literalCore(), decisionCore('Defs_tab', 'LitDecision')]).resolved).toHaveLength(1);
+  });
+
+  test('the scenario pipeline keeps its meaning: SC02 still reports a reference to a literal-expression decision', async () => {
+    const { runScenarioPipeline } = await import('./pipeline.js');
+    const process = {
+      id: 'P', nodes: [
+        { id: 's', type: 'startEvent', name: 'S' },
+        { id: 't', type: 'businessRuleTask', name: 'T', decisionRef: 'LitDecision' },
+        { id: 'e', type: 'endEvent', name: 'E' },
+      ],
+      edges: [{ id: 'f1', source: 's', target: 't' }, { id: 'f2', source: 't', target: 'e' }],
+    };
+    const result = runScenarioPipeline(process, [literalCore()]);
+    expect(result.issues.map((i) => i.rule)).toEqual(['SC02']);
+  });
+});
