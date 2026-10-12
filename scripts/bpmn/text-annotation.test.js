@@ -38,21 +38,21 @@ function diBounds(xml, id) {
   return { x, y, w, h };
 }
 
-/** Our SVG's annotation bracket of height `h` and the text lines drawn after it. */
-function svgAnnotation(svg, w, h) {
-  const re = /<path d="M ([\d.-]+),([\d.-]+) L ([\d.-]+),([\d.-]+) L ([\d.-]+),([\d.-]+) L [\d.-]+,[\d.-]+" fill="none"[^>]*\/>((?:\n<text x="[^"]+" y="[^"]+" font-size="11"[^>]*>[^<]*<\/text>)+)/g;
-  for (const m of svg.matchAll(re)) {
-    const x = Number(m[3]), y = Number(m[4]);
-    if (Math.abs(Number(m[6]) - y - h) > 0.01) continue;
-    const texts = [...m[7].matchAll(/<text x="([^"]+)" y="([^"]+)"[^>]*>([^<]*)<\/text>/g)]
-      .map(t => ({ x: Number(t[1]), y: Number(t[2]), text: t[3] }));
-    return { box: { x, y, w, h }, texts };
-  }
-  throw new Error(`no annotation of height ${h} in the SVG`);
+/**
+ * Our SVG's annotation `id`: its box (the bracket's translate group, `w`×`h`) and the text lines
+ * drawn in its element group.
+ */
+function svgAnnotation(svg, id, w, h) {
+  const g = svg.match(new RegExp(`<g data-element-id="${id}">([\\s\\S]*?)\\n</g>`));
+  if (!g) throw new Error(`no annotation ${id} in the SVG`);
+  const t = g[1].match(/<g transform="translate\(([\d.-]+),([\d.-]+)\)">/);
+  const texts = [...g[1].matchAll(/<text x="([^"]+)" y="([^"]+)"[^>]*>([^<]*)<\/text>/g)]
+    .map(m => ({ x: Number(m[1]), y: Number(m[2]), text: m[3] }));
+  return { box: { x: Number(t[1]), y: Number(t[2]), w, h }, texts };
 }
 
-/** Width of an SVG text line at 11 px, with the Arial metrics the label layout uses. */
-const estWidth11 = (s) => edgeLabelLayout(s, { fontSize: 11, lineHeight: 1.2, wrapWidth: 1e6 }).w;
+/** Width of an SVG text line at the annotation's font size, with the label layout's Arial metrics. */
+const estWidth = (s) => edgeLabelLayout(s, { fontSize: textAnnotationTextStyle().fontSize, lineHeight: 1.2, wrapWidth: 1e6 }).w;
 
 describe('text annotation — the box fits its text', () => {
   test('a long annotation wraps, and its box is the same in coordMap, DI and SVG', async () => {
@@ -72,13 +72,13 @@ describe('text annotation — the box fits its text', () => {
     expect(r.diagnostics.ok).toBe(true);
 
     // Our SVG draws the same box and every line inside it.
-    const { box, texts } = svgAnnotation(r.svg, c.w, c.h);
+    const { box, texts } = svgAnnotation(r.svg, 'n1', c.w, c.h);
     expect(texts.map(t => t.text)).toEqual(c.lines);
     for (const t of texts) {
-      expect(t.y - 11).toBeGreaterThanOrEqual(box.y);
+      expect(t.y - fontSize).toBeGreaterThanOrEqual(box.y);
       expect(t.y + 3).toBeLessThanOrEqual(box.y + box.h);
       expect(t.x).toBeGreaterThanOrEqual(box.x);
-      expect(t.x + estWidth11(t.text)).toBeLessThanOrEqual(box.x + box.w);
+      expect(t.x + estWidth(t.text)).toBeLessThanOrEqual(box.x + box.w);
     }
   });
 
@@ -136,9 +136,11 @@ describe('text annotation — the box fits its text', () => {
     const r = await runPipeline(lc);
     const c = r.coordMap.coords.n2;
     expect({ w: c.w, h: c.h, lines: c.lines }).toEqual({ w: 100, h: 30, lines: ['Four eyes'] });
-    // Drawn exactly as before the box could grow: one line, vertically centred.
-    const { box, texts } = svgAnnotation(r.svg, 100, 30);
-    expect(texts).toEqual([{ x: box.x + 20, y: box.y + 19, text: 'Four eyes' }]);
+    // Drawn as bpmn-js draws it ('bpmn:TextAnnotation', `left-top`, padding 7): first baseline ¾ of
+    // a line below the padding.
+    const { box, texts } = svgAnnotation(r.svg, 'n2', 100, 30);
+    const st = textAnnotationTextStyle();
+    expect(texts).toEqual([{ x: box.x + st.padding, y: Math.round((box.y + st.padding + 0.75 * st.fontSize * st.lineHeight) * 10) / 10, text: 'Four eyes' }]);
   });
 
   test('a medium annotation widens instead of wrapping, up to the maximum', () => {

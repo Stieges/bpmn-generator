@@ -118,17 +118,38 @@
     "gateway": 2,
     "pool": 1.5,
     "lane": 1.5,
-    "connection": 1.5,
+    "connection": 2,
+    "messageFlow": 1.5,
+    "association": 2,
+    "transaction": 1.5,
+    "eventSubProcess": 2.5,
+    "group": 1.5,
     "dataObject": 2,
     "annotation": 2
   },
   "color": {
     "fill": "#ffffff",
-    "stroke": "#000000",
-    "label": "#000000",
-    "canvasBg": "#fafafa",
-    "laneHeader": "#f0f0f0",
-    "poolHeader": "#e8e8e8"
+    "stroke": "#22242a",
+    "label": "#22242a",
+    "canvasBg": "#ffffff",
+    "laneHeader": "#ffffff",
+    "poolHeader": "#ffffff"
+  },
+  "symbols": {
+    "_comment": "Look of the SVG renderer, aligned with bpmn-js 18.6.2 (lib/draw/BpmnRenderer.js, TextRenderer.js). Colour #22242a is bpmn-js's default stroke hsl(225, 10%, 15%).",
+    "fillOpacity": 0.95,
+    "laneFillOpacity": 0.25,
+    "dash": {
+      "nonInterrupting": "6",
+      "eventSubProcess": "0, 5.5",
+      "messageFlow": "10, 11",
+      "association": "0, 5",
+      "group": "10, 6, 0, 6"
+    },
+    "embeddedText": { "fontSize": 12, "lineHeight": 1.2, "padding": 7 },
+    "containerTitle": { "fontSize": 12, "lineHeight": 1.2, "padding": 7 },
+    "participantLabel": { "fontSize": 12, "lineHeight": 1.2 },
+    "externalText": { "fontSize": 11, "lineHeight": 1.2 }
   },
   "layout": {
     "laneHeaderWidth": 30,

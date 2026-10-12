@@ -20,6 +20,8 @@ export const POOL_GAP       = CFG.layout.poolGap;
 export const COLLAB_PADDING = CFG.layout.collabPadding;
 export const MESSAGE_FLOW_FAN = CFG.layout.messageFlowFan;
 export const ARTIFACT_GAP = CFG.layout.artifactGap;
+/** The renderer's look — opacities, dash patterns, fonts — aligned with bpmn-js (config.json → symbols). */
+export const SYM = CFG.symbols;
 
 // artifactSize(node) lives in coordinates.js, next to the text layout a text annotation's size
 // depends on; layout.js imports it from there.

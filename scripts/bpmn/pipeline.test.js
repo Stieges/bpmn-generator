@@ -5721,8 +5721,8 @@ describe('lane layout — vertical axis is ours, horizontal axis is ELK\'s', () 
 /** All connection polylines in an SVG, keyed by connection kind. */
 function svgConnections(svg) {
   const kinds = {
-    messageFlow: /<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="10,12"/g,
-    association: /<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="0\.5,5"/g,
+    messageFlow: new RegExp(`<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="${CFG.symbols.dash.messageFlow}"`, 'g'),
+    association: new RegExp(`<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*stroke-dasharray="${CFG.symbols.dash.association}"`, 'g'),
     sequenceFlow: /<path (?:data-element-id="[^"]*" )?d="([^"]+)"[^>]*marker-end="url\(#seq-end\)"/g,
   };
   const out = {};
