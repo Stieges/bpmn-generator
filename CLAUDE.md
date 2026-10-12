@@ -238,6 +238,17 @@ Cross-notation (scripts/cross/) — opt-in
                                Called only by bpmn/pipeline.js, for runPipeline's `decisions` option)
 ```
 
+**The one exception to "bpmn/ imports nothing from dmn/, cross/ or scenarios/":** `bpmn/pipeline.js`
+imports `cross/decision-doc.js` (accepted by the owner, 2026-10-12). Reason: `runPipeline`'s
+`decisions` option writes a Business Rule Task's decision table into its documentation, and that
+text can only be produced from the DMN side (`dmn/table.js`, `scenarios/bridge.js`). What the rule
+protected is kept: no rule module of another rule set — `dmn/rules.js`, `dmn/scenario-rules.js`,
+`cross/rules.js`, `bpmn/scenario-rules.js` — is in `runPipeline`'s static import closure, so a DMN
+or cross-notation register gap still cannot break a BPMN run. Fenced by
+`shared/rule-registers.test.js` (exactly this edge, plus the CLI's dynamic import of
+`dmn/load-decisions.js`) and `shared/rule-catalog.test.js` (the closure). Do not add a second edge
+without the same argument.
+
 **Guiding principle:** Each pipeline step is independently replaceable, configurable, and testable.
 
 ### The geometry contract
@@ -367,8 +378,8 @@ membership instead of coordinates.
 | `scripts/dmn/requirement-order.js` | `requirementKey`, `orderedRequirements` — the one place a requirement's identity and emitted order are derived, so DMN XML and DRD geometry depend on the model and not on the `dc.requirements` array order (a permutation fence in `requirement-order.test.js`). Dependency-free; used by `layout.js`, `coordinates.js`, `dmn-xml.js` and `import.js` |
 | `scripts/dmn/pipeline.js` | `runDmnPipeline` — Orchestrator + CLI + Public API for the DMN side, gate order schema→rules→layout→coordinates→di-check→serialisation; then the views: `svg` (the DRD) always, `markdown`/`tablesSvg`/`tablesHtml` with `doc: true` (CLI `--doc`: `.md`, `.tables.svg`, `.tables.html`) |
 | `scripts/dmn/svg.js` | `generateDmnSvg` — the DRD as SVG, translating the same `coordMap` the DMNDI carries (no offset: the canvas is anchored at the origin by `coordinates.js`); shapes and markers as dmn-js 17.12.3 draws them (`pathmap.js`). Fenced against the DMNDI by `svg.test.js`, the DMN twin of `geometry contract — the two renderers agree` |
-| `scripts/dmn/table.js` | `layoutDecisionTable(s)` — the one decision-table layout (hit policy letter/name/meaning, three-line heads "When/And/Then · label · values or type", rows, every box from text metrics). `table-text.js` (Markdown; plain text for BPMN documentation with a sentence fallback above `dmn.table.plainTextMaxWidth`), `table-svg.js` and `table-html.js` only translate it. Words: `config.json → dmn.labels[locale]` (`en`, `de`), styles: `dmn.table` |
-| `scripts/cross/decision-doc.js` | `applyDecisionDocumentation(lc, decisionCores)` — runPipeline's `decisions` option (CLI `--decisions`): every `businessRuleTask` with a `decisionRef` gets its decision table in `documentation`, between `=== BEGIN generated: DMN decision …` / `=== END …` marker lines, after the author's text; every run replaces the section (import → regenerate never duplicates it). Matching is `scenarios/bridge.js` `resolveBridge`; unresolved reads "Calls decision: <ref> (table not supplied)". Without `decisions` nothing changes (goldens and the output-hash fence rely on it) |
+| `scripts/dmn/table.js` | `layoutDecisionTable(s)`, `layoutLiteralExpression` — the one decision-table layout (and the box for a decision decided by a literal expression) (hit policy letter/name/meaning, three-line heads "When/And/Then · label · values or type", rows, every box from text metrics). `table-text.js` (Markdown; plain text for BPMN documentation as one sentence per rule — an aligned table breaks in Camunda's proportional font), `table-svg.js` and `table-html.js` only translate it. Words: `config.json → dmn.labels[locale]` (`en`, `de`), styles: `dmn.table` |
+| `scripts/cross/decision-doc.js` | `applyDecisionDocumentation(lc, decisionCores)` — runPipeline's `decisions` option (CLI `--decisions`): every `businessRuleTask` with a `decisionRef` gets its decision table in `documentation`, between `=== BEGIN generated: DMN decision …` / `=== END …` marker lines, after the author's text; every run replaces the section (import → regenerate never duplicates it). Matching is `scenarios/bridge.js` `resolveBridge` with `includeLiteralExpressions` (a literal-expression decision shows its type and FEEL text; the scenario pipeline leaves the option off, so SC02/SC03 keep their meaning); unresolved reads "Calls decision: <ref> (table not supplied)". Without `decisions` nothing changes (goldens and the output-hash fence rely on it) |
 | `scripts/shared/text-layout.js` | `layoutText`, `lineWidth` — Arial advance widths and diagram-js `Text.js` line breaking, the one text measurement of both notations |
 | `references/decision-core-schema.json` | Formal JSON Schema for DMN Decision-Core input |
 | `rules/dmn-default-profile.json` | Default DMN profile (semantic: soundness + semantics) |
@@ -783,8 +794,9 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   are drawn rule-as-row only (`preferredOrientation` is carried in the XML, not honoured by the
   table views); the table SVG measures text with Arial widths — a browser without Arial may wrap a
   cell differently from the computed box. The BPMN documentation section is written only when
-  `decisions` is given (CLI `--decisions`); a decision decided by a literal expression is reported
-  as "table not supplied", because the bridge matches decisions with a table only
+  `decisions` is given (CLI `--decisions`). Under Jest, elkjs mis-lays-out a graph whose objects
+  come from `structuredClone` (another realm) — clone Logic-Core with JSON, never structuredClone;
+  reproduction skipped by design in `scripts/bpmn/elk-realm.test.js`
 - Layout, tracked individually: `boundary-event-shapes` still has one sequence-flow crossing
   between boundary-event shapes (#71); a message-flow jog keeps clearance from shapes only, not
   from groups or labels (#72); a sequence flow can run through another edge's label (#73); with
