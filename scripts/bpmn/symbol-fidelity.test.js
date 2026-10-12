@@ -187,6 +187,30 @@ function expectedActivity(el, di, { adHoc = false } = {}) {
   };
 }
 
+/**
+ * Every connection is drawn with `drawConnectionSegments` → diagram-js `createLine(points, attrs, 5)`
+ * (diagram-js 15.3, lib/util/RenderUtil.js `drawPath`): through the waypoints, each bend replaced by
+ * a cubic curve that starts and ends min(5, both segment lengths) from the corner, its control
+ * points at half that distance. Ported here independently of svg.js; coordinates at svg.js's
+ * one-decimal precision.
+ */
+const BPMN_JS_CORNER_RADIUS = 5;
+function expectedConnectionD(points) {
+  const len = (dx, dy) => Math.hypot(dx, dy);
+  const at = (a, b, l) => { const d = len(b.x - a.x, b.y - a.y); return { x: a.x + (b.x - a.x) * l / d, y: a.y + (b.y - a.y) * l / d }; };
+  const r1 = (n) => Math.round(n * 10) / 10;
+  const f = (p) => `${r1(p.x)} ${r1(p.y)}`;
+  const d = [`M ${f(points[0])}`];
+  for (let i = 1; i < points.length; i++) {
+    const [b, p, a] = [points[i - 1], points[i], points[i + 1]];
+    const r = a ? Math.min(BPMN_JS_CORNER_RADIUS, len(p.x - b.x, p.y - b.y), len(a.x - p.x, a.y - p.y)) : 0;
+    if (!r) { d.push(`L ${f(p)}`); continue; }
+    d.push(`L ${f(at(p, b, r))}`, `C ${f(at(p, b, r / 2))} ${f(at(p, a, r / 2))} ${f(at(p, a, r))}`);
+  }
+  return d.join(' ');
+}
+const waypointsOf = (p) => [...(p['data-waypoints'] ?? '').matchAll(/([-\d.]+),([-\d.]+)/g)].map((m) => ({ x: +m[1], y: +m[2] }));
+
 /** 'bpmn:SequenceFlow': the conditional diamond for a conditionExpression leaving an Activity, the
  * default slash (it wins) for the flow its Gateway or Activity source names as `default`. */
 function expectedSequenceFlowMarker(el) {
@@ -307,7 +331,16 @@ async function symbolDisagreements(lc) {
     } else if (is(el, 'bpmn:TextAnnotation')) {
       if (frag === undefined) { say(id, 'drawn', false, true); continue; }
       seen.add('artifact');
-    } else if (is(el, 'bpmn:SequenceFlow')) {
+    }
+    if (is(el, 'bpmn:SequenceFlow') || is(el, 'bpmn:MessageFlow') || is(el, 'bpmn:Association')) {
+      const p = paths.get(id);
+      if (p) {
+        const pts = waypointsOf(p);
+        if (pts.length < 2) say(id, 'data-waypoints', p['data-waypoints'], 'two or more points');
+        else if (p.d !== expectedConnectionD(pts)) say(id, 'rounded corners (radius 5)', p.d, expectedConnectionD(pts));
+      }
+    }
+    if (is(el, 'bpmn:SequenceFlow')) {
       const p = paths.get(id);
       if (!p) { say(id, 'drawn', false, true); continue; }
       seen.add('sequenceFlow');
