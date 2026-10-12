@@ -3060,7 +3060,7 @@ describe('Rule Engine — individual rules', () => {
 
   test('M01: German Objekt+Verb (Infinitiv) names → no WARNING', () => {
     for (const name of ['Antrag prüfen', 'Zahlung anweisen', 'Schwebesatz freigeben',
-                        'Partnerdaten erfassen/ändern (KVNeo)']) {
+                        'Partnerdaten erfassen/ändern (CRM)']) {
       const lc = proc([
         { id: 's', type: 'startEvent' },
         { id: 't1', type: 'userTask', name },

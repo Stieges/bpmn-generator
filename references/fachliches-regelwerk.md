@@ -450,7 +450,7 @@ Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvent
 |-----------|------|
 | gut | `Antrag pruefen` |
 | gut | `Zahlung anweisen` |
-| gut | `Partnerdaten erfassen/aendern (KVNeo)` |
+| gut | `Partnerdaten erfassen/aendern (CRM)` |
 | gut | `Review Application` (englischer Escape-Hatch) |
 | schlecht | `Pruefung` (Einzelwort) |
 | schlecht | `Vorgang zur Klaerung` (kein Verb) |
