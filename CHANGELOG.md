@@ -88,7 +88,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other end (clamped to the band), follows that end's port column when a shape shifts it, keeps
   `messageFlowAvoidance.columnStep` from the ports earlier flows took on the same band edge, and the
   participant's band is searched for a clear column when a shape blocks the straight line. Pool to
-  pool is unchanged. Measured over the eight fixtures with black-box pools: 20 of 23 flows straight
+  pool is unchanged. A flow left without a corridor leg carries its label beside its stretch in the
+  gap next to the source's participant, where the corridor leg would have been, rather than beside
+  the middle of the whole line inside a pool (labels of such flows inside a participant body: 24 of
+  26 → 0). Measured over the eight fixtures with black-box pools: 20 of 23 flows straight
   (was 0), bends 52 → 6, DI05/DI10 unchanged. Off by default, so the default output is unchanged;
   new fixture `tests/fixtures/message-flow-participant-ports.json`.
 

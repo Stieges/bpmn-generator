@@ -7,12 +7,15 @@
  *    switch on, today's centre docking with it off (the default), DI not worse on any fixture;
  *  - routeMessageFlows on hand-built geometry: clamping to the band, a shape in the way, the port
  *    following a shifted source column, two flows to one participant, pool to pool.
+ * A straight flow has no corridor leg; its label goes beside the stretch of the line that lies in
+ * the participant gap next to the source's participant — where the corridor leg would have been —
+ * not beside the middle of the whole line, which lies inside a pool.
  */
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { routeMessageFlows } from './coordinates.js';
+import { routeMessageFlows, edgeLabelBox, participantBoxes, unclearMessageFlowLabels } from './coordinates.js';
 import { runPipeline } from './pipeline.js';
 import { CFG } from '../shared/utils.js';
 
@@ -63,6 +66,28 @@ describe('alignParticipantPorts in the pipeline', () => {
     expect(coordMap.edgeCoords.mf_ack).toHaveLength(4);
   });
 
+  test('labels of straight flows sit in the gap between the two participants, and are clear', async () => {
+    const lc = load(FIXTURE);
+    const { coordMap } = await runPipeline(lc, ON);
+    const top = coordMap.poolCoords.Process_Order.y + coordMap.poolCoords.Process_Order.h;
+    const bottom = coordMap.poolCoords.Pool_Customer.y;
+    for (const key of ['mf_in', 'mf_ack', 'mf_inv']) {
+      const b = edgeLabelBox(coordMap.edgeLabels[key]);
+      expect(`${key} ${b.y >= top && b.y + b.h <= bottom}`).toBe(`${key} true`);
+    }
+    expect(unclearMessageFlowLabels(coordMap, lc)).toEqual([]);
+  });
+
+  // Every top-level fixture with a black-box participant: no more black-box flow labels inside a
+  // participant's body than with the switch off.
+  const labelsInBodies = (lc, cm) => {
+    const bb = new Set(lc.collapsedPools.map((p) => p.id));
+    const parts = participantBoxes(cm, lc);
+    return lc.messageFlows.filter((mf) => (bb.has(mf.source) || bb.has(mf.target)) && cm.edgeLabels[mf.id])
+      .filter((mf) => { const b = edgeLabelBox(cm.edgeLabels[mf.id]);
+        return parts.some((p) => b.x < p.x + p.w && p.x < b.x + b.w && b.y < p.y + p.h && p.y < b.y + b.h); })
+      .map((mf) => mf.id);
+  };
   // Every top-level fixture with a black-box participant: no DI code gets more findings.
   const withCollapsed = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort()
     .filter((f) => (load(f).collapsedPools || []).length > 0);
@@ -71,6 +96,11 @@ describe('alignParticipantPorts in the pipeline', () => {
     const off = count(await runPipeline(load(f)));
     const on = count(await runPipeline(load(f), ON));
     for (const [code, n] of Object.entries(on)) expect(`${code}: ${n}`).toBe(`${code}: ${Math.min(n, off[code] ?? 0)}`);
+  }, 60000);
+  test.each(withCollapsed)('%s: no more black-box flow labels inside a participant than with the switch off', async (f) => {
+    const off = labelsInBodies(load(f), (await runPipeline(load(f))).coordMap);
+    const on = labelsInBodies(load(f), (await runPipeline(load(f), ON)).coordMap);
+    expect(`${on.length} (${on.join(', ')})`).toBe(`${Math.min(on.length, off.length)} (${on.join(', ')})`);
   }, 60000);
 });
 
@@ -120,6 +150,16 @@ describe('alignParticipantPorts on hand-built geometry', () => {
     expect(pts[0].x).not.toBe(350);
     expect(pts[1].x).toBe(pts[0].x);
     expect(crosses(pts, a3)).toBe(false);
+  });
+
+  test('a straight flow across a participant: its label sits in the gap next to the source\'s participant', () => {
+    // b1 is out of the way, so the flow runs straight down through pool B's body.
+    const { lc, cm } = build({ b: { x: 1000, y: 180, w: 100, h: 80 }, flows: [{ id: 'm', source: 'a1', target: 'P', name: 'Msg' }] });
+    routeMessageFlows(cm, lc, ON);
+    expect(cm.edgeCoords.m).toHaveLength(2);
+    const b = edgeLabelBox(cm.edgeLabels.m);
+    expect(b.y).toBeGreaterThanOrEqual(120);
+    expect(b.y + b.h).toBeLessThanOrEqual(160);
   });
 
   test('a shape left of the band: the port is clamped to the band, portInset inside its edge', () => {
