@@ -32,7 +32,7 @@ import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
 import { profileForMode, loadRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
+import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
@@ -319,6 +319,11 @@ async function runPipeline(logicCore, opts = {}) {
   // layout.messageFlowLabelRepair); per call `messageFlowLabelRepair`.
   if (opts.messageFlowLabelRepair ?? (CFG.layout?.messageFlowLabelRepair === true)) {
     coordMap.edgeLabels = repairMessageFlowLabels(coordMap, lc);
+    // A label no spot beside its flow can take, because the gap between two participants is too
+    // narrow: grow that gap (participants below move down rigidly), route message flows again and
+    // repair again — inside growParticipantGapsForLabels, so message flows still follow the last
+    // pass that moves a participant. Kept only where it clears the label.
+    growParticipantGapsForLabels(coordMap, lc);
   }
 
   // Node labels away from flows (placeNodeLabelsAvoidingFlows): an event's or a gateway's label
