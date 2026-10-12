@@ -334,6 +334,7 @@ const BUDGET_PLAIN = {
   'long-lane-names.json':               { default: r({ bendsMax: 2 }), on: r({ bendsMax: 2 }) },
   'loop-with-join.json':                same(r({ bendsMax: 2, offOver5: 6, overlapLen: 23 })),
   'messageflow-to-subprocess.json':     same(r({ mfCrowd: 1, overlapLen: 83 })),
+  'message-flow-participant-ports.json': same(r({ overlapLen: 62 })),
   'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }),
                                           on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
@@ -377,6 +378,9 @@ const BUDGET_DEFAULT = {
   'expanded-subprocess.json':           r(),
   'long-lane-names.json':               r({ bendsMax: 1 }),
   'loop-with-join.json':                r({ bendsMax: 1, offOver5: 7, overlapLen: 23 }),
+  // overlapLen 62: mf_ack and mf_inv share the black-box pool's centre column on their last leg —
+  // the docking layout.alignParticipantPorts removes (off by default, so every mode keeps it).
+  'message-flow-participant-ports.json': r({ overlapLen: 62 }),
   'messageflow-to-subprocess.json':     r({ mfCrowd: 1, overlapLen: 83 }),
   'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 2 }),
   'parallel-split-join.json':           r({ bendsMax: 1, offOver5: 4 }),
@@ -453,6 +457,7 @@ const DIRECTION = {
   'expanded-subprocess.json':           dir(NONE),
   'long-lane-names.json':               dir(d(2, 2)),
   'loop-with-join.json':                dir(d(2, 0)),
+  'message-flow-participant-ports.json': dir(NONE),
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
   'parallel-split-join.json':           dir(NONE),

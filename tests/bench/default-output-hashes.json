@@ -223,6 +223,22 @@
     "xml": "f7f01d1891ef420dbc22dd4012f4c5d75aa904394243ce3144714e4e2d13b30e",
     "svg": "43a8ea1a56fa491b8100a6c3ce10f4a4de5cf8a3d9f3e3036b662524aafd13ed"
   },
+  "message-flow-participant-ports.json × default": {
+    "xml": "d5b6ba1af07297af79e97d80ec08a5399df4c8a0edb8ffd284808477d021f7f2",
+    "svg": "fc6e44580b0341dde2b4bd3497bca23109976ebb9c62cf495138e7c6a33ef244"
+  },
+  "message-flow-participant-ports.json × no-refine": {
+    "xml": "d5b6ba1af07297af79e97d80ec08a5399df4c8a0edb8ffd284808477d021f7f2",
+    "svg": "fc6e44580b0341dde2b4bd3497bca23109976ebb9c62cf495138e7c6a33ef244"
+  },
+  "message-flow-participant-ports.json × refine": {
+    "xml": "d5b6ba1af07297af79e97d80ec08a5399df4c8a0edb8ffd284808477d021f7f2",
+    "svg": "fc6e44580b0341dde2b4bd3497bca23109976ebb9c62cf495138e7c6a33ef244"
+  },
+  "message-flow-participant-ports.json × refine+wrap": {
+    "xml": "d5b6ba1af07297af79e97d80ec08a5399df4c8a0edb8ffd284808477d021f7f2",
+    "svg": "fc6e44580b0341dde2b4bd3497bca23109976ebb9c62cf495138e7c6a33ef244"
+  },
   "messageflow-to-subprocess.json × default": {
     "xml": "967406767052406c70de0b999477288ff6ff98de5a77ce7e7e1f0aa8381c38a9",
     "svg": "a6af26b79f2590ddea33548d91a180e71cd9854e3fe58c1cc90830dd1d481b3a"

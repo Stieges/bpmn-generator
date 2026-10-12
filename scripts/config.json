@@ -212,6 +212,7 @@
     "nodeLabelsAvoidFlows": true,
     "foreignShapeRepair": true,
     "messageFlowLabelRepair": true,
+    "alignParticipantPorts": false,
     "messageFlowLabelSlidePx": 10,
     "messageFlowLabelMaxMovePx": 150,
     "messageFlowLabelClearancePx": 4,

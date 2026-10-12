@@ -80,6 +80,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{"chat_template_kwargs":{"enable_thinking":false}}`. They cannot replace `model`, `messages`,
   `response_format` or `temperature`. An answer with only reasoning content and no content now says
   so instead of "empty response".
+- **Message flows to a participant can dock level with their other end** (`layout.alignParticipantPorts`,
+  default `false`; per call `runPipeline(lc, { alignParticipantPorts: true })`). A message flow to or
+  from a black-box pool (or an expanded pool named as an endpoint) docked at the middle of the
+  participant's band, wherever the other end lay, so every such flow got a corridor leg and they all
+  converged on one point. With the switch on, the participant's port lies straight above or below the
+  other end (clamped to the band), follows that end's port column when a shape shifts it, keeps
+  `messageFlowAvoidance.columnStep` from the ports earlier flows took on the same band edge, and the
+  participant's band is searched for a clear column when a shape blocks the straight line. Pool to
+  pool is unchanged. Measured over the eight fixtures with black-box pools: 20 of 23 flows straight
+  (was 0), bends 52 → 6, DI05/DI10 unchanged. Off by default, so the default output is unchanged;
+  new fixture `tests/fixtures/message-flow-participant-ports.json`.
+
 
 ## [4.0.0-rc.1] - 2026-10-12
 

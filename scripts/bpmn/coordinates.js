@@ -1777,7 +1777,8 @@ function verticalClear(x, y0, y1, obstacles) {
 /**
  * Port x positions on a shape's top/bottom edge, centre first, then outward one step at a time.
  * Only an activity offers more than its centre: on a circle or a diamond any other x is off the
- * outline, and a black-box participant has no entry in `coords`.
+ * outline. A participant endpoint (no entry in `coords`) offers its whole band only with
+ * `layout.alignParticipantPorts` on; off, it keeps its centre, as before.
  */
 function portColumns(x0, shape, movable) {
   const out = [x0];
@@ -1847,13 +1848,34 @@ function jogLeg(px, py, farY, obstacles) {
  *  - a leg that no column clears because of a shape in the endpoint's OWN participant jogs inside
  *    that participant (jogLeg) — the one place a horizontal leg may lie in a pool body;
  *  - a leg nothing clears keeps today's centre column (not made worse; the bench reports it).
+ *
+ * `align` (`layout.alignParticipantPorts`, set only when exactly one endpoint is a participant):
+ * the participant's port is not the middle of its band but level with the other end — first a
+ * straight vertical in any of the shape's port columns the participant can take, else the corridor
+ * route with the participant's port in the column the shape's leg actually uses, so the corridor
+ * leg does not bend for nothing. `align.free(x, end)` clamps x to the band and moves it off the
+ * ports earlier flows took on the same band edge.
  */
-function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable) {
-  const { sx, sy, ex, ey } = messageFlowPorts(srcCoord, tgtCoord);
+function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable, align = null) {
+  let { sx, sy, ex, ey } = messageFlowPorts(srcCoord, tgtCoord);
+  const straight = (x) => ({ corridors: [], points: [{ x, y: sy }, { x, y: ey }] });
+  if (align) {
+    const [end, x0, shape, mov] = align.target
+      ? ['target', sx, srcCoord, movable.source] : ['source', ex, tgtCoord, movable.target];
+    const x = portColumns(x0, shape, mov).find(x => align.free(x, end) === x && verticalClear(x, sy, ey, obstacles));
+    if (x !== undefined) return straight(x);
+    if (align.target) ex = align.free(sx, 'target');
+    else sx = align.free(ex, 'source');
+  }
   if (Math.abs(sx - ex) < 2 && verticalClear(sx, sy, ey, obstacles)) {
     return { corridors: [], points: [{ x: sx, y: sy }, { x: ex, y: ey }] };
   }
   const c = participantGapY(sy, ey, poolCoords);
+  if (align?.source) {
+    // The participant's leg drops straight to the corridor: put it in the target's first clear column.
+    const tCol = portColumns(ex, tgtCoord, movable.target).find(x => verticalClear(x, c, ey, obstacles));
+    if (tCol !== undefined) sx = align.free(tCol, 'source');
+  }
   const sCols = portColumns(sx, srcCoord, movable.source);
   const sCol = sCols.find(x => verticalClear(x, sy, c, obstacles));
   let head;
@@ -1864,6 +1886,8 @@ function planMessageFlow(mf, srcCoord, tgtCoord, poolCoords, obstacles, movable)
       ? [...jog.slice(0, -1), { x: jog[jog.length - 1].x, corridor: c }]
       : [{ x: sx, y: sy }, { x: sx, corridor: c }];
   }
+  // The participant's port follows the column the source's leg actually took.
+  if (align?.target) ex = align.free(head[head.length - 1].x, 'target');
   const tCols = portColumns(ex, tgtCoord, movable.target);
   const direct = tCols.find(x => verticalClear(x, c, ey, obstacles));
   if (direct !== undefined) {
@@ -1929,7 +1953,7 @@ function withoutRedundantPoints(pts) {
  *
  * It also keeps a flow out of the shapes of the participants it passes — see planMessageFlow.
  */
-function routeMessageFlows(coordMap, lc) {
+function routeMessageFlows(coordMap, lc, { alignParticipantPorts = CFG.layout?.alignParticipantPorts === true } = {}) {
   const { coords, poolCoords, edgeCoords, edgeLabels } = coordMap;
 
   // Fall back to poolCoords: a message flow may end on a black-box participant,
@@ -1943,6 +1967,24 @@ function routeMessageFlows(coordMap, lc) {
     for (const n of flattenProcessNodes(proc.nodes)) typeOf[n.id] = n.type;
   }
   const movable = (id) => !!coords[id] && !!typeOf[id] && !isEvent(typeOf[id]) && !isGateway(typeOf[id]);
+  // A participant endpoint: a black-box pool, or an expanded pool named as an endpoint.
+  const isParticipant = (id) => !coords[id] && !!poolCoords[id];
+  // layout.alignParticipantPorts: ports already taken per participant band edge ("id|y"), in
+  // lc.messageFlows order — a later flow's port keeps columnStep from them.
+  const taken = new Map();
+  const clampToBand = (x, band) =>
+    Math.min(Math.max(x, band.x + MF_AVOID.portInset), band.x + band.w - MF_AVOID.portInset);
+  const freePort = (x0, band, used) => {
+    const x = clampToBand(x0, band);
+    const isFree = (c) => used.every(u => Math.abs(c - u) >= MF_AVOID.columnStep);
+    if (isFree(x)) return x;
+    for (let k = 1; k * MF_AVOID.columnStep <= band.w; k++) {
+      for (const c of [x - k * MF_AVOID.columnStep, x + k * MF_AVOID.columnStep]) {
+        if (c === clampToBand(c, band) && isFree(c)) return c;
+      }
+    }
+    return x;
+  };
 
   // First pass: every flow's plan and the corridors it uses — needed before routing, so that the
   // fan-out spacing can shrink to fit instead of saturating. A detoured flow uses two corridors.
@@ -1952,9 +1994,22 @@ function routeMessageFlows(coordMap, lc) {
     const [s, t] = shapes(mf);
     if (!s || !t) continue;
     const key = messageFlowKey(mf);
+    const end = { source: isParticipant(mf.source), target: isParticipant(mf.target) };
+    let align = null;
+    if (alignParticipantPorts && end.source !== end.target) {
+      const { sy, ey } = messageFlowPorts(s, t);
+      const edgeKey = end.target ? `${mf.target}|${ey}` : `${mf.source}|${sy}`;
+      const band = end.target ? t : s;
+      align = { source: end.source, target: end.target,
+        free: (x) => freePort(x, band, taken.get(edgeKey) ?? []), edgeKey };
+    }
     const plan = planMessageFlow(mf, s, t, poolCoords,
       messageFlowObstacles(mf, coords, s, t, typeOf),
-      { source: movable(mf.source), target: movable(mf.target) });
+      { source: movable(mf.source) || !!align?.source, target: movable(mf.target) || !!align?.target }, align);
+    if (align) {
+      const p = align.target ? plan.points[plan.points.length - 1] : plan.points[0];
+      taken.set(align.edgeKey, [...(taken.get(align.edgeKey) ?? []), p.x]);
+    }
     plans.set(key, plan);
     for (const c of plan.corridors) (perCorridor[Math.round(c)] ??= []).push(key);
   }
@@ -2265,7 +2320,7 @@ function shiftParticipantsBelow(coordMap, lc, boxes, index, delta) {
  * Only a collaboration (lc.pools) has gaps. Mutates coordMap; returns the gaps grown,
  * `[{ above, below, px }]` (participant ids).
  */
-function growParticipantGapsForLabels(coordMap, lc) {
+function growParticipantGapsForLabels(coordMap, lc, routeOpts = {}) {
   const maxGrow = CFG.layout?.messageFlowLabelMaxGapGrowthPx ?? 0;
   if (!lc.pools || !(maxGrow > 0)) return [];
   const gap = CFG.layout?.edgeLabelGap ?? 4;
@@ -2305,7 +2360,7 @@ function growParticipantGapsForLabels(coordMap, lc) {
         const saved = Object.fromEntries(KEYS.map(n => [n, coordMap[n]]));
         for (const n of KEYS) coordMap[n] = { ...coordMap[n] };
         shiftParticipantsBelow(coordMap, lc, boxes, best.g, delta);
-        routeMessageFlows(coordMap, lc);
+        routeMessageFlows(coordMap, lc, routeOpts);
         coordMap.edgeLabels = repairMessageFlowLabels(coordMap, lc);
         const after = unclearMessageFlowLabels(coordMap, lc);
         if (!after.includes(k) && after.length < unclear.length) {
