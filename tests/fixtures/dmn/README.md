@@ -6,6 +6,13 @@ Reference Decision-Core fixture used by `scripts/dmn/rules.test.js` and `scripts
 Exercises every node type and every requirement kind. See `scripts/dmn/rules.js`'s own doc comment
 for the rule-engine side.
 
+## `claim-approval.json`
+
+The worked example of `references/dmn.md`, verbatim — `scripts/dmn/dmn-guide.test.js` fences that
+the two stay equal. Used by the DMN view tests (`svg.test.js`, `table.test.js`) and by
+`scripts/cross/decision-doc.test.js` as the decision a Business Rule Task calls. Its requirements
+carry no `id`, so it also covers the derived requirement keys in the DRD SVG.
+
 ## `roundtrip-all-fields.json`
 
 The round-trip fixture (`scripts/dmn/roundtrip.test.js`, dmn-xml-importer plan Stage 5). Every

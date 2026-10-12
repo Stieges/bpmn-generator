@@ -290,3 +290,55 @@ describe('runDmnPipeline — opts.ruleProfile', () => {
     expect(result.validation.errors).toEqual([]);
   });
 });
+
+describe('runDmnPipeline — the views (DRD SVG; --doc Markdown, table SVG, table HTML)', () => {
+  test('the DRD SVG is always returned; the documentation views only with doc: true', async () => {
+    const plain = await runDmnPipeline(good());
+    expect(plain.svg).toMatch(/^<svg /);
+    expect(plain).not.toHaveProperty('markdown');
+    expect(plain).not.toHaveProperty('tablesSvg');
+    expect(plain).not.toHaveProperty('tablesHtml');
+    const withDoc = await runDmnPipeline(good(), { doc: true });
+    expect(withDoc.svg).toBe(plain.svg);
+    expect(withDoc.xml).toBe(plain.xml);
+    expect(withDoc.markdown).toMatch(/^# Discount decision/);
+    expect(withDoc.tablesSvg).toMatch(/^<svg [\s\S]*class="dmn-decision-table" data-element-id="dec_discountLevel"/);
+    expect(withDoc.tablesHtml).toMatch(/^<!DOCTYPE html>[\s\S]*<table /);
+  });
+
+  test('locale reaches every documentation view', async () => {
+    const r = await runDmnPipeline(good(), { doc: true, locale: 'de' });
+    expect(r.markdown).toContain('Trefferrichtlinie');
+    expect(r.tablesSvg).toContain('Trefferrichtlinie');
+    expect(r.tablesHtml).toContain('Wenn');
+  });
+
+  test('a blocked run returns no views', async () => {
+    const dc = good();
+    delete dc.namespace;
+    const r = await runDmnPipeline(dc, { doc: true });
+    expect(r.svg).toBeNull();
+    expect(r).not.toHaveProperty('markdown');
+  });
+
+  test('CLI: .dmn and .svg by default; --doc adds .md, .tables.svg, .tables.html; --strict on a warning writes nothing', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const run = (dc, args) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmn-views-'));
+      const inPath = path.join(dir, 'in.json');
+      fs.writeFileSync(inPath, JSON.stringify(dc), 'utf8');
+      const outBase = path.join(dir, 'out');
+      const res = spawnSync('node', ['pipeline.js', inPath, outBase, ...args], { cwd: __dirname, encoding: 'utf8' });
+      const exists = (ext) => fs.existsSync(`${outBase}${ext}`);
+      return { status: res.status, files: ['.dmn', '.svg', '.md', '.tables.svg', '.tables.html'].filter(exists) };
+    };
+    expect(run(good(), [])).toEqual({ status: 0, files: ['.dmn', '.svg'] });
+    expect(run(good(), ['--doc'])).toEqual({ status: 0, files: ['.dmn', '.svg', '.md', '.tables.svg', '.tables.html'] });
+    const warn = good();
+    delete warn.nodes.find((n) => n.id === 'dec_discountLevel').question;
+    expect(run(warn, ['--doc', '--strict', '--best-practice'])).toMatchObject({ files: [] });
+  });
+});

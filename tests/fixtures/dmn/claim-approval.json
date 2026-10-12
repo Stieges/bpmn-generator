@@ -1,0 +1,100 @@
+{
+  "id": "Definitions_claimApproval",
+  "name": "Claim approval",
+  "namespace": "http://example.com/dmn/claim-approval",
+  "nodes": [
+    {
+      "id": "in_amount",
+      "type": "inputData",
+      "name": "Claim amount",
+      "typeRef": "number"
+    },
+    {
+      "id": "in_segment",
+      "type": "inputData",
+      "name": "Customer segment",
+      "typeRef": "string"
+    },
+    {
+      "id": "dec_approvalLevel",
+      "type": "decision",
+      "name": "Approval level",
+      "question": "Who has to approve this claim?",
+      "typeRef": "string",
+      "usingTask": "task_evaluateApproval",
+      "decisionTable": {
+        "hitPolicy": "UNIQUE",
+        "inputs": [
+          {
+            "label": "Claim amount",
+            "expression": "claimAmount",
+            "typeRef": "number"
+          },
+          {
+            "label": "Customer segment",
+            "expression": "customerSegment",
+            "typeRef": "string",
+            "allowedValues": "\"premium\",\"standard\""
+          }
+        ],
+        "outputs": [
+          {
+            "name": "level",
+            "typeRef": "string",
+            "allowedValues": "\"auto\",\"clerk\",\"manager\""
+          }
+        ],
+        "rules": [
+          {
+            "when": [
+              "< 1000",
+              "-"
+            ],
+            "then": [
+              "\"auto\""
+            ]
+          },
+          {
+            "when": [
+              "[1000..10000)",
+              "\"premium\""
+            ],
+            "then": [
+              "\"clerk\""
+            ]
+          },
+          {
+            "when": [
+              "[1000..10000)",
+              "\"standard\""
+            ],
+            "then": [
+              "\"manager\""
+            ]
+          },
+          {
+            "when": [
+              ">= 10000",
+              "-"
+            ],
+            "then": [
+              "\"manager\""
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "type": "information",
+      "source": "in_amount",
+      "target": "dec_approvalLevel"
+    },
+    {
+      "type": "information",
+      "source": "in_segment",
+      "target": "dec_approvalLevel"
+    }
+  ]
+}

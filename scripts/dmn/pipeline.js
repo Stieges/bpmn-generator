@@ -8,7 +8,8 @@
  * this is a deliberate difference, stated in the interface contract for this plan.
  *
  * Usage:
- *   node pipeline.js input.json [output-basename]
+ *   node pipeline.js input.json [output-basename]            -> .dmn + .svg (the DRD)
+ *   node pipeline.js input.json [output-basename] --doc      -> also .md, .tables.svg, .tables.html
  *   cat input.json | node pipeline.js - output-basename
  */
 
@@ -22,6 +23,11 @@ import { decisionCoreToElk, runDmnElkLayout } from './layout.js';
 import { buildDmnDiagrams } from './coordinates.js';
 import { checkDmnDiagramIntegrity } from './di-check.js';
 import { generateDmnXml, validateDmnXml } from './dmn-xml.js';
+import { generateDmnSvg } from './svg.js';
+import { layoutDecisionTables } from './table.js';
+import { generateTablesSvg } from './table-svg.js';
+import { generateTablesHtml } from './table-html.js';
+import { generateDmnMarkdown } from './doc.js';
 import { isMainModule } from '../shared/entry-point.js';
 
 /**
@@ -30,7 +36,15 @@ import { isMainModule } from '../shared/entry-point.js';
  * @param {string} [opts.mode='semantic'] - 'semantic' (default) or 'best-practice'
  * @param {string|object} [opts.ruleProfile] - base rule profile (path or object)
  * @param {object} [opts.config] - thresholds override, defaults to CFG.dmn inside runDmnRules
- * @returns {Promise<{xml: string|null, diagrams: object[]|null, validation: object, diagnostics: object|null}>}
+ * @param {boolean} [opts.doc=false] - also produce the documentation views: `markdown` (doc.js),
+ *   `tablesSvg` (table-svg.js) and `tablesHtml` (table-html.js), all three translating ONE table
+ *   layout (table.js layoutDecisionTables)
+ * @param {string} [opts.locale] - label locale of the documentation views, default
+ *   `config.json → dmn.labels.locale`
+ * @returns {Promise<{xml: string|null, svg: string|null, markdown?: string, tablesSvg?: string,
+ *   tablesHtml?: string, diagrams: object[]|null, validation: object, diagnostics: object|null}>}
+ *   `svg` is the DRD (svg.js), a translation of the same coordMap the DMNDI in `xml` carries.
+ *   Every view is `null`/absent wherever `xml` is `null`.
  */
 export async function runDmnPipeline(dc, opts = {}) {
   const input = JSON.parse(JSON.stringify(dc)); // deep clone — callers' objects are never mutated
@@ -39,7 +53,7 @@ export async function runDmnPipeline(dc, opts = {}) {
   const schemaCheck = validateDecisionCoreSchema(input);
   if (!schemaCheck.valid) {
     const errors = schemaCheck.errors.map((e) => `[schema] ${e.path} ${e.message}`);
-    return { xml: null, diagrams: null, diagnostics: null,
+    return { xml: null, svg: null, diagrams: null, diagnostics: null,
       validation: { errors, warnings: [], infos: [], xmlWarnings: [], mode } };
   }
 
@@ -47,7 +61,7 @@ export async function runDmnPipeline(dc, opts = {}) {
   if (typeof ruleProfile === 'string') ruleProfile = loadRuleProfile(ruleProfile);
   const { errors, warnings, infos } = runDmnRules(input, { profile: ruleProfile, mode, config: opts.config });
   if (errors.length) {
-    return { xml: null, diagrams: null, diagnostics: null,
+    return { xml: null, svg: null, diagrams: null, diagnostics: null,
       validation: { errors, warnings, infos, xmlWarnings: [], mode } };
   }
 
@@ -67,13 +81,23 @@ export async function runDmnPipeline(dc, opts = {}) {
     // serialisation itself fails (e.g. an illegal requirement pairing that only reached this
     // point because the corresponding rule was disabled in the profile).
     return {
-      xml: null, diagrams, diagnostics,
+      xml: null, svg: null, diagrams, diagnostics,
       validation: { errors: [`[serialisation] ${err.message}`], warnings, infos, xmlWarnings: [], mode },
     };
   }
 
+  // The DRD as SVG: the same `diagrams` the DMNDI above was written from — renderers translate.
+  const svg = generateDmnSvg(input, diagrams);
+  const views = {};
+  if (opts.doc) {
+    const stack = layoutDecisionTables(input, { locale: opts.locale });
+    views.markdown = generateDmnMarkdown(input, stack, { locale: opts.locale });
+    views.tablesSvg = generateTablesSvg(stack);
+    views.tablesHtml = generateTablesHtml(stack, { title: input.name || input.id || '' });
+  }
+
   return {
-    xml, diagrams, diagnostics,
+    xml, svg, ...views, diagrams, diagnostics,
     validation: { errors: [], warnings, infos, xmlWarnings: roundTrip.warnings, mode },
   };
 }
@@ -90,9 +114,10 @@ async function main() {
   const outputBase = positional[1] || 'output';
   const strict = flags.includes('--strict');
   const bestPractice = flags.includes('--best-practice') || flags.includes('--mode=best-practice');
+  const doc = flags.includes('--doc');
 
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--strict] [--best-practice]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--strict] [--best-practice] [--doc]');
     process.exit(1);
   }
 
@@ -111,7 +136,7 @@ async function main() {
     console.error(`✗ ${e.message}`);
     process.exit(1);
   }
-  const result = await runDmnPipeline(parsedInput, { mode: bestPractice ? 'best-practice' : 'semantic' });
+  const result = await runDmnPipeline(parsedInput, { mode: bestPractice ? 'best-practice' : 'semantic', doc });
 
   if (result.validation.warnings.length) {
     console.warn('\n⚠ Warnings:');
@@ -165,6 +190,22 @@ async function main() {
   const dmnPath = `${outputBase}.dmn`;
   writeFileSync(dmnPath, result.xml, 'utf8');
   console.log(`✓ DMN 1.3 XML → ${dmnPath}`);
+
+  const svgPath = `${outputBase}.svg`;
+  writeFileSync(svgPath, result.svg, 'utf8');
+  console.log(`✓ DRD SVG → ${svgPath}`);
+
+  if (doc) {
+    const files = [
+      [`${outputBase}.md`, result.markdown, 'Decision doc'],
+      [`${outputBase}.tables.svg`, result.tablesSvg, 'Decision tables (SVG)'],
+      [`${outputBase}.tables.html`, result.tablesHtml, 'Decision tables (HTML)'],
+    ];
+    for (const [path, content, what] of files) {
+      writeFileSync(path, content, 'utf8');
+      console.log(`✓ ${what} → ${path}`);
+    }
+  }
 }
 
 // Only run CLI when executed directly (not imported) — same idiom as scripts/bpmn/pipeline.js.
