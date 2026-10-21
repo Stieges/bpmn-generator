@@ -65,7 +65,7 @@
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="844" y="594.4">Fertig</tspan></text>
 </g>
 <path data-element-id="f1" data-waypoints="206,141 286,141" d="M 206 141 L 286 141" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f2" data-waypoints="336,181 336,332 466,332" d="M 336 181 L 336 327 C 336 329.5 338.5 332 341 332 L 466 332" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f3" data-waypoints="516,372 516,557 646,557" d="M 516 372 L 516 552 C 516 554.5 518.5 557 521 557 L 646 557" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f2" data-waypoints="386,141 426,141 426,332 466,332" d="M 386 141 L 421 141 C 423.5 141 426 143.5 426 146 L 426 327 C 426 329.5 428.5 332 431 332 L 466 332" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f3" data-waypoints="566,332 606,332 606,557 646,557" d="M 566 332 L 601 332 C 603.5 332 606 334.5 606 337 L 606 552 C 606 554.5 608.5 557 611 557 L 646 557" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f4" data-waypoints="746,557 826,557" d="M 746 557 L 826 557" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 </svg>

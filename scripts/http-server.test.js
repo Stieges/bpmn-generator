@@ -748,10 +748,10 @@ describe('schema-gate errors in responses are capped and bounded', () => {
   }
 });
 
-// bendRule / nodeLabelsAvoidFlows: simple-approval.json changes when either is switched off, so a
-// dropped forwarding fails the `not.toBe`.
+// bendRule / nodeLabelsAvoidFlows: sparse-lanes.json changes when either is switched off, so a
+// dropped forwarding fails the `not.toBe` (simple-approval is tip-dock saturated).
 describe('layout switches over HTTP', () => {
-  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/sparse-lanes.json', import.meta.url), 'utf8'));
   const post = (path, body) => realFetch(`${baseUrl}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });

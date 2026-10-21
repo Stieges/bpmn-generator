@@ -209,6 +209,7 @@
     "crossingGuard": true,
     "endpointReclip": true,
     "bendRule": true,
+    "bendRulePreferFlowDirection": true,
     "nodeLabelsAvoidFlows": true,
     "foreignShapeRepair": true,
     "messageFlowLabelRepair": true,

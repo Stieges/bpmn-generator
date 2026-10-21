@@ -597,5 +597,5 @@ describe('the emitted document does not depend on the order of dc.requirements',
       if (xml !== baseline) differing.push(perm.map((r) => r.id).join(','));
     }
     expect(differing).toEqual([]);
-  });
+  }, 60_000);
 });

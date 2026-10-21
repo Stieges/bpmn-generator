@@ -8,7 +8,7 @@
 
 import { BpmnModdle } from 'bpmn-moddle';
 import {
-  isGateway, isBoundaryEvent, isBpmnArtifact,
+  isEvent, isGateway, isBoundaryEvent, isBpmnArtifact,
   OMG_NODE_FIELD_SCOPE, nodeFieldSpec, matchesFieldType, bpmnXmlTag,
   EVENT_DEFINITION_BY_MARKER, FLOW_NODE_TYPES,
   resolveDefinitionRef, writesIsInterrupting } from './types.js';
@@ -186,10 +186,14 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
     return { elements, markerMap };
   }
 
-  // Auto-generate from event markers
+  // Auto-generate from event markers on Event nodes only.
+  // `inferEventMarker` matches substrings in *names* ("email", "mail", "error", …). Running it
+  // on tasks minted orphan top-level Message/Error/… elements with no eventDefinition referencing
+  // them (e.g. userTask "… via email" → unused Message_1).
   const seen = new Set();
   for (const proc of processes) {
     for (const node of (proc.nodes || [])) {
+      if (!isEvent(node.type)) continue;
       const marker = node.marker || inferEventMarker(node.name || '');
       if (!marker || seen.has(marker)) continue;
 

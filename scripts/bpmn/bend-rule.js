@@ -42,12 +42,14 @@
  * corridor on a corridorStepPx grid within corridorReachPx of the ends); only when none of them is
  * admissible at or below the current bend count, orthogonal-router.js between two end stubs.
  *
- * Choice: greedy in edge order, every edge seeing the routes already changed. A route is replaced
- * only by one with fewer bends, or as many bends and a lower side penalty (an activity/event target
- * not entered from the left +1, an activity/event source not left to the right +1). Ties: crossings,
- * moved endpoints, length, corridor nearest the middle. The pass repeats until nothing changes —
- * each replacement lowers 3 × bends + side penalty of one edge and touches no other edge's, so it
- * ends — which makes it idempotent: a second run finds nothing to do.
+ * Choice: greedy in edge order, every edge seeing the routes already changed.
+ *  - Default (`preferFlowDirection` false): replace only with fewer bends, or equal bends and a
+ *    lower side penalty. Ties: crossings, moved endpoints, length, corridor.
+ *  - `preferFlowDirection` true (pipeline / `layout.bendRulePreferFlowDirection`): lex score
+ *    [sidePenalty, bends, …] — enter-left / leave-right outranks saving a bend (Miragon
+ *    `@miragon/rules/flow-connection-side`); search may use `curBends + 2` when a side penalty
+ *    remains. The pass repeats until nothing changes; each replacement lowers the active score of
+ *    one edge and touches no other edge's, so it ends — idempotent.
  *
  * Where it runs (pipeline.js): after every pass that moves a shape or a route — lane compaction, its
  * re-route and the stuck-end pass — so it judges final geometry; before edge-label repair and
@@ -537,7 +539,7 @@ function makeChecker(entry, entries, ctx, cfg) {
  * 0/1/2-bend shapes first, the orthogonal router only when none of them qualifies. `targetSide`
  * restricts the target port to one entry side. Returns { minBends, cands: [{ pts, moved }] } or null.
  */
-function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = null } = {}) {
+function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = null, allLevels = false } = {}) {
   const cur = entry.points;
   const curSegs = segsOf(cur);
   if (!curSegs.length) return null;
@@ -564,7 +566,12 @@ function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = nu
     }
   }
   const levels = [...byLevel.keys()].sort((a, b) => a - b);
-  if (levels.length) return { minBends: levels[0], cands: byLevel.get(levels[0]) };
+  if (levels.length) {
+    const cands = allLevels
+      ? levels.flatMap((b) => byLevel.get(b))
+      : byLevel.get(levels[0]);
+    return { minBends: levels[0], cands };
+  }
   if (maxBends <= 2 || !cfg.router) return null;
 
   const routed = [];
@@ -581,7 +588,10 @@ function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = nu
   }
   if (!routed.length) return null;
   const m = Math.min(...routed.map((r) => r.b));
-  return { minBends: m, cands: routed.filter((r) => r.b === m) };
+  return {
+    minBends: m,
+    cands: allLevels ? routed : routed.filter((r) => r.b === m),
+  };
 }
 
 function resolveConfig(opts) {
@@ -620,9 +630,12 @@ function lexCompare(x, y) {
  * @param {Set<string>} [opts.skipIds] edge ids never touched and never counted (associations)
  * @param {object} [opts.limits] overrides of bendRuleLimits()
  * @param {object} [opts.guards] guards to switch off — tests only
+ * @param {boolean} [opts.preferFlowDirection] side penalty before bend count (default false;
+ *   pipeline sets true when `layout.bendRulePreferFlowDirection` is on)
  */
 export function applyBendRule(coordMap, lc, opts = {}) {
   const cfg = resolveConfig(opts);
+  const preferFlow = opts.preferFlowDirection === true;
   const ctx = buildContext(coordMap, lc);
   const entries = entriesOf(coordMap, opts.edges ?? sequenceFlowsOf(lc), opts.skipIds ?? new Set());
   const changed = new Map();
@@ -632,8 +645,9 @@ export function applyBendRule(coordMap, lc, opts = {}) {
     for (const en of entries) {
       if (!inScope(en, ctx.coords)) continue;
       const curBends = bendCount(en.points), curPenalty = sidePenalty(en.points, en, ctx);
-      const r = search(en, entries, ctx, cfg, { maxBends: curBends });
-      if (!r) continue;
+      const maxBends = preferFlow && curPenalty > 0 ? curBends + 2 : curBends;
+      const r = search(en, entries, ctx, cfg, { maxBends, allLevels: preferFlow });
+      if (!r?.cands?.length) continue;
       const scored = r.cands.map((c) => {
         const S = segsOf(c.pts), a = c.pts[0], z = c.pts[c.pts.length - 1];
         let offCentre = 0;
@@ -641,11 +655,23 @@ export function applyBendRule(coordMap, lc, opts = {}) {
           const m = S[1];
           offCentre = Math.abs(m[0].x - m[1].x) < EPS ? Math.abs(m[0].x - (a.x + z.x) / 2) : Math.abs(m[0].y - (a.y + z.y) / 2);
         }
-        return { pts: c.pts, score: [sidePenalty(c.pts, en, ctx), crossings(en, c.pts, entries), c.moved, Math.round(pathLen(c.pts)), offCentre] };
+        const penalty = sidePenalty(c.pts, en, ctx);
+        const bends = bendCount(c.pts);
+        // preferFlow: [side, bends, …]; classic: score only used for ties within min-bend bucket,
+        // with side first among equals (same array shape, different accept rule below).
+        return {
+          pts: c.pts,
+          bends,
+          penalty,
+          score: [penalty, bends, crossings(en, c.pts, entries), c.moved, Math.round(pathLen(c.pts)), offCentre],
+        };
       });
       scored.sort((x, y) => lexCompare(x.score, y.score));
       const best = scored[0];
-      if (r.minBends < curBends || (r.minBends === curBends && best.score[0] < curPenalty)) {
+      const accept = preferFlow
+        ? lexCompare(best.score, [curPenalty, curBends, crossings(en, en.points, entries), 0, Math.round(pathLen(en.points)), 0]) < 0
+        : (best.bends < curBends || (best.bends === curBends && best.penalty < curPenalty));
+      if (accept) {
         en.points = best.pts;
         changed.set(en.id, best.pts);
         progress = true;

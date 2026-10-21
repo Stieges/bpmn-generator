@@ -316,7 +316,12 @@ async function runPipeline(logicCore, opts = {}) {
   // layout.bendRule); per call `bendRule`, CLI --no-bend-rule / --bend-rule.
   if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
     const beforeBend = coordMap.edgeCoords;
-    coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
+    coordMap.edgeCoords = applyBendRule(coordMap, lc, {
+      edges: allEdges,
+      skipIds: skipSimplify,
+      // Miragon flow-connection-side: exit activities right / enter left even if it costs a bend.
+      preferFlowDirection: opts.preferFlowDirection ?? (CFG.layout?.bendRulePreferFlowDirection !== false),
+    });
     refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines, { avoidOtherRoutes: true });
   }
   if (refine.edgeLabelCollisionRepair) {

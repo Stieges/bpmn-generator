@@ -390,7 +390,10 @@ describe('the pass in the pipeline', () => {
         for (const i of r.diagnostics.issues) if (['DI07', 'DI08', 'DI09', 'DI10'].includes(i.code)) bad.push(`${name} ${i.code}`);
         if (r.validation.xmlWarnings?.length) bad.push(`${name} xmlWarnings`);
         // The Logic-Core the pipeline laid out: ids assigned to id-less edges, or the rule would see no route.
-        if (applyBendRule(r.coordMap, normalizeEdgeIds(lc)) !== r.coordMap.edgeCoords) bad.push(`${name} not idempotent`);
+        // Same preferFlowDirection the pipeline used (config bendRulePreferFlowDirection).
+        if (applyBendRule(r.coordMap, normalizeEdgeIds(lc), { preferFlowDirection: true }) !== r.coordMap.edgeCoords) {
+          bad.push(`${name} not idempotent`);
+        }
       }
       expect(bad).toEqual([]);
     }, 120000); // ~23 s under the full parallel run (example-bestellung-versand alone ~2 s per mode)
@@ -406,7 +409,7 @@ describe('the pass in the pipeline', () => {
     expect(bendMetrics(r.coordMap, normalised).scope).toBe(n);
     // fed the raw Logic-Core the same call is silently vacuous — the reason the tests normalise
     expect(bendMetrics(r.coordMap, lc).scope).toBe(n - 1);
-    expect(applyBendRule(r.coordMap, normalised)).toBe(r.coordMap.edgeCoords);
+    expect(applyBendRule(r.coordMap, normalised, { preferFlowDirection: true })).toBe(r.coordMap.edgeCoords);
   });
 });
 

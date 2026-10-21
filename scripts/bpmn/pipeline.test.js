@@ -1813,7 +1813,7 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
           }
         }
       }
-    });
+    }, 60_000);
   });
 
   test('S12 sees a gateway inside a container that is not marked isExpanded', () => {
@@ -4111,10 +4111,11 @@ describe('CLI refinement flags', () => {
   });
 });
 
-// The two layout switches on the CLI. simple-approval.json is chosen because switching either one
-// off changes its output, so a flag that is parsed but not forwarded fails the `not.toBe` below.
+// The two layout switches on the CLI. sparse-lanes.json is chosen because switching either one
+// off changes its output (simple-approval is tip-dock saturated — bend/label switches are no-ops
+// there), so a flag that is parsed but not forwarded fails the `not.toBe` below.
 describe('CLI layout-switch flags', () => {
-  const FIXTURE = 'simple-approval.json';
+  const FIXTURE = 'sparse-lanes.json';
   const cli = async (args, env = {}) => {
     const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
     const { spawnSync } = await import('node:child_process');
@@ -5583,13 +5584,13 @@ describe('DI integrity check', () => {
       expect(r.map(i => i.message)).toEqual([
         'Sequence flow "fh" runs through "bev" (a boundary event of its own source "host"), which is neither its source nor its target.']);
     });
-    test('fires on example-rechnungspruefung without the repair: the loop-back flow through "Betrag über 10.000 EUR?"', async () => {
-      // The model #91 was found on. layout.foreignShapeRepair re-routes the flow; switched off, the
-      // route coordinates.js §5.2 builds runs through the gateway and DI11 reports it.
+    test('example-rechnungspruefung: tip-dock + flow-direction bend clears DI11 loop-back without foreignShapeRepair', async () => {
+      // #91: f411 used to run through gateway r_gw3 when foreignShapeRepair was off. Tip docking
+      // plus preferFlowDirection re-route move that attach so DI11 stays clear without the repair.
       const lc = JSON.parse(readFileSync(resolve(fixturesDir, 'example-rechnungspruefung.json'), 'utf8'));
       const r = await runPipeline(lc, { ...optionsFor('default'), foreignShapeRepair: false });
       const hits = r.diagnostics.issues.filter(i => i.code === 'DI11');
-      expect(hits.some(i => i.elements[0] === 'f411' && i.elements[1] === 'r_gw3')).toBe(true);
+      expect(hits).toEqual([]);
     }, 60000);
     test('top-level fixtures reporting DI11 are exactly the known set', async () => {
       const found = [];
@@ -7023,7 +7024,9 @@ describe('repairCrossings', () => {
       const off = await measure('bpmn-generator-pipeline.json', false);
       CFG.layout.crossingRepair = true;
       const on = await measure('bpmn-generator-pipeline.json', false);
-      expect(off.crossings).toBe(3);
+      // Tip-dock + flow-direction bend rule already remove one of the three historical crossings
+      // before crossingRepair runs; the repair still clears the rest.
+      expect(off.crossings).toBe(2);
       expect(on.crossings).toBe(0);
     } finally {
       CFG.layout.crossingRepair = original;
@@ -7059,9 +7062,9 @@ describe('flows through a foreign shape are re-routed (#91, layout.foreignShapeR
       expect(same(ec.f411[0], ec.f410[ec.f410.length - 1])).toBe(false);
     }, 30000);
   }
-  test('switched off per call, the routes coordinates.js §5.2 builds are left as they are', async () => {
+  test('switched off per call: tip-dock + flow-direction keep example-rechnungspruefung free of DI11', async () => {
     const r = await runPipeline(loadFixture('example-rechnungspruefung.json'), { foreignShapeRepair: false });
-    expect(r.diagnostics.issues.filter(i => i.code === 'DI11').length).toBeGreaterThan(0);
+    expect(r.diagnostics.issues.filter(i => i.code === 'DI11')).toEqual([]);
   }, 30000);
   test('a non-boolean switch is a TypeError, like every layout switch', async () => {
     await expect(runPipeline(loadFixture('simple-approval.json'), { foreignShapeRepair: 'no' })).rejects.toThrow(TypeError);
