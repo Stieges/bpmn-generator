@@ -71,6 +71,16 @@ describe('#53 reproduction — two message definitions, two message events', () 
     expect(refsIn(r.bpmnXml, 'messageRef')).toEqual(['Message_1', 'Message_1']);
     expect(about(r.validation.warnings, 'messageRef')).toEqual([]);
   });
+
+  test('a task whose name contains "email" does not mint an unused Message', async () => {
+    const r = await runPipeline(proc([
+      { id: 's', type: 'startEvent', name: 'Start' },
+      { id: 't', type: 'userTask', name: 'Review in person or via email' },
+      { id: 'e', type: 'endEvent', name: 'Done' },
+    ], undefined));
+    expect(r.bpmnXml).not.toMatch(/<bpmn:message[\s>]/);
+    expect(refsIn(r.bpmnXml, 'messageRef')).toEqual([]);
+  });
 });
 
 describe('S16 — a *Ref that cannot be honoured is an ERROR', () => {
