@@ -192,11 +192,11 @@ describe('rule profiles over MCP are names inside rules/, never paths', () => {
   }
 });
 
-// simple-approval.json changes when either switch is off, so a dropped forwarding fails `not.toBe`.
+// sparse-lanes.json changes when either switch is off, so a dropped forwarding fails `not.toBe`.
 describe('layout switches over MCP', () => {
   const lib = async (opts) => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    return (await runPipeline(fixture('simple-approval.json'), opts)).bpmnXml;
+    return (await runPipeline(fixture('sparse-lanes.json'), opts)).bpmnXml;
   };
   test('generate_bpmn and orchestrate_bpmn declare both with the shared schema; validate_bpmn does not', async () => {
     const { LAYOUT_SWITCH_OPTION_SCHEMA } = await import('./bpmn/schema-gate.js');
@@ -209,7 +209,7 @@ describe('layout switches over MCP', () => {
   });
   for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
     test.each([['bendRule'], ['nodeLabelsAvoidFlows']])(`%s: false on ${name} equals the library call and differs from no option`, async (key) => {
-      const out = parse(await call(name, { logicCore: fixture('simple-approval.json'), [key]: false, include: ['xml'] }));
+      const out = parse(await call(name, { logicCore: fixture('sparse-lanes.json'), [key]: false, include: ['xml'] }));
       expect(out.bpmnXml).toBe(await lib({ [key]: false }));
       expect(out.bpmnXml).not.toBe(await lib({}));
     });
@@ -236,9 +236,9 @@ describe('layout switches over MCP', () => {
   }
   test('drillDown on generate_bpmn forwards them too', async () => {
     const { generateDiagramSet } = await import('./bpmn/pipeline.js');
-    const out = parse(await call('generate_bpmn', { logicCore: fixture('simple-approval.json'), bendRule: false, drillDown: true, include: ['xml'] }));
-    const set = await generateDiagramSet(fixture('simple-approval.json'), { bendRule: false });
-    const none = await generateDiagramSet(fixture('simple-approval.json'), {});
+    const out = parse(await call('generate_bpmn', { logicCore: fixture('sparse-lanes.json'), bendRule: false, drillDown: true, include: ['xml'] }));
+    const set = await generateDiagramSet(fixture('sparse-lanes.json'), { bendRule: false });
+    const none = await generateDiagramSet(fixture('sparse-lanes.json'), {});
     expect(out.parent.bpmnXml).toBe(set.parent.bpmnXml);
     expect(out.parent.bpmnXml).not.toBe(none.parent.bpmnXml);
   });

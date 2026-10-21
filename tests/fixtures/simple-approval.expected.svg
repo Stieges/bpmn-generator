@@ -50,7 +50,7 @@
 <g data-element-id="gw1">
 <polygon points="471,97.5 496,122.5 471,147.5 446,122.5" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
 <g transform="translate(446,97.5)"><path d="m 16,15 7.429,9.714 -7.429,9.714 3.429,0 5.714,-7.464 5.714,7.464 3.429,0 -7.429,-9.714 7.429,-9.714 -3.429,0 -5.714,7.464 -5.714,-7.464 -3.429,0 z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
-<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="471" y="83.4">Approved?</tspan></text>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="471" y="167.4">Approved?</tspan></text>
 </g>
 <g data-element-id="task2">
 <rect x="656" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
@@ -69,11 +69,11 @@
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="854" y="147.4">Document</tspan><tspan x="854" y="160.6">approved</tspan></text>
 </g>
 <path data-element-id="f1" data-waypoints="206,250 286,250" d="M 206 250 L 286 250" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f2" data-waypoints="336,210 336,123 446.5,123" d="M 336 210 L 336 128 C 336 125.5 338.5 123 341 123 L 446.5 123" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f3" data-waypoints="483.5,110 656,110" d="M 483.5 110 L 656 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="569.8" y="101.9">Yes</tspan></text>
-<path data-element-id="f4" data-waypoints="483.5,135 483.5,237 636,237" d="M 483.5 135 L 483.5 232 C 483.5 234.5 486 237 488.5 237 L 636 237" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="559.8" y="228.9">No</tspan></text>
+<path data-element-id="f2" data-waypoints="336,210 336,122.5 446,122.5" d="M 336 210 L 336 127.5 C 336 125 338.5 122.5 341 122.5 L 446 122.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f3" data-waypoints="496,122.5 656,122.5" d="M 496 122.5 L 656 122.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="576" y="114.4">Yes</tspan></text>
+<path data-element-id="f4" data-waypoints="496,122.5 566,122.5 566,237 636,237" d="M 496 122.5 L 561 122.5 C 563.5 122.5 566 125 566 127.5 L 566 232 C 566 234.5 568.5 237 571 237 L 636 237" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="531" y="114.4">No</tspan></text>
 <path data-element-id="f5" data-waypoints="636,263 386,263" d="M 636 263 L 386 263" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f6" data-waypoints="756,110 836,110" d="M 756 110 L 836 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 </svg>

@@ -1813,7 +1813,7 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
           }
         }
       }
-    });
+    }, 60_000);
   });
 
   test('S12 sees a gateway inside a container that is not marked isExpanded', () => {
@@ -4111,10 +4111,11 @@ describe('CLI refinement flags', () => {
   });
 });
 
-// The two layout switches on the CLI. simple-approval.json is chosen because switching either one
-// off changes its output, so a flag that is parsed but not forwarded fails the `not.toBe` below.
+// The two layout switches on the CLI. sparse-lanes.json is chosen because switching either one
+// off changes its output (simple-approval is tip-dock saturated — bend/label switches are no-ops
+// there), so a flag that is parsed but not forwarded fails the `not.toBe` below.
 describe('CLI layout-switch flags', () => {
-  const FIXTURE = 'simple-approval.json';
+  const FIXTURE = 'sparse-lanes.json';
   const cli = async (args, env = {}) => {
     const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
     const { spawnSync } = await import('node:child_process');

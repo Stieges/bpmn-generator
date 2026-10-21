@@ -491,10 +491,17 @@ function buildCoordinateMap(elkResult, lc) {
 
     if (srcCoord && srcNode) {
       pts[0] = clipOrthogonal(srcCoord, srcNode.type, pts[0], pts[1], 'source');
+      // Gateway tips sit on the centre axes; keep the first segment orthogonal after a tip snap.
+      if (isGateway(srcNode.type) && pts.length >= 2) {
+        alignSegmentToTip(pts, 0, 1);
+      }
     }
     if (tgtCoord && tgtNode) {
       const last = pts.length - 1;
       pts[last] = clipOrthogonal(tgtCoord, tgtNode.type, pts[last], pts[last - 1], 'target');
+      if (isGateway(tgtNode.type) && pts.length >= 2) {
+        alignSegmentToTip(pts, last, last - 1);
+      }
     }
   }
 
@@ -1677,10 +1684,12 @@ function clipCircleOrthogonal(cx, cy, r, nextPt, isHorizontal) {
 }
 
 /**
- * Diamond: for horizontal approach, find x where the diamond edge crosses the y-level.
- * For vertical, find y where the diamond edge crosses the x-level.
+ * Diamond: always dock at one of the four tips (left/right/top/bottom vertices).
+ * Miragon `@miragon/rules/flow-connection-side` rejects facet docks ("connects … on a diagonal").
+ * The clip loop then realigns the adjacent waypoint so the end segment stays orthogonal.
+ *
  * Diamond with center (cx,cy) and half-widths (hw,hh):
- *   |x-cx|/hw + |y-cy|/hh = 1
+ *   |x-cx|/hw + |y-cy|/hh = 1  (tips are the axis intercepts)
  */
 function clipDiamondOrthogonal(shape, nextPt, isHorizontal) {
   const cx = shape.x + shape.w / 2;
@@ -1688,24 +1697,21 @@ function clipDiamondOrthogonal(shape, nextPt, isHorizontal) {
   const hw = shape.w / 2, hh = shape.h / 2;
 
   if (isHorizontal) {
-    const y = nextPt.y;
-    const dyc = Math.abs(y - cy);
-    if (dyc >= hh) {
-      // Outside diamond vertically, snap to tip
-      return { x: cx, y: nextPt.y > cy ? cy + hh : cy - hh };
-    }
-    const xOffset = hw * (1 - dyc / hh);
-    const x = nextPt.x > cx ? cx + xOffset : cx - xOffset;
-    return { x, y };
+    return { x: nextPt.x > cx ? cx + hw : cx - hw, y: cy };
+  }
+  return { x: cx, y: nextPt.y > cy ? cy + hh : cy - hh };
+}
+
+/** After a tip dock, force the neighbouring waypoint onto the tip's axis (horizontal or vertical). */
+function alignSegmentToTip(pts, tipIdx, adjIdx) {
+  const tip = pts[tipIdx], adj = pts[adjIdx];
+  if (!tip || !adj) return;
+  const dx = Math.abs(adj.x - tip.x), dy = Math.abs(adj.y - tip.y);
+  if (dx >= dy) {
+    // Prefer a horizontal leg through the tip.
+    pts[adjIdx] = { x: adj.x, y: tip.y };
   } else {
-    const x = nextPt.x;
-    const dxc = Math.abs(x - cx);
-    if (dxc >= hw) {
-      return { x: nextPt.x > cx ? cx + hw : cx - hw, y: cy };
-    }
-    const yOffset = hh * (1 - dxc / hw);
-    const y = nextPt.y > cy ? cy + yOffset : cy - yOffset;
-    return { x, y };
+    pts[adjIdx] = { x: tip.x, y: adj.y };
   }
 }
 
