@@ -3102,6 +3102,29 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.some(w => w.includes('Review Application') && w.includes('Objekt+Verb'))).toBe(false);
   });
 
+  test('M01: extended English verbs from naming.json → no WARNING', () => {
+    // These verbs are in naming.json but were absent from the old hardcoded set.
+    const extendedVerbs = [
+      'Apply discount', 'Choose channel', 'Complete form', 'Copy record',
+      'Download report', 'Export data', 'Finalize contract', 'Import file',
+      'Load configuration', 'Move document', 'Populate template', 'Pull request',
+      'Reconcile accounts', 'Run validation', 'Save draft', 'Select option',
+      'Show result', 'Sync state', 'Tag release', 'Upload attachment', 'Use template',
+    ];
+    for (const name of extendedVerbs) {
+      const lc = proc([
+        { id: 's', type: 'startEvent' },
+        { id: 't1', type: 'task', name },
+        { id: 'e', type: 'endEvent' },
+      ], [
+        { id: 'f1', source: 's', target: 't1' },
+        { id: 'f2', source: 't1', target: 'e' },
+      ]);
+      const result = runRules(lc);
+      expect(result.warnings.some(w => w.includes(name) && w.includes('Objekt+Verb'))).toBe(false);
+    }
+  });
+
   test('M02: XOR gateway without question mark → WARNING', () => {
     const lc = proc([
       { id: 's', type: 'startEvent' },

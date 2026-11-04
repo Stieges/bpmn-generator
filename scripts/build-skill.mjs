@@ -43,7 +43,7 @@ export function includeScriptFile(rel, name) {
   if (hasSegment(rel, 'agents') || hasSegment(rel, 'robustness')) return false;
   if (name.endsWith('.test.js')) return false;
   // Note: build-skill.mjs is intentionally excluded by the `.js`-only rule (not `.mjs`).
-  return name.endsWith('.js') || name === 'config.json' || name === 'package.json';
+  return name.endsWith('.js') || name === 'config.json' || name === 'package.json' || name === 'naming.json';
 }
 
 export function includeReferenceFile(rel, name) {
@@ -121,7 +121,7 @@ export function collectIncludes(root = repoRoot) {
   }
   return [
     'SKILL.md',
-    ...[...modules, 'config.json', 'package.json'].map(rel => `scripts/${rel}`),
+    ...[...modules, 'config.json', 'package.json', 'bpmn/naming.json'].map(rel => `scripts/${rel}`),
     ...references.map(f => toPosix(relative(root, f))),
   ];
 }

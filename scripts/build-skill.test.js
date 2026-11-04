@@ -107,7 +107,7 @@ describe('build-skill — the bundle is closed under its own imports', () => {
   });
 
   test('the runtime-read files ship; the agent-dependent servers and agents/ do not', () => {
-    for (const f of ['scripts/config.json', 'scripts/package.json',
+    for (const f of ['scripts/config.json', 'scripts/package.json', 'scripts/bpmn/naming.json',
       'references/input-schema.json', 'references/ontology.jsonld', 'references/prompt-template.md']) {
       expect(bundled).toContain(f);
     }

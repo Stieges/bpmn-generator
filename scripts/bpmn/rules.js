@@ -26,6 +26,9 @@ import {
 import { resolveFlowSemantics, resolveLaneId, emptyLeafLanes } from './topology.js';
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
 import { CFG } from '../shared/utils.js';
 import { inferEventMarker } from './icons.js';
 
@@ -1012,13 +1015,10 @@ const SOUNDNESS_CHECKS = [
 // zusätzlich akzeptieren wir das englische Verb-first-Muster ("Review application")
 // über eine kleine kuratierte Liste, um False-Positives zu vermeiden.
 const M01_GERMAN_VERB_SUFFIX = /(en|eln|ern|ieren)$/i;
-const M01_ENGLISH_VERBS = new Set([
-  'review', 'approve', 'send', 'receive', 'check', 'create', 'update', 'delete',
-  'reject', 'submit', 'notify', 'validate', 'process', 'archive', 'assign', 'verify',
-  'confirm', 'record', 'issue', 'close', 'open', 'prepare', 'request', 'forward',
-  'escalate', 'sign', 'evaluate', 'calculate', 'generate', 'publish', 'cancel',
-  'release', 'collect', 'enter', 'add', 'remove', 'store', 'fetch', 'handle',
-]);
+const _m01Naming = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'naming.json'), 'utf8')
+);
+const M01_ENGLISH_VERBS = new Set(_m01Naming.englishVerbs);
 
 // Returns true when a task label does NOT look like Objekt+Verb / Verb+Object.
 function violatesVerbObject(name) {
