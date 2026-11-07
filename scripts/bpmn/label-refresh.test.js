@@ -37,13 +37,16 @@ describe('edge labels follow a route the crossing guard reverted', () => {
     let r;
     try {
       CFG.layout.endpointReclip = false;
-      r = await runPipeline(lc, { visualRefinement: false });
+      // Bend / stub / tip passes after the guard rewrite routes; keep them off so
+      // this file only fences "label refresh follows a guard revert".
+      r = await runPipeline(lc, { visualRefinement: false, bendRule: false });
     } finally {
       CFG.layout.endpointReclip = reclip;
     }
     expect(revertedId).not.toBeNull();
     const edge = (lc.pools || [lc]).flatMap(p => p.edges || []).find(e => e.id === revertedId);
-    expect(r.coordMap.edgeCoords[revertedId]).toBe(guardRoute);
+    // Geometry match (post-guard repair may copy the array; reference need not hold).
+    expect(r.coordMap.edgeCoords[revertedId]).toEqual(guardRoute);
     const want = computeSequenceFlowLabel(edge, r.coordMap.edgeCoords[revertedId], r.coordMap.coords);
     expect(r.coordMap.edgeLabels[revertedId]).toEqual(want);
   });
