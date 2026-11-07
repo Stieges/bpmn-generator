@@ -179,6 +179,7 @@
     "elkWrapping": "off",
     "elkWrappingNodeThreshold": 20,
     "happyPathLeveling": false,
+    "sameLaneChainAlign": true,
     "crossLaneDeconflict": true,
     "crossingRepair": true,
     "crossingRepairMaxPasses": 2,
@@ -191,7 +192,8 @@
       "columnStep": 10,
       "detourReach": 600
     },
-    "endStubPx": 15,
+    "endStubPx": 20,
+    "autoJoinGateways": false,
     "edgeLabelGap": 4,
     "edgeLabelText": {
       "fontSize": 11,
@@ -228,7 +230,9 @@
       "corridorStepPx": 5,
       "messageFlowLinePx": 3,
       "collinearPx": 4,
-      "portCornerMarginPx": 15
+      "portCornerMarginPx": 20,
+      "sideBendBudget": 4,
+      "backEdgeBendBudget": 6
     }
   },
   "elk": {
