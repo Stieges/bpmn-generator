@@ -3,7 +3,8 @@
  * Pre-processing steps before ELK layout.
  */
 
-import { isGateway, edgeFieldSpec, isArtifact } from './types.js';
+import { isGateway, isActivity, isEvent, edgeFieldSpec, isArtifact } from './types.js';
+import { CFG } from '../shared/utils.js';
 
 /**
  * Infer gateway directions (Diverging/Converging/Mixed) based on edge counts.
@@ -27,12 +28,16 @@ function gatewayDirections(nodes, edges) {
     const outs = outCount[n.id] || 0;
     const ins  = inCount[n.id]  || 0;
 
-    if (n.has_join && outs <= 1 && ins > 1) {
-      dirs.set(n.id, 'Converging');
-    } else if (!n.has_join && outs > 1 && ins <= 1) {
-      dirs.set(n.id, 'Diverging');
-    } else if (outs > 1 && ins > 1) {
+    // Degree wins over the has_join hint when the topology is unambiguous: a
+    // multi-in / single-out gateway is Converging even when `has_join` is omitted
+    // (otherwise resolveFlowSemantics treats it as a 1-out "split"
+    // and emits an empty conditionExpression → bpmnlint label-required).
+    if (outs > 1 && ins > 1) {
       dirs.set(n.id, 'Mixed');
+    } else if (ins > 1 && outs <= 1) {
+      dirs.set(n.id, 'Converging');
+    } else if (outs > 1 && ins <= 1) {
+      dirs.set(n.id, 'Diverging');
     } else if (n.has_join) {
       dirs.set(n.id, 'Converging');
     } else {
@@ -111,12 +116,22 @@ export function resolveFlowSemantics(nodes = [], edges = []) {
 
   const defaultIds = new Set(defaultBySource.values());
   const conditionSources = edgeFieldSpec('condition').allowed;
+  const outCount = {};
+  for (const e of edges) outCount[e.source] = (outCount[e.source] || 0) + 1;
   const conditionById = new Map();
   for (const e of edges) {
     const source = byId.get(e.source);
     if (!source || !conditionSources.has(source.type) || defaultIds.has(e.id)) continue;
-    const needsCondition = authoredCondition(e) || isConditionalSplit(source);
-    if (needsCondition) conditionById.set(e.id, e.condition || e.label || '');
+    // Inferred conditions only on a real split (≥2 outs). A lone out of a
+    // mis-tagged "Diverging" join must not get an empty FormalExpression.
+    const inferredSplit = isConditionalSplit(source) && (outCount[source.id] || 0) >= 2;
+    const needsCondition = authoredCondition(e) || inferredSplit;
+    if (!needsCondition) continue;
+    const body = e.condition || e.label || '';
+    // Never emit an empty conditionExpression — bpmnlint label-required treats
+    // the element's presence as "has a condition" and then demands a name.
+    if (!body && !authoredCondition(e)) continue;
+    conditionById.set(e.id, body);
   }
   return { defaultBySource, conditionById };
 }
@@ -170,6 +185,7 @@ export function sortNodesTopologically(proc) {
 
 /**
  * Reorder lanes based on process flow position.
+ * Start-event lanes stay first (top) so the process reads top-left → right.
  */
 export function orderLanesByFlow(proc) {
   const lanes = proc.lanes || [];
@@ -198,6 +214,143 @@ export function orderLanesByFlow(proc) {
     if (laneStartCount[b.id] > 0 && laneStartCount[a.id] === 0) return 1;
     return laneScores[a.id] - laneScores[b.id];
   });
+}
+
+/**
+ * Vertically order a diverging gateway's outgoing edges by target lane.
+ *
+ * ELK `considerModelOrder: NODES_AND_EDGES` uses edge list order when placing
+ * branches: earlier outs tend to sit above later ones. After lanes are ordered
+ * (start lane on top), sort each gateway's outs so upper-lane targets come
+ * first and lower-lane / cross-lane sinks come last — the visual "swap" that
+ * keeps same-band continuations high and deep-lane chains exiting downward.
+ * Happy-path edges still win within the same lane band.
+ */
+export function orderGatewayExitsByTargetLane(proc) {
+  const lanes = proc.lanes || [];
+  const nodes = proc.nodes || [];
+  const edges = proc.edges || [];
+  if (lanes.length === 0 || edges.length < 2) return;
+
+  const laneRank = Object.fromEntries(lanes.map((l, i) => [l.id, i]));
+  const nodeLane = Object.fromEntries(nodes.map(n => [n.id, n.lane]));
+  const outgoing = {};
+  const outCount = {};
+  for (const e of edges) {
+    outCount[e.source] = (outCount[e.source] || 0) + 1;
+    if (!outgoing[e.source]) outgoing[e.source] = [];
+    outgoing[e.source].push(e);
+  }
+
+  /**
+   * BFS: { steps, laneRank } of the first node in a strictly lower lane, or null.
+   * A branch that drops into the next band (bypass) should sit below one that
+   * only later reaches a far band (oti) — otherwise its vertical handoff braids
+   * through the sibling.
+   */
+  const firstLowerLane = (startId, fromRank) => {
+    const q = [{ id: startId, steps: 0 }];
+    const seen = new Set([startId]);
+    while (q.length) {
+      const { id, steps } = q.shift();
+      const r = laneRank[nodeLane[id]];
+      if (r != null && r > fromRank) return { steps, rank: r };
+      for (const e of outgoing[id] || []) {
+        if (seen.has(e.target)) continue;
+        seen.add(e.target);
+        q.push({ id: e.target, steps: steps + 1 });
+      }
+    }
+    return null;
+  };
+
+  const rankOf = (edge) => {
+    const srcRank = laneRank[nodeLane[edge.source]] ?? 0;
+    const lane = nodeLane[edge.target];
+    const laneIdx = lane != null && laneRank[lane] != null ? laneRank[lane] : 999;
+    const lower = firstLowerLane(edge.target, srcRank);
+    // Nearer/lower band dive → larger score → later in list → bottom of stack.
+    const dive = lower
+      ? (20 - Math.min(lower.rank, 19)) * 20 + Math.max(0, 30 - lower.steps)
+      : 0;
+    const happy = edge.isHappyPath ? 0 : 1;
+    return dive * 10 + laneIdx * 2 + happy;
+  };
+
+  // Stable partition: keep relative order of non-split edges; within each
+  // diverging source, sort that source's outs by target-lane rank.
+  const bySource = new Map();
+  for (const e of edges) {
+    if ((outCount[e.source] || 0) < 2) continue;
+    const src = nodes.find(n => n.id === e.source);
+    if (!src || !isGateway(src.type)) continue;
+    if (!bySource.has(e.source)) bySource.set(e.source, []);
+    bySource.get(e.source).push(e);
+  }
+  if (!bySource.size) return;
+
+  const sortedOuts = new Map();
+  for (const [src, outs] of bySource) {
+    sortedOuts.set(src, [...outs].sort((a, b) => rankOf(a) - rankOf(b) || 0));
+  }
+
+  const used = new Set();
+  const next = [];
+  for (const e of edges) {
+    if (!sortedOuts.has(e.source)) {
+      next.push(e);
+      continue;
+    }
+    if (used.has(e.source)) continue;
+    used.add(e.source);
+    next.push(...sortedOuts.get(e.source));
+  }
+  proc.edges = next;
+}
+
+/**
+ * Nodes that only appear via a cross-lane handoff into a lane with no start
+ * (e.g. Support) get ELK `layerConstraint: LAST` so a short sink path is not
+ * parked under a longer parallel chain in an upper lane.
+ */
+export function markCrossLaneSinksLast(proc) {
+  const nodes = proc.nodes || [];
+  const edges = proc.edges || [];
+  if (!nodes.length) return;
+  const laneOf = Object.fromEntries(nodes.map((n) => [n.id, n.lane]));
+  const laneHasStart = {};
+  for (const n of nodes) {
+    if (n.type === 'startEvent' && n.lane) laneHasStart[n.lane] = true;
+  }
+  // Only the bottom-most start-less lane (true late sink, e.g. Support) —
+  // not every work lane without a start.
+  let lastSink = null;
+  for (const l of proc.lanes || []) {
+    if (l.id && !laneHasStart[l.id]) lastSink = l.id;
+  }
+  const sinkLanes = lastSink ? new Set([lastSink]) : new Set();
+  if (!sinkLanes.size) return;
+
+  const force = new Set();
+  for (const e of edges) {
+    const sl = laneOf[e.source], tl = laneOf[e.target];
+    if (sl != null && tl != null && sl !== tl && sinkLanes.has(tl)) force.add(e.target);
+  }
+  // Descendants still in a sink lane (End after Task_SN).
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const e of edges) {
+      if (!force.has(e.source)) continue;
+      if (!sinkLanes.has(laneOf[e.target])) continue;
+      if (force.has(e.target)) continue;
+      force.add(e.target);
+      grew = true;
+    }
+  }
+  for (const n of nodes) {
+    if (force.has(n.id)) n._forceLastLayer = true;
+  }
 }
 
 /** Above this participant count the exact search is replaced by a heuristic. */
@@ -509,14 +662,118 @@ export function normalizeEdgeIds(lc) {
 }
 
 /**
+ * Collect every node/edge/lane/pool/message-flow id already used in `lc`
+ * (including nested subprocess children). Used by auto-join id allocation.
+ */
+function collectAllIds(lc) {
+  const ids = new Set();
+  const walk = (nodes, edges) => {
+    for (const n of nodes || []) {
+      if (n.id) ids.add(n.id);
+      if (n.nodes || n.edges) walk(n.nodes, n.edges);
+    }
+    for (const e of edges || []) if (e.id) ids.add(e.id);
+  };
+  const procs = lc.pools ? lc.pools : [lc];
+  for (const p of procs) {
+    if (p.id) ids.add(p.id);
+    walk(p.nodes, p.edges);
+    for (const l of p.lanes || []) if (l.id) ids.add(l.id);
+  }
+  for (const cp of lc.collapsedPools || []) if (cp.id) ids.add(cp.id);
+  for (const mf of lc.messageFlows || []) if (mf.id) ids.add(mf.id);
+  return ids;
+}
+
+function allocateId(used, prefix) {
+  if (!used.has(prefix)) {
+    used.add(prefix);
+    return prefix;
+  }
+  let i = 2;
+  while (used.has(`${prefix}_${i}`)) i++;
+  const id = `${prefix}_${i}`;
+  used.add(id);
+  return id;
+}
+
+/**
+ * bpmnlint `fake-join`: an Activity or Event with more than one incoming sequence
+ * flow. Insert an exclusive converging gateway in front of each such node and
+ * rewire the incoming edges through it. Exclusive (not parallel) — multi-in
+ * nodes in this convention are XOR rework/merge joins; AND joins stay authored.
+ *
+ * Mutates `container` in place. Recurses into expanded subprocess children.
+ *
+ * @returns {number} how many join gateways were inserted
+ */
+export function insertAutoJoinGateways(container, usedIds) {
+  let inserted = 0;
+  const nodes = container.nodes || [];
+  const edges = container.edges || (container.edges = []);
+
+  for (const n of nodes) {
+    if (n.nodes || n.edges) inserted += insertAutoJoinGateways(n, usedIds);
+  }
+
+  const incoming = new Map();
+  for (const e of edges) {
+    if (!incoming.has(e.target)) incoming.set(e.target, []);
+    incoming.get(e.target).push(e);
+  }
+
+  // Snapshot targets that need a join — rewiring mutates `edges`.
+  const victims = nodes.filter((n) => {
+    if (isGateway(n.type)) return false;
+    if (!isActivity(n.type) && !isEvent(n.type)) return false;
+    return (incoming.get(n.id) || []).length > 1;
+  });
+
+  for (const n of victims) {
+    const ins = incoming.get(n.id) || [];
+    if (ins.length <= 1) continue;
+    const joinId = allocateId(usedIds, `gw_join_${n.id}`);
+    const flowId = allocateId(usedIds, `flow_${joinId}_${n.id}`);
+    const lane = n.lane;
+    nodes.push({
+      id: joinId,
+      type: 'exclusiveGateway',
+      name: '',
+      has_join: true,
+      ...(lane !== undefined ? { lane } : {}),
+    });
+    // Format B: Lane.nodeIds
+    for (const l of container.lanes || []) {
+      if (Array.isArray(l.nodeIds) && l.nodeIds.includes(n.id) && !l.nodeIds.includes(joinId)) {
+        l.nodeIds.push(joinId);
+      }
+    }
+    for (const e of ins) e.target = joinId;
+    edges.push({ id: flowId, source: joinId, target: n.id });
+    inserted++;
+  }
+  return inserted;
+}
+
+/**
  * Pre-process a Logic-Core before ELK graph construction.
  */
 export function preprocessLogicCore(lc, opts = {}) {
+  // Opt-in: default off so upstream fixtures/hashes stay stable. Pass
+  // autoJoinGateways: true (or CFG.layout.autoJoinGateways / CLI) to enable.
+  const autoJoin = opts.autoJoinGateways ?? (CFG.layout?.autoJoinGateways === true);
+  if (autoJoin) {
+    const used = collectAllIds(lc);
+    const processes = lc.pools ? lc.pools : [lc];
+    for (const proc of processes) insertAutoJoinGateways(proc, used);
+  }
   const processes = lc.pools ? lc.pools : [lc];
   for (const proc of processes) {
     normalizeLaneAssignments(proc);
     sortNodesTopologically(proc);
     orderLanesByFlow(proc);
+    orderGatewayExitsByTargetLane(proc);
+    markCrossLaneSinksLast(proc);
   }
   if (opts.poolOrder === 'declared') {
     lc._participantOrder = [
