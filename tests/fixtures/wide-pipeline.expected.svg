@@ -170,7 +170,7 @@
 <circle cx="4804" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="4"/>
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="4804" y="147.4">Ende</tspan></text>
 </g>
-<path data-element-id="f0" data-waypoints="206,110 286,110" d="M 206 110 L 286 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f0" data-waypoints="206,109.5 286,109.5" d="M 206 109.5 L 286 109.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f1" data-waypoints="386,110 466,110" d="M 386 110 L 466 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f2" data-waypoints="566,110 646,110" d="M 566 110 L 646 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f3" data-waypoints="746,110 826,110" d="M 746 110 L 826 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
@@ -195,5 +195,5 @@
 <path data-element-id="f22" data-waypoints="4166,110 4246,110" d="M 4166 110 L 4246 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f23" data-waypoints="4346,110 4426,110" d="M 4346 110 L 4426 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f24" data-waypoints="4526,110 4606,110" d="M 4526 110 L 4606 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f25" data-waypoints="4706,110 4786,110" d="M 4706 110 L 4786 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f25" data-waypoints="4706,109.5 4786,109.5" d="M 4706 109.5 L 4786 109.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 </svg>
