@@ -1,5 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import { assertStubClearsPad, simplifyEdge, simplifyAllEdges, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, movedNonRigidly, keepOffLaneLines } from './edge-simplify.js';
+import { CFG } from '../shared/utils.js';
 
 describe('simplifyEdge — an L never ends along its endpoint\'s outline (#52)', () => {
   test("Flow_8: the L that runs down the target's left side is replaced by the one arriving horizontally", () => {
@@ -25,17 +26,20 @@ describe('simplifyEdge — an L never ends along its endpoint\'s outline (#52)',
       [{ x: 130, y: 105 }, { x: 300, y: 105 }, { x: 300, y: 240 }]);
   });
 
-  test('a 15 px stub reaches the gap a mid-corridor Z cannot (a node right in front of the target)', () => {
-    // Both L's lie on an outline; O blocks every candidateRoutes corridor (y 140, 180, 100); the
-    // stub route turns 15 px above T's top, in the strip O leaves free.
+  test('a layout.endStubPx stub reaches the gap a mid-corridor Z cannot (a node right in front of the target)', () => {
+    // Both L's lie on an outline; O blocks every candidateRoutes corridor; the
+    // stub route turns endStubPx above T's top, in the strip O leaves free.
+    // O bottom must sit above (T.top - stub) so Miragon's 20 px stub still fits.
+    const stub = CFG.layout?.endStubPx ?? 15;
     const boxes = {
       S: { x: 0, y: 0, w: 100, h: 80 },
       T: { x: 200, y: 200, w: 100, h: 80 },
-      O: { x: 70, y: 100, w: 160, h: 80 },
+      O: { x: 70, y: 90, w: 160, h: 70 },
     };
     const elk = [{ x: 50, y: 80 }, { x: 50, y: 140 }, { x: 250, y: 140 }, { x: 250, y: 200 }];
+    const y = 200 - stub;
     expect(simplifyEdge(elk, boxes, 'S', 'T')).toEqual(
-      [{ x: 50, y: 80 }, { x: 50, y: 185 }, { x: 250, y: 185 }, { x: 250, y: 200 }]);
+      [{ x: 50, y: 80 }, { x: 50, y }, { x: 250, y }, { x: 250, y: 200 }]);
   });
 
   // S exits right at (100,40), T is entered on its left at (300,240); O blocks every corridor.
@@ -111,9 +115,12 @@ describe('reclipStuckEnds — an end may move to another side when it is stuck',
   const shapeOf = (id) => (id === 'G' ? 'diamond' : 'rect');
   const stuck = () => ({ e: [{ x: 200, y: 27 }, { x: 100.5, y: 27 }, { x: 100.5, y: 225 }] });
 
-  test('re-clips to side midpoints and routes with 15 px stubs, clear of both shapes', () => {
+  test('re-clips to side midpoints and routes with endStubPx stubs, clear of both shapes', () => {
+    const stub = CFG.layout?.endStubPx ?? 15;
     const out = reclipStuckEnds(stuck(), coords, edges, new Set(), { shapeOf }).e;
-    expect(out).toEqual([{ x: 150, y: 80 }, { x: 150, y: 95 }, { x: 125, y: 95 }, { x: 125, y: 200 }]);
+    expect(out).toEqual([
+      { x: 150, y: 80 }, { x: 150, y: 80 + stub }, { x: 125, y: 80 + stub }, { x: 125, y: 200 },
+    ]);
   });
 
   test('an endpoint listed as fixed never moves — here nothing admissible is left, so nothing changes', () => {

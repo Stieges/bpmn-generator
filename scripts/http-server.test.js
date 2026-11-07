@@ -748,10 +748,11 @@ describe('schema-gate errors in responses are capped and bounded', () => {
   }
 });
 
-// bendRule / nodeLabelsAvoidFlows: simple-approval.json changes when either is switched off, so a
-// dropped forwarding fails the `not.toBe`.
+// bendRule / nodeLabelsAvoidFlows: realistic-collaboration.json changes when either is switched
+// off (simple-approval no longer moves labels under cardinal docks), so a dropped forwarding fails
+// the `not.toBe`.
 describe('layout switches over HTTP', () => {
-  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/realistic-collaboration.json', import.meta.url), 'utf8'));
   const post = (path, body) => realFetch(`${baseUrl}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
