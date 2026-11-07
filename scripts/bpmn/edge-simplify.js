@@ -171,8 +171,8 @@ export function simplifyAllEdges(edgeCoords, coords, edges, skipIds = new Set(),
 // unless a crossing actually exists, and it never moves an endpoint.
 // ═══════════════════════════════════════════════════════════════════════
 
-const DEFAULT_MAX_PASSES = 2;
-const CORRIDOR_STEPS = [40, 80];  // px offsets tried for a shifted Z corridor
+const DEFAULT_MAX_PASSES = 4;
+const CORRIDOR_STEPS = [40, 80, 120, 160, 240];  // px offsets tried for a shifted Z corridor
 
 function segmentsOf(points) {
   const segs = [];
@@ -470,6 +470,20 @@ function candidateRoutes(points) {
   for (const off of CORRIDOR_STEPS.flatMap((s) => [s, -s])) {
     push([start, { x: start.x, y: start.y + off }, { x: end.x, y: start.y + off }, end]);
     push([start, { x: start.x + off, y: start.y }, { x: start.x + off, y: end.y }, end]);
+  }
+
+  // Outer U-detours: go clear above/below/aside both ends then come back.
+  // Needed when two parallel-branch chains interleave with stacked ranks
+  // and mid-corridor Z shapes still cross the other chain's horizontals.
+  for (const off of CORRIDOR_STEPS) {
+    const above = Math.min(start.y, end.y) - off;
+    const below = Math.max(start.y, end.y) + off;
+    const left = Math.min(start.x, end.x) - off;
+    const right = Math.max(start.x, end.x) + off;
+    push([start, { x: start.x, y: above }, { x: end.x, y: above }, end]);
+    push([start, { x: start.x, y: below }, { x: end.x, y: below }, end]);
+    push([start, { x: left, y: start.y }, { x: left, y: end.y }, end]);
+    push([start, { x: right, y: start.y }, { x: right, y: end.y }, end]);
   }
   return out;
 }
@@ -1003,6 +1017,423 @@ export function reclipStuckEnds(edgeCoords, coords, edges, skipIds = new Set(), 
   const out = { ...edgeCoords };
   for (const [id, points] of changed) out[id] = points;
   return out;
+}
+
+/**
+ * When a mostly-vertical drop still crosses a foreign horizontal, shift its vertical
+ * column just past the rightmost (or leftmost) crossing segment. Keeps endpoints fixed.
+ * Complements repairCrossings for cross-lane handoffs that braid through a parallel chain.
+ */
+export function nudgeVerticalDropsPastHorizontals(edgeCoords, coords, edges, skipIds = new Set(), gap = 24) {
+  const entries = (edges || [])
+    .filter((e) => !skipIds.has(e.id) && edgeCoords[e.id]?.length >= 2)
+    .map((e) => ({ id: e.id, source: e.source, target: e.target, points: edgeCoords[e.id] }));
+  if (entries.length < 2 || totalCrossings(entries) === 0) return edgeCoords;
+
+  const out = { ...edgeCoords };
+  let any = false;
+  for (const entry of entries) {
+    const before = crossingsAgainstOthers(entry, entry.points, entries);
+    if (before === 0) continue;
+    const pts = entry.points;
+    // Find longest vertical interior segment.
+    let best = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (Math.abs(a.x - b.x) > 1) continue;
+      const len = Math.abs(b.y - a.y);
+      if (!best || len > best.len) best = { i, x: a.x, len, y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) };
+    }
+    if (!best || best.len < 40) continue;
+    // Never slide a source/target dock sideways (boundary-event tips, Miragon
+    // cardinal exits). Only nudge fully interior vertical segments.
+    if (best.i === 0 || best.i + 1 === pts.length - 1) continue;
+
+    // Horizontals of non-adjacent edges that span this x and overlap in y.
+    let maxRight = null;
+    let minLeft = null;
+    for (const other of entries) {
+      if (other.id === entry.id || adjacent(entry, other)) continue;
+      const osegs = segmentsOf(other.points);
+      for (const [a, b] of osegs) {
+        if (Math.abs(a.y - b.y) > 1) continue; // not horizontal
+        const y = a.y;
+        if (y < best.y0 - 1 || y > best.y1 + 1) continue;
+        const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
+        if (best.x < x0 - 1 || best.x > x1 + 1) continue;
+        maxRight = maxRight == null ? x1 : Math.max(maxRight, x1);
+        minLeft = minLeft == null ? x0 : Math.min(minLeft, x0);
+      }
+    }
+    if (maxRight == null && minLeft == null) continue;
+
+    const tryX = [];
+    if (maxRight != null) {
+      tryX.push(maxRight + gap, maxRight + gap + 80, maxRight + gap + 160);
+    }
+    if (minLeft != null) {
+      tryX.push(minLeft - gap, minLeft - gap - 80);
+    }
+    let bestCand = null;
+    for (const nx of tryX) {
+      const cand = pts.map((p) => ({ x: p.x, y: p.y }));
+      const i = best.i;
+      cand[i] = { x: nx, y: cand[i].y };
+      cand[i + 1] = { x: nx, y: cand[i + 1].y };
+      const cleaned = withoutCollinear(cand);
+      if (!isOrthogonal(cleaned)) continue;
+      if (!pathClearOfBoxes(cleaned, coords, entry.source, entry.target)) continue;
+      const after = crossingsAgainstOthers(entry, cleaned, entries);
+      if (after >= before) continue;
+      const score = [after, Math.abs(nx - best.x)];
+      if (!bestCand || score[0] < bestCand.score[0]
+        || (score[0] === bestCand.score[0] && score[1] < bestCand.score[1])) {
+        bestCand = { cleaned, score };
+      }
+    }
+    if (bestCand) {
+      out[entry.id] = bestCand.cleaned;
+      entry.points = bestCand.cleaned;
+      any = true;
+    }
+  }
+  return any ? out : edgeCoords;
+}
+
+/**
+ * Shift interior verticals that sit within `gap` of a foreign node's left/right
+ * face. A vertical only ~10 px past a task's right side blocks every Miragon
+ * right-exit from that task. Prefer the side away from the node's centre.
+ */
+export function nudgeVerticalsClearOfNodeSides(edgeCoords, coords, edges, skipIds = new Set(), gap = 28) {
+  // Leave room for a Miragon left/right approach stub (layout.endStubPx, usually 20) plus gap.
+  const approach = gap + Math.max(20, CFG?.layout?.endStubPx ?? 20);
+  const entries = (edges || [])
+    .filter((e) => !skipIds.has(e.id) && edgeCoords[e.id]?.length >= 2)
+    .map((e) => ({ id: e.id, source: e.source, target: e.target, points: edgeCoords[e.id] }));
+  if (!entries.length) return edgeCoords;
+
+  const out = { ...edgeCoords };
+  let any = false;
+  for (const entry of entries) {
+    const pts = entry.points;
+    for (let i = 1; i < pts.length - 2; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (Math.abs(a.x - b.x) > 1) continue;
+      const y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+      if (y1 - y0 < 20) continue;
+      let bestNx = null;
+      for (const [id, box] of Object.entries(coords || {})) {
+        if (id === entry.source || id === entry.target || !box) continue;
+        if (y1 < box.y - 1 || y0 > box.y + box.h + 1) continue;
+        const right = box.x + box.w;
+        const left = box.x;
+        // Hugging the right face blocks Miragon right-exits from this node — prefer
+        // shifting the vertical to the node's left (clear of the face), else further right.
+        if (Math.abs(a.x - right) < approach && a.x >= right - 1) {
+          for (const nx of [left - approach, right + approach, right + approach + 80]) {
+            if (bestNx == null || Math.abs(nx - a.x) < Math.abs(bestNx - a.x)) {
+              // Prefer left-of-node when it clears the right face for neighbors.
+              if (nx === left - approach) { bestNx = nx; break; }
+              bestNx = nx;
+            }
+          }
+        }
+        // Within approach of the left face: a 20px Miragon left-in stub would cross this
+        // vertical. Prefer right of the node, else further left.
+        if (Math.abs(a.x - left) < approach && a.x <= left + 1) {
+          for (const nx of [right + approach, left - approach, left - approach - 80]) {
+            if (nx === right + approach) { bestNx = nx; break; }
+            if (bestNx == null) bestNx = nx;
+          }
+        }
+      }
+      if (bestNx == null || Math.abs(bestNx - a.x) < 1) continue;
+      const tryXs = [bestNx, bestNx + gap, bestNx - gap].filter((x, i, arr) => arr.indexOf(x) === i);
+      let placed = false;
+      for (const nx of tryXs) {
+        const cand = pts.map((p) => ({ x: p.x, y: p.y }));
+        cand[i] = { x: nx, y: cand[i].y };
+        cand[i + 1] = { x: nx, y: cand[i + 1].y };
+        const cleaned = withoutCollinear(cand);
+        if (!isOrthogonal(cleaned)) continue;
+        if (!pathClearOfBoxes(cleaned, coords, entry.source, entry.target)) continue;
+        out[entry.id] = cleaned;
+        entry.points = cleaned;
+        any = true;
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+  }
+  return any ? out : edgeCoords;
+}
+
+/**
+ * Final Miragon tip pass: every gateway endpoint must sit on a tip, with the
+ * adjacent stub on that tip's axis. Bend-rule / simplify can leave a mid-facet
+ * dock on an otherwise orthogonal leg.
+ */
+export function resnapGatewayTips(edgeCoords, coords, edges, typeOf, skipIds = new Set()) {
+  const out = { ...edgeCoords };
+  let any = false;
+  for (const e of edges || []) {
+    if (skipIds.has(e.id)) continue;
+    const pts = out[e.id];
+    if (!pts || pts.length < 2) continue;
+    const srcGw = isGateway(typeOf[e.source]) && coords[e.source];
+    const tgtGw = isGateway(typeOf[e.target]) && coords[e.target];
+    if (!srcGw && !tgtGw) continue;
+
+    const srcOffTip = srcGw && !isOnGatewayTip(pts[0], coords[e.source]);
+    const tgtOffTip = tgtGw && !isOnGatewayTip(pts[pts.length - 1], coords[e.target]);
+    // Only rebuild when a dock is mid-facet — do not rewrite already-legal tip routes.
+    if (srcGw && tgtGw && (srcOffTip || tgtOffTip)) {
+      const a = tipToward(coords[e.source], coords[e.target]);
+      const b = tipToward(coords[e.target], coords[e.source]);
+      if (a && b) {
+        const rebuilt = tipToTipRoute(a, b);
+        if (rebuilt) {
+          out[e.id] = rebuilt;
+          any = true;
+          continue;
+        }
+      }
+    }
+
+    const next = pts.map((p) => ({ x: p.x, y: p.y }));
+    let changed = false;
+    if (srcOffTip && snapEndToGatewayTip(next, 0, 1, coords[e.source])) changed = true;
+    if (tgtOffTip && snapEndToGatewayTip(next, next.length - 1, next.length - 2, coords[e.target])) changed = true;
+    if (!changed) continue;
+    out[e.id] = withoutCollinear(next);
+    any = true;
+  }
+  return any ? out : edgeCoords;
+}
+
+function isOnGatewayTip(pt, box, tol = 1.5) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const hw = box.w / 2;
+  const hh = box.h / 2;
+  const tips = [
+    { x: cx + hw, y: cy },
+    { x: cx - hw, y: cy },
+    { x: cx, y: cy + hh },
+    { x: cx, y: cy - hh },
+  ];
+  return tips.some((t) => Math.abs(t.x - pt.x) <= tol && Math.abs(t.y - pt.y) <= tol);
+}
+
+/** Nearest tip of `box` facing toward `other` (L/R preferred when mostly horizontal). */
+function tipToward(box, other) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const ox = other.x + other.w / 2;
+  const oy = other.y + other.h / 2;
+  const hw = box.w / 2;
+  const hh = box.h / 2;
+  if (Math.abs(ox - cx) >= Math.abs(oy - cy)) {
+    return { x: ox > cx ? cx + hw : cx - hw, y: cy };
+  }
+  return { x: cx, y: oy > cy ? cy + hh : cy - hh };
+}
+
+/** Orthogonal tip→tip route (straight, L, or Z). */
+function tipToTipRoute(a, b) {
+  if (Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5) return [a, b];
+  if (Math.abs(a.y - b.y) < 0.5 || Math.abs(a.x - b.x) < 0.5) return withoutCollinear([a, b]);
+  // Z through a vertical corridor between the tips.
+  const midX = (a.x + b.x) / 2;
+  return withoutCollinear([a, { x: midX, y: a.y }, { x: midX, y: b.y }, b]);
+}
+
+/** Snap `endIdx` onto the nearest tip; keep/repair the stub at `adjIdx` on-axis. */
+function snapEndToGatewayTip(pts, endIdx, adjIdx, box) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const hw = box.w / 2;
+  const hh = box.h / 2;
+  const tip = pts[endIdx];
+  const adj = pts[adjIdx];
+  if (!tip || !adj) return false;
+  const tips = [
+    { x: cx + hw, y: cy },
+    { x: cx - hw, y: cy },
+    { x: cx, y: cy + hh },
+    { x: cx, y: cy - hh },
+  ];
+  const horiz = Math.abs(adj.y - tip.y) <= Math.abs(adj.x - tip.x);
+  let best = null;
+  for (const t of tips) {
+    const axisOk = horiz ? Math.abs(t.y - cy) < 1e-6 : Math.abs(t.x - cx) < 1e-6;
+    if (!axisOk) continue;
+    const d = Math.hypot(t.x - tip.x, t.y - tip.y);
+    if (!best || d < best.d) best = { t, d };
+  }
+  if (!best) return false;
+  const was = { x: tip.x, y: tip.y };
+  pts[endIdx] = { x: best.t.x, y: best.t.y };
+  const neu = pts[endIdx];
+  if (Math.abs(neu.y - cy) < 1e-6) {
+    if (Math.abs(adj.y - neu.y) > 0.5) pts[adjIdx] = { x: adj.x, y: neu.y };
+  } else if (Math.abs(adj.x - neu.x) > 0.5) {
+    pts[adjIdx] = { x: neu.x, y: adj.y };
+  }
+  return Math.abs(neu.x - was.x) > 0.5 || Math.abs(neu.y - was.y) > 0.5
+    || Math.abs(pts[adjIdx].x - adj.x) > 0.5 || Math.abs(pts[adjIdx].y - adj.y) > 0.5;
+}
+
+/**
+ * Shift the bottom start-less lane (late sink) so its nodes sit to the right of
+ * every other lane's content — short Support paths no longer park under a long
+ * parallel chain.
+ */
+export function shiftLateSinkLaneRight(coordMap, lc, gap = 100) {
+  const processes = lc.pools?.length ? lc.pools : [lc];
+  let any = false;
+  for (const proc of processes) {
+    const lanes = proc.lanes || [];
+    const nodes = proc.nodes || [];
+    if (lanes.length < 2 || !nodes.length) continue;
+    const laneHasStart = {};
+    for (const n of nodes) {
+      if (n.type === 'startEvent' && n.lane) laneHasStart[n.lane] = true;
+    }
+    let lastSink = null;
+    for (const l of lanes) {
+      if (l.id && !laneHasStart[l.id]) lastSink = l.id;
+    }
+    if (!lastSink) continue;
+    const sinkIds = new Set(nodes.filter((n) => n.lane === lastSink).map((n) => n.id));
+    if (!sinkIds.size) continue;
+    // Terminal sink only: handoff IN from another lane, and no flow back OUT.
+    // Skip lanes that cross back.
+    const hasCrossIn = (proc.edges || []).some(
+      (e) => sinkIds.has(e.target) && !sinkIds.has(e.source),
+    );
+    const hasCrossOut = (proc.edges || []).some(
+      (e) => sinkIds.has(e.source) && !sinkIds.has(e.target),
+    );
+    if (!hasCrossIn || hasCrossOut) continue;
+
+    let maxOther = 0;
+    for (const n of nodes) {
+      if (sinkIds.has(n.id)) continue;
+      const b = coordMap.coords[n.id];
+      if (b) maxOther = Math.max(maxOther, b.x + b.w);
+    }
+    let minSink = Infinity;
+    let maxSinkRight = 0;
+    for (const id of sinkIds) {
+      const b = coordMap.coords[id];
+      if (!b) continue;
+      minSink = Math.min(minSink, b.x);
+      maxSinkRight = Math.max(maxSinkRight, b.x + b.w);
+    }
+    if (!(minSink < Infinity) || minSink >= maxOther + gap) continue;
+    const delta = maxOther + gap - minSink;
+    for (const id of sinkIds) {
+      const b = coordMap.coords[id];
+      if (b) b.x += delta;
+    }
+    maxSinkRight += delta;
+
+    // Widen participant + every lane so shifted nodes stay inside (DI03).
+    const pad = 40;
+    const needRight = maxSinkRight + pad;
+    const pool = coordMap.poolCoords?.[proc.id] || coordMap.poolCoords?._singlePool;
+    if (pool && pool.x + pool.w < needRight) pool.w = needRight - pool.x;
+    for (const l of lanes) {
+      const lcBox = coordMap.laneCoords?.[l.id];
+      if (lcBox && lcBox.x + lcBox.w < needRight) lcBox.w = needRight - lcBox.x;
+    }
+
+    // Edges wholly in the sink lane: translate. Cross-lane into sink: rebuild
+    // a right→left U that drops at the (new) sink x so it clears upper chains.
+    for (const e of proc.edges || []) {
+      const pts = coordMap.edgeCoords?.[e.id];
+      if (!pts?.length) continue;
+      const s = sinkIds.has(e.source);
+      const t = sinkIds.has(e.target);
+      if (s && t) {
+        for (const p of pts) p.x += delta;
+      } else if (t) {
+        const sb = coordMap.coords[e.source];
+        const tb = coordMap.coords[e.target];
+        if (sb && tb) {
+          const sRight = { x: sb.x + sb.w, y: sb.y + sb.h / 2 };
+          const tLeft = { x: tb.x, y: tb.y + tb.h / 2 };
+          const dropX = Math.max(sRight.x + 40, tLeft.x - 20);
+          coordMap.edgeCoords[e.id] = withoutCollinear([
+            sRight,
+            { x: dropX, y: sRight.y },
+            { x: dropX, y: tLeft.y },
+            tLeft,
+          ]);
+        } else {
+          pts[pts.length - 1].x += delta;
+        }
+      } else if (s) {
+        pts[0].x += delta;
+      }
+    }
+    any = true;
+  }
+  return any;
+}
+
+/**
+ * Lengthen first/last legs that dock into a shape with less than `stubPx` of straight run
+ * (Miragon flow-connection-side minStubLength, usually layout.endStubPx = 20). Endpoints stay
+ * fixed; only the adjacent waypoint moves along the existing axis.
+ */
+export function ensureMinEndStubs(edgeCoords, coords, edges, skipIds = new Set(), stubPx = END_STUB_PX) {
+  if (!(stubPx > 0)) return edgeCoords;
+  const out = { ...edgeCoords };
+  let any = false;
+  for (const e of edges || []) {
+    if (skipIds.has(e.id)) continue;
+    const pts = out[e.id];
+    if (!pts || pts.length < 2) continue;
+    const next = pts.map((p) => ({ x: p.x, y: p.y }));
+    let changed = false;
+    if (lengthenStubAt(next, 0, 1, stubPx)) changed = true;
+    if (next.length >= 2 && lengthenStubAt(next, next.length - 1, next.length - 2, stubPx)) changed = true;
+    if (!changed) continue;
+    out[e.id] = withoutCollinear(next);
+    any = true;
+  }
+  return any ? out : edgeCoords;
+}
+
+/** Move `adjIdx` so |end−adj| ≥ stubPx along the current axis; snap the next corner to stay orthogonal. */
+function lengthenStubAt(pts, endIdx, adjIdx, stubPx) {
+  const end = pts[endIdx];
+  const adj = pts[adjIdx];
+  const dx = adj.x - end.x;
+  const dy = adj.y - end.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.5 || len >= stubPx - 0.5) return false;
+  const horizontal = Math.abs(dy) <= Math.abs(dx);
+  const sign = horizontal ? Math.sign(dx || 1) : Math.sign(dy || 1);
+  const neu = horizontal
+    ? { x: end.x + sign * stubPx, y: end.y }
+    : { x: end.x, y: end.y + sign * stubPx };
+  pts[adjIdx] = neu;
+  // If the leg beyond `adj` is no longer axis-aligned, pull that corner onto the new stub axis.
+  const beyond = adjIdx + (adjIdx > endIdx ? 1 : -1);
+  if (beyond >= 0 && beyond < pts.length) {
+    const b = pts[beyond];
+    if (horizontal && Math.abs(b.x - neu.x) > 1e-6 && Math.abs(b.y - neu.y) > 1e-6) {
+      pts[beyond] = { x: neu.x, y: b.y };
+    } else if (!horizontal && Math.abs(b.y - neu.y) > 1e-6 && Math.abs(b.x - neu.x) > 1e-6) {
+      pts[beyond] = { x: b.x, y: neu.y };
+    }
+  }
+  return true;
 }
 
 /**
