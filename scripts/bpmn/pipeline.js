@@ -30,13 +30,13 @@ import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
 import { resolveRuleProfile } from './rules.js';
-import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
+import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, orderGatewayExitsByTargetLane, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
+import { buildCoordinateMap, alignSameLaneChains, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
-import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, rerouteAfterCompaction } from './edge-simplify.js';
+import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, rerouteAfterCompaction, ensureMinEndStubs, nudgeVerticalDropsPastHorizontals, nudgeVerticalsClearOfNodeSides, resnapGatewayTips, shiftLateSinkLaneRight } from './edge-simplify.js';
 import { applyBendRule } from './bend-rule.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
@@ -205,10 +205,18 @@ async function runPipeline(logicCore, opts = {}) {
   // poolOrder: 'auto' (default) orders participants so that the ones exchanging
   // messages sit next to each other; 'declared' keeps the input order.
   const poolOrder = opts.poolOrder ?? CFG.layout?.poolOrder ?? 'auto';
-  const elkGraph  = logicCoreToElk(lc, { elkWrapping: opts.elkWrapping, poolOrder });
+  const elkGraph  = logicCoreToElk(lc, {
+    elkWrapping: opts.elkWrapping,
+    poolOrder,
+    autoJoinGateways: opts.autoJoinGateways,
+  });
   const elkResult = await runElkLayout(elkGraph);
   const layoutInfos = elkResult.layoutInfos ?? [];
   const coordMap  = buildCoordinateMap(elkResult, lc);
+
+  // Late sink lane (no start) further right than other lanes' content so a
+  // short Support path is not parked under a long parallel chain.
+  shiftLateSinkLaneRight(coordMap, lc);
 
   // Edge simplification: collapse ELK's layer-column jogs into clean L-shapes
   // where node-bbox collision allows it — never an L that would lie on an
@@ -304,20 +312,107 @@ async function runPipeline(logicCore, opts = {}) {
     refreshMovedLabels(coordMap, allEdges, beforeReroute, laneLines);
   }
 
+  // Same-lane chain align (SoT after compaction): snap forward-chain cy clusters, seed H routes.
+  // buildCoordinateMap §5.0c2 already ran once; compaction preserves relative cy, so this is
+  // mostly idempotent — still required so any post-map nudge is leveled before bend-rule.
+  if (CFG.layout?.sameLaneChainAlign !== false) {
+    const beforeAlign = coordMap.edgeCoords;
+    const { moved, seeded } = alignSameLaneChains(coordMap, lc);
+    if (moved.length || seeded.length) {
+      // Rebuild any sequence flow still missing after invalidate+seed (cross-lane / back-edges).
+      const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id));
+      if (need.length) {
+        const rebuilt = simplifyAllEdges(
+          Object.fromEntries(need.map((e) => [e.id, [
+            { x: coordMap.coords[e.source].x + coordMap.coords[e.source].w, y: coordMap.coords[e.source].y + coordMap.coords[e.source].h / 2 },
+            { x: coordMap.coords[e.target].x, y: coordMap.coords[e.target].y + coordMap.coords[e.target].h / 2 },
+          ]])),
+          coordMap.coords,
+          need,
+          new Set(),
+        );
+        coordMap.edgeCoords = { ...coordMap.edgeCoords, ...rebuilt };
+      }
+      refreshMovedLabels(coordMap, allEdges, beforeAlign, laneLines);
+    }
+  }
+
   // Node labels follow their node: buildCoordinateMap placed them, lane compaction may have moved
   // nodes since. Re-derived here, after the last pass that moves a node and before anything
   // reads them (the bend rule; routeMessageFlows moves no node), rather than shifted pass by pass —
   // placeNodeLabels is a pure function of the final node boxes, so re-deriving cannot drift from them.
   coordMap.nodeLabels = placeNodeLabels(coordMap.coords, lc);
 
+  // Verticals hugging a task's right/left face block Miragon side exits —
+  // clear them before the bend rule judges left-in / right-out.
+  {
+    const beforeSide = coordMap.edgeCoords;
+    coordMap.edgeCoords = nudgeVerticalsClearOfNodeSides(beforeSide, coordMap.coords, allEdges, skipSimplify);
+    if (coordMap.edgeCoords !== beforeSide) {
+      refreshMovedLabels(coordMap, allEdges, beforeSide, laneLines);
+    }
+  }
+
   // Bend rule (bend-rule.js): fewest bends, then enter activities and events from the left. After
   // every pass that moves a shape or a route, so it judges the final geometry and nothing re-routes
   // its choice; before edge-label repair and routeMessageFlows. On by default (config.json ->
   // layout.bendRule); per call `bendRule`, CLI --no-bend-rule / --bend-rule.
+  // Node types from the laid-out tree (includes auto-join gateways absent from the caller's LC).
+  const bendTypeOf = Object.fromEntries(
+    allProcesses.flatMap((p) => flattenProcessNodes(p.nodes || [])).map((n) => [n.id, n.type]),
+  );
   if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
     const beforeBend = coordMap.edgeCoords;
-    coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
+    coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify, typeOf: bendTypeOf });
     refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines, { avoidOtherRoutes: true });
+    // Bend-rule (esp. loop-back U-turns) can introduce crossings the earlier repair
+    // pass never saw — sweep once more before labels lock in.
+    if (CFG.layout?.crossingRepair !== false) {
+      const beforePost = coordMap.edgeCoords;
+      let repaired = repairCrossings(beforePost, coordMap.coords, allEdges, skipSimplify, repairOpts);
+      repaired = nudgeVerticalDropsPastHorizontals(repaired, coordMap.coords, allEdges, skipSimplify);
+      repaired = nudgeVerticalsClearOfNodeSides(repaired, coordMap.coords, allEdges, skipSimplify);
+      // Second sweep: nudging one drop can free another crossing pair.
+      repaired = repairCrossings(repaired, coordMap.coords, allEdges, skipSimplify, repairOpts);
+      coordMap.edgeCoords = repaired;
+      if (coordMap.edgeCoords !== beforePost) {
+        refreshMovedLabels(coordMap, allEdges, beforePost, laneLines);
+      }
+    }
+    // Miragon minStubLength: bend / crossing repair can leave a 1–2 px final leg.
+    const beforeStub = coordMap.edgeCoords;
+    coordMap.edgeCoords = ensureMinEndStubs(beforeStub, coordMap.coords, allEdges, skipSimplify);
+    if (coordMap.edgeCoords !== beforeStub) {
+      refreshMovedLabels(coordMap, allEdges, beforeStub, laneLines);
+    }
+    // Bend-rule U-turns can re-introduce DI09 (flow through own source/target) that the
+    // earlier reclip pass never saw — same stuck-end pass as after compaction.
+    if (CFG.layout?.endpointReclip !== false) {
+      const reclipOpts = { ...reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || []))), foreignShapes };
+      const beforeReclip2 = coordMap.edgeCoords;
+      coordMap.edgeCoords = reclipStuckEnds(beforeReclip2, coordMap.coords, allEdges, skipSimplify, reclipOpts);
+      if (coordMap.edgeCoords !== beforeReclip2) {
+        refreshMovedLabels(coordMap, allEdges, beforeReclip2, laneLines);
+        // Reclip moved routes the first bend pass never judged — one more bend sweep so
+        // applyBendRule stays idempotent on the final edgeCoords (example-kreditantrag f5).
+        const beforeBend2 = coordMap.edgeCoords;
+        coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify, typeOf: bendTypeOf });
+        refreshMovedLabels(coordMap, allEdges, beforeBend2, laneLines, { avoidOtherRoutes: true });
+      }
+    }
+    // Re-tip gateways after every route mutator (mid-facet docks fail Miragon).
+    const beforeTip = coordMap.edgeCoords;
+    coordMap.edgeCoords = resnapGatewayTips(beforeTip, coordMap.coords, allEdges, bendTypeOf, skipSimplify);
+    if (coordMap.edgeCoords !== beforeTip) {
+      refreshMovedLabels(coordMap, allEdges, beforeTip, laneLines);
+    }
+    // Tip snap / reclip can undo Miragon left-in / right-out —
+    // one last bend sweep on the final docks.
+    const beforeBendFinal = coordMap.edgeCoords;
+    coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify, typeOf: bendTypeOf });
+    if (coordMap.edgeCoords !== beforeBendFinal) {
+      refreshMovedLabels(coordMap, allEdges, beforeBendFinal, laneLines, { avoidOtherRoutes: true });
+    }
   }
   if (refine.edgeLabelCollisionRepair) {
     repairEdgeLabels(coordMap, {
@@ -540,6 +635,7 @@ export {
   inferGatewayDirections,
   sortNodesTopologically,
   orderLanesByFlow,
+  orderGatewayExitsByTargetLane,
   preprocessLogicCore,
   logicCoreToElk,
   runElkLayout,
@@ -598,7 +694,7 @@ async function main() {
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--auto-join] [--no-auto-join] [--decisions <files>]');
     process.exit(1);
   }
   if (refine && noRefine) {
@@ -608,7 +704,12 @@ async function main() {
   // The layout switches, each forced on or off for this call; with neither flag config.json
   // (or a BPMN_CONFIG override) decides.
   const switchOpts = {};
-  for (const [key, on, off] of [['bendRule', '--bend-rule', '--no-bend-rule'], ['nodeLabelsAvoidFlows', '--label-avoidance', '--no-label-avoidance'], ['foreignShapeRepair', '--foreign-shape-repair', '--no-foreign-shape-repair']]) {
+  for (const [key, on, off] of [
+    ['bendRule', '--bend-rule', '--no-bend-rule'],
+    ['nodeLabelsAvoidFlows', '--label-avoidance', '--no-label-avoidance'],
+    ['foreignShapeRepair', '--foreign-shape-repair', '--no-foreign-shape-repair'],
+    ['autoJoinGateways', '--auto-join', '--no-auto-join'],
+  ]) {
     if (flags.includes(on) && flags.includes(off)) {
       console.error(`${on} and ${off} are mutually exclusive.`);
       process.exit(1);
