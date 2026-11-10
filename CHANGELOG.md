@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The bend rule enters more activities and events from the left.** It now also proposes a
+  3-bend staircase — keep the flow's first leg and corridor, drop beside the target, enter it from
+  the left — which neither its 0/1/2-bend search nor its 4-bend U-turns produced. Strict guards,
+  within `layout.bendRuleLimits.sideBendBudget`. Over the committed fixtures it re-routes three
+  flows (`example-urlaubsantrag` f210, `example-onboarding` f510, `boundary-event-shapes` f8);
+  output with `--no-bend-rule` is unchanged. Connection sides are now pinned by tests, including
+  a new cross-lane fixture `tests/fixtures/cross-lane-connection-sides.json`.
+
 ## [4.0.0-rc.2] - 2026-10-12
 
 Second release candidate, published as a GitHub pre-release only (not on npm). It fixes the
