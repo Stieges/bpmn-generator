@@ -1022,25 +1022,34 @@ const M01_ENGLISH_VERBS_BUILTIN = [
   'escalate', 'sign', 'evaluate', 'calculate', 'generate', 'publish', 'cancel',
   'release', 'collect', 'enter', 'add', 'remove', 'store', 'fetch', 'handle',
 ];
-/** Extended verb pack: set BPMN_EXTRA_NAMING=1 or BPMN_NAMING_JSON=<path>. Off by default. */
-function loadM01EnglishVerbs() {
+/**
+ * The M01 naming lists, read additively on every run: naming.extra.json (the committed verb corpus
+ * and verb-first phrases), naming.json (project additions) and BPMN_NAMING_JSON=<path> if set. A
+ * missing or unreadable file is skipped. `englishVerbs` lead a label on their own; an
+ * `englishVerbPhrases` entry ("hand off") leads it when the label's first words are that phrase.
+ */
+function loadM01Naming() {
   const verbs = new Set(M01_ENGLISH_VERBS_BUILTIN);
-  try {
-    const dir = dirname(fileURLToPath(import.meta.url));
-    const custom = process.env.BPMN_NAMING_JSON;
-    const soft = process.env.BPMN_EXTRA_NAMING === '1' || process.env.BPMN_EXTRA_NAMING === 'true';
-    if (!custom && !soft) return verbs;
-    const namingPath = custom || join(dir, 'naming.extra.json');
-    const naming = JSON.parse(readFileSync(namingPath, 'utf8'));
-    for (const v of naming.englishVerbs || []) {
-      if (typeof v === 'string' && v.trim()) verbs.add(v.trim().toLowerCase());
+  const phrases = new Set();
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const paths = [join(dir, 'naming.extra.json'), join(dir, 'naming.json')];
+  if (process.env.BPMN_NAMING_JSON) paths.push(process.env.BPMN_NAMING_JSON);
+  const words = (v) => (typeof v === 'string' ? v.trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ') : '');
+  for (const path of paths) {
+    let naming;
+    try {
+      naming = JSON.parse(readFileSync(path, 'utf8'));
+    } catch {
+      continue; // optional overlay
     }
-  } catch {
-    // optional overlay
+    for (const v of naming.englishVerbs || []) if (words(v)) verbs.add(words(v));
+    for (const p of naming.englishVerbPhrases || []) if (words(p)) phrases.add(words(p));
   }
-  return verbs;
+  return { verbs, phrases };
 }
-const M01_ENGLISH_VERBS = loadM01EnglishVerbs();
+const { verbs: M01_ENGLISH_VERBS, phrases: M01_ENGLISH_VERB_PHRASES } = loadM01Naming();
+
+const m01Word = (token) => token.toLowerCase().replace(/[^a-zäöüß]/gi, '');
 
 // Returns true when a task label does NOT look like Objekt+Verb / Verb+Object.
 function violatesVerbObject(name) {
@@ -1048,12 +1057,16 @@ function violatesVerbObject(name) {
     .replace(/\([^)]*\)/g, ' ')   // (meta) entfernen, z.B. "(CRM)"
     .replace(/\[[^\]]*\]/g, ' ')  // [meta] entfernen
     .replace(/[/\n]+/g, ' ')      // Slash/Newline → Leerzeichen ("erfassen/ändern")
+    .replace(/-/g, ' ')           // Bindestrich → Leerzeichen ("Pre-qualify", "Sales-Ops-Check")
     .replace(/\s+/g, ' ')
     .trim();
   const tokens = cleaned ? cleaned.split(' ') : [];
   if (tokens.length < 2) return true;                       // Einzelwort → Verstoß
-  const first = tokens[0].toLowerCase().replace(/[^a-zäöüß]/gi, '');
-  if (M01_ENGLISH_VERBS.has(first)) return false;           // englisch: Verb zuerst
+  if (M01_ENGLISH_VERBS.has(m01Word(tokens[0]))) return false; // englisch: Verb zuerst
+  for (const phrase of M01_ENGLISH_VERB_PHRASES) {          // englisch: Verbphrase zuerst,
+    const k = phrase.split(' ').length;                     // danach mindestens ein Objekt
+    if (tokens.length > k && tokens.slice(0, k).map(m01Word).join(' ') === phrase) return false;
+  }
   const last = tokens[tokens.length - 1];
   if (last.length >= 4 && M01_GERMAN_VERB_SUFFIX.test(last)) return false; // deutsch: Infinitiv am Ende
   return true;

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **M01 recognises more English verb-first labels.** The verb corpus `scripts/bpmn/naming.extra.json`
+  (103 verbs) is now read on every run instead of only under `BPMN_EXTRA_NAMING=1`, and
+  `scripts/bpmn/naming.json` is read for the first time (project additions; empty as shipped).
+  `BPMN_NAMING_JSON=<path>` now adds to both instead of replacing the corpus. `BPMN_EXTRA_NAMING`
+  no longer has an effect. Fixture labels that lose a wrong M01 warning: "Book carrier", "Deploy
+  Build", "Run Tests", "Route request".
+- **M01 accepts verb-first phrases and hyphenated labels.** A new `englishVerbPhrases` list
+  (`stand up`, `hand off`, `pre qualify`, …) lets a label pass when it starts with the whole
+  phrase and an object follows ("Hand off request"; "Hand off" alone still violates). Hyphens
+  split words: "Pre-qualify lead", "Cross-check invoice" pass. Noun+…+Verb labels such as
+  "Sales Ops Check" or "OTI Booking Process" still violate — rename them verb-first.
+- **The `.skill` bundle carries both naming files**; before, a skill install silently fell back
+  to the 39 built-in verbs.
+
+Known cost: an English Noun+Noun label whose first word is also a corpus verb ("Book Overview")
+now passes M01, which stays a heuristic (exact part-of-speech checks: M05/M06).
+
 ## [4.0.0-rc.2] - 2026-10-12
 
 Second release candidate, published as a GitHub pre-release only (not on npm). It fixes the

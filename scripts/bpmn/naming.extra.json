@@ -105,5 +105,15 @@
     "view",
     "wait"
   ],
+  "englishVerbPhrases": [
+    "stand up",
+    "stand down",
+    "hand off",
+    "hand over",
+    "kick off",
+    "pre qualify",
+    "pre screen",
+    "pre approve"
+  ],
   "profile": "extra"
 }

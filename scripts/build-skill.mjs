@@ -121,7 +121,9 @@ export function collectIncludes(root = repoRoot) {
   }
   return [
     'SKILL.md',
-    ...[...modules, 'config.json', 'package.json'].map(rel => `scripts/${rel}`),
+    // naming*.json: read at runtime by bpmn/rules.js (M01 verb lists) — not reachable by import.
+    ...[...modules, 'config.json', 'package.json', 'bpmn/naming.json', 'bpmn/naming.extra.json']
+      .map(rel => `scripts/${rel}`),
     ...references.map(f => toPosix(relative(root, f))),
   ];
 }
