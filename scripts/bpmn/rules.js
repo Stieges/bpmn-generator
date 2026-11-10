@@ -1057,11 +1057,12 @@ function violatesVerbObject(name) {
     .replace(/\([^)]*\)/g, ' ')   // (meta) entfernen, z.B. "(CRM)"
     .replace(/\[[^\]]*\]/g, ' ')  // [meta] entfernen
     .replace(/[/\n]+/g, ' ')      // Slash/Newline → Leerzeichen ("erfassen/ändern")
-    .replace(/-/g, ' ')           // Bindestrich → Leerzeichen ("Pre-qualify", "Sales-Ops-Check")
     .replace(/\s+/g, ' ')
     .trim();
-  const tokens = cleaned ? cleaned.split(' ') : [];
-  if (tokens.length < 2) return true;                       // Einzelwort → Verstoß
+  // Einzelwort → Verstoß, gezählt vor dem Bindestrich-Split: "Follow-up" bleibt ein Wort.
+  if (!cleaned || cleaned.split(' ').length < 2) return true;
+  // Bindestrich → Leerzeichen für Verb-, Phrasen- und Suffixprüfung ("Pre-qualify lead").
+  const tokens = cleaned.replace(/-/g, ' ').split(' ').filter(Boolean);
   if (M01_ENGLISH_VERBS.has(m01Word(tokens[0]))) return false; // englisch: Verb zuerst
   for (const phrase of M01_ENGLISH_VERB_PHRASES) {          // englisch: Verbphrase zuerst,
     const k = phrase.split(' ').length;                     // danach mindestens ein Objekt

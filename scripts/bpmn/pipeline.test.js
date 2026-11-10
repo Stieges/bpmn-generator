@@ -3140,6 +3140,10 @@ describe('Rule Engine — individual rules', () => {
       // too short
       ['Check',                    true],
       ['Prüfung',                  true],
+      // one hyphenated word is still one word
+      ['Follow-up',                true],
+      ['Check-in',                 true],
+      ['Kunden-Daten',             true],
     ])('%s → M01 warning: %s', (name, expected) => {
       expect(m01For(name)).toBe(expected);
     });

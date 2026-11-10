@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **M01 accepts verb-first phrases and hyphenated labels.** A new `englishVerbPhrases` list
   (`stand up`, `hand off`, `pre qualify`, …) lets a label pass when it starts with the whole
   phrase and an object follows ("Hand off request"; "Hand off" alone still violates). Hyphens
-  split words: "Pre-qualify lead", "Cross-check invoice" pass. Noun+…+Verb labels such as
+  split words: "Pre-qualify lead", "Cross-check invoice" pass, while a single hyphenated word
+  ("Follow-up", "Kunden-Daten") is still one word and violates. Noun+…+Verb labels such as
   "Sales Ops Check" or "OTI Booking Process" still violate — rename them verb-first.
 - **The `.skill` bundle carries both naming files**; before, a skill install silently fell back
   to the 39 built-in verbs.
