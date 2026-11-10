@@ -3102,6 +3102,49 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.some(w => w.includes('Review Application') && w.includes('Objekt+Verb'))).toBe(false);
   });
 
+  describe('M01 verb-object heuristic — phrases and hyphens', () => {
+    const m01For = (name) => {
+      const lc = proc([
+        { id: 's', type: 'startEvent' },
+        { id: 't1', type: 'task', name },
+        { id: 'e', type: 'endEvent' },
+      ], [
+        { id: 'f1', source: 's', target: 't1' },
+        { id: 'f2', source: 't1', target: 'e' },
+      ]);
+      return runRules(lc).warnings.some(w => w.includes(`Task "${name}"`) && w.includes('Objekt+Verb'));
+    };
+
+    test.each([
+      // verb-first, single word
+      ['Check request',            false],  // builtin
+      ['Route order',              false],  // corpus only (naming.extra.json)
+      ['Reconcile accounts',       false],  // corpus only
+      // verb-first phrase — first word is not a verb on its own
+      ['Stand up meeting',         false],
+      ['Hand off request',         false],
+      ['Pre-qualify lead',         false],  // hyphen → "pre qualify"
+      // hyphen expansion lets a single verb lead
+      ['Cross-check invoice',      false],  // hyphen → "cross" (corpus)
+      // German object + infinitive
+      ['Antrag prüfen',            false],
+      ['Antrag einreichen-prüfen', false],  // last token after expansion: "prüfen"
+      // Noun+…+Verb: a rename in the Logic-Core, not a generator exception
+      ['Sales Ops Check',          true],
+      ['Sales-Ops-Check',          true],
+      ['OTI Booking Process',      true],
+      ['Sales Ops Check Fee',      true],   // interior verb does not count
+      // a phrase matches whole, never part-way
+      ['Hand book update',         true],
+      ['Hand off',                 true],   // phrase with no object
+      // too short
+      ['Check',                    true],
+      ['Prüfung',                  true],
+    ])('%s → M01 warning: %s', (name, expected) => {
+      expect(m01For(name)).toBe(expected);
+    });
+  });
+
   test('M02: XOR gateway without question mark → WARNING', () => {
     const lc = proc([
       { id: 's', type: 'startEvent' },
