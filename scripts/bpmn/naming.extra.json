@@ -103,7 +103,13 @@
     "validate",
     "verify",
     "view",
-    "wait"
+    "wait",
+    "identify",
+    "assess",
+    "advise",
+    "lead",
+    "build",
+    "discuss"
   ],
   "englishVerbPhrases": [
     "stand up",
