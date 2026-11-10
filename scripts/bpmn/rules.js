@@ -15,6 +15,9 @@
  *   - BEF4LLM (Kourani et al., 2025)
  */
 
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, assertRuleProfile, carryProvenance, ProfileRejectedError } from '../shared/rule-profile.js';
 import { buildRuleCatalog, profileContext } from '../shared/rule-catalog.js';
 import {
@@ -1012,13 +1015,41 @@ const SOUNDNESS_CHECKS = [
 // zusätzlich akzeptieren wir das englische Verb-first-Muster ("Review application")
 // über eine kleine kuratierte Liste, um False-Positives zu vermeiden.
 const M01_GERMAN_VERB_SUFFIX = /(en|eln|ern|ieren)$/i;
-const M01_ENGLISH_VERBS = new Set([
+const M01_ENGLISH_VERBS_BUILTIN = [
   'review', 'approve', 'send', 'receive', 'check', 'create', 'update', 'delete',
   'reject', 'submit', 'notify', 'validate', 'process', 'archive', 'assign', 'verify',
   'confirm', 'record', 'issue', 'close', 'open', 'prepare', 'request', 'forward',
   'escalate', 'sign', 'evaluate', 'calculate', 'generate', 'publish', 'cancel',
   'release', 'collect', 'enter', 'add', 'remove', 'store', 'fetch', 'handle',
-]);
+];
+/**
+ * The M01 naming lists, read additively on every run: naming.extra.json (the committed verb corpus
+ * and verb-first phrases), naming.json (project additions) and BPMN_NAMING_JSON=<path> if set. A
+ * missing or unreadable file is skipped. `englishVerbs` lead a label on their own; an
+ * `englishVerbPhrases` entry ("hand off") leads it when the label's first words are that phrase.
+ */
+function loadM01Naming() {
+  const verbs = new Set(M01_ENGLISH_VERBS_BUILTIN);
+  const phrases = new Set();
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const paths = [join(dir, 'naming.extra.json'), join(dir, 'naming.json')];
+  if (process.env.BPMN_NAMING_JSON) paths.push(process.env.BPMN_NAMING_JSON);
+  const words = (v) => (typeof v === 'string' ? v.trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ') : '');
+  for (const path of paths) {
+    let naming;
+    try {
+      naming = JSON.parse(readFileSync(path, 'utf8'));
+    } catch {
+      continue; // optional overlay
+    }
+    for (const v of naming.englishVerbs || []) if (words(v)) verbs.add(words(v));
+    for (const p of naming.englishVerbPhrases || []) if (words(p)) phrases.add(words(p));
+  }
+  return { verbs, phrases };
+}
+const { verbs: M01_ENGLISH_VERBS, phrases: M01_ENGLISH_VERB_PHRASES } = loadM01Naming();
+
+const m01Word = (token) => token.toLowerCase().replace(/[^a-zäöüß]/gi, '');
 
 // Returns true when a task label does NOT look like Objekt+Verb / Verb+Object.
 function violatesVerbObject(name) {
@@ -1028,10 +1059,15 @@ function violatesVerbObject(name) {
     .replace(/[/\n]+/g, ' ')      // Slash/Newline → Leerzeichen ("erfassen/ändern")
     .replace(/\s+/g, ' ')
     .trim();
-  const tokens = cleaned ? cleaned.split(' ') : [];
-  if (tokens.length < 2) return true;                       // Einzelwort → Verstoß
-  const first = tokens[0].toLowerCase().replace(/[^a-zäöüß]/gi, '');
-  if (M01_ENGLISH_VERBS.has(first)) return false;           // englisch: Verb zuerst
+  // Einzelwort → Verstoß, gezählt vor dem Bindestrich-Split: "Follow-up" bleibt ein Wort.
+  if (!cleaned || cleaned.split(' ').length < 2) return true;
+  // Bindestrich → Leerzeichen für Verb-, Phrasen- und Suffixprüfung ("Pre-qualify lead").
+  const tokens = cleaned.replace(/-/g, ' ').split(' ').filter(Boolean);
+  if (M01_ENGLISH_VERBS.has(m01Word(tokens[0]))) return false; // englisch: Verb zuerst
+  for (const phrase of M01_ENGLISH_VERB_PHRASES) {          // englisch: Verbphrase zuerst,
+    const k = phrase.split(' ').length;                     // danach mindestens ein Objekt
+    if (tokens.length > k && tokens.slice(0, k).map(m01Word).join(' ') === phrase) return false;
+  }
   const last = tokens[tokens.length - 1];
   if (last.length >= 4 && M01_GERMAN_VERB_SUFFIX.test(last)) return false; // deutsch: Infinitiv am Ende
   return true;

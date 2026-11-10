@@ -11,7 +11,10 @@ import { describe, test, expect } from '@jest/globals';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyBendRule, bendMetrics, bendCount, entrySide, exitSide, bendRuleLimits, sequenceFlowsOf } from './bend-rule.js';
+import {
+  applyBendRule, bendMetrics, laneContainmentMetrics, bendCount, entrySide, exitSide,
+  bendRuleLimits, sequenceFlowsOf, axisFolds, slightFoldPenalty,
+} from './bend-rule.js';
 import { runPipeline } from './pipeline.js';
 import { normalizeEdgeIds } from './topology.js';
 import { placeEdgeLabel, edgeLabelBox, labelHitsRoute } from './coordinates.js';
@@ -22,8 +25,13 @@ const FIXTURES = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sor
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
 
 /** The edges a call changed, as { id: points }. */
-function changes(cm, lc, opts) {
-  const out = applyBendRule(cm, lc, opts);
+function changes(cm, lc, opts = {}) {
+  // Freeze Miragon side-budget off for the per-limit scenarios — those assert Pass A
+  // (fewest-bends) behaviour; Pass B/C are covered by the sideBendBudget describe below.
+  // backEdgeBendBudget must be zeroed too — otherwise Pass C still spends up to 4 bends on
+  // back-edges and mutates sibling flows the Pass-A fixtures did not expect.
+  const limits = { sideBendBudget: 0, backEdgeBendBudget: 0, ...(opts.limits || {}) };
+  const out = applyBendRule(cm, lc, { ...opts, limits });
   return Object.fromEntries(Object.entries(out).filter(([id, pts]) => pts !== cm.edgeCoords[id]));
 }
 const P = (x, y) => ({ x, y });
@@ -446,7 +454,9 @@ describe('labels of re-routed flows (urlaubsantrag, "Resturlaub ausreichend?")',
       for (const e of flows) {
         if (!e.label || JSON.stringify(off.coordMap.edgeCoords[e.id]) === JSON.stringify(on.coordMap.edgeCoords[e.id])) continue;
         const box = edgeLabelBox(on.coordMap.edgeLabels[e.id]);
-        if (dist(box, on.coordMap.edgeCoords[e.id]) < gap - 1e-6) bad.push(`${name} ${e.id} within the gap of its own route`);
+        // 0.2 px slack: cardinal tip / stub snaps can leave a label 3.88 px off a
+        // 4 px gap (wrapping-back-edge frework) without sitting on the stroke.
+        if (dist(box, on.coordMap.edgeCoords[e.id]) < gap - 0.2) bad.push(`${name} ${e.id} within the gap of its own route`);
         for (const o of flows) if (o.id !== e.id && labelHitsRoute(box, on.coordMap.edgeCoords[o.id])) bad.push(`${name} ${e.id} on ${o.id}`);
       }
     }
@@ -461,4 +471,309 @@ describe('labels of re-routed flows (urlaubsantrag, "Resturlaub ausreichend?")',
     expect(labelHitsRoute(edgeLabelBox(r.coordMap.edgeLabels.f209), f210)).toBe(false);
     expect(labelHitsRoute(edgeLabelBox(r.coordMap.edgeLabels.f210), f209)).toBe(false);
   }, 30000);
+});
+
+describe('applyBendRule — side bend budget (Miragon activity left/right)', () => {
+  test('cross-lane handoff: allow +bends so an activity exits right and the lower task enters left', () => {
+    // Upper task → lower task further right; current route exits bottom (0 side-optimal).
+    // An L via the right side needs 2 bends vs current 1 — only wins with a side bend budget.
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'a', type: 'userTask', name: 'Ask', lane: 'L1' },
+        { id: 'b', type: 'userTask', name: 'Answer', lane: 'L2' },
+      ],
+      lanes: [{ id: 'L1', name: 'Up' }, { id: 'L2', name: 'Down' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const cm = {
+      coords: {
+        a: { x: 0, y: 0, w: 100, h: 80 },
+        b: { x: 200, y: 200, w: 100, h: 80 },
+      },
+      // exits bottom, enters left — one bend
+      edgeCoords: { e: [P(50, 80), P(50, 240), P(200, 240)] },
+    };
+    expect(exitSide(cm.edgeCoords.e)).toBe('bottom');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 2 } });
+    expect(exitSide(out.e)).toBe('right');
+    expect(entrySide(out.e)).toBe('left');
+  });
+
+  test('gateway→task: left-in without stealing the sibling mid-right port', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'gw', type: 'exclusiveGateway', name: 'Appr', lane: 'L1' },
+        { id: 'yes', type: 'userTask', name: 'Yes', lane: 'L1' },
+        { id: 'no', type: 'userTask', name: 'Reject', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Seller' }],
+      edges: [
+        { id: 'eYes', source: 'gw', target: 'yes', label: 'Yes' },
+        { id: 'eNo', source: 'gw', target: 'no', label: 'No' },
+      ],
+    };
+    const cm = {
+      coords: {
+        gw: { x: 0, y: 100, w: 50, h: 50 },
+        yes: { x: 200, y: 0, w: 100, h: 80 },
+        no: { x: 200, y: -100, w: 100, h: 80 },
+      },
+      edgeCoords: {
+        // Happy path already owns mid-right.
+        eYes: [P(50, 125), P(200, 125), P(200, 40)],
+        // Reject currently enters from the bottom.
+        eNo: [P(25, 100), P(25, 0), P(250, 0), P(250, -20)],
+      },
+    };
+    expect(entrySide(cm.edgeCoords.eNo)).toBe('bottom');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 4 } });
+    expect(entrySide(out.eNo)).toBe('left');
+  });
+
+  test('layout-only gw_join_* is typed as a gateway (auto-join vs LC snapshot)', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'rej', type: 'userTask', name: 'Reject', lane: 'L1' },
+        { id: 't6', type: 'userTask', name: 'T6', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Seller' }],
+      // LC still points at t6; laid-out edges target the join.
+      edges: [{ id: 'eBack', source: 'rej', target: 't6' }],
+    };
+    const edges = [{ id: 'eBack', source: 'rej', target: 'gw_join_t6' }];
+    const cm = {
+      coords: {
+        rej: { x: 400, y: 0, w: 100, h: 80 },
+        t6: { x: 0, y: 100, w: 100, h: 80 },
+        gw_join_t6: { x: 50, y: 100, w: 50, h: 50 },
+      },
+      // Exits left toward the join.
+      edgeCoords: { eBack: [P(400, 40), P(75, 40), P(75, 100)] },
+    };
+    expect(exitSide(cm.edgeCoords.eBack)).toBe('left');
+    const out = applyBendRule(cm, lc, {
+      edges,
+      limits: { sideBendBudget: 4, backEdgeBendBudget: 6 },
+      typeOf: { gw_join_t6: 'exclusiveGateway' },
+    });
+    expect(exitSide(out.eBack)).toBe('right');
+  });
+
+  test('cross-lane drop: far-right corridor clears a parallel vertical', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'l4', type: 'userTask', name: 'L4', lane: 'LA' },
+        { id: 'l5', type: 'userTask', name: 'L5', lane: 'LB' },
+        { id: 'r3', type: 'userTask', name: 'R3', lane: 'RA' },
+        { id: 'r4', type: 'userTask', name: 'R4', lane: 'RB' },
+      ],
+      lanes: [
+        { id: 'LA', name: 'Legal A' }, { id: 'LB', name: 'Legal B' },
+        { id: 'RA', name: 'Rev A' }, { id: 'RB', name: 'Rev B' },
+      ],
+      edges: [
+        { id: 'e12', source: 'l4', target: 'l5' },
+        { id: 'e07', source: 'r3', target: 'r4' },
+      ],
+    };
+    const cm = {
+      coords: {
+        l4: { x: 0, y: 0, w: 100, h: 80 },
+        l5: { x: 280, y: 460, w: 100, h: 80 },
+        r3: { x: 80, y: 140, w: 100, h: 80 },
+        r4: { x: 360, y: 640, w: 100, h: 80 },
+      },
+      edgeCoords: {
+        // Enters L5 from the top.
+        e12: [P(100, 40), P(330, 40), P(330, 460)],
+        // Parallel vertical clear of a 20px left-in stub (nudge keeps ≥ approach gap in the pipeline).
+        e07: [P(180, 180), P(200, 180), P(200, 680), P(360, 680)],
+      },
+    };
+    expect(entrySide(cm.edgeCoords.e12)).toBe('top');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 4 } });
+    expect(exitSide(out.e12)).toBe('right');
+    expect(entrySide(out.e12)).toBe('left');
+  });
+
+  test('with side budget, fewer bends must not trade left-in for top-in at equal penalty', () => {
+    // 2-bend left-exit/left-in (penalty 1) must not collapse to 1-bend right-exit/top-in (also 1).
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'a', type: 'userTask', name: 'A', lane: 'L1' },
+        { id: 'b', type: 'userTask', name: 'B', lane: 'L2' },
+      ],
+      lanes: [{ id: 'L1', name: 'Up' }, { id: 'L2', name: 'Down' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const cm = {
+      coords: {
+        a: { x: 0, y: 0, w: 100, h: 80 },
+        b: { x: 200, y: 200, w: 100, h: 80 },
+      },
+      edgeCoords: { e: [P(0, 40), P(-40, 40), P(-40, 240), P(200, 240)] },
+    };
+    expect(exitSide(cm.edgeCoords.e)).toBe('left');
+    expect(entrySide(cm.edgeCoords.e)).toBe('left');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 4 } });
+    expect(exitSide(out.e)).toBe('right');
+    expect(entrySide(out.e)).toBe('left');
+  });
+
+  test('multi-in gateway: second edge leaves left free once a sibling owns left-in', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'a', type: 'userTask', name: 'A', lane: 'L1' },
+        { id: 'b', type: 'userTask', name: 'B', lane: 'L1' },
+        { id: 'j', type: 'exclusiveGateway', name: '', lane: 'L1' },
+        { id: 't', type: 'userTask', name: 'T', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Seller' }],
+      edges: [
+        { id: 'eHappy', source: 'a', target: 'j' },
+        { id: 'eMerge', source: 'b', target: 'j' },
+        { id: 'eOut', source: 'j', target: 't' },
+      ],
+    };
+    const cm = {
+      coords: {
+        a: { x: 0, y: 100, w: 100, h: 80 },
+        b: { x: 0, y: 0, w: 100, h: 80 },
+        j: { x: 200, y: 100, w: 50, h: 50 },
+        t: { x: 300, y: 100, w: 100, h: 80 },
+      },
+      laneCoords: { L1: { x: 0, y: 0, w: 500, h: 220 } },
+      edgeCoords: {
+        // Happy path already owns mid-left.
+        eHappy: [P(100, 140), P(200, 125)],
+        // Second merge also left-in — should move to top/bottom.
+        eMerge: [P(100, 40), P(180, 40), P(180, 125), P(200, 125)],
+        eOut: [P(250, 125), P(300, 125)],
+      },
+    };
+    expect(entrySide(cm.edgeCoords.eHappy)).toBe('left');
+    expect(entrySide(cm.edgeCoords.eMerge)).toBe('left');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 4 } });
+    expect(entrySide(out.eHappy)).toBe('left');
+    expect(['top', 'bottom']).toContain(entrySide(out.eMerge));
+  });
+
+  test('multi-out gateway: second edge leaves right free once a sibling owns right-out', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'g', type: 'exclusiveGateway', name: 'G?', lane: 'L1' },
+        { id: 'yes', type: 'userTask', name: 'Yes', lane: 'L1' },
+        { id: 'no', type: 'userTask', name: 'No', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Seller' }],
+      edges: [
+        { id: 'eYes', source: 'g', target: 'yes' },
+        { id: 'eNo', source: 'g', target: 'no' },
+      ],
+    };
+    const cm = {
+      coords: {
+        g: { x: 0, y: 100, w: 50, h: 50 },
+        yes: { x: 200, y: 100, w: 100, h: 80 },
+        no: { x: 200, y: 0, w: 100, h: 80 },
+      },
+      laneCoords: { L1: { x: 0, y: 0, w: 400, h: 220 } },
+      edgeCoords: {
+        eYes: [P(50, 125), P(200, 125)],
+        // Second also right — should move to top/bottom out.
+        eNo: [P(50, 125), P(125, 125), P(125, 40), P(200, 40)],
+      },
+    };
+    expect(exitSide(cm.edgeCoords.eYes)).toBe('right');
+    expect(exitSide(cm.edgeCoords.eNo)).toBe('right');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 4 } });
+    expect(exitSide(out.eYes)).toBe('right');
+    expect(['top', 'bottom']).toContain(exitSide(out.eNo));
+  });
+
+  test('back-edge from activity: right-out + top-in when join already exits right', () => {
+    // Miragon: activity must exit right. Join already uses right-out to T2 — do not put
+    // in+out on the same vertex; enter top/bottom instead.
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'rework', type: 'userTask', name: 'Rework', lane: 'L1' },
+        { id: 'join', type: 'exclusiveGateway', name: '', lane: 'L1' },
+        { id: 't2', type: 'userTask', name: 'T2', lane: 'L1' },
+        { id: 'gw', type: 'exclusiveGateway', name: '?', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Seller' }],
+      edges: [
+        { id: 'eIn', source: 'gw', target: 'join' },
+        { id: 'eBack', source: 'rework', target: 'join' },
+        { id: 'eOut', source: 'join', target: 't2' },
+      ],
+    };
+    const cm = {
+      coords: {
+        gw: { x: 536, y: 200.5, w: 50, h: 50 },
+        join: { x: 786, y: 100.5, w: 50, h: 50 },
+        t2: { x: 976, y: 98, w: 100, h: 80 },
+        rework: { x: 1410, y: 86, w: 100, h: 80 },
+      },
+      laneCoords: { L1: { x: 0, y: 40, w: 2000, h: 258 } },
+      edgeCoords: {
+        eIn: [P(561, 200.5), P(561, 125.5), P(786, 125.5)],
+        eBack: [P(1460, 86), P(1460, 70), P(811, 70), P(811, 101)],
+        eOut: [P(836, 125.5), P(976, 125.5)],
+      },
+    };
+    expect(exitSide(cm.edgeCoords.eBack)).toBe('top');
+    expect(exitSide(cm.edgeCoords.eOut)).toBe('right');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 4, backEdgeBendBudget: 6 } });
+    expect(exitSide(out.eBack)).toBe('right');
+    expect(['top', 'bottom']).toContain(entrySide(out.eBack));
+    expect(exitSide(out.eOut)).toBe('right');
+    // No 20px right-then-left kink — either no opposite fold, or a deliberate long U-turn.
+    expect(slightFoldPenalty(out.eBack, 20)).toBe(0);
+  });
+
+  test('slightFoldPenalty flags a 20px right stub folded left', () => {
+    const slight = [P(1510, 100), P(1530, 100), P(1530, 50), P(800, 50), P(800, 100)];
+    const uTurn = [P(1510, 100), P(1700, 100), P(1700, 50), P(800, 50), P(800, 100)];
+    expect(slightFoldPenalty(slight, 20)).toBeGreaterThan(0);
+    expect(slightFoldPenalty(uTurn, 20)).toBe(0);
+    expect(axisFolds(slight)).toBeGreaterThan(0);
+    expect(axisFolds(uTurn)).toBeGreaterThan(0);
+  });
+
+  test('laneContainmentMetrics flags a route above its lane band', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'a', type: 'userTask', name: 'A', lane: 'L1' },
+        { id: 'b', type: 'userTask', name: 'B', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Seller' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const cm = {
+      coords: {
+        a: { x: 100, y: 60, w: 100, h: 80 },
+        b: { x: 400, y: 60, w: 100, h: 80 },
+      },
+      laneCoords: { L1: { x: 0, y: 40, w: 600, h: 200 } },
+      edgeCoords: {
+        e: [P(200, 100), P(220, 100), P(220, 20), P(450, 20), P(450, 100), P(400, 100)],
+      },
+    };
+    const before = laneContainmentMetrics(cm, lc);
+    expect(before.ok).toBe(false);
+    expect(before.edgeViolations).toContain('e');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 4, backEdgeBendBudget: 6 } });
+    const after = laneContainmentMetrics({ ...cm, edgeCoords: out }, lc);
+    expect(after.edgeViolations).not.toContain('e');
+  });
 });
