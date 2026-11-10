@@ -922,10 +922,12 @@ export function applyBendRule(coordMap, lc, opts = {}) {
       // beside the target and enter it from the left — 3 bends. search() builds only 0/1/2-bend
       // shapes (the router only when none fits) and Pass C builds 4-bend U-turns, so without this
       // the plain staircase is never proposed (example-urlaubsantrag f210, example-onboarding f510).
-      if (penaltyNow > 0 && sb && tb && !isGateway(ctx.typeOf[en.target])
+      const curSegs = segsOf(en.points);
+      // A zero-length route (all points coincide) has no first leg to keep — search() skips it too.
+      if (penaltyNow > 0 && sb && tb && curSegs.length && !isGateway(ctx.typeOf[en.target])
         && entrySide(en.points) !== 'left') {
         const P = en.points, a = P[0];
-        const out = dirOf(segsOf(P)[0]);
+        const out = dirOf(curSegs[0]);
         const tIn = { x: tb.x, y: tb.y + tb.h / 2 };
         const xT = tb.x - 2 * cfg.stubPx;
         const budget = (cfg.limits.sideBendBudget ?? 0)

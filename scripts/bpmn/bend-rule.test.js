@@ -777,3 +777,40 @@ describe('applyBendRule — side bend budget (Miragon activity left/right)', () 
     expect(after.edgeViolations).not.toContain('e');
   });
 });
+
+describe('applyBendRule — left-entry staircase', () => {
+  // A gateway whose right tip belongs to a sibling, a task below-right of it, and an obstacle
+  // under the gateway that blocks the 1-bend L (and the Z off the left tip). Master entered the
+  // task from the top; the only left entry within the guards is the 3-bend staircase.
+  const blocked = () => ({
+    lc: { id: 'P', nodes: [{ id: 'g', type: 'exclusiveGateway', name: 'Ok?' }, { id: 't2', type: 'task' },
+      { id: 't', type: 'task' }, { id: 'o', type: 'task' }],
+    edges: [{ id: 'e2', source: 'g', target: 't2' }, { id: 'e', source: 'g', target: 't' }] },
+    cm: { coords: { g: { x: 0, y: 0, w: 50, h: 50 }, t2: { x: 150, y: -15, w: 100, h: 80 },
+      t: { x: 300, y: 200, w: 100, h: 80 }, o: { x: -25, y: 180, w: 100, h: 80 } },
+    edgeCoords: { e2: [P(50, 25), P(150, 25)], e: [P(25, 50), P(25, 120), P(350, 120), P(350, 200)] } },
+  });
+
+  test('keeps the first leg and corridor, drops beside the target, enters it from the left', () => {
+    const { lc, cm } = blocked();
+    const pts = applyBendRule(cm, lc).e;
+    expect(entrySide(pts)).toBe('left');
+    expect(bendCount(pts)).toBe(3);
+    expect(pts.slice(0, 2)).toEqual([P(25, 50), P(25, 120)]);
+    expect(pts[pts.length - 1]).toEqual(P(300, 240));
+    expect(hitsBox(pts, cm.coords.o)).toBe(false);
+  });
+
+  test('needs the side bend budget: with sideBendBudget 0 the route stays', () => {
+    const { lc, cm } = blocked();
+    expect(changes(cm, lc).e).toBeUndefined();
+  });
+
+  test('a zero-length route is left alone, not a crash', () => {
+    const lc = { id: 'P', nodes: [{ id: 'a', type: 'task' }, { id: 'b', type: 'task' }],
+      edges: [{ id: 'e', source: 'a', target: 'b' }] };
+    const cm = { coords: { a: { x: 0, y: 0, w: 100, h: 80 }, b: { x: 100, y: 0, w: 100, h: 80 } },
+      edgeCoords: { e: [P(100, 40), P(100, 40)] } };
+    expect(() => applyBendRule(cm, lc)).not.toThrow();
+  });
+});
