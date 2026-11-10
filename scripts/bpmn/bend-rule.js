@@ -47,7 +47,10 @@
  * not entered from the left +1, an activity/event source not left to the right +1; a back-edge into
  * a gateway entered from the left +1). When the current route has a side penalty, Pass B/C may spend
  * up to bendRuleLimits.sideBendBudget (+ backEdgeBendBudget on back-edges) extra bends to clear it
- * (Miragon flow-connection-side prefers left-in / right-out on activities). Ties: crossings, moved
+ * (Miragon flow-connection-side prefers left-in / right-out on activities). Before Pass B, a route
+ * that still enters an activity/event other than from the left and leaves vertically gets one more
+ * candidate shape the search never builds: a 3-bend staircase — same first leg, a corridor, a drop
+ * beside the target, in from the left — under the strict guards. Ties: crossings, moved
  * endpoints, length, corridor nearest the middle. The pass repeats until a full sweep changes
  * nothing; a repeated route fingerprint or maxSweeps cap stops Pass B/C from oscillating with Pass A
  * (e.g. top-entry L ↔ left-entry Z around a gateway node label). Idempotent once stable.
