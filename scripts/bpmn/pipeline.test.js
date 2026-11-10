@@ -3,7 +3,7 @@
  * K0c: Tests for critical functions + golden-file regression tests
  */
 
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { readFileSync, readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -25,6 +25,7 @@ import {
 } from './pipeline.js';
 import { normalizeLaneAssignments, orderParticipantsByMessageFlow } from './topology.js';
 import { repairCrossings } from './edge-simplify.js';
+import { entrySide, exitSide } from './bend-rule.js';
 import { wrapText, CFG } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
@@ -7465,4 +7466,37 @@ describe('clipOrthogonal — gateway tips only (Miragon flow-connection-side)', 
     expect(clipped.x).toBeCloseTo(25, 0);
     expect(clipped.y).toBeCloseTo(50, 0);
   });
+});
+
+describe('connection sides — leave right, enter left', () => {
+  const sidesOf = async (fixture) =>
+    (await runPipeline(loadFixture(fixture))).coordMap.edgeCoords;
+
+  describe('cross-lane-connection-sides (guard)', () => {
+    let ec;
+    beforeAll(async () => { ec = await sidesOf('cross-lane-connection-sides.json'); }, 30000);
+    test('e3 gw1 → task2 (cross-lane) enters task2 from the left', () => {
+      expect(entrySide(ec.e3)).toBe('left');
+    });
+    test('e6 task3 → task2 (cross-lane) exits right, enters left', () => {
+      expect(exitSide(ec.e6)).toBe('right');
+      expect(entrySide(ec.e6)).toBe('left');
+    });
+    test('e1 start → task1 (same lane) exits right, enters left', () => {
+      expect(exitSide(ec.e1)).toBe('right');
+      expect(entrySide(ec.e1)).toBe('left');
+    });
+    test('e4 gw1 → task3 (same-lane arm of a mixed-lane gateway) enters left', () => {
+      expect(entrySide(ec.e4)).toBe('left');
+    });
+  });
+
+  // Entered through top/bottom on master; the 3-bend staircase (bend-rule.js) enters them left.
+  test.each([
+    ['example-urlaubsantrag.json', 'f210'], // gateway → end event, cross-lane
+    ['example-onboarding.json', 'f510'], // parallel split → expanded subprocess, cross-lane
+    ['boundary-event-shapes.json', 'f8'], // boundary event → task (exit side exempt)
+  ])('%s %s enters its target from the left', async (fixture, id) => {
+    expect(entrySide((await sidesOf(fixture))[id])).toBe('left');
+  }, 30000);
 });

@@ -63,6 +63,22 @@
     "xml": "4db610271aeb6e53354ceb2f403917ce3264e265daab919552539fa3a4811ff7",
     "svg": "a5282940fa2f6c330ca0e57fcee1359347c8ead31e4a745d43d6a68969cd98de"
   },
+  "cross-lane-connection-sides.json × default": {
+    "xml": "b8902b31b7b1606b6ecce45b088e2b57a2ecc259f3db01b7bbda3eef7d28f194",
+    "svg": "4cb04046471065b19ccc894fee020f027b7bcb2eeee84488063b13bbb180a133"
+  },
+  "cross-lane-connection-sides.json × no-refine": {
+    "xml": "fb92d1a8c89691138dd730859086ef925a20d8e40e3a3b71689819282d44f802",
+    "svg": "18dd260718ae4ea4a4e9c7b7e97fdf59fa883a666763dc55decadbe54848dc27"
+  },
+  "cross-lane-connection-sides.json × refine": {
+    "xml": "b8902b31b7b1606b6ecce45b088e2b57a2ecc259f3db01b7bbda3eef7d28f194",
+    "svg": "4cb04046471065b19ccc894fee020f027b7bcb2eeee84488063b13bbb180a133"
+  },
+  "cross-lane-connection-sides.json × refine+wrap": {
+    "xml": "b8902b31b7b1606b6ecce45b088e2b57a2ecc259f3db01b7bbda3eef7d28f194",
+    "svg": "4cb04046471065b19ccc894fee020f027b7bcb2eeee84488063b13bbb180a133"
+  },
   "dense-edge-labels.json × default": {
     "xml": "a5bdc55300f60a27118b06064cabfa9f35fc826cc49c8b7d2b0591e52fd59162",
     "svg": "f54bbce076c544034125c681abd7cd0ab1a9f036b3cc905d9df5dbfda2d1679e"

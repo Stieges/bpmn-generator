@@ -1,0 +1,23 @@
+{
+  "id": "cross_lane_sides",
+  "lanes": [
+    { "id": "lane_a", "name": "Lane A", "nodeIds": ["start", "task1", "gw1", "task3"] },
+    { "id": "lane_b", "name": "Lane B", "nodeIds": ["task2", "end"] }
+  ],
+  "nodes": [
+    { "id": "start", "type": "startEvent", "name": "Request received", "lane": "lane_a" },
+    { "id": "task1", "type": "task", "name": "Prepare request", "lane": "lane_a" },
+    { "id": "gw1",   "type": "exclusiveGateway", "name": "Approved?", "lane": "lane_a" },
+    { "id": "task2", "type": "task", "name": "Process request", "lane": "lane_b" },
+    { "id": "task3", "type": "task", "name": "Reject request",  "lane": "lane_a" },
+    { "id": "end",   "type": "endEvent", "name": "Request handled", "lane": "lane_b" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "start", "target": "task1" },
+    { "id": "e2", "source": "task1", "target": "gw1" },
+    { "id": "e3", "source": "gw1",   "target": "task2", "label": "Yes" },
+    { "id": "e4", "source": "gw1",   "target": "task3", "label": "No" },
+    { "id": "e5", "source": "task2", "target": "end" },
+    { "id": "e6", "source": "task3", "target": "task2" }
+  ]
+}

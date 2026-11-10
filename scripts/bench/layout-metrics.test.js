@@ -317,6 +317,7 @@ const BUDGET_PLAIN = {
   'boundary-event-shapes.json':           same(r({ crossings: 1, bendsMax: 2, offOver5: 8, overlapLen: 80 })),
   'bpmn-generator-pipeline.json':   { default: r({ bendsMax: 2, crowd: 1, mfCrowd: 2, offOver5: 9, labelFar: 2, overlapLen: 612 }),
                                           on: r({ bendsMax: 4, crowd: 1, mfCrowd: 3, offOver5: 11, labelFar: 1, overlapLen: 1231 }) },
+  'cross-lane-connection-sides.json':           same(r({ bendsMax: 2, labelFar: 1, overlapLen: 330 })),
   'deadlock-process.json':              { default: null, on: null },
   'dense-edge-labels.json':           same(r({ bendsMax: 2, crowd: 4, labelLabel: 6, labelFar: 1, overlapLen: 1424 })),
   'example-bestellung-versand.json':           same(r({ crossings: 1, bendsMax: 2, offOver5: 2, overlapLen: 492 })),
@@ -365,6 +366,7 @@ const BUDGET_DEFAULT = {
   'artifacts-laneless-pool.json':           r(),
   'boundary-event-shapes.json':           r({ crossings: 1, bendsMax: 2, offOver5: 8 }),
   'bpmn-generator-pipeline.json':           r({ bendsMax: 2, crowd: 1, mfCrowd: 2, offOver5: 8, overlapLen: 301 }),
+  'cross-lane-connection-sides.json':           r({ bendsMax: 2, overlapLen: 70 }),
   'deadlock-process.json':           null,
   'dense-edge-labels.json':           r({ bendsMax: 2, crowd: 1, labelLabel: 1, labelFar: 1, overlapLen: 599 }),
   'example-bestellung-versand.json':           r({ crossings: 1, bendsMax: 2, offOver5: 2, overlapLen: 123 }),
@@ -437,6 +439,9 @@ const DIRECTION = {
   'artifacts-laneless-pool.json':           dir(NONE),
   'boundary-event-shapes.json':           { default: d(0, 1), off: d(0, 1), on: d(0, 1), plain: d(1, 1), 'plain-on': d(1, 1) },
   'bpmn-generator-pipeline.json':           { default: d(5, 0), off: d(5, 0), on: d(8, 0), plain: d(8, 2), 'plain-on': d(10, 3) },
+  // e6 keeps its right-out / left-in Z over a 1-bend L into task2's top: the avoidable bend is
+  // the price of the side, so default/off/on are not NONE here.
+  'cross-lane-connection-sides.json':           { default: d(1, 0), off: d(1, 0), on: d(1, 0), plain: d(1, 0), 'plain-on': d(1, 0) },
   'deadlock-process.json':              { default: null, off: null, on: null, plain: null, 'plain-on': null },
   'dense-edge-labels.json':           dir(d(6, 0)),
   'example-bestellung-versand.json':           dir(d(5, 1)),
