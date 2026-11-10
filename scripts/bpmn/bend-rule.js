@@ -915,6 +915,38 @@ export function applyBendRule(coordMap, lc, opts = {}) {
       const backEdge = sb && tb && (sb.x + sb.w / 2) > (tb.x + tb.w / 2) + 10;
       const env = envelopeFor(en, ctx);
       const inset = cfg.limits.regionInset;
+      // Staircase into the left side: keep the current first leg, run along a corridor, drop
+      // beside the target and enter it from the left — 3 bends. search() builds only 0/1/2-bend
+      // shapes (the router only when none fits) and Pass C builds 4-bend U-turns, so without this
+      // the plain staircase is never proposed (example-urlaubsantrag f210, example-onboarding f510).
+      if (penaltyNow > 0 && sb && tb && !isGateway(ctx.typeOf[en.target])
+        && entrySide(en.points) !== 'left') {
+        const P = en.points, a = P[0];
+        const out = dirOf(segsOf(P)[0]);
+        const tIn = { x: tb.x, y: tb.y + tb.h / 2 };
+        const xT = tb.x - 2 * cfg.stubPx;
+        const budget = (cfg.limits.sideBendBudget ?? 0)
+          + (backEdge ? (cfg.limits.backEdgeBendBudget ?? 0) : 0);
+        if (Math.abs(out[0]) < EPS && xT > a.x + cfg.stubPx && 3 <= curBends + budget) {
+          const ys = new Set();
+          if (P.length >= 3 && Math.abs(P[1].y - P[2].y) < EPS) ys.add(P[1].y); // current corridor
+          ys.add((Math.max(a.y, sb.y + sb.h) + tb.y) / 2);                     // gap, target below
+          ys.add((Math.min(a.y, sb.y) + tb.y + tb.h) / 2);                     // gap, target above
+          const { check } = makeChecker(en, entries, ctx, cfg);               // strict guards
+          const stair = [];
+          for (const y of ys) {
+            const pts = withoutCollinear([a, { x: a.x, y }, { x: xT, y }, { x: xT, y: tIn.y }, tIn]);
+            if (bendCount(pts) === 3 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
+          }
+          stair.sort((x, y) => lexCompare(x.score, y.score));
+          if (stair.length && stair[0].score[0] < penaltyNow && !ptsEqual(stair[0].pts, en.points)) {
+            en.points = stair[0].pts;
+            changed.set(en.id, stair[0].pts);
+            progress = true;
+            continue;
+          }
+        }
+      }
       if (penaltyNow > 0) {
         const budget = (cfg.limits.sideBendBudget ?? 0)
           + (backEdge ? (cfg.limits.backEdgeBendBudget ?? 0) : 0);
