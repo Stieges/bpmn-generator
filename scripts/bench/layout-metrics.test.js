@@ -361,20 +361,23 @@ const BUDGET_PLAIN = {
 // against default wherever a moved route left another flow's line: bpmn-generator-pipeline
 // 227 → 187, multi-pool-collaboration 50 → 0, realistic-collaboration 386 → 226, sparse-lanes
 // 184 → 0 (f3).
+// Left-entry staircase (bend-rule.js): bendsMax 2 → 3 in default/off/on where a flow that entered
+// its target through top/bottom now drops beside it and enters from the left — boundary-event-shapes
+// f8, example-onboarding f510, example-urlaubsantrag f210 (first leg and corridor unchanged).
 const BUDGET_DEFAULT = {
   'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
   'artifacts-laneless-pool.json':           r(),
-  'boundary-event-shapes.json':           r({ crossings: 1, bendsMax: 2, offOver5: 8 }),
+  'boundary-event-shapes.json':           r({ crossings: 1, bendsMax: 3, offOver5: 8 }),
   'bpmn-generator-pipeline.json':           r({ bendsMax: 2, crowd: 1, mfCrowd: 2, offOver5: 8, overlapLen: 301 }),
   'cross-lane-connection-sides.json':           r({ bendsMax: 2, overlapLen: 70 }),
   'deadlock-process.json':           null,
   'dense-edge-labels.json':           r({ bendsMax: 2, crowd: 1, labelLabel: 1, labelFar: 1, overlapLen: 599 }),
   'example-bestellung-versand.json':           r({ crossings: 1, bendsMax: 2, offOver5: 2, overlapLen: 123 }),
   'example-kreditantrag.json':           r({ bendsMax: 2, offOver5: 7, overlapLen: 334 }),
-  'example-onboarding.json':           r({ bendsMax: 2, offOver5: 4, overlapLen: 313 }),
+  'example-onboarding.json':           r({ bendsMax: 3, offOver5: 4, overlapLen: 313 }),
   'example-rechnungspruefung.json':           r({ bendsMax: 2, overlapLen: 32 }),
   'example-schadenmeldung.json':           r({ bendsMax: 4, offOver5: 5, overlapLen: 362 }),
-  'example-urlaubsantrag.json':           r({ bendsMax: 2, offOver5: 4 }),
+  'example-urlaubsantrag.json':           r({ bendsMax: 3, offOver5: 4 }),
   'expanded-subprocess.json':           r(),
   'long-lane-names.json':           r({ bendsMax: 2 }),
   'loop-with-join.json':           r({ bendsMax: 4, offOver5: 2, overlapLen: 93 }),
@@ -437,7 +440,8 @@ const dir = (row, on = row) => ({ default: NONE, off: NONE, on: NONE, plain: row
 const DIRECTION = {
   'all-element-classes.json':           dir(NONE),
   'artifacts-laneless-pool.json':           dir(NONE),
-  'boundary-event-shapes.json':           { default: d(0, 1), off: d(0, 1), on: d(0, 1), plain: d(1, 1), 'plain-on': d(1, 1) },
+  // f8: the left-entry staircase trades its against-flow (bottom) entry for one avoidable bend.
+  'boundary-event-shapes.json':           { default: d(1, 0), off: d(1, 0), on: d(1, 0), plain: d(1, 1), 'plain-on': d(1, 1) },
   'bpmn-generator-pipeline.json':           { default: d(5, 0), off: d(5, 0), on: d(8, 0), plain: d(8, 2), 'plain-on': d(10, 3) },
   // e6 keeps its right-out / left-in Z over a 1-bend L into task2's top: the avoidable bend is
   // the price of the side, so default/off/on are not NONE here.
