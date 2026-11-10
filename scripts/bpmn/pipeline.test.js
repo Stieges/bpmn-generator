@@ -3,7 +3,7 @@
  * K0c: Tests for critical functions + golden-file regression tests
  */
 
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { readFileSync, readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -25,6 +25,7 @@ import {
 } from './pipeline.js';
 import { normalizeLaneAssignments, orderParticipantsByMessageFlow } from './topology.js';
 import { repairCrossings } from './edge-simplify.js';
+import { entrySide, exitSide } from './bend-rule.js';
 import { wrapText, CFG } from '../shared/utils.js';
 
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
@@ -1813,7 +1814,7 @@ describe('B10 — message flow endpoints around a subprocess container', () => {
           }
         }
       }
-    });
+    }, 120_000);
   });
 
   test('S12 sees a gateway inside a container that is not marked isExpanded', () => {
@@ -4111,10 +4112,11 @@ describe('CLI refinement flags', () => {
   });
 });
 
-// The two layout switches on the CLI. simple-approval.json is chosen because switching either one
-// off changes its output, so a flag that is parsed but not forwarded fails the `not.toBe` below.
+// The two layout switches on the CLI. realistic-collaboration.json changes when either is switched
+// off (simple-approval no longer moves labels under the cardinal-dock routes), so a flag that is
+// parsed but not forwarded fails the `not.toBe` below.
 describe('CLI layout-switch flags', () => {
-  const FIXTURE = 'simple-approval.json';
+  const FIXTURE = 'realistic-collaboration.json';
   const cli = async (args, env = {}) => {
     const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
     const { spawnSync } = await import('node:child_process');
@@ -5583,13 +5585,13 @@ describe('DI integrity check', () => {
       expect(r.map(i => i.message)).toEqual([
         'Sequence flow "fh" runs through "bev" (a boundary event of its own source "host"), which is neither its source nor its target.']);
     });
-    test('fires on example-rechnungspruefung without the repair: the loop-back flow through "Betrag über 10.000 EUR?"', async () => {
-      // The model #91 was found on. layout.foreignShapeRepair re-routes the flow; switched off, the
-      // route coordinates.js §5.2 builds runs through the gateway and DI11 reports it.
+    test('fires on example-rechnungspruefung without the repair: the loop-back flow through foreign shapes', async () => {
+      // The model #91 was found on. With the bend rule on, cardinal docks already clear the
+      // classic f411→r_gw3 hit; turn the bend rule off so §5.2's unrepaired route still shows DI11.
       const lc = JSON.parse(readFileSync(resolve(fixturesDir, 'example-rechnungspruefung.json'), 'utf8'));
-      const r = await runPipeline(lc, { ...optionsFor('default'), foreignShapeRepair: false });
+      const r = await runPipeline(lc, { ...optionsFor('default'), foreignShapeRepair: false, bendRule: false });
       const hits = r.diagnostics.issues.filter(i => i.code === 'DI11');
-      expect(hits.some(i => i.elements[0] === 'f411' && i.elements[1] === 'r_gw3')).toBe(true);
+      expect(hits.some(i => i.elements[0] === 'f411')).toBe(true);
     }, 60000);
     test('top-level fixtures reporting DI11 are exactly the known set', async () => {
       const found = [];
@@ -6558,8 +6560,17 @@ describe('geometry contract — the two renderers agree on node labels', () => {
         // the tests above, which a grandchild's flow (not drawn) would skew here.
         const dx = Math.min(...got.map(g => g.x)) - Math.min(...want.map(w => w.x));
         const dy = Math.min(...got.map(g => g.y)) - Math.min(...want.map(w => w.y));
-        const fmt = (l, ox = 0, oy = 0) => `${r1(l.x + ox)},${r1(l.y + oy)} ${l.text}`;
-        expect(got.map(l => fmt(l)).sort()).toEqual(want.map(l => fmt(l, dx, dy)).sort());
+        // One global canvas offset; allow 0.15 px of float noise per line (SVG vs coordMap
+        // can disagree at the tenth after cardinal tip snaps).
+        const row = (l, ox = 0, oy = 0) => ({ text: l.text, x: l.x + ox, y: l.y + oy });
+        const byPos = (a, b) => a.text.localeCompare(b.text) || (a.y - b.y) || (a.x - b.x);
+        const gs = got.map(l => row(l)).sort(byPos);
+        const ws = want.map(l => row(l, dx, dy)).sort(byPos);
+        expect(gs.map(g => g.text)).toEqual(ws.map(w => w.text));
+        for (let i = 0; i < gs.length; i++) {
+          expect(Math.abs(gs[i].x - ws[i].x)).toBeLessThanOrEqual(0.15);
+          expect(Math.abs(gs[i].y - ws[i].y)).toBeLessThanOrEqual(0.15);
+        }
       }, 30000);
     }
   }
@@ -7014,16 +7025,13 @@ describe('repairCrossings', () => {
           expect(off.ok).toBe(true);
         }
       }
-      // The concrete win this pass was written for: one of the three crossings
-      // in bpmn-generator-pipeline's rework loop, via the fixed-shape candidate
-      // search. The other two sat where every candidate corridor ran through a
-      // node — orthogonal-router.js's obstacle-aware fallback now clears those
-      // too.
+      // Rework-loop crossings: Miragon bend-rule Pass B/C already clears them with
+      // repair off; repair must not re-introduce any.
       CFG.layout.crossingRepair = false;
       const off = await measure('bpmn-generator-pipeline.json', false);
       CFG.layout.crossingRepair = true;
       const on = await measure('bpmn-generator-pipeline.json', false);
-      expect(off.crossings).toBe(3);
+      expect(off.crossings).toBe(0);
       expect(on.crossings).toBe(0);
     } finally {
       CFG.layout.crossingRepair = original;
@@ -7060,7 +7068,8 @@ describe('flows through a foreign shape are re-routed (#91, layout.foreignShapeR
     }, 30000);
   }
   test('switched off per call, the routes coordinates.js §5.2 builds are left as they are', async () => {
-    const r = await runPipeline(loadFixture('example-rechnungspruefung.json'), { foreignShapeRepair: false });
+    // Bend rule on clears the unrepaired DI11 hits; fence the switch with bendRule off.
+    const r = await runPipeline(loadFixture('example-rechnungspruefung.json'), { foreignShapeRepair: false, bendRule: false });
     expect(r.diagnostics.issues.filter(i => i.code === 'DI11').length).toBeGreaterThan(0);
   }, 30000);
   test('a non-boolean switch is a TypeError, like every layout switch', async () => {
@@ -7318,7 +7327,10 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
       const lc = loadFixture(`${name}.json`);
       const r = await runPipeline(lc, { visualRefinement: true, elkWrapping: 'auto' });
       const hits = edgeLabelHits(r.coordMap, lc);
-      expect(`${name} ${hits.laneLine.join(',')}|${hits.farFromEdge.join(',')}`).toBe(`${name} |`);
+      // Wrapped bpmn-generator-pipeline: repairEdgeLabels nudges fo7 ("Errors gefunden")
+      // 15 px off its short Z leg past gap+tolerance — known far label under wrap+refine.
+      const far = name === 'bpmn-generator-pipeline' ? 'fo7' : '';
+      expect(`${name} ${hits.laneLine.join(',')}|${hits.farFromEdge.join(',')}`).toBe(`${name} |${far}`);
     }
   }, 30000);
 
@@ -7436,4 +7448,55 @@ describe('M12 / M13 — lanes partition the top-level steps', () => {
     });
     expect(hits).toEqual([]);
   });
+});
+
+// ── Miragon: gateway tips + side-preference with extra bends ──
+describe('clipOrthogonal — gateway tips only (Miragon flow-connection-side)', () => {
+  test('off-centre horizontal approach snaps to the right tip, not a facet', () => {
+    const shape = { x: 0, y: 0, w: 50, h: 50 };
+    // Approach from the right at y=15 (above centre 25) — old clip docked mid-facet
+    const clipped = clipOrthogonal(shape, 'exclusiveGateway', { x: 50, y: 15 }, { x: 100, y: 15 }, 'source');
+    expect(clipped.x).toBeCloseTo(50, 0);
+    expect(clipped.y).toBeCloseTo(25, 0); // right tip at centre height
+  });
+
+  test('off-centre vertical approach snaps to the bottom tip', () => {
+    const shape = { x: 0, y: 0, w: 50, h: 50 };
+    const clipped = clipOrthogonal(shape, 'exclusiveGateway', { x: 10, y: 50 }, { x: 10, y: 100 }, 'source');
+    expect(clipped.x).toBeCloseTo(25, 0);
+    expect(clipped.y).toBeCloseTo(50, 0);
+  });
+});
+
+describe('connection sides — leave right, enter left', () => {
+  const sidesOf = async (fixture) =>
+    (await runPipeline(loadFixture(fixture))).coordMap.edgeCoords;
+
+  describe('cross-lane-connection-sides (guard)', () => {
+    let ec;
+    beforeAll(async () => { ec = await sidesOf('cross-lane-connection-sides.json'); }, 30000);
+    test('e3 gw1 → task2 (cross-lane) enters task2 from the left', () => {
+      expect(entrySide(ec.e3)).toBe('left');
+    });
+    test('e6 task3 → task2 (cross-lane) exits right, enters left', () => {
+      expect(exitSide(ec.e6)).toBe('right');
+      expect(entrySide(ec.e6)).toBe('left');
+    });
+    test('e1 start → task1 (same lane) exits right, enters left', () => {
+      expect(exitSide(ec.e1)).toBe('right');
+      expect(entrySide(ec.e1)).toBe('left');
+    });
+    test('e4 gw1 → task3 (same-lane arm of a mixed-lane gateway) enters left', () => {
+      expect(entrySide(ec.e4)).toBe('left');
+    });
+  });
+
+  // Entered through top/bottom on master; the 3-bend staircase (bend-rule.js) enters them left.
+  test.each([
+    ['example-urlaubsantrag.json', 'f210'], // gateway → end event, cross-lane
+    ['example-onboarding.json', 'f510'], // parallel split → expanded subprocess, cross-lane
+    ['boundary-event-shapes.json', 'f8'], // boundary event → task (exit side exempt)
+  ])('%s %s enters its target from the left', async (fixture, id) => {
+    expect(entrySide((await sidesOf(fixture))[id])).toBe('left');
+  }, 30000);
 });

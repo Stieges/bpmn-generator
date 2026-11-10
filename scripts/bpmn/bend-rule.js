@@ -44,10 +44,16 @@
  *
  * Choice: greedy in edge order, every edge seeing the routes already changed. A route is replaced
  * only by one with fewer bends, or as many bends and a lower side penalty (an activity/event target
- * not entered from the left +1, an activity/event source not left to the right +1). Ties: crossings,
- * moved endpoints, length, corridor nearest the middle. The pass repeats until nothing changes —
- * each replacement lowers 3 × bends + side penalty of one edge and touches no other edge's, so it
- * ends — which makes it idempotent: a second run finds nothing to do.
+ * not entered from the left +1, an activity/event source not left to the right +1; a back-edge into
+ * a gateway entered from the left +1). When the current route has a side penalty, Pass B/C may spend
+ * up to bendRuleLimits.sideBendBudget (+ backEdgeBendBudget on back-edges) extra bends to clear it
+ * (Miragon flow-connection-side prefers left-in / right-out on activities). Before Pass B, a route
+ * that still enters an activity/event other than from the left and leaves vertically gets one more
+ * candidate shape the search never builds: a 3-bend staircase — same first leg, a corridor, a drop
+ * beside the target, in from the left — under the strict guards. Ties: crossings, moved
+ * endpoints, length, corridor nearest the middle. The pass repeats until a full sweep changes
+ * nothing; a repeated route fingerprint or maxSweeps cap stops Pass B/C from oscillating with Pass A
+ * (e.g. top-entry L ↔ left-entry Z around a gateway node label). Idempotent once stable.
  *
  * Where it runs (pipeline.js): after every pass that moves a shape or a route — lane compaction, its
  * re-route and the stuck-end pass — so it judges final geometry; before edge-label repair and
@@ -78,7 +84,11 @@ const DEFAULT_LIMITS = Object.freeze({
   corridorStepPx: 5,
   messageFlowLinePx: 3,
   collinearPx: 4,
-  portCornerMarginPx: 15,
+  portCornerMarginPx: 20,
+  /** Extra bends allowed only to reduce sidePenalty (left-in / right-out). */
+  sideBendBudget: 4,
+  /** Extra bends on top of sideBendBudget for back-edges (source right of target). */
+  backEdgeBendBudget: 6,
 });
 
 /**
@@ -145,6 +155,65 @@ function withoutCollinear(pts) {
   if (out.length > 1) r.push(out[out.length - 1]);
   return r;
 }
+
+/**
+ * Left↔right / up↔down "folds": adjacent reverse on one axis, or an HVH/VHV whose
+ * outer legs run opposite ways.
+ * Used only for scoring — Miragon right-out on a back-edge still needs one reverse.
+ */
+function axisFolds(pts) {
+  const s = segsOf(pts);
+  let n = 0;
+  for (let i = 0; i < s.length - 1; i++) {
+    const [a, b] = s[i], [c, d] = s[i + 1];
+    const dx1 = b.x - a.x, dy1 = b.y - a.y, dx2 = d.x - c.x, dy2 = d.y - c.y;
+    if (Math.abs(dy1) < EPS && Math.abs(dy2) < EPS && dx1 * dx2 < 0) n++;
+    if (Math.abs(dx1) < EPS && Math.abs(dx2) < EPS && dy1 * dy2 < 0) n++;
+  }
+  for (let i = 0; i < s.length - 2; i++) {
+    const [a, b] = s[i], [c, d] = s[i + 1], [e, f] = s[i + 2];
+    const hvh = Math.abs(a.y - b.y) < EPS && Math.abs(c.x - d.x) < EPS && Math.abs(e.y - f.y) < EPS
+      && (b.x - a.x) * (f.x - e.x) < 0;
+    const vhv = Math.abs(a.x - b.x) < EPS && Math.abs(c.y - d.y) < EPS && Math.abs(e.x - f.x) < EPS
+      && (b.y - a.y) * (f.y - e.y) < 0;
+    if (hvh || vhv) n++;
+  }
+  return n;
+}
+
+/**
+ * Count HVH/VHV opposite folds whose shorter outer leg is only a Miragon-sized stub
+ * (≤ 1.5× endStubPx). Those read as accidental kinks; prefer a deliberate far U-turn
+ * (or fewer folds) over a 20px right stub that immediately runs left.
+ */
+function slightFoldPenalty(pts, stubPx = 20) {
+  const s = segsOf(pts);
+  const limit = stubPx * 1.5 + EPS;
+  let n = 0;
+  for (let i = 0; i < s.length - 2; i++) {
+    const [a, b] = s[i], [c, d] = s[i + 1], [e, f] = s[i + 2];
+    if (Math.abs(a.y - b.y) < EPS && Math.abs(c.x - d.x) < EPS && Math.abs(e.y - f.y) < EPS
+      && (b.x - a.x) * (f.x - e.x) < 0) {
+      if (Math.min(Math.abs(b.x - a.x), Math.abs(f.x - e.x)) <= limit) n++;
+    }
+    if (Math.abs(a.x - b.x) < EPS && Math.abs(c.y - d.y) < EPS && Math.abs(e.x - f.x) < EPS
+      && (b.y - a.y) * (f.y - e.y) < 0) {
+      if (Math.min(Math.abs(b.y - a.y), Math.abs(f.y - e.y)) <= limit) n++;
+    }
+  }
+  // Adjacent same-axis reverse with a short first leg (collinear-collapsed LRL / UDU).
+  for (let i = 0; i < s.length - 1; i++) {
+    const [a, b] = s[i], [c, d] = s[i + 1];
+    const dx1 = b.x - a.x, dy1 = b.y - a.y, dx2 = d.x - c.x, dy2 = d.y - c.y;
+    if (Math.abs(dy1) < EPS && Math.abs(dy2) < EPS && dx1 * dx2 < 0
+      && Math.min(Math.abs(dx1), Math.abs(dx2)) <= limit) n++;
+    if (Math.abs(dx1) < EPS && Math.abs(dx2) < EPS && dy1 * dy2 < 0
+      && Math.min(Math.abs(dy1), Math.abs(dy2)) <= limit) n++;
+  }
+  return n;
+}
+
+export { axisFolds, slightFoldPenalty };
 
 function orientation(a, b, c) {
   const v = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
@@ -366,14 +435,19 @@ export function sequenceFlowsOf(lc) {
   return out;
 }
 
-function buildContext(coordMap, lc) {
+function buildContext(coordMap, lc, opts = {}) {
   const procs = lc.pools ? lc.pools : [lc];
-  const typeOf = {}, partOf = {}, attached = new Set(), expanded = new Set(), groups = new Set();
+  const typeOf = {}, partOf = {}, laneOf = {}, attached = new Set(), expanded = new Set(), groups = new Set();
   for (const p of procs) {
     const pid = p.id ?? '_singlePool';
+    // Prefer explicit node.lane; fall back to lane.nodeIds (auto-join diamonds).
+    for (const lane of (p.lanes || [])) {
+      for (const nid of (lane.nodeIds || [])) laneOf[nid] = lane.id;
+    }
     const walk = (nodes) => {
       for (const n of nodes || []) {
         typeOf[n.id] = n.type; partOf[n.id] = pid;
+        if (n.lane) laneOf[n.id] = n.lane;
         if (n.attachedTo) attached.add(n.id);
         if (n.type === 'group') groups.add(n.id);
         if (n.isExpanded && n.nodes?.length) expanded.add(n.id);
@@ -382,10 +456,22 @@ function buildContext(coordMap, lc) {
     };
     walk(p.nodes);
   }
+  // Auto-join synthesises gw_join_* (and similar) after the caller's Logic-Core snapshot —
+  // pipeline passes typeOf from the laid-out process tree so Miragon side rules see gateways.
+  if (opts.typeOf) {
+    for (const [id, t] of Object.entries(opts.typeOf)) {
+      if (typeOf[id] == null && t) typeOf[id] = t;
+    }
+  }
+  for (const id of Object.keys(coordMap.coords || {})) {
+    if (typeOf[id] != null) continue;
+    // Layout-only joins keep the gw_join_ / gw_split_ prefix when the LC snapshot lacks them.
+    if (/^gw_(join|split)_/i.test(id) || /^Gateway_/i.test(id)) typeOf[id] = 'exclusiveGateway';
+  }
   for (const g of lc.groups || []) groups.add(g.id);
   const shapeOf = (id) => (isEvent(typeOf[id]) ? 'circle' : isGateway(typeOf[id]) ? 'diamond' : 'rect');
-  // Region of each participant (its lane stack, else its pool body right of the header) and its inner lane lines.
-  const regionOf = {}, linesOf = {};
+  // Region of each participant (its lane stack, else the pool body right of its header) and its inner lane lines.
+  const regionOf = {}, linesOf = {}, laneBand = { ...(coordMap.laneCoords || {}) };
   for (const p of procs) {
     const pid = p.id ?? '_singlePool';
     const bands = (p.lanes || []).map((l) => coordMap.laneCoords?.[l.id]).filter(Boolean).sort((a, b) => a.y - b.y);
@@ -403,7 +489,10 @@ function buildContext(coordMap, lc) {
   }
   const mfNodes = new Set((lc.messageFlows || []).flatMap((m) => [m.source, m.target]));
   const labelBoxes = Object.values(coordMap.nodeLabels ?? {});
-  return { coords: coordMap.coords, labelBoxes, mfNodes, typeOf, partOf, attached, expanded, groups, shapeOf, regionOf, linesOf };
+  return {
+    coords: coordMap.coords, labelBoxes, mfNodes, typeOf, partOf, laneOf, laneBand,
+    attached, expanded, groups, shapeOf, regionOf, linesOf,
+  };
 }
 
 function regionFor(entry, ctx) {
@@ -418,14 +507,151 @@ function regionFor(entry, ctx) {
 }
 const insideRegion = (pts, r, inset) => !r || pts.every((p) =>
   p.x >= r.x + inset && p.x <= r.x + r.w - inset && p.y >= r.y + inset && p.y <= r.y + r.h - inset);
+/**
+ * Vertical envelope a sequence flow may occupy: union of its endpoints' lane bands
+ * (cross-lane handoffs may cross separators), else the participant region. Intra-lane
+ * loops must not climb above their own lane into the pool header / chart margin
+ */
+function envelopeFor(entry, ctx) {
+  const lids = [ctx.laneOf[entry.source], ctx.laneOf[entry.target]].filter(Boolean);
+  const bands = lids.map((id) => ctx.laneBand[id]).filter(Boolean);
+  if (bands.length) {
+    const y = Math.min(...bands.map((b) => b.y));
+    const yMax = Math.max(...bands.map((b) => b.y + b.h));
+    const x = Math.min(...bands.map((b) => b.x));
+    const xMax = Math.max(...bands.map((b) => b.x + b.w));
+    return { x, y, w: xMax - x, h: yMax - y };
+  }
+  return ctx.regionOf[ctx.partOf[entry.source]] ?? null;
+}
+const insideEnvelope = (pts, env, inset) => insideRegion(pts, env, inset);
+const escapesEnvelope = (pts, env, inset) => !!env && !insideEnvelope(pts, env, inset);
+/** Clamp a corridor Y into the envelope (keep a little air from the band edges). */
+function clampCorridorY(y, env, inset) {
+  if (!env) return y;
+  const lo = env.y + inset, hi = env.y + env.h - inset;
+  if (hi <= lo) return (env.y + env.y + env.h) / 2;
+  return Math.max(lo, Math.min(hi, y));
+}
 
 /** Activities and events have a flow direction; gateways may be entered and left at any vertex. */
 const hasFlowDirection = (ctx, id) => !isGateway(ctx.typeOf[id]);
-/** Rule (2): one per end that faces against the flow direction. */
-function sidePenalty(pts, entry, ctx) {
+/** Auto-join diamonds read as flow-through — prefer the same left-in habit as activities. */
+const isAutoJoin = (id) => /^gw_join_/i.test(id || '');
+/**
+ * Sibling-aware gateway ports: with several ins (or outs), one left-in (right-out) is enough —
+ * the others may use top/bottom. `pts` is the candidate for `selfId` when scoring a rewrite.
+ */
+function gatewayHasLeftIn(targetId, entries, selfId, pts) {
+  for (const o of entries) {
+    if (o.target !== targetId) continue;
+    const side = o.id === selfId && pts ? entrySide(pts) : entrySide(o.points);
+    if (side === 'left') return true;
+  }
+  return false;
+}
+function gatewayHasRightOut(sourceId, entries, selfId, pts) {
+  for (const o of entries) {
+    if (o.source !== sourceId) continue;
+    const side = o.id === selfId && pts ? exitSide(pts) : exitSide(o.points);
+    if (side === 'right') return true;
+  }
+  return false;
+}
+/**
+ * Among edges that currently use the cardinal, pick the one that should keep it:
+ * closest vertical alignment with the gateway (happy-path horizontal), then fewer bends.
+ * Others must move to top/bottom — edge-list order alone put the wrong branch on the right
+.
+ */
+function preferredLeftInId(targetId, entries, coords) {
+  const ins = entries.filter((e) => e.target === targetId && entrySide(e.points) === 'left');
+  if (ins.length <= 1) return ins[0]?.id ?? null;
+  const tb = coords[targetId];
+  const cy = tb.y + tb.h / 2;
+  return [...ins].sort((a, b) => {
+    const sa = coords[a.source], sb = coords[b.source];
+    const da = Math.abs((sa.y + sa.h / 2) - cy);
+    const db = Math.abs((sb.y + sb.h / 2) - cy);
+    return da - db || bendCount(a.points) - bendCount(b.points);
+  })[0].id;
+}
+function preferredRightOutId(sourceId, entries, coords) {
+  const outs = entries.filter((e) => e.source === sourceId && exitSide(e.points) === 'right');
+  if (outs.length <= 1) return outs[0]?.id ?? null;
+  const sb = coords[sourceId];
+  const cy = sb.y + sb.h / 2;
+  return [...outs].sort((a, b) => {
+    const ta = coords[a.target], tb = coords[b.target];
+    const da = Math.abs((ta.y + ta.h / 2) - cy);
+    const db = Math.abs((tb.y + tb.h / 2) - cy);
+    return da - db || bendCount(a.points) - bendCount(b.points);
+  })[0].id;
+}
+/** True when another edge is the preferred owner of the cardinal (this one should yield). */
+function siblingOwnsLeft(targetId, entries, selfId, coords) {
+  const pref = preferredLeftInId(targetId, entries, coords);
+  return !!pref && pref !== selfId;
+}
+function siblingOwnsRight(sourceId, entries, selfId, coords) {
+  const pref = preferredRightOutId(sourceId, entries, coords);
+  return !!pref && pref !== selfId;
+}
+function incomingCount(targetId, entries) {
+  let n = 0;
+  for (const o of entries) if (o.target === targetId) n++;
+  return n;
+}
+function outgoingCount(sourceId, entries) {
+  let n = 0;
+  for (const o of entries) if (o.source === sourceId) n++;
+  return n;
+}
+/** In and out docked on the same gateway side (reads as a collision at one vertex). */
+function gatewaySameSideInOut(nodeId, entries, selfId, pts, ctx) {
+  if (!isGateway(ctx.typeOf[nodeId])) return false;
+  const sidesIn = new Set(), sidesOut = new Set();
+  for (const o of entries) {
+    if (o.target === nodeId) {
+      sidesIn.add(o.id === selfId && pts ? entrySide(pts) : entrySide(o.points));
+    }
+    if (o.source === nodeId) {
+      sidesOut.add(o.id === selfId && pts ? exitSide(pts) : exitSide(o.points));
+    }
+  }
+  for (const s of sidesIn) if (s && sidesOut.has(s)) return true;
+  return false;
+}
+/**
+ * Rule (2): one per end that faces against the flow direction.
+ * Gateways with multiple ins/outs: only the missing cardinal (no left-in / no right-out) is
+ * penalised — top/bottom siblings are fine once that cardinal exists. In+out on the same
+ * gateway side always costs.
+ */
+function sidePenalty(pts, entry, ctx, entries = []) {
   let p = 0;
   if (hasFlowDirection(ctx, entry.target) && entrySide(pts) !== 'left') p++;
   if (!ctx.attached.has(entry.source) && hasFlowDirection(ctx, entry.source) && exitSide(pts) !== 'right') p++;
+  // Miragon: a back-edge into a gateway should not enter from the left (mirrors incoming).
+  // Counted here so Pass A/B/C share one potential and Pass C cannot oscillate on gateway-only flips.
+  const sb = ctx.coords[entry.source], tb = ctx.coords[entry.target];
+  if (sb && tb && isGateway(ctx.typeOf[entry.target])) {
+    const backEdge = (sb.x + sb.w / 2) > (tb.x + tb.w / 2) + 10;
+    if (backEdge && entrySide(pts) === 'left') p++;
+    // Multi-in: need ≥1 left-in; further top/bottom ins are OK — but a *second*
+    // left-in (earlier sibling already owns left) is not (shared vertex).
+    else if (!backEdge && incomingCount(entry.target, entries) > 1) {
+      if (entrySide(pts) !== 'left' && !gatewayHasLeftIn(entry.target, entries, entry.id, pts)) p++;
+      else if (entrySide(pts) === 'left' && siblingOwnsLeft(entry.target, entries, entry.id, ctx.coords)) p++;
+    }
+  }
+  // Multi-out gateway: need ≥1 right-out; a second right-out shares the vertex.
+  if (sb && isGateway(ctx.typeOf[entry.source]) && outgoingCount(entry.source, entries) > 1) {
+    if (exitSide(pts) !== 'right' && !gatewayHasRightOut(entry.source, entries, entry.id, pts)) p++;
+    else if (exitSide(pts) === 'right' && siblingOwnsRight(entry.source, entries, entry.id, ctx.coords)) p++;
+  }
+  if (gatewaySameSideInOut(entry.target, entries, entry.id, pts, ctx)) p++;
+  if (gatewaySameSideInOut(entry.source, entries, entry.id, pts, ctx)) p++;
   return p;
 }
 
@@ -564,7 +790,9 @@ function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = nu
     }
   }
   const levels = [...byLevel.keys()].sort((a, b) => a - b);
-  if (levels.length) return { minBends: levels[0], cands: byLevel.get(levels[0]) };
+  if (levels.length) {
+    return { minBends: levels[0], cands: byLevel.get(levels[0]), byLevel };
+  }
   if (maxBends <= 2 || !cfg.router) return null;
 
   const routed = [];
@@ -581,7 +809,12 @@ function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = nu
   }
   if (!routed.length) return null;
   const m = Math.min(...routed.map((r) => r.b));
-  return { minBends: m, cands: routed.filter((r) => r.b === m) };
+  const routedByLevel = new Map();
+  for (const r of routed) {
+    if (!routedByLevel.has(r.b)) routedByLevel.set(r.b, []);
+    routedByLevel.get(r.b).push({ pts: r.pts, moved: r.moved });
+  }
+  return { minBends: m, cands: routed.filter((r) => r.b === m).map(({ pts, moved }) => ({ pts, moved })), byLevel: routedByLevel };
 }
 
 function resolveConfig(opts) {
@@ -608,6 +841,8 @@ function lexCompare(x, y) {
   for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) return x[k] - y[k];
   return 0;
 }
+const ptsEqual = (a, b) => a.length === b.length
+  && a.every((p, i) => Math.abs(p.x - b[i].x) < EPS && Math.abs(p.y - b[i].y) < EPS);
 
 /**
  * The pass. Returns the new edgeCoords — the same object when nothing changed; a changed edge gets a
@@ -623,31 +858,375 @@ function lexCompare(x, y) {
  */
 export function applyBendRule(coordMap, lc, opts = {}) {
   const cfg = resolveConfig(opts);
-  const ctx = buildContext(coordMap, lc);
+  const ctx = buildContext(coordMap, lc, opts);
   const entries = entriesOf(coordMap, opts.edges ?? sequenceFlowsOf(lc), opts.skipIds ?? new Set());
   const changed = new Map();
   let progress = true;
+  // Pass B/C may raise bends to cut sidePenalty; without a budget/potential guard that can
+  // undo Pass A's fewer-bend pick and oscillate (node-label fixture: L ↔ Z). Cap sweeps and
+  // break on a repeated full route fingerprint so the pass always terminates.
+  const seen = new Set();
+  let sweeps = 0;
+  const maxSweeps = Math.max(32, entries.length * 4);
   while (progress) {
     progress = false;
+    if (++sweeps > maxSweeps) break;
+    const fp = entries.map((e) => `${e.id}:${e.points.map((p) => `${p.x},${p.y}`).join('/')}`).join('|');
+    if (seen.has(fp)) break;
+    seen.add(fp);
     for (const en of entries) {
       if (!inScope(en, ctx.coords)) continue;
-      const curBends = bendCount(en.points), curPenalty = sidePenalty(en.points, en, ctx);
-      const r = search(en, entries, ctx, cfg, { maxBends: curBends });
-      if (!r) continue;
-      const scored = r.cands.map((c) => {
+      const curBends = bendCount(en.points), curPenalty = sidePenalty(en.points, en, ctx, entries);
+      const scoreCand = (c) => {
         const S = segsOf(c.pts), a = c.pts[0], z = c.pts[c.pts.length - 1];
         let offCentre = 0;
         if (S.length === 3) {
           const m = S[1];
           offCentre = Math.abs(m[0].x - m[1].x) < EPS ? Math.abs(m[0].x - (a.x + z.x) / 2) : Math.abs(m[0].y - (a.y + z.y) / 2);
         }
-        return { pts: c.pts, score: [sidePenalty(c.pts, en, ctx), crossings(en, c.pts, entries), c.moved, Math.round(pathLen(c.pts)), offCentre] };
-      });
-      scored.sort((x, y) => lexCompare(x.score, y.score));
-      const best = scored[0];
-      if (r.minBends < curBends || (r.minBends === curBends && best.score[0] < curPenalty)) {
-        en.points = best.pts;
-        changed.set(en.id, best.pts);
+        return {
+          pts: c.pts,
+          bends: bendCount(c.pts),
+          score: [sidePenalty(c.pts, en, ctx, entries), crossings(en, c.pts, entries), c.moved, Math.round(pathLen(c.pts)), offCentre],
+        };
+      };
+      // Pass A — fewest bends first (unchanged contract): only routes at ≤ current bends.
+      const rA = search(en, entries, ctx, cfg, { maxBends: curBends });
+      if (rA) {
+        const scoredA = rA.cands.map(scoreCand);
+        scoredA.sort((x, y) => lexCompare(x.score, y.score));
+        const bestA = scoredA[0];
+        // Fewest bends always wins when no side budget (legacy). With a side budget,
+        // fewer bends may not *raise* side — and must not trade one Miragon defect for
+        // another at equal penalty. Strict side improvement, or keep a clean (0) side.
+        const budgetOn = (cfg.limits.sideBendBudget ?? 0) > 0;
+        const fewer = rA.minBends < curBends
+          && (!budgetOn || bestA.score[0] < curPenalty || bestA.score[0] === 0);
+        const betterSide = rA.minBends === curBends && bestA.score[0] < curPenalty;
+        if ((fewer || betterSide) && !ptsEqual(bestA.pts, en.points)) {
+          en.points = bestA.pts;
+          changed.set(en.id, bestA.pts);
+          progress = true;
+          continue;
+        }
+      }
+      // Pass B — Miragon left-in / right-out: spend sideBendBudget extra bends only when the
+      // current route still has a side penalty after pass A. Back-edges (source right of
+      // target) get backEdgeBendBudget on top — reject/rework loops need the detour.
+      const penaltyNow = sidePenalty(en.points, en, ctx, entries);
+      const sb = ctx.coords[en.source], tb = ctx.coords[en.target];
+      const backEdge = sb && tb && (sb.x + sb.w / 2) > (tb.x + tb.w / 2) + 10;
+      const env = envelopeFor(en, ctx);
+      const inset = cfg.limits.regionInset;
+      // Staircase into the left side: keep the current first leg, run along a corridor, drop
+      // beside the target and enter it from the left — 3 bends. search() builds only 0/1/2-bend
+      // shapes (the router only when none fits) and Pass C builds 4-bend U-turns, so without this
+      // the plain staircase is never proposed (example-urlaubsantrag f210, example-onboarding f510).
+      const curSegs = segsOf(en.points);
+      // A zero-length route (all points coincide) has no first leg to keep — search() skips it too.
+      if (penaltyNow > 0 && sb && tb && curSegs.length && !isGateway(ctx.typeOf[en.target])
+        && entrySide(en.points) !== 'left') {
+        const P = en.points, a = P[0];
+        const out = dirOf(curSegs[0]);
+        const tIn = { x: tb.x, y: tb.y + tb.h / 2 };
+        const xT = tb.x - 2 * cfg.stubPx;
+        const budget = (cfg.limits.sideBendBudget ?? 0)
+          + (backEdge ? (cfg.limits.backEdgeBendBudget ?? 0) : 0);
+        if (Math.abs(out[0]) < EPS && xT > a.x + cfg.stubPx && 3 <= curBends + budget) {
+          const ys = new Set();
+          if (P.length >= 3 && Math.abs(P[1].y - P[2].y) < EPS) ys.add(P[1].y); // current corridor
+          ys.add((Math.max(a.y, sb.y + sb.h) + tb.y) / 2);                     // gap, target below
+          ys.add((Math.min(a.y, sb.y) + tb.y + tb.h) / 2);                     // gap, target above
+          const { check } = makeChecker(en, entries, ctx, cfg);               // strict guards
+          const stair = [];
+          for (const y of ys) {
+            const pts = withoutCollinear([a, { x: a.x, y }, { x: xT, y }, { x: xT, y: tIn.y }, tIn]);
+            if (bendCount(pts) === 3 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
+          }
+          stair.sort((x, y) => lexCompare(x.score, y.score));
+          if (stair.length && stair[0].score[0] < penaltyNow && !ptsEqual(stair[0].pts, en.points)) {
+            en.points = stair[0].pts;
+            changed.set(en.id, stair[0].pts);
+            progress = true;
+            continue;
+          }
+        }
+      }
+      if (penaltyNow > 0) {
+        const budget = (cfg.limits.sideBendBudget ?? 0)
+          + (backEdge ? (cfg.limits.backEdgeBendBudget ?? 0) : 0);
+        if (budget > 0) {
+          const rB = search(en, entries, ctx, cfg, { maxBends: curBends + budget });
+          if (rB?.byLevel) {
+            const poolB = [];
+            for (const [b, cs] of rB.byLevel) {
+              if (b <= curBends || b > curBends + budget) continue;
+              for (const c of cs) poolB.push(c);
+            }
+            if (poolB.length) {
+              const scoredB = poolB.map(scoreCand);
+              scoredB.sort((x, y) => lexCompare(
+                [x.score[0], x.bends, x.score[1], x.score[2], x.score[3], x.score[4]],
+                [y.score[0], y.bends, y.score[1], y.score[2], y.score[3], y.score[4]],
+              ));
+              const bestB = scoredB[0];
+              if (bestB.score[0] < penaltyNow && !ptsEqual(bestB.pts, en.points)) {
+                en.points = bestB.pts;
+                changed.set(en.id, bestB.pts);
+                progress = true;
+                continue;
+              }
+            }
+          }
+        }
+      }
+      // Pass C — Miragon connection-side U-turns. Activities/events: right-out / left-in.
+      // Multi-in/out gateways: only the missing cardinal (no left-in / no right-out) needs a
+      // rewrite — siblings may stay top/bottom. A second edge must not share that cardinal
+      // (or the same side as an opposite-direction flow). Envelope escapes also rewrite.
+      const penaltyAfter = sidePenalty(en.points, en, ctx, entries);
+      const srcIsGw = isGateway(ctx.typeOf[en.source]);
+      const tgtIsGw = isGateway(ctx.typeOf[en.target]);
+      const multiIn = tgtIsGw && incomingCount(en.target, entries) > 1;
+      const multiOut = srcIsGw && outgoingCount(en.source, entries) > 1;
+      const sibOwnsLeft = multiIn && entrySide(en.points) === 'left'
+        && siblingOwnsLeft(en.target, entries, en.id, ctx.coords);
+      const sibOwnsRight = multiOut && exitSide(en.points) === 'right'
+        && siblingOwnsRight(en.source, entries, en.id, ctx.coords);
+      const srcNeedsRight = (hasFlowDirection(ctx, en.source)
+        || (multiOut && !gatewayHasRightOut(en.source, entries, en.id, en.points)))
+        && exitSide(en.points) !== 'right';
+      const tgtNeedsLeft = (hasFlowDirection(ctx, en.target)
+        || (!backEdge && multiIn && !gatewayHasLeftIn(en.target, entries, en.id, en.points)))
+        && entrySide(en.points) !== 'left';
+      // Back-edge into a gateway: prefer right-in, but not when the join already exits
+      // right (in+out on the same vertex) — then top/bottom in.
+      const joinRightTakenByOut = tgtIsGw && entries.some((o) =>
+        o.id !== en.id && o.source === en.target && exitSide(o.points) === 'right');
+      const enterFromRight = backEdge && tgtIsGw && !joinRightTakenByOut;
+      // Second multi-in on a left already taken → dock top/bottom (not another left).
+      // Same when yielding a shared right-out into a join that already has a left-in:
+      // the free docks are top/bottom.
+      const joinLeftTaken = multiIn && gatewayHasLeftIn(en.target, entries, en.id, en.points)
+        && entrySide(en.points) !== 'left';
+      const enterFromTopBottom = (!enterFromRight && (sibOwnsLeft || (sibOwnsRight && joinLeftTaken)))
+        || (backEdge && tgtIsGw && joinRightTakenByOut);
+      const gwNeedsNonLeft = enterFromRight && entrySide(en.points) === 'left';
+      const sameSideIO = gatewaySameSideInOut(en.source, entries, en.id, en.points, ctx)
+        || gatewaySameSideInOut(en.target, entries, en.id, en.points, ctx);
+      const escapes = escapesEnvelope(en.points, env, inset);
+      if (penaltyAfter <= 0 && !srcNeedsRight && !tgtNeedsLeft && !gwNeedsNonLeft
+        && !sibOwnsLeft && !sibOwnsRight && !sameSideIO && !escapes) continue;
+      if (!sb || !tb) continue;
+      const cardinalRepair = sibOwnsLeft || sibOwnsRight || (srcNeedsRight && enterFromTopBottom);
+      const cfgLoose = {
+        ...cfg,
+        guards: {
+          ...cfg.guards,
+          // Length / region / sideConflicts yield to Miragon left-in / right-out; keep
+          // nodeLabels, crowding, and sharedPorts so Pass C cannot undo those guards
+          // (label + crowding fixtures: Z → L through a gateway label at equal bends).
+          length: false,
+          region: false,
+          sideConflicts: false,
+          // Shared-cardinal / activity right-out + top-in repairs need a little more room
+          // through busy charts.
+          ...(cardinalRepair ? {
+            crowding: false,
+            nodeLabels: false,
+            sharedPorts: false,
+          } : {}),
+        },
+        limits: cardinalRepair
+          ? { ...cfg.limits, shapeClearance: Math.min(cfg.limits.shapeClearance ?? 8, 2) }
+          : cfg.limits,
+      };
+      const { check } = makeChecker(en, entries, ctx, cfgLoose);
+      const stub = cfg.stubPx;
+      const curExit = en.points[0];
+      // Activity: prefer current right tip, else mid-right. Gateway: keep the current tip when it
+      // already sits on a side, else try every side midpoint (never force right onto a busy port).
+      const sPorts = [];
+      if (!srcIsGw) {
+        const onRight = exitSide(en.points) === 'right' && !sibOwnsRight;
+        sPorts.push({
+          p: onRight ? { x: sb.x + sb.w, y: curExit.y } : { x: sb.x + sb.w, y: sb.y + sb.h / 2 },
+          out: OUTWARD.right,
+        });
+        // Back-edge / top-bottom repair: also try right-face ports near the corridor so the
+        // mandatory right stub sits next to the above/below run (short hook, not a mid-height fold).
+        if (enterFromTopBottom || (backEdge && srcNeedsRight)) {
+          const margin = cfg.limits.portCornerMarginPx ?? 20;
+          const yLo = sb.y + margin, yHi = sb.y + sb.h - margin;
+          for (const yAim of [
+            Math.min(sb.y, tb.y) - Math.max(40, stub * 2),
+            Math.max(sb.y + sb.h, tb.y + tb.h) + Math.max(40, stub * 2),
+          ]) {
+            const y = Math.max(yLo, Math.min(yHi, yAim));
+            const p = { x: sb.x + sb.w, y };
+            if (sPorts.every((q) => Math.abs(q.p.y - p.y) > 1)) {
+              sPorts.push({ p, out: OUTWARD.right });
+            }
+          }
+        }
+      } else if (sibOwnsRight) {
+        // Second multi-out: leave top/bottom — keep the sibling's right free.
+        for (const s of ['top', 'bottom']) {
+          sPorts.push({ p: sideMidpoint(sb, s), out: OUTWARD[s] });
+        }
+      } else {
+        const curSide = sideOf(curExit, sb) || exitSide(en.points);
+        if (curSide) sPorts.push({ p: sideMidpoint(sb, curSide), out: OUTWARD[curSide] });
+        for (const s of SIDES) {
+          if (s === curSide) continue;
+          sPorts.push({ p: sideMidpoint(sb, s), out: OUTWARD[s] });
+        }
+      }
+      const tIns = enterFromRight
+        ? [{ p: { x: tb.x + tb.w, y: tb.y + tb.h / 2 }, in: INWARD.right }]
+        : enterFromTopBottom
+          ? [
+            { p: { x: tb.x + tb.w / 2, y: tb.y }, in: INWARD.top },
+            { p: { x: tb.x + tb.w / 2, y: tb.y + tb.h }, in: INWARD.bottom },
+          ]
+          : [{ p: { x: tb.x, y: tb.y + tb.h / 2 }, in: INWARD.left }];
+      // Corridor Ys stay inside the lane/participant envelope — Pass C used to set
+      // region:false for Miragon U-turns and climbed into the chart margin.
+      const belowY = clampCorridorY(
+        Math.max(sb.y + sb.h, tb.y + tb.h) + Math.max(40, stub * 2), env, inset);
+      const aboveY = clampCorridorY(
+        Math.min(sb.y, tb.y) - Math.max(40, stub * 2), env, inset);
+      // Deep below/above / far right/left of every laid-out shape so a far corridor clears
+      // foreign verticals and does not thread a neighbour's bbox.
+      let deepBelow = belowY, deepAbove = aboveY;
+      let rightX = Math.max(sb.x + sb.w, tb.x + tb.w) + Math.max(40, stub * 2);
+      let leftX = Math.min(sb.x, tb.x) - Math.max(40, stub * 2);
+      for (const [oid, box] of Object.entries(ctx.coords)) {
+        if (oid === en.source || oid === en.target) continue;
+        deepBelow = Math.max(deepBelow, box.y + box.h + Math.max(40, stub * 2));
+        deepAbove = Math.min(deepAbove, box.y - Math.max(40, stub * 2));
+        rightX = Math.max(rightX, box.x + box.w + Math.max(40, stub * 2));
+        leftX = Math.min(leftX, box.x - Math.max(40, stub * 2));
+      }
+      deepBelow = clampCorridorY(deepBelow, env, inset);
+      deepAbove = clampCorridorY(deepAbove, env, inset);
+      const candidates = [];
+      const addCand = (out, inDir, raw) => { candidates.push({ out, inDir, raw }); };
+      for (const { p: sDock, out } of sPorts) {
+        for (const { p: tIn, in: inDir } of tIns) {
+          const midX = (sDock.x + tIn.x) / 2;
+          const levelY = tIn.y;
+          if (enterFromRight) {
+            addCand(out, inDir, [sDock, { x: sDock.x + stub, y: sDock.y }, { x: sDock.x + stub, y: belowY },
+              { x: tIn.x + stub, y: belowY }, { x: tIn.x + stub, y: tIn.y }, tIn]);
+            addCand(out, inDir, [sDock, { x: sDock.x + stub, y: sDock.y }, { x: sDock.x + stub, y: aboveY },
+              { x: tIn.x + stub, y: aboveY }, { x: tIn.x + stub, y: tIn.y }, tIn]);
+            addCand(out, inDir, [sDock, { x: rightX, y: sDock.y }, { x: rightX, y: tIn.y }, tIn]);
+            addCand(out, inDir, [sDock, { x: sDock.x + stub, y: sDock.y }, { x: sDock.x + stub, y: aboveY },
+              { x: midX, y: aboveY }, { x: midX, y: tIn.y }, tIn]);
+          } else if (enterFromTopBottom) {
+            // First leg must travel in `out` (activity right-out, or gateway top/bottom when
+            // yielding a shared cardinal); then a corridor to the free top/bottom in-dock.
+            // Long back-edges need above/below corridors — a mid-height run hits every node
+            // between Rework and the join.
+            const stubOut = {
+              x: sDock.x + out[0] * stub,
+              y: sDock.y + out[1] * stub,
+            };
+            const stubIn = {
+              x: tIn.x - inDir[0] * stub,
+              y: tIn.y - inDir[1] * stub,
+            };
+            addCand(out, inDir, [sDock, stubOut, { x: stubIn.x, y: stubOut.y }, stubIn, tIn]);
+            addCand(out, inDir, [sDock, stubOut, { x: midX, y: stubOut.y }, { x: midX, y: stubIn.y },
+              stubIn, tIn]);
+            addCand(out, inDir, [sDock, stubOut, { x: rightX, y: stubOut.y }, { x: rightX, y: stubIn.y },
+              stubIn, tIn]);
+            addCand(out, inDir, [sDock, stubOut, { x: stubOut.x, y: aboveY }, { x: stubIn.x, y: aboveY },
+              stubIn, tIn]);
+            addCand(out, inDir, [sDock, stubOut, { x: stubOut.x, y: belowY }, { x: stubIn.x, y: belowY },
+              stubIn, tIn]);
+            addCand(out, inDir, [sDock, stubOut, { x: stubOut.x, y: deepAbove }, { x: stubIn.x, y: deepAbove },
+              stubIn, tIn]);
+            addCand(out, inDir, [sDock, stubOut, { x: stubOut.x, y: deepBelow }, { x: stubIn.x, y: deepBelow },
+              stubIn, tIn]);
+            // Local far-right then corridor: first leg past the source/target only (not the
+            // chart-wide rightX). Enough length that the
+            // reverse is a deliberate U-turn, not a 20px right stub folded left.
+            if (out[0] > 0) {
+              const localRightX = Math.max(sb.x + sb.w, tb.x + tb.w) + Math.max(80, stub * 4);
+              for (const cy of [aboveY, belowY, deepAbove, deepBelow, stubIn.y]) {
+                addCand(out, inDir, [sDock, { x: localRightX, y: sDock.y }, { x: localRightX, y: cy },
+                  { x: stubIn.x, y: cy }, stubIn, tIn]);
+              }
+            }
+          } else {
+            const corridor = Math.max(sDock.x + stub, tIn.x - stub);
+            const stubOut = {
+              x: sDock.x + (out[0] !== 0 ? stub * out[0] : 0),
+              y: sDock.y + (out[1] !== 0 ? stub * out[1] : 0),
+            };
+            // Direct-ish: out → vertical → left in.
+            addCand(out, inDir, [sDock, { x: corridor, y: sDock.y }, { x: corridor, y: levelY },
+              { x: tIn.x - stub, y: levelY }, tIn]);
+            addCand(out, inDir, [sDock, stubOut, { x: stubOut.x, y: levelY },
+              { x: tIn.x - stub, y: levelY }, tIn]);
+            addCand(out, inDir, [sDock, { x: sDock.x + stub, y: sDock.y }, { x: sDock.x + stub, y: belowY },
+              { x: tIn.x - stub, y: belowY }, { x: tIn.x - stub, y: tIn.y }, tIn]);
+            addCand(out, inDir, [sDock, { x: sDock.x + stub, y: sDock.y }, { x: sDock.x + stub, y: aboveY },
+              { x: tIn.x - stub, y: aboveY }, { x: tIn.x - stub, y: tIn.y }, tIn]);
+            // Far-right then back at levelY (short) or deepBelow/deepAbove (clears foreign verticals).
+            addCand(out, inDir, [sDock, { x: rightX, y: sDock.y }, { x: rightX, y: levelY },
+              { x: tIn.x - stub, y: levelY }, tIn]);
+            addCand(out, inDir, [sDock, { x: rightX, y: sDock.y }, { x: rightX, y: deepBelow },
+              { x: tIn.x - stub, y: deepBelow }, { x: tIn.x - stub, y: tIn.y }, tIn]);
+            addCand(out, inDir, [sDock, { x: rightX, y: sDock.y }, { x: rightX, y: deepAbove },
+              { x: tIn.x - stub, y: deepAbove }, { x: tIn.x - stub, y: tIn.y }, tIn]);
+            // Far-left corridor when the source is a gateway already exiting top/left.
+            addCand(out, inDir, [sDock, { x: leftX, y: sDock.y }, { x: leftX, y: levelY },
+              { x: tIn.x - stub, y: levelY }, tIn]);
+            // Axis-aligned from a gateway top/bottom tip straight to the target's left mid y.
+            addCand(out, inDir, [sDock, { x: sDock.x, y: levelY }, { x: tIn.x - stub, y: levelY }, tIn]);
+          }
+        }
+      }
+      let bestC = null;
+      const curBendsC = bendCount(en.points);
+      const budgetC = (cfg.limits.sideBendBudget ?? 0)
+        + (backEdge ? (cfg.limits.backEdgeBendBudget ?? 0) : 0);
+      for (const { out: outDir, inDir, raw } of candidates) {
+        const pts = withoutCollinear(raw);
+        // Full check only (cfgLoose already drops length/region/crowding/labels/sideConflicts).
+        // A soft orthogonal fallback used to skip sharedPorts / crossings and re-broke those guards.
+        const ok = check(pts, outDir, inDir);
+        if (!ok) continue;
+        // Lane/participant envelope is always on — even when region:false for Miragon U-turns.
+        if (escapesEnvelope(pts, env, inset)) continue;
+        const pen = sidePenalty(pts, en, ctx, entries);
+        if (gatewaySameSideInOut(en.source, entries, en.id, pts, ctx)
+          || gatewaySameSideInOut(en.target, entries, en.id, pts, ctx)) continue;
+        // Do not recreate a shared cardinal when an earlier sibling already owns it.
+        if (multiIn && entrySide(pts) === 'left' && siblingOwnsLeft(en.target, entries, en.id, ctx.coords)) continue;
+        if (multiOut && exitSide(pts) === 'right' && siblingOwnsRight(en.source, entries, en.id, ctx.coords)) continue;
+        const b = bendCount(pts);
+        // Strict side improvement, or equal side when repairing envelope / same-side IO / shared cardinal.
+        if (pen > penaltyAfter) continue;
+        if (pen === penaltyAfter && !escapes && !sameSideIO && !sibOwnsLeft && !sibOwnsRight) continue;
+        if (b - curBendsC > budgetC) continue;
+        // Prefer no slight left↔right / up↔down kinks; then fewer folds; then shorter overall.
+        const score = [
+          pen,
+          escapesEnvelope(pts, env, inset) ? 1 : 0,
+          slightFoldPenalty(pts, stub),
+          axisFolds(pts),
+          b,
+          Math.round(pathLen(pts)),
+        ];
+        if (!bestC || lexCompare(score, bestC.score) < 0) bestC = { pts, score };
+      }
+      if (bestC && !ptsEqual(bestC.pts, en.points)) {
+        en.points = bestC.pts;
+        changed.set(en.id, bestC.pts);
         progress = true;
       }
     }
@@ -668,7 +1247,7 @@ export function applyBendRule(coordMap, lc, opts = {}) {
  */
 export function bendMetrics(coordMap, lc, opts = {}) {
   const cfg = resolveConfig(opts);
-  const ctx = buildContext(coordMap, lc);
+  const ctx = buildContext(coordMap, lc, opts);
   const entries = entriesOf(coordMap, opts.edges ?? sequenceFlowsOf(lc), opts.skipIds ?? new Set());
   const perEdge = {};
   let scope = 0, avoidableBends = 0, avoidableEdges = 0, againstFlowEntries = 0;
@@ -680,7 +1259,8 @@ export function bendMetrics(coordMap, lc, opts = {}) {
     const minBends = r ? Math.min(r.minBends, bends) : bends;
     let againstFlow = false;
     if (hasFlowDirection(ctx, en.target) && entrySide(en.points) !== 'left') {
-      againstFlow = !!search(en, entries, ctx, cfg, { maxBends: bends, targetSide: 'left' });
+      const budget = cfg.limits.sideBendBudget ?? 0;
+      againstFlow = !!search(en, entries, ctx, cfg, { maxBends: bends + budget, targetSide: 'left' });
     }
     avoidableBends += bends - minBends;
     if (bends > minBends) avoidableEdges++;
@@ -688,4 +1268,37 @@ export function bendMetrics(coordMap, lc, opts = {}) {
     perEdge[en.id] = { bends, minBends, entry: entrySide(en.points), againstFlow };
   }
   return { scope, avoidableBends, avoidableEdges, againstFlowEntries, perEdge };
+}
+
+/**
+ * Post-layout check: every flow-node box sits in its lane band, and every sequence-flow
+ * waypoint stays inside the vertical union of its endpoints' lanes (or the participant
+ * region when lanes are absent). Cross-lane edges may cross separators; they must not
+ * leave the union band into the pool header / chart margin.
+ *
+ * @returns {{ shapeViolations: string[], edgeViolations: string[], ok: boolean }}
+ */
+export function laneContainmentMetrics(coordMap, lc, opts = {}) {
+  const cfg = resolveConfig(opts);
+  const inset = cfg.limits.regionInset ?? 10;
+  const ctx = buildContext(coordMap, lc, opts);
+  const shapeViolations = [];
+  for (const [id, box] of Object.entries(coordMap.coords || {})) {
+    const lid = ctx.laneOf[id];
+    if (!lid) continue;
+    const band = ctx.laneBand[lid];
+    if (!band) continue;
+    if (box.y < band.y - 0.5 || box.y + box.h > band.y + band.h + 0.5
+      || box.x + box.w < band.x - 0.5 || box.x > band.x + band.w + 0.5) {
+      shapeViolations.push(id);
+    }
+  }
+  const edgeViolations = [];
+  const entries = entriesOf(coordMap, opts.edges ?? sequenceFlowsOf(lc), opts.skipIds ?? new Set());
+  for (const en of entries) {
+    if (!inScope(en, ctx.coords)) continue;
+    const env = envelopeFor(en, ctx);
+    if (escapesEnvelope(en.points, env, inset)) edgeViolations.push(en.id);
+  }
+  return { shapeViolations, edgeViolations, ok: shapeViolations.length === 0 && edgeViolations.length === 0 };
 }

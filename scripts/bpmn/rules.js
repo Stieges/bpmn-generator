@@ -15,6 +15,9 @@
  *   - BEF4LLM (Kourani et al., 2025)
  */
 
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { loadRuleProfile, isRuleEnabled, getEffectiveSeverity, auditProfile, assertRuleProfile, carryProvenance, ProfileRejectedError } from '../shared/rule-profile.js';
 import { buildRuleCatalog, profileContext } from '../shared/rule-catalog.js';
 import {
@@ -1012,13 +1015,32 @@ const SOUNDNESS_CHECKS = [
 // zusätzlich akzeptieren wir das englische Verb-first-Muster ("Review application")
 // über eine kleine kuratierte Liste, um False-Positives zu vermeiden.
 const M01_GERMAN_VERB_SUFFIX = /(en|eln|ern|ieren)$/i;
-const M01_ENGLISH_VERBS = new Set([
+const M01_ENGLISH_VERBS_BUILTIN = [
   'review', 'approve', 'send', 'receive', 'check', 'create', 'update', 'delete',
   'reject', 'submit', 'notify', 'validate', 'process', 'archive', 'assign', 'verify',
   'confirm', 'record', 'issue', 'close', 'open', 'prepare', 'request', 'forward',
   'escalate', 'sign', 'evaluate', 'calculate', 'generate', 'publish', 'cancel',
   'release', 'collect', 'enter', 'add', 'remove', 'store', 'fetch', 'handle',
-]);
+];
+/** Extended verb pack: set BPMN_EXTRA_NAMING=1 or BPMN_NAMING_JSON=<path>. Off by default. */
+function loadM01EnglishVerbs() {
+  const verbs = new Set(M01_ENGLISH_VERBS_BUILTIN);
+  try {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const custom = process.env.BPMN_NAMING_JSON;
+    const soft = process.env.BPMN_EXTRA_NAMING === '1' || process.env.BPMN_EXTRA_NAMING === 'true';
+    if (!custom && !soft) return verbs;
+    const namingPath = custom || join(dir, 'naming.extra.json');
+    const naming = JSON.parse(readFileSync(namingPath, 'utf8'));
+    for (const v of naming.englishVerbs || []) {
+      if (typeof v === 'string' && v.trim()) verbs.add(v.trim().toLowerCase());
+    }
+  } catch {
+    // optional overlay
+  }
+  return verbs;
+}
+const M01_ENGLISH_VERBS = loadM01EnglishVerbs();
 
 // Returns true when a task label does NOT look like Objekt+Verb / Verb+Object.
 function violatesVerbObject(name) {
