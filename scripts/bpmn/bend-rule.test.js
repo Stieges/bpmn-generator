@@ -698,6 +698,87 @@ describe('applyBendRule — side bend budget (Miragon activity left/right)', () 
     expect(['top', 'bottom']).toContain(exitSide(out.eNo));
   });
 
+  test('multi-out gateway: skip branch exits a free tip and re-enters join on the same tip', () => {
+    // Same-Y fork (BPM0301 Paste Modelling link?): Yes keeps right→task; No must leave
+    // top/bottom and dock the join on that same vertical tip (not shared right, not left).
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'GW_Paste', type: 'exclusiveGateway', name: 'Paste?', lane: 'L1' },
+        { id: 'T7', type: 'userTask', name: 'Paste link', lane: 'L1' },
+        { id: 'gw_join_T8', type: 'exclusiveGateway', name: '', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Sales Rep' }],
+      edges: [
+        { id: 'eYes', source: 'GW_Paste', target: 'T7', label: 'Yes' },
+        { id: 'eNo', source: 'GW_Paste', target: 'gw_join_T8', label: 'No', isDefault: true },
+        { id: 'eJoin', source: 'T7', target: 'gw_join_T8' },
+      ],
+    };
+    const cm = {
+      coords: {
+        GW_Paste: { x: 2696, y: 87.5, w: 50, h: 50 },
+        T7: { x: 3026, y: 72.5, w: 100, h: 80 },
+        gw_join_T8: { x: 3266, y: 87.5, w: 50, h: 50 },
+      },
+      laneCoords: { L1: { x: 2600, y: 40, w: 1200, h: 200 } },
+      edgeCoords: {
+        eYes: [P(2746, 112.5), P(3026, 112.5)],
+        eNo: [P(2746, 112.5), P(3014, 112.5), P(3014, 61), P(3226, 61), P(3226, 112.5), P(3266, 112.5)],
+        // Already on bottom of the join — No must take the opposite tip.
+        eJoin: [P(3126, 132.5), P(3146, 132.5), P(3146, 192.5), P(3291, 192.5), P(3291, 137.5)],
+      },
+    };
+    expect(exitSide(cm.edgeCoords.eYes)).toBe('right');
+    expect(exitSide(cm.edgeCoords.eNo)).toBe('right');
+    expect(entrySide(cm.edgeCoords.eJoin)).toBe('bottom');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 6 } });
+    expect(exitSide(out.eYes)).toBe('right');
+    const noExit = exitSide(out.eNo);
+    const noEntry = entrySide(out.eNo);
+    expect(['top', 'bottom']).toContain(noExit);
+    expect(noEntry).toBe(noExit);
+    expect(noEntry).not.toBe(entrySide(out.eJoin));
+  });
+
+  test('multi-out gateway: tip-mismatch repair re-enters on the same tip as exit', () => {
+    // Already yielded the right tip (exit top) but docked the join on bottom — must flip entry.
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'GW_Paste', type: 'exclusiveGateway', name: 'Paste?', lane: 'L1' },
+        { id: 'T7', type: 'userTask', name: 'Paste link', lane: 'L1' },
+        { id: 'gw_join_T8', type: 'exclusiveGateway', name: '', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Sales Rep' }],
+      edges: [
+        { id: 'eYes', source: 'GW_Paste', target: 'T7' },
+        { id: 'eNo', source: 'GW_Paste', target: 'gw_join_T8' },
+        { id: 'eJoin', source: 'T7', target: 'gw_join_T8' },
+      ],
+    };
+    const cm = {
+      coords: {
+        GW_Paste: { x: 2696, y: 87.5, w: 50, h: 50 },
+        T7: { x: 3026, y: 72.5, w: 100, h: 80 },
+        gw_join_T8: { x: 3266, y: 87.5, w: 50, h: 50 },
+      },
+      laneCoords: { L1: { x: 2600, y: 40, w: 1200, h: 200 } },
+      edgeCoords: {
+        eYes: [P(2746, 112.5), P(3026, 112.5)],
+        // Exit top, enter bottom — mismatch.
+        eNo: [P(2721, 87.5), P(2721, 67.5), P(3174, 67.5), P(3174, 157.5), P(3291, 157.5), P(3291, 137.5)],
+        eJoin: [P(3126, 112.5), P(3266, 112.5)],
+      },
+    };
+    expect(exitSide(cm.edgeCoords.eNo)).toBe('top');
+    expect(entrySide(cm.edgeCoords.eNo)).toBe('bottom');
+    const out = applyBendRule(cm, lc, { limits: { sideBendBudget: 6 } });
+    expect(exitSide(out.eYes)).toBe('right');
+    expect(exitSide(out.eNo)).toBe('top');
+    expect(entrySide(out.eNo)).toBe('top');
+  });
+
   test('back-edge from activity: right-out + top-in when join already exits right', () => {
     // Miragon: activity must exit right. Join already uses right-out to T2 — do not put
     // in+out on the same vertex; enter top/bottom instead.
