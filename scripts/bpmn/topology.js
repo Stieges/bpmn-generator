@@ -698,6 +698,67 @@ function allocateId(used, prefix) {
 }
 
 /**
+ * bpmnlint `no-gateway-join-fork` + `conditional-flows`: an exclusive/inclusive
+ * gateway with more than one incoming AND more than one outgoing is Mixed —
+ * forbidden as a single diamond, and `resolveFlowSemantics` only infers
+ * conditions on **Diverging** sources, so Mixed outs lose `conditionExpression`.
+ *
+ * Split each Mixed XOR/OR into a converging join (new) → original gateway kept
+ * as the diverge (name, outs, isDefault / labels unchanged).
+ *
+ * Mutates `container` in place. Recurses into expanded subprocess children.
+ *
+ * @returns {number} how many Mixed gateways were split
+ */
+export function splitMixedGateways(container, usedIds) {
+  let split = 0;
+  const nodes = container.nodes || [];
+  const edges = container.edges || (container.edges = []);
+
+  for (const n of nodes) {
+    if (n.nodes || n.edges) split += splitMixedGateways(n, usedIds);
+  }
+
+  const inCount = new Map();
+  const outCount = new Map();
+  for (const e of edges) {
+    inCount.set(e.target, (inCount.get(e.target) || 0) + 1);
+    outCount.set(e.source, (outCount.get(e.source) || 0) + 1);
+  }
+
+  // Snapshot — rewiring mutates edges.
+  const mixed = nodes.filter((n) => {
+    if (n.type !== 'exclusiveGateway' && n.type !== 'inclusiveGateway') return false;
+    return (inCount.get(n.id) || 0) > 1 && (outCount.get(n.id) || 0) > 1;
+  });
+
+  for (const gw of mixed) {
+    const joinId = allocateId(usedIds, `gw_join_${gw.id}`);
+    const flowId = allocateId(usedIds, `flow_${joinId}_${gw.id}`);
+    const lane = gw.lane;
+    nodes.push({
+      id: joinId,
+      type: gw.type,
+      name: '',
+      has_join: true,
+      ...(lane !== undefined ? { lane } : {}),
+    });
+    for (const l of container.lanes || []) {
+      if (Array.isArray(l.nodeIds) && l.nodeIds.includes(gw.id) && !l.nodeIds.includes(joinId)) {
+        l.nodeIds.push(joinId);
+      }
+    }
+    for (const e of edges) {
+      if (e.target === gw.id) e.target = joinId;
+    }
+    edges.push({ id: flowId, source: joinId, target: gw.id });
+    if (gw.has_join) delete gw.has_join;
+    split++;
+  }
+  return split;
+}
+
+/**
  * bpmnlint `fake-join`: an Activity or Event with more than one incoming sequence
  * flow. Insert an exclusive converging gateway in front of each such node and
  * rewire the incoming edges through it. Exclusive (not parallel) — multi-in
@@ -759,15 +820,19 @@ export function insertAutoJoinGateways(container, usedIds) {
  * Pre-process a Logic-Core before ELK graph construction.
  */
 export function preprocessLogicCore(lc, opts = {}) {
-  // Opt-in: default off so upstream fixtures/hashes stay stable. Pass
-  // autoJoinGateways: true (or CFG.layout.autoJoinGateways / CLI) to enable.
+  // Defaults from CFG.layout (BAT fork: both true). Pass false / --no-auto-join
+  // to keep upstream-stable fixtures without inserted joins.
   const autoJoin = opts.autoJoinGateways ?? (CFG.layout?.autoJoinGateways === true);
+  const splitMixed = opts.splitMixedGateways ?? (CFG.layout?.splitMixedGateways !== false);
+  const used = collectAllIds(lc);
+  const processes = lc.pools ? lc.pools : [lc];
+  // Mixed split before activity auto-join so diverge diamonds stay single-in.
+  if (splitMixed) {
+    for (const proc of processes) splitMixedGateways(proc, used);
+  }
   if (autoJoin) {
-    const used = collectAllIds(lc);
-    const processes = lc.pools ? lc.pools : [lc];
     for (const proc of processes) insertAutoJoinGateways(proc, used);
   }
-  const processes = lc.pools ? lc.pools : [lc];
   for (const proc of processes) {
     normalizeLaneAssignments(proc);
     sortNodesTopologically(proc);

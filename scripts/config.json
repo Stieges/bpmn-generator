@@ -193,7 +193,8 @@
       "detourReach": 600
     },
     "endStubPx": 20,
-    "autoJoinGateways": false,
+    "autoJoinGateways": true,
+    "splitMixedGateways": true,
     "edgeLabelGap": 4,
     "edgeLabelText": {
       "fontSize": 11,

@@ -70,24 +70,7 @@ describe('insertAutoJoinGateways', () => {
     expect(insertAutoJoinGateways(proc, new Set(['G', 'A', 'B', 'a', 'b']))).toBe(0);
   });
 
-  test('preprocessLogicCore skips auto-join by default (upstream-stable)', () => {
-    const lc = {
-      id: 'P',
-      nodes: [
-        { id: 'S', type: 'startEvent' },
-        { id: 'T', type: 'task' },
-        { id: 'R', type: 'task' },
-      ],
-      edges: [
-        { id: 'e1', source: 'S', target: 'T' },
-        { id: 'e2', source: 'R', target: 'T' },
-      ],
-    };
-    preprocessLogicCore(lc);
-    expect(lc.nodes.some((n) => n.type === 'exclusiveGateway')).toBe(false);
-  });
-
-  test('preprocessLogicCore runs auto-join when enabled', () => {
+  test('preprocessLogicCore runs auto-join by default (BAT fork CFG)', () => {
     const lc = {
       id: 'P',
       nodes: [
@@ -102,7 +85,24 @@ describe('insertAutoJoinGateways', () => {
       ],
       lanes: [{ id: 'L', name: 'L', nodeIds: ['S', 'T', 'R'] }],
     };
-    preprocessLogicCore(lc, { autoJoinGateways: true });
+    preprocessLogicCore(lc);
     expect(lc.nodes.some((n) => n.type === 'exclusiveGateway' && n.has_join)).toBe(true);
+  });
+
+  test('preprocessLogicCore skips auto-join when disabled', () => {
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'S', type: 'startEvent' },
+        { id: 'T', type: 'task' },
+        { id: 'R', type: 'task' },
+      ],
+      edges: [
+        { id: 'e1', source: 'S', target: 'T' },
+        { id: 'e2', source: 'R', target: 'T' },
+      ],
+    };
+    preprocessLogicCore(lc, { autoJoinGateways: false, splitMixedGateways: false });
+    expect(lc.nodes.some((n) => n.type === 'exclusiveGateway')).toBe(false);
   });
 });
