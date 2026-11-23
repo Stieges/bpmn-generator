@@ -20,7 +20,10 @@ function logicCoreToElk(lc, opts = {}) {
   assignEdgeIds(lc);
   // Pre-process: sort nodes topologically, order lanes by flow,
   // order participants by who talks to whom
-  preprocessLogicCore(lc, { poolOrder: opts.poolOrder });
+  preprocessLogicCore(lc, {
+    poolOrder: opts.poolOrder,
+    autoJoinGateways: opts.autoJoinGateways,
+  });
 
   // Decide if wrapping should be applied at the current subgraph level
   const wrappingOpts = resolveWrappingOpts(lc, opts);
@@ -157,6 +160,10 @@ function buildLanedProcessElk(proc, wrappingOpts = {}) {
   // ALL edges (intra-lane + cross-lane) in one flat list
   const flatEdges = buildElkEdges(nodes, edges);
 
+  // Cross-lane charts: widen layer gaps so a late sink task (e.g. Support) can
+  // sit further right of parallel chains in other lanes and avoid crossings.
+  const crossLaneSpacing = crossLaneLayerSpacing(nodes, edges);
+
   return {
     id: 'pool',
     properties: {
@@ -168,10 +175,28 @@ function buildLanedProcessElk(proc, wrappingOpts = {}) {
       // external labels but no width, so a 36 px event carries a 90 px label
       // that overhangs it by 27 px on each side and nothing accounts for it.
       'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + 2 * LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
+      ...crossLaneSpacing,
       ...wrappingOpts,  // merge last so it wins on conflicts
     },
     children: flatChildren,
     edges: flatEdges,
+  };
+}
+
+/** Extra between-layer spacing when sequence flows cross lanes (keeps start-top). */
+function crossLaneLayerSpacing(nodes, edges) {
+  const laneOf = Object.fromEntries((nodes || []).map(n => [n.id, n.lane]));
+  let cross = 0;
+  for (const e of edges || []) {
+    const a = laneOf[e.source], b = laneOf[e.target];
+    if (a != null && b != null && a !== b) cross++;
+  }
+  if (cross === 0) return {};
+  const base = Number(CFG.elk?.layered?.['elk.layered.spacing.nodeNodeBetweenLayers'] ?? 80);
+  // One bump for any cross-lane edge; a second when several handoffs exist.
+  const bump = cross >= 2 ? 60 : 30;
+  return {
+    'elk.layered.spacing.nodeNodeBetweenLayers': String(base + bump),
   };
 }
 
@@ -249,10 +274,12 @@ function buildElkNode(node) {
     'elk.portConstraints': 'FREE',
   };
 
-  // Layer constraints: start events → first layer, end events → last layer
+  // Layer constraints: start events → first layer, end events → last layer.
+  // Cross-lane sinks (_forceLastLayer from topology) also LAST so a short
+  // Support path is not parked under a longer parallel chain.
   if (node.type === 'startEvent') {
     props['elk.layered.layerConstraint'] = 'FIRST';
-  } else if (node.type === 'endEvent') {
+  } else if (node.type === 'endEvent' || node._forceLastLayer) {
     props['elk.layered.layerConstraint'] = 'LAST';
   }
 
