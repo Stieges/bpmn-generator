@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Feedback / rework edges no longer pull the loop XOR left.** DFS back-edges
+  (circulate → finalize → Review closed? → back to Collect / Circulate) are
+  excluded from the ELK layered graph (`layout.excludeFeedbackEdgesFromElk`,
+  default on) so GREEDY_MODEL_ORDER cannot park the decision gateway before
+  its predecessors; bend-rule still routes those edges as back-edges.
+- **Fan-out column align ignores feedback outs.** §5.0d no longer snaps
+  re-circulate / more-feedback targets (and their auto-join successors) onto
+  the Yes-path x-column when a gateway has 3+ exits.
+- **Multi-in auto-joins keep the forward spine.** Feedback incomings are ignored
+  when leveling `gw_join_*` cy; the join snaps to its successor so T20→join→T21
+  stays horizontal.
+- **Cross-lane handoffs enter from the left.** Bend-rule proposes a 2-bend
+  (or right-side detour) staircase when the first leg is horizontal, so a higher
+  lane does not top-enter the activity below (Miragon flow-connection-side).
 - **Multi-in joins sit beside the mid-rank branch.** A converging exclusive gateway with
   2+ incomings and one forward out snaps its centerline to the median of its incoming
   sources (refined to the successor when that successor is already near the median), so

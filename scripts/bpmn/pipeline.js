@@ -30,7 +30,7 @@ import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
 import { resolveRuleProfile } from './rules.js';
-import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, orderGatewayExitsByTargetLane, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
+import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, orderGatewayExitsByTargetLane, preprocessLogicCore, identifyHappyPathNodes, identifyFeedbackEdges, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, alignSameLaneChains, alignMultiInJoins, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
@@ -674,6 +674,7 @@ export {
   dotToLogicCore,
   generateProcessDoc,
   identifyHappyPathNodes,
+  identifyFeedbackEdges,
   generateDiagramSet,
   collapseSubProcesses,
   extractSubProcessAsLogicCore,

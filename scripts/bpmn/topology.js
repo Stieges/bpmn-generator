@@ -137,6 +137,45 @@ export function resolveFlowSemantics(nodes = [], edges = []) {
 }
 
 /**
+ * DFS back-edges (rework / feedback loops): edges that point to an ancestor on
+ * the current search stack when walking from start events.
+ *
+ * These must **not** constrain ELK layer assignment — GREEDY_MODEL_ORDER still
+ * pulls the loop XOR left of its predecessors when several outs re-enter early
+ * auto-joins (SME circulate / approve loops). Exclude them from the ELK graph
+ * and let post-layout routing (bend-rule) draw them as back-edges.
+ *
+ * @param {object[]} nodes
+ * @param {object[]} edges
+ * @returns {Set<string>} edge ids that are feedback
+ */
+export function identifyFeedbackEdges(nodes, edges) {
+  const list = edges || [];
+  const outMap = {};
+  for (const e of list) {
+    if (!outMap[e.source]) outMap[e.source] = [];
+    outMap[e.source].push(e);
+  }
+  const starts = (nodes || []).filter(n => n.type === 'startEvent').map(n => n.id);
+  const roots = starts.length ? starts : ((nodes || [])[0] ? [nodes[0].id] : []);
+  const state = {}; // 0=unvisited, 1=on-stack, 2=done
+  const feedback = new Set();
+  const dfs = (id) => {
+    state[id] = 1;
+    for (const e of outMap[id] || []) {
+      const t = e.target;
+      if (state[t] === 1) feedback.add(e.id);
+      else if (!state[t]) dfs(t);
+    }
+    state[id] = 2;
+  };
+  for (const r of roots) {
+    if (!state[r]) dfs(r);
+  }
+  return feedback;
+}
+
+/**
  * Sort nodes in topological happy-path order.
  * ELK's Sugiyama respects input order for layer assignment (model order).
  */

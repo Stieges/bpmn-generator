@@ -5,6 +5,7 @@
     "add",
     "adjust",
     "advise",
+    "align",
     "apply",
     "approve",
     "archive",
@@ -33,9 +34,11 @@
     "discuss",
     "download",
     "enable",
+    "engage",
     "ensure",
     "enter",
     "escalate",
+    "establish",
     "evaluate",
     "export",
     "fetch",
@@ -64,6 +67,7 @@
     "obtain",
     "open",
     "paste",
+    "pick",
     "place",
     "populate",
     "post",
@@ -81,6 +85,7 @@
     "redirect",
     "reject",
     "release",
+    "remediate",
     "remove",
     "request",
     "respond",
@@ -114,14 +119,17 @@
     "wait"
   ],
   "englishVerbPhrases": [
-    "stand up",
-    "stand down",
+    "cross check",
     "hand off",
     "hand over",
     "kick off",
+    "pick up",
+    "pre approve",
     "pre qualify",
     "pre screen",
-    "pre approve"
+    "stand down",
+    "stand up",
+    "tie out"
   ],
   "profile": "extra"
 }
