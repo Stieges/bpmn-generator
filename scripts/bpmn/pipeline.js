@@ -320,7 +320,10 @@ async function runPipeline(logicCore, opts = {}) {
     const { moved, seeded } = alignSameLaneChains(coordMap, lc);
     if (moved.length || seeded.length) {
       // Rebuild any sequence flow still missing after invalidate+seed (cross-lane / back-edges).
-      const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id));
+      // Both ends need a shape: a collapsed subprocess's child flows are in allEdges (flattened)
+      // but its children are not drawn, so they have no coords and no route to rebuild.
+      const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id)
+        && coordMap.coords[e.source] && coordMap.coords[e.target]);
       if (need.length) {
         const rebuilt = simplifyAllEdges(
           Object.fromEntries(need.map((e) => [e.id, [
@@ -343,7 +346,10 @@ async function runPipeline(logicCore, opts = {}) {
     const beforeJoin = coordMap.edgeCoords;
     const { moved: joinMoved } = alignMultiInJoins(coordMap, lc);
     if (joinMoved.length) {
-      const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id));
+      // Both ends need a shape: a collapsed subprocess's child flows are in allEdges (flattened)
+      // but its children are not drawn, so they have no coords and no route to rebuild.
+      const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id)
+        && coordMap.coords[e.source] && coordMap.coords[e.target]);
       if (need.length) {
         const rebuilt = simplifyAllEdges(
           Object.fromEntries(need.map((e) => [e.id, [
