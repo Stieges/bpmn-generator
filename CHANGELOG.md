@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   excluded from the ELK layered graph (`layout.excludeFeedbackEdgesFromElk`,
   default on) so GREEDY_MODEL_ORDER cannot park the decision gateway before
   its predecessors; bend-rule still routes those edges as back-edges.
+- **Fan-out column align ignores feedback outs.** §5.0d no longer snaps
+  re-circulate / more-feedback targets (and their auto-join successors) onto
+  the Yes-path x-column when a gateway has 3+ exits.
 - **Multi-in joins sit beside the mid-rank branch.** A converging exclusive gateway with
   2+ incomings and one forward out snaps its centerline to the median of its incoming
   sources (refined to the successor when that successor is already near the median), so

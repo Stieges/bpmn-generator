@@ -62,6 +62,8 @@ describe('SME circulate loop layout', () => {
     expect(result.validation.errors).toEqual([]);
     expect(result.coordMap?.coords?.T25).toBeTruthy();
     expect(result.coordMap?.coords?.GW).toBeTruthy();
+    const t21 = result.coordMap.coords.T21;
+    const t24 = result.coordMap.coords.T24;
     const t25 = result.coordMap.coords.T25;
     const gw = result.coordMap.coords.GW;
     const t26 = result.coordMap.coords.T26;
@@ -69,5 +71,8 @@ describe('SME circulate loop layout', () => {
     expect(gw.x).toBeGreaterThan(t25.x - 1);
     // Yes path continues rightward.
     expect(t26.x).toBeGreaterThan(gw.x - 1);
+    // Fan-out align must not park Circulate / Collect under the Yes column.
+    expect(t21.x).toBeLessThan(t25.x);
+    expect(t24.x).toBeLessThan(t25.x + 1);
   }, 60000);
 });
