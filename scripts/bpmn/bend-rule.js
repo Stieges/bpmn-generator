@@ -45,15 +45,17 @@
  * Choice: greedy in edge order, every edge seeing the routes already changed. A route is replaced
  * only by one with fewer bends, or as many bends and a lower side penalty (an activity/event target
  * not entered from the left +1, an activity/event source not left to the right +1; a back-edge into
- * a gateway entered from the left +1). When the current route has a side penalty, Pass B/C may spend
- * up to bendRuleLimits.sideBendBudget (+ backEdgeBendBudget on back-edges) extra bends to clear it
- * (Miragon flow-connection-side prefers left-in / right-out on activities). Before Pass B, a route
- * that still enters an activity/event other than from the left and leaves vertically gets one more
- * candidate shape the search never builds: a 3-bend staircase — same first leg, a corridor, a drop
- * beside the target, in from the left — under the strict guards. Ties: crossings, moved
- * endpoints, length, corridor nearest the middle. The pass repeats until a full sweep changes
- * nothing; a repeated route fingerprint or maxSweeps cap stops Pass B/C from oscillating with Pass A
- * (e.g. top-entry L ↔ left-entry Z around a gateway node label). Idempotent once stable.
+ * a gateway entered from the left +1; a back-edge leaving a gateway other than top/bottom +1). When
+ * the current route has a side penalty, Pass B/C may spend up to bendRuleLimits.sideBendBudget
+ * (+ backEdgeBendBudget on back-edges) extra bends to clear it (Miragon flow-connection-side prefers
+ * left-in / right-out on activities; returning gateway exits prefer top/bottom tips — not right or
+ * left). Before Pass B, a route that still enters an activity/event other than from the left and
+ * leaves vertically gets one more candidate shape the search never builds: a 3-bend staircase —
+ * same first leg, a corridor, a drop beside the target, in from the left — under the strict guards.
+ * Ties: crossings, moved endpoints, length, corridor nearest the middle. The pass repeats until a
+ * full sweep changes nothing; a repeated route fingerprint or maxSweeps cap stops Pass B/C from
+ * oscillating with Pass A (e.g. top-entry L ↔ left-entry Z around a gateway node label). Idempotent
+ * once stable.
  *
  * Where it runs (pipeline.js): after every pass that moves a shape or a route — lane compaction, its
  * re-route and the stuck-end pass — so it judges final geometry; before edge-label repair and
@@ -89,6 +91,11 @@ const DEFAULT_LIMITS = Object.freeze({
   sideBendBudget: 4,
   /** Extra bends on top of sideBendBudget for back-edges (source right of target). */
   backEdgeBendBudget: 6,
+  /**
+   * Extra crossings allowed over the current route when repairing a gateway back-edge
+   * to a vertical tip (left-exit U-turns often under-count crossings vs a clear below/above run).
+   */
+  backEdgeCrossingSlack: 8,
 });
 
 /**
@@ -536,6 +543,10 @@ function clampCorridorY(y, env, inset) {
 
 /** Activities and events have a flow direction; gateways may be entered and left at any vertex. */
 const hasFlowDirection = (ctx, id) => !isGateway(ctx.typeOf[id]);
+/** Source centre is to the right of the target — a returning / rework edge. */
+function isBackEdge(sb, tb, eps = 10) {
+  return !!sb && !!tb && (sb.x + sb.w / 2) > (tb.x + tb.w / 2) + eps;
+}
 /** Auto-join diamonds read as flow-through — prefer the same left-in habit as activities. */
 const isAutoJoin = (id) => /^gw_join_/i.test(id || '');
 /**
@@ -582,14 +593,17 @@ function preferredRightOutId(sourceId, entries, coords, typeOf = null) {
   const sb = coords[sourceId];
   const cy = sb.y + sb.h / 2;
   // Closest vertical alignment (happy-path horizontal), then prefer a non-gateway target
-  // (task on the right tip; skip/default branch yields to top/bottom), then fewer bends.
+  // (task on the right tip; skip/default branch yields to top/bottom), never a back-edge
+  // (returning exits belong on top/bottom), then fewer bends.
   return [...outs].sort((a, b) => {
     const ta = coords[a.target], tb = coords[b.target];
     const da = Math.abs((ta.y + ta.h / 2) - cy);
     const db = Math.abs((tb.y + tb.h / 2) - cy);
     const ga = typeOf && isGateway(typeOf[a.target]) ? 1 : 0;
     const gb = typeOf && isGateway(typeOf[b.target]) ? 1 : 0;
-    return da - db || ga - gb || bendCount(a.points) - bendCount(b.points);
+    const ba = isBackEdge(sb, ta) ? 1 : 0;
+    const bb = isBackEdge(sb, tb) ? 1 : 0;
+    return da - db || ba - bb || ga - gb || bendCount(a.points) - bendCount(b.points);
   })[0].id;
 }
 /** True when another edge is the preferred owner of the cardinal (this one should yield). */
@@ -649,8 +663,13 @@ function sidePenalty(pts, entry, ctx, entries = []) {
   // Miragon: a back-edge into a gateway should not enter from the left (mirrors incoming).
   // Counted here so Pass A/B/C share one potential and Pass C cannot oscillate on gateway-only flips.
   const sb = ctx.coords[entry.source], tb = ctx.coords[entry.target];
+  const backEdge = isBackEdge(sb, tb);
+  // Returning from a gateway: leave top/bottom — never right (happy path) or left (wrong way).
+  if (sb && tb && backEdge && isGateway(ctx.typeOf[entry.source])) {
+    const ex = exitSide(pts);
+    if (ex !== 'top' && ex !== 'bottom') p++;
+  }
   if (sb && tb && isGateway(ctx.typeOf[entry.target])) {
-    const backEdge = (sb.x + sb.w / 2) > (tb.x + tb.w / 2) + 10;
     if (backEdge && entrySide(pts) === 'left') p++;
     // Multi-in: need ≥1 left-in; further top/bottom ins are OK — but a *second*
     // left-in (earlier sibling already owns left) is not (shared vertex).
@@ -660,15 +679,18 @@ function sidePenalty(pts, entry, ctx, entries = []) {
     }
   }
   // Multi-out gateway: need ≥1 right-out; a second right-out shares the vertex.
-  if (sb && isGateway(ctx.typeOf[entry.source]) && outgoingCount(entry.source, entries) > 1) {
+  // Back-edges never keep the right tip — they belong on top/bottom (penalty above).
+  if (sb && isGateway(ctx.typeOf[entry.source]) && outgoingCount(entry.source, entries) > 1
+    && !(backEdge && isGateway(ctx.typeOf[entry.source]))) {
     if (exitSide(pts) !== 'right' && !gatewayHasRightOut(entry.source, entries, entry.id, pts)) p++;
     else if (exitSide(pts) === 'right'
       && siblingOwnsRight(entry.source, entries, entry.id, ctx.coords, ctx.typeOf)) p++;
-    // Yielded vertical exit into a gateway must re-enter on the same tip (top↔top / bottom↔bottom).
-    if (tb && isGateway(ctx.typeOf[entry.target])) {
-      const ex = exitSide(pts), enSide = entrySide(pts);
-      if ((ex === 'top' || ex === 'bottom') && enSide !== ex) p++;
-    }
+  }
+  // Yielded / returning vertical exit into a gateway must re-enter on the same tip
+  // (top↔top / bottom↔bottom).
+  if (sb && tb && isGateway(ctx.typeOf[entry.source]) && isGateway(ctx.typeOf[entry.target])) {
+    const ex = exitSide(pts), enSide = entrySide(pts);
+    if ((ex === 'top' || ex === 'bottom') && enSide !== ex) p++;
   }
   if (gatewaySameSideInOut(entry.target, entries, entry.id, pts, ctx)) p++;
   if (gatewaySameSideInOut(entry.source, entries, entry.id, pts, ctx)) p++;
@@ -766,7 +788,8 @@ function makeChecker(entry, entries, ctx, cfg) {
     if (guards.region && !insideRegion(pts, region, limits.regionInset)) return false;
     for (const s of S) for (const o of obstacles) if (!segmentClearOfBox(s, o, limits.shapeClearance)) return false;
     if (laneLineHug(pts, lines, limits.laneLineHugPx) > cur.hug + EPS) return false;
-    if (crossings(entry, pts, entries) > cur.cross) return false;
+    if (guards.crossings !== false
+      && crossings(entry, pts, entries) > cur.cross + (limits.crossingSlack ?? 0)) return false;
     if (collinearOverlap(entry, pts, entries, limits.collinearPx) > cur.over + EPS) return false;
     if (guards.crowding && crowdPairs(entry, pts, entries, limits.crowdingPx) > cur.crowd) return false;
     if (guards.sideConflicts && sideConflicts(entry, pts, entries) > cur.side) return false;
@@ -935,7 +958,7 @@ export function applyBendRule(coordMap, lc, opts = {}) {
       // target) get backEdgeBendBudget on top — reject/rework loops need the detour.
       const penaltyNow = sidePenalty(en.points, en, ctx, entries);
       const sb = ctx.coords[en.source], tb = ctx.coords[en.target];
-      const backEdge = sb && tb && (sb.x + sb.w / 2) > (tb.x + tb.w / 2) + 10;
+      const backEdge = isBackEdge(sb, tb);
       const env = envelopeFor(en, ctx);
       const inset = cfg.limits.regionInset;
       // Staircase into the left side: keep the current first leg, run along a corridor, drop
@@ -1011,43 +1034,65 @@ export function applyBendRule(coordMap, lc, opts = {}) {
       const multiOut = srcIsGw && outgoingCount(en.source, entries) > 1;
       const sibOwnsLeft = multiIn && entrySide(en.points) === 'left'
         && siblingOwnsLeft(en.target, entries, en.id, ctx.coords);
-      const sibOwnsRight = multiOut && exitSide(en.points) === 'right'
+      // Preferred sibling already owns the right tip — whether we are on it or not.
+      const rightOwnedBySibling = multiOut
         && siblingOwnsRight(en.source, entries, en.id, ctx.coords, ctx.typeOf);
+      // This edge currently shares the right tip with that preferred sibling.
+      const sibOwnsRight = rightOwnedBySibling && exitSide(en.points) === 'right';
       const srcNeedsRight = (hasFlowDirection(ctx, en.source)
-        || (multiOut && !gatewayHasRightOut(en.source, entries, en.id, en.points)))
+        || (multiOut && !backEdge && !gatewayHasRightOut(en.source, entries, en.id, en.points)))
         && exitSide(en.points) !== 'right';
       const tgtNeedsLeft = (hasFlowDirection(ctx, en.target)
         || (!backEdge && multiIn && !gatewayHasLeftIn(en.target, entries, en.id, en.points)))
         && entrySide(en.points) !== 'left';
       // Back-edge into a gateway: prefer right-in, but not when the join already exits
-      // right (in+out on the same vertex) — then top/bottom in.
+      // right (in+out on the same vertex) — then top/bottom in. Returning *from* a
+      // gateway always uses vertical tips instead (gwBackVertical below).
       const joinRightTakenByOut = tgtIsGw && entries.some((o) =>
         o.id !== en.id && o.source === en.target && exitSide(o.points) === 'right');
-      const enterFromRight = backEdge && tgtIsGw && !joinRightTakenByOut;
+      const curExitSide = exitSide(en.points);
+      // Returning from a gateway: leave top/bottom, never right or left.
+      const gwBackVertical = backEdge && srcIsGw
+        && (curExitSide !== 'top' && curExitSide !== 'bottom');
       // Second multi-in on a left already taken → dock top/bottom (not another left).
       // Yielding a shared right-out into a gateway: exit top/bottom and re-enter on the
       // same tip (top↔top / bottom↔bottom) — not left. Also repair an existing vertical
       // tip mismatch (exit top but enter bottom) even after the right tip is already free.
       const joinLeftTaken = multiIn && gatewayHasLeftIn(en.target, entries, en.id, en.points)
         && entrySide(en.points) !== 'left';
-      const curExitSide = exitSide(en.points);
-      const tipMismatchRepair = multiOut && tgtIsGw
+      const tipMismatchRepair = (multiOut || (backEdge && srcIsGw)) && tgtIsGw
         && (curExitSide === 'top' || curExitSide === 'bottom')
         && entrySide(en.points) !== curExitSide;
-      const matchVerticalTips = (sibOwnsRight && tgtIsGw) || tipMismatchRepair;
-      const enterFromTopBottom = (!enterFromRight && (
-        sibOwnsLeft
-        || matchVerticalTips
-        || (sibOwnsRight && joinLeftTaken)
-      )) || (backEdge && tgtIsGw && joinRightTakenByOut);
+      const matchVerticalTips = ((rightOwnedBySibling || gwBackVertical) && tgtIsGw)
+        || tipMismatchRepair;
+      // Activity/event needs right-out into a multi-in join whose left tip is already
+      // taken → keep Miragon right-out and dock a free top/bottom tip.
+      const activityRightIntoBusyJoin = srcNeedsRight && tgtIsGw && multiIn
+        && gatewayHasLeftIn(en.target, entries, en.id, en.points);
+      const enterFromTopBottom = gwBackVertical || tipMismatchRepair || activityRightIntoBusyJoin
+        || (!gwBackVertical && (
+          (backEdge && tgtIsGw && joinRightTakenByOut)
+          || sibOwnsLeft
+          || matchVerticalTips
+          || (rightOwnedBySibling && joinLeftTaken)
+        ));
+      // Right-in only when we are not forcing a vertical return exit.
+      const enterFromRight = backEdge && tgtIsGw && !joinRightTakenByOut && !enterFromTopBottom;
       const gwNeedsNonLeft = enterFromRight && entrySide(en.points) === 'left';
       const sameSideIO = gatewaySameSideInOut(en.source, entries, en.id, en.points, ctx)
         || gatewaySameSideInOut(en.target, entries, en.id, en.points, ctx);
       const escapes = escapesEnvelope(en.points, env, inset);
+      // Yield only when we still sit on the shared right tip, return horizontally,
+      // or need a gateway↔gateway vertical tip — not when we already left top/bottom
+      // toward an activity (staircase / Pass B left-entry).
+      const needsVerticalYield = gwBackVertical || tipMismatchRepair
+        || (rightOwnedBySibling && (tgtIsGw || curExitSide === 'right' || curExitSide === 'left'));
       if (penaltyAfter <= 0 && !srcNeedsRight && !tgtNeedsLeft && !gwNeedsNonLeft
-        && !sibOwnsLeft && !sibOwnsRight && !tipMismatchRepair && !sameSideIO && !escapes) continue;
+        && !sibOwnsLeft && !sibOwnsRight && !needsVerticalYield
+        && !sameSideIO && !escapes) continue;
       if (!sb || !tb) continue;
-      const cardinalRepair = sibOwnsLeft || sibOwnsRight || tipMismatchRepair
+      const cardinalRepair = sibOwnsLeft || sibOwnsRight || needsVerticalYield
+        || activityRightIntoBusyJoin
         || (srcNeedsRight && enterFromTopBottom);
       const cfgLoose = {
         ...cfg,
@@ -1068,7 +1113,17 @@ export function applyBendRule(coordMap, lc, opts = {}) {
           } : {}),
         },
         limits: cardinalRepair
-          ? { ...cfg.limits, shapeClearance: Math.min(cfg.limits.shapeClearance ?? 8, 2) }
+          ? {
+            ...cfg.limits,
+            shapeClearance: Math.min(cfg.limits.shapeClearance ?? 8, 2),
+            // Left-exit back-edges / busy-join right-outs under-count crossings vs a
+            // clear above/below U-turn.
+            crossingSlack: Math.max(
+              cfg.limits.crossingSlack ?? 0,
+              (gwBackVertical || matchVerticalTips || activityRightIntoBusyJoin)
+                ? (cfg.limits.backEdgeCrossingSlack ?? 0) : 0,
+            ),
+          }
           : cfg.limits,
       };
       const { check } = makeChecker(en, entries, ctx, cfgLoose);
@@ -1099,10 +1154,18 @@ export function applyBendRule(coordMap, lc, opts = {}) {
             }
           }
         }
-      } else if (sibOwnsRight || tipMismatchRepair) {
-        // Second multi-out (or tip-mismatch repair): leave top/bottom — keep the sibling's
-        // right free. Prefer the current vertical tip when repairing a mismatch.
-        const prefer = tipMismatchRepair ? curExitSide : null;
+      } else if (sibOwnsRight || tipMismatchRepair || gwBackVertical
+        || (rightOwnedBySibling && tgtIsGw)) {
+        // Yield right tip / returning gateway exit: leave top/bottom. Prefer the tip
+        // opposite a join out already on top/bottom; else keep a mismatch tip; else top first.
+        const joinOutSides = new Set(
+          entries.filter((o) => o.id !== en.id && o.source === en.target)
+            .map((o) => exitSide(o.points))
+            .filter((s) => s === 'top' || s === 'bottom'),
+        );
+        let prefer = tipMismatchRepair ? curExitSide : null;
+        if (!prefer && joinOutSides.has('top') && !joinOutSides.has('bottom')) prefer = 'bottom';
+        if (!prefer && joinOutSides.has('bottom') && !joinOutSides.has('top')) prefer = 'top';
         for (const s of (prefer === 'bottom' ? ['bottom', 'top'] : ['top', 'bottom'])) {
           sPorts.push({ p: sideMidpoint(sb, s), out: OUTWARD[s] });
         }
@@ -1116,15 +1179,27 @@ export function applyBendRule(coordMap, lc, opts = {}) {
       }
       // When matching vertical tips, pair each exit with the same-side entry only
       // (top→top / bottom→bottom) — never cross (top→bottom).
+      const verticalIns = () => {
+        const tips = [
+          { side: 'top', p: { x: tb.x + tb.w / 2, y: tb.y }, in: INWARD.top },
+          { side: 'bottom', p: { x: tb.x + tb.w / 2, y: tb.y + tb.h }, in: INWARD.bottom },
+        ];
+        // Prefer a tip no sibling already owns (busy multi-in join).
+        if (activityRightIntoBusyJoin || joinLeftTaken) {
+          tips.sort((a, b) => {
+            const oa = siblingOwnsEntrySide(en.target, entries, en.id, a.side) ? 1 : 0;
+            const ob = siblingOwnsEntrySide(en.target, entries, en.id, b.side) ? 1 : 0;
+            return oa - ob;
+          });
+        }
+        return tips.map(({ p, in: inn }) => ({ p, in: inn }));
+      };
       const tIns = enterFromRight
         ? [{ p: { x: tb.x + tb.w, y: tb.y + tb.h / 2 }, in: INWARD.right }]
         : enterFromTopBottom
           ? matchVerticalTips
             ? null // filled per sPort below
-            : [
-              { p: { x: tb.x + tb.w / 2, y: tb.y }, in: INWARD.top },
-              { p: { x: tb.x + tb.w / 2, y: tb.y + tb.h }, in: INWARD.bottom },
-            ]
+            : verticalIns()
           : [{ p: { x: tb.x, y: tb.y + tb.h / 2 }, in: INWARD.left }];
       const tInsForOut = (out) => {
         if (tIns) return tIns;
@@ -1276,7 +1351,7 @@ export function applyBendRule(coordMap, lc, opts = {}) {
         // Strict side improvement, or equal side when repairing envelope / same-side IO / shared cardinal.
         if (pen > penaltyAfter) continue;
         if (pen === penaltyAfter && !escapes && !sameSideIO && !sibOwnsLeft && !sibOwnsRight
-          && !tipMismatchRepair) continue;
+          && !needsVerticalYield && !activityRightIntoBusyJoin && !srcNeedsRight) continue;
         if (b - curBendsC > budgetC) continue;
         // Hard: matched vertical tips never cross (top→bottom). Compare tip *sides*
         // (not travel dirs — leave-up / enter-down both use the top tip).

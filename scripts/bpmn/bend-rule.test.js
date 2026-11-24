@@ -779,6 +779,113 @@ describe('applyBendRule — side bend budget (Miragon activity left/right)', () 
     expect(entrySide(out.eNo)).toBe('top');
   });
 
+  test('activity into busy multi-in join: right-out + free vertical tip (not bottom-out)', () => {
+    // Multi-in join: left tip taken by path A, top by path B — a third activity
+    // must still leave right and dock a free tip (not bottom-out).
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'doc', type: 'userTask', name: 'Collect papers', lane: 'L1' },
+        { id: 'blank', type: 'userTask', name: 'Start draft', lane: 'L1' },
+        { id: 'narrate', type: 'userTask', name: 'Write summary', lane: 'L1' },
+        { id: 'join', type: 'exclusiveGateway', name: 'Merge', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Analyst' }],
+      edges: [
+        { id: 'eDoc', source: 'doc', target: 'join' },
+        { id: 'eBlank', source: 'blank', target: 'join' },
+        { id: 'eNarr', source: 'narrate', target: 'join' },
+      ],
+    };
+    const cm = {
+      coords: {
+        doc: { x: 1836, y: 941, w: 100, h: 80 },
+        blank: { x: 1756, y: 521, w: 100, h: 80 },
+        narrate: { x: 1756, y: 661, w: 100, h: 80 },
+        join: { x: 1996, y: 956, w: 50, h: 50 },
+      },
+      laneCoords: { L1: { x: 1600, y: 480, w: 600, h: 600 } },
+      edgeCoords: {
+        eDoc: [P(1936, 981), P(1996, 981)],
+        eBlank: [P(1856, 561), P(2021, 561), P(2021, 956)],
+        // Broken: bottom-out from the activity.
+        eNarr: [P(1806, 741), P(1806, 849), P(2021, 849), P(2021, 956)],
+      },
+    };
+    expect(exitSide(cm.edgeCoords.eNarr)).toBe('bottom');
+    expect(entrySide(cm.edgeCoords.eDoc)).toBe('left');
+    expect(entrySide(cm.edgeCoords.eBlank)).toBe('top');
+    const out = applyBendRule(cm, lc, {
+      limits: { sideBendBudget: 6, backEdgeBendBudget: 6, backEdgeCrossingSlack: 8 },
+    });
+    expect(exitSide(out.eNarr)).toBe('right');
+    // Free tip when path A keeps left — top/bottom (or right if join layout allows).
+    if (entrySide(out.eDoc) === 'left') {
+      expect(entrySide(out.eNarr)).not.toBe('left');
+    }
+    expect(['top', 'bottom', 'right']).toContain(entrySide(out.eNarr));
+  });
+
+  test('gateway back-edge: exit top/bottom (not left/right), same-tip re-entry on join', () => {
+    // Decision → rework join: returning branch must leave a vertical tip, not right
+    // (happy path) or left (wrong way). Join already exits top → prefer bottom↔bottom.
+    const lc = {
+      id: 'P',
+      nodes: [
+        { id: 'join', type: 'exclusiveGateway', name: 'Merge', lane: 'L1' },
+        { id: 'run', type: 'userTask', name: 'Run checks', lane: 'L1' },
+        { id: 'card', type: 'userTask', name: 'Write card', lane: 'L1' },
+        { id: 'fid', type: 'exclusiveGateway', name: 'Ready?', lane: 'L1' },
+        { id: 'open', type: 'userTask', name: 'Open request', lane: 'L1' },
+      ],
+      lanes: [{ id: 'L1', name: 'Analyst' }],
+      edges: [
+        { id: 'eIn', source: 'run', target: 'join' },
+        { id: 'eFwd', source: 'join', target: 'card' },
+        { id: 'eToFid', source: 'card', target: 'fid' },
+        { id: 'eYes', source: 'fid', target: 'open', label: 'Yes' },
+        { id: 'eNo', source: 'fid', target: 'join', label: 'No', isDefault: true },
+      ],
+    };
+    const cm = {
+      coords: {
+        join: { x: 2906, y: 675.5, w: 50, h: 50 },
+        run: { x: 2700, y: 660.5, w: 100, h: 80 },
+        card: { x: 3200, y: 660.5, w: 100, h: 80 },
+        fid: { x: 3816, y: 675.5, w: 50, h: 50 },
+        open: { x: 4046, y: 660.5, w: 100, h: 80 },
+      },
+      laneCoords: { L1: { x: 2600, y: 600, w: 1800, h: 220 } },
+      edgeCoords: {
+        eIn: [P(2800, 700.5), P(2906, 700.5)],
+        // Join already uses the top tip for its forward out.
+        eFwd: [P(2931, 675.5), P(2931, 620.5), P(3200, 620.5), P(3200, 700.5)],
+        eToFid: [P(3300, 700.5), P(3816, 700.5)],
+        eYes: [P(3866, 700.5), P(4046, 700.5)],
+        // Broken: left-out from decision, left-in on the join (travel right into left tip).
+        eNo: [
+          P(3816, 700.5), P(3706, 700.5), P(3706, 788), P(2800, 788),
+          P(2800, 700.5), P(2906, 700.5),
+        ],
+      },
+    };
+    expect(exitSide(cm.edgeCoords.eNo)).toBe('left');
+    expect(entrySide(cm.edgeCoords.eNo)).toBe('left');
+    expect(exitSide(cm.edgeCoords.eFwd)).toBe('top');
+    const out = applyBendRule(cm, lc, {
+      limits: { sideBendBudget: 6, backEdgeBendBudget: 6, backEdgeCrossingSlack: 8 },
+    });
+    expect(exitSide(out.eYes)).toBe('right');
+    const noExit = exitSide(out.eNo);
+    expect(['top', 'bottom']).toContain(noExit);
+    expect(entrySide(out.eNo)).toBe(noExit);
+    // Do not share a tip with the join's existing vertical out.
+    const fwdExit = exitSide(out.eFwd);
+    if (fwdExit === 'top' || fwdExit === 'bottom') {
+      expect(noExit).not.toBe(fwdExit);
+    }
+  });
+
   test('back-edge from activity: right-out + top-in when join already exits right', () => {
     // Miragon: activity must exit right. Join already uses right-out to T2 — do not put
     // in+out on the same vertex; enter top/bottom instead.

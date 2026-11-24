@@ -233,7 +233,8 @@
       "collinearPx": 4,
       "portCornerMarginPx": 20,
       "sideBendBudget": 4,
-      "backEdgeBendBudget": 6
+      "backEdgeBendBudget": 6,
+      "backEdgeCrossingSlack": 8
     }
   },
   "elk": {

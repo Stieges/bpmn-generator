@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Activity into a busy multi-in join keeps right-out.** When the join's left tip
+  is already taken, Pass C docks a free top/bottom tip instead of leaving the
+  activity through the bottom.
+- **Returning gateway exits use top/bottom tips.** A back-edge leaving a gateway (source
+  right of target) no longer keeps a left or right dock — Pass C forces a vertical tip and
+  same-tip re-entry on the join (`top↔top` / `bottom↔bottom`), preferring the tip opposite an
+  existing join out. `sidePenalty` counts a non-vertical gateway back-exit; `backEdgeCrossingSlack`
+  lets the U-turn compete with under-counted left-exit routes on busy charts.
+
 ## [4.0.0-rc.3] - 2026-11-11
 
 Third release candidate. The bend rule enters more activities and events from the left
