@@ -975,19 +975,44 @@ export function applyBendRule(coordMap, lc, opts = {}) {
         const xT = tb.x - 2 * cfg.stubPx;
         const budget = (cfg.limits.sideBendBudget ?? 0)
           + (backEdge ? (cfg.limits.backEdgeBendBudget ?? 0) : 0);
+        const { check } = makeChecker(en, entries, ctx, cfg);               // strict guards
+        const stair = [];
+        // Vertical first leg → corridor Y then drop beside target, left-in (3 bends).
         if (Math.abs(out[0]) < EPS && xT > a.x + cfg.stubPx && 3 <= curBends + budget) {
           const ys = new Set();
           if (P.length >= 3 && Math.abs(P[1].y - P[2].y) < EPS) ys.add(P[1].y); // current corridor
           ys.add((Math.max(a.y, sb.y + sb.h) + tb.y) / 2);                     // gap, target below
           ys.add((Math.min(a.y, sb.y) + tb.y + tb.h) / 2);                     // gap, target above
-          const { check } = makeChecker(en, entries, ctx, cfg);               // strict guards
-          const stair = [];
           for (const y of ys) {
             const pts = withoutCollinear([a, { x: a.x, y }, { x: xT, y }, { x: xT, y: tIn.y }, tIn]);
             if (bendCount(pts) === 3 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
           }
+        }
+        // Horizontal first leg (cross-lane handoff) → keep outbound X corridor, drop to
+        // target cy beside the left face, left-in (2 bends). Without this, Miragon keeps
+        // top-entry when the source sits in a higher lane (BPM0000 T09→T10).
+        if (Math.abs(out[1]) < EPS && xT > a.x + cfg.stubPx && 2 <= curBends + budget) {
+          const xs = new Set([xT]);
+          if (P.length >= 2) xs.add(Math.max(a.x + cfg.stubPx, Math.min(xT, P[1].x)));
+          for (const x of xs) {
+            const pts = withoutCollinear([a, { x, y: a.y }, { x, y: tIn.y }, tIn]);
+            const b = bendCount(pts);
+            if ((b === 2 || b === 3) && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
+          }
+          // Right-side detour when the direct left-face column crosses a long
+          // same-band horizontal (Blank-draft e05 under Catala T09→T10): go past
+          // the target, drop, run left to the left-face stub, then left-in.
+          const xR = tb.x + tb.w + 2 * cfg.stubPx;
+          if (xR > a.x + cfg.stubPx && 3 <= curBends + budget) {
+            const pts = withoutCollinear([
+              a, { x: xR, y: a.y }, { x: xR, y: tIn.y }, { x: xT, y: tIn.y }, tIn,
+            ]);
+            if (bendCount(pts) === 3 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
+          }
+        }
+        if (stair.length) {
           stair.sort((x, y) => lexCompare(x.score, y.score));
-          if (stair.length && stair[0].score[0] < penaltyNow && !ptsEqual(stair[0].pts, en.points)) {
+          if (stair[0].score[0] < penaltyNow && !ptsEqual(stair[0].pts, en.points)) {
             en.points = stair[0].pts;
             changed.set(en.id, stair[0].pts);
             progress = true;

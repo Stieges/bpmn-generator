@@ -229,14 +229,14 @@
       "lengthSlackPx": 20,
       "laneLineHugPx": 3,
       "crowdingPx": 10,
-      "corridorReachPx": 120,
+      "corridorReachPx": 480,
       "corridorStepPx": 5,
       "messageFlowLinePx": 3,
       "collinearPx": 4,
       "portCornerMarginPx": 20,
-      "sideBendBudget": 4,
-      "backEdgeBendBudget": 6,
-      "backEdgeCrossingSlack": 8
+      "sideBendBudget": 6,
+      "backEdgeBendBudget": 12,
+      "backEdgeCrossingSlack": 0
     }
   },
   "elk": {

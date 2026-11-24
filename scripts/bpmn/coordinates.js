@@ -1382,6 +1382,8 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
       (outgoing[e.source] ||= []).push(e);
     }
 
+    const feedback = identifyFeedbackEdges(proc.nodes || [], edges);
+
     for (const node of procNodes) {
       if (!isGateway(node.type)) continue;
       const ins = (incoming[node.id] || []).filter((e) => coords[e.source]);
@@ -1389,7 +1391,12 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
       if (ins.length < minIn || outs.length !== 1) continue;
 
       const join = coords[node.id];
-      const cys = ins.map((e) => {
+      // Ignore DFS feedback / rework incomings for the mid-rank cy — otherwise a
+      // loop XOR on another lane pulls the auto-join off the forward spine and
+      // the T20→join→T21 edges go diagonal (Miragon flow-orthogonal).
+      const forwardIns = ins.filter((e) => !feedback.has(e.id));
+      const cySources = forwardIns.length ? forwardIns : ins;
+      const cys = cySources.map((e) => {
         const b = coords[e.source];
         return b.y + b.h / 2;
       }).sort((a, b) => a - b);
@@ -1398,13 +1405,16 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
         : (cys[cys.length / 2 - 1] + cys[cys.length / 2]) / 2;
 
       // Prefer the unique forward out when it already lies on the mid-rank spine.
+      // Auto-joins (gw_join_*) always snap to the successor — they exist only to
+      // fan into that activity.
       const outEdge = outs[0];
       const outBox = coords[outEdge.target];
       const joinCx = join.x + join.w / 2;
       const outCx = outBox.x + outBox.w / 2;
+      const autoJoin = /^gw_join_/i.test(node.id || '');
       if (outCx > joinCx + forwardEps) {
         const outCy = outBox.y + outBox.h / 2;
-        if (Math.abs(outCy - targetCy) <= outSnapPx) targetCy = outCy;
+        if (autoJoin || Math.abs(outCy - targetCy) <= outSnapPx) targetCy = outCy;
       }
 
       const joinCy = join.y + join.h / 2;
