@@ -1184,12 +1184,13 @@ export function applyBendRule(coordMap, lc, opts = {}) {
           { side: 'top', p: { x: tb.x + tb.w / 2, y: tb.y }, in: INWARD.top },
           { side: 'bottom', p: { x: tb.x + tb.w / 2, y: tb.y + tb.h }, in: INWARD.bottom },
         ];
-        // Prefer a tip no sibling already owns (busy multi-in join).
+        // Busy multi-in join: prefer docking with an existing vertical in (share the
+        // corridor) over opening a new tip on the opposite side.
         if (activityRightIntoBusyJoin || joinLeftTaken) {
           tips.sort((a, b) => {
             const oa = siblingOwnsEntrySide(en.target, entries, en.id, a.side) ? 1 : 0;
             const ob = siblingOwnsEntrySide(en.target, entries, en.id, b.side) ? 1 : 0;
-            return oa - ob;
+            return ob - oa;
           });
         }
         return tips.map(({ p, in: inn }) => ({ p, in: inn }));
@@ -1345,8 +1346,11 @@ export function applyBendRule(coordMap, lc, opts = {}) {
         const enSide = entrySide(pts);
         if (multiOut && exSide && exSide !== 'right'
           && siblingOwnsExitSide(en.source, entries, en.id, exSide)) continue;
+        // Left tip stays exclusive; vertical tips may share when an activity is
+        // forced off left into a busy join (merge with the existing top/bottom in).
         if (multiIn && enSide && enSide !== 'left'
-          && siblingOwnsEntrySide(en.target, entries, en.id, enSide)) continue;
+          && siblingOwnsEntrySide(en.target, entries, en.id, enSide)
+          && !activityRightIntoBusyJoin) continue;
         const b = bendCount(pts);
         // Strict side improvement, or equal side when repairing envelope / same-side IO / shared cardinal.
         if (pen > penaltyAfter) continue;

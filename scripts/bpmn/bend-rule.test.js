@@ -779,9 +779,9 @@ describe('applyBendRule — side bend budget (Miragon activity left/right)', () 
     expect(entrySide(out.eNo)).toBe('top');
   });
 
-  test('activity into busy multi-in join: right-out + free vertical tip (not bottom-out)', () => {
+  test('activity into busy multi-in join: right-out, share existing vertical tip', () => {
     // Multi-in join: left tip taken by path A, top by path B — a third activity
-    // must still leave right and dock a free tip (not bottom-out).
+    // must leave right and preferably share B's top tip (not open a south entry).
     const lc = {
       id: 'P',
       nodes: [
@@ -819,11 +819,8 @@ describe('applyBendRule — side bend budget (Miragon activity left/right)', () 
       limits: { sideBendBudget: 6, backEdgeBendBudget: 6, backEdgeCrossingSlack: 8 },
     });
     expect(exitSide(out.eNarr)).toBe('right');
-    // Free tip when path A keeps left — top/bottom (or right if join layout allows).
-    if (entrySide(out.eDoc) === 'left') {
-      expect(entrySide(out.eNarr)).not.toBe('left');
-    }
-    expect(['top', 'bottom', 'right']).toContain(entrySide(out.eNarr));
+    expect(entrySide(out.eNarr)).toBe('top');
+    expect(entrySide(out.eBlank)).toBe('top');
   });
 
   test('gateway back-edge: exit top/bottom (not left/right), same-tip re-entry on join', () => {
