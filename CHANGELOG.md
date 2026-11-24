@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Lockfile refresh for two high advisories in transitive dependencies of the MCP SDK:
+  `body-parser` 2.3.0 → 2.4.0 (GHSA-27r3-jxmh-p828) and `zod` 4.3.6 → 4.6.7 (GHSA-mrhx-c7xc-m3w5).
+  Also lifts `fast-uri` to 3.1.9 and `hono` to 4.13.21 (moderate). No source change.
+
 ## [4.0.0-rc.2] - 2026-10-12
 
 Second release candidate, published as a GitHub pre-release only (not on npm). It fixes the
