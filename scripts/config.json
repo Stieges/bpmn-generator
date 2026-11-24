@@ -179,6 +179,7 @@
     "elkWrapping": "off",
     "elkWrappingNodeThreshold": 20,
     "happyPathLeveling": false,
+    "excludeFeedbackEdgesFromElk": true,
     "sameLaneChainAlign": true,
     "multiInJoinAlign": true,
     "crossLaneDeconflict": true,

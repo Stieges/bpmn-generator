@@ -85,6 +85,15 @@ Extraction Prompt in `references/prompt-template.md`. These rules always apply:
 - Mark the main success flow with `"isHappyPath": true`; the layout puts it on the horizontal axis
   and branches exceptions off it.
 
+**Feedback / rework loops**
+- Pattern: work → decision XOR → (Yes → continue) | (No / More → earlier step).
+  Auto-join inserts converging diamonds where the loop re-enters (`fake-join`).
+- Mark the **continue** out `"isHappyPath": true`; leave rework outs unmarked
+  (optional `isDefault: true` on the chase branch).
+- Do **not** hand-place the XOR left of Finalize — the pipeline excludes DFS
+  feedback edges from ELK layering so the XOR stays on the rightward spine.
+  If a chart still parks the XOR left, regenerate with this tip (`excludeFeedbackEdgesFromElk`).
+
 **Gateway direction** (OMG §10.5.1)
 - `has_join: true` on a joining gateway → `Converging`; splits become `Diverging`, split+join
   `Mixed` — automatically. Close every split with a join of the **same type** unless the branches

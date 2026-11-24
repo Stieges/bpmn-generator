@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Feedback / rework edges no longer pull the loop XOR left.** DFS back-edges
+  (circulate → finalize → Review closed? → back to Collect / Circulate) are
+  excluded from the ELK layered graph (`layout.excludeFeedbackEdgesFromElk`,
+  default on) so GREEDY_MODEL_ORDER cannot park the decision gateway before
+  its predecessors; bend-rule still routes those edges as back-edges.
 - **Multi-in joins sit beside the mid-rank branch.** A converging exclusive gateway with
   2+ incomings and one forward out snaps its centerline to the median of its incoming
   sources (refined to the successor when that successor is already near the median), so

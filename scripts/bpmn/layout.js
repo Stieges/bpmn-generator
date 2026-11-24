@@ -9,7 +9,7 @@ import { artifactSize } from './coordinates.js';
 import { CFG } from '../shared/utils.js';
 import { boundText } from '../shared/safe-text.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
-import { preprocessLogicCore, assignEdgeIds } from './topology.js';
+import { preprocessLogicCore, assignEdgeIds, identifyFeedbackEdges } from './topology.js';
 
 /**
  * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
@@ -123,6 +123,11 @@ function buildElkEdges(nodes, edges) {
   }
   const known = new Set(nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type)).map(n => n.id));
 
+  // Drop DFS feedback edges from ELK so cycle-breaking cannot park a loop XOR
+  // left of the happy path (config layout.excludeFeedbackEdgesFromElk, default on).
+  const skipFeedback = CFG.layout?.excludeFeedbackEdgesFromElk !== false;
+  const feedback = skipFeedback ? identifyFeedbackEdges(nodes, edges) : new Set();
+
   return edges
     .map(e => {
       const source = hostOf[e.source] || e.source;
@@ -130,6 +135,7 @@ function buildElkEdges(nodes, edges) {
       return source === target ? null : { ...e, source, target };
     })
     .filter(e => e && known.has(e.source) && known.has(e.target))
+    .filter(e => !feedback.has(e.id))
     .map((e, i) => buildElkEdge(e, i));
 }
 
