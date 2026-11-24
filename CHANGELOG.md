@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Feedback / rework edges no longer pull the loop XOR left.** DFS back-edges
+  (circulate → finalize → Review closed? → back to Collect / Circulate) are
+  excluded from the ELK layered graph (`layout.excludeFeedbackEdgesFromElk`,
+  default on) so GREEDY_MODEL_ORDER cannot park the decision gateway before
+  its predecessors; bend-rule still routes those edges as back-edges.
+- **Fan-out column align ignores feedback outs.** §5.0d no longer snaps
+  re-circulate / more-feedback targets (and their auto-join successors) onto
+  the Yes-path x-column when a gateway has 3+ exits.
+- **Multi-in auto-joins keep the forward spine.** Feedback incomings are ignored
+  when leveling `gw_join_*` cy; the join snaps to its successor so T20→join→T21
+  stays horizontal.
+- **Cross-lane handoffs enter from the left.** Bend-rule proposes a 2-bend
+  (or right-side detour) staircase when the first leg is horizontal, so a higher
+  lane does not top-enter the activity below (Miragon flow-connection-side).
+- **Multi-in joins sit beside the mid-rank branch.** A converging exclusive gateway with
+  2+ incomings and one forward out snaps its centerline to the median of its incoming
+  sources (refined to the successor when that successor is already near the median), so
+  the diamond lands just right of the middle activity instead of ELK parking it on the
+  lowest branch. Layout switch: `layout.multiInJoinAlign` (default on).
+- **Activity into a busy multi-in join keeps right-out.** When the join's left tip
+  is already taken, Pass C docks a vertical tip — preferring one another incoming
+  already uses — instead of leaving the activity through the bottom.
+- **Returning gateway exits use top/bottom tips.** A back-edge leaving a gateway (source
+  right of target) no longer keeps a left or right dock — Pass C forces a vertical tip and
+  same-tip re-entry on the join (`top↔top` / `bottom↔bottom`), preferring the tip opposite an
+  existing join out. `sidePenalty` counts a non-vertical gateway back-exit; `backEdgeCrossingSlack`
+  lets the U-turn compete with under-counted left-exit routes on busy charts.
+
+## [4.0.0-rc.3] - 2026-11-11
+
+Third release candidate. The bend rule enters more activities and events from the left
+(a 3-bend staircase), and M01 recognises more English verb-first task names.
+
+### Fixed
+
+- **The bend rule enters more activities and events from the left.** It now also proposes a
+  3-bend staircase — keep the flow's first leg and corridor, drop beside the target, enter it from
+  the left — which neither its 0/1/2-bend search nor its 4-bend U-turns produced. Strict guards,
+  within `layout.bendRuleLimits.sideBendBudget`. Over the committed fixtures it re-routes three
+  flows (`example-urlaubsantrag` f210, `example-onboarding` f510, `boundary-event-shapes` f8);
+  output with `--no-bend-rule` is unchanged. Connection sides are now pinned by tests, including
+  a new cross-lane fixture `tests/fixtures/cross-lane-connection-sides.json`.
+- **M01 recognises more English verb-first labels.** The verb corpus `scripts/bpmn/naming.extra.json`
+  (109 verbs) is now read on every run instead of only under `BPMN_EXTRA_NAMING=1`, and
+  `scripts/bpmn/naming.json` is read for the first time (project additions; empty as shipped).
+  `BPMN_NAMING_JSON=<path>` now adds to both instead of replacing the corpus. `BPMN_EXTRA_NAMING`
+  no longer has an effect. Fixture labels that lose a wrong M01 warning: "Book carrier", "Deploy
+  Build", "Run Tests", "Route request", "Assess application".
+- **M01 accepts verb-first phrases and hyphenated labels.** A new `englishVerbPhrases` list
+  (`stand up`, `hand off`, `pre qualify`, …) lets a label pass when it starts with the whole
+  phrase and an object follows ("Hand off request"; "Hand off" alone still violates). Hyphens
+  split words: "Pre-qualify lead", "Cross-check invoice" pass, while a single hyphenated word
+  ("Follow-up", "Kunden-Daten") is still one word and violates. Noun+…+Verb labels such as
+  "Sales Ops Check" or "OTI Booking Process" still violate — rename them verb-first.
+- **The `.skill` bundle carries both naming files**; before, a skill install silently fell back
+  to the 39 built-in verbs.
+
+Known cost: an English Noun+Noun label whose first word is also a corpus verb ("Book Overview")
+now passes M01, which stays a heuristic (exact part-of-speech checks: M05/M06).
+
 ## [4.0.0-rc.2] - 2026-10-12
 
 Second release candidate, published as a GitHub pre-release only (not on npm). It fixes the

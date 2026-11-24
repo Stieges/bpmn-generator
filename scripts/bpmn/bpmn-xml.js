@@ -8,7 +8,7 @@
 
 import { BpmnModdle } from 'bpmn-moddle';
 import {
-  isGateway, isBoundaryEvent, isBpmnArtifact,
+  isGateway, isBoundaryEvent, isBpmnArtifact, isEvent,
   OMG_NODE_FIELD_SCOPE, nodeFieldSpec, matchesFieldType, bpmnXmlTag,
   EVENT_DEFINITION_BY_MARKER, FLOW_NODE_TYPES,
   resolveDefinitionRef, writesIsInterrupting } from './types.js';
@@ -186,11 +186,17 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
     return { elements, markerMap };
   }
 
-  // Auto-generate from event markers
+  // Auto-generate from event / message-task markers only — never from a task
+  // whose *name* happens to contain "message" (that left unused RootElements
+  // and tripped bpmnlint `global` / Element is unused).
   const seen = new Set();
   for (const proc of processes) {
     for (const node of (proc.nodes || [])) {
-      const marker = node.marker || inferEventMarker(node.name || '');
+      const isMsgTask = node.type === 'sendTask' || node.type === 'receiveTask';
+      if (!isEvent(node.type) && !isMsgTask && !node.messageRef) continue;
+      const marker = node.marker
+        || (isEvent(node.type) ? inferEventMarker(node.name || '') : null)
+        || (isMsgTask || node.messageRef ? 'message' : null);
       if (!marker || seen.has(marker)) continue;
 
       const tagMap = {

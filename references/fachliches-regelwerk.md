@@ -442,11 +442,15 @@ Three rule sets, one per notation plus one across notations: 42 BPMN rules, 5 la
 Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvention: Verb am Ende im Infinitiv, z.B. "Antrag pruefen", "Zahlung anweisen"). Reine Substantive oder Substantivketten ohne Verb ("Pruefung", "Vorgang zur Klaerung") sind unklar und werden gewarnt.
 
 **Heuristik (bewusst konservativ):** M01 ist **kein** POS-Tagger. Die Pruefung nutzt:
-1. **< 2 Tokens** → Verstoss (Einzelwort wie "Pruefung").
-2. **Deutsch (primaer):** valide, wenn das letzte Token wie ein Infinitiv aussieht (Endung `-en`/`-eln`/`-ern`/`-ieren`, Laenge ≥ 4). Klammer-/Bracket-Meta `(…)`/`[…]` und Slashes werden vorher normalisiert ("erfassen/aendern" → beide Verben).
-3. **Englischer Escape-Hatch:** valide, wenn das erste Token in einer kleinen kuratierten Verbliste steht ("Review Application"), um False-Positives zu vermeiden.
+1. **< 2 Woerter** → Verstoss (Einzelwort wie "Pruefung"). Gezaehlt wird nach Leerzeichen, vor dem Bindestrich-Split: "Follow-up", "Kunden-Daten" und "Sales-Ops-Check" bleiben ein Wort. Klammer-/Bracket-Meta `(…)`/`[…]` und Slashes werden vorher normalisiert ("erfassen/aendern" → beide Verben).
+2. **Bindestriche** trennen danach Woerter fuer die Schritte 3–5 ("Pre-qualify lead" → "Pre qualify lead", "Antrag einreichen-pruefen" → letztes Wort "pruefen"). Nur der ASCII-Bindestrich `-`.
+3. **Englisch, Verb zuerst:** valide, wenn das erste Wort ein englisches Verb ist — die eingebaute Liste (39 Verben) plus `englishVerbs` aus `scripts/bpmn/naming.extra.json` (mitgelieferter Korpus, 109 Verben), `scripts/bpmn/naming.json` (Projektergaenzungen, ausgeliefert leer) und der Datei in `BPMN_NAMING_JSON`, falls gesetzt. Alle drei werden bei jedem Lauf additiv gelesen; eine fehlende Datei wird uebersprungen.
+4. **Englisch, Verbphrase zuerst:** valide, wenn die ersten N Woerter genau einer N-Wort-Phrase aus `englishVerbPhrases` (gleiche Dateien) entsprechen **und** danach mindestens ein Wort folgt ("Hand off request"; "Hand off" allein und "Hand book update" bleiben Verstoesse).
+5. **Deutsch (primaer):** valide, wenn das letzte Wort wie ein Infinitiv aussieht (Endung `-en`/`-eln`/`-ern`/`-ieren`, Laenge ≥ 4).
 
-**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Die exakte Wortartanalyse ist als **M05/M06** vorgesehen (Status: Platzhalter/OFF — POS-Tagger-Problem, siehe ROADMAP). M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
+Es gibt **keine** Pruefung auf ein englisches Verb am Ende: "Sales Ops Check" oder "OTI Booking Process" sind Substantiv+…+Verb und bleiben Verstoesse — die Abhilfe ist eine Umbenennung ("Check Sales Ops", "Book OTI"), keine Ausnahme im Generator.
+
+**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden ("Kunden Daten"), und ein englisches Substantiv, das zugleich als Verb im Korpus steht, laesst ein Substantiv+Substantiv-Label passieren ("Book Overview"). Sie ist deshalb WARNING, nie blockierend. Die exakte Wortartanalyse ist als **M05/M06** vorgesehen (Status: Platzhalter/OFF — POS-Tagger-Problem, siehe ROADMAP). M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
 
 **Beispiele:**
 
@@ -458,6 +462,10 @@ Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvent
 | gut | `Review Application` (englischer Escape-Hatch) |
 | schlecht | `Pruefung` (Einzelwort) |
 | schlecht | `Vorgang zur Klaerung` (kein Verb) |
+| gut | `Hand off request` (Verbphrase zuerst) |
+| gut | `Pre-qualify lead` (Bindestrich trennt) |
+| schlecht | `Follow-up` (ein Wort, auch mit Bindestrich) |
+| schlecht | `Sales Ops Check` (Substantiv+…+Verb — umbenennen: `Check Sales Ops`) |
 
 **Referenz:** 7PMG G6 "use verb-object activity labels" (Mendling, Reijers, van der Aalst, 2010), Bruce Silver: BPMN Method & Style, Ch.3
 

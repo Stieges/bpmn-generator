@@ -235,9 +235,11 @@ describe('placeNodeLabelsAvoidingFlows — in the pipeline', () => {
     expect(r.coordMap.nodeLabels).toEqual(placeNodeLabels(r.coordMap.coords, lc));
   });
 
-  test('multi-pool-collaboration: a gateway label a flow ran through moves off it', async () => {
-    const lc = load('multi-pool-collaboration.json');
-    const off = await runPipeline(load('multi-pool-collaboration.json'), { nodeLabelsAvoidFlows: false });
+  // multi-pool-collaboration no longer docks a flow through a default gateway label after
+  // flow-connection-side / stub / bend-rule work — use a fixture that still has the defect.
+  test('realistic-collaboration: a label a flow ran through moves off it', async () => {
+    const lc = load('realistic-collaboration.json');
+    const off = await runPipeline(load('realistic-collaboration.json'), { nodeLabelsAvoidFlows: false });
     const on = await runPipeline(lc, { nodeLabelsAvoidFlows: true });
     const hit = (cm, id) => Object.values(cm.edgeCoords).some(pts => labelHitsRoute(cm.nodeLabels[id], pts));
     const movedIds = Object.keys(on.coordMap.nodeLabels)
