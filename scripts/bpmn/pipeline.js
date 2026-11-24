@@ -32,7 +32,7 @@ import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
 import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, orderGatewayExitsByTargetLane, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, alignSameLaneChains, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
+import { buildCoordinateMap, alignSameLaneChains, alignMultiInJoins, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
@@ -334,6 +334,29 @@ async function runPipeline(logicCore, opts = {}) {
         coordMap.edgeCoords = { ...coordMap.edgeCoords, ...rebuilt };
       }
       refreshMovedLabels(coordMap, allEdges, beforeAlign, laneLines);
+    }
+  }
+
+  // Multi-in join leveling after chain align: snap converging XOR to mid-rank of its
+  // incomings (just right of the middle branch) so bend-rule can left-in from that spine.
+  if (CFG.layout?.multiInJoinAlign !== false) {
+    const beforeJoin = coordMap.edgeCoords;
+    const { moved: joinMoved } = alignMultiInJoins(coordMap, lc);
+    if (joinMoved.length) {
+      const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id));
+      if (need.length) {
+        const rebuilt = simplifyAllEdges(
+          Object.fromEntries(need.map((e) => [e.id, [
+            { x: coordMap.coords[e.source].x + coordMap.coords[e.source].w, y: coordMap.coords[e.source].y + coordMap.coords[e.source].h / 2 },
+            { x: coordMap.coords[e.target].x, y: coordMap.coords[e.target].y + coordMap.coords[e.target].h / 2 },
+          ]])),
+          coordMap.coords,
+          need,
+          new Set(),
+        );
+        coordMap.edgeCoords = { ...coordMap.edgeCoords, ...rebuilt };
+      }
+      refreshMovedLabels(coordMap, allEdges, beforeJoin, laneLines);
     }
   }
 

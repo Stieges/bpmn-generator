@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Multi-in joins sit beside the mid-rank branch.** A converging exclusive gateway with
+  2+ incomings and one forward out snaps its centerline to the median of its incoming
+  sources (refined to the successor when that successor is already near the median), so
+  the diamond lands just right of the middle activity instead of ELK parking it on the
+  lowest branch. Layout switch: `layout.multiInJoinAlign` (default on).
 - **Activity into a busy multi-in join keeps right-out.** When the join's left tip
   is already taken, Pass C docks a vertical tip — preferring one another incoming
   already uses — instead of leaving the activity through the bottom.

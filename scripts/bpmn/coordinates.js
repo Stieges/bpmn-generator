@@ -349,6 +349,13 @@ function buildCoordinateMap(elkResult, lc) {
     alignSameLaneChains({ coords, laneCoords, edgeCoords }, lc);
   }
 
+  // §5.0c3  Multi-in join leveling: snap a converging exclusive gateway to its
+  //         single forward successor's centerline (else median of incomings) so
+  //         the spine continues left→right instead of sitting on a bottom branch.
+  if (CFG.layout?.multiInJoinAlign !== false) {
+    alignMultiInJoins({ coords, laneCoords, edgeCoords }, lc);
+  }
+
   // §5.0d  Fan-out alignment: when an exclusive gateway fans out to 3+ targets,
   //        snap those targets to the same x-column, and their direct successors
   //        (typically end events) to a second aligned x-column.
@@ -1330,6 +1337,92 @@ function laneOfNode(node, proc) {
     if (host) return resolveLaneId(proc, host);
   }
   return undefined;
+}
+
+/**
+ * Multi-in exclusive join → mid-rank of its incomings (median cy), refined to the
+ * unique forward successor when that successor already sits near the median.
+ * Puts the diamond just right of the middle branch instead of ELK parking it on
+ * the lowest incoming (e.g. Blank top / Narrate mid / Lock bottom → join at Narrate).
+ *
+ * @param {{ coords: object, laneCoords?: object, edgeCoords?: object }} coordMap
+ * @param {object} lc Logic-Core
+ * @param {{ enabled?: boolean, minIn?: number, outSnapPx?: number }} [opts]
+ * @returns {{ moved: string[] }}
+ */
+function alignMultiInJoins(coordMap, lc, opts = {}) {
+  const enabled = opts.enabled ?? (CFG.layout?.multiInJoinAlign !== false);
+  if (!enabled) return { moved: [] };
+
+  const coords = coordMap.coords || {};
+  const laneCoords = coordMap.laneCoords || {};
+  const edgeCoords = coordMap.edgeCoords || (coordMap.edgeCoords = {});
+  const allProcesses = lc.pools ? lc.pools : [lc];
+  const cyEps = 1;
+  const forwardEps = 10;
+  const minIn = opts.minIn ?? 2;
+  const taskH = SHAPE?.task?.height ?? SHAPE?.task?.h ?? 80;
+  const outSnapPx = opts.outSnapPx ?? Math.max(36, taskH / 2);
+  const moved = [];
+
+  for (const proc of allProcesses) {
+    const procNodes = flattenProcessNodes(proc.nodes || [])
+      .filter((n) => !isArtifact(n.type) && !isBoundaryEvent(n.type) && coords[n.id]);
+    const edges = flattenProcessEdges(proc);
+    const incoming = {};
+    const outgoing = {};
+    for (const e of edges) {
+      (incoming[e.target] ||= []).push(e);
+      (outgoing[e.source] ||= []).push(e);
+    }
+
+    for (const node of procNodes) {
+      if (!isGateway(node.type)) continue;
+      const ins = (incoming[node.id] || []).filter((e) => coords[e.source]);
+      const outs = (outgoing[node.id] || []).filter((e) => coords[e.target]);
+      if (ins.length < minIn || outs.length !== 1) continue;
+
+      const join = coords[node.id];
+      const cys = ins.map((e) => {
+        const b = coords[e.source];
+        return b.y + b.h / 2;
+      }).sort((a, b) => a - b);
+      let targetCy = (cys.length % 2 === 1)
+        ? cys[Math.floor(cys.length / 2)]
+        : (cys[cys.length / 2 - 1] + cys[cys.length / 2]) / 2;
+
+      // Prefer the unique forward out when it already lies on the mid-rank spine.
+      const outEdge = outs[0];
+      const outBox = coords[outEdge.target];
+      const joinCx = join.x + join.w / 2;
+      const outCx = outBox.x + outBox.w / 2;
+      if (outCx > joinCx + forwardEps) {
+        const outCy = outBox.y + outBox.h / 2;
+        if (Math.abs(outCy - targetCy) <= outSnapPx) targetCy = outCy;
+      }
+
+      const joinCy = join.y + join.h / 2;
+      if (Math.abs(joinCy - targetCy) <= cyEps) continue;
+
+      let newY = targetCy - join.h / 2;
+      const lid = laneOfNode(node, proc);
+      const band = lid ? laneCoords[lid] : null;
+      if (band) {
+        const pad = 4;
+        const lo = band.y + pad;
+        const hi = band.y + band.h - join.h - pad;
+        if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
+      }
+      if (Math.abs(newY - join.y) <= cyEps) continue;
+      join.y = newY;
+      moved.push(node.id);
+
+      // Drop routes that touched the join so later passes rebuild them.
+      for (const e of [...ins, ...outs]) delete edgeCoords[e.id];
+    }
+  }
+
+  return { moved };
 }
 
 /**
@@ -2640,4 +2733,4 @@ function besideDistance(L, a, b, horizontal) {
   return Math.hypot(L.x - a.x, dy);
 }
 
-export { buildCoordinateMap, alignSameLaneChains, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, alignSameLaneChains, alignMultiInJoins, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };

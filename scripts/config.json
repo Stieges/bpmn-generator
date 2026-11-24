@@ -180,6 +180,7 @@
     "elkWrappingNodeThreshold": 20,
     "happyPathLeveling": false,
     "sameLaneChainAlign": true,
+    "multiInJoinAlign": true,
     "crossLaneDeconflict": true,
     "crossingRepair": true,
     "crossingRepairMaxPasses": 2,
