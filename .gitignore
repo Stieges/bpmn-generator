@@ -64,3 +64,6 @@ scripts/references/
 
 # Local, never committed: private test corpora and scratch output
 private/
+
+# Local mirrors of referenced articles (copyrighted; the README links to them)
+docs/reference/
