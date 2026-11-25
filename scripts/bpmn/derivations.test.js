@@ -31,6 +31,20 @@ describe('applyDerivations — joinGateways', () => {
     expect(lc.edges.find(x => x.id === 'fb')).toEqual(e('fb', 'b', 'gw_join_t'));
   });
 
+  test('the derived flow is on the happy path when an incoming flow it gathers is', () => {
+    const input = mergeModel();
+    input.edges.find(x => x.id === 'fa').isHappyPath = true;
+    const { lc } = applyDerivations(input, ON);
+    expect(lc.edges.find(x => x.id === 'flow_gw_join_t_t'))
+      .toEqual({ id: 'flow_gw_join_t_t', source: 'gw_join_t', target: 't', isHappyPath: true });
+    expect(lc.edges.find(x => x.id === 'fa')).toEqual({ ...e('fa', 'a', 'gw_join_t'), isHappyPath: true });
+  });
+
+  test('without a happy-path flow among the incoming ones the derived flow carries no flag', () => {
+    const { lc } = applyDerivations(mergeModel(), ON);
+    expect(lc.edges.find(x => x.id === 'flow_gw_join_t_t')).not.toHaveProperty('isHappyPath');
+  });
+
   test('the argument is not changed', () => {
     const input = mergeModel();
     const snapshot = JSON.parse(JSON.stringify(input));

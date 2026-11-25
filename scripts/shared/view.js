@@ -17,9 +17,9 @@ import { resolve, join, sep } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {
   PROFILE_LIMITS, ProfileRejectedError, readBoundedJsonText, exceedsBounds, quoteForMessage,
-  isPlainObject, describeSchemaError, jsonErrorLocation,
+  isPlainObject, describeSchemaError, jsonErrorLocation, loadNamedRuleProfile,
 } from './rule-profile.js';
-import { viewSchemaPath, viewsDirPath } from './resource-paths.js';
+import { viewSchemaPath, viewsDirPath, rulesDirPath } from './resource-paths.js';
 
 /** Hard limits on view input: those of a rule profile. */
 export const VIEW_LIMITS = PROFILE_LIMITS;
@@ -33,8 +33,11 @@ export class ViewRejectedError extends Error {
   }
 }
 
-const validateSchema = new Ajv2020({ allErrors: true, strict: true })
-  .compile(JSON.parse(readFileSync(viewSchemaPath(), 'utf8')));
+const VIEW_SCHEMA = JSON.parse(readFileSync(viewSchemaPath(), 'utf8'));
+const validateSchema = new Ajv2020({ allErrors: true, strict: true }).compile(VIEW_SCHEMA);
+
+/** The pipeline options a view's `layout` may set — the schema's list, so the two cannot drift. */
+const LAYOUT_KEYS = Object.freeze(Object.keys(VIEW_SCHEMA.properties.layout.properties));
 
 /** Refuse anything that is not a view: not a plain object, too deep or large, or off the schema. Returns the view. */
 export function assertView(view, label) {
@@ -126,4 +129,35 @@ export function loadNamedView(name) {
   }
   if (!real.startsWith(root + sep)) throw new ViewRejectedError(`view ${shown} points outside the views directory`);
   return parseView(readViewText(real, shown), shown);
+}
+
+/**
+ * The options a pipeline run uses under `view` (an already loaded view, or null for none). For
+ * `ruleProfile` and every `layout` key the explicit option wins when it is not `undefined`, then
+ * the view's value; a key neither sets stays absent, so config.json's default applies unchanged.
+ * A view names its rule profile, which resolves inside rules/ only (loadNamedRuleProfile); a
+ * name that does not resolve rejects the view. The view's `derivations` are passed on as given.
+ *
+ * @param {object|null} view - a view that passed assertView, or null
+ * @param {object} [opts] - the caller's runPipeline options; never changed
+ * @returns {object} `{ ...effectiveOpts, derivations }`
+ */
+export function resolveViewOptions(view, opts = {}) {
+  const resolved = { ...opts };
+  if (view) {
+    if (resolved.ruleProfile === undefined && view.ruleProfile !== undefined) {
+      try {
+        resolved.ruleProfile = loadNamedRuleProfile(view.ruleProfile, rulesDirPath());
+      } catch (err) {
+        if (err instanceof ProfileRejectedError) {
+          throw new ViewRejectedError(`view ${quoteForMessage(view.view)}: ${err.message}`);
+        }
+        throw err;
+      }
+    }
+    for (const key of LAYOUT_KEYS) {
+      if (resolved[key] === undefined && view.layout?.[key] !== undefined) resolved[key] = view.layout[key];
+    }
+  }
+  return { ...resolved, derivations: view?.derivations };
 }

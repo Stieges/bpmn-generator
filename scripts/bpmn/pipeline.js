@@ -43,6 +43,8 @@ import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, laneLabelFloor } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
+import { loadView, resolveViewOptions } from '../shared/view.js';
+import { applyDerivations } from './derivations.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
 // reachable from here.
@@ -108,6 +110,20 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
 }
 
 /**
+ * One hint per derived element (derivations.js) — a message level below info: nothing is wrong,
+ * the output only shows something the author did not write. In a collaboration the message
+ * starts with `[pool] `, as rule findings do.
+ */
+function derivationHints(derived, lc) {
+  const poolName = new Map((lc.pools || []).map(p => [p.id, p.name || p.id]));
+  return derived.map(({ id, target, process }) => ({
+    code: 'H01',
+    message: `${process === null ? '' : `[${poolName.get(process)}] `}Join gateway "${id}" derived in front of "${target}", which more than one flow enters.`,
+    elements: [id, target],
+  }));
+}
+
+/**
  * Run the full BPMN pipeline programmatically.
  * @param {object} logicCore - Logic-Core JSON object
  * @param {object} [opts={}] - Pipeline options
@@ -125,6 +141,10 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  *   section that replaces any earlier one (cross/decision-doc.js). Each document passes the
  *   Decision-Core schema gate first; a failure blocks like a validation error
  * @param {string} [opts.locale] - label locale of that section, default config.json -> dmn.labels.locale
+ * @param {string|object} [opts.view] - a view (shared/view.js; a path or an object): its
+ *   `ruleProfile` and `layout` values apply where the matching option is not given, and its
+ *   `derivations` add elements after validation — the rules judge the author's model, every step
+ *   from gateway directions on sees the derived one. An invalid view rejects with ViewRejectedError
  * @returns {Promise<{
  *   bpmnXml: string|null,
  *   svg: string|null,
@@ -138,10 +158,17 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  *     key from `diagnostics` because that one's `code` is a closed DI enum in
  *     references/api-schema.json
  *   validation: {errors: string[], warnings: string[], advisories: object[], metrics: object,
- *                xmlWarnings?: string[]}
+ *                hints: Array<{code: string, message: string, elements: string[]}>,
+ *                infos?: string[], xmlWarnings?: string[]}
+ *     `hints` (always present, empty on an early return): one entry per element the view
+ *     derived — H01 a join gateway, `elements: [gatewayId, targetId]`
  * }>}
  */
-async function runPipeline(logicCore, opts = {}) {
+async function runPipeline(logicCore, callerOpts = {}) {
+  // The view first: a rejected view fails before any work, and from here on `opts` holds the
+  // effective options (explicit option, else the view's value, else absent -> config.json).
+  const opts = resolveViewOptions(callerOpts.view === undefined ? null : loadView(callerOpts.view), callerOpts);
+
   // Deep clone (no mutation of the caller's object) that also gives every id-less edge its id,
   // once, before validation, the net check and layout: nothing downstream invents one (#64).
   let lc = normalizeEdgeIds(logicCore);
@@ -154,7 +181,7 @@ async function runPipeline(logicCore, opts = {}) {
     const decisionErrors = decisionCoreErrors(opts.decisions);
     if (decisionErrors.length) {
       return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
-        validation: { errors: decisionErrors, warnings: [], advisories: [], metrics: {} } };
+        validation: { errors: decisionErrors, warnings: [], advisories: [], metrics: {}, hints: [] } };
     }
     lc = applyDecisionDocumentation(lc, opts.decisions, { locale: opts.locale });
   }
@@ -162,8 +189,14 @@ async function runPipeline(logicCore, opts = {}) {
   const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
-    return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null, validation: { errors, warnings, advisories, metrics } };
+    return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null, validation: { errors, warnings, advisories, metrics, hints: [] } };
   }
+
+  // Derivations AFTER validation: the rules (and the schema gate before runPipeline) judge the
+  // author's model; the derived one carries `_derived` nodes the input schema does not know.
+  const derivation = applyDerivations(lc, opts.derivations);
+  lc = derivation.lc;
+  const hints = derivationHints(derivation.derived, lc);
 
   const allProcesses = lc.pools ? lc.pools : [lc];
   for (const proc of allProcesses) {
@@ -373,7 +406,7 @@ async function runPipeline(logicCore, opts = {}) {
 
   return {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
-    validation: { errors: [], warnings, infos: layoutInfos, advisories, metrics, xmlWarnings: roundTrip.warnings },
+    validation: { errors: [], warnings, infos: layoutInfos, advisories, metrics, xmlWarnings: roundTrip.warnings, hints },
   };
 }
 

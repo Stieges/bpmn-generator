@@ -31,7 +31,8 @@ function laneListHolding(lanes, nodeId) {
 /**
  * An explicit exclusive join in front of every non-gateway node that two or more sequence flows
  * enter, per process (single process or each pool). The incoming flows keep their ids and now
- * end at the gateway; one new flow leads on to the node. Message flows do not count, and
+ * end at the gateway; one new flow leads on to the node, on the happy path when one of the
+ * gathered flows is (`isHappyPath`). Message flows do not count, and
  * subprocess children are not touched in v1 (their ids still count for collisions).
  */
 function deriveJoinGateways(lc, derived) {
@@ -52,9 +53,17 @@ function deriveJoinGateways(lc, derived) {
       gateway._derived = 'joinGateway';
       proc.nodes.splice(proc.nodes.indexOf(target), 0, gateway);
 
-      for (const edge of proc.edges) if (edge.target === target.id) edge.target = id;
+      let onHappyPath = false;
+      for (const edge of proc.edges) {
+        if (edge.target !== target.id) continue;
+        edge.target = id;
+        if (edge.isHappyPath === true) onHappyPath = true;
+      }
       const edgeId = mintId(used, `flow_${id}_${target.id}`);
-      proc.edges.push({ id: edgeId, source: id, target: target.id });
+      const onward = { id: edgeId, source: id, target: target.id };
+      // The layout reads isHappyPath per flow: the path through the join stays the happy path.
+      if (onHappyPath) onward.isHappyPath = true;
+      proc.edges.push(onward);
       derived.push({ kind: 'joinGateway', id, target: target.id, edge: edgeId, process: processId });
     }
   }

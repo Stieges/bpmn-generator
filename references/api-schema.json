@@ -91,7 +91,21 @@
         "infos": { "type": "array", "items": { "type": "string" } },
         "advisories": { "type": "array", "items": { "$ref": "#/$defs/Advisory" } },
         "metrics": { "type": "object" },
-        "xmlWarnings": { "type": "array", "items": { "type": "string" }, "description": "Round-trip warnings from re-parsing the generated XML through bpmn-moddle (scripts/bpmn-xml.js validateBpmnXml)." }
+        "xmlWarnings": { "type": "array", "items": { "type": "string" }, "description": "Round-trip warnings from re-parsing the generated XML through bpmn-moddle (scripts/bpmn-xml.js validateBpmnXml)." },
+        "hints": {
+          "type": "array",
+          "description": "One entry per element a view derived (scripts/bpmn/derivations.js) — nothing is wrong, the output shows something the author did not write. runPipeline path only. H01: a join gateway, elements [gatewayId, targetId].",
+          "items": {
+            "type": "object",
+            "required": ["code", "message", "elements"],
+            "properties": {
+              "code": { "type": "string", "pattern": "^H01$" },
+              "message": { "type": "string" },
+              "elements": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": false
     },
