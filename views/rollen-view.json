@@ -1,0 +1,6 @@
+{
+  "view": "rollen",
+  "version": "1.0",
+  "description": "Lanes per performer (role, unit or actor without kind). Format 2.0 models only.",
+  "lanes": "role"
+}

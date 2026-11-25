@@ -96,6 +96,14 @@
             }
           }
         },
+        "lanes": {
+          "description": "Lanes formed from the assignments of a format 2.0 model: per performer (role), per unit of the performer (unit) or none. Absent: a 1.x model keeps its own lanes, a 2.0 model gets role lanes. On a 1.x model a view with lanes is refused.",
+          "enum": [
+            "role",
+            "unit",
+            "none"
+          ]
+        },
         "derivations": {
           "type": "object",
           "additionalProperties": false,
@@ -179,12 +187,12 @@
         "xmlWarnings": { "type": "array", "items": { "type": "string" }, "description": "Round-trip warnings from re-parsing the generated XML through bpmn-moddle (scripts/bpmn-xml.js validateBpmnXml)." },
         "hints": {
           "type": "array",
-          "description": "One entry per element a view derived (scripts/bpmn/derivations.js) — nothing is wrong, the output shows something the author did not write. runPipeline path only. H01: a join gateway and its onward flow, elements [gatewayId, targetId, flowId].",
+          "description": "Information, never a warning: nothing is wrong, the output shows something the author did not write or a gap in the assignments; hints never fail --strict. runPipeline path only. Lane hints of a format 2.0 model (scripts/bpmn/model-v2.js formLanes) come first: H02 an activity without performer, elements [nodeId]; H03 an automatic activity without performer placed with its neighbour, [nodeId, laneId]; H04 the unit of the performer not recorded (view unit), [nodeId, actorId]; H05 a lane name over 25 characters, [laneId, actorId]; H06 a process without any performer, no lanes, [processId]; H08 a node without a neighbour with a lane, [nodeId]. Then one entry per element a view derived (scripts/bpmn/derivations.js): H01 a join gateway and its onward flow, elements [gatewayId, targetId, flowId].",
           "items": {
             "type": "object",
             "required": ["code", "message", "elements"],
             "properties": {
-              "code": { "type": "string", "pattern": "^H01$" },
+              "code": { "type": "string", "pattern": "^H0[1-9]$" },
               "message": { "type": "string" },
               "elements": { "type": "array", "items": { "type": "string" } }
             },

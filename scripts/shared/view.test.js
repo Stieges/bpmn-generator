@@ -2,12 +2,12 @@ import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertView, loadView, loadNamedView, ViewRejectedError, VIEW_LIMITS } from './view.js';
+import { assertView, loadView, loadNamedView, ViewRejectedError, VIEW_LIMITS, resolveViewOptions } from './view.js';
 import { PROFILE_LIMITS } from './rule-profile.js';
 import { viewsDirFor, viewsDirPath } from './resource-paths.js';
 
 describe('shipped views', () => {
-  test.each(['default', 'explicit-joins'])('%s loads by name and passes the gate', (name) => {
+  test.each(['default', 'einheiten', 'explicit-joins', 'rollen'])('%s loads by name and passes the gate', (name) => {
     const view = loadNamedView(name);
     expect(view.view).toBe(name);
     expect(() => assertView(view)).not.toThrow();
@@ -18,6 +18,24 @@ describe('shipped views', () => {
     expect(loadNamedView('explicit-joins').derivations.joinGateways).toBe(true);
     expect(loadNamedView('default').ruleProfile).toBeUndefined();
     expect(loadNamedView('explicit-joins').ruleProfile).toBeUndefined();
+  });
+
+  test('rollen and einheiten form lanes; the other two carry no lanes key', () => {
+    expect(loadNamedView('rollen').lanes).toBe('role');
+    expect(loadNamedView('einheiten').lanes).toBe('unit');
+    expect('lanes' in loadNamedView('default')).toBe(false);
+    expect('lanes' in loadNamedView('explicit-joins')).toBe(false);
+  });
+
+  test('resolveViewOptions passes lanes and the view name on; without a view both are undefined', () => {
+    expect(resolveViewOptions(loadNamedView('einheiten'))).toMatchObject({ lanes: 'unit', viewName: 'einheiten' });
+    const none = resolveViewOptions(null, {});
+    expect(none.lanes).toBeUndefined();
+    expect(none.viewName).toBeUndefined();
+  });
+
+  test('a lanes value off the enum is refused', () => {
+    expect(() => assertView({ view: 'x', version: '1.0', lanes: 'system' })).toThrow(ViewRejectedError);
   });
 
   test('limits equal the profile limits', () => {
