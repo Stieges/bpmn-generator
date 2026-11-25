@@ -123,7 +123,7 @@ describe('runPipeline — format 2.0 early returns', () => {
   });
 
   test.each(['optimize', 'soll'])('mode %s is refused', async (mode) => {
-    expect(await run({ mode })).toEqual(early([`[format 2.0] mode "${mode}" is not available for format 2.0 models yet`]));
+    expect(await run({ mode })).toEqual(early([`[F04] mode "${mode}" is not available for format 2.0 models yet`]));
   });
 
   test('a C01 finding stops the run with no artefact and no hints', async () => {
@@ -136,7 +136,7 @@ describe('runPipeline — format 2.0 early returns', () => {
   test('a model naming its catalogue as a path without a catalogue object is an error', async () => {
     const result = await runPipeline(copy(MODEL));
     expect(result.bpmnXml).toBeNull();
-    expect(result.validation.errors).toEqual([expect.stringMatching(/^\[catalog\] the model names catalogue/)]);
+    expect(result.validation.errors).toEqual([expect.stringMatching(/^\[C13\] the model names catalogue/)]);
   });
 });
 
@@ -176,7 +176,7 @@ describe('a 1.x model under a view with lanes is a view error (design 6)', () =>
 
 describe('$schemaVersion: only "2.0" is format 2.0', () => {
   const versioned = (v) => ({ ...copy(MODEL), $schemaVersion: v });
-  const refusal = (v) => `[format 2.0] /$schemaVersion $schemaVersion "${v}" is not supported; only "2.0" is supported`;
+  const refusal = (v) => `[F02] /$schemaVersion $schemaVersion "${v}" is not supported; only "2.0" is supported`;
 
   test('"2.0" is accepted by runPipeline and stamped 2.0', async () => {
     const result = await run({}, versioned('2.0'));
@@ -232,7 +232,7 @@ describe('response contract', () => {
 });
 
 describe('generateDiagramSet refuses format 2.0 (design 9: drill-down does not read 2.0 yet)', () => {
-  const REFUSAL = '[format 2.0] drill-down is not available for format 2.0 models yet';
+  const REFUSAL = '[F04] drill-down is not available for format 2.0 models yet';
   // A 2.0 model with an expanded subprocess whose child carries an assignment.
   const WITH_SUB = () => {
     const m = copy(MODEL);

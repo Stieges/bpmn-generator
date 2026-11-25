@@ -32,7 +32,7 @@ describe('catalogErrors', () => {
   ])('%s gives one error naming the path', (_label, actor, path) => {
     const errors = catalogErrors({ actors: [actor] });
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatch(/^\[catalog\] /);
+    expect(errors[0]).toMatch(/^\[C12\] "/);
     expect(errors[0]).toContain(path);
   });
 
@@ -41,9 +41,9 @@ describe('catalogErrors', () => {
   });
 
   test('a non-object and a too-deep catalogue are refused by the bounds', () => {
-    expect(catalogErrors(null)[0]).toMatch(/^\[catalog\] /);
+    expect(catalogErrors(null)[0]).toMatch(/^\[C12\] "\/" /);
     const deep = { actors: [{ id: 'a', name: 'A', extra: { x: { y: { z: 1 } } } }] };
-    expect(catalogErrors(deep)[0]).toContain('nested deeper than 5 levels');
+    expect(catalogErrors(deep)[0]).toMatch(/^\[C12\] "\/" is nested deeper than 5 levels/);
   });
 
   test('an embedded scheme is checked, an unknown top-level key is refused', () => {
@@ -131,8 +131,53 @@ describe('loadCatalog', () => {
       expect(err).toBeInstanceOf(CatalogRejectedError);
       expect(err.code).toBe('CATALOG_REJECTED');
       expect(err.name).toBe('CatalogRejectedError');
-      expect(err.message).toContain('[catalog] ');
+      expect(err.message).toMatch(/^\[C12\] catalog .* is refused: "\/actors\/0\/id" /);
+      expect(err.message).not.toContain('refused: [C12]');
+      expect(err.messageCode).toBe('C12');
     }
+  });
+
+  test('every refusal carries its code: C11 for the file, C12 for the content', () => {
+    const codes = (fn) => { try { fn(); } catch (err) { return [err.messageCode, err.message, err.code]; } return null; };
+    const [c1, m1, k1] = codes(() => loadCatalog(join(dir, 'nope.json')));
+    expect([c1, k1]).toEqual(['C11', 'CATALOG_REJECTED']);
+    expect(m1).toMatch(/^\[C11\] catalog .* cannot be read \(ENOENT\)$/);
+    const [c2, m2] = codes(() => loadCatalog(write('{"actors": [},')));
+    expect(c2).toBe('C11');
+    expect(m2).toMatch(/^\[C11\] catalog .* is not valid JSON at line \d+, column \d+$/);
+    const [c3, m3] = codes(() => loadCatalog(write(' '.repeat(2 * 1024 * 1024))));
+    expect(c3).toBe('C11');
+    expect(m3).toMatch(/^\[C11\] .*larger than 1024 KiB/);
+  });
+
+  test('a directory is C11, not a stack trace', () => {
+    try {
+      loadCatalog(dir);
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CatalogRejectedError);
+      expect(err.messageCode).toBe('C11');
+      expect(err.message).toMatch(/^\[C11\] /);
+    }
+  });
+
+  test('a refusal lists at most 5 entries, each without its own prefix', () => {
+    const actors = Array.from({ length: 8 }, (_, i) => ({ id: `${i}x`, name: 'A' }));
+    try {
+      loadCatalog(write(JSON.stringify({ actors })));
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err.message.match(/\[C1\d\]/g)).toEqual(['[C12]']);
+      expect(err.message.split('; ')).toHaveLength(5);
+    }
+  });
+
+  test('catalogErrors: the cap entry is coded and the list is bounded', () => {
+    const actors = Array.from({ length: 30 }, (_, i) => ({ id: `${i}x`, name: 'A' }));
+    const errors = catalogErrors({ actors });
+    expect(errors.every((e) => e.startsWith('[C12] '))).toBe(true);
+    expect(errors).toHaveLength(CATALOG_LIMITS.messages + 1);
+    expect(errors.at(-1)).toMatch(/^\[C12\] … and \d+ more$/);
   });
 
   test('a missing file is a rejection', () => {

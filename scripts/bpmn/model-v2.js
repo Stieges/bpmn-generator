@@ -9,6 +9,7 @@
  */
 
 import { validateModelSchema } from './schema-gate.js';
+import { coded } from '../shared/message-codes.js';
 import { isEvent, isGateway, isActivity, isBoundaryEvent, FLOW_NODE_TYPES } from './types.js';
 import { findBackEdges, collectDocumentIds } from './topology.js';
 import { LANE_NAME_LIMIT } from './rules.js';
@@ -71,17 +72,17 @@ export function resolveFields(model, { catalog, viewName = 'default' } = {}) {
 
   // (1) format schema
   const gate = validateModelSchema(model, { accept: ['2'] });
-  if (!gate.valid) return fail(gate.errors.map((e) => `[format 2.0] ${e.path} ${e.message}`));
+  if (!gate.valid) return fail(gate.errors.map((e) => (e.code ? coded(e.code, `${e.path} ${e.message}`) : e.message)));
 
   // (2) the source of the actors
   let source = null;
   if (catalog !== undefined && catalog !== null) {
     if (model.actors !== undefined) {
-      return fail(['[catalog] the model carries actors and a catalogue was passed; replacing entries comes in a later version']);
+      return fail([coded('C13', 'the model carries actors and a catalogue was passed; replacing entries comes in a later version')]);
     }
     source = catalog;
   } else if (typeof model.catalog === 'string') {
-    return fail([`[catalog] the model names catalogue "${q(model.catalog)}" but no catalogue object was passed — the CLI reads it relative to the model file, a library caller passes { catalog }`]);
+    return fail([coded('C13', `the model names catalogue "${q(model.catalog)}" but no catalogue object was passed — the CLI reads it relative to the model file, a library caller passes { catalog }`)]);
   } else if (model.actors !== undefined) {
     source = { actors: model.actors };
     if (model.scheme !== undefined) source.scheme = model.scheme;

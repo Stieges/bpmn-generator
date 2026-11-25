@@ -31,10 +31,11 @@ ajv.addSchema(JSON.parse(readFileSync(catalogSchemaPath(), 'utf8')));
 const validateV2 = ajv.compile(schemaV2);
 const validateBranchV2 = branchValidators(schemaV2.$id);
 
-const asGateErrors = (errors) => (errors || []).map(e => ({
+const asGateErrors = (errors, code) => (errors || []).map(e => ({
   path: e.instancePath || '(root)',
   message: e.message,
   params: e.params,
+  ...(code ? { code } : {}),
 }));
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -64,6 +65,12 @@ export function assertViewFitsModel(model, view) {
 
 export const FORMAT_V2_NOT_ACCEPTED = 'format 2.0 is not accepted here yet — only the CLI generate path (node bpmn/pipeline.js) and runPipeline read it';
 
+/** Why a model that is not format 2.0 is refused where only 2.0 is read; no code (1.x responses stay as they were). */
+function notFormatV2Message(input) {
+  const v = isPlainObject(input) && input.$schemaVersion !== undefined ? quoteForMessage(input.$schemaVersion) : 'absent';
+  return `this is not a format 2.0 model ($schemaVersion ${v})`;
+}
+
 /** The error of a model on the 2 line whose `$schemaVersion` is not exactly "2.0", else null. */
 function unsupportedVersionError(input) {
   if (modelFormat(input) !== '2' || input.$schemaVersion === FORMAT_V2_VERSION) return null;
@@ -71,6 +78,7 @@ function unsupportedVersionError(input) {
     path: '/$schemaVersion',
     message: `$schemaVersion ${quoteForMessage(input.$schemaVersion)} is not supported; only "${FORMAT_V2_VERSION}" is supported`,
     params: { allowedValue: FORMAT_V2_VERSION },
+    code: 'F02',
   };
 }
 
@@ -90,17 +98,22 @@ export function validateModelSchema(input, { accept = ['1'] } = {}) {
   const unsupported = unsupportedVersionError(input);
   if (unsupported) return { valid: false, format, errors: [unsupported] };
   if (!accept.includes(format)) {
-    return { valid: false, format, errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: accept } }] };
+    // A 2.x model gets F03; a 1.x model refused under accept ['2'] is the "not a format 2.0 model" case, uncoded.
+    const entry = format === '2'
+      ? { path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: accept }, code: 'F03' }
+      : { path: '/$schemaVersion', message: notFormatV2Message(input), params: { accepted: accept } };
+    return { valid: false, format, errors: [entry] };
   }
+  const code = format === '2' ? 'F01' : undefined;
   const [check, branches] = format === '2' ? [validateV2, validateBranchV2] : [validate, validateBranch];
   if (check(input)) return { valid: true, format, errors: [] };
   const all = check.errors;
   if (isPlainObject(input)) {
     const branch = branches[Array.isArray(input.pools) || 'pools' in input ? 'Collaboration' : 'SingleProcess'];
     // A branch the input passes cannot explain the failure (it would then match both): keep all.
-    if (branch && !branch(input)) return { valid: false, format, errors: asGateErrors(branch.errors) };
+    if (branch && !branch(input)) return { valid: false, format, errors: asGateErrors(branch.errors, code) };
   }
-  return { valid: false, format, errors: asGateErrors(all) };
+  return { valid: false, format, errors: asGateErrors(all, code) };
 }
 
 /** The 1.x gate every caller that has not opted into format 2.0 uses. */
@@ -120,7 +133,7 @@ export function formatSchemaErrors(errors, max = 10) {
   const lines = errors.slice(0, max).map((e) => {
     const d = detail(e.params);
     const extra = d !== null && !String(e.message).includes(`'${d}'`) ? ` (${boundText(String(d), RESPONSE_TEXT_MAX)})` : '';
-    return `${boundText(String(e.path), RESPONSE_TEXT_MAX)}: ${e.message}${extra}`;
+    return `${e.code ? `[${e.code}] ` : ''}${boundText(String(e.path), RESPONSE_TEXT_MAX)}: ${e.message}${extra}`;
   });
   if (errors.length > max) lines.push(`… and ${errors.length - max} more`);
   return lines.join('\n');
@@ -196,6 +209,7 @@ export function boundSchemaErrors(errors) {
     path: boundText(e.path, RESPONSE_TEXT_MAX),
     message: boundText(e.message, RESPONSE_TEXT_MAX),
     params: boundParams(e.params),
+    ...(e.code ? { code: e.code } : {}),
   }));
   const more = errors.length - shown.length;
   if (more > 0) shown.push({ path: '(root)', message: `… and ${more} more`, params: { more } });
