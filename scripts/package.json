@@ -65,7 +65,9 @@
   },
   "devDependencies": {
     "@jest/globals": "^30.5.2",
+    "@miragon/bpmnlint-plugin-rules": "^0.22.0",
     "bpmn-auto-layout": "^1.3.0",
+    "bpmnlint": "^11.15.0",
     "jest": "^30.5.2"
   },
   "overrides": {

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **bpmnlint fence.** `scripts/bpmn/bpmnlint.test.js` lints every top-level fixture's output with
+  `bpmnlint:recommended` + `plugin:@miragon/rules/recommended-for-modeling` (`flow-target-alignment`
+  off) and compares the findings exactly against a reasoned exclusion list (model content, or an
+  open layout defect). `node bench/bpmnlint-fixtures.mjs [fixture…]` prints the same findings.
+  Dev dependencies `bpmnlint` and `@miragon/bpmnlint-plugin-rules`.
+
 ### Fixed
 
 - **Feedback / rework edges no longer pull the loop XOR left.** DFS back-edges

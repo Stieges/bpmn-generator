@@ -697,7 +697,7 @@ failing on.
 
 - ES Modules (`import`/`export`) — no CommonJS
 - Node `>=20` (declared in `package.json` `engines`; CI tests 20 and 22)
-- Runtime deps (6): `elkjs`, `bpmn-moddle`, `dmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`. Dev deps: `jest`, `@jest/globals`, `bpmn-auto-layout`. No new deps without prior discussion.
+- Runtime deps (6): `elkjs`, `bpmn-moddle`, `dmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`. Dev deps: `jest`, `@jest/globals`, `bpmn-auto-layout`, `bpmnlint`, `@miragon/bpmnlint-plugin-rules` (the last two lint every fixture's output in `scripts/bpmn/bpmnlint.test.js`, via `scripts/bench/bpmnlint-fixtures.mjs` in a child process — bpmnlint require()s an ESM-only module, which Jest's runtime cannot load). No new deps without prior discussion.
 - Config in `config.json`, not hardcoded
 - Functions are pure (no global state except `CFG`)
 - IDs in Logic-Core: `^[a-zA-Z_][a-zA-Z0-9_-]*$`
