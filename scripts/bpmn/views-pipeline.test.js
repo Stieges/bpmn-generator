@@ -31,6 +31,7 @@ describe('runPipeline — view', () => {
   test.each([
     ['no view', {}],
     ['the default view', { view: viewPath('default') }],
+    ['view: null (not given, as over MCP and HTTP)', { view: null }],
   ])('%s: XML and SVG equal the committed golden files, no hints', async (_, opts) => {
     const result = await runPipeline(simpleApproval(), opts);
     expect(result.bpmnXml).toBe(fixture('simple-approval.expected.bpmn'));

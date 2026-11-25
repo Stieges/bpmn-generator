@@ -36,8 +36,9 @@ function laneListHolding(lanes, nodeId) {
  * An explicit exclusive join in front of every non-gateway node that two or more sequence flows
  * enter, per process (single process or each pool). The incoming flows keep their ids and now
  * end at the gateway; one new flow leads on to the node, on the happy path when one of the
- * gathered flows is (`isHappyPath`). Message flows do not count, and
- * subprocess children are not touched in v1 (their ids still count for collisions).
+ * gathered flows is (`isHappyPath`). Message flows do not count, a node an event-based gateway
+ * leads to gets no join, and subprocess children are not touched in v1 (their ids still count for
+ * collisions).
  */
 function deriveJoinGateways(lc, derived) {
   const used = collectDocumentIds(lc);
@@ -46,7 +47,13 @@ function deriveJoinGateways(lc, derived) {
     if (!Array.isArray(proc.nodes) || !Array.isArray(proc.edges)) continue;
     const incoming = new Map();
     for (const edge of proc.edges) incoming.set(edge.target, (incoming.get(edge.target) || 0) + 1);
-    const targets = proc.nodes.filter(node => !isGateway(node.type) && (incoming.get(node.id) || 0) >= 2);
+    // An event an event-based gateway leads to stays right behind that gateway: a join in between
+    // would separate the gateway from the event it waits for.
+    const typeOf = new Map(proc.nodes.map(node => [node.id, node.type]));
+    const afterEventGateway = new Set(proc.edges
+      .filter(edge => typeOf.get(edge.source) === 'eventBasedGateway').map(edge => edge.target));
+    const targets = proc.nodes.filter(node => !isGateway(node.type) && (incoming.get(node.id) || 0) >= 2
+      && !afterEventGateway.has(node.id));
 
     for (const target of targets) {
       const id = mintId(used, `gw_join_${target.id}`);

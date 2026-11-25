@@ -76,6 +76,21 @@ describe('applyDerivations — joinGateways', () => {
     ]);
   });
 
+  test('an event that follows an event-based gateway gets no join, even with a second incoming flow', () => {
+    // s → ebg → c1 | c2; c2 → r → c1 and r → t, s2 → t: c1 is entered from the event-based gateway
+    // and from r, t from r and s2. A join in front of c1 would sit between the gateway and its event.
+    const input = {
+      id: 'p', name: 'P',
+      nodes: [n('s', 'startEvent'), n('ebg', 'eventBasedGateway'), n('c1', 'intermediateCatchEvent'),
+        n('c2', 'intermediateCatchEvent'), n('r'), n('s2', 'startEvent'), n('t'), n('end', 'endEvent'), n('end2', 'endEvent')],
+      edges: [e('f1', 's', 'ebg'), e('f2', 'ebg', 'c1'), e('f3', 'ebg', 'c2'), e('f4', 'c2', 'r'),
+        e('f5', 'r', 'c1'), e('f6', 'c1', 'end'), e('f7', 'r', 't'), e('f8', 's2', 't'), e('f9', 't', 'end2')],
+    };
+    const { lc, derived } = applyDerivations(input, ON);
+    expect(derived.map(d => d.target)).toEqual(['t']);
+    expect(incoming(lc, 'c1').map(x => x.id)).toEqual(['f2', 'f5']);
+  });
+
   test('a gateway with two incoming flows is left alone', () => {
     const input = {
       id: 'p',

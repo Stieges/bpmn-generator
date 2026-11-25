@@ -310,7 +310,9 @@ The format: `view` (the name), `version` (`"1.0"`), and the optional `descriptio
 rejected at every level.
 
 Two views ship. `default` derives nothing, and its output is byte-identical to a call without a
-view. `explicit-joins` switches on the join-gateway derivation and names no rule profile.
+view. `explicit-joins` switches on the join-gateway derivation and names no rule profile. Like the
+`rules/` profiles, the `views/` files are part of a repository checkout and live outside the npm
+package: in an npm install, view names are refused and view files are read by path.
 
 Precedence: an explicit option of the call wins over the view's value, which wins over
 `scripts/config.json`.
@@ -325,7 +327,8 @@ Precedence: an explicit option of the call wins over the view's value, which win
 ### The join-gateway derivation
 
 With `derivations.joinGateways: true`, the pipeline inserts an exclusive join gateway in front of
-every node that is not a gateway and has two or more incoming sequence flows. It works on its own
+every node that is not a gateway and has two or more incoming sequence flows, except an event an
+event-based gateway leads to (a join there would separate the gateway from the event it waits for). It works on its own
 copy: the author's model is never changed, and validation and the rules judge that model. The new
 elements get the ids `gw_join_<target>` and `flow_<gateway>_<target>` (`_2`, `_3`, … on a
 collision), and both are marked in the XML: the gateway with `<bg:derived>joinGateway</bg:derived>`,

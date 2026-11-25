@@ -141,7 +141,7 @@ function derivationHints(derived, lc) {
  *   section that replaces any earlier one (cross/decision-doc.js). Each document passes the
  *   Decision-Core schema gate first; a failure blocks like a validation error
  * @param {string} [opts.locale] - label locale of that section, default config.json -> dmn.labels.locale
- * @param {string|object} [opts.view] - a view (shared/view.js; a path or an object): its
+ * @param {string|object|null} [opts.view] - a view (shared/view.js; a path or an object; `null` is no view): its
  *   `ruleProfile` and `layout` values apply where the matching option is not given, and its
  *   `derivations` add elements after validation — the rules judge the author's model, every step
  *   from gateway directions on sees the derived one. An invalid view rejects with ViewRejectedError
@@ -167,7 +167,8 @@ function derivationHints(derived, lc) {
 async function runPipeline(logicCore, callerOpts = {}) {
   // The view first: a rejected view fails before any work, and from here on `opts` holds the
   // effective options (explicit option, else the view's value, else absent -> config.json).
-  const opts = resolveViewOptions(callerOpts.view === undefined ? null : loadView(callerOpts.view), callerOpts);
+  // `view: null` means "not given", as over MCP and HTTP.
+  const opts = resolveViewOptions(callerOpts.view == null ? null : loadView(callerOpts.view), callerOpts);
 
   // Deep clone (no mutation of the caller's object) that also gives every id-less edge its id,
   // once, before validation, the net check and layout: nothing downstream invents one (#64).
