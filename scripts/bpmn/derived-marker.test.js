@@ -30,6 +30,7 @@ jest.unstable_mockModule('./derivations.js', () => ({
 const { applyDerivations, removeDerivedElements } = actualDerivations;
 const { runPipeline } = await import('./pipeline.js');
 const { bpmnToLogicCore, bpmnToLogicCoreLegacy } = await import('./import.js');
+const { moddleParse } = await import('./moddle-import.js');
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const fixture = (file) => JSON.parse(readFileSync(resolve(root, 'tests/fixtures', file), 'utf8'));
@@ -60,6 +61,10 @@ beforeAll(async () => {
 /** The gateway's element in the generated XML, for edits that touch it alone. */
 const GATEWAY_ELEMENT = new RegExp(`<bpmn:exclusiveGateway id="${GW}"[\\s\\S]*?</bpmn:exclusiveGateway>`);
 const ONWARD_FLOW = new RegExp(`<bpmn:sequenceFlow id="${ONWARD}"[^>]*/>`);
+
+/** A modeler's own namespace, declared on the definitions element as Camunda Modeler does. */
+const CAMUNDA = 'http://camunda.org/schema/1.0/bpmn';
+const declareCamunda = (xml) => editOnce(xml, /<bpmn:definitions /, `<bpmn:definitions xmlns:camunda="${CAMUNDA}" `);
 
 /** Replace exactly one match, so an edit that no longer applies fails loudly. */
 function editOnce(xml, pattern, replace) {
@@ -101,6 +106,14 @@ describe.each(READERS)('%s: an untouched derived gateway is removed', (_, read) 
     expect(processes(joined).map(p => p.lanes)).toEqual(processes(plain).map(p => p.lanes));
   });
 
+  test('a marker body with surrounding whitespace is the marker: the gateway is removed', async () => {
+    const xml = editOnce(joinedXml, new RegExp(MARKER), '<bg:derived>\n  joinGateway  \n</bg:derived>');
+    const lc = await read(xml);
+    expect(nodesOf(lc).map(x => x.id)).not.toContain(GW);
+    expect(byId(edgesOf(lc)).f5.target).toBe('task1');
+    expect(hasDerivedKey(lc)).toBe(false);
+  });
+
   test('a gateway written without any name attribute counts as nameless', async () => {
     const xml = editOnce(joinedXml, new RegExp(`id="${GW}" name=""`), `id="${GW}"`);
     expect(nodesOf(await read(xml)).map(x => x.id)).not.toContain(GW);
@@ -121,6 +134,15 @@ const EDITS = [
   ['its outgoing flow set as default', (xml) => editOnce(xml, new RegExp(`id="${GW}" name=""`), `id="${GW}" name="" default="${ONWARD}"`)],
   ['documentation', (xml) => editOnce(xml, GATEWAY_ELEMENT,
     (el) => el.replace('>', '>\n      <bpmn:documentation>Bewusst gesetzt</bpmn:documentation>'))],
+  // Edits neither importer reads into Logic-Core: the reader has to see them in the XML.
+  ['a second extension element next to the marker', (xml) => editOnce(declareCamunda(xml), new RegExp(MARKER),
+    `${MARKER}\n        <camunda:executionListener class="org.example.Listener" event="start" />`)],
+  ['documentation on its outgoing flow', (xml) => editOnce(xml, ONWARD_FLOW, (el) => el.replace(' />',
+    '>\n      <bpmn:documentation>Bewusst gesetzt</bpmn:documentation>\n    </bpmn:sequenceFlow>'))],
+  ['a foreign attribute on it', (xml) => editOnce(declareCamunda(xml), new RegExp(`id="${GW}" name=""`),
+    `id="${GW}" name="" camunda:asyncBefore="true"`)],
+  ['a foreign attribute on its outgoing flow', (xml) => editOnce(declareCamunda(xml), ONWARD_FLOW,
+    (el) => el.replace(`id="${ONWARD}"`, `id="${ONWARD}" camunda:asyncAfter="true"`))],
 ];
 
 describe.each(READERS)('%s: a derived gateway edited by a person stays', (_, read) => {
@@ -134,6 +156,27 @@ describe.each(READERS)('%s: a derived gateway edited by a person stays', (_, rea
     expect(edges.f5.target).toBe(GW);
     expect(edges[ONWARD]).toBeDefined();
     expect(hasDerivedKey(lc)).toBe(false);
+  });
+});
+
+/**
+ * What the stripping decides: which nodes exist and how the flows run. Compared instead of the
+ * whole result because the readers already differ elsewhere — bpmn-moddle keeps a foreign
+ * attribute in `extensions.$attrs`, the DOM reader has no such read.
+ */
+const strippingOutcome = (lc) => ({ nodes: nodesOf(lc).map(x => x.id), edges: edgesOf(lc) });
+
+describe('both readers agree on every edited file', () => {
+  test.each(EDITS)('given %s', async (_label, edit) => {
+    const xml = edit(joinedXml);
+    // bpmn-moddle reads the file cleanly, so bpmnToLogicCore really takes the moddle path.
+    expect((await moddleParse(xml)).warnings).toEqual([]);
+    expect(strippingOutcome(await bpmnToLogicCore(xml))).toEqual(strippingOutcome(bpmnToLogicCoreLegacy(xml)));
+  });
+
+  test('given a marker body with surrounding whitespace', async () => {
+    const xml = editOnce(joinedXml, new RegExp(MARKER), '<bg:derived> joinGateway </bg:derived>');
+    expect(await bpmnToLogicCore(xml)).toEqual(bpmnToLogicCoreLegacy(xml));
   });
 });
 

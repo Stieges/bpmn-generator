@@ -64,6 +64,38 @@ function readRole(resourceRoles) {
   return typeof name === 'string' && name !== '' ? name : undefined;
 }
 
+// What the writer puts on a derived gateway and on its onward flow (bpmn-xml.js). Own enumerable
+// keys of the moddle element: bpmn-moddle keeps references (incoming, outgoing, sourceRef,
+// targetRef, default) and `$attrs`/`$parent` off that list. Anything else — documentation, a
+// condition, a second extension element, a foreign attribute — is a person's edit, including the
+// edits neither importer reads into Logic-Core. `import.js` states the same rule over the raw DOM;
+// change both together.
+const WRITTEN_DERIVED_KEYS = new Set(['$type', 'id', 'name', 'gatewayDirection', 'extensionElements']);
+const WRITTEN_ONWARD_KEYS = new Set(['$type', 'id', 'name']);
+const noForeignAttrs = (el) => Object.keys(el.$attrs ?? {}).length === 0;
+const localName = (el) => el.$type?.split(':').pop();
+
+/**
+ * The `<bg:derived>` marker of `el` (its trimmed text), or `undefined` when there is none or when
+ * the element or its one onward flow carries anything the writer does not write — an edited
+ * derived element is the person's and comes back unmarked.
+ */
+function readDerivedMarker(el) {
+  const values = el.extensionElements?.values ?? [];
+  const markerEl = values.find(v => localName(v) === 'derived');
+  const marker = typeof markerEl?.$body === 'string' ? markerEl.$body.trim() : '';
+  if (!marker) return undefined;
+  if (values.length !== 1 || !noForeignAttrs(el) || !noForeignAttrs(el.extensionElements)) return undefined;
+  if (!Object.keys(el).every(key => WRITTEN_DERIVED_KEYS.has(key))) return undefined;
+  const outgoing = (el.$parent?.flowElements ?? [])
+    .filter(f => f.$type === 'bpmn:SequenceFlow' && (f.sourceRef?.id ?? f.sourceRef) === el.id);
+  if (outgoing.length !== 1) return undefined;
+  const [onward] = outgoing;
+  if (onward.name || !noForeignAttrs(onward)) return undefined;
+  if (!Object.keys(onward).every(key => WRITTEN_ONWARD_KEYS.has(key))) return undefined;
+  return marker;
+}
+
 /**
  * Find a converted Logic-Core node by id ANYWHERE in a node tree, not only at the top level.
  *
@@ -383,11 +415,11 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
       .find(v => v.$type?.split(':').pop() === 'system');
     if (systemEl?.$body) node.system = systemEl.$body;
 
-    // derived — the marker a view's element carries (bpmn-xml.js). removeDerivedElements in
-    // derivations.js reads it and never lets it into an import result.
-    const derivedEl = (el.extensionElements?.values ?? [])
-      .find(v => v.$type?.split(':').pop() === 'derived');
-    if (derivedEl?.$body) node._derived = derivedEl.$body;
+    // derived — the marker a view's element carries (bpmn-xml.js), read only while the element and
+    // its onward flow are still as the writer left them. removeDerivedElements in derivations.js
+    // reads it and never lets it into an import result.
+    const derived = readDerivedMarker(el);
+    if (derived) node._derived = derived;
 
     // role — exactly ONE performer or humanPerformer whose resourceRef resolves to a resource with
     // a name. bpmn-moddle has already resolved the IDREF to the Resource element. Other forms a
