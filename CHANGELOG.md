@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/api/v1/orchestrate`) or `runPipeline(lc, { view })`, which takes a path or an object. An
   explicit option of the call wins over the view, which wins over `scripts/config.json`.
 - **Join-gateway derivation.** With `derivations.joinGateways`, the output gets an explicit exclusive
-  join gateway in front of every node with two or more incoming flows. The gateway and its onward
+  join gateway in front of every node with two or more incoming flows (not in front of an event an
+  event-based gateway leads to). The gateway and its onward
   flow are marked in the XML (`<bg:derived>joinGateway</bg:derived>` and
   `<bg:derived>joinGatewayFlow</bg:derived>`). Import removes a derived gateway that nobody changed
   again, through both importers (`import_bpmn` and `/api/v1/import`); a gateway edited in a modeler
@@ -28,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   splitting mixed gateways, and layout parameters per view.
 
 Default output is unchanged: a call without a view, or with `default`, produces the same bytes as
-before.
+before. Every `validation` result gains the key `hints`, an empty array without a view.
 
 ### Fixed
 

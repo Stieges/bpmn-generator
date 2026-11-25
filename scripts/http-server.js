@@ -423,8 +423,9 @@ const server = createServer(async (req, res) => {
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       const view = clientView(body);
-      // With a view, an option the caller did not give stays undefined so the view's value can apply.
-      const poolOrder = body.poolOrder === 'declared' ? 'declared' : (view && body.poolOrder === undefined ? undefined : 'auto');
+      // With a view, an option the caller did not give (absent or null) stays undefined so the view's
+      // value can apply. Without a view every value but 'declared' is 'auto', as before.
+      const poolOrder = body.poolOrder === 'declared' ? 'declared' : (view && body.poolOrder == null ? undefined : 'auto');
       const ruleProfile = clientRuleProfile(body) ?? (view ? undefined : null);
       const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile, view: view ?? undefined, ...layoutOptionsOf(body) });
       const durationMs = Date.now() - t0;

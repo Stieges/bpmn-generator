@@ -7,6 +7,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDnsLookup, resolveClientLlmConfig,
   apiKeyMatches, rateLimitKey, rateLimitAllows, _rateBucketCount, _setFrontendDir } from './http-server.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
@@ -911,7 +912,7 @@ describe('POST /api/v1/import removes derived elements', () => {
 
   test('the explicit-joins XML of simple-approval comes back without gw_join_task1', async () => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
-    const view = new URL('../views/explicit-joins-view.json', import.meta.url).pathname;
+    const view = fileURLToPath(new URL('../views/explicit-joins-view.json', import.meta.url));
     const { bpmnXml } = await runPipeline(lc, { view });
     expect(bpmnXml).toContain('id="gw_join_task1"');
 
@@ -967,6 +968,27 @@ describe('views over HTTP — inline objects only, gated, bounded', () => {
     for (const path of ['/api/v1/generate', '/api/v1/orchestrate']) {
       const data = await (await post(path, { logicCore: lc, view })).json();
       expect(data.bpmnXml).toBe(expected);
+    }
+  });
+
+  test('/api/v1/generate: poolOrder null with a view counts as not given, so the view\'s poolOrder applies', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const collab = JSON.parse(readFileSync(new URL('../tests/fixtures/realistic-collaboration.json', import.meta.url), 'utf8'));
+    const view = { view: 'po', version: '1.0', layout: { poolOrder: 'declared' } };
+    const declared = (await runPipeline(collab, { poolOrder: 'declared' })).bpmnXml;
+    expect(declared).not.toBe((await runPipeline(collab, { poolOrder: 'auto' })).bpmnXml);
+    const data = await (await post('/api/v1/generate', { logicCore: collab, view, poolOrder: null })).json();
+    expect(data.bpmnXml).toBe(declared);
+  });
+
+  test('/api/v1/generate without a view: poolOrder null and absent still mean auto', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const collab = JSON.parse(readFileSync(new URL('../tests/fixtures/realistic-collaboration.json', import.meta.url), 'utf8'));
+    const auto = (await runPipeline(collab, { poolOrder: 'auto' })).bpmnXml;
+    expect(auto).not.toBe((await runPipeline(collab, { poolOrder: 'declared' })).bpmnXml);
+    for (const extra of [{}, { poolOrder: null }, { poolOrder: null, view: null }]) {
+      const data = await (await post('/api/v1/generate', { logicCore: collab, ...extra })).json();
+      expect(data.bpmnXml).toBe(auto);
     }
   });
 
