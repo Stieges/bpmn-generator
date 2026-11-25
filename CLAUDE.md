@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 29 bpmn-pipeline + 20 dmn (growing) + 11 shared + 2 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 29 bpmn-pipeline + 20 dmn (growing) + 12 shared + 2 cross-notation + 7 agent +
 11 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -98,8 +98,11 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   rule-profile.js            (profile machinery: assertRuleProfile schema gate, loadRuleProfile, loadNamedRuleProfile,
                                isRuleEnabled, getEffectiveSeverity, auditProfile)
   rule-catalog.js            ← ontology.js (buildRuleCatalog: rule registers ⋈ ontology metadata, checked at import)
-  resource-paths.js          (no deps — where references/ lives in each layout, and the repository's rules/
-                               for named profiles: rulesDirPath, null outside a checkout)
+  view.js                    ← rule-profile.js, resource-paths.js, ajv (view schema gate `assertView`, `loadView`,
+                               `loadNamedView`: a view is a small named file outside the model that selects rule
+                               profile, layout switches and derivations; `ViewRejectedError`)
+  resource-paths.js          (no deps — where references/ lives in each layout, and the repository's rules/ and
+                               views/ for named profiles and views: rulesDirPath, viewsDirPath, null outside a checkout)
   ontology.js                ← resource-paths.js, ajv (loads + validates references/ontology.jsonld at import; `VOCABULARY`)
   outbound-url.js            (no deps beyond node: — the one validator + pinned, redirect-free transport
                                for every outbound request to a client-supplied URL: callbacks, LLM base URLs)
@@ -391,6 +394,7 @@ membership instead of coordinates.
 | `rules/dmn-best-practice-profile.json` | Adds the opt-in `best_practice` layer |
 | `rules/custom/` | Project-specific profiles, loaded by path only — see its README |
 | `scripts/shared/geometry.js` | `clipStraight`, `clipToRect` — straight-segment clip maths shared by `bpmn/coordinates.js` and `dmn/coordinates.js` (DMN's DRD draws requirement connections as unstyled straight lines, same as a BPMN Association). The orthogonal clip helpers stay in `scripts/bpmn/coordinates.js` |
+| `scripts/shared/view.js` | `assertView`, `loadView`, `loadNamedView`, `ViewRejectedError`, `VIEW_LIMITS` — a view is a small named JSON file, outside the model, that decides how it is processed (`ruleProfile` name, `layout` switches, `derivations`). Same posture as a rule profile: 64 KiB / 4-level bound, then `references/view-schema.json` (ajv strict, `additionalProperties: false` at every level), files read through `readBoundedJsonText`. Unlike a profile, a missing file **throws**. `loadNamedView` reads `views/<name>-view.json` only (shipped: `default`, `explicit-joins`; no `custom/`), realpath-contained, an unknown name lists the available ones |
 | `scripts/shared/resource-paths.js` | `inputSchemaPath`, `promptTemplatePath` — the single place that decides where `references/` lives. **The source outranks the in-package copy.** The reverse precedence was a silent trap: `npm pack` (including the `--dry-run` the docs gate runs) leaves a copy behind, and every later edit to `references/` then had no effect while `git status` said nothing, because it is gitignored. Filenames are spelled out literally in each `join(__dirname, …)` — the docs gate parses those calls for string literals, and a variable would make it check a directory |
 | `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them. npm's `files` cannot reach outside the package root, hence a copy |
 | `scripts/postpack-clean-references.mjs` | `postpack` lifecycle script — removes that copy again. npm runs it after both `npm pack` and `npm pack --dry-run`, so a build artifact no longer outlives the build |

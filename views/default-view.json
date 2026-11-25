@@ -1,0 +1,6 @@
+{
+  "view": "default",
+  "version": "1.0",
+  "description": "The model as written: no derived elements, every other setting at its default.",
+  "derivations": { "joinGateways": false }
+}

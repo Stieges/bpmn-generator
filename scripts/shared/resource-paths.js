@@ -56,6 +56,8 @@ const SOURCE_ONTOLOGY   = join(__dirname, '..', '..', 'references', 'ontology.js
 const PACKAGED_ONTOLOGY = join(__dirname, '..', 'references', 'ontology.jsonld');
 const SOURCE_PROFILE_SCHEMA   = join(__dirname, '..', '..', 'references', 'rule-profile-schema.json');
 const PACKAGED_PROFILE_SCHEMA = join(__dirname, '..', 'references', 'rule-profile-schema.json');
+const SOURCE_VIEW_SCHEMA   = join(__dirname, '..', '..', 'references', 'view-schema.json');
+const PACKAGED_VIEW_SCHEMA = join(__dirname, '..', 'references', 'view-schema.json');
 
 /**
  * Source first, packaged copy second, loud failure last. Exported because it is
@@ -100,6 +102,11 @@ export function ruleProfileSchemaPath() {
   return resolveWithFallback(SOURCE_PROFILE_SCHEMA, PACKAGED_PROFILE_SCHEMA, 'rule-profile-schema.json');
 }
 
+/** Absolute path to references/view-schema.json. */
+export function viewSchemaPath() {
+  return resolveWithFallback(SOURCE_VIEW_SCHEMA, PACKAGED_VIEW_SCHEMA, 'view-schema.json');
+}
+
 /**
  * The repository's rules/ directory as seen from a module in `moduleDir` (a direct subdirectory of
  * scripts/), or null when there is none. Rule profiles are not shipped in the npm package, so there
@@ -123,4 +130,26 @@ export function rulesDirFor(moduleDir) {
 /** Absolute path to the repository's rules/ directory, or null outside a repository checkout. */
 export function rulesDirPath() {
   return rulesDirFor(__dirname);
+}
+
+/**
+ * The repository's views/ directory as seen from a module in `moduleDir`, or null when there is
+ * none. Same rule as `rulesDirFor`: views are not shipped in the npm package, so only a checkout
+ * (the parent of `moduleDir` IS the repository's scripts/) has one.
+ */
+export function viewsDirFor(moduleDir) {
+  const packageDir = dirname(moduleDir);
+  const repoRoot = dirname(packageDir);
+  const views = join(repoRoot, 'views');
+  try {
+    if (realpathSync(join(repoRoot, 'scripts')) !== realpathSync(packageDir)) return null;
+    return statSync(views).isDirectory() ? views : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Absolute path to the repository's views/ directory, or null outside a repository checkout. */
+export function viewsDirPath() {
+  return viewsDirFor(__dirname);
 }
