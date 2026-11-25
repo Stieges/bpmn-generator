@@ -39,6 +39,7 @@ node bpmn/pipeline.js <input.json | -> [output-basename] [flags]
 | `--refine` / `--no-refine` | turns all visual-refinement passes on / off (lane compaction, dynamic lane header, label collision repair) |
 | `--wrap` | wraps long chains (more than 20 nodes) into rows |
 | `--bend-rule`, `--label-avoidance`, `--foreign-shape-repair` (and `--no-…`) | toggle individual layout repair passes; the defaults come from `config.json` |
+| `--view=<name\|path>` | the view for this call: a name is read from `views/`, any other value is a file. A flag given on the command line still wins over the view. See `README.md#views` |
 
 Examples:
 

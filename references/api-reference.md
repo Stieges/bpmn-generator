@@ -48,6 +48,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 - `logicCore` (required, object) — validated against `references/input-schema.json` via the ajv strict gate.
 - `mode` (optional, string) — `"document"` (default, faithful IST) or `"optimize"`/`"soll"`. In optimize mode the response `validation` gains `advisories` (redesign suggestions) and `metrics.optimization` (Lean metrics). Advisories are heuristic, non-blocking, never auto-applied.
 - `ruleProfile` (optional, object) — an inline rule profile, see "Rule profiles over HTTP" below.
+- `view` (optional, object) — an inline view, see "Views over HTTP" below. Its `layout` values and `derivations` apply to the call; a field the request sets itself wins over the view.
 - `poolOrder` (optional, string) — `"auto"` (default) or `"declared"`. With `"auto"` the participants of a collaboration are stacked so that the ones exchanging messages sit next to each other; a message flow spanning N positions has to cross N-1 uninvolved pools, which reads as a participation that does not exist. With `"declared"` the input order is kept instead — routing stays orthogonal, there are simply more crossings, and `diagnostics` reports them as DI05.
 - `visualRefinement` (optional, boolean or object) — which refinement passes run. `true` / `false` switch both; an object switches single passes over the server's defaults: `{ "laneCompaction": false }`. Passes: `edgeLabelCollisionRepair` (default on), `laneCompaction` (default on). Anything else → `400 schema_error`. Schema: `references/api-schema.json` `$defs/VisualRefinementOption`. Not accepted by `/api/v1/validate`, which runs no layout.
 - `bendRule` (optional, boolean) — the bend rule (fewest bends, flows enter activities and events in flow direction). Omitted: the server's `config.json -> layout.bendRule` (as shipped: `true`); `false` restores the routes from before the rule. Anything but a boolean → `400 schema_error`. Schema: `references/api-schema.json` `$defs/LayoutSwitchOption`. Not accepted by `/api/v1/validate`.
@@ -55,6 +56,8 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 - `foreignShapeRepair` (optional, boolean) — a sequence flow running through a task, event or gateway that is neither its source nor its target (DI11) is re-routed, at the price of at most one crossing per shape. Omitted: `config.json -> layout.foreignShapeRepair` (as shipped: `true`). Anything but a boolean → `400 schema_error`. Schema: `$defs/LayoutSwitchOption`. Not accepted by `/api/v1/validate`.
 
 `validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
+
+`validation.hints` is a list of `{ code, message, elements }`, one entry per element a view derives. The only code is `H01` (a join gateway; `elements` is `[gatewayId, targetId]`). It is always present and empty when nothing is derived, and hints never fail a request. See "Views over HTTP" below.
 - `id` — advisory rule id (`O01`–`O04`, see `references/fachliches-regelwerk.md`)
 - `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/bpmn/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/bpmn/redesign.js`/`redesign-cli.js` directly.
 - `targets` — ids of the affected nodes/gateways
@@ -85,6 +88,7 @@ None of this is applied automatically; turning an advisory into an actual model 
 - `400 { correlationId, status: "schema_error", errors: [...] }` — Logic-Core failed the schema gate.
 - `400 { error: "callbackUrl ..." }` — invalid or internal callback URL, credentials in it, or a failed DNS lookup.
 - `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused; see "Rule profiles over HTTP" below.
+- `400 { correlationId, status: "view_error", error }` — the `view` was refused; see "Views over HTTP" below.
 - `500 { correlationId, status: "internal_error", error }` — pipeline threw.
 
 ### Rule profiles over HTTP
@@ -112,6 +116,19 @@ demoted into a `"success"`. Raising a soundness rule is fine, and every other la
 relaxed. (The MCP server is a trusted local channel and may relax soundness too; it takes a
 profile *name* instead of an object — see `SECURITY.md`.) Rule ids and layers the BPMN rule set does
 not know are not an error; the server logs a warning (at most 20 per request) and ignores them.
+
+### Views over HTTP
+
+`/generate`, `/validate` and `/orchestrate` accept `view` as an **inline JSON object only**. A view
+name or a file path would name a file on the server, so either is refused with `400 view_error`. The
+object passes `references/view-schema.json`, and a `ruleProfile` inside it is refused (`view_error`):
+the request's own `ruleProfile` field applies. On `/generate` and `/orchestrate` the view's `layout`
+values (among them `poolOrder` and `elkWrapping`) and its `derivations` apply. `/validate` checks the
+view, but judges the model by the request's `ruleProfile` alone and derives nothing.
+
+The MCP tools are not described in this file: they take `view` as a view name (see the MCP table in
+the README). The library call `runPipeline(lc, { view })` takes a path or an object. The derivation
+and its hints: [README, Views](../README.md#views).
 
 ### validation vs. diagnostics
 
@@ -333,6 +350,8 @@ Validate Logic-Core against the rule engine without generating output.
 
 `mode` (optional) — `"document"` (default) or `"optimize"`; in optimize mode `validation` gains `advisories` + `metrics.optimization`. `advisories` object shape: see `/api/v1/generate` above. `ruleProfile` (optional) — an inline profile object, as for `/api/v1/generate`.
 
+`view` (optional) — an inline view object, checked as for `/api/v1/generate` (`400 view_error` when refused). It is not applied to the validation: see "Views over HTTP" below.
+
 **Response 200:**
 ```json
 { "correlationId": "uuid", "status": "success", "validation": { "errors": [...], "warnings": [...], "advisories": [...], "metrics": {} } }
@@ -388,6 +407,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 - One of `userText` or `logicCore` is required.
 - `mode` (optional) — `"document"` (default) or `"optimize"`/`"soll"`; optimize mode adds `validation.advisories` + `metrics.optimization` to the response.
 - `ruleProfile` (optional) — an inline profile object, as for `/api/v1/generate`. It applies in every phase that judges the model — the reviewer (so an issue the profile makes an ERROR reaches the refinement loop), the layout pass (`validation`) and compliance — together with `mode`, so `validation` and `compliance` agree.
+- `view` (optional) — an inline view object, as for `/api/v1/generate`; see "Views over HTTP" below.
 - `visualRefinement` (optional, boolean or object) — which refinement passes run. `true` / `false` switch both; an object switches single passes over the server's defaults: `{ "laneCompaction": false }`. Passes: `edgeLabelCollisionRepair` (default on), `laneCompaction` (default on). Anything else → `400 schema_error`. Schema: `references/api-schema.json` `$defs/VisualRefinementOption`. Not accepted by `/api/v1/validate`, which runs no layout.
 - `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` (optional, booleans) — as for `/api/v1/generate`; forwarded to the layout phase. Checked, with `visualRefinement`, before any LLM or callback work: an invalid value is a `400 schema_error` and nothing else runs.
 - `llmConfig` is required when `userText` is given; if omitted, the server falls back to `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` env vars when present. A client `llmConfig` needs `apiKey` and `model`; **omit `baseUrl`** to use the server-configured endpoint (`OPENAI_BASE_URL`, else `https://api.openai.com/v1`). A client `baseUrl` is accepted only when the operator lists its origin in `LLM_BASE_URL_ALLOWLIST` (comma-separated, empty by default) and it then passes the same address check as `callbackUrl`.

@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changed. Two views ship: `default` (derives nothing) and `explicit-joins`. Choose one with
   `--view=<name|path>` (CLI), `view` (a name on MCP `generate_bpmn`, `validate_bpmn` and
   `orchestrate_bpmn`; an inline object on HTTP `/api/v1/generate`, `/api/v1/validate` and
-  `/api/v1/orchestrate`) or `runPipeline(lc, { view })`. An explicit option of the call wins over the
-  view, which wins over `scripts/config.json`.
+  `/api/v1/orchestrate`) or `runPipeline(lc, { view })`, which takes a path or an object. An
+  explicit option of the call wins over the view, which wins over `scripts/config.json`.
 - **Join-gateway derivation.** With `derivations.joinGateways`, the output gets an explicit exclusive
   join gateway in front of every node with two or more incoming flows. Import removes a derived
   gateway that nobody changed again, through both importers (`import_bpmn` and `/api/v1/import`);
