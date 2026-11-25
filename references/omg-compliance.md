@@ -81,6 +81,20 @@ Provenance verified 2026-07-30: every URL above returns HTTP 200 with a byte cou
 corresponding local file (`Semantic.xsd` 62 507, `BPMNDI.xsd` 4 010, `DI.xsd` 3 470, `DC.xsd` 1 324,
 `BPMN20.xsd` 1 941, PDF 7 296 515).
 
+**Fetch command.** `node .github/scripts/fetch-bpmn-xsd.mjs` downloads the five files into
+`references/omg-spec/normative/`, verifies each against the SHA-256 below and skips files already present
+with the right hash; it exits 1 naming the file on an HTTP error or a mismatch. The XSD conformance test
+(`scripts/bpmn/xsd-conformance.test.js`, Prüfung X) validates all generated and committed BPMN XML against
+`BPMN20.xsd` with `xmllint`; it skips locally without the files and fails in CI.
+
+| File | SHA-256 |
+|------|---------|
+| `BPMN20.xsd` | `a07c159cb0594573dd7c97b1370dd116112378f377e43c89a8bf512ac5030705` |
+| `Semantic.xsd` | `c4318842f7d2bbc262d7954c9452c501db16f0868eac0b8732ec5d7fb384d9a7` |
+| `BPMNDI.xsd` | `f0dff1cd559d1514d8ebfc8c646f58402bcaced27ec22e2aa6456c2dcc80b038` |
+| `DC.xsd` | `a2f90e5ad9bb48c6915e4e034b4e27ac838264a1d4f27bfc70dbdfc69351312d` |
+| `DI.xsd` | `8220b179c175572df74e08a51bffabe957867962035cee7b5fee0b6acb4c4498` |
+
 `Semantic.xsd` is the file to check first for any question about what an element may legally carry —
 see the artifact-label fix (#36), which turned on `tArtifact` extending `tBaseElement` and therefore
 having no `name`.

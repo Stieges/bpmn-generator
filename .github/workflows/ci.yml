@@ -39,6 +39,15 @@ jobs:
       - name: Install xmllint
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils
 
+      - name: Cache BPMN XSD
+        uses: actions/cache@v4
+        with:
+          path: references/omg-spec/normative/*.xsd
+          key: bpmn-xsd-20100501-${{ hashFiles('.github/scripts/fetch-bpmn-xsd.mjs') }}
+
+      - name: Fetch BPMN XSD
+        run: node .github/scripts/fetch-bpmn-xsd.mjs
+
       - name: Run tests
         working-directory: scripts
         run: npm test
