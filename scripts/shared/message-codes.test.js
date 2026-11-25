@@ -73,13 +73,13 @@ describe('fences', () => {
     const bad = [];
     for (const [file, text] of files) {
       for (const m of text.matchAll(/['"`]\[([A-Z]{1,2}\d{2})\] /g)) {
-        if (!MESSAGE_CODES[m[1]]) bad.push(`${file}: literal [${m[1]}]`);
+        if (!Object.hasOwn(MESSAGE_CODES, m[1])) bad.push(`${file}: literal [${m[1]}]`);
       }
       for (const m of text.matchAll(/\bcoded\(\s*['"]([^'"]+)['"]/g)) {
-        if (!MESSAGE_CODES[m[1]]) bad.push(`${file}: coded('${m[1]}')`);
+        if (!Object.hasOwn(MESSAGE_CODES, m[1])) bad.push(`${file}: coded('${m[1]}')`);
       }
       for (const m of text.matchAll(/\bwithCode\([^;]*?,\s*['"]([A-Z]{1,2}\d{2})['"]\s*\)/g)) {
-        if (!MESSAGE_CODES[m[1]]) bad.push(`${file}: withCode(…, '${m[1]}')`);
+        if (!Object.hasOwn(MESSAGE_CODES, m[1])) bad.push(`${file}: withCode(…, '${m[1]}')`);
       }
     }
     expect(bad).toEqual([]);
@@ -89,14 +89,14 @@ describe('fences', () => {
     expect(files.some(([f]) => f === join('bpmn', 'model-v2.js'))).toBe(true);
   });
 
-  test('fence 2: every code has a place in the "Message codes" section of the API reference', () => {
+  test('fence 2: every code has a table row in the "Message codes" section of the API reference', () => {
     const doc = readFileSync(resolve(SCRIPTS, '../references/api-reference.md'), 'utf8');
     const start = doc.indexOf('\n## Message codes');
     expect(start).toBeGreaterThan(-1);
     const rest = doc.slice(start + 1);
     const next = rest.indexOf('\n## ', 3);
     const section = next < 0 ? rest : rest.slice(0, next);
-    const missing = Object.keys(MESSAGE_CODES).filter((c) => !new RegExp(`\\b${c}\\b`).test(section));
+    const missing = Object.keys(MESSAGE_CODES).filter((c) => !new RegExp(`^\\| ${c} \\|`, 'm').test(section));
     expect(missing).toEqual([]);
   });
 });

@@ -41,6 +41,8 @@ describe('format 1.x characterisation: library and CLI', () => {
     const err = await runPipeline(simpleApproval(), { catalog: {} }).then(() => null, (e) => e);
     expect(err).toBeInstanceOf(TypeError);
     expect(err.message).toBe('catalog applies to format 2.0 models only');
+    expect(err.messageCode).toBeUndefined();
+    expect(err.code).toBeUndefined();
   });
 
   test('CLI --catalog=x with a 1.x model: the exact stderr and exit 1', () => {
@@ -145,6 +147,8 @@ describe('format 1.x characterisation: MCP', () => {
     const bad = simpleApproval();
     bad.pools[0].nodes[0].bogus = 1;
     const r = await call('generate_bpmn', { logicCore: bad });
+    expect(r.isError).toBeUndefined();
+    expect(r.content).toHaveLength(1);
     expect(r.content[0].text).toBe(JSON.stringify({
       status: 'schema_error',
       errors: [{ path: '/pools/0/nodes/0', message: 'must NOT have additional properties', params: { additionalProperty: 'bogus' } }],
@@ -155,5 +159,7 @@ describe('format 1.x characterisation: MCP', () => {
     const err = await call('generate_bpmn', { logicCore: simpleApproval(), view: 'rollen' }).then(() => null, (e) => e);
     expect(err?.name).toBe('ViewRejectedError');
     expect(err.message).toBe(VIEW_ERROR);
+    expect(err.messageCode).toBeUndefined();
+    expect(err.code).toBe('VIEW_REJECTED');
   });
 });
