@@ -532,7 +532,8 @@ nothing changes:
   predecessors.
 - Back edges (loop-backs) do not count, neither as predecessor nor as successor. A back edge is a flow to a
   node on the current path of a depth-first search that starts at the start events in the order of `nodes`
-  and follows the flows in the order of `edges`.
+  (at the first node when there is no start event), restarts from every node not yet visited, which is how
+  paths behind boundary events are searched, and follows the flows in the order of `edges`.
 - A node takes the most common lane among its neighbours in its direction (each neighbour counted once, by
   the state at the start of the round); on a tie the lane declared first in the catalogue wins, the
   placeholders last.
@@ -542,9 +543,11 @@ nothing changes:
 - Boundary events take no part in the rounds: they are neither given a lane by a neighbour nor counted as
   one. A boundary event takes the lane of its host in the last step, wherever its exception path leads.
 
-A step reached only through a boundary event, having no performer, cannot inherit from the boundary event
-during the rounds, so it takes the lane of its successor if one has a lane. Only when no neighbour has a lane
-does it land in `(nicht zugeordnet)` with H08.
+Behind a boundary event, an activity that is not automatic and has no performer goes to `(nicht zugeordnet)`
+with H02 before any round, whatever its neighbours. An event, a gateway or an automatic task there has no
+predecessor lane during the rounds (the boundary event takes no part), so the other direction applies and it
+takes the lane of its successors if they have one; without any neighbour lane it lands in `(nicht zugeordnet)`
+with H08.
 
 A process without any performer gets no lanes (hint H06). The placeholders are ids
 `L.<process-id>._unassigned` and `L.<process-id>._unitUnknown` with the names `(nicht zugeordnet)`
