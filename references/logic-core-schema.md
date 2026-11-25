@@ -513,7 +513,8 @@ not as a quotation of a standard.
 model gets role lanes; `none` gives no lanes. A `lanes` view on a 1.x model is a view error on
 every surface.
 
-- `role`: the lane is the performer of the step (a role, or an actor without `kind`).
+- `role`: the lane is the performer of the step (a role, an actor without `kind`, or a unit that
+  performs the step directly).
 - `unit`: the unit of the performer: the performer itself when it is a unit, else its `unit`; when
   that is missing the placeholder `(Einheit nicht erhoben)`, with hint H04.
 
@@ -524,7 +525,9 @@ automatic task (`serviceTask`, `scriptTask`, `businessRuleTask`, `sendTask`, `re
 with its neighbour (H03). Every other node without a lane takes the most common lane of its neighbours, the
 successors for a start event or a merging gateway and the predecessors otherwise, in rounds until nothing
 changes. A node that still has none goes to `(nicht zugeordnet)` (H08). A boundary event takes the lane of its
-host only at the end, so a step reached only through a boundary event lands in `(nicht zugeordnet)` with H08.
+host only at the end, so an event, gateway or automatic task without performer that is reached only through a
+boundary event lands in `(nicht zugeordnet)` with H08 (an activity without performer that is not automatic has H02
+already, and a step with a performer takes the performer's lane).
 
 A process without any performer gets no lanes (hint H06). The placeholders are ids
 `L.<process-id>._unassigned` and `L.<process-id>._unitUnknown` with the names `(nicht zugeordnet)`

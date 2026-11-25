@@ -588,6 +588,19 @@ function buildNavigation(logicCore) {
  * @returns {Promise<{parent: object, subProcesses: object, navigation: object}>}
  */
 async function generateDiagramSet(logicCore, opts = {}) {
+  // Format 2.0 (design 9): drill-down does not read it yet; refused before any work, as a blocked
+  // parent result like runPipeline's, so every caller reports it as a pipeline error.
+  if (modelFormat(logicCore) === '2') {
+    return {
+      parent: {
+        bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
+        validation: { errors: ['[format 2.0] drill-down is not available for format 2.0 models yet'], warnings: [], advisories: [], metrics: {}, hints: [] },
+      },
+      subProcesses: {},
+      navigation: { subProcesses: [] },
+    };
+  }
+
   // 1. Parent diagram with subprocesses collapsed
   const parentLc = collapseSubProcesses(logicCore);
   const parent = await runPipeline(parentLc, opts);
@@ -746,7 +759,8 @@ async function main() {
   // HTTP entry already has. See references/input-schema.json + scripts/bpmn/schema-gate.js.
   const schemaCheck = validateModelSchema(parsedInput, { accept: ['1', '2'] });
   if (!schemaCheck.valid) {
-    console.error('\n✗ Schema-Gate: Logic-Core input violates references/input-schema.json:');
+    const schemaFile = schemaCheck.format === '2' ? 'input-schema-v2.json' : 'input-schema.json';
+    console.error(`\n✗ Schema-Gate: Logic-Core input violates references/${schemaFile}:`);
     schemaCheck.errors.forEach(e => console.error(`  · ${e.path} ${e.message}`));
     process.exit(1);
   }
