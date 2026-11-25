@@ -43,7 +43,7 @@ import { generateSvg } from './svg.js';
 import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, laneLabelFloor } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
-import { loadView, resolveViewOptions } from '../shared/view.js';
+import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOptions } from '../shared/view.js';
 import { applyDerivations } from './derivations.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
@@ -602,6 +602,7 @@ async function main() {
   // `--decisions <files>` (or `--decisions=<files>`) is the one flag that takes a value; pull it
   // out first so its value is not read as the input or output path.
   let decisionsArg = null;
+  let viewArg = null;
   const args = [];
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
@@ -613,6 +614,8 @@ async function main() {
       decisionsArg = rawArgs[++i];
     } else if (a.startsWith('--decisions=')) {
       decisionsArg = a.slice('--decisions='.length);
+    } else if (a.startsWith('--view=')) {
+      viewArg = a.slice('--view='.length);
     } else {
       args.push(a);
     }
@@ -631,7 +634,7 @@ async function main() {
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--view=<name|path>] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
     process.exit(1);
   }
   if (refine && noRefine) {
@@ -648,6 +651,21 @@ async function main() {
     }
     if (flags.includes(on)) switchOpts[key] = true;
     else if (flags.includes(off)) switchOpts[key] = false;
+  }
+
+  // --view=<name|path>: a value that is a view name is looked up in views/, anything else is a file.
+  // Loaded before the model is read so a refused view fails fast; a rejection is the caller's
+  // input, so it is a message and exit 1, never a stack trace.
+  let view;
+  if (viewArg !== null) {
+    try {
+      if (viewArg === '') throw new ViewRejectedError('--view requires a view name or a path to a view file');
+      view = isViewName(viewArg) ? loadNamedView(viewArg) : loadView(viewArg);
+    } catch (e) {
+      if (!(e instanceof ViewRejectedError)) throw e;
+      console.error(`✗ ${e.message}`);
+      process.exit(1);
+    }
   }
 
   // Read input
@@ -707,6 +725,7 @@ async function main() {
     ...(wrap ? { elkWrapping: 'auto' } : {}),
     ...switchOpts,
     ...(decisions ? { decisions } : {}),
+    ...(view ? { view } : {}),
   };
 
   // Drill-down mode: generate parent + per-subprocess diagrams
@@ -757,6 +776,8 @@ async function main() {
   if (result.validation.infos?.length) {
     result.validation.infos.forEach(i => console.log('ℹ ' + i));
   }
+  // Hints (derived elements) are information, never a warning: they do not fail --strict.
+  result.validation.hints?.forEach(h => console.log(`ℹ [${h.code}] ${h.message}`));
   if (optimize && result.validation.advisories?.length) {
     console.log('\n💡 Optimization opportunities (Soll-Redesign — Vorschläge, kein Auto-Fix):');
     result.validation.advisories.forEach(a => console.log('  · ' + (a.pool ? `[${a.pool}] ` : '') + a.message));

@@ -23,6 +23,7 @@ const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 't
 import { runPipeline, validateLogicCore } from './bpmn/pipeline.js';
 import { profileForMode, checkRuleProfile } from './bpmn/rules.js';
 import { ProfileRejectedError, assertLayerNotWeakened } from './shared/rule-profile.js';
+import { ViewRejectedError, assertView } from './shared/view.js';
 import { profileContext } from './shared/rule-catalog.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -194,6 +195,26 @@ export function clientRuleProfile(body) {
   checkRuleProfile(profile);
   assertLayerNotWeakened(profile, 'soundness', BPMN_PROFILE_CONTEXT);
   return profile;
+}
+
+/**
+ * The view a client sent, or null. Over HTTP a view is an inline object only — a string would name
+ * a file or a views/ entry on the server, so it is refused — and it passes the view schema gate.
+ * Its `ruleProfile` field names a file on the server, which HTTP never reads, so a view carrying
+ * one is refused; the request's own `ruleProfile` field takes an inline profile.
+ * Throws ViewRejectedError (→ 400 view_error).
+ */
+export function clientView(body) {
+  const view = body.view;
+  if (view === undefined || view === null) return null;
+  if (typeof view !== 'object' || Array.isArray(view)) {
+    throw new ViewRejectedError('view must be an inline JSON object; view names and file paths are not accepted over HTTP');
+  }
+  assertView(view);
+  if (view.ruleProfile !== undefined) {
+    throw new ViewRejectedError('an inline view may not name a ruleProfile over HTTP (profile names are not accepted); send the profile in the request field ruleProfile instead');
+  }
+  return view;
 }
 
 const AUDIT_ID_MAX = 128;
@@ -401,9 +422,11 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(layoutCheck.errors) });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
-      const poolOrder = body.poolOrder === 'declared' ? 'declared' : 'auto';
-      const ruleProfile = clientRuleProfile(body);
-      const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile, ...layoutOptionsOf(body) });
+      const view = clientView(body);
+      // With a view, an option the caller did not give stays undefined so the view's value can apply.
+      const poolOrder = body.poolOrder === 'declared' ? 'declared' : (view && body.poolOrder === undefined ? undefined : 'auto');
+      const ruleProfile = clientRuleProfile(body) ?? (view ? undefined : null);
+      const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile, view: view ?? undefined, ...layoutOptionsOf(body) });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
       // A green validation says nothing about the layout — the rule engine never
@@ -448,6 +471,7 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
+      clientView(body); // gated like the other endpoints; a view's values reach validation only through runPipeline
       const ruleProfile = clientRuleProfile(body);
       const validation = validateLogicCore(body.logicCore, profileForMode(ruleProfile, mode));
       const durationMs = Date.now() - t0;
@@ -474,9 +498,11 @@ const server = createServer(async (req, res) => {
         auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: layoutCheck.errors.length });
         return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(layoutCheck.errors) });
       }
+      const view = clientView(body);
       const options = {
         ...layoutOptionsOf(body),
-        ruleProfile: clientRuleProfile(body),
+        ruleProfile: clientRuleProfile(body) ?? (view ? undefined : null),
+        view: view ?? undefined,
         mode: (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document',
       };
 
@@ -576,6 +602,11 @@ const server = createServer(async (req, res) => {
     if (err instanceof ProfileRejectedError) {
       auditLog({ event: 'profile_rejected', correlationId, error: truncateForAudit(err.message) });
       return json(res, 400, { correlationId, status: 'profile_error', error: err.message });
+    }
+    // Likewise a refused view.
+    if (err instanceof ViewRejectedError) {
+      auditLog({ event: 'view_rejected', correlationId, error: truncateForAudit(err.message) });
+      return json(res, 400, { correlationId, status: 'view_error', error: err.message });
     }
     // An LLM endpoint's answer can carry anything: log the detail here, return only the class.
     const llmFailure = llmFailureOf(err);
