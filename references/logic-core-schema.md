@@ -469,8 +469,9 @@ How each connection is drawn:
 
 Format 2.0 is a second input format next to 1.x. A model says `"$schemaVersion": "2.0"` and is
 validated by [`input-schema-v2.json`](input-schema-v2.json). A model without the field, or with
-`1.x`, is a 1.x model and is unchanged. Within 2.0 fields are only added; each addition raises the
-minor version (2.1, 2.2 …).
+`1.x`, is a 1.x model and is unchanged. Exactly the string `"2.0"` is format 2.0: any other value of
+the 2 line (`"2"`, `"2.1"`, `"2.7"`) is refused with one error that names the value and says that only
+`"2.0"` is supported. The generated XML carries `bg:modelVersion="2.0"`.
 
 **What 2.0 is:**
 
@@ -522,12 +523,28 @@ every surface.
 subprocesses get none, and only sequence flows count), and a node with a performer takes the lane of that
 performer. An activity without performer goes to the placeholder `(nicht zugeordnet)` (H02), unless it is an
 automatic task (`serviceTask`, `scriptTask`, `businessRuleTask`, `sendTask`, `receiveTask`), which is placed
-with its neighbour (H03). Every other node without a lane takes the most common lane of its neighbours, the
-successors for a start event or a merging gateway and the predecessors otherwise, in rounds until nothing
-changes. A node that still has none goes to `(nicht zugeordnet)` (H08). A boundary event takes the lane of its
-host only at the end, so an event, gateway or automatic task without performer that is reached only through a
-boundary event lands in `(nicht zugeordnet)` with H08 (an activity without performer that is not automatic has H02
-already, and a step with a performer takes the performer's lane).
+with its neighbour (H03). Every other node without a lane inherits one from its neighbours, in rounds until
+nothing changes:
+
+- Direction by node kind: a start event and a merging gateway (two or more incoming flows, at most one
+  outgoing) take the lane of their successors; a splitting gateway (and a gateway that both merges and
+  splits, or does neither), an intermediate event, an end event and an automatic task take the lane of their
+  predecessors.
+- Back edges (loop-backs) do not count, neither as predecessor nor as successor. A back edge is a flow to a
+  node on the current path of a depth-first search that starts at the start events in the order of `nodes`
+  and follows the flows in the order of `edges`.
+- A node takes the most common lane among its neighbours in its direction (each neighbour counted once, by
+  the state at the start of the round); on a tie the lane declared first in the catalogue wins, the
+  placeholders last.
+- When no round in that direction changes anything, one round in the other direction is tried; if it
+  changes something, the rounds in the first direction resume.
+- A node that still has no lane goes to `(nicht zugeordnet)` (H08).
+- Boundary events take no part in the rounds: they are neither given a lane by a neighbour nor counted as
+  one. A boundary event takes the lane of its host in the last step, wherever its exception path leads.
+
+A step reached only through a boundary event, having no performer, cannot inherit from the boundary event
+during the rounds, so it takes the lane of its successor if one has a lane. Only when no neighbour has a lane
+does it land in `(nicht zugeordnet)` with H08.
 
 A process without any performer gets no lanes (hint H06). The placeholders are ids
 `L.<process-id>._unassigned` and `L.<process-id>._unitUnknown` with the names `(nicht zugeordnet)`
@@ -554,7 +571,8 @@ arrays in their order, and no whitespace. A 2.0 output has no `bpmn:performer`, 
 `bg:system`.
 
 **Which entry points read 2.0.** Only the CLI generate path (`node bpmn/pipeline.js`) and the
-library function `runPipeline`. Every other entry point refuses a 2.0 model before any work with
+library function `runPipeline`. The library function `generateDiagramSet` refuses a 2.0 model with a
+blocked parent result ("drill-down is not available for format 2.0 models yet"). Every other entry point refuses a 2.0 model before any work with
 one message, "format 2.0 is not accepted here yet": the MCP tools `generate_bpmn`, `validate_bpmn`
 and `orchestrate_bpmn`, the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
 `/api/v1/orchestrate`, the orchestrator, `redesign-cli.js` and the scenario pipeline. On the CLI a

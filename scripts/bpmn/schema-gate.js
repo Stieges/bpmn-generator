@@ -39,10 +39,16 @@ const asGateErrors = (errors) => (errors || []).map(e => ({
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-/** The format of a model: '2' iff a plain object whose `$schemaVersion` is a string starting `2.`, else '1'. */
+/**
+ * The format of a model: '2' iff a plain object whose `$schemaVersion` is the string "2" or starts
+ * `2.`, else '1'. Only the exact string "2.0" passes the 2.0 gate; any other value of the 2 line
+ * ("2", "2.1", "2.7") is classified 2 so it gets the one clear version message, not a 1.x error.
+ */
 export function modelFormat(input) {
-  return isPlainObject(input) && typeof input.$schemaVersion === 'string' && input.$schemaVersion.startsWith('2.') ? '2' : '1';
+  return isPlainObject(input) && typeof input.$schemaVersion === 'string' && /^2(\.|$)/.test(input.$schemaVersion) ? '2' : '1';
 }
+
+export const FORMAT_V2_VERSION = '2.0';
 
 /**
  * Design 6: a view with `lanes` forms the lanes of a format 2.0 model from its assignments; a 1.x
@@ -67,6 +73,13 @@ export function validateModelSchema(input, { accept = ['1'] } = {}) {
   const format = modelFormat(input);
   if (!accept.includes(format)) {
     return { valid: false, format, errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: accept } }] };
+  }
+  if (format === '2' && input.$schemaVersion !== FORMAT_V2_VERSION) {
+    return { valid: false, format, errors: [{
+      path: '/$schemaVersion',
+      message: `$schemaVersion ${quoteForMessage(input.$schemaVersion)} is not supported; only "${FORMAT_V2_VERSION}" is supported`,
+      params: { allowedValue: FORMAT_V2_VERSION },
+    }] };
   }
   const [check, branches] = format === '2' ? [validateV2, validateBranchV2] : [validate, validateBranch];
   if (check(input)) return { valid: true, format, errors: [] };

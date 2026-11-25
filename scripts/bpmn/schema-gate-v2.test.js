@@ -64,7 +64,7 @@ describe('v2 schema drift fence against the 1.x schema', () => {
 
 describe('modelFormat', () => {
   test.each([
-    [{ $schemaVersion: '2.0' }, '2'], [{ $schemaVersion: '2.7' }, '2'],
+    [{ $schemaVersion: '2.0' }, '2'], [{ $schemaVersion: '2.7' }, '2'], [{ $schemaVersion: '2' }, '2'],
     [{ $schemaVersion: '1.2' }, '1'], [{}, '1'], [{ $schemaVersion: 2 }, '1'], [{ $schemaVersion: 'x2.0' }, '1'],
     [null, '1'], [[], '1'], ['2.0', '1'],
   ])('%j is format %s', (input, expected) => {
