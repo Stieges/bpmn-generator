@@ -4269,6 +4269,118 @@ describe('CLI --view', () => {
   }, 60_000);
 });
 
+describe('CLI format 2.0 and --catalog', () => {
+  const V2 = resolve('../tests/fixtures-v2/schaden.json');
+  const CAT = resolve('../tests/fixtures-v2/schaden-catalog.json');
+  const mod = async () => ({
+    fs: await import('node:fs'), os: await import('node:os'), path: await import('node:path'),
+    cp: await import('node:child_process'),
+  });
+  // Runs the CLI in a fresh temp dir (cwd unless given); returns the spawn result plus the written xml.
+  const run = async (args, { input, cwd } = {}) => {
+    const { fs, os, path, cp } = await mod();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'v2-cli-'));
+    try {
+      const out = path.join(dir, 'out');
+      const res = cp.spawnSync(process.execPath, [resolve('bpmn/pipeline.js'), ...args.map(a => a === '<out>' ? out : a)],
+        { encoding: 'utf8', cwd: cwd ?? dir, input });
+      const read = (ext) => fs.existsSync(`${out}.${ext}`) ? fs.readFileSync(`${out}.${ext}`, 'utf8') : null;
+      return { ...res, xml: read('bpmn'), svg: read('svg'), dir };
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const tempFile = async (name, content) => {
+    const { fs, os, path } = await mod();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'v2-cat-'));
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, content);
+    return file;
+  };
+
+  test('--view=rollen --strict on the 2.0 fixture exits 0 and writes both files; the summary counts the formed lanes', async () => {
+    const res = await run([V2, '<out>', '--view=rollen', '--strict']);
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('bg:view="rollen"');
+    expect(res.svg).toContain('<svg');
+    expect(res.stdout).toMatch(/Lanes:\s+3\b/);
+  }, 30_000);
+
+  test('catalogue resolution: an absolute input path and another cwd still find the catalogue beside the model', async () => {
+    const { os } = await mod();
+    const res = await run([V2, '<out>', '--view=rollen', '--strict'], { cwd: os.tmpdir() });
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('bg:catalog="sha256:');
+  }, 30_000);
+
+  test('stdin with a "catalog" field and no --catalog fails with the message', async () => {
+    const res = await run(['-', '<out>', '--view=rollen'], { input: (await import('node:fs')).readFileSync(V2, 'utf8') });
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('✗ the model names catalogue "schaden-catalog.json" but is read from standard input; pass --catalog <path>');
+    expect(res.xml).toBeNull();
+  });
+
+  test('stdin with --catalog works, the path relative to the working directory', async () => {
+    const { path } = await mod();
+    const res = await run(['-', '<out>', '--view=rollen', `--catalog=${path.basename(CAT)}`],
+      { input: (await import('node:fs')).readFileSync(V2, 'utf8'), cwd: path.dirname(CAT) });
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('bg:view="rollen"');
+  }, 30_000);
+
+  test('--catalog <path> (a space) wins over the model\'s own field', async () => {
+    const other = await tempFile('other.json', JSON.stringify({ scheme: 'demi', actors: [
+      { id: 'sb_schaden', name: 'Andere Rolle', kind: 'role' }, { id: 'regress', name: 'Regress', kind: 'role' }, { id: 'zahlung', name: 'Zahlung', kind: 'role' }] }));
+    const res = await run([V2, '<out>', '--view=rollen', '--catalog', other]);
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('Andere Rolle');
+    expect(res.xml).not.toContain('Sachbearbeitung Schaden');
+  }, 30_000);
+
+  test('a catalogue with a byte order mark loads', async () => {
+    const { fs } = await mod();
+    const bom = await tempFile('bom.json', '﻿' + fs.readFileSync(CAT, 'utf8'));
+    const res = await run([V2, '<out>', '--view=rollen', `--catalog=${bom}`]);
+    expect(res.status).toBe(0);
+  }, 30_000);
+
+  test('a catalogue with a trailing comma exits 1 naming the position, without a stack trace', async () => {
+    const bad = await tempFile('bad.json', '{ "scheme": "demi", "actors": [ ], }');
+    const res = await run([V2, '<out>', '--view=rollen', `--catalog=${bad}`]);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/✗ catalog .*not valid JSON at line 1, column \d+/);
+    expect(res.stderr).not.toMatch(/at .*\.js:\d+/);
+    expect(res.xml).toBeNull();
+  });
+
+  test('--catalog with a 1.x model exits 1', async () => {
+    const res = await run([resolve('../tests/fixtures/simple-approval.json'), '<out>', `--catalog=${CAT}`]);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('✗ --catalog applies to format 2.0 models only');
+  });
+
+  test.each([['--optimize'], ['--mode=soll'], ['--dot'], ['--format=dot'], ['--drill-down']])(
+    '%s on a 2.0 model exits 1 before any work', async (flag) => {
+      const res = await run([V2, '<out>', '--view=rollen', flag]);
+      expect(res.status).toBe(1);
+      expect(res.stderr).toContain(`✗ ${flag} is not available for format 2.0 models yet`);
+      expect(res.xml).toBeNull();
+    });
+
+  test('--doc stays available for a 2.0 model', async () => {
+    const res = await run([V2, '<out>', '--view=rollen', '--doc']);
+    expect(res.status).toBe(0);
+    expect(res.stdout).toMatch(/Process doc/);
+  }, 30_000);
+
+  test('a 1.x fixture\'s CLI output is unchanged', async () => {
+    const { fs } = await mod();
+    const res = await run([resolve('../tests/fixtures/simple-approval.json'), '<out>']);
+    expect(res.status).toBe(0);
+    expect(res.xml).toBe(fs.readFileSync(resolve('../tests/fixtures/simple-approval.expected.bpmn'), 'utf8'));
+  }, 30_000);
+});
+
 describe('runPipeline layout switches', () => {
   test.each([['bendRule', 'false'], ['nodeLabelsAvoidFlows', 1], ['bendRule', null]])(
     'a non-boolean %s (%j) is a TypeError, not a truthy switch', async (key, value) => {

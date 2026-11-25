@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bg="http://bpmn-generator/schema/1.0" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-generator" bg:modelVersion="2.0" bg:view="rollen" bg:catalog="sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_Process_Schaden" name="Schaden regulieren" processRef="Process_Schaden" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Schaden" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Schaden">
+      <bpmn:lane id="L.Process_Schaden.sb_schaden" name="Sachbearbeitung Schaden">
+        <bpmn:extensionElements>
+          <bg:derived by="role" actor="sb_schaden">lane</bg:derived>
+        </bpmn:extensionElements>
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pruefen</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L.Process_Schaden.regress" name="Regressspezialist">
+        <bpmn:extensionElements>
+          <bg:derived by="role" actor="regress">lane</bg:derived>
+        </bpmn:extensionElements>
+        <bpmn:flowNodeRef>regr</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L.Process_Schaden.zahlung" name="Zahlungsverkehr">
+        <bpmn:extensionElements>
+          <bg:derived by="role" actor="zahlung">lane</bg:derived>
+        </bpmn:extensionElements>
+        <bpmn:flowNodeRef>zahlen</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Schaden gemeldet">
+      <bpmn:outgoing>flow_start_pruefen</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="pruefen" name="Schaden prüfen">
+      <bpmn:extensionElements>
+        <bg:assignment type="D" actor="sb_schaden" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_start_pruefen</bpmn:incoming>
+      <bpmn:outgoing>flow_pruefen_gw</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="gw" name="Regress möglich?" gatewayDirection="Diverging" default="flow_gw_zahlen">
+      <bpmn:incoming>flow_pruefen_gw</bpmn:incoming>
+      <bpmn:outgoing>flow_gw_regr</bpmn:outgoing>
+      <bpmn:outgoing>flow_gw_zahlen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="regr" name="Regress prüfen">
+      <bpmn:extensionElements>
+        <bg:assignment type="D" actor="regress" />
+        <bg:assignment type="I" actor="sb_schaden" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_gw_regr</bpmn:incoming>
+      <bpmn:outgoing>flow_regr_zahlen</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="zahlen" name="Zahlung anweisen">
+      <bpmn:extensionElements>
+        <bg:assignment type="D" actor="zahlung" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_gw_zahlen</bpmn:incoming>
+      <bpmn:incoming>flow_regr_zahlen</bpmn:incoming>
+      <bpmn:outgoing>flow_zahlen_end</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="end" name="Schaden reguliert">
+      <bpmn:incoming>flow_zahlen_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="flow_start_pruefen" sourceRef="start" targetRef="pruefen" />
+    <bpmn:sequenceFlow id="flow_pruefen_gw" sourceRef="pruefen" targetRef="gw" />
+    <bpmn:sequenceFlow id="flow_gw_regr" name="ja" sourceRef="gw" targetRef="regr">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">ja</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_gw_zahlen" name="nein" sourceRef="gw" targetRef="zahlen" />
+    <bpmn:sequenceFlow id="flow_regr_zahlen" sourceRef="regr" targetRef="zahlen" />
+    <bpmn:sequenceFlow id="flow_zahlen_end" sourceRef="zahlen" targetRef="end" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Participant_Process_Schaden_di" bpmnElement="Participant_Process_Schaden" isHorizontal="true">
+        <dc:Bounds x="0" y="38" width="1082" height="455.5" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L.Process_Schaden.sb_schaden_di" bpmnElement="L.Process_Schaden.sb_schaden" isHorizontal="true">
+        <dc:Bounds x="30" y="38" width="1052" height="124" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L.Process_Schaden.regress_di" bpmnElement="L.Process_Schaden.regress" isHorizontal="true">
+        <dc:Bounds x="30" y="162" width="1052" height="169.5" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L.Process_Schaden.zahlung_di" bpmnElement="L.Process_Schaden.zahlung" isHorizontal="true">
+        <dc:Bounds x="30" y="331.5" width="1052" height="162" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="120" y="81.5" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="115.4" y="127.5" width="45.2" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
+        <dc:Bounds x="236" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true">
+        <dc:Bounds x="416" y="74.5" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="397" y="50.5" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="regr_di" bpmnElement="regr">
+        <dc:Bounds x="626" y="222" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zahlen_di" bpmnElement="zahlen">
+        <dc:Bounds x="806" y="391.5" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end">
+        <dc:Bounds x="986" y="413" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="960.9" y="459" width="86.2" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="flow_start_pruefen_di" bpmnElement="flow_start_pruefen">
+        <di:waypoint x="156" y="100" />
+        <di:waypoint x="236" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_pruefen_gw_di" bpmnElement="flow_pruefen_gw">
+        <di:waypoint x="336" y="100" />
+        <di:waypoint x="416.5" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_gw_regr_di" bpmnElement="flow_gw_regr">
+        <di:waypoint x="466" y="99.5" />
+        <di:waypoint x="676" y="99.5" />
+        <di:waypoint x="676" y="222" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="566.7" y="81.5" width="8.6" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_gw_zahlen_di" bpmnElement="flow_gw_zahlen">
+        <di:waypoint x="441" y="124.5" />
+        <di:waypoint x="441" y="431.5" />
+        <di:waypoint x="806" y="431.5" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="613.1" y="413.5" width="20.8" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_regr_zahlen_di" bpmnElement="flow_regr_zahlen">
+        <di:waypoint x="726" y="262" />
+        <di:waypoint x="856" y="262" />
+        <di:waypoint x="856" y="391.5" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_zahlen_end_di" bpmnElement="flow_zahlen_end">
+        <di:waypoint x="906" y="431.5" />
+        <di:waypoint x="986" y="431.5" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

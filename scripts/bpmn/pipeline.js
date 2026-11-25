@@ -22,13 +22,14 @@
  */
 
 import { readFileSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 // Module imports
 import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
-import { validateLogicCoreSchema, LAYOUT_SWITCHES, modelFormat, assertViewFitsModel } from './schema-gate.js';
+import { validateModelSchema, LAYOUT_SWITCHES, modelFormat, assertViewFitsModel } from './schema-gate.js';
+import { loadCatalog, CatalogRejectedError } from '../shared/catalog.js';
 import { resolveFields, formLanes } from './model-v2.js';
 import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
@@ -649,8 +650,9 @@ async function main() {
   const VALUE_FLAGS = {
     '--decisions': 'a value (comma-separated Decision-Core JSON or .dmn files)',
     '--view': 'a value (a view name or a path to a view file)',
+    '--catalog': 'a value (a path to an actor catalogue file)',
   };
-  const values = { '--decisions': null, '--view': null };
+  const values = { '--decisions': null, '--view': null, '--catalog': null };
   const args = [];
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
@@ -669,6 +671,7 @@ async function main() {
   }
   const decisionsArg = values['--decisions'];
   const viewArg = values['--view'];
+  const catalogArg = values['--catalog'];
   const flags      = args.filter(a => a.startsWith('--'));
   const positional = args.filter(a => !a.startsWith('--'));
   const inputArg   = positional[0];
@@ -683,7 +686,7 @@ async function main() {
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--view <name|path>] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--view <name|path>] [--catalog <path>] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
     process.exit(1);
   }
   if (refine && noRefine) {
@@ -741,11 +744,49 @@ async function main() {
   // Schema-Gate (ajv, draft-2020-12): LLM/handwritten Logic-Core is never trusted
   // raw — enforce the formal input-schema before the pipeline, same guarantee the
   // HTTP entry already has. See references/input-schema.json + scripts/bpmn/schema-gate.js.
-  const schemaCheck = validateLogicCoreSchema(parsedInput);
+  const schemaCheck = validateModelSchema(parsedInput, { accept: ['1', '2'] });
   if (!schemaCheck.valid) {
     console.error('\n✗ Schema-Gate: Logic-Core input violates references/input-schema.json:');
     schemaCheck.errors.forEach(e => console.error(`  · ${e.path} ${e.message}`));
     process.exit(1);
+  }
+
+  // Format 2.0 (design 9): the generate path reads it; the paths that read the model's lanes
+  // (optimize, DOT, drill-down) do not yet. Refused before any work.
+  const isV2 = schemaCheck.format === '2';
+  if (isV2) {
+    const lanesFlag = flags.find(f => ['--optimize', '--mode=soll', '--mode=optimize', '--dot', '--format=dot', '--drill-down'].includes(f));
+    if (lanesFlag) {
+      console.error(`✗ ${lanesFlag} is not available for format 2.0 models yet`);
+      process.exit(1);
+    }
+  } else if (catalogArg !== null) {
+    console.error('✗ --catalog applies to format 2.0 models only');
+    process.exit(1);
+  }
+
+  // The catalogue of a 2.0 model (design 5.3): --catalog (relative to the working directory) wins
+  // over the model's "catalog" field (relative to the model file, which standard input has not).
+  let catalog;
+  if (isV2) {
+    let catalogPath = null;
+    if (catalogArg !== null) catalogPath = resolve(catalogArg);
+    else if (typeof parsedInput.catalog === 'string') {
+      if (inputArg === '-') {
+        console.error(`✗ the model names catalogue "${parsedInput.catalog}" but is read from standard input; pass --catalog <path>`);
+        process.exit(1);
+      }
+      catalogPath = resolve(dirname(resolve(inputArg)), parsedInput.catalog);
+    }
+    if (catalogPath !== null) {
+      try {
+        catalog = loadCatalog(catalogPath);
+      } catch (e) {
+        if (!(e instanceof CatalogRejectedError)) throw e;
+        console.error(`✗ ${e.message}`);
+        process.exit(1);
+      }
+    }
   }
 
   // --decisions: Decision-Core JSON or .dmn files (routed by content, dmn/load-decisions.js), whose
@@ -775,6 +816,7 @@ async function main() {
     ...switchOpts,
     ...(decisions ? { decisions } : {}),
     ...(view ? { view } : {}),
+    ...(catalog ? { catalog } : {}),
   };
 
   // Hints (derived elements) are information, never a warning: they do not fail --strict. One
@@ -995,7 +1037,8 @@ async function main() {
   const allProcesses = lc.pools ? lc.pools : [lc];
   const totalNodes = allProcesses.reduce((s, p) => s + (p.nodes || []).length, 0);
   const totalEdges = allProcesses.reduce((s, p) => s + (p.edges || []).length, 0);
-  const totalLanes = allProcesses.reduce((s, p) => s + (p.lanes || []).length, 0);
+  // A 2.0 model has no lanes of its own; the formed ones are in the coordinate map.
+  const totalLanes = isV2 ? Object.keys(result.coordMap.laneCoords || {}).length : allProcesses.reduce((s, p) => s + (p.lanes || []).length, 0);
   const totalMsgFlows = (lc.messageFlows || []).length;
   const totalCollapsed = (lc.collapsedPools || []).length;
   const totalAssociations = (lc.associations || []).length;
