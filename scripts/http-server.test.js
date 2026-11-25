@@ -904,3 +904,25 @@ describe('GET / — optional web frontend', () => {
     expect(css.headers.get('content-type')).toBe('text/css');
   });
 });
+
+describe('POST /api/v1/import removes derived elements', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  beforeEach(() => _resetRateLimit());
+
+  test('the explicit-joins XML of simple-approval comes back without gw_join_task1', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const view = new URL('../views/explicit-joins-view.json', import.meta.url).pathname;
+    const { bpmnXml } = await runPipeline(lc, { view });
+    expect(bpmnXml).toContain('id="gw_join_task1"');
+
+    const res = await realFetch(`${baseUrl}/api/v1/import`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bpmnXml }),
+    });
+    expect(res.status).toBe(200);
+    const { logicCore } = await res.json();
+    const procs = logicCore.pools || [logicCore];
+    expect(procs.flatMap((p) => p.nodes).map((n) => n.id)).not.toContain('gw_join_task1');
+    expect(procs.flatMap((p) => p.edges).find((e) => e.id === 'f5').target).toBe('task1');
+    expect(JSON.stringify(logicCore)).not.toContain('_derived');
+  });
+});

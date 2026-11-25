@@ -383,6 +383,12 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
       .find(v => v.$type?.split(':').pop() === 'system');
     if (systemEl?.$body) node.system = systemEl.$body;
 
+    // derived — the marker a view's element carries (bpmn-xml.js). removeDerivedElements in
+    // derivations.js reads it and never lets it into an import result.
+    const derivedEl = (el.extensionElements?.values ?? [])
+      .find(v => v.$type?.split(':').pop() === 'derived');
+    if (derivedEl?.$body) node._derived = derivedEl.$body;
+
     // role — exactly ONE performer or humanPerformer whose resourceRef resolves to a resource with
     // a name. bpmn-moddle has already resolved the IDREF to the Resource element. Other forms a
     // foreign file may use (a resourceAssignmentExpression, several performers, a nameless

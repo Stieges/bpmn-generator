@@ -504,6 +504,13 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
       $body: node.system,
     }));
   }
+  // derived — the element is not the author's but a view's (derivations.js), so the import can
+  // drop it again. Only a derived node carries the key: without a view the XML gains nothing.
+  if (node._derived) {
+    extensionValues.push(moddle.createAny(`${EXTENSION_PREFIX}:derived`, EXTENSION_NS, {
+      $body: node._derived,
+    }));
+  }
   if (extensionValues.length) {
     el.extensionElements = create('bpmn:ExtensionElements', { values: extensionValues });
   }
