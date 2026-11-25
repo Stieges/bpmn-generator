@@ -4306,6 +4306,17 @@ describe('CLI format 2.0 and --catalog', () => {
     expect(res.stdout).toMatch(/Lanes:\s+3\b/);
   }, 30_000);
 
+  test('an invalid 2.0 model: the schema-gate header names the 2.0 schema', async () => {
+    const { fs } = await mod();
+    const model = JSON.parse(fs.readFileSync(V2, 'utf8'));
+    const file = await tempFile('bad.json', JSON.stringify({ ...model, lanes: [{ id: 'L1', name: 'X' }] }));
+    const res = await run([file, '<out>', `--catalog=${CAT}`]);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('✗ Schema-Gate: Logic-Core input violates references/input-schema-v2.json:');
+    expect(res.stderr).not.toContain('references/input-schema.json');
+    expect(res.xml).toBeNull();
+  });
+
   test('catalogue resolution: an absolute input path and another cwd still find the catalogue beside the model', async () => {
     const { os } = await mod();
     const res = await run([V2, '<out>', '--view=rollen', '--strict'], { cwd: os.tmpdir() });

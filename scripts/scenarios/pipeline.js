@@ -44,7 +44,7 @@ import { runBpmnScenarioRules } from '../bpmn/scenario-rules.js';
 import { runDmnScenarioRules, tableAnalysisKey, countSkippedTableAnalyses } from '../dmn/scenario-rules.js';
 import { runCrossRules } from '../cross/rules.js';
 import { isMainModule } from '../shared/entry-point.js';
-import { modelFormat } from '../bpmn/schema-gate.js';
+import { modelFormat, FORMAT_V2_NOT_ACCEPTED } from '../bpmn/schema-gate.js';
 
 /**
  * One judged finding.
@@ -265,7 +265,7 @@ async function main() {
     process.exit(1);
   }
   if (modelFormat(lc) === '2') {
-    console.error('✗ Format 2.0 is not accepted here yet.');
+    console.error(`✗ ${FORMAT_V2_NOT_ACCEPTED}`);
     process.exit(1);
   }
 

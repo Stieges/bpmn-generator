@@ -160,6 +160,14 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
     expect(r.errors).toEqual([entry]);
   });
 
+  // generate_bpmn with drillDown never reaches generateDiagramSet for a 2.0 model: the MCP schema
+  // gate (1.x only) refuses it first, with the one error.
+  test('MCP generate_bpmn with drillDown', async () => {
+    const r = JSON.parse((await handleToolCall({ params: { name: 'generate_bpmn', arguments: { logicCore: m56(), drillDown: true } } })).content[0].text);
+    expect(r.status).toBe('schema_error');
+    expect(r.errors).toEqual([entry]);
+  });
+
   test('orchestrate() rejects with the message', async () => {
     await expect(orchestrate(m56())).rejects.toThrow(FORMAT_V2_NOT_ACCEPTED);
   });
@@ -180,6 +188,7 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
       const r = run('scenarios/pipeline.js', join(dir, 'm56.json'));
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('2.0');
+      expect(r.stderr).toContain(`✗ ${FORMAT_V2_NOT_ACCEPTED}`);
     });
   });
 });

@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runPipeline } from './pipeline.js';
+import { runPipeline, generateDiagramSet } from './pipeline.js';
 import { loadNamedView, ViewRejectedError } from '../shared/view.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -187,5 +187,34 @@ describe('response contract', () => {
     const re = new RegExp(find(api));
     for (const code of ['H01', 'H02', 'H06', 'H08']) expect(re.test(code)).toBe(true);
     expect(re.test('H10')).toBe(false);
+  });
+});
+
+describe('generateDiagramSet refuses format 2.0 (design 9: drill-down does not read 2.0 yet)', () => {
+  const REFUSAL = '[format 2.0] drill-down is not available for format 2.0 models yet';
+  // A 2.0 model with an expanded subprocess whose child carries an assignment.
+  const WITH_SUB = () => {
+    const m = copy(MODEL);
+    m.nodes.splice(2, 1, { id: 'pruefen', type: 'subProcess', name: 'Schaden prüfen', isExpanded: true,
+      assignments: [{ type: 'D', actor: 'sb_schaden' }],
+      nodes: [
+        { id: 's_start', type: 'startEvent', name: 'Prüfung begonnen' },
+        { id: 's_task', type: 'userTask', name: 'Unterlagen sichten', assignments: [{ type: 'D', actor: 'regress' }] },
+        { id: 's_end', type: 'endEvent', name: 'Prüfung beendet' },
+      ],
+      edges: [{ source: 's_start', target: 's_task' }, { source: 's_task', target: 's_end' }] });
+    return m;
+  };
+
+  test.each([['no view', {}], ['view rollen', { view: loadNamedView('rollen') }]])('%s: refused before any work, no diagram', async (_, opts) => {
+    const model = WITH_SUB();
+    const before = JSON.stringify(model);
+    const set = await generateDiagramSet(model, { catalog: copy(CATALOG), ...opts });
+    expect(set.parent.bpmnXml).toBeNull();
+    expect(set.parent.svg).toBeNull();
+    expect(set.parent.validation.errors).toEqual([REFUSAL]);
+    expect(set.subProcesses).toEqual({});
+    expect(set.navigation).toEqual({ subProcesses: [] });
+    expect(JSON.stringify(model)).toBe(before);
   });
 });
