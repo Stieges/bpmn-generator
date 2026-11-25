@@ -6,8 +6,9 @@
  * view adds no diagram error, and generating twice gives the same XML.
  *
  * Inventories (record what the code does today, compared against files in tests/bench/): the
- * diagram findings per fixture and view, and which fixtures are round-trip stable
- * (generate(import(generate(m))) equals generate(m)). The stable set may only grow.
+ * diagram findings per fixture and view, and which fixtures are round-trip stable under each view
+ * (generate(import(generate(m))) equals generate(m), the same view both times). Each stable set
+ * may only grow.
  * Rewrite both files after an intended change: `UPDATE_VIEW_INVENTORIES=1 npm test --
  * --testPathPatterns=views-roundtrip` from scripts/.
  */
@@ -16,7 +17,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPipeline } from './pipeline.js';
-import { bpmnToLogicCore } from './import.js';
+import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { loadNamedView } from '../shared/view.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -28,6 +29,24 @@ const UPDATE = process.env.UPDATE_VIEW_INVENTORIES === '1';
 
 const JOINS = loadNamedView('explicit-joins');
 const DEFAULT = loadNamedView('default');
+const READERS = [['bpmnToLogicCore', bpmnToLogicCore], ['bpmnToLogicCoreLegacy', async (xml) => bpmnToLogicCoreLegacy(xml)]];
+
+/**
+ * Derived join gateways per fixture under explicit-joins; a fixture not listed derives none. Pinned
+ * so the transparency checks below cannot pass by deriving nothing.
+ */
+const DERIVED_PER_FIXTURE = {
+  'boundary-event-shapes.json': 2,
+  'bpmn-generator-pipeline.json': 3,
+  'example-bestellung-versand.json': 1,
+  'example-kreditantrag.json': 1,
+  'example-rechnungspruefung.json': 2,
+  'example-schadenmeldung.json': 1,
+  'example-urlaubsantrag.json': 1,
+  'simple-approval.json': 1,
+  'subprocess-merge-fanout.json': 1,
+  'wrapping-back-edge.json': 1,
+};
 
 // Top-level Logic-Core models only: expected outputs and non-model JSON are skipped, directories
 // (dmn/, negative/, ...) are not entered, as in output-hashes.mjs.
@@ -81,15 +100,16 @@ describe('explicit-joins over every top-level fixture', () => {
     expect(names.length).toBe(26);
   });
 
-  test('the view derives at least one gateway somewhere (the suite is not vacuous)', () => {
-    const total = names.reduce((s, n) => s + markerCount(results[n].joined.bpmnXml), 0);
-    expect(total).toBeGreaterThan(0);
+  test('the view derives exactly the pinned gateways per fixture (the suite is not vacuous)', () => {
+    const actual = Object.fromEntries(names.map((n) => [n, markerCount(results[n].joined.bpmnXml)]).filter(([, c]) => c > 0));
+    expect(actual).toEqual(DERIVED_PER_FIXTURE);
+    expect(Object.values(actual).reduce((s, c) => s + c, 0)).toBe(14);
   });
 
   describe.each(names)('%s', (n) => {
-    test('transparency: importing the view output gives the default output\'s model', async () => {
-      const viaJoins = await bpmnToLogicCore(results[n].joined.bpmnXml);
-      const viaDefault = await bpmnToLogicCore(results[n].plain.bpmnXml);
+    test.each(READERS)('transparency (%s): importing the view output gives the default output\'s model', async (_r, read) => {
+      const viaJoins = await read(results[n].joined.bpmnXml);
+      const viaDefault = await read(results[n].plain.bpmnXml);
       expect(normalise(viaJoins)).toEqual(normalise(viaDefault));
     });
 
@@ -127,25 +147,28 @@ describe('inventories', () => {
     expect(actual).toEqual(JSON.parse(readFileSync(FINDINGS_PATH, 'utf8')).fixtures);
   });
 
-  test('round-trip stable fixtures include every recorded one', async () => {
-    const stable = [];
-    for (const n of names) {
-      const xml = results[n].plain.bpmnXml;
-      try {
-        const back = await runPipeline(await bpmnToLogicCore(xml), { view: DEFAULT });
-        if (back.bpmnXml === xml) stable.push(n);
-      } catch { /* a fixture whose import cannot be regenerated is not stable */ }
+  test('round-trip stable fixtures include every recorded one, per view', async () => {
+    const stable = { default: [], 'explicit-joins': [] };
+    for (const [viewName, view, key] of [['default', DEFAULT, 'plain'], ['explicit-joins', JOINS, 'joined']]) {
+      for (const n of names) {
+        const xml = results[n][key].bpmnXml;
+        try {
+          const back = await runPipeline(await bpmnToLogicCore(xml), { view });
+          if (back.bpmnXml === xml) stable[viewName].push(n);
+        } catch { /* a fixture whose import cannot be regenerated is not stable */ }
+      }
     }
     if (UPDATE) {
       writeFileSync(STABLE_PATH, JSON.stringify({
-        description: 'Top-level fixtures for which generate(import(generate(m))) equals generate(m) as XML under the default view. '
-          + 'The test requires this set to be a subset of the current stable set (it may grow, not shrink); compared by '
+        description: 'Top-level fixtures for which generate(import(generate(m))) equals generate(m) as XML, per view (the same view both times). '
+          + 'The test requires each recorded set to be a subset of the current stable set (it may grow, not shrink); compared by '
           + 'scripts/bpmn/views-roundtrip.test.js. Rewrite with UPDATE_VIEW_INVENTORIES=1 npm test -- --testPathPatterns=views-roundtrip (from scripts/).',
         stable,
       }, null, 2) + '\n');
     }
     const recorded = JSON.parse(readFileSync(STABLE_PATH, 'utf8')).stable;
-    expect(recorded.length).toBeGreaterThan(0);
-    expect(stable).toEqual(expect.arrayContaining(recorded));
-  }, 180000);
+    expect(Object.keys(recorded).sort()).toEqual(['default', 'explicit-joins']);
+    expect(recorded.default.length).toBeGreaterThan(0);
+    for (const viewName of Object.keys(recorded)) expect(stable[viewName]).toEqual(expect.arrayContaining(recorded[viewName]));
+  }, 360000);
 });
