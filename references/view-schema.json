@@ -40,6 +40,10 @@
         "elkWrapping": { "enum": ["off", "auto", "always"] }
       }
     },
+    "lanes": {
+      "description": "Lanes formed from the assignments of a format 2.0 model: per performer (role), per unit of the performer (unit) or none. Absent: a 1.x model keeps its own lanes, a 2.0 model gets role lanes. On a 1.x model a view with lanes is refused.",
+      "enum": ["role", "unit", "none"]
+    },
     "derivations": {
       "type": "object",
       "additionalProperties": false,

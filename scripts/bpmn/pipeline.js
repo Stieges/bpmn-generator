@@ -28,7 +28,8 @@ import { fileURLToPath } from 'url';
 // Module imports
 import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
-import { validateLogicCoreSchema, LAYOUT_SWITCHES } from './schema-gate.js';
+import { validateLogicCoreSchema, LAYOUT_SWITCHES, modelFormat } from './schema-gate.js';
+import { resolveFields, formLanes } from './model-v2.js';
 import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
@@ -44,6 +45,7 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, laneLabelFloor } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOptions } from '../shared/view.js';
+import { quoteForMessage } from '../shared/rule-profile.js';
 import { applyDerivations } from './derivations.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
@@ -144,7 +146,14 @@ function derivationHints(derived, lc) {
  * @param {string|object|null} [opts.view] - a view (shared/view.js; a path or an object; `null` is no view): its
  *   `ruleProfile` and `layout` values apply where the matching option is not given, and its
  *   `derivations` add elements after validation — the rules judge the author's model, every step
- *   from gateway directions on sees the derived one. An invalid view rejects with ViewRejectedError
+ *   from gateway directions on sees the derived one. An invalid view rejects with ViewRejectedError.
+ *   A view's `lanes` (`role`, `unit`, `none`) forms the lanes of a format 2.0 model from its
+ *   assignments (absent: `role`); on a 1.x model, which carries its own lanes, such a view rejects
+ *   with ViewRejectedError
+ * @param {object} [opts.catalog] - the actor catalogue `{ actors, scheme? }` of a format 2.0 model, as an
+ *   object (shared/catalog.js loadCatalog reads a file); a string throws a TypeError, and so does a
+ *   catalogue with a 1.x model. A 2.0 model first passes resolveFields (format schema, catalogue,
+ *   assignments: C01–C06); its findings, or `mode` optimize/soll, return early like a validation error
  * @returns {Promise<{
  *   bpmnXml: string|null,
  *   svg: string|null,
@@ -160,8 +169,9 @@ function derivationHints(derived, lc) {
  *   validation: {errors: string[], warnings: string[], advisories: object[], metrics: object,
  *                hints: Array<{code: string, message: string, elements: string[]}>,
  *                infos?: string[], xmlWarnings?: string[]}
- *     `hints` (always present, empty on an early return): one entry per element the view
- *     derived — H01 a join gateway and its onward flow, `elements: [gatewayId, targetId, flowId]`
+ *     `hints` (always present, empty on an early return): first the lane hints of a format 2.0
+ *     model (formLanes: H02–H06, H08), then one entry per element the view derived — H01 a join
+ *     gateway and its onward flow, `elements: [gatewayId, targetId, flowId]`
  * }>}
  */
 async function runPipeline(logicCore, callerOpts = {}) {
@@ -170,9 +180,36 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // `view: null` means "not given", as over MCP and HTTP.
   const opts = resolveViewOptions(callerOpts.view == null ? null : loadView(callerOpts.view), callerOpts);
 
+  // Format 2.0 (design 7.3 step 2): checked against its catalogue and translated into the
+  // intermediate form without lanes; the lanes are formed after validation. A 1.x model runs as
+  // before, and a view that would form lanes is refused for it: it carries its own (design 6).
+  const blocked = (errors, rest = { warnings: [], advisories: [], metrics: {} }) => ({
+    bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
+    validation: { errors, ...rest, hints: [] },
+  });
+  if (opts.catalog != null && (typeof opts.catalog !== 'object' || Array.isArray(opts.catalog))) {
+    throw new TypeError('catalog must be a catalogue object; read a file with loadCatalog');
+  }
+  const v2 = modelFormat(logicCore) === '2';
+  let source = logicCore;
+  let resolved = null;
+  if (v2) {
+    if (opts.mode === 'optimize' || opts.mode === 'soll') {
+      return blocked([`[format 2.0] mode "${opts.mode}" is not available for format 2.0 models yet`]);
+    }
+    const fields = resolveFields(logicCore, { catalog: opts.catalog ?? undefined, viewName: opts.viewName ?? 'default' });
+    if (fields.errors.length) return blocked(fields.errors);
+    ({ lc: source, resolved } = fields);
+  } else {
+    if (opts.catalog != null) throw new TypeError('catalog applies to format 2.0 models only');
+    if (opts.lanes !== undefined) {
+      throw new ViewRejectedError(`view ${quoteForMessage(opts.viewName)} forms lanes from assignments; this model (format 1.x) carries its own lanes`);
+    }
+  }
+
   // Deep clone (no mutation of the caller's object) that also gives every id-less edge its id,
   // once, before validation, the net check and layout: nothing downstream invents one (#64).
-  let lc = normalizeEdgeIds(logicCore);
+  let lc = normalizeEdgeIds(source);
 
   // Decision tables into Business Rule Task documentation — only when the caller supplies the
   // decision models (cross/decision-doc.js). Text, never geometry; without `decisions` nothing
@@ -181,8 +218,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
     if (!Array.isArray(opts.decisions)) throw new TypeError('decisions must be an array of Decision-Core documents');
     const decisionErrors = decisionCoreErrors(opts.decisions);
     if (decisionErrors.length) {
-      return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
-        validation: { errors: decisionErrors, warnings: [], advisories: [], metrics: {}, hints: [] } };
+      return blocked(decisionErrors);
     }
     lc = applyDecisionDocumentation(lc, opts.decisions, { locale: opts.locale });
   }
@@ -190,14 +226,25 @@ async function runPipeline(logicCore, callerOpts = {}) {
   const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
-    return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null, validation: { errors, warnings, advisories, metrics, hints: [] } };
+    return blocked(errors, { warnings, advisories, metrics });
+  }
+
+  // The lanes of a 2.0 model AFTER validation (design 7.3 step 5): the rules judged the model
+  // without lanes, so its verdict is the same under every view (check M). Before the derivations,
+  // so a derived join takes the lane of its target.
+  let laneHints = [];
+  if (v2) {
+    const formed = formLanes(lc, resolved, { lanes: opts.lanes ?? 'role' });
+    if (formed.errors.length) return blocked(formed.errors, { warnings, advisories, metrics });
+    lc = formed.lc;
+    laneHints = formed.hints;
   }
 
   // Derivations AFTER validation: the rules (and the schema gate before runPipeline) judge the
   // author's model; the derived one carries `_derived` nodes and edges the input schema does not know.
   const derivation = applyDerivations(lc, opts.derivations);
   lc = derivation.lc;
-  const hints = derivationHints(derivation.derived, lc);
+  const hints = [...laneHints, ...derivationHints(derivation.derived, lc)];
 
   const allProcesses = lc.pools ? lc.pools : [lc];
   for (const proc of allProcesses) {
@@ -737,9 +784,21 @@ async function main() {
   // printer for both branches, so drill-down reports what the single diagram reports.
   const printHints = (validation) => validation.hints?.forEach(h => console.log(`ℹ [${h.code}] ${h.message}`));
 
+  // A view the model refuses (a lanes view on a 1.x model) is the caller's input, as above: a
+  // message and exit 1.
+  const refusingView = async (run) => {
+    try {
+      return await run();
+    } catch (e) {
+      if (!(e instanceof ViewRejectedError)) throw e;
+      console.error(`✗ ${e.message}`);
+      process.exit(1);
+    }
+  };
+
   // Drill-down mode: generate parent + per-subprocess diagrams
   if (drillDown) {
-    const diagramSet = await generateDiagramSet(parsedInput, refineOpts);
+    const diagramSet = await refusingView(() => generateDiagramSet(parsedInput, refineOpts));
     if (!diagramSet.parent.bpmnXml) {
       console.error('\n✗ Errors (pipeline blocked):');
       diagramSet.parent.validation.errors.forEach(e => console.error('  · ' + e));
@@ -778,7 +837,7 @@ async function main() {
     return;
   }
 
-  const result = await runPipeline(parsedInput, { mode: optimize ? 'optimize' : 'document', ...refineOpts });
+  const result = await refusingView(() => runPipeline(parsedInput, { mode: optimize ? 'optimize' : 'document', ...refineOpts }));
 
   if (result.validation.warnings.length) {
     console.warn('\n⚠ Warnings:');

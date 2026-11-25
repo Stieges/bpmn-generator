@@ -245,7 +245,7 @@ bpmn-generator/
 │   ├── omg-spec/                         Normative DMN 1.3 XSDs
 │   └── review-set/                       Third-party fixtures for visual review (sources and licenses in its README)
 ├── rules/                                Rule profiles (default, strict, DMN default/best-practice; custom/)
-├── views/                                Views (default, explicit-joins): named processing settings outside the model
+├── views/                                Views (default, explicit-joins, rollen, einheiten): named processing settings outside the model
 ├── scripts/                              Pipeline modules (see above)
 ├── docs/                                 Screenshots and guides
 └── tests/

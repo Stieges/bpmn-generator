@@ -1,0 +1,6 @@
+{
+  "view": "einheiten",
+  "version": "1.0",
+  "description": "Lanes per unit of the performer. Format 2.0 models only.",
+  "lanes": "unit"
+}

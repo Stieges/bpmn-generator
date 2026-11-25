@@ -141,11 +141,12 @@ export function loadNamedView(name) {
  * `ruleProfile` and every `layout` key the explicit option wins when it is not `undefined`, then
  * the view's value; a key neither sets stays absent, so config.json's default applies unchanged.
  * A view names its rule profile, which resolves inside rules/ only (loadNamedRuleProfile); a
- * name that does not resolve rejects the view. The view's `derivations` are passed on as given.
+ * name that does not resolve rejects the view. The view's `derivations` and `lanes` and its name
+ * (`viewName`) are passed on as given; without a view all three are `undefined`.
  *
  * @param {object|null} view - a view that passed assertView, or null
  * @param {object} [opts] - the caller's runPipeline options; never changed
- * @returns {object} `{ ...effectiveOpts, derivations }`
+ * @returns {object} `{ ...effectiveOpts, derivations, lanes, viewName }`
  */
 export function resolveViewOptions(view, opts = {}) {
   const resolved = { ...opts };
@@ -164,5 +165,5 @@ export function resolveViewOptions(view, opts = {}) {
       if (resolved[key] === undefined && view.layout?.[key] !== undefined) resolved[key] = view.layout[key];
     }
   }
-  return { ...resolved, derivations: view?.derivations };
+  return { ...resolved, derivations: view?.derivations, lanes: view?.lanes, viewName: view?.view };
 }

@@ -203,6 +203,11 @@ describe('view over MCP is a name inside views/, never a path or an object', () 
     expect(r.validation.hints).toEqual([expect.objectContaining({ code: 'H01', elements: ['gw_join_task1', 'task1', 'flow_gw_join_task1_task1'] })]);
   });
 
+  test('generate_bpmn with a lanes view on a 1.x model rejects with the view error', async () => {
+    await expect(call('generate_bpmn', { logicCore: lc, view: 'rollen' }))
+      .rejects.toThrow('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+  });
+
   test('orchestrate_bpmn forwards the view to the layout agent', async () => {
     const r = parse(await call('orchestrate_bpmn', { logicCore: lc, view: 'explicit-joins' }));
     expect(r.bpmnXml).toContain('gw_join_task1');
@@ -246,7 +251,7 @@ describe('view over MCP is a name inside views/, never a path or an object', () 
     });
 
     test(`${name} refuses an unknown name (listing the available ones) and a non-string`, async () => {
-      await expect(call(name, { logicCore: lc, view: 'no-such-view' })).rejects.toThrow(/unknown view "no-such-view" — available: default, explicit-joins/);
+      await expect(call(name, { logicCore: lc, view: 'no-such-view' })).rejects.toThrow(/unknown view "no-such-view" — available: default, einheiten, explicit-joins, rollen$/);
       await expect(call(name, { logicCore: lc, view: { view: 'x', version: '1.0' } })).rejects.toThrow(/view name/);
     });
 
