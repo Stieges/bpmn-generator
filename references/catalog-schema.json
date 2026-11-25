@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpmn-generator.local/catalog.schema.json",
+  "title": "Actor catalogue",
+  "description": "The catalogue of actors (roles, units) and the responsibility scheme a 2.0 model refers to. Design 5.2 and 5.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["actors"],
+  "properties": {
+    "actors": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/Actor" } },
+    "scheme": { "$ref": "#/$defs/SchemeRef" },
+    "description": { "type": "string", "maxLength": 1000 }
+  },
+  "$defs": {
+    "ActorId": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ActorId" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "kind": { "enum": ["role", "unit"] },
+        "unit": { "$ref": "#/$defs/ActorId" }
+      },
+      "not": {
+        "required": ["kind", "unit"],
+        "properties": { "kind": { "const": "unit" }, "unit": {} }
+      }
+    },
+    "SchemeName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+    "SchemeRef": {
+      "oneOf": [
+        { "$ref": "#/$defs/SchemeName" },
+        { "$ref": "#/$defs/Scheme" }
+      ]
+    },
+    "Scheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "types"],
+      "properties": {
+        "scheme": { "$ref": "#/$defs/SchemeName" },
+        "types": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/SchemeType" } }
+      }
+    },
+    "SchemeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,7}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "performs": { "const": true }
+      }
+    }
+  }
+}

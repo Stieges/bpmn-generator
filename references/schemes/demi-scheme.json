@@ -1,0 +1,9 @@
+{
+  "scheme": "demi",
+  "types": [
+    { "key": "D", "label": "Durchführung", "performs": true },
+    { "key": "E", "label": "Ergebnisverantwortung" },
+    { "key": "M", "label": "Mitarbeit" },
+    { "key": "I", "label": "Information" }
+  ]
+}

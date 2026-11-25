@@ -485,7 +485,9 @@ describe('docs-gate — checkPackageIntegrity', () => {
        'references/decision-core-schema.json',
        'references/ontology.jsonld',
        'references/rule-profile-schema.json',
-       'references/view-schema.json'],
+       'references/view-schema.json',
+       'references/catalog-schema.json',
+       'references/schemes/demi-scheme.json'],
       new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
     expect(findings).toEqual([]);
@@ -499,7 +501,9 @@ describe('docs-gate — checkPackageIntegrity', () => {
        'references/decision-core-schema.json',
        'references/bpmn-ontology.jsonld',
        'references/rule-profile-schema.json',
-       'references/view-schema.json'],
+       'references/view-schema.json',
+       'references/catalog-schema.json',
+       'references/schemes/demi-scheme.json'],
       new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
     expect(findings).toHaveLength(1);
@@ -516,7 +520,7 @@ describe('docs-gate — checkPackageIntegrity', () => {
       ['shared/resource-paths.js'],
       new Set([join(__dirname, 'shared', 'resource-paths.js')]),
     );
-    expect(findings).toHaveLength(6);   // one per file resource-paths.js reads
+    expect(findings).toHaveLength(8);   // one per file resource-paths.js reads
     expect(findings[0]).toMatchObject({ check: 'package-integrity' });
     expect(findings.map(f => f.detail).join(' ')).toContain('resource-paths.js');
   });

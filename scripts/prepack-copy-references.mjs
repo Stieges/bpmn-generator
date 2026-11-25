@@ -33,10 +33,11 @@ const DEST_DIR = join(__dirname, 'references');
 // Keep in step with resource-paths.js — every file resolved there must be packed
 // here, or the published package throws on first import. The docs gate's
 // package-integrity check is what catches a mismatch.
-const FILES = ['input-schema.json', 'prompt-template.md', 'decision-core-schema.json', 'ontology.jsonld', 'rule-profile-schema.json', 'view-schema.json'];
+const FILES = ['input-schema.json', 'prompt-template.md', 'decision-core-schema.json', 'ontology.jsonld', 'rule-profile-schema.json', 'view-schema.json', 'catalog-schema.json', 'schemes/demi-scheme.json'];
 
 mkdirSync(DEST_DIR, { recursive: true });
 for (const name of FILES) {
+  mkdirSync(dirname(join(DEST_DIR, name)), { recursive: true });
   copyFileSync(join(SOURCE_DIR, name), join(DEST_DIR, name));
 }
 // stderr, not stdout: `npm pack --json`/`npm publish --json` write their JSON
