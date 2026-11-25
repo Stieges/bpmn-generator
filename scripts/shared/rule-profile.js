@@ -131,24 +131,24 @@ function describeSchemaError(e) {
  * nested millions of levels deep for seconds before the bound could say no.)
  * Returns the reason, or null.
  */
-function exceedsBounds(root) {
-  const tooLarge = `larger than ${PROFILE_LIMITS.inlineBytes / 1024} KiB`;
+export function exceedsBounds(root, limits = PROFILE_LIMITS) {
+  const tooLarge = `larger than ${limits.inlineBytes / 1024} KiB`;
   const stack = [[root, 1]];
   let size = 0;
   while (stack.length) {
     const [value, depth] = stack.pop();
     if (value !== null && typeof value === 'object') {
-      if (depth > PROFILE_LIMITS.depth) return `nested deeper than ${PROFILE_LIMITS.depth} levels`;
+      if (depth > limits.depth) return `nested deeper than ${limits.depth} levels`;
       size += 2;
       for (const key of Object.keys(value)) {
         size += key.length + 4;
-        if (size > PROFILE_LIMITS.inlineBytes) return tooLarge;
+        if (size > limits.inlineBytes) return tooLarge;
         stack.push([value[key], depth + 1]);
       }
     } else {
       size += typeof value === 'string' ? value.length + 2 : 5;
     }
-    if (size > PROFILE_LIMITS.inlineBytes) return tooLarge;
+    if (size > limits.inlineBytes) return tooLarge;
   }
   return null;
 }
@@ -205,42 +205,43 @@ export function assertLayerNotWeakened(profile, layer, context) {
 const O_NONBLOCK = FS.O_NONBLOCK ?? 0;
 
 /**
- * Read a profile file: open non-blocking (a FIFO without a writer would otherwise block the
+ * Read a bounded JSON file: open non-blocking (a FIFO without a writer would otherwise block the
  * thread), fstat the open descriptor (so what is checked is what is read), refuse anything that is
- * not a regular file or is larger than `PROFILE_LIMITS.fileBytes`, then read at most that many bytes.
- * `label` is how messages name the file; nothing of the file's content ever enters a message.
+ * not a regular file or is larger than `maxBytes`, then read at most that many bytes.
+ * `label` names the kind of file in messages (default 'rule profile'), `name` optionally the file
+ * itself; nothing of the file's content ever enters a message.
  */
-function readProfileText(path, label) {
+export function readBoundedJsonText(path, { label = 'rule profile', name, maxBytes = PROFILE_LIMITS.fileBytes } = {}) {
+  const who = name === undefined ? label : `${label} ${name}`;
+  const limit = maxBytes % 1024 === 0 ? `${maxBytes / 1024} KiB` : `${maxBytes} bytes`;
   let fd;
   try {
     fd = openSync(path, FS.O_RDONLY | O_NONBLOCK);
   } catch (err) {
-    throw new ProfileRejectedError(`rule profile ${label} cannot be read (${err.code ?? 'error'})`);
+    throw new ProfileRejectedError(`${who} cannot be read (${err.code ?? 'error'})`);
   }
   try {
     const st = fstatSync(fd);
-    if (!st.isFile()) throw new ProfileRejectedError(`rule profile ${label} is not a regular file`);
-    if (st.size > PROFILE_LIMITS.fileBytes) {
-      throw new ProfileRejectedError(`rule profile ${label} is larger than ${PROFILE_LIMITS.fileBytes / 1024} KiB`);
-    }
-    const buf = Buffer.alloc(PROFILE_LIMITS.fileBytes + 1);
+    if (!st.isFile()) throw new ProfileRejectedError(`${who} is not a regular file`);
+    if (st.size > maxBytes) throw new ProfileRejectedError(`${who} is larger than ${limit}`);
+    const buf = Buffer.alloc(maxBytes + 1);
     let n = 0;
     for (;;) {
       const r = readSync(fd, buf, n, buf.length - n, null);
       if (r === 0) break;
       n += r;
-      if (n > PROFILE_LIMITS.fileBytes) {
-        throw new ProfileRejectedError(`rule profile ${label} is larger than ${PROFILE_LIMITS.fileBytes / 1024} KiB`);
-      }
+      if (n > maxBytes) throw new ProfileRejectedError(`${who} is larger than ${limit}`);
     }
     return buf.toString('utf8', 0, n);
   } catch (err) {
     if (err instanceof ProfileRejectedError) throw err;
-    throw new ProfileRejectedError(`rule profile ${label} cannot be read (${err.code ?? 'error'})`);
+    throw new ProfileRejectedError(`${who} cannot be read (${err.code ?? 'error'})`);
   } finally {
     closeSync(fd);
   }
 }
+
+const readProfileText = (path, name) => readBoundedJsonText(path, { name });
 
 /** Parse, gate and label a profile's text. A leading UTF-8 BOM (Windows editors) is stripped. */
 function parseProfile(text, label) {

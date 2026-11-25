@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdtempSync, readdirSync, mkdirSync } from
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { loadRuleProfile, auditProfile, ProfileRejectedError } from './rule-profile.js';
+import { loadRuleProfile, auditProfile, ProfileRejectedError, readBoundedJsonText, exceedsBounds } from './rule-profile.js';
 import { profileContext } from './rule-catalog.js';
 import { runRules } from '../bpmn/rules.js';
 import { runPipeline } from '../bpmn/pipeline.js';
@@ -450,5 +450,24 @@ describe('named profiles need the repository rules/ directory', () => {
     expect(err.message).toBe('rule profile "broken" is not valid JSON at line 1, column 2');
     expect(profileProvenance(loadNamedRuleProfile('strict', RULES_DIR)).label).toBe('"strict"');
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('bounded JSON helpers take a label', () => {
+  test('readBoundedJsonText names the file kind by label and honours maxBytes', () => {
+    const p = writeProfile('big.json', '{"a":"0123456789"}');
+    expect(() => readBoundedJsonText(p, { label: 'view', maxBytes: 10 })).toThrow(/^view is larger than 10 bytes$/);
+    expect(() => readBoundedJsonText(p, { label: 'view', maxBytes: 10 })).not.toThrow(/rule profile/);
+  });
+  test('the label defaults to rule profile and a file within bounds is returned', () => {
+    const p = writeProfile('ok.json', '{"a":1}');
+    expect(readBoundedJsonText(p)).toBe('{"a":1}');
+    expect(() => readBoundedJsonText(join(tmp(), 'nope.json'))).toThrow(/^rule profile cannot be read \(ENOENT\)$/);
+  });
+  test('exceedsBounds defaults to the profile limits and accepts others', () => {
+    let deep = {};
+    for (let i = 0; i < PROFILE_LIMITS.depth; i++) deep = { k: deep };
+    expect(exceedsBounds(deep)).toBe(`nested deeper than ${PROFILE_LIMITS.depth} levels`);
+    expect(exceedsBounds(deep, { ...PROFILE_LIMITS, depth: PROFILE_LIMITS.depth + 1 })).toBeNull();
   });
 });
