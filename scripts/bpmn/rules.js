@@ -1006,6 +1006,9 @@ const SOUNDNESS_CHECKS = [
 // Schicht 2 — Method & Style (WARNING)
 // ═══════════════════════════════════════════════════════════════════════
 
+/** Lane and pool header names longer than this wrap (M10); formLanes (model-v2.js) reports formed lanes over it as H05. */
+export const LANE_NAME_LIMIT = 25;
+
 // M01 Objekt+Verb-Heuristik. Bewusst konservativ und nur WARNING — das ist KEIN
 // echter POS-Tagger (exakte Wortartanalyse bleibt M05/M06, aktuell OFF). Die
 // deutsche BA-Konvention setzt das Verb ans Ende im Infinitiv ("Antrag prüfen");
@@ -1184,15 +1187,14 @@ const STYLE_CHECKS = [
     ref: { silver: '§4.2' },
     scope: 'global',
     check: (proc, lc) => {
-      const LIMIT = 25;
       const offenders = [];
       const pools = lc.pools ?? [lc];
       for (const pool of pools) {
-        if (pool.name && pool.name.length > LIMIT) {
+        if (pool.name && pool.name.length > LANE_NAME_LIMIT) {
           offenders.push(`pool "${pool.name}" (${pool.name.length} chars)`);
         }
         for (const lane of pool.lanes ?? []) {
-          if (lane.name && lane.name.length > LIMIT) {
+          if (lane.name && lane.name.length > LANE_NAME_LIMIT) {
             offenders.push(`lane "${lane.name}" (${lane.name.length} chars)`);
           }
         }
@@ -1204,7 +1206,7 @@ const STYLE_CHECKS = [
       // it). Naming each offender in its own complete sentence is what the rule meant all along.
       return offenders.length === 0
         ? { pass: true }
-        : { pass: false, messages: offenders.map(o => `Name exceeds ${LIMIT} chars — shorten for readability: ${o}`) };
+        : { pass: false, messages: offenders.map(o => `Name exceeds ${LANE_NAME_LIMIT} chars — shorten for readability: ${o}`) };
     }
   },
   {

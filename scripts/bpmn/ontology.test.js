@@ -268,6 +268,7 @@ describe('findVocabularyLists', () => {
 const LIST_ALLOWLIST = new Map([
   ['scripts/bpmn/net-check.js', 'Deliberately independent of types.js: a checker that shares predicates with the code it checks cannot see a bug in them. Fenced by equality above.'],
   ['scripts/dmn/requirement-order.js', 'Deliberately dependency-free, and the list is an ORDER (the DMN13.xsd sequence the writer emits), not a membership set. Fenced by equality, in order, below.'],
+  ['scripts/bpmn/model-v2.js', 'The automatic activities of the inheritance rule (information model design 7.2 step 5): a category, not the vocabulary. Fenced below: every entry is a TASK_TYPES member.'],
   ['scripts/scenarios/decision-table.js', 'Two hit-policy CATEGORIES (one branch per rule vs. aggregated), not the vocabulary itself. Fenced below: together they are exactly the ontology hit policies.'],
 ]);
 
@@ -306,6 +307,14 @@ describe('no vocabulary list outside the ontology', () => {
     const src = readFileSync(join(__dirname, '..', 'dmn', 'requirement-order.js'), 'utf8');
     const m = /const REQUIREMENT_EMIT_KINDS = \[([^\]]+)\]/.exec(src);
     expect([...m[1].matchAll(/'([^']+)'/g)].map(x => x[1])).toEqual(VOCABULARY.dmn.requirementKinds());
+  });
+  test('model-v2.js names only task types as automatic activities', () => {
+    const src = readFileSync(join(__dirname, 'model-v2.js'), 'utf8');
+    const m = /const AUTOMATIC_ACTIVITY_TYPES = new Set\(\[([^\]]+)\]\)/.exec(src);
+    const names = [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
+    const tasks = new Set(VOCABULARY.classMembers('Task'));
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.filter(n => !tasks.has(n))).toEqual([]);
   });
   test('decision-table.js partitions exactly the ontology hit policies', () => {
     const src = readFileSync(join(__dirname, '..', 'scenarios', 'decision-table.js'), 'utf8');
