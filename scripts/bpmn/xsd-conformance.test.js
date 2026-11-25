@@ -61,7 +61,13 @@ function validateBatch(files) {
   }
 }
 
-if (!status.available && process.env.CI) {
+if (status.mismatch) {
+  describe('BPMN XSD conformance', () => {
+    test('BPMN XSD files carry the pinned SHA-256', () => {
+      throw new Error(`BPMN XSD file has the wrong SHA-256 — delete it and run ${FIX_HINT} (${status.reason})`);
+    });
+  });
+} else if (!status.available && process.env.CI) {
   describe('BPMN XSD conformance', () => {
     test('BPMN XSD files and xmllint are present in CI', () => {
       throw new Error(`BPMN XSD files or xmllint missing in CI — run ${FIX_HINT} (${status.reason})`);
@@ -69,7 +75,7 @@ if (!status.available && process.env.CI) {
   });
 } else if (!status.available) {
   const text = `skipped: xmllint or BPMN XSD missing (${FIX_HINT})`;
-  console.warn(`BPMN XSD conformance ${text}`);
+  console.warn(`BPMN XSD conformance ${text}: ${status.reason}`);
   describe.skip(`BPMN XSD conformance — ${text}`, () => {
     test('generated and committed BPMN XML validates against BPMN20.xsd', () => {});
   });

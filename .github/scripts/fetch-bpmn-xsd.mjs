@@ -56,20 +56,30 @@ export async function fetchBpmnXsd({ dir = xsdDir() } = {}) {
   return written;
 }
 
-/** Can the conformance test run? xmllint present and all five files carry the pinned hashes. */
-export function bpmnXsdStatus() {
+/**
+ * Can the conformance test run? xmllint present and all five files carry the pinned hashes.
+ * `mismatch` is true when a file exists with the wrong hash (a broken download, never a skip);
+ * missing files or a missing xmllint only make it unavailable.
+ */
+export function bpmnXsdStatus({ dir = xsdDir() } = {}) {
   try {
     execFileSync('xmllint', ['--version'], { stdio: 'pipe' });
   } catch {
-    return { available: false, reason: 'xmllint not found' };
+    return { available: false, mismatch: false, reason: 'xmllint not found' };
   }
   const problems = [];
+  let mismatch = false;
   for (const [name, hash] of Object.entries(XSD_FILES)) {
-    const file = join(xsdDir(), name);
+    const file = join(dir, name);
     if (!existsSync(file)) problems.push(`${name} missing`);
-    else if (sha256(readFileSync(file)) !== hash) problems.push(`${name} has the wrong SHA-256`);
+    else if (sha256(readFileSync(file)) !== hash) {
+      problems.push(`${name} has the wrong SHA-256`);
+      mismatch = true;
+    }
   }
-  return problems.length ? { available: false, reason: problems.join('; ') } : { available: true, reason: null };
+  return problems.length
+    ? { available: false, mismatch, reason: problems.join('; ') }
+    : { available: true, mismatch: false, reason: null };
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) {
