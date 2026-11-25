@@ -18,6 +18,7 @@ import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYP
 import { isBpmnArtifact, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { removeDerivedElements, DERIVED_JOIN_FLOW } from './derivations.js';
+import { EXTENSION_NS } from '../shared/utils.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -668,6 +669,45 @@ function findChildren(element, localName) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Origin marker of a diagram generated from a format 2.0 model
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Reported by every import entry point (CLI on stderr, MCP as a second text block, HTTP as
+ * `notices`) when `readModelMarker` finds the origin attributes. The import never refuses.
+ */
+export const MODEL_V2_IMPORT_NOTICE = 'Diagram generated from a format 2.0 model. Changes belong in the model. '
+  + 'Importing yields a format 1.x model; assignments and catalogue references are lost.';
+
+/**
+ * The origin attributes a format 2.0 model leaves on `bpmn:definitions` (`modelVersion`, `view`,
+ * `catalog` in the namespace `EXTENSION_NS`), or `null` when there are none or the text cannot be
+ * parsed. The prefix is found by its namespace URI, so any prefix works. A foreign tool may drop
+ * the attributes on saving; the diagram then reads as plain 1.x output. Reads only: what the
+ * importers return is the same with or without the marker.
+ */
+export function readModelMarker(xml) {
+  if (typeof xml !== 'string') return null;
+  let root;
+  try { root = parseXml(xml); } catch { return null; }
+  const attrs = root?.attrs;
+  if (!attrs || stripNs(root.tag) !== 'definitions') return null;
+  const prefixes = Object.keys(attrs)
+    .filter((name) => name.startsWith('xmlns:') && attrs[name] === EXTENSION_NS)
+    .map((name) => name.slice('xmlns:'.length));
+  for (const prefix of prefixes) {
+    const modelVersion = attrs[`${prefix}:modelVersion`];
+    if (typeof modelVersion !== 'string') continue;
+    return {
+      modelVersion,
+      view: attrs[`${prefix}:view`] ?? null,
+      catalog: attrs[`${prefix}:catalog`] ?? null,
+    };
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════
 
@@ -713,6 +753,7 @@ async function main() {
   if (logicCore.collapsedPools?.length) console.log(`  Black-Box:  ${logicCore.collapsedPools.length}`);
   console.log(`  Nodes:      ${totalNodes}`);
   console.log(`  Edges:      ${totalEdges}`);
+  if (readModelMarker(xmlInput)) console.error(MODEL_V2_IMPORT_NOTICE);
 }
 
 export { bpmnToLogicCore, bpmnToLogicCoreLegacy, parseXml };

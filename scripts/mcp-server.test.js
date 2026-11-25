@@ -12,6 +12,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { TOOLS, handleToolCall } from './mcp-bpmn-server.js';
+import { MODEL_V2_IMPORT_NOTICE } from './bpmn/import.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) =>
@@ -371,5 +372,21 @@ describe('import_bpmn removes derived elements', () => {
     expect(procs.flatMap((p) => p.nodes).map((n) => n.id)).not.toContain('gw_join_task1');
     expect(procs.flatMap((p) => p.edges).find((e) => e.id === 'f5').target).toBe('task1');
     expect(JSON.stringify(logicCore)).not.toContain('_derived');
+  });
+});
+
+describe('import_bpmn reports a diagram generated from a format 2.0 model', () => {
+  const xmlOf = (path) => readFileSync(resolve(__dirname, '..', path), 'utf8');
+
+  test('2.0 output gives a second text block with the notice', async () => {
+    const result = await call('import_bpmn', { bpmnXml: xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn') });
+    expect(result.content).toHaveLength(2);
+    expect(result.content[1]).toEqual({ type: 'text', text: MODEL_V2_IMPORT_NOTICE });
+    expect(parse(result).lanes.map((l) => l.id)).toContain('L.Process_Schaden.regress');
+  });
+
+  test('1.x output gives one block', async () => {
+    const result = await call('import_bpmn', { bpmnXml: xmlOf('tests/fixtures/simple-approval.expected.bpmn') });
+    expect(result.content).toHaveLength(1);
   });
 });

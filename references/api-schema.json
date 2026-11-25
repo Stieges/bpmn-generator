@@ -145,12 +145,13 @@
 
     "ImportResponse": {
       "type": "object",
-      "description": "POST /api/v1/import — success response.",
+      "description": "POST /api/v1/import — success response. `notices` appears only for a diagram generated from a format 2.0 model (origin attributes on bpmn:definitions); the import never refuses.",
       "required": ["correlationId", "status", "logicCore"],
       "properties": {
         "correlationId": { "type": "string" },
         "status": { "const": "success" },
-        "logicCore": { "type": "object" }
+        "logicCore": { "type": "object" },
+        "notices": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
       },
       "additionalProperties": false
     },

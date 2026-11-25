@@ -14,6 +14,7 @@ import { ProfileRejectedError } from './shared/rule-profile.js';
 import { CFG } from './shared/utils.js';
 import { getAuditPath } from './audit.js';
 import { FORMAT_V2_NOT_ACCEPTED } from './bpmn/schema-gate.js';
+import { MODEL_V2_IMPORT_NOTICE } from './bpmn/import.js';
 
 let baseUrl;
 
@@ -1058,5 +1059,40 @@ describe('views over HTTP — inline objects only, gated, bounded', () => {
     const view = JSON.parse(readFileSync(new URL('../references/view-schema.json', import.meta.url), 'utf8'));
     const { $schema, $id, ...expected } = view;
     expect(api.$defs.ViewOption).toEqual(expected);
+  });
+});
+
+describe('POST /api/v1/import reports a diagram generated from a format 2.0 model', () => {
+  const xmlOf = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const importXml = (bpmnXml) => realFetch(`${baseUrl}/api/v1/import`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bpmnXml }),
+  });
+  const importResponseSchema = async () => {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const Ajv2020 = require('ajv/dist/2020.js').default;
+    const ajv = new Ajv2020({ allErrors: true, strict: false });
+    require('ajv-formats').default(ajv);
+    const api = JSON.parse(readFileSync(new URL('../references/api-schema.json', import.meta.url), 'utf8'));
+    ajv.addSchema(api, api.$id);
+    return ajv.getSchema(`${api.$id}#/$defs/ImportResponse`);
+  };
+  beforeEach(() => _resetRateLimit());
+
+  test('2.0 output carries notices, and the response fits ImportResponse', async () => {
+    const res = await importXml(xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn'));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.notices).toEqual([MODEL_V2_IMPORT_NOTICE]);
+    expect(data.logicCore.lanes.map((l) => l.id)).toContain('L.Process_Schaden.regress');
+    const validate = await importResponseSchema();
+    expect(validate(data)).toBe(true);
+  });
+
+  test('1.x output keeps its exact keys: no notices key', async () => {
+    const res = await importXml(xmlOf('tests/fixtures/simple-approval.expected.bpmn'));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Object.keys(data).sort()).toEqual(['correlationId', 'logicCore', 'status']);
   });
 });
