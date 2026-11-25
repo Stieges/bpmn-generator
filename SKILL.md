@@ -190,4 +190,4 @@ Load only the file the task needs; each is self-contained.
 | `references/api-reference.md` | integrating through the HTTP API instead of the CLI |
 | `references/input-schema.json` | the formal Logic-Core JSON Schema (the gate) — read when a schema error is unclear |
 | `references/decision-core-schema.json` | the formal Decision-Core JSON Schema (the DMN gate) |
-| `references/api-schema.json`, `references/rule-profile-schema.json`, `references/ontology.jsonld` | machine-read by the scripts; open only to debug the HTTP contract, a rule profile or the vocabulary |
+| `references/api-schema.json`, `references/rule-profile-schema.json`, `references/view-schema.json`, `references/ontology.jsonld` | machine-read by the scripts; open only to debug the HTTP contract, a rule profile, a view or the vocabulary |

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stieges.github.io/bpmn-generator/view-schema.json",
+  "title": "View",
+  "description": "A view: a small named file that decides how a model is processed (which rule profile, which layout switches, which derivations). It lives outside the model. Every view passes this gate (scripts/shared/view.js) before anything reads it; unknown keys are refused at every level.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["view", "version"],
+  "properties": {
+    "view": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+    "version": { "const": "1.0" },
+    "description": { "type": "string", "maxLength": 1000 },
+    "ruleProfile": {
+      "description": "A rule profile NAME (resolved inside rules/), never a path.",
+      "type": "string",
+      "pattern": "^(custom/)?[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bendRule": { "type": "boolean" },
+        "nodeLabelsAvoidFlows": { "type": "boolean" },
+        "foreignShapeRepair": { "type": "boolean" },
+        "visualRefinement": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "object", "maxProperties": 32 }
+          ]
+        },
+        "poolOrder": { "enum": ["auto", "declared"] },
+        "elkWrapping": { "enum": ["off", "auto", "always"] }
+      }
+    },
+    "derivations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "joinGateways": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "view": "explicit-joins",
+  "version": "1.0",
+  "description": "Makes joins explicit: a task that several flows enter gets a joining gateway in front of it.",
+  "derivations": { "joinGateways": true }
+}
