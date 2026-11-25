@@ -26,7 +26,7 @@ import { loadNamedView, ViewRejectedError, resolveViewOptions } from './shared/v
 import { rulesDirPath } from './shared/resource-paths.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
-import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
 import { bpmnToLogicCore } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -181,12 +181,14 @@ function viewOf(args) {
 }
 
 /**
- * The view and the rule profile of a tool call. With a view the profile the caller did not give
+ * The view and the rule profile of a tool call, the view checked against the model (a lanes view
+ * on a 1.x model is a view error, before any work). With a view the profile the caller did not give
  * stays `undefined` (not null), so the view's own profile can apply; it is resolved here, once, so
  * the reviewer and compliance agents judge the model by the same profile the layout runs with.
  */
 function viewAndProfileOf(args) {
   const view = viewOf(args);
+  assertViewFitsModel(args.logicCore, view);
   const ruleProfile = ruleProfileOf(args);
   if (!view) return { view: undefined, ruleProfile };
   return { view, ruleProfile: resolveViewOptions(view, { ruleProfile: ruleProfile ?? undefined }).ruleProfile };

@@ -3,6 +3,8 @@ import addFormats from 'ajv-formats';
 import { readFileSync } from 'node:fs';
 import { inputSchemaPath, inputSchemaV2Path, catalogSchemaPath } from '../shared/resource-paths.js';
 import { boundText } from '../shared/safe-text.js';
+import { ViewRejectedError } from '../shared/view.js';
+import { quoteForMessage } from '../shared/rule-profile.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './visual-refinement.js';
 
 // Which of the two layouts applies — and why the source wins over the in-package
@@ -40,6 +42,18 @@ const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArr
 /** The format of a model: '2' iff a plain object whose `$schemaVersion` is a string starting `2.`, else '1'. */
 export function modelFormat(input) {
   return isPlainObject(input) && typeof input.$schemaVersion === 'string' && input.$schemaVersion.startsWith('2.') ? '2' : '1';
+}
+
+/**
+ * Design 6: a view with `lanes` forms the lanes of a format 2.0 model from its assignments; a 1.x
+ * model carries its own lanes, so that pair is a view error. One check for every surface that
+ * resolves a view (runPipeline, MCP tools, HTTP endpoints, orchestrate), so the message lives here.
+ * `view` is a loaded view object, or null/undefined for none. Throws ViewRejectedError.
+ */
+export function assertViewFitsModel(model, view) {
+  if (view?.lanes !== undefined && modelFormat(model) === '1') {
+    throw new ViewRejectedError(`view ${quoteForMessage(view.view)} forms lanes from assignments; this model (format 1.x) carries its own lanes`);
+  }
 }
 
 export const FORMAT_V2_NOT_ACCEPTED = 'format 2.0 is not accepted here yet — only the CLI generate path (node bpmn/pipeline.js) and runPipeline read it';

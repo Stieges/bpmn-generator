@@ -969,6 +969,14 @@ describe('views over HTTP — inline objects only, gated, bounded', () => {
     expect(data.error).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
   });
 
+  test.each(['/api/v1/validate', '/api/v1/orchestrate'])('%s: an inline lanes view on a 1.x model is a view_error', async (path) => {
+    const res = await post(path, { logicCore: lc, view: { view: 'rollen', version: '1.0', lanes: 'role' } });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.status).toBe('view_error');
+    expect(data.error).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+  });
+
   test('/api/v1/orchestrate forwards the inline view to the layout agent', async () => {
     const res = await post('/api/v1/orchestrate', { logicCore: lc, view: joins });
     const data = await res.json();

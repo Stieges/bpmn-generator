@@ -389,6 +389,16 @@ describe('orchestrate — schema gate on every Modeler output', () => {
 
 // The layout loop and the profile the agents judge by. What orchestrate returns must be one model:
 // the logicCore that was laid out into bpmnXml and judged by the reviewer and compliance alike.
+describe('orchestrate — a lanes view on a 1.x model', () => {
+  test('rejects with the bare ViewRejectedError, not a wrapped layout failure', async () => {
+    const { loadNamedView } = await import('./shared/view.js');
+    let err;
+    try { await orchestrate(loadFixture('simple-approval.json'), { view: loadNamedView('rollen') }); } catch (e) { err = e; }
+    expect(err?.name).toBe('ViewRejectedError');
+    expect(err.message).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+  });
+});
+
 describe('orchestrate — layout loop and rule profile', () => {
   const structuralFeedback = JSON.stringify({ feedback: [{ issue: 'Too long', suggestion: 'Split it', requiresLogicCoreChange: true }] });
   const renamed = (lc, name) => {

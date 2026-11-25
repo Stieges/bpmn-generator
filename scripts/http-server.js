@@ -31,7 +31,7 @@ import { chatAgent } from './agents/chat.js';
 import { createLlmProvider, LlmProviderError } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
-import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, boundSchemaErrors } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, boundSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
@@ -423,6 +423,7 @@ const server = createServer(async (req, res) => {
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       const view = clientView(body);
+      assertViewFitsModel(body.logicCore, view);
       // With a view, an option the caller did not give (absent or null) stays undefined so the view's
       // value can apply. Without a view every value but 'declared' is 'auto', as before.
       const poolOrder = body.poolOrder === 'declared' ? 'declared' : (view && body.poolOrder == null ? undefined : 'auto');
@@ -472,7 +473,9 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
-      clientView(body); // gated like the other endpoints; a view's values reach validation only through runPipeline
+      // Gated like the other endpoints; a view's values reach validation only through runPipeline,
+      // but a lanes view on a 1.x model is refused here too (one view error on every surface).
+      assertViewFitsModel(body.logicCore, clientView(body));
       const ruleProfile = clientRuleProfile(body);
       const validation = validateLogicCore(body.logicCore, profileForMode(ruleProfile, mode));
       const durationMs = Date.now() - t0;

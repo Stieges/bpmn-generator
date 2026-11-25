@@ -208,6 +208,19 @@ describe('view over MCP is a name inside views/, never a path or an object', () 
       .rejects.toThrow('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
   });
 
+  // Review Focus 2: every tool that takes a view answers a lanes view on a 1.x model with the same
+  // bare view error, never a 1.x verdict and never a wrapped orchestration failure.
+  test.each([
+    ['validate_bpmn', {}],
+    ['orchestrate_bpmn', {}],
+    ['generate_bpmn', { drillDown: true }],
+  ])('%s with a lanes view on a 1.x model rejects with the bare view error', async (name, extra) => {
+    let err;
+    try { await call(name, { logicCore: fixture('expanded-subprocess.json'), view: 'einheiten', ...extra }); } catch (e) { err = e; }
+    expect(err?.name).toBe('ViewRejectedError');
+    expect(err.message).toBe('view "einheiten" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+  });
+
   test('orchestrate_bpmn forwards the view to the layout agent', async () => {
     const r = parse(await call('orchestrate_bpmn', { logicCore: lc, view: 'explicit-joins' }));
     expect(r.bpmnXml).toContain('gw_join_task1');
