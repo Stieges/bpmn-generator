@@ -4231,6 +4231,42 @@ describe('CLI --view', () => {
     expect(res.status).toBe(0);
     expect(res.stdout).not.toMatch(/H01/);
   }, 30_000);
+
+  test('--view <value> (a space, as --decisions takes it) applies the view to the named output', async () => {
+    const res = await cli(['--view', 'explicit-joins']);
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('gw_join_task1');
+    expect(res.stdout).toMatch(/ℹ \[H01\] .*gw_join_task1/);
+  }, 30_000);
+
+  test('--view <value> before any output name: the value is not taken for the output name', async () => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const { spawnSync } = await import('node:child_process');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'view-cli-cwd-'));
+    try {
+      const res = spawnSync(process.execPath, [path.resolve('bpmn/pipeline.js'), path.resolve('../tests/fixtures/simple-approval.json'),
+        '--view', 'explicit-joins'], { encoding: 'utf8', cwd: dir });
+      expect(res.status).toBe(0);
+      expect(fs.readdirSync(dir).sort()).toEqual(['output.bpmn', 'output.svg']);
+      expect(fs.readFileSync(path.join(dir, 'output.bpmn'), 'utf8')).toContain('gw_join_task1');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('--view as the last argument, without a value, exits 1 with a message', async () => {
+    const res = await cli(['--view']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/--view requires a value/);
+    expect(res.xml).toBeNull();
+  });
+
+  test('--drill-down prints the hints of the diagrams it writes', async () => {
+    const res = await cli(['--view=explicit-joins', '--drill-down'], 'subprocess-merge-fanout.json');
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('<bg:derived>joinGateway</bg:derived>');
+    expect(res.stdout).toMatch(/ℹ \[H01\] .*gw_join_/);
+  }, 60_000);
 });
 
 describe('runPipeline layout switches', () => {

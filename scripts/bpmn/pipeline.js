@@ -599,27 +599,31 @@ export {
 
 async function main() {
   const rawArgs    = process.argv.slice(2);
-  // `--decisions <files>` (or `--decisions=<files>`) is the one flag that takes a value; pull it
-  // out first so its value is not read as the input or output path.
-  let decisionsArg = null;
-  let viewArg = null;
+  // `--decisions <files>` and `--view <name|path>` (or `--decisions=…`, `--view=…`) are the flags
+  // that take a value; pull them out first so a value is not read as the input or output path.
+  const VALUE_FLAGS = {
+    '--decisions': 'a value (comma-separated Decision-Core JSON or .dmn files)',
+    '--view': 'a value (a view name or a path to a view file)',
+  };
+  const values = { '--decisions': null, '--view': null };
   const args = [];
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
-    if (a === '--decisions') {
+    const flag = Object.keys(VALUE_FLAGS).find(f => a === f || a.startsWith(`${f}=`));
+    if (!flag) {
+      args.push(a);
+    } else if (a !== flag) {
+      values[flag] = a.slice(flag.length + 1);
+    } else {
       if (i + 1 >= rawArgs.length) {
-        console.error('✗ --decisions requires a value (comma-separated Decision-Core JSON or .dmn files)');
+        console.error(`✗ ${flag} requires ${VALUE_FLAGS[flag]}`);
         process.exit(1);
       }
-      decisionsArg = rawArgs[++i];
-    } else if (a.startsWith('--decisions=')) {
-      decisionsArg = a.slice('--decisions='.length);
-    } else if (a.startsWith('--view=')) {
-      viewArg = a.slice('--view='.length);
-    } else {
-      args.push(a);
+      values[flag] = rawArgs[++i];
     }
   }
+  const decisionsArg = values['--decisions'];
+  const viewArg = values['--view'];
   const flags      = args.filter(a => a.startsWith('--'));
   const positional = args.filter(a => !a.startsWith('--'));
   const inputArg   = positional[0];
@@ -634,7 +638,7 @@ async function main() {
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--view=<name|path>] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--view <name|path>] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
     process.exit(1);
   }
   if (refine && noRefine) {
@@ -653,7 +657,7 @@ async function main() {
     else if (flags.includes(off)) switchOpts[key] = false;
   }
 
-  // --view=<name|path>: a value that is a view name is looked up in views/, anything else is a file.
+  // --view <name|path> (or --view=<name|path>): a value that is a view name is looked up in views/, anything else is a file.
   // Loaded before the model is read so a refused view fails fast; a rejection is the caller's
   // input, so it is a message and exit 1, never a stack trace.
   let view;
@@ -728,6 +732,10 @@ async function main() {
     ...(view ? { view } : {}),
   };
 
+  // Hints (derived elements) are information, never a warning: they do not fail --strict. One
+  // printer for both branches, so drill-down reports what the single diagram reports.
+  const printHints = (validation) => validation.hints?.forEach(h => console.log(`ℹ [${h.code}] ${h.message}`));
+
   // Drill-down mode: generate parent + per-subprocess diagrams
   if (drillDown) {
     const diagramSet = await generateDiagramSet(parsedInput, refineOpts);
@@ -738,12 +746,14 @@ async function main() {
     }
     writeFileSync(`${outputBase}.bpmn`, diagramSet.parent.bpmnXml, 'utf8');
     writeFileSync(`${outputBase}.svg`, diagramSet.parent.svg, 'utf8');
+    printHints(diagramSet.parent.validation);
     console.log(`✓ Parent diagram → ${outputBase}.bpmn, ${outputBase}.svg`);
 
     for (const [subId, subResult] of Object.entries(diagramSet.subProcesses)) {
       if (subResult.bpmnXml) {
         writeFileSync(`${outputBase}_${subId}.bpmn`, subResult.bpmnXml, 'utf8');
         writeFileSync(`${outputBase}_${subId}.svg`, subResult.svg, 'utf8');
+        printHints(subResult.validation);
         console.log(`✓ SubProcess ${subId} → ${outputBase}_${subId}.svg`);
       }
     }
@@ -776,8 +786,7 @@ async function main() {
   if (result.validation.infos?.length) {
     result.validation.infos.forEach(i => console.log('ℹ ' + i));
   }
-  // Hints (derived elements) are information, never a warning: they do not fail --strict.
-  result.validation.hints?.forEach(h => console.log(`ℹ [${h.code}] ${h.message}`));
+  printHints(result.validation);
   if (optimize && result.validation.advisories?.length) {
     console.log('\n💡 Optimization opportunities (Soll-Redesign — Vorschläge, kein Auto-Fix):');
     result.validation.advisories.forEach(a => console.log('  · ' + (a.pool ? `[${a.pool}] ` : '') + a.message));
