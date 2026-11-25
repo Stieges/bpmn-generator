@@ -22,6 +22,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { runPipeline, validateLogicCore, generateDiagramSet } from './bpmn/pipeline.js';
 import { profileForMode } from './bpmn/rules.js';
 import { loadNamedRuleProfile, ProfileRejectedError } from './shared/rule-profile.js';
+import { loadNamedView, ViewRejectedError, resolveViewOptions } from './shared/view.js';
 import { rulesDirPath } from './shared/resource-paths.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
@@ -53,6 +54,11 @@ const NODE_LABELS_AVOID_FLOWS_PARAM = {
   description: "Event and gateway labels move off the flows at their node. Omitted: the server's config default (as shipped: on)",
 };
 
+const VIEW_PARAM = {
+  type: 'string',
+  description: "A view NAME from the repository's views/ directory, e.g. \"explicit-joins\" (a name only, no file and no inline object). The view decides the rule profile, layout switches and derivations for this call; an option given explicitly wins over the view. Derived elements come back as hints (validation.hints). Needs a repository checkout",
+};
+
 const FOREIGN_SHAPE_REPAIR_PARAM = {
   ...LAYOUT_SWITCH_OPTION_SCHEMA,
   description: "Re-route a sequence flow that runs through a task, event or gateway that is not its own source or target. Omitted: the server's config default (as shipped: on)",
@@ -75,6 +81,7 @@ const TOOLS = [
         drillDown: { type: 'boolean', description: 'Generate per-subprocess diagrams (optional, default false)' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default, faithful IST) or 'optimize' (Soll — adds redesign advisories)" },
         ruleProfile: PROFILE_PARAM,
+        view: VIEW_PARAM,
         visualRefinement: VISUAL_REFINEMENT_PARAM,
         bendRule: BEND_RULE_PARAM,
         nodeLabelsAvoidFlows: NODE_LABELS_AVOID_FLOWS_PARAM,
@@ -97,7 +104,8 @@ const TOOLS = [
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to validate' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (adds redesign advisories)" },
-        ruleProfile: PROFILE_PARAM
+        ruleProfile: PROFILE_PARAM,
+        view: VIEW_PARAM
       }
     }
   },
@@ -121,6 +129,7 @@ const TOOLS = [
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to orchestrate' },
         ruleProfile: PROFILE_PARAM,
+        view: VIEW_PARAM,
         visualRefinement: VISUAL_REFINEMENT_PARAM,
         bendRule: BEND_RULE_PARAM,
         nodeLabelsAvoidFlows: NODE_LABELS_AVOID_FLOWS_PARAM,
@@ -161,6 +170,28 @@ function ruleProfileOf(args) {
   return loadNamedRuleProfile(name, rulesDirPath());
 }
 
+/** The view a tool call names (a name inside views/ only); null when none, including `view: null`. */
+function viewOf(args) {
+  const name = args.view;
+  if (name === undefined || name === null) return null;
+  if (typeof name !== 'string') {
+    throw new ViewRejectedError('view must be a view name such as "explicit-joins"');
+  }
+  return loadNamedView(name);
+}
+
+/**
+ * The view and the rule profile of a tool call. With a view the profile the caller did not give
+ * stays `undefined` (not null), so the view's own profile can apply; it is resolved here, once, so
+ * the reviewer and compliance agents judge the model by the same profile the layout runs with.
+ */
+function viewAndProfileOf(args) {
+  const view = viewOf(args);
+  const ruleProfile = ruleProfileOf(args);
+  if (!view) return { view: undefined, ruleProfile };
+  return { view, ruleProfile: resolveViewOptions(view, { ruleProfile: ruleProfile ?? undefined }).ruleProfile };
+}
+
 async function handleToolCall(request) {
   const { name, arguments: args } = request.params;
 
@@ -169,7 +200,8 @@ async function handleToolCall(request) {
     if (rejected) return rejected;
 
     const include = new Set(args.include ?? ['xml', 'svg', 'validation', 'diagnostics']);
-    const opts = { mode: args.mode, ruleProfile: ruleProfileOf(args), poolOrder: args.poolOrder, ...layoutOptionsOf(args) };
+    const { view, ruleProfile } = viewAndProfileOf(args);
+    const opts = { mode: args.mode, ruleProfile, view, poolOrder: args.poolOrder, ...layoutOptionsOf(args) };
 
     if (args.drillDown) {
       const set = await generateDiagramSet(args.logicCore, opts);
@@ -207,7 +239,7 @@ async function handleToolCall(request) {
     if (rejected) return rejected;
     // infos and metrics used to be dropped here, which silently killed the
     // whole P layer (complexity metrics) for every MCP caller.
-    const result = validateLogicCore(args.logicCore, profileForMode(ruleProfileOf(args), args.mode));
+    const result = validateLogicCore(args.logicCore, profileForMode(viewAndProfileOf(args).ruleProfile ?? null, args.mode));
     return text(result);
   }
 
@@ -221,8 +253,10 @@ async function handleToolCall(request) {
     // description, and a malformed model would surface as a thrown error, not a schema_error.
     const rejected = schemaGate(args.logicCore, args);
     if (rejected) return rejected;
+    const { view, ruleProfile } = viewAndProfileOf(args);
     const result = await orchestrate(args.logicCore, {
-      ruleProfile: ruleProfileOf(args),
+      ruleProfile,
+      view,
       mode: args.mode,
       ...layoutOptionsOf(args),
     });

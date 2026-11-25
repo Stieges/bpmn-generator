@@ -192,6 +192,73 @@ describe('rule profiles over MCP are names inside rules/, never paths', () => {
   }
 });
 
+describe('view over MCP is a name inside views/, never a path or an object', () => {
+  const lc = fixture('simple-approval.json');
+  const styled = fixture('boundary-event-shapes.json');
+  const VIEW_TOOLS = ['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'];
+
+  test('generate_bpmn with view explicit-joins returns the derived gateway and an H01 hint', async () => {
+    const r = parse(await call('generate_bpmn', { logicCore: lc, view: 'explicit-joins' }));
+    expect(r.bpmnXml).toContain('gw_join_task1');
+    expect(r.validation.hints).toEqual([expect.objectContaining({ code: 'H01', elements: ['gw_join_task1', 'task1'] })]);
+  });
+
+  test('orchestrate_bpmn forwards the view to the layout agent', async () => {
+    const r = parse(await call('orchestrate_bpmn', { logicCore: lc, view: 'explicit-joins' }));
+    expect(r.bpmnXml).toContain('gw_join_task1');
+    expect(r.validation.hints).toHaveLength(1);
+  });
+
+  test('no view, view null: no hints and the plain model', async () => {
+    for (const args of [{}, { view: null }]) {
+      const r = parse(await call('generate_bpmn', { logicCore: lc, ...args }));
+      expect(r.validation.hints).toEqual([]);
+      expect(r.bpmnXml).not.toContain('gw_join_');
+    }
+  });
+
+  test('a view\'s own ruleProfile takes effect when the caller gives none (a null profile must not override it)', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { viewsDirPath } = await import('./shared/resource-paths.js');
+    const name = `t-strict-${process.pid}`;
+    const file = join(viewsDirPath(), `${name}-view.json`);
+    writeFileSync(file, JSON.stringify({ view: name, version: '1.0', ruleProfile: 'strict' }));
+    try {
+      const gen = parse(await call('generate_bpmn', { logicCore: styled, view: name, include: ['validation'] }));
+      expect(gen.validation.errors.join('\n')).toMatch(/Objekt\+Verb/);
+      const val = parse(await call('validate_bpmn', { logicCore: styled, view: name }));
+      expect(val.errors.join('\n')).toMatch(/Objekt\+Verb/);
+      const orch = parse(await call('orchestrate_bpmn', { logicCore: styled, view: name }));
+      expect(orch.compliance.isCompliant).toBe(false);
+    } finally {
+      rmSync(file, { force: true });
+    }
+  });
+
+  for (const name of VIEW_TOOLS) {
+    test.each(['../x', '/etc/passwd', 'views/default-view.json', 'a/b'])(`${name} refuses %s, naming only the name`, async (view) => {
+      let err;
+      try { await call(name, { logicCore: lc, view }); } catch (e) { err = e; }
+      expect(err?.name).toBe('ViewRejectedError');
+      expect(err.message).toContain(JSON.stringify(view));
+    });
+
+    test(`${name} refuses an unknown name (listing the available ones) and a non-string`, async () => {
+      await expect(call(name, { logicCore: lc, view: 'no-such-view' })).rejects.toThrow(/unknown view "no-such-view" — available: default, explicit-joins/);
+      await expect(call(name, { logicCore: lc, view: { view: 'x', version: '1.0' } })).rejects.toThrow(/view name/);
+    });
+
+    test(`${name} declares a view parameter that is a name`, () => {
+      const v = tool(name).inputSchema.properties.view;
+      expect(v.type).toBe('string');
+      expect(v.description).toMatch(/name/i);
+      expect(v.description).not.toMatch(/path/i);
+    });
+  }
+});
+
 // simple-approval.json changes when either switch is off, so a dropped forwarding fails `not.toBe`.
 describe('layout switches over MCP', () => {
   const lib = async (opts) => {

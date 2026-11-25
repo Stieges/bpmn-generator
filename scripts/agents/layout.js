@@ -63,6 +63,7 @@ export async function layoutAgent(state) {
     bendRule: state.options?.bendRule,
     nodeLabelsAvoidFlows: state.options?.nodeLabelsAvoidFlows,
     foreignShapeRepair: state.options?.foreignShapeRepair,
+    view: state.options?.view,
   });
 
   const update = {

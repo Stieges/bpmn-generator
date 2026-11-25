@@ -99,6 +99,11 @@ export function loadView(pathOrObject) {
 const VIEW_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const VIEW_SUFFIX = '-view.json';
 
+/** True for a string that is a view NAME (as opposed to a path). */
+export function isViewName(value) {
+  return typeof value === 'string' && VIEW_NAME.test(value);
+}
+
 function shippedNames(dir) {
   try {
     return readdirSync(dir).filter((f) => f.endsWith(VIEW_SUFFIX)).map((f) => f.slice(0, -VIEW_SUFFIX.length)).sort();
@@ -114,7 +119,7 @@ function shippedNames(dir) {
  */
 export function loadNamedView(name) {
   const shown = quoteForMessage(name);
-  if (typeof name !== 'string' || !VIEW_NAME.test(name)) {
+  if (!isViewName(name)) {
     throw new ViewRejectedError(`view name ${shown} is not valid — use a name such as "default" or "explicit-joins"`);
   }
   const dir = viewsDirPath();

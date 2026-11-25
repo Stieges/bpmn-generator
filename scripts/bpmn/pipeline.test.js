@@ -4164,6 +4164,75 @@ describe('CLI layout-switch flags', () => {
     });
 });
 
+describe('CLI --view', () => {
+  const cli = async (args, fixture = 'simple-approval.json') => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const { spawnSync } = await import('node:child_process');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'view-cli-'));
+    const out = path.join(dir, 'out');
+    const res = spawnSync(process.execPath, ['bpmn/pipeline.js', `../tests/fixtures/${fixture}`, out, ...args], { encoding: 'utf8' });
+    const xml = fs.existsSync(`${out}.bpmn`) ? fs.readFileSync(`${out}.bpmn`, 'utf8') : null;
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { ...res, xml };
+  };
+  const tempView = async (view) => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'view-file-'));
+    const file = path.join(dir, 'my.view.json');
+    fs.writeFileSync(file, JSON.stringify(view));
+    return file;
+  };
+
+  test('--view=explicit-joins (a name) writes the derived gateway, prints the hint and passes --strict', async () => {
+    const res = await cli(['--view=explicit-joins', '--strict'], 'example-urlaubsantrag.json'); // a model without warnings
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('gw_join_');
+    expect(res.stdout).toMatch(/ℹ \[H01\] .*gw_join_/);
+  }, 30_000);
+
+  test('--view=<path> loads a view file; a path is anything that is not a view name', async () => {
+    const file = await tempView({ view: 't', version: '1.0', derivations: { joinGateways: true } });
+    const res = await cli([`--view=${file}`]);
+    expect(res.status).toBe(0);
+    expect(res.xml).toContain('gw_join_task1');
+  }, 30_000);
+
+  test('a view\'s own ruleProfile takes effect when no profile is given', async () => {
+    const file = await tempView({ view: 't', version: '1.0', ruleProfile: 'strict' });
+    const strict = await cli([`--view=${file}`], 'boundary-event-shapes.json');
+    const plain = await cli([], 'boundary-event-shapes.json');
+    expect(plain.status).toBe(0);
+    expect(strict.status).toBe(1);
+    expect(strict.stderr).toMatch(/Objekt\+Verb/);
+  }, 30_000);
+
+  test('an unknown view name exits 1 and lists the available views on stderr', async () => {
+    const res = await cli(['--view=nope']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/unknown view "nope".*available: .*default.*explicit-joins/);
+    expect(res.xml).toBeNull();
+  });
+
+  test('a missing view file exits 1 with the message, not a stack trace', async () => {
+    const res = await cli(['--view=/no/such/dir/x.json']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/cannot be read/);
+    expect(res.stderr).not.toMatch(/at .*\.js:\d+/);
+  });
+
+  test('--view without a value is refused', async () => {
+    const res = await cli(['--view=']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/--view/);
+  });
+
+  test('without hints the output is unchanged: the default view prints no hint line', async () => {
+    const res = await cli(['--view=default']);
+    expect(res.status).toBe(0);
+    expect(res.stdout).not.toMatch(/H01/);
+  }, 30_000);
+});
+
 describe('runPipeline layout switches', () => {
   test.each([['bendRule', 'false'], ['nodeLabelsAvoidFlows', 1], ['bendRule', null]])(
     'a non-boolean %s (%j) is a TypeError, not a truthy switch', async (key, value) => {

@@ -926,3 +926,83 @@ describe('POST /api/v1/import removes derived elements', () => {
     expect(JSON.stringify(logicCore)).not.toContain('_derived');
   });
 });
+
+describe('views over HTTP — inline objects only, gated, bounded', () => {
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const joins = { view: 'joins', version: '1.0', derivations: { joinGateways: true } };
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const ENDPOINTS = ['/api/v1/generate', '/api/v1/validate', '/api/v1/orchestrate'];
+  beforeEach(() => _resetRateLimit());
+
+  test('/api/v1/generate with an inline view returns the derived gateway and its hint', async () => {
+    const res = await post('/api/v1/generate', { logicCore: lc, view: joins });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.bpmnXml).toContain('gw_join_task1');
+    expect(data.validation.hints).toEqual([expect.objectContaining({ code: 'H01' })]);
+  });
+
+  test('/api/v1/orchestrate forwards the inline view to the layout agent', async () => {
+    const res = await post('/api/v1/orchestrate', { logicCore: lc, view: joins });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.bpmnXml).toContain('gw_join_task1');
+  });
+
+  test('no view and view null: the plain model, no hints', async () => {
+    for (const extra of [{}, { view: null }]) {
+      const data = await (await post('/api/v1/generate', { logicCore: lc, ...extra })).json();
+      expect(data.validation.hints).toEqual([]);
+      expect(data.bpmnXml).not.toContain('gw_join_');
+    }
+  });
+
+  test('a view\'s layout switch takes effect when the body gives none (no default overrides it)', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const view = { view: 'nb', version: '1.0', layout: { bendRule: false, poolOrder: 'declared' } };
+    const expected = (await runPipeline(lc, { bendRule: false, poolOrder: 'declared' })).bpmnXml;
+    expect(expected).not.toBe((await runPipeline(lc, {})).bpmnXml);
+    for (const path of ['/api/v1/generate', '/api/v1/orchestrate']) {
+      const data = await (await post(path, { logicCore: lc, view })).json();
+      expect(data.bpmnXml).toBe(expected);
+    }
+  });
+
+  for (const path of ENDPOINTS) {
+    test(`${path}: a name or a path is refused — nothing is read`, async () => {
+      for (const view of ['explicit-joins', '/etc/passwd', '../views/default-view.json', 7, true, [], '']) {
+        const res = await post(path, { logicCore: lc, view });
+        const text = await res.text();
+        expect(res.status).toBe(400);
+        expect(JSON.parse(text).status).toBe('view_error');
+        expect(text).not.toMatch(/root:|\/etc\/passwd/);
+      }
+    });
+
+    test(`${path}: a view with an unknown key is a bounded 400`, async () => {
+      const res = await post(path, { logicCore: lc, view: { ...joins, ['x'.repeat(50000)]: 1 } });
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.status).toBe('view_error');
+      expect(data.error.length).toBeLessThan(1500);
+    });
+
+    test(`${path}: an inline view with ruleProfile is refused and points to the ruleProfile field`, async () => {
+      const res = await post(path, { logicCore: lc, view: { ...joins, ruleProfile: 'strict' } });
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.status).toBe('view_error');
+      expect(data.error).toMatch(/ruleProfile/);
+      expect(data.error).toMatch(/request field/);
+    });
+  }
+
+  test('the view schema in api-schema.json ($defs/ViewOption) mirrors references/view-schema.json', () => {
+    const api = JSON.parse(readFileSync(new URL('../references/api-schema.json', import.meta.url), 'utf8'));
+    const view = JSON.parse(readFileSync(new URL('../references/view-schema.json', import.meta.url), 'utf8'));
+    const { $schema, $id, ...expected } = view;
+    expect(api.$defs.ViewOption).toEqual(expected);
+  });
+});
