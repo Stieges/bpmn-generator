@@ -115,3 +115,25 @@ describe('reworkLoops unchanged', () => {
     });
   });
 });
+
+describe('findBackEdges with node ids that are Object.prototype members', () => {
+  test('a loop through "constructor", "toString" and "__proto__" is found, nothing throws', () => {
+    const nodes = [
+      { id: 'start', type: 'startEvent' }, { id: 'constructor', type: 'task' },
+      { id: 'toString', type: 'task' }, { id: '__proto__', type: 'task' }, { id: 'end', type: 'endEvent' },
+    ];
+    const edges = [
+      { source: 'start', target: 'constructor' }, { source: 'constructor', target: 'toString' },
+      { source: 'toString', target: '__proto__' }, { source: '__proto__', target: 'constructor' },
+      { source: '__proto__', target: 'end' },
+    ];
+    expect([...findBackEdges(nodes, edges)]).toEqual([edges[3]]);
+    expect([...findBackEdges(nodes, edges, { restartFromUnvisited: false })]).toEqual([edges[3]]);
+  });
+
+  test('prototype-named ids that are only reachable by restart, and a self-loop, are found', () => {
+    const nodes = [{ id: 'start', type: 'startEvent' }, { id: 'constructor', type: 'task' }, { id: 'toString', type: 'task' }];
+    const edges = [{ source: 'constructor', target: 'toString' }, { source: 'toString', target: 'constructor' }, { source: 'toString', target: 'toString' }];
+    expect([...findBackEdges(nodes, edges)]).toEqual([edges[1], edges[2]]);
+  });
+});
