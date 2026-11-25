@@ -15,12 +15,14 @@ const VIEW = join(ROOT, 'views/explicit-joins-view.json');
 const FIX_HINT = 'node .github/scripts/fetch-bpmn-xsd.mjs';
 const BATCH = 50;
 // Floors for the corpus, so it cannot shrink silently (a fixture that stopped generating is
-// skipped, not failed). Currently 54 generated (plain and explicit-joins) + 16 committed
-// (.expected.bpmn, .refined.bpmn, fixtures-v2) = 70. To update after adding fixtures: raise a floor
-// to the new count (temporarily set a floor too high: the failure message shows the real count).
+// skipped, not failed). Currently 54 generated (plain and explicit-joins) + 14 committed in
+// tests/fixtures (.expected.bpmn, .refined.bpmn) + 2 committed in
+// tests/fixtures-v2 = 70. To update after adding fixtures: raise a floor
+// to the new count of that folder (temporarily set a floor too high: the failure message shows the real count).
 // Never lower a floor to make a run pass.
 const MIN_GENERATED = 54;
-const MIN_COMMITTED = 16;
+const MIN_COMMITTED_FIXTURES = 14;
+const MIN_COMMITTED_FIXTURES_V2 = 2;
 
 const status = bpmnXsdStatus();
 
@@ -93,9 +95,11 @@ if (status.mismatch) {
       try {
         const files = await buildCorpus(out);
         const generated = files.filter((f) => f.startsWith(out)).length;
-        const counts = { generated, committed: files.length - generated };
+        const inDir = (dir) => files.filter((f) => f.startsWith(`${dir}/`)).length;
+        const counts = { generated, fixtures: inDir(FIXTURES), fixturesV2: inDir(FIXTURES_V2) };
         expect(counts.generated).toBeGreaterThanOrEqual(MIN_GENERATED);
-        expect(counts.committed).toBeGreaterThanOrEqual(MIN_COMMITTED);
+        expect(counts.fixtures).toBeGreaterThanOrEqual(MIN_COMMITTED_FIXTURES);
+        expect(counts.fixturesV2).toBeGreaterThanOrEqual(MIN_COMMITTED_FIXTURES_V2);
         const failed = [];
         for (let i = 0; i < files.length; i += BATCH) failed.push(...validateBatch(files.slice(i, i + BATCH)));
         expect({ checked: files.length, failed }).toEqual({ checked: files.length, failed: [] });
