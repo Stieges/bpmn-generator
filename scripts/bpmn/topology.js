@@ -322,6 +322,35 @@ export function orderParticipantsByMessageFlow(lc) {
 }
 
 /**
+ * Back edges of a depth-first search, as the edge objects of `edges`. An edge is a back edge when
+ * it points to a node still on the current DFS path (a self-loop included). The search starts at
+ * every startEvent in `nodes` order, or at `nodes[0]` when there is none. With
+ * `restartFromUnvisited` it then restarts from every node the search has not reached, so cycles
+ * without a path from a start are found too.
+ * @returns {Set<object>}
+ */
+export function findBackEdges(nodes, edges, { restartFromUnvisited = true } = {}) {
+  const outMap = {};
+  for (const e of edges) (outMap[e.source] ??= []).push(e);
+  const starts = nodes.filter(n => n.type === 'startEvent').map(n => n.id);
+  const roots = starts.length ? starts : (nodes[0] ? [nodes[0].id] : []);
+  if (restartFromUnvisited) roots.push(...nodes.map(n => n.id));
+  const state = {}; // 0=unvisited,1=on-stack,2=done
+  const back = new Set();
+  const dfs = (id) => {
+    state[id] = 1;
+    for (const e of (outMap[id] || [])) {
+      const t = e.target;
+      if (state[t] === 1) back.add(e);
+      else if (!state[t]) dfs(t);
+    }
+    state[id] = 2;
+  };
+  for (const r of roots) if (!state[r]) dfs(r);
+  return back;
+}
+
+/**
  * Identify nodes on the happy path (connected by isHappyPath edges).
  * Returns a Set of node IDs.
  */

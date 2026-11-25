@@ -17,7 +17,7 @@
  */
 
 import { isGateway, TASK_TYPES, MARKER_GROUPS } from './types.js';
-import { resolveLaneId } from './topology.js';
+import { resolveLaneId, findBackEdges } from './topology.js';
 
 const EXCEPTION_MARKERS = MARKER_GROUPS.exception;
 // German-first exception stems (match inflected forms: eskaliert/eskalation,
@@ -204,23 +204,9 @@ function computeMetrics(proc) {
 }
 
 // Rework loops ≈ back edges (DFS): edges pointing to an ancestor on the current stack.
+// Counted via the shared findBackEdges, rooted at the start events only (no restart).
 function countBackEdges(nodes, edges) {
-  const outMap = out(edges);
-  const starts = nodes.filter(n => n.type === 'startEvent').map(n => n.id);
-  const roots = starts.length ? starts : (nodes[0] ? [nodes[0].id] : []);
-  const state = {}; // 0=unvisited,1=on-stack,2=done
-  let back = 0;
-  const dfs = (id) => {
-    state[id] = 1;
-    for (const e of (outMap[id] || [])) {
-      const t = e.target;
-      if (state[t] === 1) back++;
-      else if (!state[t]) dfs(t);
-    }
-    state[id] = 2;
-  };
-  for (const r of roots) if (!state[r]) dfs(r);
-  return back;
+  return findBackEdges(nodes, edges, { restartFromUnvisited: false }).size;
 }
 
 /**
