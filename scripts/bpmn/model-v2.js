@@ -110,6 +110,11 @@ export function resolveFields(model, { catalog, viewName = 'default' } = {}) {
   for (const [id, n] of counts) if (n > 1) errors.push(`[C03] actor id "${q(id)}" occurs ${n} times in the catalogue`);
 
   const nodes = allNodes(model);
+  // No catalogue handed over at all (no source): one leading error instead of a C01 line per
+  // assignment. An empty actors list is a catalogue that was given; its C01 lines stay.
+  if (!source && nodes.some((n) => (n.assignments ?? []).length > 0)) {
+    return fail(['[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file or the catalog option of runPipeline']);
+  }
   for (const node of nodes) {
     for (const a of node.assignments ?? []) {
       if (!byId.has(a.actor)) errors.push(`[C01] node "${q(node.id)}": actor "${q(a.actor)}" is not in the catalogue`);

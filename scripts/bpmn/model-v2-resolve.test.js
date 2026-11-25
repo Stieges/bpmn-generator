@@ -120,6 +120,39 @@ describe('resolveFields', () => {
     expect(run(pooled).errors).toEqual(['[C01] node "t": actor "ghost" is not in the catalogue']);
   });
 
+  describe('assignments without any catalogue given', () => {
+    const NONE = '[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file or the catalog option of runPipeline';
+    const { catalog: _drop, ...bare } = MODEL;
+
+    test('exactly one leading error, not one C01 line per assignment', () => {
+      const { lc, resolved, errors } = resolveFields(copy(bare));
+      expect(errors).toEqual([NONE]);
+      expect(lc).toBeNull(); expect(resolved).toBeNull();
+    });
+
+    test('also with a catalogue option of null', () => {
+      expect(resolveFields(copy(bare), { catalog: null }).errors).toEqual([NONE]);
+    });
+
+    test('a catalogue with an empty actors list is given: one C01 line per assignment', () => {
+      const errors = resolveFields(copy(bare), { catalog: { actors: [] } }).errors;
+      expect(errors).toHaveLength(4);
+      expect(errors.every((e) => /^\[C01\] node "\w+": actor "\w+" is not in the catalogue$/.test(e))).toBe(true);
+    });
+
+    test('a model with an empty actors list is given too', () => {
+      const errors = resolveFields({ ...copy(bare), actors: [] }).errors;
+      expect(errors).toHaveLength(4);
+      expect(errors).not.toContain(NONE);
+    });
+
+    test('an empty catalogue object {} is given but invalid: [catalog] lines, not the no-catalogue error', () => {
+      const errors = resolveFields(copy(bare), { catalog: {} }).errors;
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors.every((e) => e.startsWith('[catalog] '))).toBe(true);
+    });
+  });
+
   test('C01 unknown unit', () => {
     const catalog = { actors: [{ id: 'r', name: 'R', kind: 'role', unit: 'nowhere' }] };
     expect(run(withNodes([task('t', [])]), catalog).errors).toEqual(['[C01] actor "r": unit "nowhere" is not in the catalogue']);
