@@ -207,7 +207,7 @@
       "required": ["id"],
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string", "description": "Short role or department name. Recommended: ≤ 25 characters (e.g. 'Einkauf', 'QA', 'Compliance', 'Teamleiter'). Longer names force multi-line header rendering and visual clutter; rule M10 emits a WARNING if exceeded. Avoid descriptive sentences, module paths, or bracketed meta-info." },
+        "name": { "type": "string", "description": "Short role or department name. Recommended: ≤ 25 characters (e.g. 'Einkauf', 'QA', 'Compliance', 'Teamleiter'). Longer names force multi-line header rendering and visual clutter; rule M10 emits a WARNING if exceeded. Avoid descriptive sentences, module paths, or bracketed meta-info. In format 2.0 lanes come from assignments, see input-schema-v2.json." },
         "nodeIds": {
           "type": "array",
           "items": { "type": "string" },
