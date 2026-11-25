@@ -48,6 +48,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const SOURCE_SCHEMA   = join(__dirname, '..', '..', 'references', 'input-schema.json');
 const PACKAGED_SCHEMA = join(__dirname, '..', 'references', 'input-schema.json');
+const SOURCE_SCHEMA_V2   = join(__dirname, '..', '..', 'references', 'input-schema-v2.json');
+const PACKAGED_SCHEMA_V2 = join(__dirname, '..', 'references', 'input-schema-v2.json');
 const SOURCE_PROMPT   = join(__dirname, '..', '..', 'references', 'prompt-template.md');
 const PACKAGED_PROMPT = join(__dirname, '..', 'references', 'prompt-template.md');
 const SOURCE_DECISION   = join(__dirname, '..', '..', 'references', 'decision-core-schema.json');
@@ -84,6 +86,11 @@ export function resolveWithFallback(sourcePath, packagedPath, label) {
 /** Absolute path to references/input-schema.json. */
 export function inputSchemaPath() {
   return resolveWithFallback(SOURCE_SCHEMA, PACKAGED_SCHEMA, 'input-schema.json');
+}
+
+/** Absolute path to references/input-schema-v2.json (format 2.0). */
+export function inputSchemaV2Path() {
+  return resolveWithFallback(SOURCE_SCHEMA_V2, PACKAGED_SCHEMA_V2, 'input-schema-v2.json');
 }
 
 /** Absolute path to references/prompt-template.md. */

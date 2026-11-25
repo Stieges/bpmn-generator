@@ -1,7 +1,7 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { readFileSync } from 'node:fs';
-import { inputSchemaPath } from '../shared/resource-paths.js';
+import { inputSchemaPath, inputSchemaV2Path, catalogSchemaPath } from '../shared/resource-paths.js';
 import { boundText } from '../shared/safe-text.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './visual-refinement.js';
 
@@ -17,10 +17,17 @@ const validate = ajv.compile(schema);
 // collaboration with one bad message flow opens with SingleProcess's "must have required property
 // 'nodes'", and the real cause comes later. A Logic-Core with `pools` is meant as a Collaboration,
 // any other object as a SingleProcess — its errors are that branch's alone.
-const validateBranch = {
-  Collaboration: ajv.getSchema(`${schema.$id}#/$defs/Collaboration`),
-  SingleProcess: ajv.getSchema(`${schema.$id}#/$defs/SingleProcess`),
-};
+const branchValidators = (id) => ({
+  Collaboration: ajv.getSchema(`${id}#/$defs/Collaboration`),
+  SingleProcess: ajv.getSchema(`${id}#/$defs/SingleProcess`),
+});
+const validateBranch = branchValidators(schema.$id);
+
+// Format 2.0 (design 5.1): its own schema, which refers to the actor catalogue schema.
+const schemaV2 = JSON.parse(readFileSync(inputSchemaV2Path(), 'utf8'));
+ajv.addSchema(JSON.parse(readFileSync(catalogSchemaPath(), 'utf8')));
+const validateV2 = ajv.compile(schemaV2);
+const validateBranchV2 = branchValidators(schemaV2.$id);
 
 const asGateErrors = (errors) => (errors || []).map(e => ({
   path: e.instancePath || '(root)',
@@ -28,15 +35,40 @@ const asGateErrors = (errors) => (errors || []).map(e => ({
   params: e.params,
 }));
 
-export function validateLogicCoreSchema(input) {
-  if (validate(input)) return { valid: true, errors: [] };
-  const all = validate.errors;
-  if (input && typeof input === 'object' && !Array.isArray(input)) {
-    const branch = validateBranch[Array.isArray(input.pools) || 'pools' in input ? 'Collaboration' : 'SingleProcess'];
-    // A branch the input passes cannot explain the failure (it would then match both): keep all.
-    if (branch && !branch(input)) return { valid: false, errors: asGateErrors(branch.errors) };
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** The format of a model: '2' iff a plain object whose `$schemaVersion` is a string starting `2.`, else '1'. */
+export function modelFormat(input) {
+  return isPlainObject(input) && typeof input.$schemaVersion === 'string' && input.$schemaVersion.startsWith('2.') ? '2' : '1';
+}
+
+export const FORMAT_V2_NOT_ACCEPTED = 'format 2.0 is not accepted here yet — only the CLI generate path (node bpmn/pipeline.js) and runPipeline read it';
+
+/**
+ * The schema gate for both formats. `accept` lists the formats the caller reads; a model of
+ * another format gets exactly one error. Errors are those of the root shape the input was meant
+ * to have (Collaboration iff `pools`).
+ */
+export function validateModelSchema(input, { accept = ['1'] } = {}) {
+  const format = modelFormat(input);
+  if (!accept.includes(format)) {
+    return { valid: false, format, errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: accept } }] };
   }
-  return { valid: false, errors: asGateErrors(all) };
+  const [check, branches] = format === '2' ? [validateV2, validateBranchV2] : [validate, validateBranch];
+  if (check(input)) return { valid: true, format, errors: [] };
+  const all = check.errors;
+  if (isPlainObject(input)) {
+    const branch = branches[Array.isArray(input.pools) || 'pools' in input ? 'Collaboration' : 'SingleProcess'];
+    // A branch the input passes cannot explain the failure (it would then match both): keep all.
+    if (branch && !branch(input)) return { valid: false, format, errors: asGateErrors(branch.errors) };
+  }
+  return { valid: false, format, errors: asGateErrors(all) };
+}
+
+/** The 1.x gate every caller that has not opted into format 2.0 uses. */
+export function validateLogicCoreSchema(input) {
+  const { valid, errors } = validateModelSchema(input, { accept: ['1'] });
+  return { valid, errors };
 }
 
 /**

@@ -407,6 +407,7 @@ membership instead of coordinates.
 | `scripts/postpack-clean-references.mjs` | `postpack` lifecycle script — removes that copy again. npm runs it after both `npm pack` and `npm pack --dry-run`, so a build artifact no longer outlives the build |
 | `scripts/build-skill.mjs` | `npm run build:skill` — bundles `SKILL.md` + `references/` + the import closure of the CLIs `SKILL.md` and the bundled `references/*.md` name (`node <file>.js`; `NOT_SKILL_CLIS` — the HTTP and MCP servers — excepted) + `scripts/config.json`/`package.json` into `bpmn-generator.skill` (gitignored, rebuilt on demand); the build aborts when an entry point reaches an excluded module (`agents/`, `robustness/`, a test), and `build-skill.test.js` fences that the bundle is closed under its own imports |
 | `references/input-schema.json` | Formal JSON Schema for Logic-Core input |
+| `references/input-schema-v2.json` | Formal JSON Schema for format 2.0 (no lanes/role/system, `assignments`, catalogue refs); read by `validateModelSchema` in `schema-gate.js`, which every gate but the CLI generate path calls with `accept: ['1']` |
 | `references/logic-core-schema.md` | Schema documentation (prose + examples) |
 | `references/prompt-template.md` | LLM prompts + 5 enterprise few-shot patterns |
 | `references/fachliches-regelwerk.md` | Rule documentation (per-rule sources, extension guide). Authoritative catalog — see this file, not duplicated counts. |

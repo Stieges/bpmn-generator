@@ -189,6 +189,6 @@ Load only the file the task needs; each is self-contained.
 | `references/fachliches-regelwerk.md` | explaining or resolving a specific rule finding (S/M/P/WF/O/SC/D/B ids) |
 | `references/omg-compliance.md` | the user asks what the XML guarantees or how an OMG element is mapped |
 | `references/api-reference.md` | integrating through the HTTP API instead of the CLI |
-| `references/input-schema.json` | the formal Logic-Core JSON Schema (the gate) — read when a schema error is unclear |
+| `references/input-schema.json`, `references/input-schema-v2.json` | the formal Logic-Core JSON Schemas (the gate; the second is format 2.0) — read when a schema error is unclear |
 | `references/decision-core-schema.json` | the formal Decision-Core JSON Schema (the DMN gate) |
 | `references/api-schema.json`, `references/rule-profile-schema.json`, `references/view-schema.json`, `references/catalog-schema.json`, `references/ontology.jsonld` | machine-read by the scripts; open only to debug the HTTP contract, a rule profile, a view, an actor catalogue or the vocabulary |

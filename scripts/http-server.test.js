@@ -13,6 +13,7 @@ import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDn
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { CFG } from './shared/utils.js';
 import { getAuditPath } from './audit.js';
+import { FORMAT_V2_NOT_ACCEPTED } from './bpmn/schema-gate.js';
 
 let baseUrl;
 
@@ -745,6 +746,21 @@ describe('schema-gate errors in responses are capped and bounded', () => {
       const text = await res.text();
       expect(res.status).toBe(400);
       expect(text.length).toBeLessThan(5_000);
+    });
+  }
+});
+
+describe('a 2.0 model is not accepted over HTTP yet', () => {
+  const m = { $schemaVersion: '2.0', id: 'P', nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }], edges: [{ source: 's', target: 'e' }] };
+  for (const path of ['/api/v1/generate', '/api/v1/validate', '/api/v1/orchestrate']) {
+    test(`${path}: 400 schema_error with the one not-accepted entry`, async () => {
+      const res = await realFetch(`${baseUrl}${path}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ logicCore: m }),
+      });
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.status).toBe('schema_error');
+      expect(data.errors).toEqual([{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] } }]);
     });
   }
 });

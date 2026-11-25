@@ -24,6 +24,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from '../shared/entry-point.js';
+import { modelFormat } from './schema-gate.js';
 import {
   previewParallelize, applyParallelize,
   previewMergeTasks, applyMergeTasks,
@@ -166,6 +167,10 @@ export function main(argv = process.argv.slice(2)) {
     lc = JSON.parse(readFileSync(resolve(inputArg), 'utf8'));
   } catch (e) {
     console.error(`✗ Eingabe konnte nicht gelesen werden: ${e.message}`);
+    process.exit(1);
+  }
+  if (modelFormat(lc) === '2') {
+    console.error('✗ Format 2.0 wird hier noch nicht angenommen.');
     process.exit(1);
   }
 
