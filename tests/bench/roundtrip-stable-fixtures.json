@@ -1,0 +1,11 @@
+{
+  "description": "Top-level fixtures for which generate(import(generate(m))) equals generate(m) as XML under the default view. The test requires this set to be a subset of the current stable set (it may grow, not shrink); compared by scripts/bpmn/views-roundtrip.test.js. Rewrite with UPDATE_VIEW_INVENTORIES=1 npm test -- --testPathPatterns=views-roundtrip (from scripts/).",
+  "stable": [
+    "artifacts-laneless-pool.json",
+    "example-onboarding.json",
+    "message-flow-participant-ports.json",
+    "messageflow-to-subprocess.json",
+    "multi-pool-collaboration.json",
+    "realistic-collaboration.json"
+  ]
+}
