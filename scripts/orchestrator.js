@@ -23,7 +23,8 @@ import { modelerAgent } from './agents/modeler.js';
 import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
-import { validateLogicCoreSchema, formatSchemaErrors } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, formatSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
+import { ViewRejectedError } from './shared/view.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { isMainModule } from './shared/entry-point.js';
 
@@ -121,6 +122,8 @@ export async function orchestrate(input, options = {}) {
     state.history.push({ agent: 'schema-gate', phase: 'reject', errors: schemaCheck.errors, ts: new Date().toISOString() });
     throw new Error(`Logic-Core failed schema validation:\n${formatSchemaErrors(schemaCheck.errors)}`);
   }
+  // A lanes view on a 1.x model is the caller's view error: refused before the reviewer runs.
+  assertViewFitsModel(state.logicCore, options.view);
 
   // Phase 2: Review loop
   for (let i = 0; i < maxReviewIterations; i++) {
@@ -178,6 +181,8 @@ export async function orchestrate(input, options = {}) {
       if (layout.done) break;
     } catch (err) {
       state.history.push({ agent: 'layout', iteration: i, error: err.message, ts: new Date().toISOString() });
+      // A refused view is the caller's input, not a layout fault: it keeps its type (→ view_error).
+      if (err instanceof ViewRejectedError) throw err;
       throw new Error(`Layout agent failed (iteration ${i}): ${err.message}`, { cause: err });
     }
 

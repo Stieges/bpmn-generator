@@ -28,7 +28,7 @@ import { fileURLToPath } from 'url';
 // Module imports
 import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
-import { validateLogicCoreSchema, LAYOUT_SWITCHES, modelFormat } from './schema-gate.js';
+import { validateLogicCoreSchema, LAYOUT_SWITCHES, modelFormat, assertViewFitsModel } from './schema-gate.js';
 import { resolveFields, formLanes } from './model-v2.js';
 import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
@@ -45,7 +45,6 @@ import { logicCoreToDot, dotToLogicCore } from './dot.js';
 import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, laneLabelFloor } from './visual-refinement.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOptions } from '../shared/view.js';
-import { quoteForMessage } from '../shared/rule-profile.js';
 import { applyDerivations } from './derivations.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
@@ -202,9 +201,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
     ({ lc: source, resolved } = fields);
   } else {
     if (opts.catalog != null) throw new TypeError('catalog applies to format 2.0 models only');
-    if (opts.lanes !== undefined) {
-      throw new ViewRejectedError(`view ${quoteForMessage(opts.viewName)} forms lanes from assignments; this model (format 1.x) carries its own lanes`);
-    }
+    assertViewFitsModel(logicCore, { view: opts.viewName, lanes: opts.lanes });
   }
 
   // Deep clone (no mutation of the caller's object) that also gives every id-less edge its id,
