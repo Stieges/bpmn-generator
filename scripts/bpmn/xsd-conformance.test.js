@@ -1,6 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,13 @@ const FIXTURES_V2 = join(ROOT, 'tests/fixtures-v2');
 const VIEW = join(ROOT, 'views/explicit-joins-view.json');
 const FIX_HINT = 'node .github/scripts/fetch-bpmn-xsd.mjs';
 const BATCH = 50;
+// Floors for the corpus, so it cannot shrink silently (a fixture that stopped generating is
+// skipped, not failed). Currently 54 generated (plain and explicit-joins) + 16 committed
+// (.expected.bpmn, .refined.bpmn, fixtures-v2) = 70. To update after adding fixtures: raise a floor
+// to the new count (temporarily set a floor too high: the failure message shows the real count).
+// Never lower a floor to make a run pass.
+const MIN_GENERATED = 54;
+const MIN_COMMITTED = 16;
 
 const status = bpmnXsdStatus();
 
@@ -85,7 +92,10 @@ if (status.mismatch) {
       const out = mkdtempSync(join(tmpdir(), 'bpmn-xsd-'));
       try {
         const files = await buildCorpus(out);
-        expect(files.length).toBeGreaterThan(0);
+        const generated = files.filter((f) => f.startsWith(out)).length;
+        const counts = { generated, committed: files.length - generated };
+        expect(counts.generated).toBeGreaterThanOrEqual(MIN_GENERATED);
+        expect(counts.committed).toBeGreaterThanOrEqual(MIN_COMMITTED);
         const failed = [];
         for (let i = 0; i < files.length; i += BATCH) failed.push(...validateBatch(files.slice(i, i + BATCH)));
         expect({ checked: files.length, failed }).toEqual({ checked: files.length, failed: [] });
