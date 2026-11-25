@@ -6,7 +6,7 @@
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP } from './constants.js';
 import { CFG } from '../shared/utils.js';
-import { identifyHappyPathNodes, identifyFeedbackEdges, resolveLaneId, assignEdgeIds } from './topology.js';
+import { identifyHappyPathNodes, identifyFeedbackEdgesDeep, isAutoJoin, resolveLaneId, assignEdgeIds, FEEDBACK_ELK_SUFFIX } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
 import { layoutText, lineWidth } from '../shared/text-layout.js';
 
@@ -99,6 +99,9 @@ function buildCoordinateMap(elkResult, lc) {
   };
 
   const collectEdge = (edge, offX = 0, offY = 0) => {
+    // A reversed feedback edge exists only to steer ELK's layering (layout.feedbackEdges);
+    // its route runs backwards, so §5.2 builds the real one.
+    if (edge.id.endsWith(FEEDBACK_ELK_SUFFIX)) return;
     const pts = [];
     for (const sec of edge.sections || []) {
       pts.push({ x: sec.startPoint.x + offX, y: sec.startPoint.y + offY });
@@ -361,11 +364,11 @@ function buildCoordinateMap(elkResult, lc) {
   //        successors (typically end events) to a second aligned x-column.
   //        This prevents ELK's slight horizontal offsets on parallel branches.
   //        Skip DFS feedback / rework outs — aligning them to the Yes column
-  //        parks Circulate / Collect auto-joins at the end of the chart.
+  //        parks the loop's re-entry auto-joins at the end of the chart.
   for (const proc of allProcesses) {
     const edges = proc.edges || [];
     const nodes = proc.nodes || [];
-    const feedback = identifyFeedbackEdges(nodes, edges);
+    const feedback = identifyFeedbackEdgesDeep(proc);
     const outgoing = {};
     for (const e of edges) {
       if (feedback.has(e.id)) continue;
@@ -528,6 +531,11 @@ function buildCoordinateMap(elkResult, lc) {
 
   // §5.2  Synthetic routing for edges without ELK routing data
   //        (cross-lane edges in rectpacking mode have no sections)
+  const typeOfNode = Object.fromEntries(
+    allProcesses.flatMap((p) => flattenProcessNodes(p.nodes || [])).map((n) => [n.id, n.type]));
+  const returnTargets = new Set(allProcessEdges
+    .filter((e) => coords[e.source] && coords[e.target] && isBackward(coords[e.source], coords[e.target]))
+    .map((e) => e.target));
   for (const edge of allProcessEdges) {
     const eid = edge.id;
     const pts = edgeCoords[eid];
@@ -537,8 +545,19 @@ function buildCoordinateMap(elkResult, lc) {
     const tgtC = coords[edge.target];
     if (!srcC || !tgtC) continue;
 
+    const hostC = coords[boundaryHosts.get(edge.source)];
+    if (!hostC && isBackward(srcC, tgtC)) {
+      // Miragon flow-connection-side's return-flow policy: the target is re-entered from the
+      // right; an activity that is itself a return-flow target (a "chain member") leaves to the
+      // left and carries the loop on, any other source leaves forward and wraps round.
+      edgeCoords[eid] = returnTargets.has(edge.source) && !isGateway(typeOfNode[edge.source])
+        && !isEvent(typeOfNode[edge.source])
+        ? orthogonalConnect(srcC, tgtC, { directionalHorizontal: true })
+        : backEdgeUTurn(srcC, tgtC, coords, edgeCoords);
+      continue;
+    }
     edgeCoords[eid] = orthogonalConnect(srcC, tgtC, {
-      hostC: coords[boundaryHosts.get(edge.source)],
+      hostC,
       // This section has always exited right and entered left, whatever the
       // direction — see orthogonalConnect's doc for why that is preserved.
       directionalHorizontal: false,
@@ -1375,6 +1394,7 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
     const procNodes = flattenProcessNodes(proc.nodes || [])
       .filter((n) => !isArtifact(n.type) && !isBoundaryEvent(n.type) && coords[n.id]);
     const edges = flattenProcessEdges(proc);
+    const allNodes = flattenProcessNodes(proc.nodes || []);  // boundary events included (moveNodeY)
     const incoming = {};
     const outgoing = {};
     for (const e of edges) {
@@ -1382,7 +1402,7 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
       (outgoing[e.source] ||= []).push(e);
     }
 
-    const feedback = identifyFeedbackEdges(proc.nodes || [], edges);
+    const feedback = identifyFeedbackEdgesDeep(proc);
 
     for (const node of procNodes) {
       if (!isGateway(node.type)) continue;
@@ -1405,13 +1425,13 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
         : (cys[cys.length / 2 - 1] + cys[cys.length / 2]) / 2;
 
       // Prefer the unique forward out when it already lies on the mid-rank spine.
-      // Auto-joins (gw_join_*) always snap to the successor — they exist only to
+      // Auto-joins (synthesised by preprocessLogicCore) always snap to the successor — they exist only to
       // fan into that activity.
       const outEdge = outs[0];
       const outBox = coords[outEdge.target];
       const joinCx = join.x + join.w / 2;
       const outCx = outBox.x + outBox.w / 2;
-      const autoJoin = /^gw_join_/i.test(node.id || '');
+      const autoJoin = isAutoJoin(node);
       if (outCx > joinCx + forwardEps) {
         const outCy = outBox.y + outBox.h / 2;
         if (autoJoin || Math.abs(outCy - targetCy) <= outSnapPx) targetCy = outCy;
@@ -1430,7 +1450,8 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
         if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
       }
       if (Math.abs(newY - join.y) <= cyEps) continue;
-      join.y = newY;
+      if (!verticalMoveIsFree(coords, node.id, newY)) continue;
+      moveNodeY(coords, edgeCoords, node.id, newY, allNodes, edges);
       moved.push(node.id);
 
       // Drop routes that touched the join so later passes rebuild them.
@@ -1439,6 +1460,56 @@ function alignMultiInJoins(coordMap, lc, opts = {}) {
   }
 
   return { moved };
+}
+
+/**
+ * Move node `id` vertically to `newY`, and its boundary events with it — they sit on its outline
+ * (placeBoundaryEvents ran before the align passes), so a host moving alone left them hanging off
+ * it. A boundary event's outgoing flow keeps its route; only its start moves by the same delta (and
+ * the second point too while the first leg is horizontal, so the leg stays orthogonal).
+ * @returns {string[]} the boundary events moved along
+ */
+function moveNodeY(coords, edgeCoords, id, newY, procNodes, procEdges) {
+  const box = coords[id];
+  const dy = newY - box.y;
+  box.y = newY;
+  const moved = [];
+  for (const n of procNodes) {
+    if (n.attachedTo !== id || !coords[n.id]) continue;
+    coords[n.id].y += dy;
+    moved.push(n.id);
+    for (const e of procEdges) {
+      const pts = e.source === n.id ? edgeCoords[e.id] : null;
+      if (!pts || pts.length < 2) continue;
+      const horizontal = Math.abs(pts[0].y - pts[1].y) < 0.5;
+      pts[0] = { ...pts[0], y: pts[0].y + dy };
+      if (horizontal) pts[1] = { ...pts[1], y: pts[1].y + dy };
+    }
+  }
+  return moved;
+}
+
+/**
+ * May node `id` move vertically to `newY`? Only when its new box clears every other shape by
+ * `layout.nodeMoveClearancePx` — the snap passes below (chain align, join align) used to move a
+ * node straight onto a neighbour in the same column, an overlap no DI code reports (bpmnlint's
+ * no-overlapping-elements does). A container holding the node, or held by it, does not count,
+ * nor does a boundary event on the node.
+ */
+function verticalMoveIsFree(coords, id, newY) {
+  const box = coords[id];
+  if (!box) return false;
+  const gap = CFG.layout?.nodeMoveClearancePx ?? 4;
+  const nb = { x: box.x, y: newY, w: box.w, h: box.h };
+  const holds = (P, Q) => P.x <= Q.x && P.y <= Q.y && P.x + P.w >= Q.x + Q.w && P.y + P.h >= Q.y + Q.h;
+  const touchesOld = (b) => b.x < box.x + box.w && box.x < b.x + b.w && b.y < box.y + box.h && box.y < b.y + b.h;
+  for (const [oid, b] of Object.entries(coords)) {
+    if (oid === id || !b) continue;
+    if (holds(b, box) || holds(box, b)) continue;
+    if (touchesOld(b) && b.w < box.w && b.h < box.h) continue; // its own boundary event
+    if (b.x < nb.x + nb.w + gap && nb.x < b.x + b.w + gap && b.y < nb.y + nb.h + gap && nb.y < b.y + b.h + gap) return false;
+  }
+  return true;
 }
 
 /**
@@ -1478,6 +1549,7 @@ function alignSameLaneChains(coordMap, lc, opts = {}) {
     const procNodes = flattenProcessNodes(proc.nodes || [])
       .filter((n) => !isArtifact(n.type) && !isBoundaryEvent(n.type) && coords[n.id]);
     const edges = flattenProcessEdges(proc);
+    const allNodes = flattenProcessNodes(proc.nodes || []);  // boundary events included (moveNodeY)
     const nodeById = Object.fromEntries(procNodes.map((n) => [n.id, n]));
 
     const byLane = new Map();
@@ -1547,8 +1619,8 @@ function alignSameLaneChains(coordMap, lc, opts = {}) {
               const hi = band.y + band.h - box.h - pad;
               if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
             }
-            if (Math.abs(newY - box.y) > cyEps) {
-              box.y = newY;
+            if (Math.abs(newY - box.y) > cyEps && verticalMoveIsFree(coords, id, newY)) {
+              moveNodeY(coords, edgeCoords, id, newY, allNodes, edges);
               moved.add(id);
             }
           }
@@ -1607,8 +1679,8 @@ function alignSameLaneChains(coordMap, lc, opts = {}) {
               const hi = band.y + band.h - box.h - pad;
               if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
             }
-            if (Math.abs(newY - box.y) > cyEps) {
-              box.y = newY;
+            if (Math.abs(newY - box.y) > cyEps && verticalMoveIsFree(coords, id, newY)) {
+              moveNodeY(coords, edgeCoords, id, newY, allNodes, edges);
               moved.add(id);
             }
           }
@@ -1711,6 +1783,87 @@ function outwardFromHost(evC, hostC) {
     right: Math.abs(cx - (hostC.x + hostC.w)),
   };
   return Object.keys(dist).reduce((a, b) => (dist[b] < dist[a] ? b : a));
+}
+
+/**
+ * A return flow in Miragon flow-connection-side's sense: the target's centre lies more than
+ * `layout.returnFlowTolerancePx` left of the source's (the rule's own tolerance is 10 px).
+ */
+function isBackward(srcC, tgtC) {
+  const tol = CFG.layout?.returnFlowTolerancePx ?? 10;
+  return tgtC.x + tgtC.w / 2 < srcC.x + srcC.w / 2 - tol;
+}
+
+/**
+ * The §5.2 route of a return flow (rework loop) whose source leaves forward: out of the
+ * source's right side, along a corridor below (or above) every shape in the way, back to
+ * the right of the target and into its right side — the return-flow policy of Miragon
+ * flow-connection-side (target re-entered from the right; an initiating activity exits
+ * forward), four bends. Before this, §5.2 routed every flow as a straight right-out /
+ * left-in Z, which for a target behind its source ran back through both shapes
+ * (`layout.feedbackEdges` hands every feedback edge to §5.2).
+ * The corridor sits `boundaryExitClearance` past the lowest (highest) shape in the span,
+ * below LANE_COMPACT_PADDING for the reason orthogonalConnect's `clearance` doc gives; the
+ * side with the shorter detour wins, below on a tie. A box holding either end (an expanded
+ * subprocess) is not in the way. The bend rule may still improve the route.
+ */
+function backEdgeUTurn(srcC, tgtC, coords, edgeCoords = {}) {
+  const clearance = CFG.layout?.boundaryExitClearance ?? 12;
+  const stub = CFG.layout?.endStubPx ?? 20;
+  const sx = srcC.x + srcC.w + stub;
+  const tx = tgtC.x + tgtC.w + stub;
+  const scy = srcC.y + srcC.h / 2;
+  const tcy = tgtC.y + tgtC.h / 2;
+  const holds = (b, c) => b.x <= c.x && b.y <= c.y && b.x + b.w >= c.x + c.w && b.y + b.h >= c.y + c.h
+    && (b.w > c.w || b.h > c.h);
+  const lo = Math.min(tx, sx), hi = Math.max(tx, sx);
+  const boxes = Object.values(coords).filter((b) => b && b !== srcC && b !== tgtC
+    && !holds(b, srcC) && !holds(b, tgtC) && b.x < hi && b.x + b.w > lo);
+  const corridor = (down) => {
+    let y = down ? Math.max(srcC.y + srcC.h, tgtC.y + tgtC.h) + clearance
+                 : Math.min(srcC.y, tgtC.y) - clearance;
+    for (let moved = true; moved;) {
+      moved = false;
+      for (const b of boxes) {
+        if (b.y - clearance < y && y < b.y + b.h + clearance) {
+          y = down ? b.y + b.h + clearance : b.y - clearance;
+          moved = true;
+        }
+      }
+    }
+    return y;
+  };
+  const route = (y) => [
+    { x: srcC.x + srcC.w, y: scy }, { x: sx, y: scy }, { x: sx, y },
+    { x: tx, y }, { x: tx, y: tcy }, { x: tgtC.x + tgtC.w, y: tcy },
+  ];
+  const detour = (y) => Math.abs(y - scy) + Math.abs(y - tcy);
+  const cands = [corridor(true), corridor(false)].map((y) => ({ y, pts: route(y) }));
+  for (const c of cands) c.crossings = routeCrossings(c.pts, edgeCoords);
+  // Fewer crossings with the routes already there, then the shorter detour, then below.
+  cands.sort((a, b) => a.crossings - b.crossings || detour(a.y) - detour(b.y));
+  return cands[0].pts;
+}
+
+/** Proper crossings of orthogonal route `pts` with every route in `edgeCoords` (shared ends excluded). */
+function routeCrossings(pts, edgeCoords) {
+  const segs = (p) => p.slice(1).map((q, i) => [p[i], q]);
+  const mine = segs(pts);
+  let n = 0;
+  for (const other of Object.values(edgeCoords || {})) {
+    if (!other || other.length < 2) continue;
+    for (const [a, b] of mine) {
+      for (const [c, d] of segs(other)) {
+        const h1 = Math.abs(a.y - b.y) < 0.5, h2 = Math.abs(c.y - d.y) < 0.5;
+        if (h1 === h2) continue;
+        const [H0, H1, V0, V1] = h1 ? [a, b, c, d] : [c, d, a, b];
+        const x = V0.x, y = H0.y;
+        if (x > Math.min(H0.x, H1.x) + 0.5 && x < Math.max(H0.x, H1.x) - 0.5
+          && y > Math.min(V0.y, V1.y) + 0.5 && y < Math.max(V0.y, V1.y) - 0.5) n++;
+      }
+    }
+  }
+  return n;
 }
 
 /**

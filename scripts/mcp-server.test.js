@@ -220,11 +220,12 @@ describe('layout switches over MCP', () => {
       expect(out.errors[0].path).toBe(key);
     });
   }
-  // foreignShapeRepair changes nothing in simple-approval; the #91 model shows a dropped forwarding.
+  // foreignShapeRepair changes nothing in simple-approval; boundary-event-shapes (one DI11 when off)
+  // shows a dropped forwarding.
   for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
     test(`foreignShapeRepair: false on ${name} equals the library call and differs from no option`, async () => {
       const { runPipeline } = await import('./bpmn/pipeline.js');
-      const rp = () => fixture('example-rechnungspruefung.json');
+      const rp = () => fixture('boundary-event-shapes.json');
       const out = parse(await call(name, { logicCore: rp(), foreignShapeRepair: false, include: ['xml'] }));
       expect(out.bpmnXml).toBe((await runPipeline(rp(), { foreignShapeRepair: false })).bpmnXml);
       expect(out.bpmnXml).not.toBe((await runPipeline(rp(), {})).bpmnXml);

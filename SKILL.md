@@ -90,9 +90,10 @@ Extraction Prompt in `references/prompt-template.md`. These rules always apply:
   Auto-join inserts converging diamonds where the loop re-enters (`fake-join`).
 - Mark the **continue** out `"isHappyPath": true`; leave rework outs unmarked
   (optional `isDefault: true` on the chase branch).
-- Do **not** hand-place the XOR left of Finalize — the pipeline excludes DFS
-  feedback edges from ELK layering so the XOR stays on the rightward spine.
-  If a chart still parks the XOR left, regenerate with this tip (`excludeFeedbackEdgesFromElk`).
+- Do **not** hand-place the XOR left of Finalize — the pipeline hands DFS feedback
+  edges to ELK reversed, so the XOR stays on the rightward spine and the loop stays
+  short. Nothing to set in the Logic-Core (operators can change it with
+  `layout.feedbackEdges` in a `BPMN_CONFIG` file).
 
 **Gateway direction** (OMG §10.5.1)
 - `has_join: true` on a joining gateway → `Converging`; splits become `Diverging`, split+join

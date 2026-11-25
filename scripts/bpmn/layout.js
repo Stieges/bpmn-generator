@@ -9,7 +9,7 @@ import { artifactSize } from './coordinates.js';
 import { CFG } from '../shared/utils.js';
 import { boundText } from '../shared/safe-text.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
-import { preprocessLogicCore, assignEdgeIds, identifyFeedbackEdges } from './topology.js';
+import { preprocessLogicCore, assignEdgeIds, identifyFeedbackEdges, feedbackEdgeMode, FEEDBACK_ELK_SUFFIX } from './topology.js';
 
 /**
  * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
@@ -123,10 +123,12 @@ function buildElkEdges(nodes, edges) {
   }
   const known = new Set(nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type)).map(n => n.id));
 
-  // Drop DFS feedback edges from ELK so cycle-breaking cannot park a loop XOR
-  // left of the happy path (config layout.excludeFeedbackEdgesFromElk, default on).
-  const skipFeedback = CFG.layout?.excludeFeedbackEdgesFromElk !== false;
-  const feedback = skipFeedback ? identifyFeedbackEdges(nodes, edges) : new Set();
+  // DFS feedback edges (rework loops) per `layout.feedbackEdges` — see feedbackEdgeMode.
+  // 'reverse' keeps their layering pull without letting ELK's cycle breaking pick a
+  // different edge to reverse (which parked a loop XOR left of its predecessors);
+  // the renamed id keeps ELK's route of the reversed edge out of coordMap.
+  const mode = feedbackEdgeMode();
+  const feedback = mode === 'elk' ? new Set() : identifyFeedbackEdges(nodes, edges);
 
   return edges
     .map(e => {
@@ -135,7 +137,11 @@ function buildElkEdges(nodes, edges) {
       return source === target ? null : { ...e, source, target };
     })
     .filter(e => e && known.has(e.source) && known.has(e.target))
-    .filter(e => !feedback.has(e.id))
+    .flatMap(e => {
+      if (!feedback.has(e.id)) return [e];
+      if (mode === 'drop') return [];
+      return [{ id: e.id + FEEDBACK_ELK_SUFFIX, source: e.target, target: e.source }];
+    })
     .map((e, i) => buildElkEdge(e, i));
 }
 

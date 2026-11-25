@@ -13,9 +13,10 @@
  * structurally blind alignment metric, so the blind spots are documented as
  * carefully as the definitions.
  *
- *   - crossings         pairwise segment intersections between non-adjacent
- *                        sequence-flow edges (edges sharing a source/target
- *                        node are considered adjacent and excluded).
+ *   - crossings         pairwise segment intersections between sequence-flow
+ *                        edges; two edges sharing a source/target node count
+ *                        only where one cuts clean across the other (touching
+ *                        at the shared port or overlapping is not a crossing).
  *                        Does NOT cover message flows or associations.
  *   - bends             direction changes per edge polyline (sum + count of
  *                        edges with <=1 bend). A bend is not automatically a
@@ -64,11 +65,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPipeline } from '../bpmn/pipeline.js';
 import { logicCoreToElk, runElkLayout } from '../bpmn/layout.js';
-import { resolveLaneId } from '../bpmn/topology.js';
+import { resolveLaneId, normalizeEdgeIds } from '../bpmn/topology.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { CFG } from '../shared/utils.js';
-import { flowMetrics, flowDirectionMetrics } from './flow-metrics.mjs';
+import { flowMetrics, flowDirectionMetrics, sideRuleMetrics } from './flow-metrics.mjs';
 import { edgeLabelBox, labelHitsRoute, boxWithin, flattenProcessNodes } from '../bpmn/coordinates.js';
 import { innerLaneLines } from '../bpmn/visual-refinement.js';
 
@@ -97,6 +98,13 @@ function onSegment(a, b, c) {
     Math.min(a.x, b.x) - 1e-6 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-6 &&
     Math.min(a.y, b.y) - 1e-6 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-6
   );
+}
+
+/** Strict interior crossing: each segment's ends lie on opposite sides of the other. */
+function properlyCross(p1, p2, p3, p4) {
+  const o1 = orientation(p1, p2, p3), o2 = orientation(p1, p2, p4);
+  const o3 = orientation(p3, p4, p1), o4 = orientation(p3, p4, p2);
+  return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
 }
 
 function segmentsIntersect(p1, p2, p3, p4) {
@@ -428,11 +436,12 @@ function computeMetrics(coords, edgeCoords, edgeList, alignCtx) {
     for (let j = i + 1; j < edges.length; j++) {
       const a = edges[i], b = edges[j];
       const adjacent = a.source === b.source || a.source === b.target || a.target === b.source || a.target === b.target;
-      if (adjacent) continue;
+      // Flows sharing a node count only when one cuts clean across the other (the bend rule's rule).
+      const test = adjacent ? properlyCross : segmentsIntersect;
       const segsA = segments(a.points), segsB = segments(b.points);
       for (const [p1, p2] of segsA) {
         for (const [p3, p4] of segsB) {
-          if (segmentsIntersect(p1, p2, p3, p4)) crossings++;
+          if (test(p1, p2, p3, p4)) crossings++;
         }
       }
     }
@@ -638,6 +647,7 @@ export async function measureLayout(lc, opts = {}) {
   const edgeList = collectAllEdges(lc);
   const cm = r.coordMap;
   const f = flowMetrics(cm, lc);
+  const sides = sideRuleMetrics(cm, normalizeEdgeIds(JSON.parse(JSON.stringify(lc))));
   const diCodes = {};
   for (const i of r.diagnostics?.issues || []) diCodes[i.code] = (diCodes[i.code] || 0) + 1;
   return {
@@ -650,7 +660,7 @@ export async function measureLayout(lc, opts = {}) {
     labels: edgeLabelHits(cm, lc),
     flow: { hug: f.seq.laneLineHug, bendsMax: f.seq.bendsMax, crowd: f.seq.crowd.pairs, mfCrowd: f.mf.crowd.pairs,
       offOver5: f.seq.endOffOver5 + f.mf.endOffOver5, overlapLen: f.overlapLen },
-    direction: flowDirectionMetrics(cm, lc),
+    direction: { ...flowDirectionMetrics(cm, lc), sides },
     diCodes,
   };
 }
@@ -682,7 +692,9 @@ export function summarize(m) {
 /** The flow-direction counts the fence compares — kept apart from summarize(), whose rows predate them. */
 export function summarizeDirection(m) {
   if (!m) return null;
-  return { avoidableBends: m.direction.avoidableBends, againstFlowEntries: m.direction.againstFlowEntries };
+  const { sides } = m.direction;
+  return { avoidableBends: m.direction.avoidableBends, againstFlowEntries: m.direction.againstFlowEntries,
+    wrongExit: sides.wrongExit.length, wrongEntry: sides.wrongEntry.length, oddBends: sides.oddBends.length };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

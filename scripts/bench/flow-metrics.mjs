@@ -6,7 +6,7 @@
  */
 import { isEvent, isGateway } from '../bpmn/types.js';
 import { resolveLaneId, normalizeEdgeIds } from '../bpmn/topology.js';
-import { bendMetrics, bendRuleLimits, collinearRun } from '../bpmn/bend-rule.js';
+import { bendMetrics, bendRuleLimits, collinearRun, entrySide, exitSide } from '../bpmn/bend-rule.js';
 
 /** Horizontal run within this many px of an inner lane boundary counts as lying on the line. */
 export const LANE_LINE_HUG_PX = 3;
@@ -234,4 +234,61 @@ export function flowDirectionMetrics(coordMap, lc) {
   // would silently drop out of the measure.
   const { avoidableBends, againstFlowEntries } = bendMetrics(coordMap, normalizeEdgeIds(lc));
   return { avoidableBends, againstFlowEntries };
+}
+
+/**
+ * Connection-side conformance, read off the final routes — a port of the side policy of
+ * Miragon's bpmnlint rule `flow-connection-side` (the bend rule's target):
+ *  forward flow   — target: event/activity left, gateway top/bottom/left;
+ *                   source: activity right, event/gateway top/right/bottom.
+ *  return flow    — the target's centre more than 10 px left of the source's: the target is
+ *                   entered mirrored (event/activity right, gateway top/bottom/right); an activity
+ *                   source exits right, or left when it is itself a return-flow target (a "chain
+ *                   member"); an event/gateway source may leave any side.
+ * Boundary events are free. A side is read from the end segment's direction, so a gateway docked
+ * on a flank instead of a tip is not seen here; the stub length is not checked either.
+ * `oddBends`: activity source and activity/event target, both ends horizontal by the policy above,
+ * so the segment count is odd and the bend count even (segments alternate H/V) — an odd count
+ * proves a vertical end. Necessary, not sufficient: a straight vertical drop has 0 bends.
+ * The caller's Logic-Core predates auto-joins, so an end that does not touch its declared node's
+ * box is a rewired end at a synthesised gateway and is judged as a gateway.
+ * @returns {{ wrongExit: string[], wrongEntry: string[], oddBends: string[] }}
+ */
+export function sideRuleMetrics(coordMap, lc, ctx = buildFlowContext(lc)) {
+  const coords = coordMap.coords || {};
+  const boundary = new Set();
+  const walk = (nodes) => { for (const n of nodes || []) { if (n.attachedTo) boundary.add(n.id); walk(n.nodes); } };
+  for (const p of ctx.procs) walk(p.nodes);
+  const touches = (pt, b) => b && pt.x >= b.x - 2 && pt.x <= b.x + b.w + 2 && pt.y >= b.y - 2 && pt.y <= b.y + b.h + 2;
+  const category = (id, pt) => {
+    if (boundary.has(id) || ctx.typeOf[id] == null) return null;
+    if (!touches(pt, coords[id])) return 'gateway';
+    return isGateway(ctx.typeOf[id]) ? 'gateway' : isEvent(ctx.typeOf[id]) ? 'event' : 'activity';
+  };
+  const cx = (b) => b.x + b.w / 2;
+  const backward = (e) => coords[e.source] && coords[e.target] && cx(coords[e.target]) < cx(coords[e.source]) - 10;
+  const routed = ctx.seqEdges.filter((e) => (coordMap.edgeCoords?.[e.id]?.length ?? 0) >= 2);
+  const chainMembers = new Set(routed.filter(backward).map((e) => e.target));
+  const POLICY = {
+    in: { event: ['left'], activity: ['left'], gateway: ['top', 'bottom', 'left'] },
+    out: { event: ['top', 'right', 'bottom'], activity: ['right'], gateway: ['top', 'right', 'bottom'] },
+  };
+  const MIRROR = { left: 'right', right: 'left', top: 'top', bottom: 'bottom' };
+  const allowed = (dir, cat, back, chain) => {
+    const pol = POLICY[dir][cat];
+    const mir = pol.map((x) => MIRROR[x]);
+    if (dir === 'in') return back ? mir : pol;
+    if (cat === 'activity') return back && chain ? mir : pol;
+    return back ? [...new Set([...pol, ...mir])] : pol;
+  };
+  const out = { wrongExit: [], wrongEntry: [], oddBends: [] };
+  for (const e of routed) {
+    const pts = coordMap.edgeCoords[e.id];
+    const back = backward(e);
+    const sc = category(e.source, pts[0]), tc = category(e.target, pts[pts.length - 1]);
+    if (sc && !allowed('out', sc, back, chainMembers.has(e.source)).includes(exitSide(pts))) out.wrongExit.push(e.id);
+    if (tc && !allowed('in', tc, back).includes(entrySide(pts))) out.wrongEntry.push(e.id);
+    if (sc === 'activity' && (tc === 'activity' || tc === 'event') && bends(pts) % 2 === 1) out.oddBends.push(e.id);
+  }
+  return out;
 }

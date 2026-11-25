@@ -284,6 +284,10 @@ layout and rendering. Two rules make it hold:
    text out the way bpmn-js lays out a TextAnnotation (`layout.textAnnotationText`) and is the one
    size source for both `layout.js` (`artifactReserveHeight`) and `placeArtifacts`; `bpmn-xml.js`
    writes the box, `svg.js` draws `lines` into it and never re-wraps.
+   A collapsed container with children has a diagram of its own: `coordMap.subPlanes[containerId]`
+   is a complete coordMap for its children (`layoutCollapsedSubPlanes` in `pipeline.js`, a nested
+   pipeline run on the preprocessed children), written by `bpmn-xml.js` as one more `BPMNDiagram`
+   whose plane is the container. The SVG draws the main plane only.
 2. **Anything depending on final geometry runs last.** Message flow routes must lie in the gap
    between participants, so `routeMessageFlows()` runs in `pipeline.js` *after* visual refinement —
    the last pass that can still move a participant. Two label passes run after it, in this order:

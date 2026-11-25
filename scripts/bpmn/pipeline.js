@@ -161,7 +161,9 @@ async function runPipeline(logicCore, opts = {}) {
 
   const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
-  if (errors.length) {
+  // A sub-plane run (layoutCollapsedSubPlanes) lays out children the parent run already
+  // validated; a child-level finding must not cost the parent its diagram.
+  if (errors.length && !opts._subPlane) {
     return { bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null, validation: { errors, warnings, advisories, metrics } };
   }
 
@@ -325,16 +327,7 @@ async function runPipeline(logicCore, opts = {}) {
       const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id)
         && coordMap.coords[e.source] && coordMap.coords[e.target]);
       if (need.length) {
-        const rebuilt = simplifyAllEdges(
-          Object.fromEntries(need.map((e) => [e.id, [
-            { x: coordMap.coords[e.source].x + coordMap.coords[e.source].w, y: coordMap.coords[e.source].y + coordMap.coords[e.source].h / 2 },
-            { x: coordMap.coords[e.target].x, y: coordMap.coords[e.target].y + coordMap.coords[e.target].h / 2 },
-          ]])),
-          coordMap.coords,
-          need,
-          new Set(),
-        );
-        coordMap.edgeCoords = { ...coordMap.edgeCoords, ...rebuilt };
+        coordMap.edgeCoords = { ...coordMap.edgeCoords, ...rebuildOrthogonal(need, coordMap.coords) };
       }
       refreshMovedLabels(coordMap, allEdges, beforeAlign, laneLines);
     }
@@ -351,16 +344,7 @@ async function runPipeline(logicCore, opts = {}) {
       const need = allEdges.filter((e) => !coordMap.edgeCoords[e.id] && !skipSimplify.has(e.id)
         && coordMap.coords[e.source] && coordMap.coords[e.target]);
       if (need.length) {
-        const rebuilt = simplifyAllEdges(
-          Object.fromEntries(need.map((e) => [e.id, [
-            { x: coordMap.coords[e.source].x + coordMap.coords[e.source].w, y: coordMap.coords[e.source].y + coordMap.coords[e.source].h / 2 },
-            { x: coordMap.coords[e.target].x, y: coordMap.coords[e.target].y + coordMap.coords[e.target].h / 2 },
-          ]])),
-          coordMap.coords,
-          need,
-          new Set(),
-        );
-        coordMap.edgeCoords = { ...coordMap.edgeCoords, ...rebuilt };
+        coordMap.edgeCoords = { ...coordMap.edgeCoords, ...rebuildOrthogonal(need, coordMap.coords) };
       }
       refreshMovedLabels(coordMap, allEdges, beforeJoin, laneLines);
     }
@@ -485,6 +469,12 @@ async function runPipeline(logicCore, opts = {}) {
     coordMap.nodeLabels = placeNodeLabelsAvoidingFlows(coordMap, lc);
   }
 
+  // A collapsed container's children get a diagram of their own (bpmn-js opens it on drill-in;
+  // bpmnlint's no-bpmndi asks for it): laid out here, carried in coordMap like every other
+  // geometry, written by bpmn-xml.js as one more BPMNDiagram. The SVG draws the main plane only.
+  coordMap.subPlanes = await layoutCollapsedSubPlanes(lc, opts);
+  if (opts._subPlane) return { coordMap };
+
   const bpmnXml   = await generateBpmnXml(lc, coordMap);
   const svg       = generateSvg(lc, coordMap);
 
@@ -499,6 +489,54 @@ async function runPipeline(logicCore, opts = {}) {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
     validation: { errors: [], warnings, infos: layoutInfos, advisories, metrics, xmlWarnings: roundTrip.warnings },
   };
+}
+
+/**
+ * Routes for flows a node-moving pass (chain align, join align) dropped: an orthogonal Z from the
+ * source's right to the target's left, simplified, then forced orthogonal. The seed used to be the
+ * straight two-point line between those ports, which simplifyAllEdges does not always break up —
+ * a diagonal reached the DI (bpmnlint flow-orthogonal).
+ */
+function rebuildOrthogonal(edges, coords) {
+  const seeds = Object.fromEntries(edges.map((e) => {
+    const s = coords[e.source], t = coords[e.target];
+    const a = { x: s.x + s.w, y: s.y + s.h / 2 };
+    const b = { x: t.x, y: t.y + t.h / 2 };
+    const mx = (a.x + b.x) / 2;
+    return [e.id, Math.abs(a.y - b.y) < 0.5 ? [a, b] : [a, { x: mx, y: a.y }, { x: mx, y: b.y }, b]];
+  }));
+  const rebuilt = simplifyAllEdges(seeds, coords, edges, new Set());
+  for (const id of Object.keys(rebuilt)) rebuilt[id] = enforceOrthogonal(rebuilt[id]);
+  return rebuilt;
+}
+
+/**
+ * Lay out the children of every collapsed container (subprocess, transaction… with `nodes`, not
+ * `isExpanded`) as a process of their own, for the container's own BPMNDiagram. Reads the
+ * pipeline's preprocessed Logic-Core, so the children's auto-joins and rewired flows already
+ * exist and match the XML. Children of an expanded container are searched too; a collapsed
+ * container nested inside a collapsed one is handled by the nested run and merged in.
+ * Lanes do not reach into a sub-plane, so a child's `lane` is dropped there.
+ * @returns {Promise<Object<string, object>>} container id → coordMap
+ */
+async function layoutCollapsedSubPlanes(lc, opts) {
+  const planes = {};
+  const visit = async (nodes) => {
+    for (const n of nodes || []) {
+      if (!n.nodes?.length) continue;
+      if (n.isExpanded) { await visit(n.nodes); continue; }
+      const childLc = JSON.parse(JSON.stringify({ id: `${n.id}_plane`, name: n.name || n.id, nodes: n.nodes, edges: n.edges || [] }));
+      const strip = (ns) => { for (const c of ns || []) { delete c.lane; strip(c.nodes); } };
+      strip(childLc.nodes);
+      const { coordMap } = await runPipeline(childLc, { ...opts, decisions: undefined, _subPlane: true });
+      if (!coordMap) continue;
+      const { subPlanes = {}, ...own } = coordMap;
+      planes[n.id] = own;
+      Object.assign(planes, subPlanes);
+    }
+  };
+  for (const proc of (lc.pools || [lc])) await visit(proc.nodes);
+  return planes;
 }
 
 /**

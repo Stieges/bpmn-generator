@@ -10,19 +10,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Feedback / rework edges no longer pull the loop XOR left.** DFS back-edges
-  (circulate → finalize → Review closed? → back to Collect / Circulate) are
-  excluded from the ELK layered graph (`layout.excludeFeedbackEdgesFromElk`,
-  default on) so GREEDY_MODEL_ORDER cannot park the decision gateway before
-  its predecessors; bend-rule still routes those edges as back-edges.
-- **Fan-out column align ignores feedback outs.** §5.0d no longer snaps
-  re-circulate / more-feedback targets (and their auto-join successors) onto
-  the Yes-path x-column when a gateway has 3+ exits.
+  (work → decision → back to an earlier step) are handed to ELK reversed
+  (`layout.feedbackEdges`: `reverse` by default; `drop` leaves them out, `elk` lets ELK's
+  own cycle breaking decide), so the decision gateway stays after its predecessors while
+  the reversed edge still keeps the loop short under network-simplex layering. Feedback
+  edges are found per container (a loop inside an expanded subprocess included), from
+  start events and from nodes without an incoming flow, with an iterative DFS. The two
+  alignment passes below follow the same switch.
+- **Back-edges without an ELK route get a U-turn.** §5.2 used to route every flow it
+  built as a straight right-out / left-in Z, which for a target behind its source ran
+  back through both shapes. A return flow (target centre more than
+  `layout.returnFlowTolerancePx` left of the source's) now follows Miragon flow-connection-side's
+  return-flow policy: it leaves forward, runs below or above every shape in the way — the side
+  with fewer crossings, then the shorter detour — and re-enters the target from the right; an
+  activity that is itself a return-flow target leaves to the left.
+- **Fan-out column align ignores feedback outs.** §5.0d no longer snaps loop-back
+  targets (and their auto-join successors) onto the Yes-path x-column when a gateway
+  has 3+ exits.
+- **Subprocess children carry `incoming`/`outgoing`.** Top-level flow nodes always listed their
+  sequence flows; children of a subprocess did not, so bpmnlint (`no-disconnected`,
+  `no-implicit-start`, `no-implicit-end`) reported every child as disconnected.
+- **A collapsed subprocess's children get their own diagram.** Each collapsed container with
+  children now has a `BPMNDiagram` whose plane is the container (what bpmn-js shows on drill-in),
+  laid out by a nested pipeline run and carried in `coordMap.subPlanes`. The children used to have
+  no DI at all (bpmnlint `no-bpmndi`). The SVG still draws the main plane only.
+- **No unused message definitions.** A `Message` (and the other definition kinds) is generated
+  only for an event marker or an explicit `messageRef` — a send/receive task without `messageRef`
+  references nothing, and used to leave `Message_1` unreferenced (bpmnlint `global`). Events
+  inside subprocesses now count too.
+- **No diagonal after a node moves.** Chain align and join align rebuilt the flows of a node they
+  moved from a straight two-point seed, which sometimes reached the DI as a diagonal (bpmnlint
+  `flow-orthogonal`); the seed is now an orthogonal Z, forced orthogonal after simplification.
+- **Chain and join align never move a node onto another.** A vertical snap is applied only when
+  the new box clears every other shape by `layout.nodeMoveClearancePx` (bpmnlint
+  `no-overlapping-elements`; no DI code reports a shape overlap).
+- **Forward flows through a gateway keep Miragon's sides.** The bend rule's side penalty now also
+  counts a forward flow leaving a gateway by its left tip or entering it by its right tip.
+- **A collapsed subprocess with children no longer crashes the layout.** Its child flows
+  have no shapes to route; the same-lane chain align's rebuild read their coordinates.
 - **Multi-in auto-joins keep the forward spine.** Feedback incomings are ignored
-  when leveling `gw_join_*` cy; the join snaps to its successor so T20→join→T21
-  stays horizontal.
+  when leveling an auto-join's cy (marked by `preprocessLogicCore`, not by its id, so a
+  gateway the author named `gw_join_…` is not mistaken for one); the join snaps to its
+  successor so the step → join → step chain stays horizontal.
 - **Cross-lane handoffs enter from the left.** Bend-rule proposes a 2-bend
-  (or right-side detour) staircase when the first leg is horizontal, so a higher
-  lane does not top-enter the activity below (Miragon flow-connection-side).
+  staircase (or a 4-bend detour round the target) when the first leg leaves to the right,
+  so a higher lane does not top-enter the activity below (Miragon flow-connection-side).
 - **Multi-in joins sit beside the mid-rank branch.** A converging exclusive gateway with
   2+ incomings and one forward out snaps its centerline to the median of its incoming
   sources (refined to the successor when that successor is already near the median), so

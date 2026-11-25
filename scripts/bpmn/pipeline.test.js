@@ -352,7 +352,11 @@ describe('Round-trip (JSON → BPMN → JSON)', () => {
     const origNodes = original.pools[0].nodes;
     const reimNodes = reimported.nodes || (reimported.pools && reimported.pools[0].nodes) || [];
 
-    expect(reimNodes.length).toBe(origNodes.length);
+    // Plus the converging gateway the pipeline inserts where a task has several incomings
+    // (bpmnlint fake-join, preprocessLogicCore): a real node of the written model.
+    const autoJoins = reimNodes.filter(n => n.type === 'exclusiveGateway' && !origNodes.some(o => o.id === n.id));
+    expect(autoJoins.every(n => n.id.startsWith('gw_join_'))).toBe(true);
+    expect(reimNodes.length - autoJoins.length).toBe(origNodes.length);
   });
 
   test('multi-pool: reimport preserves pool count', async () => {
@@ -3675,8 +3679,9 @@ describe('DOT format', () => {
       expect(result.validation.errors).toEqual([]);
       expect(result.validation.xmlWarnings ?? []).toEqual([]);
       const ids = [...result.bpmnXml.matchAll(/<bpmn:sequenceFlow id="([^"]+)"/g)].map((m) => m[1]);
-      expect(ids).toHaveLength(3);
-      expect(new Set(ids).size).toBe(3);
+      // The two parallel flows meet at an auto-join (bpmnlint fake-join), which adds one flow.
+      expect(ids).toHaveLength(4);
+      expect(new Set(ids).size).toBe(4);
     });
 
     test('`a -> b;` and `a -> b ;` parse identically, with no semicolon in the target', () => {
@@ -4223,11 +4228,13 @@ describe('runPipeline layout switches', () => {
 describe('ELK wrapping fallback', () => {
   const lc = () => JSON.parse(readFileSync('../tests/fixtures/wrapping-back-edge.json', 'utf8'));
 
-  test('a 23-node chain with a back edge lays out with wrapping requested and says it fell back', async () => {
+  // This chain used to make ELK's wrapping throw, and the fallback said so. It no longer throws, so
+  // the fallback itself is fenced below with an injected ELK error.
+  test('a 23-node chain with a back edge lays out with wrapping requested, nothing to report', async () => {
     const r = await runPipeline(lc(), { elkWrapping: 'auto' });
     expect(r.bpmnXml).toBeTruthy();
     expect(r.diagnostics.ok).toBe(true);
-    expect(r.validation.infos).toEqual([expect.stringContaining('wrapping skipped')]);
+    expect(r.validation.infos).toEqual([]);
   });
 
   test('the raw ELK error text in the fallback message is bounded', async () => {
@@ -4252,7 +4259,7 @@ describe('ELK wrapping fallback', () => {
   test('--refine --wrap equivalent (ALL_ON) no longer crashes on it', async () => {
     const r = await runPipeline(lc(), ALL_ON);
     expect(r.bpmnXml).toBeTruthy();
-    expect(r.validation.infos.length).toBe(1);
+    expect(r.validation.infos).toEqual([]);
   });
 
   test('without wrapping there is nothing to report', async () => {
@@ -5210,13 +5217,16 @@ describe('B1 — boundary events reach the layout', () => {
     const lc = twoLanes();
     lc.nodes = lc.nodes.filter(n => !['up', 'side', 'rem', 'e2', 'fix', 'e3'].includes(n.id));
     lc.edges = lc.edges.filter(e => ['f1', 'f2'].includes(e.id));
-    // Targets left of the host come before it in the flow (a loop back), targets right after it.
+    // Targets left of the host come before it in the flow (a loop back into the host), targets
+    // right after it. A loop-back target has the boundary flow as its only incoming: with a second
+    // one (s → target) the pipeline puts an auto-join in front of it (bpmnlint fake-join), and the
+    // join, which the boundary flow then reaches, has to come after the host.
     for (const [ev, tgt, right] of ups) {
       lc.nodes.push({ id: ev, type: 'boundaryEvent', marker: 'timer', attachedTo: 't', cancelActivity: false, name: ev, lane: 'L2' });
       lc.nodes.push({ id: tgt, type: 'userTask', name: tgt, lane: 'L1' });
       lc.edges.push({ id: `f_${ev}`, source: ev, target: tgt });
       if (right) lc.edges.push({ id: `g_${tgt}`, source: tgt, target: 'e' });
-      else lc.edges.push({ id: `g_${tgt}`, source: 's', target: tgt });
+      else lc.edges.push({ id: `g_${tgt}`, source: tgt, target: 't' });
     }
     return lc;
   };
@@ -5632,13 +5642,13 @@ describe('DI integrity check', () => {
       expect(r.map(i => i.message)).toEqual([
         'Sequence flow "fh" runs through "bev" (a boundary event of its own source "host"), which is neither its source nor its target.']);
     });
-    test('fires on example-rechnungspruefung without the repair: the loop-back flow through foreign shapes', async () => {
-      // The model #91 was found on. With the bend rule on, cardinal docks already clear the
-      // classic f411→r_gw3 hit; turn the bend rule off so §5.2's unrepaired route still shows DI11.
-      const lc = JSON.parse(readFileSync(resolve(fixturesDir, 'example-rechnungspruefung.json'), 'utf8'));
-      const r = await runPipeline(lc, { ...optionsFor('default'), foreignShapeRepair: false, bendRule: false });
+    test('fires on boundary-event-shapes without the repair: f6 through the escalation event esc_c', async () => {
+      // example-rechnungspruefung, the model #91 was found on, no longer has a hit for the repair to
+      // clear (feedback edges reach ELK reversed, §5.2 builds return-flow U-turns); f6 still does.
+      const lc = JSON.parse(readFileSync(resolve(fixturesDir, 'boundary-event-shapes.json'), 'utf8'));
+      const r = await runPipeline(lc, { ...optionsFor('default'), foreignShapeRepair: false });
       const hits = r.diagnostics.issues.filter(i => i.code === 'DI11');
-      expect(hits.some(i => i.elements[0] === 'f411')).toBe(true);
+      expect(hits.map(i => i.elements.join(' > '))).toContain('f6 > esc_c');
     }, 60000);
     test('top-level fixtures reporting DI11 are exactly the known set', async () => {
       const found = [];
@@ -6177,7 +6187,12 @@ describe('subprocess children — nothing is lost on the way down', () => {
     const r = await runPipeline(lc);
 
     expect(r.bpmnXml).toContain('id="c_doc"');                      // content is there
-    expect(r.bpmnXml).not.toMatch(/bpmnElement="c_doc"/);           // but no DI shape
+    // No shape on the main plane, one on the subprocess's own plane (what bpmn-js drills into).
+    const main = r.bpmnXml.match(/<bpmndi:BPMNDiagram id="BPMNDiagram_1">[\s\S]*?<\/bpmndi:BPMNDiagram>/)[0];
+    expect(main).not.toMatch(/bpmnElement="c_doc"/);
+    const sub = r.bpmnXml.match(/<bpmndi:BPMNDiagram id="outer_diagram">[\s\S]*?<\/bpmndi:BPMNDiagram>/)?.[0];
+    expect(sub).toMatch(/<bpmndi:BPMNPlane id="outer_plane" bpmnElement="outer">/);
+    expect(sub).toMatch(/bpmnElement="c_doc"/);
     expect(r.bpmnXml).not.toMatch(/<bpmn:subProcess id="outer"[^>]*isExpanded="true"/);
   });
 
@@ -6443,11 +6458,14 @@ describe('geometry contract — the two renderers agree', () => {
           ...(n.edges || []).map(e => e.id),
           ...edgeIds(n.nodes),
         ]);
-        const ids = [
+        // Plus the flows preprocessLogicCore adds (an auto-join's outgoing flow): they are in
+        // coordMap and drawn like any other, but not in the fixture.
+        const ids = [...new Set([
           ...(lc.pools || [lc]).flatMap(p => [...(p.edges || []).map(e => e.id), ...edgeIds(p.nodes)]),
           ...(lc.messageFlows || []).map(m => m.id),
           ...(lc.associations || []).map(a => a.id),
-        ].filter(id => r.coordMap.edgeCoords[id]);
+          ...Object.keys(r.coordMap.edgeCoords).filter(id => id.startsWith('flow_gw_join_')),
+        ])].filter(id => r.coordMap.edgeCoords[id]);
         expect(drawn).toHaveLength(ids.length);
 
         // One offset for all of them: derive it from the leftmost/topmost point
@@ -6458,8 +6476,21 @@ describe('geometry contract — the two renderers agree', () => {
         const dy = Math.min(...flat(drawn).map(p => p[1]))
                  - Math.min(...ids.flatMap(id => r.coordMap.edgeCoords[id].map(p => p.y)));
 
-        expect(new Set(drawn.map(p => poly(p))))
-          .toEqual(new Set(ids.map(id => poly(r.coordMap.edgeCoords[id], dx, dy))));
+        // Matched within the renderers' rounding step: the offset is estimated from rounded SVG
+        // points against unrounded coordMap points, so with quarter-pixel positions (the align
+        // passes take medians) an exact one-decimal string match flips the last digit. A renderer
+        // computing its own geometry is off by far more than this.
+        const near = (a, b) => a.length === b.length
+          && a.every((p, i) => Math.abs(p[0] - b[i][0]) <= 0.2 && Math.abs(p[1] - b[i][1]) <= 0.2);
+        const pool = drawn.map(p => p.map(q => [q[0], q[1]]));
+        const unmatched = [];
+        for (const id of ids) {
+          const want = r.coordMap.edgeCoords[id].map(q => [q.x + dx, q.y + dy]);
+          const i = pool.findIndex(d => near(d, want));
+          if (i < 0) unmatched.push(`${id}: ${poly(want)}`); else pool.splice(i, 1);
+        }
+        expect(unmatched).toEqual([]);
+        expect(pool.map(p => poly(p))).toEqual([]);
       });
 
       test(`${fixture} (refinement: ${visualRefinement}) — the SVG places each edge label's lines by bpmn-js's Text.js rule for its DI box`, async () => {
@@ -6485,10 +6516,17 @@ describe('geometry contract — the two renderers agree', () => {
           ...Object.values(cm.edgeLabels).map(L => ({ ...boxOf(L), lines: L.lines })),
           ...Object.values(cm.nodeLabels),
         ].flatMap(b =>
-          b.lines.map((line, i) => `${r1(b.x + b.w / 2 + dx)},${r1(b.y + dy + lineH * (0.75 + i))} ${line}`));
+          b.lines.map((line, i) => ({ x: b.x + b.w / 2 + dx, y: b.y + dy + lineH * (0.75 + i), line })));
         const got = [...r.svg.matchAll(/<tspan x="([-\d.]+)" y="([-\d.]+)">([^<]*)<\/tspan>/g)]
-          .map(m => `${r1(+m[1])},${r1(+m[2])} ${m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}`);
-        expect(got.sort()).toEqual(want.sort());
+          .map(m => ({ x: +m[1], y: +m[2], line: m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>') }));
+        // Within the rounding step, for the reason the connection test above gives.
+        const unmatched = [];
+        for (const w of want) {
+          const i = got.findIndex(g => g.line === w.line && Math.abs(g.x - w.x) <= 0.2 && Math.abs(g.y - w.y) <= 0.2);
+          if (i < 0) unmatched.push(`${r1(w.x)},${r1(w.y)} ${w.line}`); else got.splice(i, 1);
+        }
+        expect(unmatched).toEqual([]);
+        expect(got.map(g => `${r1(g.x)},${r1(g.y)} ${g.line}`)).toEqual([]);
       });
 
       test(`${fixture} (refinement: ${visualRefinement}) — every edge label in the DI is coordMap's`, async () => {
@@ -6519,10 +6557,12 @@ describe('geometry contract — the two renderers agree on node labels', () => {
   // svg.js draws its lines into it. Both are compared against the contract, every top-level fixture.
   const r1 = n => (Math.round(n * 10) / 10).toFixed(1);
   const box = (b) => b && `${r1(b.x)},${r1(b.y)} ${r1(b.w)}x${r1(b.h)}`;
-  /** BPMNLabel bounds of every BPMNShape that carries one, keyed by node id (the shape id minus `_di`). */
+  /** BPMNLabel bounds of every BPMNShape that carries one, keyed by node id (the shape id minus `_di`).
+   *  Main plane only: a collapsed subprocess's own diagram (coordMap.subPlanes) is not drawn in the SVG. */
   const diNodeLabels = (xml) => {
     const out = {};
-    for (const m of xml.matchAll(/<bpmndi:BPMNShape id="([^"]+)_di"[\s\S]*?<\/bpmndi:BPMNShape>/g)) {
+    const main = xml.match(/<bpmndi:BPMNDiagram id="BPMNDiagram_1">[\s\S]*?<\/bpmndi:BPMNDiagram>/)[0];
+    for (const m of main.matchAll(/<bpmndi:BPMNShape id="([^"]+)_di"[\s\S]*?<\/bpmndi:BPMNShape>/g)) {
       const b = m[0].match(/<bpmndi:BPMNLabel>\s*<dc:Bounds x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/);
       if (b) out[m[1]] = { x: +b[1], y: +b[2], w: +b[3], h: +b[4] };
     }
@@ -7115,9 +7155,11 @@ describe('flows through a foreign shape are re-routed (#91, layout.foreignShapeR
     }, 30000);
   }
   test('switched off per call, the routes coordinates.js §5.2 builds are left as they are', async () => {
-    // Bend rule on clears the unrepaired DI11 hits; fence the switch with bendRule off.
-    const r = await runPipeline(loadFixture('example-rechnungspruefung.json'), { foreignShapeRepair: false, bendRule: false });
-    expect(r.diagnostics.issues.filter(i => i.code === 'DI11').length).toBeGreaterThan(0);
+    // boundary-event-shapes' f6 runs through esc_c until the repair moves it (see the DI11 fence).
+    const off = await runPipeline(loadFixture('boundary-event-shapes.json'), { foreignShapeRepair: false });
+    expect(off.diagnostics.issues.filter(i => i.code === 'DI11').length).toBeGreaterThan(0);
+    const on = await runPipeline(loadFixture('boundary-event-shapes.json'));
+    expect(on.diagnostics.issues.filter(i => i.code === 'DI11')).toEqual([]);
   }, 30000);
   test('a non-boolean switch is a TypeError, like every layout switch', async () => {
     await expect(runPipeline(loadFixture('simple-approval.json'), { foreignShapeRepair: 'no' })).rejects.toThrow(TypeError);
@@ -7344,6 +7386,13 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
 
   test('compactLanes twice equals once; two runs are byte-identical', async () => {
     const { compactLanes, laneLabelFloor } = await import('./visual-refinement.js');
+    // Chain align and join align run AFTER compaction and may tighten a lane's content, so the
+    // pipeline's final output can hold slack a second compaction would take. Switched off here so
+    // "once" is compactLanes' own output.
+    const saved = { chain: CFG.layout.sameLaneChainAlign, join: CFG.layout.multiInJoinAlign };
+    CFG.layout.sameLaneChainAlign = false;
+    CFG.layout.multiInJoinAlign = false;
+    try {
     for (const name of ['sparse-lanes', 'multi-pool-collaboration', 'realistic-collaboration', 'long-lane-names', 'all-element-classes']) {
       const lc = loadFixture(`${name}.json`);
       const a = await runPipeline(lc, COMPACT);
@@ -7360,13 +7409,20 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
       const off = await runPipeline(loadFixture(`${name}.json`), { visualRefinement: false });
       const lc2 = loadFixture(`${name}.json`);
       const edges = (lc2.pools || [lc2]).flatMap(p => flattenProcessEdges(p));
-      const again = rerouteAfterCompaction(a.coordMap.edgeCoords, off.coordMap.edgeCoords, a.coordMap.coords,
+      // On its own output, not on the pipeline's: passes after it (nudgeVerticalsClearOfNodeSides,
+      // the bend rule) may move a leg it would put back, by design.
+      const reroute = (ec) => rerouteAfterCompaction(ec, off.coordMap.edgeCoords, a.coordMap.coords,
         edges.filter(e => a.coordMap.edgeCoords[e.id]), new Set(), { laneLines: innerLaneLines(a.coordMap, lc2), laneLineClearance: 10 });
-      expect(JSON.stringify(again)).toBe(JSON.stringify(a.coordMap.edgeCoords));
+      const once = reroute(a.coordMap.edgeCoords);
+      expect(JSON.stringify(reroute(once))).toBe(JSON.stringify(once));
       const b = await runPipeline(loadFixture(`${name}.json`), COMPACT);
       expect(b.bpmnXml).toBe(a.bpmnXml);
     }
-  }, 30000);
+    } finally {
+      CFG.layout.sameLaneChainAlign = saved.chain;
+      CFG.layout.multiInJoinAlign = saved.join;
+    }
+  }, 60000);
 
   test('a re-routed flow\'s label follows it: beside its own route, off every lane separator', async () => {
     const { edgeLabelHits } = await import('../bench/layout-metrics.mjs');
@@ -7374,10 +7430,9 @@ describe('lane compaction keeps sequence flows off lane lines', () => {
       const lc = loadFixture(`${name}.json`);
       const r = await runPipeline(lc, { visualRefinement: true, elkWrapping: 'auto' });
       const hits = edgeLabelHits(r.coordMap, lc);
-      // Wrapped bpmn-generator-pipeline: repairEdgeLabels nudges fo7 ("Errors gefunden")
-      // 15 px off its short Z leg past gap+tolerance — known far label under wrap+refine.
-      const far = name === 'bpmn-generator-pipeline' ? 'fo7' : '';
-      expect(`${name} ${hits.laneLine.join(',')}|${hits.farFromEdge.join(',')}`).toBe(`${name} |${far}`);
+      // bpmn-generator-pipeline's fo7 ("Errors gefunden") used to sit 15 px off its short Z leg
+      // under wrap+refine; with its route no longer bent that way it is beside it like the rest.
+      expect(`${name} ${hits.laneLine.join(',')}|${hits.farFromEdge.join(',')}`).toBe(`${name} |`);
     }
   }, 30000);
 
@@ -7522,8 +7577,12 @@ describe('connection sides — leave right, enter left', () => {
   describe('cross-lane-connection-sides (guard)', () => {
     let ec;
     beforeAll(async () => { ec = await sidesOf('cross-lane-connection-sides.json'); }, 30000);
-    test('e3 gw1 → task2 (cross-lane) enters task2 from the left', () => {
-      expect(entrySide(ec.e3)).toBe('left');
+    // task2 has two incomings (e3, e6), so they meet at an auto-join in front of it (bpmnlint
+    // fake-join): e3 enters that gateway — top, bottom or left per Miragon — and the join's own
+    // flow carries the left entry into task2.
+    test('e3 gw1 → task2 (cross-lane) reaches task2 through its auto-join, entered from the left', () => {
+      expect(['top', 'bottom', 'left']).toContain(entrySide(ec.e3));
+      expect(entrySide(ec.flow_gw_join_task2_task2)).toBe('left');
     });
     test('e6 task3 → task2 (cross-lane) exits right, enters left', () => {
       expect(exitSide(ec.e6)).toBe('right');

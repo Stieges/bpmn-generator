@@ -311,10 +311,20 @@ function crossings(entry, pts, entries) {
   let n = 0;
   const A = segsOf(pts);
   for (const o of entries) {
-    if (o.id === entry.id || adjacent(entry, o)) continue;
-    for (const [p1, p2] of A) for (const [p3, p4] of segsOf(o.points)) if (segmentsIntersect(p1, p2, p3, p4)) n++;
+    if (o.id === entry.id) continue;
+    // Two flows sharing a node may touch at its port or run into it together — not a crossing —
+    // but one cutting clean across the other's line is: five flows into one join used to cross
+    // each other freely because adjacent pairs were never counted (dense-edge-labels' f7).
+    const test = adjacent(entry, o) ? properlyCross : segmentsIntersect;
+    for (const [p1, p2] of A) for (const [p3, p4] of segsOf(o.points)) if (test(p1, p2, p3, p4)) n++;
   }
   return n;
+}
+/** Strict interior crossing: each segment's ends lie on opposite sides of the other (no touching, no overlap). */
+function properlyCross(p1, p2, p3, p4) {
+  const o1 = orientation(p1, p2, p3), o2 = orientation(p1, p2, p4);
+  const o3 = orientation(p3, p4, p1), o4 = orientation(p3, p4, p2);
+  return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
 }
 /**
  * Length two segments run on top of each other: both horizontal (or both vertical), closer than
@@ -547,6 +557,30 @@ const hasFlowDirection = (ctx, id) => !isGateway(ctx.typeOf[id]);
 function isBackEdge(sb, tb, eps = 10) {
   return !!sb && !!tb && (sb.x + sb.w / 2) > (tb.x + tb.w / 2) + eps;
 }
+/** Targets of return flows among `entries` — Miragon's "chain members" (they carry a loop on leftwards). */
+const returnTargetsCache = new WeakMap();
+function returnTargets(entries, coords) {
+  let set = returnTargetsCache.get(entries);
+  if (!set) {
+    set = new Set(entries.filter((e) => isBackEdge(coords[e.source], coords[e.target])).map((e) => e.target));
+    returnTargetsCache.set(entries, set);
+  }
+  return set;
+}
+/**
+ * The side an activity/event end of `entry` should use, per Miragon flow-connection-side: forward,
+ * enter left and leave right; on a return flow the target is re-entered from the right, and an
+ * activity source leaves right (it initiates the loop) or left (it is itself a return-flow target).
+ * An event source on a return flow may leave by any side (null = no constraint).
+ */
+function wantedEntrySide(ctx, entry) {
+  return isBackEdge(ctx.coords[entry.source], ctx.coords[entry.target]) ? 'right' : 'left';
+}
+function wantedExitSide(ctx, entry, entries) {
+  if (!isBackEdge(ctx.coords[entry.source], ctx.coords[entry.target])) return 'right';
+  if (isEvent(ctx.typeOf[entry.source])) return null;
+  return returnTargets(entries, ctx.coords).has(entry.source) ? 'left' : 'right';
+}
 /** Auto-join diamonds read as flow-through — prefer the same left-in habit as activities. */
 const isAutoJoin = (id) => /^gw_join_/i.test(id || '');
 /**
@@ -658,12 +692,19 @@ function gatewaySameSideInOut(nodeId, entries, selfId, pts, ctx) {
  */
 function sidePenalty(pts, entry, ctx, entries = []) {
   let p = 0;
-  if (hasFlowDirection(ctx, entry.target) && entrySide(pts) !== 'left') p++;
-  if (!ctx.attached.has(entry.source) && hasFlowDirection(ctx, entry.source) && exitSide(pts) !== 'right') p++;
+  if (hasFlowDirection(ctx, entry.target) && entrySide(pts) !== wantedEntrySide(ctx, entry)) p++;
+  if (!ctx.attached.has(entry.source) && hasFlowDirection(ctx, entry.source)) {
+    const want = wantedExitSide(ctx, entry, entries);
+    if (want && exitSide(pts) !== want) p++;
+  }
   // Miragon: a back-edge into a gateway should not enter from the left (mirrors incoming).
   // Counted here so Pass A/B/C share one potential and Pass C cannot oscillate on gateway-only flips.
   const sb = ctx.coords[entry.source], tb = ctx.coords[entry.target];
   const backEdge = isBackEdge(sb, tb);
+  // Forward through a gateway (Miragon flow-connection-side): never leave by the left tip — that
+  // doubles back into the incoming side — and never enter by the right tip.
+  if (sb && tb && !backEdge && isGateway(ctx.typeOf[entry.source]) && exitSide(pts) === 'left') p++;
+  if (sb && tb && !backEdge && isGateway(ctx.typeOf[entry.target]) && entrySide(pts) === 'right') p++;
   // Returning from a gateway: leave top/bottom — never right (happy path) or left (wrong way).
   if (sb && tb && backEdge && isGateway(ctx.typeOf[entry.source])) {
     const ex = exitSide(pts);
@@ -988,26 +1029,27 @@ export function applyBendRule(coordMap, lc, opts = {}) {
             if (bendCount(pts) === 3 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
           }
         }
-        // Horizontal first leg (cross-lane handoff) → keep outbound X corridor, drop to
-        // target cy beside the left face, left-in (2 bends). Without this, Miragon keeps
-        // top-entry when the source sits in a higher lane (BPM0000 T09→T10).
-        if (Math.abs(out[1]) < EPS && xT > a.x + cfg.stubPx && 2 <= curBends + budget) {
+        // Horizontal first leg leaving to the right (cross-lane handoff) → keep the outbound
+        // X corridor, drop to the target's cy beside its left face, enter left: 2 bends. A
+        // route that starts and ends horizontally has an even bend count, so 2 is the only
+        // staircase here; a 3 would have to double back on itself.
+        if (out[0] > 0 && Math.abs(out[1]) < EPS && xT > a.x + cfg.stubPx && 2 <= curBends + budget) {
           const xs = new Set([xT]);
           if (P.length >= 2) xs.add(Math.max(a.x + cfg.stubPx, Math.min(xT, P[1].x)));
           for (const x of xs) {
             const pts = withoutCollinear([a, { x, y: a.y }, { x, y: tIn.y }, tIn]);
-            const b = bendCount(pts);
-            if ((b === 2 || b === 3) && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
+            if (bendCount(pts) === 2 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
           }
-          // Right-side detour when the direct left-face column crosses a long
-          // same-band horizontal (Blank-draft e05 under Catala T09→T10): go past
-          // the target, drop, run left to the left-face stub, then left-in.
+          // Detour round the target when the direct left-face column is blocked (it crosses a
+          // long horizontal in the same band): run past the target, pass it on the source's
+          // side, come back to the left-face stub and enter left — 4 bends.
           const xR = tb.x + tb.w + 2 * cfg.stubPx;
-          if (xR > a.x + cfg.stubPx && 3 <= curBends + budget) {
+          if (xR > a.x + cfg.stubPx && 4 <= curBends + budget) {
+            const yC = a.y < tb.y ? tb.y - cfg.stubPx : tb.y + tb.h + cfg.stubPx;
             const pts = withoutCollinear([
-              a, { x: xR, y: a.y }, { x: xR, y: tIn.y }, { x: xT, y: tIn.y }, tIn,
+              a, { x: xR, y: a.y }, { x: xR, y: yC }, { x: xT, y: yC }, { x: xT, y: tIn.y }, tIn,
             ]);
-            if (bendCount(pts) === 3 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
+            if (bendCount(pts) === 4 && check(pts, out, INWARD.left)) stair.push(scoreCand({ pts, moved: 0 }));
           }
         }
         if (stair.length) {
@@ -1430,9 +1472,10 @@ export function bendMetrics(coordMap, lc, opts = {}) {
     const r = search(en, entries, ctx, cfg, { maxBends: bends });
     const minBends = r ? Math.min(r.minBends, bends) : bends;
     let againstFlow = false;
-    if (hasFlowDirection(ctx, en.target) && entrySide(en.points) !== 'left') {
+    const wantIn = wantedEntrySide(ctx, en);
+    if (hasFlowDirection(ctx, en.target) && entrySide(en.points) !== wantIn) {
       const budget = cfg.limits.sideBendBudget ?? 0;
-      againstFlow = !!search(en, entries, ctx, cfg, { maxBends: bends + budget, targetSide: 'left' });
+      againstFlow = !!search(en, entries, ctx, cfg, { maxBends: bends + budget, targetSide: wantIn });
     }
     avoidableBends += bends - minBends;
     if (bends > minBends) avoidableEdges++;

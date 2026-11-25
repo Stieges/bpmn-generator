@@ -16,7 +16,7 @@ import {
   bendRuleLimits, sequenceFlowsOf, axisFolds, slightFoldPenalty,
 } from './bend-rule.js';
 import { runPipeline } from './pipeline.js';
-import { normalizeEdgeIds } from './topology.js';
+import { normalizeEdgeIds, preprocessLogicCore } from './topology.js';
 import { placeEdgeLabel, edgeLabelBox, labelHitsRoute } from './coordinates.js';
 import { CFG } from '../shared/utils.js';
 
@@ -140,7 +140,11 @@ describe('applyBendRule — every limit, on a scenario the unguarded rule breaks
     const cm = { coords: { a: { x: 0, y: 150, w: 100, h: 80 }, t: { x: 300, y: 0, w: 100, h: 80 }, x: { x: 160, y: -200, w: 100, h: 80 } },
       edgeCoords: { e: [P(50, 150), P(50, 120), P(350, 120), P(350, 80)], back: [P(300, 15), P(210, 15), P(210, -120)] } };
     expect(entrySide(changes(cm, lc, { guards: { sideConflicts: false } }).e)).toBe('left'); // where `back` leaves t
-    expect(changes(cm, lc)).toEqual({ e: [P(100, 190), P(350, 190), P(350, 80)] });
+    const guarded = changes(cm, lc);
+    expect(guarded.e).toEqual([P(100, 190), P(350, 190), P(350, 80)]);
+    // `back` is a return flow (x lies left of t): Miragon's policy re-enters x from the right,
+    // so its old bottom entry is re-routed too.
+    expect(entrySide(guarded.back)).toBe('right');
   });
 
   test('detour: a route with fewer bends but far longer is not taken', () => {
@@ -397,8 +401,12 @@ describe('the pass in the pipeline', () => {
         if (!r.coordMap) continue; // blocked on purpose (deadlock-process)
         for (const i of r.diagnostics.issues) if (['DI07', 'DI08', 'DI09', 'DI10'].includes(i.code)) bad.push(`${name} ${i.code}`);
         if (r.validation.xmlWarnings?.length) bad.push(`${name} xmlWarnings`);
-        // The Logic-Core the pipeline laid out: ids assigned to id-less edges, or the rule would see no route.
-        if (applyBendRule(r.coordMap, normalizeEdgeIds(lc)) !== r.coordMap.edgeCoords) bad.push(`${name} not idempotent`);
+        // The Logic-Core the pipeline laid out: ids assigned to id-less edges, or the rule would see no
+        // route, and preprocessed — a flow into a task with several incomings ends at its auto-join,
+        // and judged against the fixture's endpoint the rule "repairs" an entry that does not exist.
+        const laidOut = normalizeEdgeIds(lc);
+        preprocessLogicCore(laidOut);
+        if (applyBendRule(r.coordMap, laidOut) !== r.coordMap.edgeCoords) bad.push(`${name} not idempotent`);
       }
       expect(bad).toEqual([]);
     }, 120000); // ~23 s under the full parallel run (example-bestellung-versand alone ~2 s per mode)
@@ -699,7 +707,7 @@ describe('applyBendRule — side bend budget (Miragon activity left/right)', () 
   });
 
   test('multi-out gateway: skip branch exits a free tip and re-enters join on the same tip', () => {
-    // Same-Y fork (BPM0301 Paste Modelling link?): Yes keeps right→task; No must leave
+    // Same-Y fork (a yes/no fork at one height): Yes keeps right→task; No must leave
     // top/bottom and dock the join on that same vertical tip (not shared right, not left).
     const lc = {
       id: 'P',

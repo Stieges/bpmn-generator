@@ -186,36 +186,41 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
     return { elements, markerMap };
   }
 
-  // Auto-generate from event / message-task markers only — never from a task
-  // whose *name* happens to contain "message" (that left unused RootElements
-  // and tripped bpmnlint `global` / Element is unused).
+  // Auto-generate only what something will reference: an event's marker (its event definition
+  // takes the type's only definition) or an explicit `messageRef`. A send/receive task without
+  // `messageRef` references nothing (see buildFlowNode), and neither does a task whose *name*
+  // happens to contain "message" — both used to leave an unused RootElement behind, which
+  // bpmnlint's `global` rule reports. Subprocess children count: their events resolve against
+  // the same top-level definitions.
   const seen = new Set();
-  for (const proc of processes) {
-    for (const node of (proc.nodes || [])) {
-      const isMsgTask = node.type === 'sendTask' || node.type === 'receiveTask';
-      if (!isEvent(node.type) && !isMsgTask && !node.messageRef) continue;
-      const marker = node.marker
-        || (isEvent(node.type) ? inferEventMarker(node.name || '') : null)
-        || (isMsgTask || node.messageRef ? 'message' : null);
-      if (!marker || seen.has(marker)) continue;
-
-      const tagMap = {
-        message: 'bpmn:Message', error: 'bpmn:Error',
-        signal: 'bpmn:Signal', escalation: 'bpmn:Escalation',
-      };
-      const bpmnType = tagMap[marker];
-      if (!bpmnType) continue;
-
-      seen.add(marker);
-      const shortName = marker.charAt(0).toUpperCase() + marker.slice(1);
-      const el = create(bpmnType, {
-        id: `${shortName}_${elements.length + 1}`,
-        name: shortName,
-      });
-      elements.push(el);
-      register(marker, el);
+  const tagMap = {
+    message: 'bpmn:Message', error: 'bpmn:Error',
+    signal: 'bpmn:Signal', escalation: 'bpmn:Escalation',
+  };
+  const visit = (nodes) => {
+    for (const node of (nodes || [])) {
+      define(node);
+      visit(node.nodes);
     }
-  }
+  };
+  const define = (node) => {
+    if (!isEvent(node.type) && !node.messageRef) return;
+    const marker = isEvent(node.type)
+      ? (node.marker || inferEventMarker(node.name || ''))
+      : 'message';
+    if (!marker || seen.has(marker)) return;
+    const bpmnType = tagMap[marker];
+    if (!bpmnType) return;
+    seen.add(marker);
+    const shortName = marker.charAt(0).toUpperCase() + marker.slice(1);
+    const el = create(bpmnType, {
+      id: `${shortName}_${elements.length + 1}`,
+      name: shortName,
+    });
+    elements.push(el);
+    register(marker, el);
+  };
+  for (const proc of processes) visit(proc.nodes);
   return { elements, markerMap };
 }
 
@@ -557,6 +562,10 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
       const seFlow = create('bpmn:SequenceFlow', seAttrs);
       el.get('flowElements').push(seFlow);
       childFlows.set(seid, seFlow);
+      // incoming/outgoing as at process level: bpmnlint's no-disconnected and
+      // no-implicit-start/end read these references, not sourceRef/targetRef.
+      seAttrs.sourceRef?.get('outgoing').push(seFlow);
+      seAttrs.targetRef?.get('incoming').push(seFlow);
       registerNode({ id: seid, _isEdge: true }, seFlow);
     }
     for (const [sourceId, flowId] of defaultBySource) {
@@ -933,26 +942,57 @@ function buildNodeShapeDI(nodes, coords, edgeCoords, allFlowNodeMaps, planeEleme
     // Expanded container: its children's shapes and its own edges' BPMNEdges.
     if (node.isExpanded && node.nodes) {
       buildNodeShapeDI(node.nodes, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels, nodeLabels);
-      for (const subEdge of (node.edges || [])) {
-        const seid = subEdge.id;
-        const spts = edgeCoords[seid] || [];
-        const waypoints = buildWaypoints(spts, coords, subEdge.source, subEdge.target);
-        const subEdgeEl = create('bpmndi:BPMNEdge', {
-          id: `${seid}_di`,
-          bpmnElement: allFlowNodeMaps.get(seid) || seid,
-          waypoint: waypoints,
-        });
-        const subLabel = subEdge.label ? edgeLabels[seid] : null;
-        if (subLabel) {
-          const b = edgeLabelBox(subLabel);
-          subEdgeEl.label = create('bpmndi:BPMNLabel', {
-            bounds: create('dc:Bounds', { x: rn(b.x), y: rn(b.y), width: rn(b.w), height: rn(b.h) }),
-          });
-        }
-        planeElements.push(subEdgeEl);
-      }
+      buildContainerEdgeDI(node.edges, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels);
     }
   }
+}
+
+/** The BPMNEdge of every sequence flow a container owns (an expanded one, or a sub-plane's root). */
+function buildContainerEdgeDI(edges, coords, edgeCoords, allFlowNodeMaps, planeElements, edgeLabels = {}) {
+  for (const subEdge of (edges || [])) {
+    const seid = subEdge.id;
+    const spts = edgeCoords[seid] || [];
+    const waypoints = buildWaypoints(spts, coords, subEdge.source, subEdge.target);
+    if (waypoints.length < 2) continue;
+    const subEdgeEl = create('bpmndi:BPMNEdge', {
+      id: `${seid}_di`,
+      bpmnElement: allFlowNodeMaps.get(seid) || seid,
+      waypoint: waypoints,
+    });
+    const subLabel = subEdge.label ? edgeLabels[seid] : null;
+    if (subLabel) {
+      const b = edgeLabelBox(subLabel);
+      subEdgeEl.label = create('bpmndi:BPMNLabel', {
+        bounds: create('dc:Bounds', { x: rn(b.x), y: rn(b.y), width: rn(b.w), height: rn(b.h) }),
+      });
+    }
+    planeElements.push(subEdgeEl);
+  }
+}
+
+/**
+ * One BPMNDiagram per collapsed container whose children were laid out (`coordMap.subPlanes`,
+ * pipeline.js layoutCollapsedSubPlanes): the plane's bpmnElement is the container, its shapes
+ * and edges are the children's — the layout bpmn-js shows when the container is drilled into.
+ * Geometry is the sub-plane coordMap's, never computed here.
+ */
+function buildSubPlaneDiagrams(lc, subPlanes, allFlowNodeMaps) {
+  const byId = new Map();
+  const walk = (nodes) => { for (const n of nodes || []) { byId.set(n.id, n); walk(n.nodes); } };
+  for (const proc of (lc.pools || [lc])) walk(proc.nodes);
+  const diagrams = [];
+  for (const [id, cm] of Object.entries(subPlanes || {})) {
+    const node = byId.get(id);
+    const el = allFlowNodeMaps.get(id);
+    if (!node || !el) continue;
+    const planeElements = [];
+    buildNodeShapeDI(node.nodes, cm.coords, cm.edgeCoords, allFlowNodeMaps, planeElements, cm.edgeLabels || {}, cm.nodeLabels || {});
+    buildContainerEdgeDI(node.edges, cm.coords, cm.edgeCoords, allFlowNodeMaps, planeElements, cm.edgeLabels || {});
+    const plane = create('bpmndi:BPMNPlane', { id: `${id}_plane`, bpmnElement: el });
+    for (const pe of planeElements) plane.get('planeElement').push(pe);
+    diagrams.push(create('bpmndi:BPMNDiagram', { id: `${id}_diagram`, plane }));
+  }
+  return diagrams;
 }
 
 function buildLaneDI(lanes, laneCoords, planeElements, allFlowNodeMaps) {
@@ -1147,8 +1187,9 @@ async function generateBpmnXml(lc, coordMap) {
   // Processes
   for (const pe of processElements) rootElements.push(pe);
 
-  // Diagram
+  // Diagram, then one per collapsed container with children
   definitions.get('diagrams').push(diagram);
+  for (const d of buildSubPlaneDiagrams(lc, coordMap.subPlanes, allFlowNodeMaps)) definitions.get('diagrams').push(d);
 
   // 8. Serialize
   const { xml } = await moddle.toXML(definitions, { format: true, preamble: true });

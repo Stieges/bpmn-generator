@@ -137,42 +137,101 @@ export function resolveFlowSemantics(nodes = [], edges = []) {
 }
 
 /**
- * DFS back-edges (rework / feedback loops): edges that point to an ancestor on
- * the current search stack when walking from start events.
+ * How DFS feedback edges (see identifyFeedbackEdges) take part in ELK layering —
+ * `config.json → layout.feedbackEdges`:
+ *  - 'reverse' (default): handed to ELK reversed (target → source), so ELK breaks no cycle
+ *    of its own; the reversed edge still pulls the loop's two ends together under
+ *    network-simplex layering. Its ELK route is discarded (FEEDBACK_ELK_SUFFIX) and
+ *    §5.2 builds the back-edge route.
+ *  - 'drop': left out of the ELK graph — no layering pull at all, rework loops stretch.
+ *  - 'elk': handed to ELK unchanged; ELK's own cycle breaking decides
+ *    (`elk.layered.cycleBreaking.strategy`), and the post-layout alignment passes treat
+ *    feedback edges like any other edge.
+ * @returns {'reverse'|'drop'|'elk'}
+ */
+export function feedbackEdgeMode() {
+  const m = CFG.layout?.feedbackEdges;
+  return m === 'drop' || m === 'elk' ? m : 'reverse';
+}
+
+/** Id suffix of a reversed feedback edge inside the ELK graph; its ELK route is never read. */
+export const FEEDBACK_ELK_SUFFIX = '__feedback_reversed';
+
+/**
+ * DFS back-edges (rework / feedback loops) of ONE container: edges that point to an
+ * ancestor on the current search stack. What `layout.feedbackEdges` acts on.
  *
- * These must **not** constrain ELK layer assignment — GREEDY_MODEL_ORDER still
- * pulls the loop XOR left of its predecessors when several outs re-enter early
- * auto-joins (SME circulate / approve loops). Exclude them from the ELK graph
- * and let post-layout routing (bend-rule) draw them as back-edges.
+ * Roots, in order: start events, then nodes with no incoming edge (a boundary event, a
+ * stranded fragment), then anything still unvisited (a cycle no root reaches) — so a loop
+ * behind a boundary event or in a disconnected part is still found. Iterative, so a very
+ * long chain cannot overflow the stack. Edges whose ends are not both in `nodes` are
+ * ignored (a container's edge list only connects its own nodes).
  *
- * @param {object[]} nodes
- * @param {object[]} edges
+ * @param {object[]} nodes  the container's direct nodes
+ * @param {object[]} edges  the container's direct edges
  * @returns {Set<string>} edge ids that are feedback
  */
 export function identifyFeedbackEdges(nodes, edges) {
-  const list = edges || [];
-  const outMap = {};
-  for (const e of list) {
-    if (!outMap[e.source]) outMap[e.source] = [];
-    outMap[e.source].push(e);
+  const list = nodes || [];
+  const ids = new Set(list.map((n) => n.id));
+  const outMap = new Map();
+  const hasIn = new Set();
+  for (const e of edges || []) {
+    if (!ids.has(e.source) || !ids.has(e.target)) continue;
+    if (!outMap.has(e.source)) outMap.set(e.source, []);
+    outMap.get(e.source).push(e);
+    hasIn.add(e.target);
   }
-  const starts = (nodes || []).filter(n => n.type === 'startEvent').map(n => n.id);
-  const roots = starts.length ? starts : ((nodes || [])[0] ? [nodes[0].id] : []);
-  const state = {}; // 0=unvisited, 1=on-stack, 2=done
+  const roots = [
+    ...list.filter((n) => n.type === 'startEvent'),
+    ...list.filter((n) => !hasIn.has(n.id)),
+    ...list,
+  ].map((n) => n.id);
+  const state = new Map(); // undefined = unvisited, 1 = on stack, 2 = done
   const feedback = new Set();
-  const dfs = (id) => {
-    state[id] = 1;
-    for (const e of outMap[id] || []) {
-      const t = e.target;
-      if (state[t] === 1) feedback.add(e.id);
-      else if (!state[t]) dfs(t);
+  for (const root of roots) {
+    if (state.has(root)) continue;
+    state.set(root, 1);
+    const stack = [{ id: root, i: 0 }];
+    while (stack.length) {
+      const top = stack[stack.length - 1];
+      const outs = outMap.get(top.id) || [];
+      if (top.i >= outs.length) {
+        state.set(top.id, 2);
+        stack.pop();
+        continue;
+      }
+      const e = outs[top.i++];
+      const st = state.get(e.target);
+      if (st === 1) feedback.add(e.id);
+      else if (st === undefined) {
+        state.set(e.target, 1);
+        stack.push({ id: e.target, i: 0 });
+      }
     }
-    state[id] = 2;
-  };
-  for (const r of roots) {
-    if (!state[r]) dfs(r);
   }
   return feedback;
+}
+
+/**
+ * identifyFeedbackEdges over a process and every expanded container inside it, one
+ * container at a time — the same scopes `buildElkEdges` sees — returned as one set.
+ * Empty when `layout.feedbackEdges` is 'elk', so every consumer follows the one switch.
+ */
+export function identifyFeedbackEdgesDeep(proc) {
+  const out = new Set();
+  if (feedbackEdgeMode() === 'elk') return out;
+  const visit = (container) => {
+    for (const id of identifyFeedbackEdges(container.nodes, container.edges)) out.add(id);
+    for (const n of container.nodes || []) if (n.nodes?.length) visit(n);
+  };
+  visit(proc);
+  return out;
+}
+
+/** True for a converging gateway preprocessLogicCore synthesised (never one the author wrote). */
+export function isAutoJoin(node) {
+  return node?._autoJoin === true;
 }
 
 /**
@@ -780,6 +839,7 @@ export function splitMixedGateways(container, usedIds) {
       type: gw.type,
       name: '',
       has_join: true,
+      _autoJoin: true,
       ...(lane !== undefined ? { lane } : {}),
     });
     for (const l of container.lanes || []) {
@@ -840,6 +900,7 @@ export function insertAutoJoinGateways(container, usedIds) {
       type: 'exclusiveGateway',
       name: '',
       has_join: true,
+      _autoJoin: true,
       ...(lane !== undefined ? { lane } : {}),
     });
     // Format B: Lane.nodeIds

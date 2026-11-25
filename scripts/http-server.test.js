@@ -787,8 +787,8 @@ describe('layout switches over HTTP', () => {
       });
   }
   // foreignShapeRepair leaves simple-approval alone (nothing runs through a shape there), so its
-  // forwarding is fenced on the #91 model, which it changes.
-  const rp = JSON.parse(readFileSync(new URL('../tests/fixtures/example-rechnungspruefung.json', import.meta.url), 'utf8'));
+  // forwarding is fenced on boundary-event-shapes, the fixture it still changes (one DI11 when off).
+  const rp = JSON.parse(readFileSync(new URL('../tests/fixtures/boundary-event-shapes.json', import.meta.url), 'utf8'));
   const libRp = async (opts) => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
     return (await runPipeline(JSON.parse(JSON.stringify(rp)), opts)).bpmnXml;

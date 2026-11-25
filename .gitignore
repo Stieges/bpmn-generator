@@ -61,3 +61,6 @@ scripts/coverage/
 # Build artifact: prepack-copy-references.mjs copies these in from references/
 # so the npm package can ship them. references/ (repo root) is the source.
 scripts/references/
+
+# Local, never committed: private test corpora and scratch output
+private/
