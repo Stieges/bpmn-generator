@@ -17,6 +17,7 @@ schema gate (`references/input-schema.json`) enforces.
 - [Example with Parallel Gateway (split + join)](#example-with-parallel-gateway-split--join)
 - [Example: Multi-Pool with Message Flows](#example-multi-pool-with-message-flows)
 - [Example: Boundary Timer Event](#example-boundary-timer-event)
+- [Views (outside the model)](#views-outside-the-model)
 - [Common Anti-Patterns (Reviewer checklist)](#common-anti-patterns-reviewer-checklist)
 - [CollapsedPoolObject (Black-Box Participant)](#collapsedpoolobject-black-box-participant)
 - [AssociationObject](#associationobject)
@@ -462,6 +463,16 @@ How each connection is drawn:
 ```
 
 ---
+
+## Views (outside the model)
+
+A view is not part of the Logic-Core. It is a separate file that decides how a model is processed
+(rule profile, layout switches, derivations) and adds no knowledge about the process, so the author
+never writes one into the model. Its one derivation that changes the diagram,
+`derivations.joinGateways`, makes an implicit join (a task several flows enter) an explicit
+exclusive join gateway in the output only. The model keeps its implicit join, and import removes
+the gateway again unless someone edited it in a modeler. Format: `references/view-schema.json`;
+see the README section [Views](../README.md#views).
 
 ## Common Anti-Patterns (Reviewer checklist)
 

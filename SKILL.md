@@ -135,6 +135,7 @@ node bpmn/import.js existing.bpmn extracted.json     # BPMN XML → Logic-Core (
 node dmn/pipeline.js decision.json out --strict      # Decision-Core → out.dmn + out.svg (DRD)
 node dmn/pipeline.js decision.json out --doc         # plus out.md, out.tables.svg, out.tables.html
 node bpmn/pipeline.js process.json out --decisions decision.json   # table into the task's documentation
+node bpmn/pipeline.js process.json out --view=explicit-joins      # joins as explicit gateways (hint H01)
 ```
 
 Outputs: `*.bpmn` opens in Camunda Modeler, bpmn.io, ADONIS, Signavio; `*.svg` in a browser or
