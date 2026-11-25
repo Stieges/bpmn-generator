@@ -421,6 +421,23 @@ export function normalizeLaneAssignments(proc) {
 }
 
 /**
+ * Every string `id` anywhere in a Logic-Core document (nodes, edges, pools, lanes, definitions,
+ * message flows, associations, subprocess children) — the set a minted id must avoid.
+ */
+export function collectDocumentIds(lc) {
+  const used = new Set();
+  const collect = (v) => {
+    if (Array.isArray(v)) { v.forEach(collect); return; }
+    if (v && typeof v === 'object') {
+      if (typeof v.id === 'string') used.add(v.id);
+      for (const k of Object.keys(v)) collect(v[k]);
+    }
+  };
+  collect(lc);
+  return used;
+}
+
+/**
  * Give every sequence-flow edge without an id a deterministic one, in place.
  *
  * `flow_<source>_<target>`; on a collision with any id anywhere in the document (nodes, edges,
@@ -434,15 +451,7 @@ export function normalizeLaneAssignments(proc) {
  * Message flows and associations require an `id` in the schema and need no such step.
  */
 export function assignEdgeIds(lc) {
-  const used = new Set();
-  const collect = (v) => {
-    if (Array.isArray(v)) { v.forEach(collect); return; }
-    if (v && typeof v === 'object') {
-      if (typeof v.id === 'string') used.add(v.id);
-      for (const k of Object.keys(v)) collect(v[k]);
-    }
-  };
-  collect(lc);
+  const used = collectDocumentIds(lc);
 
   const assign = (v) => {
     if (Array.isArray(v)) { v.forEach(assign); return; }
@@ -478,15 +487,7 @@ export function assignEdgeIds(lc) {
 export function assignProcessId(lc) {
   if (!lc || typeof lc !== 'object' || lc.pools) return lc;
   if (typeof lc.id === 'string' && lc.id !== '') return lc;
-  const used = new Set();
-  const collect = (v) => {
-    if (Array.isArray(v)) { v.forEach(collect); return; }
-    if (v && typeof v === 'object') {
-      if (typeof v.id === 'string') used.add(v.id);
-      for (const k of Object.keys(v)) collect(v[k]);
-    }
-  };
-  collect(lc);
+  const used = collectDocumentIds(lc);
   let id = 'Process_1';
   for (let n = 2; used.has(id); n++) id = `Process_${n}`;
   lc.id = id;
