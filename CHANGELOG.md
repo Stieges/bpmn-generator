@@ -17,10 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/api/v1/orchestrate`) or `runPipeline(lc, { view })`, which takes a path or an object. An
   explicit option of the call wins over the view, which wins over `scripts/config.json`.
 - **Join-gateway derivation.** With `derivations.joinGateways`, the output gets an explicit exclusive
-  join gateway in front of every node with two or more incoming flows. Import removes a derived
-  gateway that nobody changed again, through both importers (`import_bpmn` and `/api/v1/import`);
-  a gateway edited in a modeler stays. Each derived gateway is reported as hint `H01` in
-  `validation.hints`; hints never fail `--strict`. For every example model, the `explicit-joins`
+  join gateway in front of every node with two or more incoming flows. The gateway and its onward
+  flow are marked in the XML (`<bg:derived>joinGateway</bg:derived>` and
+  `<bg:derived>joinGatewayFlow</bg:derived>`). Import removes a derived gateway that nobody changed
+  again, through both importers (`import_bpmn` and `/api/v1/import`); a gateway edited in a modeler
+  stays, and so does one whose removal would change the process (its onward flow re-pointed at a
+  gateway or a missing element, no incoming flow). Each derived gateway is reported as hint `H01`
+  in `validation.hints` with `elements: [gatewayId, targetId, flowId]`; hints never fail `--strict`. For every example model, the `explicit-joins`
   diagram imports to the same model as the default one. Not covered yet: joins inside subprocesses,
   splitting mixed gateways, and layout parameters per view.
 

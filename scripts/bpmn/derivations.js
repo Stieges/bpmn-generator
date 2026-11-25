@@ -10,6 +10,10 @@
 import { isGateway } from './types.js';
 import { collectDocumentIds } from './topology.js';
 
+/** The `<bg:derived>` values the writer puts on a derived join gateway and on its onward flow. */
+export const DERIVED_JOIN = 'joinGateway';
+export const DERIVED_JOIN_FLOW = 'joinGatewayFlow';
+
 /** `<base>`, else `<base>_2`, `<base>_3`, ... — the first one not in `used`, which it joins. */
 function mintId(used, base) {
   let id = base;
@@ -50,7 +54,7 @@ function deriveJoinGateways(lc, derived) {
       if (target.lane) gateway.lane = target.lane;
       else laneListHolding(proc.lanes, target.id)?.push(id);
       gateway.has_join = true;
-      gateway._derived = 'joinGateway';
+      gateway._derived = DERIVED_JOIN;
       proc.nodes.splice(proc.nodes.indexOf(target), 0, gateway);
 
       let onHappyPath = false;
@@ -63,6 +67,7 @@ function deriveJoinGateways(lc, derived) {
       const onward = { id: edgeId, source: id, target: target.id };
       // The layout reads isHappyPath per flow: the path through the join stays the happy path.
       if (onHappyPath) onward.isHappyPath = true;
+      onward._derived = DERIVED_JOIN_FLOW;
       proc.edges.push(onward);
       derived.push({ kind: 'joinGateway', id, target: target.id, edge: edgeId, process: processId });
     }
@@ -94,6 +99,19 @@ const UNTOUCHED_JOIN_KEYS = new Set(['id', 'type', 'name', 'lane', 'has_join', '
 const UNTOUCHED_ONWARD_KEYS = new Set(['id', 'source', 'target', 'isHappyPath']);
 const onlyKeys = (obj, allowed) => Object.keys(obj).every(key => allowed.has(key));
 
+/**
+ * Whether `gateway` with its one `onward` flow is a join the derivation could have produced in
+ * `container`: at least one flow enters it, and the onward flow ends at a node of the same
+ * container that is not a gateway. Removing anything else would change what the process does — an
+ * XOR merge in front of a parallel join folded into that join deadlocks — or re-point the incoming
+ * flows at an id that is not there.
+ */
+function isDerivableJoin(container, edges, gateway, onward) {
+  const target = container.nodes.find(node => node.id === onward.target);
+  return target !== undefined && !isGateway(target.type)
+    && edges.some(edge => edge.target === gateway.id);
+}
+
 /** Drop `id` from every `nodeIds` list in a lane tree. */
 function dropFromLanes(lanes, id) {
   for (const lane of lanes || []) {
@@ -104,12 +122,21 @@ function dropFromLanes(lanes, id) {
 
 /**
  * Remove the untouched derived elements of one container (a process, a pool or a subprocess,
- * nested containers first) and unmark the rest. `lanes` is the enclosing process's lane tree.
+ * nested containers first) and unmark the rest, nodes and edges alike. `lanes` is the enclosing
+ * process's lane tree.
  */
 function removeDerivedIn(container, lanes, referenced) {
   if (!Array.isArray(container.nodes)) return;
   for (const node of container.nodes) removeDerivedIn(node, lanes, referenced);
   const edges = Array.isArray(container.edges) ? container.edges : [];
+  // An edge's marker only ever confirms its gateway's: read here, then gone from every edge. The
+  // importers never set it — they check the onward flow's marker in the XML themselves.
+  const edgeMarks = new Map();
+  for (const edge of edges) {
+    if (!('_derived' in edge)) continue;
+    edgeMarks.set(edge, edge._derived);
+    delete edge._derived;
+  }
 
   for (const node of [...container.nodes]) {
     if (!('_derived' in node)) continue;
@@ -117,10 +144,12 @@ function removeDerivedIn(container, lanes, referenced) {
     delete node._derived;
     const outgoing = edges.filter(edge => edge.source === node.id);
     const [onward] = outgoing;
-    const untouched = kind === 'joinGateway'
+    const untouched = kind === DERIVED_JOIN
       && node.type === 'exclusiveGateway' && !node.name && onlyKeys(node, UNTOUCHED_JOIN_KEYS)
-      && outgoing.length === 1 && onward.target !== node.id && onlyKeys(onward, UNTOUCHED_ONWARD_KEYS)
-      && !referenced.has(node.id);
+      && outgoing.length === 1 && onlyKeys(onward, UNTOUCHED_ONWARD_KEYS)
+      && (edgeMarks.get(onward) ?? DERIVED_JOIN_FLOW) === DERIVED_JOIN_FLOW
+      && !referenced.has(node.id) && !referenced.has(onward.id)
+      && isDerivableJoin(container, edges, node, onward);
     if (!untouched) continue;
 
     for (const edge of edges) if (edge.target === node.id) edge.target = onward.target;
@@ -133,16 +162,19 @@ function removeDerivedIn(container, lanes, referenced) {
 /**
  * The inverse of applyDerivations, for a model read back from XML: every derived element still as
  * the writer left it is removed — a join gateway's incoming flows end at the onward flow's target
- * again, the gateway, the onward flow and the gateway's lane `nodeIds` entries go. A derived
- * element a person edited stays and loses its marker. The result carries no `_derived` key at
- * any depth (references/input-schema.json allows no unknown node key).
+ * again, the gateway, the onward flow and the gateway's lane `nodeIds` entries go. Only what the
+ * derivation can produce is removed (`isDerivableJoin`): imported XML is untrusted, and removing
+ * anything else could change what the process does. A derived element a person edited stays and
+ * loses its marker. No node and no edge of the result, in any process, pool or subprocess, carries
+ * a `_derived` key (references/input-schema.json allows no unknown node key).
  *
  * @param {object} lc - Logic-Core (single process or collaboration); never changed
  * @returns {object} a copy without derived elements
  */
 export function removeDerivedElements(lc) {
   const copy = JSON.parse(JSON.stringify(lc));
-  // An association or message flow that ends at the gateway was drawn by a person.
+  // An association or message flow that ends at the gateway or at its onward flow was drawn by a
+  // person: removing either would leave it pointing at nothing.
   const referenced = new Set();
   for (const link of [...(copy.associations || []), ...(copy.messageFlows || [])]) {
     referenced.add(link.source);

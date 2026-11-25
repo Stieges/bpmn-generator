@@ -8,6 +8,7 @@
 
 import { BpmnModdle } from 'bpmn-moddle';
 import { OMG_NODE_FIELD_SCOPE, SUPPORTED_NODE_TYPES, MARKER_BY_EVENT_DEFINITION } from './types.js';
+import { DERIVED_JOIN_FLOW } from './derivations.js';
 
 const moddle = new BpmnModdle();
 
@@ -71,19 +72,29 @@ function readRole(resourceRoles) {
 // edits neither importer reads into Logic-Core. `import.js` states the same rule over the raw DOM;
 // change both together.
 const WRITTEN_DERIVED_KEYS = new Set(['$type', 'id', 'name', 'gatewayDirection', 'extensionElements']);
-const WRITTEN_ONWARD_KEYS = new Set(['$type', 'id', 'name']);
+const WRITTEN_ONWARD_KEYS = new Set(['$type', 'id', 'name', 'extensionElements']);
 const noForeignAttrs = (el) => Object.keys(el.$attrs ?? {}).length === 0;
 const localName = (el) => el.$type?.split(':').pop();
+const markerBody = (v) => (typeof v?.$body === 'string' ? v.$body.trim() : '');
+
+/** True when `flow`'s extensionElements hold exactly the flow marker and nothing else. */
+function carriesOnlyFlowMarker(flow) {
+  const values = flow.extensionElements?.values ?? [];
+  return values.length === 1 && localName(values[0]) === 'derived' && markerBody(values[0]) === DERIVED_JOIN_FLOW
+    && noForeignAttrs(flow.extensionElements);
+}
 
 /**
  * The `<bg:derived>` marker of `el` (its trimmed text), or `undefined` when there is none or when
  * the element or its one onward flow carries anything the writer does not write — an edited
- * derived element is the person's and comes back unmarked.
+ * derived element is the person's and comes back unmarked. The onward flow must carry the flow
+ * marker (`joinGatewayFlow`) as its only extension element; a flow's marker is never read into
+ * the result, so no edge carries `_derived`.
  */
 function readDerivedMarker(el) {
   const values = el.extensionElements?.values ?? [];
   const markerEl = values.find(v => localName(v) === 'derived');
-  const marker = typeof markerEl?.$body === 'string' ? markerEl.$body.trim() : '';
+  const marker = markerBody(markerEl);
   if (!marker) return undefined;
   if (values.length !== 1 || !noForeignAttrs(el) || !noForeignAttrs(el.extensionElements)) return undefined;
   if (!Object.keys(el).every(key => WRITTEN_DERIVED_KEYS.has(key))) return undefined;
@@ -93,6 +104,7 @@ function readDerivedMarker(el) {
   const [onward] = outgoing;
   if (onward.name || !noForeignAttrs(onward)) return undefined;
   if (!Object.keys(onward).every(key => WRITTEN_ONWARD_KEYS.has(key))) return undefined;
+  if (!carriesOnlyFlowMarker(onward)) return undefined;
   return marker;
 }
 

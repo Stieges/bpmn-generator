@@ -328,18 +328,22 @@ With `derivations.joinGateways: true`, the pipeline inserts an exclusive join ga
 every node that is not a gateway and has two or more incoming sequence flows. It works on its own
 copy: the author's model is never changed, and validation and the rules judge that model. The new
 elements get the ids `gw_join_<target>` and `flow_<gateway>_<target>` (`_2`, `_3`, … on a
-collision) and are marked in the XML with `<bg:derived>joinGateway</bg:derived>` in their
-`extensionElements`.
+collision), and both are marked in the XML: the gateway with `<bg:derived>joinGateway</bg:derived>`,
+its onward flow with `<bg:derived>joinGatewayFlow</bg:derived>`, each in its `extensionElements`.
 
 On import (both importers, so MCP `import_bpmn` and `POST /api/v1/import` too), a derived gateway
-that nobody changed is removed again, and its incoming flows point at the original target. A
-gateway a person changed in a modeler stays a real gateway: a new name or type, a second outgoing
-flow, a label or condition on its outgoing flow, documentation, an extra extension element, a
-foreign attribute, or an attached artefact.
+that nobody changed is removed again together with its onward flow, and its incoming flows point at
+the original target. A gateway a person changed in a modeler stays a real gateway: a new name or
+type, a second outgoing flow, a label, condition or missing marker on its outgoing flow, that flow
+re-pointed at another element, no incoming flow left, documentation, an extra extension element, a
+foreign attribute, or an artefact attached to the gateway or to its outgoing flow. Removal only
+undoes what the derivation can produce: the onward flow ends at a node of the same process that is
+not a gateway, and at least one flow enters the gateway. Imported XML is not trusted, so anything
+else keeps the gateway and never changes what the process does.
 
 Each derived gateway is reported as hint `H01` in `validation.hints` (`{ code, message, elements }`,
-where `elements` is `[gatewayId, targetId]`); the CLI prints it as `ℹ [H01] …`. Hints never fail
-`--strict`, and `validation.infos` is unchanged.
+where `elements` is `[gatewayId, targetId, flowId]`, `flowId` being its onward flow); the CLI prints
+it as `ℹ [H01] …`. Hints never fail `--strict`, and `validation.infos` is unchanged.
 
 For every example model, importing the diagram generated with `explicit-joins` gives the same model
 as importing the one generated with the default view. 10 of the 27 example models get at least one

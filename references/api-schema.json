@@ -179,7 +179,7 @@
         "xmlWarnings": { "type": "array", "items": { "type": "string" }, "description": "Round-trip warnings from re-parsing the generated XML through bpmn-moddle (scripts/bpmn-xml.js validateBpmnXml)." },
         "hints": {
           "type": "array",
-          "description": "One entry per element a view derived (scripts/bpmn/derivations.js) — nothing is wrong, the output shows something the author did not write. runPipeline path only. H01: a join gateway, elements [gatewayId, targetId].",
+          "description": "One entry per element a view derived (scripts/bpmn/derivations.js) — nothing is wrong, the output shows something the author did not write. runPipeline path only. H01: a join gateway and its onward flow, elements [gatewayId, targetId, flowId].",
           "items": {
             "type": "object",
             "required": ["code", "message", "elements"],

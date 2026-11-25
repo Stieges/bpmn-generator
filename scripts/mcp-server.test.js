@@ -200,7 +200,7 @@ describe('view over MCP is a name inside views/, never a path or an object', () 
   test('generate_bpmn with view explicit-joins returns the derived gateway and an H01 hint', async () => {
     const r = parse(await call('generate_bpmn', { logicCore: lc, view: 'explicit-joins' }));
     expect(r.bpmnXml).toContain('gw_join_task1');
-    expect(r.validation.hints).toEqual([expect.objectContaining({ code: 'H01', elements: ['gw_join_task1', 'task1'] })]);
+    expect(r.validation.hints).toEqual([expect.objectContaining({ code: 'H01', elements: ['gw_join_task1', 'task1', 'flow_gw_join_task1_task1'] })]);
   });
 
   test('orchestrate_bpmn forwards the view to the layout agent', async () => {

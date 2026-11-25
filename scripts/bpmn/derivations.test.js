@@ -26,7 +26,7 @@ describe('applyDerivations — joinGateways', () => {
     ]);
     expect(lc.nodes.find(x => x.id === 'gw_join_t'))
       .toEqual({ id: 'gw_join_t', type: 'exclusiveGateway', has_join: true, _derived: 'joinGateway' });
-    expect(incoming(lc, 't')).toEqual([e('flow_gw_join_t_t', 'gw_join_t', 't')]);
+    expect(incoming(lc, 't')).toEqual([{ ...e('flow_gw_join_t_t', 'gw_join_t', 't'), _derived: 'joinGatewayFlow' }]);
     expect(lc.edges.find(x => x.id === 'fa')).toEqual(e('fa', 'a', 'gw_join_t'));
     expect(lc.edges.find(x => x.id === 'fb')).toEqual(e('fb', 'b', 'gw_join_t'));
   });
@@ -36,7 +36,7 @@ describe('applyDerivations — joinGateways', () => {
     input.edges.find(x => x.id === 'fa').isHappyPath = true;
     const { lc } = applyDerivations(input, ON);
     expect(lc.edges.find(x => x.id === 'flow_gw_join_t_t'))
-      .toEqual({ id: 'flow_gw_join_t_t', source: 'gw_join_t', target: 't', isHappyPath: true });
+      .toEqual({ id: 'flow_gw_join_t_t', source: 'gw_join_t', target: 't', isHappyPath: true, _derived: 'joinGatewayFlow' });
     expect(lc.edges.find(x => x.id === 'fa')).toEqual({ ...e('fa', 'a', 'gw_join_t'), isHappyPath: true });
   });
 
