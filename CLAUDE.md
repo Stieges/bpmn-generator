@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 31 bpmn-pipeline + 20 dmn (growing) + 13 shared + 2 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 31 bpmn-pipeline + 20 dmn (growing) + 14 shared + 2 cross-notation + 7 agent +
 11 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -124,6 +124,9 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
                                helpers stay in bpmn/ — see dmn-integration plan's Stage 3 note)
   entry-point.js             (no deps beyond node: — isMainModule, the CLI guard every entry script uses;
                                symlink- and Windows-safe, unlike comparing import.meta.url to argv[1])
+  message-codes.js           (no deps — MESSAGE_CODES, the one registry of message codes of a format 2.x run; `coded`,
+                               `codeOf`, `withCode`; fenced by message-codes.test.js against unregistered codes in the
+                               sources and against codes missing from references/api-reference.md)
   version.js                 (no deps beyond node: — PACKAGE_VERSION, read once from ../package.json;
                                'unknown' if unreadable)
 
@@ -342,6 +345,7 @@ membership instead of coordinates.
 | `scripts/bpmn/redesign-core.js` | Shared redesign kernel: profile-independent soundness gate (`SOUNDNESS_GATE`/`checkGate`), deterministic collision-free IDs (`nextId`), protection-list matching by id/name (`isProtected`), cross-format lane resolution (re-exported `resolveLaneId` from `topology.js`) |
 | `scripts/bpmn/redesign-cli.js` | CLI entry to the redesign toolbox (`node bpmn/redesign-cli.js <input.json> <transform> [options] [--apply]`); preview is the default, nothing is written without `--apply`, a refusal exits non-zero and writes nothing |
 | `scripts/bpmn/validate.js` | Thin wrapper around `runRules()` |
+| `scripts/shared/message-codes.js` | `MESSAGE_CODES`: the registry of message codes (C, F, H, N families) of a format 2.x run; `coded(code, text)`, `codeOf(text)`, `withCode(err, code)`. `message-codes.test.js` fences unregistered codes in the sources and codes missing from the "Message codes" section of `references/api-reference.md`. `format1-responses.test.js` pins the 1.x responses on every surface |
 | `scripts/shared/ontology.js` | Loader for `references/ontology.jsonld` (read as plain JSON, ajv-validated at import — an invalid ontology fails the process, a missing file names both paths tried). `buildVocabulary`/`VOCABULARY`: class members, node types and their status (`supported`/`announced`), markers (incl. lossy ones, which need a reason), definition kinds, per-field domains. Exported as `bpmn-generator/ontology`. `ontology-audit.js` finds vocabulary lists outside it; `ontology.test.js` fences schema enums equal to it |
 | `references/ontology.jsonld` | The vocabulary and rule catalog, one JSON-LD file: BPMN classes, 26 node types (announced ones such as `adHocSubProcess` included), 12 markers, 4 definition kinds, one `rdf:Property` per schema field with `allowedOn` (`bg:allowedOn`, not `rdfs:domain`) — BPMN fields only: the `rdf:Property` schema admits the Decision-Core element names (the `decision-core-schema.json` `$defs` names `Requirement`, `DecisionTable`, `InputClause`, `OutputClause`, `DecisionRule`, plus `DecisionCore` for the root; `Node` is shared with BPMN, a DMN property being told apart by its notation) but no per-field DMN `rdf:Property` entries exist yet; the DMN terms (node kinds, requirement kinds, hit policies, aggregations, orientations, expression kinds — `context`/`invocation`/`list`/`relation` announced); notations (BPMN, DMN; ArchiMate announced), severities, layers and every rule. Linked to the OMG metamodel (BPMN20.cmof), the DMN 1.3 XSD namespace, SHACL and BBO via `rdfs:seeAlso` only — no import, no reasoner. Labels are proper element names |
 | `scripts/bpmn/types.js` | `isEvent`, `isGateway` (all type sets derive from `references/ontology.jsonld` via `scripts/shared/ontology.js` — no list of its own), `isArtifact` (layout sense — kept out of the ELK graph; wider than the BPMN class, includes data references), `isBpmnArtifact` (the actual OMG Artifact class — TextAnnotation, Group; use this one for anything that has to be right against the XSD), `bpmnXmlTag` (strict: an unknown or announced type throws), plus `OMG_NODE_FIELD_SCOPE`/`isFieldOutOfScope` — the single table of which node classes may carry which OMG-scoped per-node field (`isCompensation`, `implementation`, `isEventSubProcess`, `calledElement`, `scriptFormat`, `isCollection`). Read by **both** `bpmn-xml.js`'s `buildFlowNode` (drops an out-of-scope field, so the XML stays valid) and `rules.js`'s S15 (reports the drop, so it is not silent). Add a scoped field here, never inline in either consumer — the two disagreeing is the defect the table exists to prevent. Note `implementation`'s scope is narrower than `Activity` (five invoking Task types only), which is why the table is per-field rather than one `isActivity` test |
