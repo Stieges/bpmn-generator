@@ -1250,6 +1250,8 @@ const STYLE_CHECKS = [
     // a lane with nothing in it at the top level shows a role that does no work in the diagram. In
     // practice that is the work of the role hidden in a collapsed subprocess, or a role the model
     // names but forgot — found after an LLM extraction that every other check called fine.
+    // In format 2.0 lanes come from assignments, not from the model (references/input-schema-v2.json):
+    // the rules judge the lane-less form, so this check sees lanes only in a 1.x model.
     ref: { omg: '§10.8 Lanes', note: 'generator convention: a role without a step is a modelling gap' },
     scope: 'process',
     check: (proc) => {

@@ -7,6 +7,7 @@ schema gate (`references/input-schema.json`) enforces.
 
 - [Overview](#overview)
 - [Schema Modes](#schema-modes)
+- [Format 2.0 (catalogue and lane views)](#format-20-catalogue-and-lane-views)
 - [Top-Level Fields](#top-level-fields)
 - [NodeObject](#nodeobject)
 - [EdgeObject](#edgeobject)
@@ -463,6 +464,101 @@ How each connection is drawn:
 ```
 
 ---
+
+## Format 2.0 (catalogue and lane views)
+
+Format 2.0 is a second input format next to 1.x. A model says `"$schemaVersion": "2.0"` and is
+validated by [`input-schema-v2.json`](input-schema-v2.json). A model without the field, or with
+`1.x`, is a 1.x model and is unchanged. Within 2.0 fields are only added; each addition raises the
+minor version (2.1, 2.2 …).
+
+**What 2.0 is:**
+
+- The model has no `lanes`, `lane`, `role`, `system` or `children`. Lanes are formed from the
+  model's assignments by a view (see the rule below), so the same model gives role lanes or unit
+  lanes without an edit.
+- An activity, event or gateway may carry `assignments`: `[ { "type": "D", "actor": "sb_schaden" } ]`.
+  `type` is a key of the responsibility scheme, `actor` an id of the catalogue. At most one
+  performer per node. Events and gateways carry only the performer type.
+- Actors come from a catalogue: `{ "actors": [ { "id", "name", "kind"?, "unit"? } ] }`, with `kind`
+  `role` or `unit` (omitted: not recorded) and `unit` naming the unit a role works in. The schema is
+  [`catalog-schema.json`](catalog-schema.json).
+- Every process needs an `id` matching `^[A-Za-z_][A-Za-z0-9_-]*$`; it is part of the lane ids.
+
+**What 2.0 is not (yet):** no systems or data nodes, no `partOf` between units, no positions or
+persons, no matrices (RACI), no migration tool. Within this release the catalogue can only be
+passed; replacing entries of a catalogue in the process file is not supported.
+
+**The catalogue (three ways to pass it).**
+
+1. CLI `--catalog <path>` (or `--catalog=<path>`), relative to the working directory. It wins over
+   the model's own field.
+2. The model's field `"catalog": "<path>"`, relative to the model file. Not on standard input,
+   which has no file: there only `--catalog` works.
+3. Library: `runPipeline(model, { catalog })` with a catalogue object. A string is a `TypeError`;
+   read a file with `loadCatalog` (`scripts/shared/catalog.js`) first.
+
+A model may instead carry `actors` (and `scheme`) itself. That is not combined with `catalog`,
+neither in the file nor in the call. `--catalog` with a 1.x model is an error.
+
+**The responsibility scheme.** `scheme` is the name of a shipped scheme or an embedded object; when
+it is absent the scheme is `demi`. `demi` ([`schemes/demi-scheme.json`](schemes/demi-scheme.json))
+has four types: `D` Durchführung (the performer, `performs: true`; exactly one type of a scheme
+performs), `E` Ergebnisverantwortung, `M` Mitarbeit, `I` Information. The labels have no fixed
+external source; the design chose them deliberately, so treat them as this project's wording and
+not as a quotation of a standard.
+
+**Lanes by view.** The view's `lanes` (`role`, `unit`, `none`) forms the lanes. Shipped:
+`views/rollen-view.json` (`role`) and `views/einheiten-view.json` (`unit`). Without `lanes` a 2.0
+model gets role lanes; `none` gives no lanes. A `lanes` view on a 1.x model is a view error on
+every surface.
+
+- `role`: the lane is the performer of the step (a role, or an actor without `kind`).
+- `unit`: the unit of the performer: the performer itself when it is a unit, else its `unit`; when
+  that is missing the placeholder `(Einheit nicht erhoben)`, with hint H04.
+
+**The inheritance rule.** Only top-level flow nodes of each modelled process take a lane (children of
+subprocesses get none, and only sequence flows count), and a node with a performer takes the lane of that
+performer. An activity without performer goes to the placeholder `(nicht zugeordnet)` (H02), unless it is an
+automatic task (`serviceTask`, `scriptTask`, `businessRuleTask`, `sendTask`, `receiveTask`), which is placed
+with its neighbour (H03). Every other node without a lane takes the most common lane of its neighbours, the
+successors for a start event or a merging gateway and the predecessors otherwise, in rounds until nothing
+changes. A node that still has none goes to `(nicht zugeordnet)` (H08). A boundary event takes the lane of its
+host only at the end, so a step reached only through a boundary event lands in `(nicht zugeordnet)` with H08.
+
+A process without any performer gets no lanes (hint H06). The placeholders are ids
+`L.<process-id>._unassigned` and `L.<process-id>._unitUnknown` with the names `(nicht zugeordnet)`
+and `(Einheit nicht erhoben)`; ordinary lane ids are `L.<process-id>.<actor-id>`. A collision of a
+lane id, or of its `<lane-id>_di`, with another id of the document is error C10, never a rename.
+
+**Hints.** Hints go to `validation.hints` and never fail `--strict`. H02 (activity without
+performer), H03 (automatic step placed with its neighbour), H04 (unit not recorded), H05 (lane name
+over 25 characters), H06 (process without performer) and H08 (node without a neighbour with a lane)
+come from the lane formation; H01 is the view's join-gateway derivation.
+
+**Output of a 2.0 model (XML).** The assignments and the origin are kept in the XML so that the
+diagram can be read back:
+
+- `<bg:assignment type="D" actor="sb_schaden"/>` in the `extensionElements` of the node;
+- `<bg:derived by="role" actor="sb_schaden">lane</bg:derived>` in the `extensionElements` of a
+  formed lane (`by` is `role` or `unit`);
+- on `bpmn:definitions`: `bg:modelVersion="2.0"`, `bg:view="<name>"`, `bg:catalog="sha256:<64 hex>"`
+  and `exporter="bpmn-generator"`; there is no `exporterVersion`.
+
+The fingerprint is SHA-256 (hex, prefixed `sha256:`) over the UTF-8 bytes of the canonical JSON of
+`{ "actors": …, "scheme": … }`, with the scheme resolved to its object, keys sorted at every level,
+arrays in their order, and no whitespace. A 2.0 output has no `bpmn:performer`, `bpmn:resource` or
+`bg:system`.
+
+**Which entry points read 2.0.** Only the CLI generate path (`node bpmn/pipeline.js`) and the
+library function `runPipeline`. Every other entry point refuses a 2.0 model before any work with
+one message, "format 2.0 is not accepted here yet": the MCP tools `generate_bpmn`, `validate_bpmn`
+and `orchestrate_bpmn`, the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
+`/api/v1/orchestrate`, the orchestrator, `redesign-cli.js` and the scenario pipeline. On the CLI a
+2.0 model refuses `--optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`; `--doc`
+works. The importers (`node bpmn/import.js`, MCP `import_bpmn`, HTTP `/api/v1/import`) read the
+diagram of a 2.0 model and report that it was generated from one (the CLI on stderr, MCP as a
+second text block, HTTP as `notices`); the result is a 1.x model.
 
 ## Views (outside the model)
 

@@ -112,7 +112,8 @@ node bpmn/pipeline.js my-process.json my-process --dot
 # DOT import → Logic-Core JSON:
 node bpmn/pipeline.js graph.dot output --import-dot
 
-# Run tests:
+# Run tests (fetch the OMG BPMN XSD once, from the repository root, so the conformance test runs):
+node .github/scripts/fetch-bpmn-xsd.mjs
 npm test
 ```
 
@@ -353,6 +354,17 @@ as importing the one generated with the default view. 10 of the 27 example model
 derived gateway (14 in total).
 
 Not covered yet: joins inside subprocesses, splitting mixed gateways, and layout parameters per view.
+
+### Format 2.0: catalogue and lane views
+
+Format 2.0 (`"$schemaVersion": "2.0"`, schema [`references/input-schema-v2.json`](references/input-schema-v2.json)) has no
+lanes in the model. Steps carry `assignments` (a responsibility type such as `D`, the performer, and an actor
+id) that point into an actor catalogue. The catalogue is passed with `--catalog <path>` on the CLI, named by the
+model's `"catalog"` field, or passed as an object to `runPipeline(model, { catalog })`. The view decides the lanes:
+[`views/rollen-view.json`](views/rollen-view.json) gives one lane per performer, [`views/einheiten-view.json`](views/einheiten-view.json)
+one lane per unit of the performer; without a lanes view a 2.0 model gets role lanes. Only the CLI generate path and
+`runPipeline` accept 2.0; the other entry points refuse it. The rules for lanes, placeholders and hints are in
+[`references/logic-core-schema.md`](references/logic-core-schema.md#format-20-catalogue-and-lane-views).
 
 ## Programmatic API
 

@@ -28,6 +28,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   diagram imports to the same model as the default one. Not covered yet: joins inside subprocesses,
   splitting mixed gateways, and layout parameters per view.
 
+- **Format 2.0: catalogue and lane views (first slice).** A model with `"$schemaVersion": "2.0"` has no
+  lanes. Its steps carry `assignments` (a type of the DEMI responsibility scheme, `D` for the performer, and an
+  actor id) that point into an actor catalogue, passed with `--catalog <path>`, named by the model's `"catalog"`
+  field, or given as an object to `runPipeline(model, { catalog })`. The view decides the lanes: `rollen` (one
+  lane per performer, also the default for 2.0) and `einheiten` (one lane per unit of the performer). Steps
+  without a performer go to the placeholder lane `(nicht zugeordnet)`, unit-less performers to
+  `(Einheit nicht erhoben)`. Hints H02–H06 and H08 go to `validation.hints` and never fail `--strict`. The XML
+  keeps the assignments (`bg:assignment`), the formed lanes (`bg:derived`) and the origin (`bg:modelVersion`,
+  `bg:view`, `bg:catalog` with a SHA-256 fingerprint of the catalogue). The importers read such a diagram, report
+  that it was generated from a 2.0 model and return a 1.x model. A lanes view on a 1.x model is a view error.
+  The rules are in `references/logic-core-schema.md`, section Format 2.0.
+  - Known limitations: only the CLI generate path and `runPipeline` accept 2.0; MCP, HTTP, the orchestrator and
+    the scenario pipeline refuse it. On the CLI `--optimize`, `--mode=soll`, `--dot` and `--drill-down` refuse it;
+    `--doc` works. 2.0 output has no `bpmn:performer`. The nested-lane DI03 form found in the first slice (a
+    gateway in the first of two child lanes, `scripts/bpmn/nested-lanes.test.js`) is recorded, not fixed.
+
 Default output is unchanged: a call without a view, or with `default`, produces the same bytes as
 before. Every `validation` result gains the key `hints`, an empty array without a view.
 
