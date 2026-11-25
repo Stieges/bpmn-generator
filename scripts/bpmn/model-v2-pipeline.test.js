@@ -6,7 +6,7 @@
  */
 import { describe, test, expect } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -168,6 +168,47 @@ describe('a 1.x model under a view with lanes is a view error (design 6)', () =>
       } catch (e) { err = e; }
       expect(err?.status).toBe(1);
       expect(err.stderr.toString()).toContain(`✗ ${LANES_ON_1X}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('$schemaVersion: only "2.0" is format 2.0', () => {
+  const versioned = (v) => ({ ...copy(MODEL), $schemaVersion: v });
+  const refusal = (v) => `[format 2.0] /$schemaVersion $schemaVersion "${v}" is not supported; only "2.0" is supported`;
+
+  test('"2.0" is accepted by runPipeline and stamped 2.0', async () => {
+    const result = await run({}, versioned('2.0'));
+    expect(result.validation.errors).toEqual([]);
+    expect(result.bpmnXml).toContain('modelVersion="2.0"');
+  });
+
+  test.each(['2.7', '2.1', '2'])('runPipeline refuses "%s" with one error naming it', async (v) => {
+    const result = await run({}, versioned(v));
+    expect(result.bpmnXml).toBeNull();
+    expect(result.validation.errors).toEqual([refusal(v)]);
+  });
+
+  test('the CLI exits 1 for "2.7" and for "2", names the value, and accepts "2.0"', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'v2-ver-'));
+    try {
+      const catalogFile = join(dir, 'bpmn-catalog.json');
+      writeFileSync(catalogFile, JSON.stringify(CATALOG));
+      const generate = (v) => {
+        const file = join(dir, `m-${v}.json`);
+        writeFileSync(file, JSON.stringify(versioned(v)));
+        try {
+          execFileSync(process.execPath, [resolve(here, 'pipeline.js'), file, join(dir, `out-${v}`), '--strict', `--catalog=${catalogFile}`], { stdio: 'pipe' });
+          return { status: 0, stderr: '' };
+        } catch (e) { return { status: e.status, stderr: e.stderr.toString() }; }
+      };
+      expect(generate('2.0').status).toBe(0);
+      for (const v of ['2.7', '2']) {
+        const r = generate(v);
+        expect(r.status).toBe(1);
+        expect(r.stderr).toContain(`$schemaVersion "${v}" is not supported; only "2.0" is supported`);
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -23,8 +23,8 @@
       "properties": {
         "$schemaVersion": {
           "type": "string",
-          "pattern": "^2\\.(0|[1-9][0-9]*)$",
-          "description": "Format version of the 2.0 line (design 5.1). Required. Within 2.0 fields are only added; each addition raises the minor version."
+          "const": "2.0",
+          "description": "Format version. Required; exactly the string \"2.0\" is format 2.0, any other value is refused."
         },
         "catalog": {
           "type": "string",
@@ -104,8 +104,8 @@
       "properties": {
         "$schemaVersion": {
           "type": "string",
-          "pattern": "^2\\.(0|[1-9][0-9]*)$",
-          "description": "Format version of the 2.0 line (design 5.1). Required. Within 2.0 fields are only added; each addition raises the minor version."
+          "const": "2.0",
+          "description": "Format version. Required; exactly the string \"2.0\" is format 2.0, any other value is refused."
         },
         "catalog": {
           "type": "string",
