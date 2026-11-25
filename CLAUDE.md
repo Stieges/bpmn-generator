@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 30 bpmn-pipeline + 20 dmn (growing) + 13 shared + 2 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 31 bpmn-pipeline + 20 dmn (growing) + 13 shared + 2 cross-notation + 7 agent +
 11 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -63,6 +63,7 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     │                          symbols, data shapes — element-relative, as bpmn-js 18.6.2 draws them)
     ├── pathmap.js           (no deps — bpmn-js 18.6.2 PathMap glyph templates + getScaledPath)
     ├── dot.js               ← types.js, topology.js
+    ├── model-v2.js          ← schema-gate.js, types.js, ../shared/catalog.js, ../shared/safe-text.js (resolveFields: format-2.0 check and translation, rules C01–C06; not on any path yet)
     ├── schema-gate.js       ← ../shared/resource-paths.js, ../shared/safe-text.js, visual-refinement.js (ajv draft-2020-12 strict gate;
     │                          visual-refinement.js supplies VISUAL_REFINEMENT_OPTION_SCHEMA, which pulls coordinates.js into the gate)
     ├── types.js             ← ../shared/ontology.js (every type set, marker map and field-table `allowed` derives from the ontology)
@@ -362,6 +363,7 @@ membership instead of coordinates.
 | `scripts/bpmn/orthogonal-router.js` | `routeAroundObstacles` — obstacle-aware orthogonal Dijkstra pathfinder ("trellis"/extended-lines grid + per-bend cost penalty + soft crossing penalty), three callers: in `edge-simplify.js` `repairCrossings` (fallback candidate source) and `reclipStuckEnds` (the route between the two 15 px end stubs, for each port pair it tries), and `bend-rule.js` (fallback when no 0/1/2-bend shape is admissible). The router never chooses an endpoint: it routes between the two points it is given, and its caller decides whether an endpoint moves |
 | `scripts/bpmn/bend-rule.js` | `applyBendRule` — routing pass (`layout.bendRule`, default `true`; per call `runPipeline(lc, { bendRule: false })` switches it off): a sequence flow is re-routed when an admissible route has fewer bends, or as many bends and enters an activity/event from the left (leaves one to the right; gateways free). Endpoints stay put or move to a side midpoint, on a rectangle also to a projection port (level with the counterpart's centre or endpoint, `portCornerMarginPx` from the corners); a boundary event's never moves. Admissible = no end defect, clear of foreign shapes, inside its region, at most `lengthFactor`× + `lengthSlackPx` longer, and per edge not worse than the current route in crossings, lane-line hug, length of collinear overlap (legs closer than `collinearPx` count as one line), crowding, `coordMap.nodeLabels` hits, side conflicts, shared ports (two flows out of — or into — one gateway/event side, or one rectangle point; rechnungspruefung's „Betrag über 10.000 EUR?“) and the later message-flow line; no new top/bottom port at a message-flow node. A re-routed flow's label is refreshed with the other routes as obstacles (`placeEdgeLabel`'s `avoidRoutes`; the first candidate off every route, else off its own). Limits in `layout.bendRuleLimits`. Greedy in edge order, repeated to a fixpoint (idempotent). Runs in `pipeline.js` after lane compaction and its re-route, before edge-label repair and `routeMessageFlows`. `bendMetrics` is the same search as a measure (avoidable bends, entries against the flow), read by `scripts/bench/flow-metrics.mjs` |
 | `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API and MCP; also `validateVisualRefinementOption` |
+| `scripts/bpmn/model-v2.js` | `resolveFields(model, { catalog, viewName })` → `{ lc, resolved, errors }` — checks a 2.0 model on a copy (format schema, catalogue source, C06, C03, C01, C02, C04, C05) and translates it into the lane-less intermediate form (`_assignments`, `_modelInfo`; no `role`/`system`/`lane`). Not on any path yet |
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |
 | `scripts/mcp-bpmn-server.js` | MCP server entry point |
