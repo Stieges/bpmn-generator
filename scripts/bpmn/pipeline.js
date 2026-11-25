@@ -47,6 +47,7 @@ import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, lane
 import { isMainModule } from '../shared/entry-point.js';
 import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOptions } from '../shared/view.js';
 import { applyDerivations } from './derivations.js';
+import { coded } from '../shared/message-codes.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
 // reachable from here.
@@ -125,6 +126,14 @@ function derivationHints(derived, lc) {
   }));
 }
 
+/** A pipeline result that stopped before any diagram: `errors`, and `rest` for the other validation lists. */
+function blockedResult(errors, rest = { warnings: [], advisories: [], metrics: {} }) {
+  return {
+    bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
+    validation: { errors, ...rest, hints: [] },
+  };
+}
+
 /**
  * Run the full BPMN pipeline programmatically.
  * @param {object} logicCore - Logic-Core JSON object
@@ -183,10 +192,6 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // Format 2.0 (design 7.3 step 2): checked against its catalogue and translated into the
   // intermediate form without lanes; the lanes are formed after validation. A 1.x model runs as
   // before, and a view that would form lanes is refused for it: it carries its own (design 6).
-  const blocked = (errors, rest = { warnings: [], advisories: [], metrics: {} }) => ({
-    bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
-    validation: { errors, ...rest, hints: [] },
-  });
   if (opts.catalog != null && (typeof opts.catalog !== 'object' || Array.isArray(opts.catalog))) {
     throw new TypeError('catalog must be a catalogue object; read a file with loadCatalog');
   }
@@ -195,10 +200,10 @@ async function runPipeline(logicCore, callerOpts = {}) {
   let resolved = null;
   if (v2) {
     if (opts.mode === 'optimize' || opts.mode === 'soll') {
-      return blocked([`[format 2.0] mode "${opts.mode}" is not available for format 2.0 models yet`]);
+      return blockedResult([coded('F04', `mode "${opts.mode}" is not available for format 2.0 models yet`)]);
     }
     const fields = resolveFields(logicCore, { catalog: opts.catalog ?? undefined, viewName: opts.viewName ?? 'default' });
-    if (fields.errors.length) return blocked(fields.errors);
+    if (fields.errors.length) return blockedResult(fields.errors);
     ({ lc: source, resolved } = fields);
   } else {
     if (opts.catalog != null) throw new TypeError('catalog applies to format 2.0 models only');
@@ -216,7 +221,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
     if (!Array.isArray(opts.decisions)) throw new TypeError('decisions must be an array of Decision-Core documents');
     const decisionErrors = decisionCoreErrors(opts.decisions);
     if (decisionErrors.length) {
-      return blocked(decisionErrors);
+      return blockedResult(decisionErrors);
     }
     lc = applyDecisionDocumentation(lc, opts.decisions, { locale: opts.locale });
   }
@@ -224,7 +229,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
   const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
   const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
   if (errors.length) {
-    return blocked(errors, { warnings, advisories, metrics });
+    return blockedResult(errors, { warnings, advisories, metrics });
   }
 
   // The lanes of a 2.0 model AFTER validation (design 7.3 step 5): the rules judged the model
@@ -233,7 +238,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
   let laneHints = [];
   if (v2) {
     const formed = formLanes(lc, resolved, { lanes: opts.lanes ?? 'role' });
-    if (formed.errors.length) return blocked(formed.errors, { warnings, advisories, metrics });
+    if (formed.errors.length) return blockedResult(formed.errors, { warnings, advisories, metrics });
     lc = formed.lc;
     laneHints = formed.hints;
   }
@@ -592,10 +597,7 @@ async function generateDiagramSet(logicCore, opts = {}) {
   // parent result like runPipeline's, so every caller reports it as a pipeline error.
   if (modelFormat(logicCore) === '2') {
     return {
-      parent: {
-        bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
-        validation: { errors: ['[format 2.0] drill-down is not available for format 2.0 models yet'], warnings: [], advisories: [], metrics: {}, hints: [] },
-      },
+      parent: blockedResult([coded('F04', 'drill-down is not available for format 2.0 models yet')]),
       subProcesses: {},
       navigation: { subProcesses: [] },
     };

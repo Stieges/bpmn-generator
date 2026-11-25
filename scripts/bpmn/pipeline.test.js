@@ -4359,7 +4359,7 @@ describe('CLI format 2.0 and --catalog', () => {
     const bad = await tempFile('bad.json', '{ "scheme": "demi", "actors": [ ], }');
     const res = await run([V2, '<out>', '--view=rollen', `--catalog=${bad}`]);
     expect(res.status).toBe(1);
-    expect(res.stderr).toMatch(/✗ catalog .*not valid JSON at line 1, column \d+/);
+    expect(res.stderr).toMatch(/✗ \[C11\] catalog .*not valid JSON at line 1, column \d+/);
     expect(res.stderr).not.toMatch(/at .*\.js:\d+/);
     expect(res.xml).toBeNull();
   });

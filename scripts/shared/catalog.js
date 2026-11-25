@@ -18,6 +18,7 @@ import {
   describeSchemaError, jsonErrorLocation,
 } from './rule-profile.js';
 import { catalogSchemaPath, demiSchemePath } from './resource-paths.js';
+import { coded, withCode } from './message-codes.js';
 
 /** Hard limits on catalogue input; a catalogue of a few thousand actors must fit. */
 export const CATALOG_LIMITS = Object.freeze({
@@ -41,15 +42,15 @@ export class CatalogRejectedError extends Error {
 const validateSchema = new Ajv2020({ allErrors: true, strict: true })
   .compile(JSON.parse(readFileSync(catalogSchemaPath(), 'utf8')));
 
-/** Problems of a catalogue as `[catalog] <path> <message>` lines: bounds first, then the schema. `[]` when valid. */
+/** Problems of a catalogue as `[C12] <path> <message>` lines: bounds first, then the schema. `[]` when valid. */
 export function catalogErrors(catalog) {
   const bound = exceedsBounds(catalog, CATALOG_LIMITS);
-  if (bound) return [`[catalog] catalogue is ${bound}`];
+  if (bound) return [coded('C12', `"/" is ${bound}`)];
   if (validateSchema(catalog)) return [];
-  const errors = (validateSchema.errors ?? []).map((e) => `[catalog] ${describeSchemaError(e)}`);
+  const errors = (validateSchema.errors ?? []).map((e) => coded('C12', describeSchemaError(e)));
   if (errors.length > CATALOG_LIMITS.messages) {
     const more = errors.length - CATALOG_LIMITS.messages;
-    return [...errors.slice(0, CATALOG_LIMITS.messages), `[catalog] … and ${more} more`];
+    return [...errors.slice(0, CATALOG_LIMITS.messages), coded('C12', `… and ${more} more`)];
   }
   return errors;
 }
@@ -58,7 +59,7 @@ function readCatalogText(path, label) {
   try {
     return readBoundedJsonText(path, { label: 'catalog', name: label, maxBytes: CATALOG_LIMITS.fileBytes });
   } catch (err) {
-    if (err instanceof ProfileRejectedError) throw new CatalogRejectedError(err.message);
+    if (err instanceof ProfileRejectedError) throw withCode(new CatalogRejectedError(err.message), 'C11');
     throw err;
   }
 }
@@ -71,7 +72,7 @@ export function loadCatalog(path) {
   try {
     real = realpathSync(abs);
   } catch (err) {
-    throw new CatalogRejectedError(`catalog ${label} cannot be read (${err.code ?? 'error'})`);
+    throw withCode(new CatalogRejectedError(`catalog ${label} cannot be read (${err.code ?? 'error'})`), 'C11');
   }
   const json = readCatalogText(real, label).replace(/^﻿/, '');
   let catalog;
@@ -79,11 +80,12 @@ export function loadCatalog(path) {
     catalog = JSON.parse(json);
   } catch (err) {
     // The parser's own message quotes the start of the input; only the position is passed on.
-    throw new CatalogRejectedError(`catalog ${label} is not valid JSON at ${jsonErrorLocation(json, err)}`);
+    throw withCode(new CatalogRejectedError(`catalog ${label} is not valid JSON at ${jsonErrorLocation(json, err)}`), 'C11');
   }
   const errors = catalogErrors(catalog);
   if (errors.length) {
-    throw new CatalogRejectedError(`catalog ${label} is refused: ${errors.slice(0, CATALOG_LIMITS.schemaErrors).join('; ')}`);
+    const listed = errors.slice(0, CATALOG_LIMITS.schemaErrors).map((e) => e.slice('[C12] '.length));
+    throw withCode(new CatalogRejectedError(`catalog ${label} is refused: ${listed.join('; ')}`), 'C12');
   }
   return catalog;
 }

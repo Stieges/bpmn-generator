@@ -7,6 +7,9 @@
  * orchestrator showed three) showed none of the real ones.
  */
 import { describe, test, expect } from '@jest/globals';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { validateLogicCoreSchema, formatSchemaErrors } from './schema-gate.js';
 
 // An external partner modelled as a pool with no nodes, and a message flow named with `label`.
@@ -50,7 +53,32 @@ describe('validateLogicCoreSchema reports the errors of the intended root shape'
   });
 });
 
+describe('1.x gate results do not change (no code anywhere)', () => {
+  const dir = resolve(dirname(fileURLToPath(import.meta.url)), '../../tests/fixtures');
+  const fixtures = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+
+  test('every top-level fixture is still valid with no errors', () => {
+    expect(fixtures.length).toBeGreaterThan(20);
+    for (const f of fixtures) {
+      expect([f, validateLogicCoreSchema(JSON.parse(readFileSync(join(dir, f), 'utf8')))]).toEqual([f, { valid: true, errors: [] }]);
+    }
+  });
+
+  test('a failing 1.x model has entries of exactly path, message, params', () => {
+    const { errors } = validateLogicCoreSchema(badCollaboration());
+    expect(errors.length).toBeGreaterThan(0);
+    for (const e of errors) expect(Object.keys(e).sort()).toEqual(['message', 'params', 'path']);
+  });
+});
+
 describe('formatSchemaErrors', () => {
+  test('a coded entry is printed as [code] path: message, an uncoded one unchanged', () => {
+    expect(formatSchemaErrors([
+      { path: '/nodes', message: 'bad', params: {}, code: 'F01' },
+      { path: '/x', message: 'plain', params: {} },
+    ])).toBe('[F01] /nodes: bad\n/x: plain');
+  });
+
   test('one line per error, with the offending property or limit', () => {
     const { errors } = validateLogicCoreSchema(badCollaboration());
     expect(formatSchemaErrors(errors)).toBe([

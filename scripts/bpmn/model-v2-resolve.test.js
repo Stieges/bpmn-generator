@@ -1,4 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
+import { readFileSync } from 'node:fs';
 import { resolveFields } from './model-v2.js';
 import { catalogFingerprint, resolveScheme } from '../shared/catalog.js';
 
@@ -31,6 +32,7 @@ const MODEL = {
   ],
 };
 
+const simpleApproval = () => JSON.parse(readFileSync(new URL('../../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const withNodes = (nodes, extra = {}) => ({ ...copy(MODEL), nodes, edges: [], ...extra });
 const task = (id, assignments) => ({ id, type: 'userTask', name: id, assignments });
@@ -78,22 +80,27 @@ describe('resolveFields', () => {
     const { errors, lc, resolved } = resolveFields({ $schemaVersion: '2.0', nodes: 5 });
     expect(lc).toBeNull(); expect(resolved).toBeNull();
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors.every((e) => e.startsWith('[format 2.0] '))).toBe(true);
+    expect(errors.every((e) => e.startsWith('[F01] '))).toBe(true);
+  });
+
+  test('a 1.x model is not a format 2.0 model: the text carries no code', () => {
+    expect(resolveFields(simpleApproval()).errors).toEqual(['this is not a format 2.0 model ($schemaVersion absent)']);
+    expect(resolveFields({ ...simpleApproval(), $schemaVersion: '1.2' }).errors).toEqual(['this is not a format 2.0 model ($schemaVersion "1.2")']);
   });
 
   test('catalogue and model actors together', () => {
     const { catalog: _drop, ...rest } = copy(MODEL);
-    expect(run({ ...rest, ...copy(CATALOG) }).errors).toEqual(['[catalog] the model carries actors and a catalogue was passed; replacing entries comes in a later version']);
+    expect(run({ ...rest, ...copy(CATALOG) }).errors).toEqual(['[C13] the model carries actors and a catalogue was passed; replacing entries comes in a later version']);
   });
 
   test('a catalogue path without a catalogue object', () => {
-    expect(run(copy(MODEL), null).errors).toEqual(['[catalog] the model names catalogue "../bpmn-catalog.json" but no catalogue object was passed — the CLI reads it relative to the model file, a library caller passes { catalog }']);
+    expect(run(copy(MODEL), null).errors).toEqual(['[C13] the model names catalogue "../bpmn-catalog.json" but no catalogue object was passed — the CLI reads it relative to the model file, a library caller passes { catalog }']);
   });
 
-  test('a bad catalogue object gives [catalog] lines', () => {
+  test('a bad catalogue object gives [C12] lines', () => {
     const errors = run(copy(MODEL), { actors: [{ id: '1bad', name: 'x' }] }).errors;
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors.every((e) => e.startsWith('[catalog] '))).toBe(true);
+    expect(errors.every((e) => e.startsWith('[C12] '))).toBe(true);
   });
 
   test('C06 unknown scheme name', () => {
@@ -164,10 +171,10 @@ describe('resolveFields', () => {
       expect(errors).not.toContain(NONE);
     });
 
-    test('an empty catalogue object {} is given but invalid: [catalog] lines, not the no-catalogue error', () => {
+    test('an empty catalogue object {} is given but invalid: [C12] lines, not the no-catalogue error', () => {
       const errors = resolveFields(copy(bare), { catalog: {} }).errors;
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors.every((e) => e.startsWith('[catalog] '))).toBe(true);
+      expect(errors.every((e) => e.startsWith('[C12] '))).toBe(true);
     });
   });
 

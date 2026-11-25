@@ -761,7 +761,7 @@ describe('a 2.0 model is not accepted over HTTP yet', () => {
       const data = await res.json();
       expect(res.status).toBe(400);
       expect(data.status).toBe('schema_error');
-      expect(data.errors).toEqual([{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] } }]);
+      expect(data.errors).toEqual([{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] }, code: 'F03' }]);
     });
   }
 });

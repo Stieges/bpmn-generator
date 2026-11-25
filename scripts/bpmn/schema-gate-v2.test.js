@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
-  modelFormat, validateModelSchema, validateLogicCoreSchema, FORMAT_V2_NOT_ACCEPTED,
+  modelFormat, validateModelSchema, validateLogicCoreSchema, FORMAT_V2_NOT_ACCEPTED, boundSchemaErrors, formatSchemaErrors,
 } from './schema-gate.js';
 import { inputSchemaPath, inputSchemaV2Path } from '../shared/resource-paths.js';
 import { TOOLS, handleToolCall } from '../mcp-bpmn-server.js';
@@ -84,7 +84,7 @@ describe('validateModelSchema', () => {
 
   test('by default only 1 is accepted: one error for a 2.0 model', () => {
     const r = validateModelSchema(m56());
-    expect(r).toEqual({ valid: false, format: '2', errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] } }] });
+    expect(r).toEqual({ valid: false, format: '2', errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] }, code: 'F03' }] });
   });
 
   test('a 1.x model is rejected when only 2 is accepted', () => {
@@ -92,6 +92,28 @@ describe('validateModelSchema', () => {
     expect(r.valid).toBe(false);
     expect(r.errors).toHaveLength(1);
     expect(r.errors[0].params).toEqual({ accepted: ['2'] });
+    expect(r.errors[0]).not.toHaveProperty('code');
+    expect(r.errors[0].message).toBe('this is not a format 2.0 model ($schemaVersion absent)');
+  });
+
+  test('2.x entries carry their code: F01 per schema error, F02 for a version, F03 for not accepted', () => {
+    const bad = validateModelSchema({ $schemaVersion: '2.0', nodes: 5 }, { accept: ['2'] }).errors;
+    expect(bad.length).toBeGreaterThan(0);
+    expect(bad.every((e) => e.code === 'F01')).toBe(true);
+    const seven = validateModelSchema({ ...m56(), $schemaVersion: '2.7' }, BOTH).errors;
+    expect(seven).toHaveLength(1);
+    expect(seven[0].code).toBe('F02');
+    expect(validateModelSchema(m56()).errors[0].code).toBe('F03');
+  });
+
+  test('boundSchemaErrors keeps the code of 20 entries and the cap entry has none', () => {
+    const errors = Array.from({ length: 25 }, (_, i) => ({ path: `/nodes/${i}`, message: 'bad', params: {}, code: 'F01' }));
+    const out = boundSchemaErrors(errors);
+    expect(out).toHaveLength(21);
+    expect(out.slice(0, 20).every((e) => e.code === 'F01')).toBe(true);
+    expect(out[20]).toEqual({ path: '(root)', message: '… and 5 more', params: { more: 5 } });
+    expect(boundSchemaErrors([{ path: '/a', message: 'm', params: {} }])[0]).not.toHaveProperty('code');
+    expect(formatSchemaErrors(out, 1)).toBe('[F01] /nodes/0: bad\n… and 20 more');
   });
 
   const withNode = (extra) => { const m = m56(); Object.assign(m.nodes[2], extra); return m; };
@@ -129,7 +151,7 @@ describe('validateLogicCoreSchema stays the 1.x gate', () => {
   test('a 2.0 model gets exactly the one not-accepted error', () => {
     expect(validateLogicCoreSchema(m56())).toEqual({
       valid: false,
-      errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] } }],
+      errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] }, code: 'F03' }],
     });
   });
 
@@ -151,7 +173,7 @@ describe('validateLogicCoreSchema stays the 1.x gate', () => {
 });
 
 describe('surfaces that have not opted in reject a 2.0 model with the one error', () => {
-  const entry = { path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] } };
+  const entry = { path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] }, code: 'F03' };
 
   test.each(['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'])('MCP %s', async (name) => {
     expect(TOOLS.some((t) => t.name === name)).toBe(true);
@@ -163,7 +185,7 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
   test.each(['2', '2.7'])('MCP validate_bpmn names the unsupported version %s, not the fixed text', async (version) => {
     const r = JSON.parse((await handleToolCall({ params: { name: 'validate_bpmn', arguments: { logicCore: { ...m56(), $schemaVersion: version } } } })).content[0].text);
     expect(r.status).toBe('schema_error');
-    expect(r.errors).toEqual([{ path: '/$schemaVersion', message: `$schemaVersion "${version}" is not supported; only "2.0" is supported`, params: { allowedValue: '2.0' } }]);
+    expect(r.errors).toEqual([{ path: '/$schemaVersion', message: `$schemaVersion "${version}" is not supported; only "2.0" is supported`, params: { allowedValue: '2.0' }, code: 'F02' }]);
   });
 
   // generate_bpmn with drillDown never reaches generateDiagramSet for a 2.0 model: the MCP schema
