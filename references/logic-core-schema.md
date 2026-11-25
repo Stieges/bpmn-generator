@@ -470,8 +470,10 @@ A view is not part of the Logic-Core. It is a separate file that decides how a m
 (rule profile, layout switches, derivations) and adds no knowledge about the process, so the author
 never writes one into the model. Its one derivation that changes the diagram,
 `derivations.joinGateways`, makes an implicit join (a task several flows enter) an explicit
-exclusive join gateway in the output only. The model keeps its implicit join, and import removes
-the gateway again unless someone edited it in a modeler. Format: `references/view-schema.json`;
+exclusive join gateway in the output only. The gateway and its onward flow are both marked in the
+XML (`<bg:derived>`); the model keeps its implicit join, and import removes the gateway and its
+onward flow again unless someone edited them in a modeler. Each derivation is reported as hint
+`H01` with `elements: [gatewayId, targetId, flowId]`. Format: `references/view-schema.json`;
 see the README section [Views](../README.md#views).
 
 ## Common Anti-Patterns (Reviewer checklist)

@@ -24,7 +24,7 @@ describe('runPipeline — view', () => {
     expect(result.bpmnXml).toContain('id="gw_join_task1"');
     expect(result.svg).toContain('gw_join_task1');
     expect(result.validation.hints).toEqual([
-      { code: 'H01', message: expect.stringContaining('gw_join_task1'), elements: ['gw_join_task1', 'task1'] },
+      { code: 'H01', message: expect.stringContaining('gw_join_task1'), elements: ['gw_join_task1', 'task1', 'flow_gw_join_task1_task1'] },
     ]);
   });
 

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url';
 import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep } from './moddle-import.js';
 import { isBpmnArtifact, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
 import { isMainModule } from '../shared/entry-point.js';
-import { removeDerivedElements } from './derivations.js';
+import { removeDerivedElements, DERIVED_JOIN_FLOW } from './derivations.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -542,7 +542,8 @@ const WRITTEN_ONWARD_ATTRS = new Set(['id', 'sourceRef', 'targetRef', 'name']);
 /**
  * The `<bg:derived>` marker of `element` (its text, trimmed by `parseElement`), or `undefined`
  * when there is none or when the element or its one onward flow among `siblings` carries anything
- * the writer does not write.
+ * the writer does not write. The onward flow must carry the flow marker (`joinGatewayFlow`) as
+ * its only extension element; a flow's marker is never read into the result.
  */
 function readDerivedMarkerFromDom(element, siblings = []) {
   const ext = findChild(element, 'extensionElements');
@@ -555,8 +556,14 @@ function readDerivedMarkerFromDom(element, siblings = []) {
   const outgoing = siblings.filter(c => stripNs(c.tag) === 'sequenceFlow' && c.attrs.sourceRef === element.attrs.id);
   if (outgoing.length !== 1) return undefined;
   const [onward] = outgoing;
-  if (onward.attrs.name || onward.children.length > 0) return undefined;
+  if (onward.attrs.name) return undefined;
   if (!Object.keys(onward.attrs).every(a => WRITTEN_ONWARD_ATTRS.has(a))) return undefined;
+  // The onward flow's one child is its extensionElements, holding the flow marker and nothing else.
+  if (onward.children.length !== 1 || stripNs(onward.children[0].tag) !== 'extensionElements') return undefined;
+  const [onwardExt] = onward.children;
+  if (Object.keys(onwardExt.attrs).length > 0 || onwardExt.children.length !== 1) return undefined;
+  const [flowMarker] = onwardExt.children;
+  if (stripNs(flowMarker.tag) !== 'derived' || flowMarker.text !== DERIVED_JOIN_FLOW) return undefined;
   return marker;
 }
 

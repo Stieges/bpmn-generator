@@ -57,7 +57,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 
 `validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
 
-`validation.hints` is a list of `{ code, message, elements }`, one entry per element a view derives. The only code is `H01` (a join gateway; `elements` is `[gatewayId, targetId]`). It is always present and empty when nothing is derived, and hints never fail a request. See "Views over HTTP" below.
+`validation.hints` is a list of `{ code, message, elements }`, one entry per element a view derives. The only code is `H01` (a join gateway and its onward flow; `elements` is `[gatewayId, targetId, flowId]`). It is always present and empty when nothing is derived, and hints never fail a request. See "Views over HTTP" below.
 - `id` — advisory rule id (`O01`–`O04`, see `references/fachliches-regelwerk.md`)
 - `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/bpmn/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/bpmn/redesign.js`/`redesign-cli.js` directly.
 - `targets` — ids of the affected nodes/gateways

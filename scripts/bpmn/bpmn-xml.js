@@ -54,6 +54,20 @@ function laneHeaderW(poolCoords, poolKey) {
 }
 
 /** Helper: create a moddle element with shorthand */
+/**
+ * The `<bg:derived>` marker of an element a view derived (derivations.js): a join gateway carries
+ * `joinGateway`, its onward flow `joinGatewayFlow`. Only an element with `_derived` gets one, so
+ * without a view the XML gains nothing.
+ */
+function derivedMarker(value) {
+  return moddle.createAny(`${EXTENSION_PREFIX}:derived`, EXTENSION_NS, { $body: value });
+}
+
+/** `attrs.extensionElements` holding the derived marker, when `edge` is a derived flow. */
+function markDerivedFlow(edge, attrs) {
+  if (edge._derived) attrs.extensionElements = create('bpmn:ExtensionElements', { values: [derivedMarker(edge._derived)] });
+}
+
 function create(type, attrs = {}) {
   return moddle.create(type, attrs);
 }
@@ -506,11 +520,7 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
   }
   // derived — the element is not the author's but a view's (derivations.js), so the import can
   // drop it again. Only a derived node carries the key: without a view the XML gains nothing.
-  if (node._derived) {
-    extensionValues.push(moddle.createAny(`${EXTENSION_PREFIX}:derived`, EXTENSION_NS, {
-      $body: node._derived,
-    }));
-  }
+  if (node._derived) extensionValues.push(derivedMarker(node._derived));
   if (extensionValues.length) {
     el.extensionElements = create('bpmn:ExtensionElements', { values: extensionValues });
   }
@@ -559,6 +569,7 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
       if (conditionById.has(seid)) {
         seAttrs.conditionExpression = create('bpmn:FormalExpression', { body: conditionById.get(seid) });
       }
+      markDerivedFlow(subEdge, seAttrs);
       const seFlow = create('bpmn:SequenceFlow', seAttrs);
       el.get('flowElements').push(seFlow);
       childFlows.set(seid, seFlow);
@@ -652,6 +663,7 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     if (conditionById.has(eid)) {
       attrs.conditionExpression = create('bpmn:FormalExpression', { body: conditionById.get(eid) });
     }
+    markDerivedFlow(edge, attrs);
 
     const seqFlow = create('bpmn:SequenceFlow', attrs);
     seqFlowMap.set(eid, seqFlow);

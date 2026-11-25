@@ -40,7 +40,8 @@ const modelNames = readdirSync(FIXTURES)
   .sort();
 
 const load = (n) => JSON.parse(readFileSync(resolve(FIXTURES, n), 'utf8'));
-const markerCount = (xml) => (xml.match(/<bg:derived>/g) ?? []).length;
+const markerCount = (xml) => (xml.match(/<bg:derived>joinGateway<\/bg:derived>/g) ?? []).length;
+const flowMarkerCount = (xml) => (xml.match(/<bg:derived>joinGatewayFlow<\/bg:derived>/g) ?? []).length;
 const codes = (r) => r.diagnostics.issues.map((i) => i.code).sort();
 const errors = (r) => r.diagnostics.issues.filter((i) => i.severity === 'ERROR').map((i) => i.code).sort();
 
@@ -92,10 +93,12 @@ describe('explicit-joins over every top-level fixture', () => {
       expect(normalise(viaJoins)).toEqual(normalise(viaDefault));
     });
 
-    test('hints match: one H01 per derived element in the XML', () => {
+    test('hints match: one H01 per derived gateway and its onward flow in the XML', () => {
       const r = results[n].joined;
-      const h01 = (r.validation.hints ?? []).filter((h) => h.code === 'H01').length;
-      expect(h01).toBe(markerCount(r.bpmnXml));
+      const h01 = (r.validation.hints ?? []).filter((h) => h.code === 'H01');
+      expect(h01.length).toBe(markerCount(r.bpmnXml));
+      expect(h01.length).toBe(flowMarkerCount(r.bpmnXml));
+      expect(h01.every((h) => h.elements.length === 3)).toBe(true);
     });
 
     test('no new diagram error under the view', () => {

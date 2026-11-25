@@ -116,10 +116,10 @@ function refreshMovedLabels(coordMap, edges, beforeRoutes, laneLines = [], { avo
  */
 function derivationHints(derived, lc) {
   const poolName = new Map((lc.pools || []).map(p => [p.id, p.name || p.id]));
-  return derived.map(({ id, target, process }) => ({
+  return derived.map(({ id, target, edge, process }) => ({
     code: 'H01',
     message: `${process === null ? '' : `[${poolName.get(process)}] `}Join gateway "${id}" derived in front of "${target}", which more than one flow enters.`,
-    elements: [id, target],
+    elements: [id, target, edge],
   }));
 }
 
@@ -161,7 +161,7 @@ function derivationHints(derived, lc) {
  *                hints: Array<{code: string, message: string, elements: string[]}>,
  *                infos?: string[], xmlWarnings?: string[]}
  *     `hints` (always present, empty on an early return): one entry per element the view
- *     derived — H01 a join gateway, `elements: [gatewayId, targetId]`
+ *     derived — H01 a join gateway and its onward flow, `elements: [gatewayId, targetId, flowId]`
  * }>}
  */
 async function runPipeline(logicCore, callerOpts = {}) {
@@ -193,7 +193,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
   }
 
   // Derivations AFTER validation: the rules (and the schema gate before runPipeline) judge the
-  // author's model; the derived one carries `_derived` nodes the input schema does not know.
+  // author's model; the derived one carries `_derived` nodes and edges the input schema does not know.
   const derivation = applyDerivations(lc, opts.derivations);
   lc = derivation.lc;
   const hints = derivationHints(derivation.derived, lc);
