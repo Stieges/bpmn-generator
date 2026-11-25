@@ -10,7 +10,7 @@
 import { validateLogicCore } from '../bpmn/validate.js';
 import { runRules } from '../bpmn/rules.js';
 import { runPipeline } from '../bpmn/pipeline.js';
-import { normalizeEdgeIds } from '../bpmn/topology.js';
+import { normalizeEdgeIds, preprocessLogicCore } from '../bpmn/topology.js';
 import { bpmnToLogicCore } from '../bpmn/import.js';
 import { isStructurallyEqual } from './graph-isomorphism.js';
 
@@ -22,7 +22,11 @@ export async function runRoundtripCheck(originalLc, bpmnXml) {
   } catch (e) {
     return { equal: false, delta: { reason: `import threw: ${e.message}` } };
   }
-  return isStructurallyEqual(originalLc, reparsedLc);
+  // Compare against the model the pipeline writes: preprocessLogicCore adds converging gateways
+  // (bpmnlint fake-join) and splits mixed gateways, which are real nodes of the written BPMN.
+  const written = normalizeEdgeIds(originalLc);
+  preprocessLogicCore(written);
+  return isStructurallyEqual(written, reparsedLc);
 }
 
 export async function preFilter(lc) {

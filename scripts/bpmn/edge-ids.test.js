@@ -37,8 +37,9 @@ describe('#64 id-less edges', () => {
   test('parallel id-less edges get flow_a_b and flow_a_b_2', async () => {
     const lc = base({ edges: [{ source: 's', target: 'w' }, { source: 's', target: 'w' }, { source: 'w', target: 'e' }] });
     const r = await runPipeline(lc);
-    expect(flowIds(r.bpmnXml)).toEqual(['flow_s_w', 'flow_s_w_2', 'flow_w_e']);
-    expect(diIds(r.bpmnXml).sort()).toEqual(['flow_s_w', 'flow_s_w_2', 'flow_w_e']);
+    // Both parallel flows meet at an auto-join (bpmnlint fake-join), whose own flow joins the list.
+    expect(flowIds(r.bpmnXml)).toEqual(['flow_s_w', 'flow_s_w_2', 'flow_w_e', 'flow_gw_join_w_w']);
+    expect(diIds(r.bpmnXml).sort()).toEqual(['flow_gw_join_w_w', 'flow_s_w', 'flow_s_w_2', 'flow_w_e']);
     expect((r.validation.xmlWarnings || []).filter(w => /duplicate/i.test(w))).toEqual([]);
     expect(r.diagnostics.issues.filter(i => i.code === 'DI07')).toEqual([]);
   });
@@ -141,20 +142,25 @@ describe('#64 ruling 3: normalised BEFORE validation and the net check', () => {
 });
 
 describe('#64 direct public entries complete id-less edges', () => {
-  const idLess = () => base({ edges: [{ source: 's', target: 'w' }, { source: 's', target: 'w' }, { source: 'w', target: 'e' }] });
+  // The parallel pair meets at a converging gateway: into a task, preprocessLogicCore would insert
+  // an auto-join (bpmnlint fake-join), and the raw and the preprocessed model would differ.
+  const idLess = () => base({
+    nodes: [n('s', 'startEvent'), n('j', 'exclusiveGateway'), n('w'), n('e', 'endEvent')],
+    edges: [{ source: 's', target: 'j' }, { source: 's', target: 'j' }, { source: 'j', target: 'w' }, { source: 'w', target: 'e' }],
+  });
   const layoutOf = async (lc) => {
     const ready = normalizeEdgeIds(lc);
     const elk = await runElkLayout(logicCoreToElk(ready));
     return { ready, elk, coordMap: buildCoordinateMap(elk, ready) };
   };
-  const expected = ['flow_s_w', 'flow_s_w_2', 'flow_w_e'];
+  const expected = ['flow_j_w', 'flow_s_j', 'flow_s_j_2', 'flow_w_e'];
 
   test('buildCoordinateMap keys edge geometry by the generated ids', async () => {
     const { ready, elk } = await layoutOf(idLess());
     const raw = idLess();
     const cm = buildCoordinateMap(elk, raw);
     expect(Object.keys(cm.edgeCoords).sort()).toEqual(expected);
-    expect(raw.edges.map(e => e.id)).toEqual(['flow_s_w', 'flow_s_w_2', 'flow_w_e']);
+    expect(raw.edges.map(e => e.id)).toEqual(['flow_s_j', 'flow_s_j_2', 'flow_j_w', 'flow_w_e']);
     expect(ready.edges.map(e => e.id)).toEqual(raw.edges.map(e => e.id));
   });
 
@@ -171,7 +177,7 @@ describe('#64 direct public entries complete id-less edges', () => {
     const svg = generateSvg(idLess(), coordMap);
     expect(svg).not.toContain('undefined');
     expect(svg).toBe(generateSvg(ready, coordMap));
-    expect((svg.match(/marker-end="url\(#seq-end\)"/g) || []).length).toBe(3);
+    expect((svg.match(/marker-end="url\(#seq-end\)"/g) || []).length).toBe(4);
   });
 });
 

@@ -6,7 +6,7 @@
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP } from './constants.js';
 import { CFG } from '../shared/utils.js';
-import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds } from './topology.js';
+import { identifyHappyPathNodes, identifyFeedbackEdgesDeep, isAutoJoin, resolveLaneId, assignEdgeIds, FEEDBACK_ELK_SUFFIX } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
 import { layoutText, lineWidth } from '../shared/text-layout.js';
 
@@ -99,6 +99,9 @@ function buildCoordinateMap(elkResult, lc) {
   };
 
   const collectEdge = (edge, offX = 0, offY = 0) => {
+    // A reversed feedback edge exists only to steer ELK's layering (layout.feedbackEdges);
+    // its route runs backwards, so §5.2 builds the real one.
+    if (edge.id.endsWith(FEEDBACK_ELK_SUFFIX)) return;
     const pts = [];
     for (const sec of edge.sections || []) {
       pts.push({ x: sec.startPoint.x + offX, y: sec.startPoint.y + offY });
@@ -342,15 +345,35 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
-  // §5.0d  Fan-out alignment: when an exclusive gateway fans out to 3+ targets,
-  //        snap those targets to the same x-column, and their direct successors
-  //        (typically end events) to a second aligned x-column.
+  // §5.0c2  Same-lane forward-chain leveling (geometry; no isHappyPath required).
+  //         Snap near-cy clusters to a shared centerline, seed straight H routes.
+  //         Controlled by layout.sameLaneChainAlign (default on). Re-run after compactLanes.
+  if (CFG.layout?.sameLaneChainAlign !== false) {
+    alignSameLaneChains({ coords, laneCoords, edgeCoords }, lc);
+  }
+
+  // §5.0c3  Multi-in join leveling: snap a converging exclusive gateway to its
+  //         single forward successor's centerline (else median of incomings) so
+  //         the spine continues left→right instead of sitting on a bottom branch.
+  if (CFG.layout?.multiInJoinAlign !== false) {
+    alignMultiInJoins({ coords, laneCoords, edgeCoords }, lc);
+  }
+
+  // §5.0d  Fan-out alignment: when an exclusive gateway fans out to 3+ *forward*
+  //        targets, snap those targets to the same x-column, and their direct
+  //        successors (typically end events) to a second aligned x-column.
   //        This prevents ELK's slight horizontal offsets on parallel branches.
+  //        Skip DFS feedback / rework outs — aligning them to the Yes column
+  //        parks the loop's re-entry auto-joins at the end of the chart.
   for (const proc of allProcesses) {
     const edges = proc.edges || [];
     const nodes = proc.nodes || [];
+    const feedback = identifyFeedbackEdgesDeep(proc);
     const outgoing = {};
-    for (const e of edges) (outgoing[e.source] ||= []).push(e.target);
+    for (const e of edges) {
+      if (feedback.has(e.id)) continue;
+      (outgoing[e.source] ||= []).push(e.target);
+    }
 
     for (const node of nodes) {
       if (node.type !== 'exclusiveGateway') continue;
@@ -491,15 +514,28 @@ function buildCoordinateMap(elkResult, lc) {
 
     if (srcCoord && srcNode) {
       pts[0] = clipOrthogonal(srcCoord, srcNode.type, pts[0], pts[1], 'source');
+      // Gateway/event cardinal snap may move y (or x) off the old stub axis —
+      // keep the first segment orthogonal so §5.3 does not invent an extra dog-leg.
+      if (isGateway(srcNode.type) || isEvent(srcNode.type)) {
+        alignStubToGatewayTip(pts, 0, 1, srcCoord);
+      }
     }
     if (tgtCoord && tgtNode) {
       const last = pts.length - 1;
       pts[last] = clipOrthogonal(tgtCoord, tgtNode.type, pts[last], pts[last - 1], 'target');
+      if (isGateway(tgtNode.type) || isEvent(tgtNode.type)) {
+        alignStubToGatewayTip(pts, last, last - 1, tgtCoord);
+      }
     }
   }
 
   // §5.2  Synthetic routing for edges without ELK routing data
   //        (cross-lane edges in rectpacking mode have no sections)
+  const typeOfNode = Object.fromEntries(
+    allProcesses.flatMap((p) => flattenProcessNodes(p.nodes || [])).map((n) => [n.id, n.type]));
+  const returnTargets = new Set(allProcessEdges
+    .filter((e) => coords[e.source] && coords[e.target] && isBackward(coords[e.source], coords[e.target]))
+    .map((e) => e.target));
   for (const edge of allProcessEdges) {
     const eid = edge.id;
     const pts = edgeCoords[eid];
@@ -509,8 +545,19 @@ function buildCoordinateMap(elkResult, lc) {
     const tgtC = coords[edge.target];
     if (!srcC || !tgtC) continue;
 
+    const hostC = coords[boundaryHosts.get(edge.source)];
+    if (!hostC && isBackward(srcC, tgtC)) {
+      // Miragon flow-connection-side's return-flow policy: the target is re-entered from the
+      // right; an activity that is itself a return-flow target (a "chain member") leaves to the
+      // left and carries the loop on, any other source leaves forward and wraps round.
+      edgeCoords[eid] = returnTargets.has(edge.source) && !isGateway(typeOfNode[edge.source])
+        && !isEvent(typeOfNode[edge.source])
+        ? orthogonalConnect(srcC, tgtC, { directionalHorizontal: true })
+        : backEdgeUTurn(srcC, tgtC, coords, edgeCoords);
+      continue;
+    }
     edgeCoords[eid] = orthogonalConnect(srcC, tgtC, {
-      hostC: coords[boundaryHosts.get(edge.source)],
+      hostC,
       // This section has always exited right and entered left, whatever the
       // direction — see orthogonalConnect's doc for why that is preserved.
       directionalHorizontal: false,
@@ -979,7 +1026,24 @@ function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLin
   for (const [a, b] of segs) if (isV(a, b)) cands.push(beside(a, b, 'left'));
 
   const boxOf = (c) => ({ x: c.x - w / 2, y: c.y - h / 2, w, h });
-  const offOwn = (c) => !labelHitsRoute(boxOf(c), pts);
+  // Non-overlap alone is not enough: beside a short vertical stub the box can sit
+  // < edgeLabelGap from the next horizontal leg without crossing either stroke
+  // (bpmn-generator-pipeline fo8). Require gap clearance to every own segment.
+  const distToRoute = (b, route) => {
+    if (!route || route.length < 2) return Infinity;
+    let best = Infinity;
+    for (let i = 0; i < route.length - 1; i++) {
+      const a = route[i], z = route[i + 1];
+      const dx = Math.max(0, b.x - Math.max(a.x, z.x), Math.min(a.x, z.x) - (b.x + b.w));
+      const dy = Math.max(0, b.y - Math.max(a.y, z.y), Math.min(a.y, z.y) - (b.y + b.h));
+      best = Math.min(best, Math.hypot(dx, dy));
+    }
+    return best;
+  };
+  const offOwn = (c) => {
+    const b = boxOf(c);
+    return !labelHitsRoute(b, pts) && distToRoute(b, pts) >= gap - 0.2;
+  };
   const offOthers = (c) => !avoidRoutes.some(r => labelHitsRoute(boxOf(c), r));
   const allClear = avoidRoutes.length > 0 && cands.some(c => offOwn(c) && offOthers(c));
   const offRoute = allClear ? (c) => offOwn(c) && offOthers(c) : offOwn;
@@ -1300,6 +1364,364 @@ function laneOfNode(node, proc) {
   return undefined;
 }
 
+/**
+ * Multi-in exclusive join → mid-rank of its incomings (median cy), refined to the
+ * unique forward successor when that successor already sits near the median.
+ * Puts the diamond just right of the middle branch instead of ELK parking it on
+ * the lowest incoming (e.g. Blank top / Narrate mid / Lock bottom → join at Narrate).
+ *
+ * @param {{ coords: object, laneCoords?: object, edgeCoords?: object }} coordMap
+ * @param {object} lc Logic-Core
+ * @param {{ enabled?: boolean, minIn?: number, outSnapPx?: number }} [opts]
+ * @returns {{ moved: string[] }}
+ */
+function alignMultiInJoins(coordMap, lc, opts = {}) {
+  const enabled = opts.enabled ?? (CFG.layout?.multiInJoinAlign !== false);
+  if (!enabled) return { moved: [] };
+
+  const coords = coordMap.coords || {};
+  const laneCoords = coordMap.laneCoords || {};
+  const edgeCoords = coordMap.edgeCoords || (coordMap.edgeCoords = {});
+  const allProcesses = lc.pools ? lc.pools : [lc];
+  const cyEps = 1;
+  const forwardEps = 10;
+  const minIn = opts.minIn ?? 2;
+  const taskH = SHAPE?.task?.height ?? SHAPE?.task?.h ?? 80;
+  const outSnapPx = opts.outSnapPx ?? Math.max(36, taskH / 2);
+  const moved = [];
+
+  for (const proc of allProcesses) {
+    const procNodes = flattenProcessNodes(proc.nodes || [])
+      .filter((n) => !isArtifact(n.type) && !isBoundaryEvent(n.type) && coords[n.id]);
+    const edges = flattenProcessEdges(proc);
+    const allNodes = flattenProcessNodes(proc.nodes || []);  // boundary events included (moveNodeY)
+    const incoming = {};
+    const outgoing = {};
+    for (const e of edges) {
+      (incoming[e.target] ||= []).push(e);
+      (outgoing[e.source] ||= []).push(e);
+    }
+
+    const feedback = identifyFeedbackEdgesDeep(proc);
+
+    for (const node of procNodes) {
+      if (!isGateway(node.type)) continue;
+      const ins = (incoming[node.id] || []).filter((e) => coords[e.source]);
+      const outs = (outgoing[node.id] || []).filter((e) => coords[e.target]);
+      if (ins.length < minIn || outs.length !== 1) continue;
+
+      const join = coords[node.id];
+      // Ignore DFS feedback / rework incomings for the mid-rank cy — otherwise a
+      // loop XOR on another lane pulls the auto-join off the forward spine and
+      // the T20→join→T21 edges go diagonal (Miragon flow-orthogonal).
+      const forwardIns = ins.filter((e) => !feedback.has(e.id));
+      const cySources = forwardIns.length ? forwardIns : ins;
+      const cys = cySources.map((e) => {
+        const b = coords[e.source];
+        return b.y + b.h / 2;
+      }).sort((a, b) => a - b);
+      let targetCy = (cys.length % 2 === 1)
+        ? cys[Math.floor(cys.length / 2)]
+        : (cys[cys.length / 2 - 1] + cys[cys.length / 2]) / 2;
+
+      // Prefer the unique forward out when it already lies on the mid-rank spine.
+      // Auto-joins (synthesised by preprocessLogicCore) always snap to the successor — they exist only to
+      // fan into that activity.
+      const outEdge = outs[0];
+      const outBox = coords[outEdge.target];
+      const joinCx = join.x + join.w / 2;
+      const outCx = outBox.x + outBox.w / 2;
+      const autoJoin = isAutoJoin(node);
+      if (outCx > joinCx + forwardEps) {
+        const outCy = outBox.y + outBox.h / 2;
+        if (autoJoin || Math.abs(outCy - targetCy) <= outSnapPx) targetCy = outCy;
+      }
+
+      const joinCy = join.y + join.h / 2;
+      if (Math.abs(joinCy - targetCy) <= cyEps) continue;
+
+      let newY = targetCy - join.h / 2;
+      const lid = laneOfNode(node, proc);
+      const band = lid ? laneCoords[lid] : null;
+      if (band) {
+        const pad = 4;
+        const lo = band.y + pad;
+        const hi = band.y + band.h - join.h - pad;
+        if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
+      }
+      if (Math.abs(newY - join.y) <= cyEps) continue;
+      if (!verticalMoveIsFree(coords, node.id, newY)) continue;
+      moveNodeY(coords, edgeCoords, node.id, newY, allNodes, edges);
+      moved.push(node.id);
+
+      // Drop routes that touched the join so later passes rebuild them.
+      for (const e of [...ins, ...outs]) delete edgeCoords[e.id];
+    }
+  }
+
+  return { moved };
+}
+
+/**
+ * Move node `id` vertically to `newY`, and its boundary events with it — they sit on its outline
+ * (placeBoundaryEvents ran before the align passes), so a host moving alone left them hanging off
+ * it. A boundary event's outgoing flow keeps its route; only its start moves by the same delta (and
+ * the second point too while the first leg is horizontal, so the leg stays orthogonal).
+ * @returns {string[]} the boundary events moved along
+ */
+function moveNodeY(coords, edgeCoords, id, newY, procNodes, procEdges) {
+  const box = coords[id];
+  const dy = newY - box.y;
+  box.y = newY;
+  const moved = [];
+  for (const n of procNodes) {
+    if (n.attachedTo !== id || !coords[n.id]) continue;
+    coords[n.id].y += dy;
+    moved.push(n.id);
+    for (const e of procEdges) {
+      const pts = e.source === n.id ? edgeCoords[e.id] : null;
+      if (!pts || pts.length < 2) continue;
+      const horizontal = Math.abs(pts[0].y - pts[1].y) < 0.5;
+      pts[0] = { ...pts[0], y: pts[0].y + dy };
+      if (horizontal) pts[1] = { ...pts[1], y: pts[1].y + dy };
+    }
+  }
+  return moved;
+}
+
+/**
+ * May node `id` move vertically to `newY`? Only when its new box clears every other shape by
+ * `layout.nodeMoveClearancePx` — the snap passes below (chain align, join align) used to move a
+ * node straight onto a neighbour in the same column, an overlap no DI code reports (bpmnlint's
+ * no-overlapping-elements does). A container holding the node, or held by it, does not count,
+ * nor does a boundary event on the node.
+ */
+function verticalMoveIsFree(coords, id, newY) {
+  const box = coords[id];
+  if (!box) return false;
+  const gap = CFG.layout?.nodeMoveClearancePx ?? 4;
+  const nb = { x: box.x, y: newY, w: box.w, h: box.h };
+  const holds = (P, Q) => P.x <= Q.x && P.y <= Q.y && P.x + P.w >= Q.x + Q.w && P.y + P.h >= Q.y + Q.h;
+  const touchesOld = (b) => b.x < box.x + box.w && box.x < b.x + b.w && b.y < box.y + box.h && box.y < b.y + b.h;
+  for (const [oid, b] of Object.entries(coords)) {
+    if (oid === id || !b) continue;
+    if (holds(b, box) || holds(box, b)) continue;
+    if (touchesOld(b) && b.w < box.w && b.h < box.h) continue; // its own boundary event
+    if (b.x < nb.x + nb.w + gap && nb.x < b.x + b.w + gap && b.y < nb.y + nb.h + gap && nb.y < b.y + b.h + gap) return false;
+  }
+  return true;
+}
+
+/**
+ * Same-lane forward chains → shared centerline Y + straight left-in/right-out seeds.
+ *
+ * Forward edges only (`source.cx + eps < target.cx`), so rework/back-edges stay out of the
+ * chain graph. Within each connected component, nodes already near each other in Y form a
+ * row (cluster threshold); each row of 2+ snaps to its median center Y. Branches that ELK
+ * already placed on a distant rank keep their own row.
+ *
+ * After the snap, same-lane forward edges whose ends share cy get a 2-point horizontal
+ * route (right mid → left mid). Bend-rule may still rewrite exceptions (join right taken,
+ * multi-in/out, envelope).
+ *
+ * @param {{ coords: object, laneCoords?: object, edgeCoords?: object }} coordMap
+ * @param {object} lc Logic-Core
+ * @param {{ clusterThreshPx?: number, enabled?: boolean }} [opts]
+ * @returns {{ moved: string[], seeded: string[] }}
+ */
+function alignSameLaneChains(coordMap, lc, opts = {}) {
+  const enabled = opts.enabled ?? (CFG.layout?.sameLaneChainAlign !== false);
+  if (!enabled) return { moved: [], seeded: [] };
+
+  const coords = coordMap.coords || {};
+  const laneCoords = coordMap.laneCoords || {};
+  const edgeCoords = coordMap.edgeCoords || (coordMap.edgeCoords = {});
+  const allProcesses = lc.pools ? lc.pools : [lc];
+  const cyEps = 1;
+  const forwardEps = 10;
+  const taskH = SHAPE?.task?.height ?? SHAPE?.task?.h ?? 80;
+  const clusterThresh = opts.clusterThreshPx ?? Math.max(36, taskH / 2);
+
+  const moved = new Set();
+  const seeded = [];
+
+  for (const proc of allProcesses) {
+    const procNodes = flattenProcessNodes(proc.nodes || [])
+      .filter((n) => !isArtifact(n.type) && !isBoundaryEvent(n.type) && coords[n.id]);
+    const edges = flattenProcessEdges(proc);
+    const allNodes = flattenProcessNodes(proc.nodes || []);  // boundary events included (moveNodeY)
+    const nodeById = Object.fromEntries(procNodes.map((n) => [n.id, n]));
+
+    const byLane = new Map();
+    for (const n of procNodes) {
+      const lid = laneOfNode(n, proc);
+      if (!lid) continue;
+      if (!byLane.has(lid)) byLane.set(lid, []);
+      byLane.get(lid).push(n);
+    }
+
+    for (const [laneId, laneNodes] of byLane) {
+      const idSet = new Set(laneNodes.map((n) => n.id));
+      const adj = new Map([...idSet].map((id) => [id, []]));
+      const forwardEdges = [];
+      for (const e of edges) {
+        if (!idSet.has(e.source) || !idSet.has(e.target)) continue;
+        const s = coords[e.source], t = coords[e.target];
+        if (!s || !t) continue;
+        const scx = s.x + s.w / 2, tcx = t.x + t.w / 2;
+        if (scx + forwardEps >= tcx) continue;
+        forwardEdges.push(e);
+        adj.get(e.source).push(e.target);
+        adj.get(e.target).push(e.source);
+      }
+
+      const seen = new Set();
+      for (const start of idSet) {
+        if (seen.has(start)) continue;
+        const comp = [];
+        const stack = [start];
+        seen.add(start);
+        while (stack.length) {
+          const u = stack.pop();
+          comp.push(u);
+          for (const v of adj.get(u) || []) {
+            if (!seen.has(v)) {
+              seen.add(v);
+              stack.push(v);
+            }
+          }
+        }
+        if (comp.length < 2) continue;
+
+        const ranked = comp
+          .map((id) => ({ id, cy: coords[id].y + coords[id].h / 2 }))
+          .sort((a, b) => a.cy - b.cy);
+        const clusters = [];
+        let cur = [ranked[0]];
+        for (let i = 1; i < ranked.length; i++) {
+          if (ranked[i].cy - cur[cur.length - 1].cy <= clusterThresh) cur.push(ranked[i]);
+          else {
+            clusters.push(cur);
+            cur = [ranked[i]];
+          }
+        }
+        clusters.push(cur);
+
+        const band = laneCoords[laneId];
+        const snapToCy = (ids, medianCy) => {
+          for (const id of ids) {
+            const box = coords[id];
+            if (!box) continue;
+            let newY = medianCy - box.h / 2;
+            if (band) {
+              const pad = 4;
+              const lo = band.y + pad;
+              const hi = band.y + band.h - box.h - pad;
+              if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
+            }
+            if (Math.abs(newY - box.y) > cyEps && verticalMoveIsFree(coords, id, newY)) {
+              moveNodeY(coords, edgeCoords, id, newY, allNodes, edges);
+              moved.add(id);
+            }
+          }
+        };
+        for (const cluster of clusters) {
+          if (cluster.length < 2) continue;
+          const ys = cluster.map((c) => c.cy).sort((a, b) => a - b);
+          snapToCy(cluster.map((c) => c.id), ys[Math.floor(ys.length / 2)]);
+        }
+      }
+
+      // Peer exclusive gateways on a short forward succession:
+      // snap the path (both diamonds + intermediates) to one centerline even when ELK ranked
+      // them on different cy bands. Named XOR only — empty-name auto-joins are intermediates.
+      const maxGwHops = opts.maxGatewayPathHops ?? 4;
+      const namedXor = laneNodes.filter(
+        (n) => n.type === 'exclusiveGateway' && String(n.name || '').trim().length > 0,
+      );
+      const fwdAdj = new Map([...idSet].map((id) => [id, []]));
+      for (const e of forwardEdges) fwdAdj.get(e.source)?.push(e.target);
+      const shortestFwdPath = (from, to) => {
+        const q = [[from]];
+        const seen = new Set([from]);
+        while (q.length) {
+          const path = q.shift();
+          const u = path[path.length - 1];
+          if (u === to) return path;
+          if (path.length - 1 >= maxGwHops) continue;
+          for (const v of fwdAdj.get(u) || []) {
+            if (seen.has(v)) continue;
+            seen.add(v);
+            q.push([...path, v]);
+          }
+        }
+        return null;
+      };
+      namedXor.sort((a, b) => (coords[a.id].x + coords[a.id].w / 2) - (coords[b.id].x + coords[b.id].w / 2));
+      for (let i = 0; i < namedXor.length; i++) {
+        for (let j = i + 1; j < namedXor.length; j++) {
+          const a = namedXor[i], b = namedXor[j];
+          const path = shortestFwdPath(a.id, b.id);
+          if (!path || path.length < 2) continue;
+          const cys = path.map((id) => coords[id].y + coords[id].h / 2).sort((x, y) => x - y);
+          const medianCy = cys[Math.floor(cys.length / 2)];
+          // Only worth it when the two diamonds disagree vertically.
+          const aCy = coords[a.id].y + coords[a.id].h / 2;
+          const bCy = coords[b.id].y + coords[b.id].h / 2;
+          if (Math.abs(aCy - bCy) <= cyEps) continue;
+          const band = laneCoords[laneId];
+          for (const id of path) {
+            const box = coords[id];
+            let newY = medianCy - box.h / 2;
+            if (band) {
+              const pad = 4;
+              const lo = band.y + pad;
+              const hi = band.y + band.h - box.h - pad;
+              if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
+            }
+            if (Math.abs(newY - box.y) > cyEps && verticalMoveIsFree(coords, id, newY)) {
+              moveNodeY(coords, edgeCoords, id, newY, allNodes, edges);
+              moved.add(id);
+            }
+          }
+        }
+      }
+
+      // Straight H seed for forward same-lane edges now on a shared centerline.
+      for (const e of forwardEdges) {
+        const s = coords[e.source], t = coords[e.target];
+        if (!s || !t) continue;
+        const scy = s.y + s.h / 2, tcy = t.y + t.h / 2;
+        if (Math.abs(scy - tcy) > cyEps) {
+          // Ends no longer match the old route — drop so §5.2 / bend-rule rebuild.
+          if (moved.has(e.source) || moved.has(e.target)) delete edgeCoords[e.id];
+          continue;
+        }
+        const cy = (scy + tcy) / 2;
+        edgeCoords[e.id] = [
+          { x: s.x + s.w, y: cy },
+          { x: t.x, y: cy },
+        ];
+        seeded.push(e.id);
+      }
+    }
+
+    // Cross-lane / back-edges that touch a moved node: invalidate stale waypoints.
+    for (const e of edges) {
+      if (!moved.has(e.source) && !moved.has(e.target)) continue;
+      if (seeded.includes(e.id)) continue;
+      const sn = nodeById[e.source], tn = nodeById[e.target];
+      if (!sn || !tn) {
+        delete edgeCoords[e.id];
+        continue;
+      }
+      delete edgeCoords[e.id];
+    }
+  }
+
+  return { moved: [...moved], seeded };
+}
+
 function flattenProcessNodes(nodes) {
   const out = [];
   for (const n of nodes || []) {
@@ -1364,6 +1786,87 @@ function outwardFromHost(evC, hostC) {
 }
 
 /**
+ * A return flow in Miragon flow-connection-side's sense: the target's centre lies more than
+ * `layout.returnFlowTolerancePx` left of the source's (the rule's own tolerance is 10 px).
+ */
+function isBackward(srcC, tgtC) {
+  const tol = CFG.layout?.returnFlowTolerancePx ?? 10;
+  return tgtC.x + tgtC.w / 2 < srcC.x + srcC.w / 2 - tol;
+}
+
+/**
+ * The §5.2 route of a return flow (rework loop) whose source leaves forward: out of the
+ * source's right side, along a corridor below (or above) every shape in the way, back to
+ * the right of the target and into its right side — the return-flow policy of Miragon
+ * flow-connection-side (target re-entered from the right; an initiating activity exits
+ * forward), four bends. Before this, §5.2 routed every flow as a straight right-out /
+ * left-in Z, which for a target behind its source ran back through both shapes
+ * (`layout.feedbackEdges` hands every feedback edge to §5.2).
+ * The corridor sits `boundaryExitClearance` past the lowest (highest) shape in the span,
+ * below LANE_COMPACT_PADDING for the reason orthogonalConnect's `clearance` doc gives; the
+ * side with the shorter detour wins, below on a tie. A box holding either end (an expanded
+ * subprocess) is not in the way. The bend rule may still improve the route.
+ */
+function backEdgeUTurn(srcC, tgtC, coords, edgeCoords = {}) {
+  const clearance = CFG.layout?.boundaryExitClearance ?? 12;
+  const stub = CFG.layout?.endStubPx ?? 20;
+  const sx = srcC.x + srcC.w + stub;
+  const tx = tgtC.x + tgtC.w + stub;
+  const scy = srcC.y + srcC.h / 2;
+  const tcy = tgtC.y + tgtC.h / 2;
+  const holds = (b, c) => b.x <= c.x && b.y <= c.y && b.x + b.w >= c.x + c.w && b.y + b.h >= c.y + c.h
+    && (b.w > c.w || b.h > c.h);
+  const lo = Math.min(tx, sx), hi = Math.max(tx, sx);
+  const boxes = Object.values(coords).filter((b) => b && b !== srcC && b !== tgtC
+    && !holds(b, srcC) && !holds(b, tgtC) && b.x < hi && b.x + b.w > lo);
+  const corridor = (down) => {
+    let y = down ? Math.max(srcC.y + srcC.h, tgtC.y + tgtC.h) + clearance
+                 : Math.min(srcC.y, tgtC.y) - clearance;
+    for (let moved = true; moved;) {
+      moved = false;
+      for (const b of boxes) {
+        if (b.y - clearance < y && y < b.y + b.h + clearance) {
+          y = down ? b.y + b.h + clearance : b.y - clearance;
+          moved = true;
+        }
+      }
+    }
+    return y;
+  };
+  const route = (y) => [
+    { x: srcC.x + srcC.w, y: scy }, { x: sx, y: scy }, { x: sx, y },
+    { x: tx, y }, { x: tx, y: tcy }, { x: tgtC.x + tgtC.w, y: tcy },
+  ];
+  const detour = (y) => Math.abs(y - scy) + Math.abs(y - tcy);
+  const cands = [corridor(true), corridor(false)].map((y) => ({ y, pts: route(y) }));
+  for (const c of cands) c.crossings = routeCrossings(c.pts, edgeCoords);
+  // Fewer crossings with the routes already there, then the shorter detour, then below.
+  cands.sort((a, b) => a.crossings - b.crossings || detour(a.y) - detour(b.y));
+  return cands[0].pts;
+}
+
+/** Proper crossings of orthogonal route `pts` with every route in `edgeCoords` (shared ends excluded). */
+function routeCrossings(pts, edgeCoords) {
+  const segs = (p) => p.slice(1).map((q, i) => [p[i], q]);
+  const mine = segs(pts);
+  let n = 0;
+  for (const other of Object.values(edgeCoords || {})) {
+    if (!other || other.length < 2) continue;
+    for (const [a, b] of mine) {
+      for (const [c, d] of segs(other)) {
+        const h1 = Math.abs(a.y - b.y) < 0.5, h2 = Math.abs(c.y - d.y) < 0.5;
+        if (h1 === h2) continue;
+        const [H0, H1, V0, V1] = h1 ? [a, b, c, d] : [c, d, a, b];
+        const x = V0.x, y = H0.y;
+        if (x > Math.min(H0.x, H1.x) + 0.5 && x < Math.max(H0.x, H1.x) - 0.5
+          && y > Math.min(V0.y, V1.y) + 0.5 && y < Math.max(V0.y, V1.y) - 0.5) n++;
+      }
+    }
+  }
+  return n;
+}
+
+/**
  * The orthogonal connection used wherever a route has to be built from scratch:
  * leave the source, cross over on a mid-line, enter the target. Three sections
  * (§5.0e detour compaction, §5.2 synthetic routing, §5.5 zigzag cleanup) all
@@ -1417,11 +1920,16 @@ function orthogonalConnect(srcC, tgtC, opts = {}) {
   // A boundary event straddles its host's outline, so half of it is inside the
   // host. The side-choice above only asks where the target is, which for a
   // target on the far side of the host means leaving through the host's body —
-  // the flow then reads as if it came out of the activity itself. Only rebuild
-  // when that actually happened: running ALONG the outline is normal, and the
-  // space directly outward is often occupied by the host's own artifacts.
-  if (hostC && entersInterior(route, hostC)) {
-    route = boundaryOutwardRoute(srcC, tgtC, hostC, clearance);
+  // the flow then reads as if it came out of the activity itself.
+  // Top-edge events (#91) always leave upward: a mostly-horizontal target still
+  // must not exit sideways along the host's top (that runs through sibling
+  // boundary events on the same edge). Bottom-edge events keep the old gate —
+  // running along the outline toward a side target is normal there.
+  if (hostC) {
+    const leaveUp = outwardFromHost(srcC, hostC) === 'up';
+    if (leaveUp || entersInterior(route, hostC)) {
+      route = boundaryOutwardRoute(srcC, tgtC, hostC, clearance);
+    }
   }
   return route;
 }
@@ -1652,35 +2160,22 @@ function clipOrthogonal(shape, type, edgePt, nextPt, role) {
  * For vertical approach, place at cy ± r on the x-level of nextPt.
  */
 function clipCircleOrthogonal(cx, cy, r, nextPt, isHorizontal) {
+  // Cardinal docks only (L/R/T/B). Miragon flow-connection-side requires events
+  // entered from the left / exited to the right — mid-arc docks on the lower
+  // half of the circle are reported as "from the bottom" even on a horizontal leg.
   if (isHorizontal) {
-    // Horizontal segment: keep y from nextPt, compute x on circle boundary
-    const y = nextPt.y;
-    const dyc = y - cy;
-    // Clamp: if nextPt.y is outside the circle, snap to center height
-    if (Math.abs(dyc) >= r) {
-      return { x: nextPt.x > cx ? cx + r : cx - r, y: cy };
-    }
-    const xOffset = Math.sqrt(r * r - dyc * dyc);
-    const x = nextPt.x > cx ? cx + xOffset : cx - xOffset;
-    return { x, y };
-  } else {
-    // Vertical segment: keep x from nextPt, compute y on circle boundary
-    const x = nextPt.x;
-    const dxc = x - cx;
-    if (Math.abs(dxc) >= r) {
-      return { x: cx, y: nextPt.y > cy ? cy + r : cy - r };
-    }
-    const yOffset = Math.sqrt(r * r - dxc * dxc);
-    const y = nextPt.y > cy ? cy + yOffset : cy - yOffset;
-    return { x, y };
+    return { x: nextPt.x > cx ? cx + r : cx - r, y: cy };
   }
+  return { x: cx, y: nextPt.y > cy ? cy + r : cy - r };
 }
 
 /**
- * Diamond: for horizontal approach, find x where the diamond edge crosses the y-level.
- * For vertical, find y where the diamond edge crosses the x-level.
- * Diamond with center (cx,cy) and half-widths (hw,hh):
- *   |x-cx|/hw + |y-cy|/hh = 1
+ * Diamond: dock only at a tip (left/right/top/bottom vertex). Miragon's
+ * `flow-connection-side` rule rejects mid-facet docks even when the segment is
+ * axis-aligned; the four vertices are the only legal connection points.
+ * Callers that clip an endpoint must keep the adjacent stub orthogonal (see
+ * §5.1 tip-stub alignment) — snapping y to cy on a horizontal approach can
+ * otherwise leave a diagonal first segment.
  */
 function clipDiamondOrthogonal(shape, nextPt, isHorizontal) {
   const cx = shape.x + shape.w / 2;
@@ -1688,24 +2183,22 @@ function clipDiamondOrthogonal(shape, nextPt, isHorizontal) {
   const hw = shape.w / 2, hh = shape.h / 2;
 
   if (isHorizontal) {
-    const y = nextPt.y;
-    const dyc = Math.abs(y - cy);
-    if (dyc >= hh) {
-      // Outside diamond vertically, snap to tip
-      return { x: cx, y: nextPt.y > cy ? cy + hh : cy - hh };
-    }
-    const xOffset = hw * (1 - dyc / hh);
-    const x = nextPt.x > cx ? cx + xOffset : cx - xOffset;
-    return { x, y };
-  } else {
-    const x = nextPt.x;
-    const dxc = Math.abs(x - cx);
-    if (dxc >= hw) {
-      return { x: nextPt.x > cx ? cx + hw : cx - hw, y: cy };
-    }
-    const yOffset = hh * (1 - dxc / hw);
-    const y = nextPt.y > cy ? cy + yOffset : cy - yOffset;
-    return { x, y };
+    return { x: nextPt.x > cx ? cx + hw : cx - hw, y: cy };
+  }
+  return { x: cx, y: nextPt.y > cy ? cy + hh : cy - hh };
+}
+
+/** Keep the stub next to a gateway tip on the tip's axis (horizontal for L/R tips). */
+function alignStubToGatewayTip(pts, endIdx, adjIdx, shape) {
+  const tip = pts[endIdx];
+  if (!tip || !pts[adjIdx]) return;
+  const cx = shape.x + shape.w / 2;
+  const cy = shape.y + shape.h / 2;
+  const adj = pts[adjIdx];
+  if (Math.abs(tip.y - cy) < 1e-6) {
+    pts[adjIdx] = { x: adj.x, y: tip.y };
+  } else if (Math.abs(tip.x - cx) < 1e-6) {
+    pts[adjIdx] = { x: tip.x, y: adj.y };
   }
 }
 
@@ -2409,4 +2902,4 @@ function besideDistance(L, a, b, horizontal) {
   return Math.hypot(L.x - a.x, dy);
 }
 
-export { buildCoordinateMap, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, alignSameLaneChains, alignMultiInJoins, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };

@@ -748,10 +748,11 @@ describe('schema-gate errors in responses are capped and bounded', () => {
   }
 });
 
-// bendRule / nodeLabelsAvoidFlows: simple-approval.json changes when either is switched off, so a
-// dropped forwarding fails the `not.toBe`.
+// bendRule / nodeLabelsAvoidFlows: realistic-collaboration.json changes when either is switched
+// off (simple-approval no longer moves labels under cardinal docks), so a dropped forwarding fails
+// the `not.toBe`.
 describe('layout switches over HTTP', () => {
-  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+  const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/realistic-collaboration.json', import.meta.url), 'utf8'));
   const post = (path, body) => realFetch(`${baseUrl}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
@@ -786,8 +787,8 @@ describe('layout switches over HTTP', () => {
       });
   }
   // foreignShapeRepair leaves simple-approval alone (nothing runs through a shape there), so its
-  // forwarding is fenced on the #91 model, which it changes.
-  const rp = JSON.parse(readFileSync(new URL('../tests/fixtures/example-rechnungspruefung.json', import.meta.url), 'utf8'));
+  // forwarding is fenced on boundary-event-shapes, the fixture it still changes (one DI11 when off).
+  const rp = JSON.parse(readFileSync(new URL('../tests/fixtures/boundary-event-shapes.json', import.meta.url), 'utf8'));
   const libRp = async (opts) => {
     const { runPipeline } = await import('./bpmn/pipeline.js');
     return (await runPipeline(JSON.parse(JSON.stringify(rp)), opts)).bpmnXml;

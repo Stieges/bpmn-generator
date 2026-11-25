@@ -595,8 +595,7 @@
     "errors": [],
     "warnings": [
       "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -605,8 +604,7 @@
     "errors": [],
     "warnings": [
       "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -615,8 +613,7 @@
     "errors": [],
     "warnings": [
       "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -625,8 +622,7 @@
     "errors": [],
     "warnings": [
       "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -634,8 +630,7 @@
   "parallel-split-join.json|strict|document": {
     "errors": [
       "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "warnings": [],
     "infos": [],
@@ -644,8 +639,7 @@
   "parallel-split-join.json|strict|optimize": {
     "errors": [
       "[Shipment Preparation] Task \"Pack goods\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Shipment Preparation] Task \"Book carrier\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Shipment Preparation] Task \"Print invoice\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "warnings": [],
     "infos": [],
@@ -657,7 +651,6 @@
       "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
@@ -670,7 +663,6 @@
       "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
@@ -683,7 +675,6 @@
       "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
@@ -696,7 +687,6 @@
       "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
@@ -708,7 +698,6 @@
       "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
@@ -721,7 +710,6 @@
       "[Applicant] Task \"Await decision\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Intake Office] Task \"Register application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Assessment Unit] Task \"Query register\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Assessment Unit] Task \"Assess application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Schedule session\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
       "[Decision Board] Task \"Decide on application\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
@@ -781,9 +769,7 @@
     "errors": [],
     "warnings": [
       "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -792,9 +778,7 @@
     "errors": [],
     "warnings": [
       "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -803,9 +787,7 @@
     "errors": [],
     "warnings": [
       "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -814,9 +796,7 @@
     "errors": [],
     "warnings": [
       "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "infos": [],
     "advisories": []
@@ -824,9 +804,7 @@
   "sparse-lanes.json|strict|document": {
     "errors": [
       "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "warnings": [],
     "infos": [],
@@ -835,9 +813,7 @@
   "sparse-lanes.json|strict|optimize": {
     "errors": [
       "[Sparse Lanes Test] Task \"Render Form\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Deploy Build\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06.",
-      "[Sparse Lanes Test] Task \"Run Tests\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
+      "[Sparse Lanes Test] Task \"Log Telemetry\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
     ],
     "warnings": [],
     "infos": [],
@@ -881,48 +857,36 @@
   },
   "subprocess-collapsed-children.json|none|document": {
     "errors": [],
-    "warnings": [
-      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
-    ],
+    "warnings": [],
     "infos": [],
     "advisories": []
   },
   "subprocess-collapsed-children.json|none|optimize": {
     "errors": [],
-    "warnings": [
-      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
-    ],
+    "warnings": [],
     "infos": [],
     "advisories": []
   },
   "subprocess-collapsed-children.json|default|document": {
     "errors": [],
-    "warnings": [
-      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
-    ],
+    "warnings": [],
     "infos": [],
     "advisories": []
   },
   "subprocess-collapsed-children.json|default|optimize": {
     "errors": [],
-    "warnings": [
-      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
-    ],
+    "warnings": [],
     "infos": [],
     "advisories": []
   },
   "subprocess-collapsed-children.json|strict|document": {
-    "errors": [
-      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
-    ],
+    "errors": [],
     "warnings": [],
     "infos": [],
     "advisories": []
   },
   "subprocess-collapsed-children.json|strict|optimize": {
-    "errors": [
-      "[Collapsed Containers] Task \"Route request\" folgt nicht der Objekt+Verb-Konvention (z.B. \"Antrag prüfen\"). Heuristik — exakte Wortartprüfung: M05/M06."
-    ],
+    "errors": [],
     "warnings": [],
     "infos": [],
     "advisories": []

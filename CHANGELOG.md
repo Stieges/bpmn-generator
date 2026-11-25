@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **bpmnlint fence.** `scripts/bpmn/bpmnlint.test.js` lints every top-level fixture's output with
+  `bpmnlint:recommended` + `plugin:@miragon/rules/recommended-for-modeling` (`flow-target-alignment`
+  off) and compares the findings exactly against a reasoned exclusion list (model content, or an
+  open layout defect). `node bench/bpmnlint-fixtures.mjs [fixture…]` prints the same findings.
+  Dev dependencies `bpmnlint` and `@miragon/bpmnlint-plugin-rules`.
+
+### Fixed
+
+- **Feedback / rework edges no longer pull the loop XOR left.** DFS back-edges
+  (work → decision → back to an earlier step) are handed to ELK reversed
+  (`layout.feedbackEdges`: `reverse` by default; `drop` leaves them out, `elk` lets ELK's
+  own cycle breaking decide), so the decision gateway stays after its predecessors while
+  the reversed edge still keeps the loop short under network-simplex layering. Feedback
+  edges are found per container (a loop inside an expanded subprocess included), from
+  start events and from nodes without an incoming flow, with an iterative DFS. The two
+  alignment passes below follow the same switch.
+- **Back-edges without an ELK route get a U-turn.** §5.2 used to route every flow it
+  built as a straight right-out / left-in Z, which for a target behind its source ran
+  back through both shapes. A return flow (target centre more than
+  `layout.returnFlowTolerancePx` left of the source's) now follows Miragon flow-connection-side's
+  return-flow policy: it leaves forward, runs below or above every shape in the way — the side
+  with fewer crossings, then the shorter detour — and re-enters the target from the right; an
+  activity that is itself a return-flow target leaves to the left.
+- **Fan-out column align ignores feedback outs.** §5.0d no longer snaps loop-back
+  targets (and their auto-join successors) onto the Yes-path x-column when a gateway
+  has 3+ exits.
+- **Subprocess children carry `incoming`/`outgoing`.** Top-level flow nodes always listed their
+  sequence flows; children of a subprocess did not, so bpmnlint (`no-disconnected`,
+  `no-implicit-start`, `no-implicit-end`) reported every child as disconnected.
+- **A collapsed subprocess's children get their own diagram.** Each collapsed container with
+  children now has a `BPMNDiagram` whose plane is the container (what bpmn-js shows on drill-in),
+  laid out by a nested pipeline run and carried in `coordMap.subPlanes`. The children used to have
+  no DI at all (bpmnlint `no-bpmndi`). The SVG still draws the main plane only.
+- **No unused message definitions.** A `Message` (and the other definition kinds) is generated
+  only for an event marker or an explicit `messageRef` — a send/receive task without `messageRef`
+  references nothing, and used to leave `Message_1` unreferenced (bpmnlint `global`). Events
+  inside subprocesses now count too.
+- **No diagonal after a node moves.** Chain align and join align rebuilt the flows of a node they
+  moved from a straight two-point seed, which sometimes reached the DI as a diagonal (bpmnlint
+  `flow-orthogonal`); the seed is now an orthogonal Z, forced orthogonal after simplification.
+- **Chain and join align never move a node onto another.** A vertical snap is applied only when
+  the new box clears every other shape by `layout.nodeMoveClearancePx` (bpmnlint
+  `no-overlapping-elements`; no DI code reports a shape overlap).
+- **Forward flows through a gateway keep Miragon's sides.** The bend rule's side penalty now also
+  counts a forward flow leaving a gateway by its left tip or entering it by its right tip.
+- **A collapsed subprocess with children no longer crashes the layout.** Its child flows
+  have no shapes to route; the same-lane chain align's rebuild read their coordinates.
+- **Multi-in auto-joins keep the forward spine.** Feedback incomings are ignored
+  when leveling an auto-join's cy (marked by `preprocessLogicCore`, not by its id, so a
+  gateway the author named `gw_join_…` is not mistaken for one); the join snaps to its
+  successor so the step → join → step chain stays horizontal.
+- **Cross-lane handoffs enter from the left.** Bend-rule proposes a 2-bend
+  staircase (or a 4-bend detour round the target) when the first leg leaves to the right,
+  so a higher lane does not top-enter the activity below (Miragon flow-connection-side).
+- **Multi-in joins sit beside the mid-rank branch.** A converging exclusive gateway with
+  2+ incomings and one forward out snaps its centerline to the median of its incoming
+  sources (refined to the successor when that successor is already near the median), so
+  the diamond lands just right of the middle activity instead of ELK parking it on the
+  lowest branch. Layout switch: `layout.multiInJoinAlign` (default on).
+- **Activity into a busy multi-in join keeps right-out.** When the join's left tip
+  is already taken, Pass C docks a vertical tip — preferring one another incoming
+  already uses — instead of leaving the activity through the bottom.
+- **Returning gateway exits use top/bottom tips.** A back-edge leaving a gateway (source
+  right of target) no longer keeps a left or right dock — Pass C forces a vertical tip and
+  same-tip re-entry on the join (`top↔top` / `bottom↔bottom`), preferring the tip opposite an
+  existing join out. `sidePenalty` counts a non-vertical gateway back-exit; `backEdgeCrossingSlack`
+  lets the U-turn compete with under-counted left-exit routes on busy charts.
+
+## [4.0.0-rc.3] - 2026-11-11
+
+Third release candidate. The bend rule enters more activities and events from the left
+(a 3-bend staircase), and M01 recognises more English verb-first task names.
+
+### Fixed
+
+- **The bend rule enters more activities and events from the left.** It now also proposes a
+  3-bend staircase — keep the flow's first leg and corridor, drop beside the target, enter it from
+  the left — which neither its 0/1/2-bend search nor its 4-bend U-turns produced. Strict guards,
+  within `layout.bendRuleLimits.sideBendBudget`. Over the committed fixtures it re-routes three
+  flows (`example-urlaubsantrag` f210, `example-onboarding` f510, `boundary-event-shapes` f8);
+  output with `--no-bend-rule` is unchanged. Connection sides are now pinned by tests, including
+  a new cross-lane fixture `tests/fixtures/cross-lane-connection-sides.json`.
+- **M01 recognises more English verb-first labels.** The verb corpus `scripts/bpmn/naming.extra.json`
+  (109 verbs) is now read on every run instead of only under `BPMN_EXTRA_NAMING=1`, and
+  `scripts/bpmn/naming.json` is read for the first time (project additions; empty as shipped).
+  `BPMN_NAMING_JSON=<path>` now adds to both instead of replacing the corpus. `BPMN_EXTRA_NAMING`
+  no longer has an effect. Fixture labels that lose a wrong M01 warning: "Book carrier", "Deploy
+  Build", "Run Tests", "Route request", "Assess application".
+- **M01 accepts verb-first phrases and hyphenated labels.** A new `englishVerbPhrases` list
+  (`stand up`, `hand off`, `pre qualify`, …) lets a label pass when it starts with the whole
+  phrase and an object follows ("Hand off request"; "Hand off" alone still violates). Hyphens
+  split words: "Pre-qualify lead", "Cross-check invoice" pass, while a single hyphenated word
+  ("Follow-up", "Kunden-Daten") is still one word and violates. Noun+…+Verb labels such as
+  "Sales Ops Check" or "OTI Booking Process" still violate — rename them verb-first.
+- **The `.skill` bundle carries both naming files**; before, a skill install silently fell back
+  to the 39 built-in verbs.
+
+Known cost: an English Noun+Noun label whose first word is also a corpus verb ("Book Overview")
+now passes M01, which stays a heuristic (exact part-of-speech checks: M05/M06).
+
 ## [4.0.0-rc.2] - 2026-10-12
 
 Second release candidate, published as a GitHub pre-release only (not on npm). It fixes the

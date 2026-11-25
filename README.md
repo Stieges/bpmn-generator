@@ -639,6 +639,7 @@ See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full license details an
 - Bruce Silver: "BPMN Method and Style, 2nd Edition"
 - Soliman et al. (2025): "Size matters less: how fine-tuned small LLMs excel in BPMN generation"
 - Domroes et al. (2023): "Model Order in Sugiyama Layouts" (ELK)
+- Petrov et al. (2026): ["Algorithm for Automatic Arrangement of BPMN Elements"](https://teodorpetrov.com/blog/algorithm_for_automatic_arrangement_of_bpmn_elements) — lane-constrained Sugiyama pipeline on ELK (DFS cycle breaking, network-simplex layering, lane-aware crossing minimisation)
 
 ## License
 
