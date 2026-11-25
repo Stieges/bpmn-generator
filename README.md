@@ -292,7 +292,8 @@ A view is a small named JSON file that decides how a model is processed: which r
 applies, which layout switches are set, and which derivations run. Model + view = output. The
 model (Logic-Core JSON) holds what the author knows about the process; a view adds no knowledge
 about the process. Views live outside the model, under [`views/`](views/), and each file passes
-[`references/view-schema.json`](references/view-schema.json) before anything reads it.
+[`references/view-schema.json`](references/view-schema.json) before anything reads it. The loader
+is `scripts/shared/view.js`.
 
 ```json
 {

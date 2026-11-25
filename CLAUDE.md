@@ -626,11 +626,12 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 ### Choose or write a view
 
 1. A view is a named file in `views/` (`references/view-schema.json`), outside the model. Choose one
-   per call: `runPipeline(lc, { view: 'explicit-joins' })` (a name, a path or an object), CLI
-   `--view=explicit-joins` (a value that is not a view name is read as a path), MCP `"view"` on
-   `generate_bpmn`/`validate_bpmn`/`orchestrate_bpmn` (a name only), HTTP `"view"` as an inline
-   object (no `ruleProfile` in it; the request's own field applies). Precedence: explicit option →
-   view → `scripts/config.json`.
+   per call: CLI `--view=explicit-joins` (a value that is not a view name is read as a path), MCP
+   `"view"` on `generate_bpmn`/`validate_bpmn`/`orchestrate_bpmn` (a name only), library
+   `runPipeline(lc, { view })` with a path (resolved against the working directory, e.g. from
+   `scripts/`: `'../views/explicit-joins-view.json'`) or an inline object, not a bare name, and HTTP
+   `"view"` as an inline object (no `ruleProfile` in it; the request's own field applies). Precedence:
+   explicit option → view → `scripts/config.json`.
 2. Write one: copy `views/default-view.json`, set a new `view` name (`^[a-z0-9][a-z0-9-]{0,63}$`) and
    only the keys you need. Unknown keys are refused. Only `derivations.joinGateways` derives anything
    today (see README, [Views](README.md#views)).
