@@ -330,23 +330,27 @@ export function orderParticipantsByMessageFlow(lc) {
  * @returns {Set<object>}
  */
 export function findBackEdges(nodes, edges, { restartFromUnvisited = true } = {}) {
-  const outMap = {};
-  for (const e of edges) (outMap[e.source] ??= []).push(e);
+  // Maps, not plain objects: a node id may equal an Object.prototype member (`constructor`, `__proto__`).
+  const outMap = new Map();
+  for (const e of edges) {
+    if (!outMap.has(e.source)) outMap.set(e.source, []);
+    outMap.get(e.source).push(e);
+  }
   const starts = nodes.filter(n => n.type === 'startEvent').map(n => n.id);
   const roots = starts.length ? starts : (nodes[0] ? [nodes[0].id] : []);
   if (restartFromUnvisited) roots.push(...nodes.map(n => n.id));
-  const state = {}; // 0=unvisited,1=on-stack,2=done
+  const state = new Map(); // absent=unvisited,1=on-stack,2=done
   const back = new Set();
   const dfs = (id) => {
-    state[id] = 1;
-    for (const e of (outMap[id] || [])) {
+    state.set(id, 1);
+    for (const e of (outMap.get(id) || [])) {
       const t = e.target;
-      if (state[t] === 1) back.add(e);
-      else if (!state[t]) dfs(t);
+      if (state.get(t) === 1) back.add(e);
+      else if (!state.get(t)) dfs(t);
     }
-    state[id] = 2;
+    state.set(id, 2);
   };
-  for (const r of roots) if (!state[r]) dfs(r);
+  for (const r of roots) if (!state.get(r)) dfs(r);
   return back;
 }
 
