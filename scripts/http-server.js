@@ -25,7 +25,7 @@ import { profileForMode, checkRuleProfile } from './bpmn/rules.js';
 import { ProfileRejectedError, assertLayerNotWeakened } from './shared/rule-profile.js';
 import { ViewRejectedError, assertView } from './shared/view.js';
 import { profileContext } from './shared/rule-catalog.js';
-import { bpmnToLogicCore } from './bpmn/import.js';
+import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 import { chatAgent } from './agents/chat.js';
 import { createLlmProvider, LlmProviderError } from './agents/llm-provider.js';
@@ -489,7 +489,9 @@ const server = createServer(async (req, res) => {
       const logicCore = await bpmnToLogicCore(body.bpmnXml);
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs });
-      return json(res, 200, { correlationId, status: 'success', logicCore });
+      // `notices` only for a diagram generated from a format 2.0 model: 1.x responses keep their keys.
+      const notices = readModelMarker(body.bpmnXml) ? { notices: [MODEL_V2_IMPORT_NOTICE] } : {};
+      return json(res, 200, { correlationId, status: 'success', logicCore, ...notices });
     }
 
     // Orchestrate

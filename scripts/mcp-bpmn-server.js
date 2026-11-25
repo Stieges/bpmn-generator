@@ -28,7 +28,7 @@ import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
 import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
-import { bpmnToLogicCore } from './bpmn/import.js';
+import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 
 const PROFILE_PARAM = {
@@ -247,7 +247,9 @@ async function handleToolCall(request) {
 
   if (name === 'import_bpmn') {
     const logicCore = await bpmnToLogicCore(args.bpmnXml);
-    return { content: [{ type: 'text', text: JSON.stringify(logicCore, null, 2) }] };
+    const content = [{ type: 'text', text: JSON.stringify(logicCore, null, 2) }];
+    if (readModelMarker(args.bpmnXml)) content.push({ type: 'text', text: MODEL_V2_IMPORT_NOTICE });
+    return { content };
   }
 
   if (name === 'orchestrate_bpmn') {

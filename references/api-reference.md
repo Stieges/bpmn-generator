@@ -377,6 +377,8 @@ BPMN 2.0 XML → Logic-Core JSON (round-trip via the DOM parser).
 
 **Response 200:** `{ "correlationId": "uuid", "status": "success", "logicCore": {...} }`
 
+For a diagram generated from a format 2.0 model (the attributes `bg:modelVersion`, `bg:view`, `bg:catalog` on `bpmn:definitions`), the response also carries `"notices": ["Diagram generated from a format 2.0 model. Changes belong in the model. Importing yields a format 1.x model; assignments and catalogue references are lost."]`. The import never refuses: `logicCore` is a format 1.x model (formed lanes as ordinary lanes). A modeler that drops the `bg:` attributes on saving also drops the notice. A 1.x response has no `notices` key. The CLI (`node bpmn/import.js`) prints the same notice on stderr, MCP `import_bpmn` as a second text block.
+
 **Errors:** `500 { correlationId, status: "internal_error", error }` — parse failure.
 
 **Example:**

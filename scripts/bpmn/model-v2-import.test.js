@@ -1,0 +1,148 @@
+/**
+ * Importing a diagram generated from a format 2.0 model (design 10 "Zwischenzeit", 11 a, 11 e):
+ * both importers give a 1.x model (formed lanes as ordinary lanes, no `role`, no `bg:` data), the
+ * result passes the 1.x gate, and every import entry point reports the origin with one notice.
+ * The import never refuses. A foreign tool may drop the `bg:` attributes on saving; the file then
+ * imports as plain 1.x output, without a notice.
+ */
+import { describe, test, expect } from '@jest/globals';
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { bpmnToLogicCore, bpmnToLogicCoreLegacy, readModelMarker, MODEL_V2_IMPORT_NOTICE } from './import.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
+import { runPipeline } from './pipeline.js';
+import { loadNamedView, ViewRejectedError } from '../shared/view.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = resolve(here, '../..');
+const golden = (view) => resolve(root, `tests/fixtures-v2/schaden.${view}.expected.bpmn`);
+const read = (path) => readFileSync(path, 'utf8');
+const CATALOG = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
+const LANE_IDS = {
+  rollen: ['L.Process_Schaden.sb_schaden', 'L.Process_Schaden.regress', 'L.Process_Schaden.zahlung'],
+  einheiten: ['L.Process_Schaden.abt_schaden', 'L.Process_Schaden.abt_finanzen'],
+};
+const READERS = { bpmnToLogicCore, bpmnToLogicCoreLegacy };
+
+/** Every key anywhere in a JSON value. */
+function keysOf(value, out = []) {
+  if (Array.isArray(value)) value.forEach((v) => keysOf(v, out));
+  else if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) { out.push(k); keysOf(v, out); }
+  }
+  return out;
+}
+
+/** The golden as a foreign modeler might save it: the `bg:` attributes on `definitions` gone. */
+const edited = (xml) => xml.replace(/<bpmn:definitions[^>]*>/, (tag) => tag.replace(/\s+bg:(modelVersion|view|catalog)="[^"]*"/g, ''));
+
+describe('MODEL_V2_IMPORT_NOTICE', () => {
+  test('is the agreed text', () => {
+    expect(MODEL_V2_IMPORT_NOTICE).toBe('Diagram generated from a format 2.0 model. Changes belong in the model. '
+      + 'Importing yields a format 1.x model; assignments and catalogue references are lost.');
+  });
+});
+
+for (const view of ['rollen', 'einheiten']) {
+  describe(`the ${view} golden`, () => {
+    for (const [name, reader] of Object.entries(READERS)) {
+      test(`${name} gives a 1.x model that passes the 1.x gate`, async () => {
+        const lc = await reader(read(golden(view)));
+        expect(validateLogicCoreSchema(lc)).toEqual({ valid: true, errors: [] });
+        expect(lc.$schemaVersion).toBeUndefined();
+        expect(lc.lanes.map((l) => l.id)).toEqual(LANE_IDS[view]);
+        expect(lc.lanes.every((l) => Object.keys(l).sort().join() === 'id,name')).toBe(true);
+        expect(lc.nodes.some((n) => 'role' in n || 'assignments' in n)).toBe(false);
+        expect(lc.nodes.every((n) => LANE_IDS[view].includes(n.lane))).toBe(true);
+        const text = JSON.stringify(lc);
+        expect(text).not.toMatch(/bg:|modelVersion|sha256|assignment|derived/);
+        expect(keysOf(lc).filter((k) => k.startsWith('_') || k.startsWith('$'))).toEqual([]);
+      });
+    }
+
+    test('both readers give the same model', async () => {
+      const xml = read(golden(view));
+      expect(await bpmnToLogicCore(xml)).toEqual(bpmnToLogicCoreLegacy(xml));
+    });
+
+    test('readModelMarker reads the origin from the root element', () => {
+      expect(readModelMarker(read(golden(view)))).toEqual({ modelVersion: '2.0', view, catalog: CATALOG });
+    });
+  });
+}
+
+describe('readModelMarker', () => {
+  const xml = read(golden('rollen'));
+
+  test('finds the marker by its namespace URI, under any prefix', () => {
+    const renamed = xml.replace(/xmlns:bg=/g, 'xmlns:x=').replace(/\bbg:/g, 'x:');
+    expect(renamed).not.toContain('bg:');
+    expect(readModelMarker(renamed)).toEqual({ modelVersion: '2.0', view: 'rollen', catalog: CATALOG });
+  });
+
+  test('a prefix bound to another namespace is no marker', () => {
+    const foreign = xml.replace('xmlns:bg="http://bpmn-generator/schema/1.0"', 'xmlns:bg="http://example.org/other"');
+    expect(readModelMarker(foreign)).toBeNull();
+  });
+
+  test('tolerates a missing bg:view and bg:catalog', () => {
+    const bare = xml.replace(/\s+bg:(view|catalog)="[^"]*"/g, '');
+    expect(readModelMarker(bare)).toEqual({ modelVersion: '2.0', view: null, catalog: null });
+  });
+
+  test('is null for 1.x output, an edited golden and text that is no XML', () => {
+    expect(readModelMarker(read(resolve(root, 'tests/fixtures/simple-approval.expected.bpmn')))).toBeNull();
+    expect(readModelMarker(edited(xml))).toBeNull();
+    for (const junk of ['', 'not xml', '<', '<a', null, undefined, 7]) expect(readModelMarker(junk)).toBeNull();
+  });
+
+  test('never changes what the importer returns', async () => {
+    const before = await bpmnToLogicCore(xml);
+    readModelMarker(xml);
+    expect(await bpmnToLogicCore(xml)).toEqual(before);
+    expect(await bpmnToLogicCore(edited(xml))).toEqual(before);
+  });
+});
+
+describe('an edited 2.0 diagram (Review Focus 1)', () => {
+  const xml = read(golden('rollen'));
+
+  test('without the bg: attributes it imports without a notice, passes the 1.x gate and regenerates', async () => {
+    const changed = edited(xml);
+    expect(changed).not.toMatch(/bg:modelVersion|bg:view|bg:catalog/);
+    expect(readModelMarker(changed)).toBeNull();
+    for (const reader of Object.values(READERS)) {
+      const lc = await reader(changed);
+      expect(validateLogicCoreSchema(lc).valid).toBe(true);
+      const { bpmnXml } = await runPipeline(lc);
+      expect(bpmnXml).toContain('id="L.Process_Schaden.regress"');
+    }
+  });
+
+  test('the unedited import is a 1.x model: the view rollen on it is the 1.x view error', async () => {
+    const lc = await bpmnToLogicCore(xml);
+    await expect(runPipeline(lc, { view: loadNamedView('rollen') })).rejects.toThrow(ViewRejectedError);
+    await expect(runPipeline(lc, { view: loadNamedView('rollen') }))
+      .rejects.toThrow('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+  });
+});
+
+describe('CLI node bpmn/import.js', () => {
+  const cli = (file) => spawnSync(process.execPath, [resolve(here, 'import.js'), file], { encoding: 'utf8' });
+
+  test('prints the notice on stderr, not on stdout, for 2.0 output', () => {
+    const { status, stdout, stderr } = cli(golden('rollen'));
+    expect(status).toBe(0);
+    expect(stderr).toContain(MODEL_V2_IMPORT_NOTICE);
+    expect(stdout).not.toContain(MODEL_V2_IMPORT_NOTICE);
+    expect(stdout).toContain('"L.Process_Schaden.regress"');
+  });
+
+  test('prints no notice for 1.x output', () => {
+    const { status, stderr } = cli(resolve(root, 'tests/fixtures/simple-approval.expected.bpmn'));
+    expect(status).toBe(0);
+    expect(stderr).not.toContain(MODEL_V2_IMPORT_NOTICE);
+  });
+});
