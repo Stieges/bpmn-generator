@@ -186,17 +186,15 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
     return { elements, markerMap };
   }
 
-  // Auto-generate from event / message-task markers only — never from a task
-  // whose *name* happens to contain "message" (that left unused RootElements
-  // and tripped bpmnlint `global` / Element is unused).
+  // Derive from events only (#121). An event carries the event definition that references the
+  // derived element; a task does not. A send/receive task points at a message solely through an
+  // explicit `messageRef`, and S16 requires an explicit definition for that — so a definition
+  // derived from a task, by its name or its type, is one nothing references.
   const seen = new Set();
   for (const proc of processes) {
     for (const node of (proc.nodes || [])) {
-      const isMsgTask = node.type === 'sendTask' || node.type === 'receiveTask';
-      if (!isEvent(node.type) && !isMsgTask && !node.messageRef) continue;
-      const marker = node.marker
-        || (isEvent(node.type) ? inferEventMarker(node.name || '') : null)
-        || (isMsgTask || node.messageRef ? 'message' : null);
+      if (!isEvent(node.type)) continue;
+      const marker = node.marker || inferEventMarker(node.name || '');
       if (!marker || seen.has(marker)) continue;
 
       const tagMap = {

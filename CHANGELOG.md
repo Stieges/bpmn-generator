@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A derived top-level definition is always referenced** (#121). Without explicit `definitions`
+  the writer derived a `Message` / `Error` / `Signal` / `Escalation` from every node's name, so a
+  user task called "Review via e-mail" left a `Message_1` that no element pointed at, and
+  bpmnlint reported an unused global element. Definitions are now derived from events only: an
+  event carries the event definition that references the element, a task does not. A send or
+  receive task still references a message through an explicit `messageRef` and `definitions`.
+  No committed fixture changes its output. Contributed by Jérôme Fenal (@jfenal) in #132, with a
+  follow-up that also keeps send and receive tasks from deriving an unreferenced message.
+
 ### Security
 
 - Lockfile refresh for two high advisories in transitive dependencies of the MCP SDK:
