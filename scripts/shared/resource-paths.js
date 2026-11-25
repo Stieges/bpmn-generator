@@ -108,6 +108,23 @@ export function viewSchemaPath() {
 }
 
 /**
+ * The directory `name` beside scripts/ as seen from a module in `moduleDir` (a direct subdirectory
+ * of scripts/), or null. The parent of `moduleDir` must BE the repository's scripts/ before its
+ * sibling counts; in an installed package `../../<name>` would be some other package's directory.
+ */
+function checkoutSiblingDir(moduleDir, name) {
+  const packageDir = dirname(moduleDir);
+  const repoRoot = dirname(packageDir);
+  const dir = join(repoRoot, name);
+  try {
+    if (realpathSync(join(repoRoot, 'scripts')) !== realpathSync(packageDir)) return null;
+    return statSync(dir).isDirectory() ? dir : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The repository's rules/ directory as seen from a module in `moduleDir` (a direct subdirectory of
  * scripts/), or null when there is none. Rule profiles are not shipped in the npm package, so there
  * is no packaged fallback: in an installed package `../../rules` would be node_modules/rules — some
@@ -116,15 +133,7 @@ export function viewSchemaPath() {
  * layouts can be tested; `rulesDirPath()` is the call for this checkout.
  */
 export function rulesDirFor(moduleDir) {
-  const packageDir = dirname(moduleDir);
-  const repoRoot = dirname(packageDir);
-  const rules = join(repoRoot, 'rules');
-  try {
-    if (realpathSync(join(repoRoot, 'scripts')) !== realpathSync(packageDir)) return null;
-    return statSync(rules).isDirectory() ? rules : null;
-  } catch {
-    return null;
-  }
+  return checkoutSiblingDir(moduleDir, 'rules');
 }
 
 /** Absolute path to the repository's rules/ directory, or null outside a repository checkout. */
@@ -138,15 +147,7 @@ export function rulesDirPath() {
  * (the parent of `moduleDir` IS the repository's scripts/) has one.
  */
 export function viewsDirFor(moduleDir) {
-  const packageDir = dirname(moduleDir);
-  const repoRoot = dirname(packageDir);
-  const views = join(repoRoot, 'views');
-  try {
-    if (realpathSync(join(repoRoot, 'scripts')) !== realpathSync(packageDir)) return null;
-    return statSync(views).isDirectory() ? views : null;
-  } catch {
-    return null;
-  }
+  return checkoutSiblingDir(moduleDir, 'views');
 }
 
 /** Absolute path to the repository's views/ directory, or null outside a repository checkout. */
