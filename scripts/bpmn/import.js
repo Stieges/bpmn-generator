@@ -329,7 +329,7 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
   // in moddle-import.js and buildFlowNode in bpmn-xml.js: subprocess children
   // must be read with the same field set as top-level nodes, or the round trip
   // drops data on the way back in.
-  const nodeFromChild = (child) => {
+  const nodeFromChild = (child, siblings) => {
     const tag = stripNs(child.tag);
 
     const node = {
@@ -425,9 +425,10 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     const systemEl = findChild(findChild(child, 'extensionElements'), 'system');
     if (systemEl?.text) node.system = systemEl.text;
 
-    // derived — the view marker; see the twin read in moddle-import.js.
-    const derivedEl = findChild(findChild(child, 'extensionElements'), 'derived');
-    if (derivedEl?.text) node._derived = derivedEl.text;
+    // derived — the view marker, read only while the element and its onward flow are as the
+    // writer left them; see readDerivedMarkerFromDom.
+    const derived = readDerivedMarkerFromDom(child, siblings);
+    if (derived) node._derived = derived;
 
     // role — the same single form moddle-import.js's `readRole` reads, over the raw DOM.
     const roleName = readRoleFromDom(child, resourcesById);
@@ -479,7 +480,7 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
         const subFlowNodes = child.children.filter(c => flowNodeTags.has(stripNs(c.tag)));
         const subSeqFlows = findChildren(child, 'sequenceFlow');
         if (subFlowNodes.length > 0) {
-          node.nodes = subFlowNodes.map(nodeFromChild);
+          node.nodes = subFlowNodes.map(c => nodeFromChild(c, child.children));
         }
         // `edges` is keyed off the FLOW-node children, not off `subFlowNodes`, which this DOM
         // parser also fills with artifacts (it has no `flowElements`-vs-`artifacts` split to go on).
@@ -500,7 +501,7 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
 
   for (const child of proc.children) {
     if (!flowNodeTags.has(stripNs(child.tag))) continue;
-    nodes.push(nodeFromChild(child));
+    nodes.push(nodeFromChild(child, proc.children));
   }
 
   // Sequence flows
@@ -528,6 +529,35 @@ function parseLanes(laneSet, lanes, nodeLaneMap) {
       nodeLaneMap[ref.text] = lane.attrs.id;
     }
   }
+}
+
+// What the writer puts on a derived gateway and on its onward flow (bpmn-xml.js): attributes and
+// child elements. Anything else is a person's edit, including edits this reader does not read into
+// Logic-Core. The twin rule over the moddle tree is `readDerivedMarker` in moddle-import.js;
+// change both together.
+const WRITTEN_DERIVED_ATTRS = new Set(['id', 'name', 'gatewayDirection']);
+const WRITTEN_DERIVED_CHILDREN = new Set(['incoming', 'outgoing', 'extensionElements']);
+const WRITTEN_ONWARD_ATTRS = new Set(['id', 'sourceRef', 'targetRef', 'name']);
+
+/**
+ * The `<bg:derived>` marker of `element` (its text, trimmed by `parseElement`), or `undefined`
+ * when there is none or when the element or its one onward flow among `siblings` carries anything
+ * the writer does not write.
+ */
+function readDerivedMarkerFromDom(element, siblings = []) {
+  const ext = findChild(element, 'extensionElements');
+  const marker = findChild(ext, 'derived')?.text;
+  if (!marker) return undefined;
+  if (ext.children.length !== 1 || Object.keys(ext.attrs).length > 0) return undefined;
+  if (!Object.keys(element.attrs).every(a => WRITTEN_DERIVED_ATTRS.has(a))) return undefined;
+  if (!element.children.every(c => WRITTEN_DERIVED_CHILDREN.has(stripNs(c.tag)))) return undefined;
+  if (findChildren(element, 'extensionElements').length !== 1) return undefined;
+  const outgoing = siblings.filter(c => stripNs(c.tag) === 'sequenceFlow' && c.attrs.sourceRef === element.attrs.id);
+  if (outgoing.length !== 1) return undefined;
+  const [onward] = outgoing;
+  if (onward.attrs.name || onward.children.length > 0) return undefined;
+  if (!Object.keys(onward.attrs).every(a => WRITTEN_ONWARD_ATTRS.has(a))) return undefined;
+  return marker;
 }
 
 // The ResourceRole subclasses an Activity can carry (bpmn.json: ResourceRole, Performer,
