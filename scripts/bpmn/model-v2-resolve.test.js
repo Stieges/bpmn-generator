@@ -130,6 +130,24 @@ describe('resolveFields', () => {
       expect(lc).toBeNull(); expect(resolved).toBeNull();
     });
 
+    test('scheme-only errors (C04, C05) still show, after the one leading error and without C01 lines', () => {
+      const model = withNodes([
+        task('two', [{ type: 'D', actor: 'a' }, { type: 'D', actor: 'b' }]),
+        task('odd', [{ type: 'X', actor: 'a' }]),
+        { id: 'ev', type: 'startEvent', name: 'ev', assignments: [{ type: 'I', actor: 'a' }] },
+      ]);
+      delete model.catalog;
+      const { errors } = resolveFields(model);
+      expect(errors[0]).toBe(NONE);
+      expect(errors.some((e) => /not in the catalogue/.test(e))).toBe(false);
+      expect(errors).toContain('[C04] node "two" has 2 performers; at most one');
+      expect(errors.some((e) => e.startsWith('[C04] node "odd": type "X"'))).toBe(true);
+      expect(errors.some((e) => e.startsWith('[C05] event "ev"'))).toBe(true);
+      // the same scheme-only lines appear with a catalogue
+      const withCat = resolveFields(model, { catalog: { actors: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] } }).errors;
+      expect(errors.slice(1)).toEqual(withCat);
+    });
+
     test('also with a catalogue option of null', () => {
       expect(resolveFields(copy(bare), { catalog: null }).errors).toEqual([NONE]);
     });
