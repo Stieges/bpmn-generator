@@ -271,6 +271,22 @@
     "xml": "efe35542712ffdf31264cc698670e30a8001a8fb229904c6306e1e6ecd6c6ed9",
     "svg": "fb7597b674ce8d6a92a5352a49636a5a2c3dd1f15ec99c30212048078f1187bc"
   },
+  "nested-lanes-role-system.json × default": {
+    "xml": "3f28a1fc505d3896c481914230cad38e462e632a4c079718be342c76fca040b3",
+    "svg": "56b842b064970ce46371535a7d95288814d438d88a7396b368082d921000034d"
+  },
+  "nested-lanes-role-system.json × no-refine": {
+    "xml": "7da1f3fce0867cf878d03914f1d21edb72e981991429836214299792f1349506",
+    "svg": "a743d3f719e957a9dd9ce504764f7bf31c58a82e80ba509288e1fb169849ebd0"
+  },
+  "nested-lanes-role-system.json × refine": {
+    "xml": "3f28a1fc505d3896c481914230cad38e462e632a4c079718be342c76fca040b3",
+    "svg": "56b842b064970ce46371535a7d95288814d438d88a7396b368082d921000034d"
+  },
+  "nested-lanes-role-system.json × refine+wrap": {
+    "xml": "3f28a1fc505d3896c481914230cad38e462e632a4c079718be342c76fca040b3",
+    "svg": "56b842b064970ce46371535a7d95288814d438d88a7396b368082d921000034d"
+  },
   "parallel-split-join.json × default": {
     "xml": "4fba7f47f9b242fc863809924cba4b96d6f999cfe3e28ce99f7451b595deeb81",
     "svg": "629eb28e2e8e7ea1122debb375c7fb191fc9353fe0be88ce39612dcce6b962ec"

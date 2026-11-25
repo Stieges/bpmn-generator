@@ -43,6 +43,7 @@ const DERIVED_PER_FIXTURE = {
   'example-rechnungspruefung.json': 2,
   'example-schadenmeldung.json': 1,
   'example-urlaubsantrag.json': 1,
+  'nested-lanes-role-system.json': 1,
   'simple-approval.json': 1,
   'subprocess-merge-fanout.json': 1,
   'wrapping-back-edge.json': 1,
@@ -97,13 +98,13 @@ const names = Object.keys(results);
 describe('explicit-joins over every top-level fixture', () => {
   test('the scan found the Logic-Core fixtures', () => {
     expect(blocked).toEqual(['deadlock-process.json']); // blocked on purpose (WF deadlock)
-    expect(names.length).toBe(26);
+    expect(names.length).toBe(27);
   });
 
   test('the view derives exactly the pinned gateways per fixture (the suite is not vacuous)', () => {
     const actual = Object.fromEntries(names.map((n) => [n, markerCount(results[n].joined.bpmnXml)]).filter(([, c]) => c > 0));
     expect(actual).toEqual(DERIVED_PER_FIXTURE);
-    expect(Object.values(actual).reduce((s, c) => s + c, 0)).toBe(14);
+    expect(Object.values(actual).reduce((s, c) => s + c, 0)).toBe(15);
   });
 
   describe.each(names)('%s', (n) => {
