@@ -7,6 +7,9 @@
  * makes the writer emit no reference at all.
  */
 import { describe, test, expect } from '@jest/globals';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runPipeline } from './pipeline.js';
 import { runRules } from './rules.js';
 import { resolveDefinitionRef } from './types.js';
@@ -213,4 +216,64 @@ describe('collaboration: definitions live on the document, events in the pools',
     expect(r.validation.errors).toEqual([]);
     expect(refsIn(r.bpmnXml, 'messageRef')).toEqual(['Msg_Pay', 'Msg_Order']);
   });
+});
+
+/**
+ * Issue #121 — a definition nothing references.
+ *
+ * Without explicit `definitions` the writer derives one top-level definition per marker kind. It
+ * used to derive from every node's NAME, so a user task called "Review via e-mail" minted a
+ * `Message_1` no element pointed at. Only an event carries an event definition that can consume
+ * one; a send/receive task references a message solely through an explicit `messageRef`, and that
+ * needs an explicit definition (S16). So only events may derive a definition.
+ */
+describe('#121 — a derived definition is always referenced', () => {
+  const DEF = /<bpmn:(?:message|error|signal|escalation) id="([^"]+)"/g;
+  const REF = /(?:messageRef|errorRef|signalRef|escalationRef)="([^"]+)"/g;
+  const defsIn = (xml) => [...xml.matchAll(DEF)].map((m) => m[1]);
+  const allRefsIn = (xml) => new Set([...xml.matchAll(REF)].map((m) => m[1]));
+  const around = (node) => proc([
+    { id: 's', type: 'startEvent', name: 'Start' },
+    { id: 't', ...node },
+    { id: 'e', type: 'endEvent', name: 'Done' },
+  ]);
+
+  test.each([
+    ['userTask', 'Review application via e-mail'],
+    ['serviceTask', 'Process message'],
+    ['userTask', 'Fehler dokumentieren'],
+    ['sendTask', 'Send offer'],
+    ['receiveTask', 'Receive answer'],
+    ['sendTask', 'Send offer by mail'],
+  ])('a %s named "%s" derives no definition', async (type, name) => {
+    const r = await runPipeline(around({ type, name }));
+    expect(r.validation.errors).toEqual([]);
+    expect(defsIn(r.bpmnXml)).toEqual([]);
+  });
+
+  test.each([
+    ['by name', { type: 'intermediateCatchEvent', name: 'Nachricht eingegangen' }],
+    ['by marker', { type: 'intermediateCatchEvent', name: 'Answer is there', marker: 'message' }],
+  ])('a message event (%s) derives one message and references it', async (_label, node) => {
+    const r = await runPipeline(around(node));
+    expect(r.validation.errors).toEqual([]);
+    expect(defsIn(r.bpmnXml)).toEqual(['Message_1']);
+    expect(refsIn(r.bpmnXml, 'messageRef')).toEqual(['Message_1']);
+  });
+
+  // The whole class, over every committed model that leaves the definitions to the writer.
+  const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
+  const derived = readdirSync(FIXTURES)
+    .filter((f) => f.endsWith('.json') && !f.includes('.expected') && !f.includes('.refined'))
+    .map((f) => [f, JSON.parse(readFileSync(join(FIXTURES, f), 'utf8'))])
+    .filter(([, lc]) => (lc.nodes || lc.pools) && !(lc.definitions && lc.definitions.length));
+
+  test('the fixture set is not empty', () => { expect(derived.length).toBeGreaterThan(10); });
+
+  test.each(derived)('%s: no derived definition is left unreferenced', async (_file, lc) => {
+    const r = await runPipeline(lc);
+    if (!r.bpmnXml) return;
+    const refs = allRefsIn(r.bpmnXml);
+    expect(defsIn(r.bpmnXml).filter((id) => !refs.has(id))).toEqual([]);
+  }, 60_000);
 });
