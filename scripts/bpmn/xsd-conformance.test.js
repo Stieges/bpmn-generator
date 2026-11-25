@@ -1,0 +1,91 @@
+import { describe, test, expect } from '@jest/globals';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { bpmnXsdStatus, xsdDir } from '../../.github/scripts/fetch-bpmn-xsd.mjs';
+import { runPipeline } from './pipeline.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(__dirname, '../..');
+const FIXTURES = join(ROOT, 'tests/fixtures');
+const FIXTURES_V2 = join(ROOT, 'tests/fixtures-v2');
+const VIEW = join(ROOT, 'views/explicit-joins-view.json');
+const FIX_HINT = 'node .github/scripts/fetch-bpmn-xsd.mjs';
+const BATCH = 50;
+
+const status = bpmnXsdStatus();
+
+/** Files of `dir` (absolute) whose name ends in one of `suffixes`; a missing dir yields none. */
+function committed(dir, suffixes) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => suffixes.some((s) => f.endsWith(s)))
+    .sort()
+    .map((f) => join(dir, f));
+}
+
+/** Every file to validate, written into `out`: generated XML (no view / explicit-joins) and committed XML. */
+async function buildCorpus(out) {
+  const files = [];
+  for (const path of committed(FIXTURES, ['.json'])) {
+    const name = path.slice(FIXTURES.length + 1, -'.json'.length);
+    const model = JSON.parse(readFileSync(path, 'utf8'));
+    for (const [label, opts] of [['plain', {}], ['joins', { view: VIEW }]]) {
+      let bpmnXml;
+      try {
+        ({ bpmnXml } = await runPipeline(JSON.parse(JSON.stringify(model)), opts));
+      } catch {
+        continue; // models that do not generate (invalid on purpose) are not part of the corpus
+      }
+      if (!bpmnXml) continue;
+      const file = join(out, `${name}.${label}.bpmn`);
+      writeFileSync(file, bpmnXml);
+      files.push(file);
+    }
+  }
+  files.push(...committed(FIXTURES, ['.expected.bpmn', '.refined.bpmn']));
+  files.push(...committed(FIXTURES_V2, ['.expected.bpmn']));
+  return files;
+}
+
+function validateBatch(files) {
+  try {
+    execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), ...files], { encoding: 'utf8', stdio: 'pipe' });
+    return [];
+  } catch (e) {
+    const out = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+    const failed = out.split('\n').filter((l) => l.includes('fails to validate')).map((l) => l.replace(/ fails to validate.*$/, ''));
+    return failed.length ? failed : [`xmllint error: ${out.slice(0, 500) || e.message}`];
+  }
+}
+
+if (!status.available && process.env.CI) {
+  describe('BPMN XSD conformance', () => {
+    test('BPMN XSD files and xmllint are present in CI', () => {
+      throw new Error(`BPMN XSD files or xmllint missing in CI — run ${FIX_HINT} (${status.reason})`);
+    });
+  });
+} else if (!status.available) {
+  const text = `skipped: xmllint or BPMN XSD missing (${FIX_HINT})`;
+  console.warn(`BPMN XSD conformance ${text}`);
+  describe.skip(`BPMN XSD conformance — ${text}`, () => {
+    test('generated and committed BPMN XML validates against BPMN20.xsd', () => {});
+  });
+} else {
+  describe('BPMN XSD conformance', () => {
+    test('generated and committed BPMN XML validates against BPMN20.xsd', async () => {
+      const out = mkdtempSync(join(tmpdir(), 'bpmn-xsd-'));
+      try {
+        const files = await buildCorpus(out);
+        expect(files.length).toBeGreaterThan(0);
+        const failed = [];
+        for (let i = 0; i < files.length; i += BATCH) failed.push(...validateBatch(files.slice(i, i + BATCH)));
+        expect({ checked: files.length, failed }).toEqual({ checked: files.length, failed: [] });
+      } finally {
+        rmSync(out, { recursive: true, force: true });
+      }
+    }, 180000);
+  });
+}

@@ -419,6 +419,7 @@ npm install
 npm test                                          # Jest, ES Modules; verify count with `npm test 2>&1 | tail -5`
 npm run docs-gate                                 # the CI docs gate; add `-- --summary` to pass flags
 node bpmn/pipeline.js ../tests/fixtures/simple-approval.json /tmp/test   # Smoke Test
+node ../.github/scripts/fetch-bpmn-xsd.mjs          # once: OMG BPMN XSD for the conformance test (skips without it; CI fails)
 ```
 
 Everything runs from `scripts/` — that is where the only `package.json` lives. The docs gate
