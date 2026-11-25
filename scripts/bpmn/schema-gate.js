@@ -64,6 +64,21 @@ export function assertViewFitsModel(model, view) {
 
 export const FORMAT_V2_NOT_ACCEPTED = 'format 2.0 is not accepted here yet — only the CLI generate path (node bpmn/pipeline.js) and runPipeline read it';
 
+/** The error of a model on the 2 line whose `$schemaVersion` is not exactly "2.0", else null. */
+function unsupportedVersionError(input) {
+  if (modelFormat(input) !== '2' || input.$schemaVersion === FORMAT_V2_VERSION) return null;
+  return {
+    path: '/$schemaVersion',
+    message: `$schemaVersion ${quoteForMessage(input.$schemaVersion)} is not supported; only "${FORMAT_V2_VERSION}" is supported`,
+    params: { allowedValue: FORMAT_V2_VERSION },
+  };
+}
+
+/** Why an entry point that does not read 2.x refuses this 2.x model: the version message, or the fixed text for "2.0". */
+export function formatV2RefusalMessage(input) {
+  return unsupportedVersionError(input)?.message ?? FORMAT_V2_NOT_ACCEPTED;
+}
+
 /**
  * The schema gate for both formats. `accept` lists the formats the caller reads; a model of
  * another format gets exactly one error. Errors are those of the root shape the input was meant
@@ -71,15 +86,11 @@ export const FORMAT_V2_NOT_ACCEPTED = 'format 2.0 is not accepted here yet — o
  */
 export function validateModelSchema(input, { accept = ['1'] } = {}) {
   const format = modelFormat(input);
+  // An unsupported 2.x value ("2", "2.7") names its value everywhere, whichever formats the caller reads.
+  const unsupported = unsupportedVersionError(input);
+  if (unsupported) return { valid: false, format, errors: [unsupported] };
   if (!accept.includes(format)) {
     return { valid: false, format, errors: [{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: accept } }] };
-  }
-  if (format === '2' && input.$schemaVersion !== FORMAT_V2_VERSION) {
-    return { valid: false, format, errors: [{
-      path: '/$schemaVersion',
-      message: `$schemaVersion ${quoteForMessage(input.$schemaVersion)} is not supported; only "${FORMAT_V2_VERSION}" is supported`,
-      params: { allowedValue: FORMAT_V2_VERSION },
-    }] };
   }
   const [check, branches] = format === '2' ? [validateV2, validateBranchV2] : [validate, validateBranch];
   if (check(input)) return { valid: true, format, errors: [] };

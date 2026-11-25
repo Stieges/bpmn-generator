@@ -160,6 +160,12 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
     expect(r.errors).toEqual([entry]);
   });
 
+  test.each(['2', '2.7'])('MCP validate_bpmn names the unsupported version %s, not the fixed text', async (version) => {
+    const r = JSON.parse((await handleToolCall({ params: { name: 'validate_bpmn', arguments: { logicCore: { ...m56(), $schemaVersion: version } } } })).content[0].text);
+    expect(r.status).toBe('schema_error');
+    expect(r.errors).toEqual([{ path: '/$schemaVersion', message: `$schemaVersion "${version}" is not supported; only "2.0" is supported`, params: { allowedValue: '2.0' } }]);
+  });
+
   // generate_bpmn with drillDown never reaches generateDiagramSet for a 2.0 model: the MCP schema
   // gate (1.x only) refuses it first, with the one error.
   test('MCP generate_bpmn with drillDown', async () => {
