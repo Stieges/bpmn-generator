@@ -58,6 +58,10 @@ const SOURCE_PROFILE_SCHEMA   = join(__dirname, '..', '..', 'references', 'rule-
 const PACKAGED_PROFILE_SCHEMA = join(__dirname, '..', 'references', 'rule-profile-schema.json');
 const SOURCE_VIEW_SCHEMA   = join(__dirname, '..', '..', 'references', 'view-schema.json');
 const PACKAGED_VIEW_SCHEMA = join(__dirname, '..', 'references', 'view-schema.json');
+const SOURCE_CATALOG_SCHEMA   = join(__dirname, '..', '..', 'references', 'catalog-schema.json');
+const PACKAGED_CATALOG_SCHEMA = join(__dirname, '..', 'references', 'catalog-schema.json');
+const SOURCE_DEMI_SCHEME   = join(__dirname, '..', '..', 'references', 'schemes', 'demi-scheme.json');
+const PACKAGED_DEMI_SCHEME = join(__dirname, '..', 'references', 'schemes', 'demi-scheme.json');
 
 /**
  * Source first, packaged copy second, loud failure last. Exported because it is
@@ -105,6 +109,16 @@ export function ruleProfileSchemaPath() {
 /** Absolute path to references/view-schema.json. */
 export function viewSchemaPath() {
   return resolveWithFallback(SOURCE_VIEW_SCHEMA, PACKAGED_VIEW_SCHEMA, 'view-schema.json');
+}
+
+/** Absolute path to references/catalog-schema.json. */
+export function catalogSchemaPath() {
+  return resolveWithFallback(SOURCE_CATALOG_SCHEMA, PACKAGED_CATALOG_SCHEMA, 'catalog-schema.json');
+}
+
+/** Absolute path to references/schemes/demi-scheme.json. */
+export function demiSchemePath() {
+  return resolveWithFallback(SOURCE_DEMI_SCHEME, PACKAGED_DEMI_SCHEME, 'demi-scheme.json');
 }
 
 /**

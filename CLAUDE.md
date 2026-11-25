@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 30 bpmn-pipeline + 20 dmn (growing) + 12 shared + 2 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 30 bpmn-pipeline + 20 dmn (growing) + 13 shared + 2 cross-notation + 7 agent +
 11 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -103,6 +103,9 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   view.js                    ← rule-profile.js, resource-paths.js, ajv (view schema gate `assertView`, `loadView`,
                                `loadNamedView`: a view is a small named file outside the model that selects rule
                                profile, layout switches and derivations; `ViewRejectedError`)
+  catalog.js                 ← rule-profile.js, resource-paths.js, ajv (actor catalogue gate `catalogErrors`, `loadCatalog`,
+                               `resolveScheme` (ships references/schemes/demi-scheme.json), `catalogFingerprint`;
+                               `CatalogRejectedError`; not yet on the generate path)
   resource-paths.js          (no deps — where references/ lives in each layout, and the repository's rules/ and
                                views/ for named profiles and views: rulesDirPath, viewsDirPath, null outside a checkout)
   ontology.js                ← resource-paths.js, ajv (loads + validates references/ontology.jsonld at import; `VOCABULARY`)
@@ -397,6 +400,7 @@ membership instead of coordinates.
 | `rules/dmn-best-practice-profile.json` | Adds the opt-in `best_practice` layer |
 | `rules/custom/` | Project-specific profiles, loaded by path only — see its README |
 | `scripts/shared/geometry.js` | `clipStraight`, `clipToRect` — straight-segment clip maths shared by `bpmn/coordinates.js` and `dmn/coordinates.js` (DMN's DRD draws requirement connections as unstyled straight lines, same as a BPMN Association). The orthogonal clip helpers stay in `scripts/bpmn/coordinates.js` |
+| `scripts/shared/catalog.js` | `catalogErrors`, `loadCatalog`, `resolveScheme`, `canonicalJson`, `catalogFingerprint`, `CatalogRejectedError`, `CATALOG_LIMITS`, `SHIPPED_SCHEMES` — the actor catalogue (`actors` of role/unit with optional `unit`, optional `scheme`) gated by `references/catalog-schema.json` (ajv strict, `additionalProperties: false`; 1 MiB / 5-level bound). `resolveScheme` maps no ref to the shipped DEMI scheme, a shipped name to its file, an unknown name to `null`, an object to itself. `catalogFingerprint` is `sha256:` over the canonical JSON (sorted keys, no whitespace) of `{ actors, scheme }`. Nothing on the generate path imports it yet |
 | `scripts/shared/view.js` | `assertView`, `loadView`, `loadNamedView`, `ViewRejectedError`, `VIEW_LIMITS` — a view is a small named JSON file, outside the model, that decides how it is processed (`ruleProfile` name, `layout` switches, `derivations`). Same posture as a rule profile: 64 KiB / 4-level bound, then `references/view-schema.json` (ajv strict, `additionalProperties: false` at every level), files read through `readBoundedJsonText`. Unlike a profile, a missing file **throws**. `loadNamedView` reads `views/<name>-view.json` only (shipped: `default`, `explicit-joins`; no `custom/`), realpath-contained, an unknown name lists the available ones |
 | `scripts/shared/resource-paths.js` | `inputSchemaPath`, `promptTemplatePath` — the single place that decides where `references/` lives. **The source outranks the in-package copy.** The reverse precedence was a silent trap: `npm pack` (including the `--dry-run` the docs gate runs) leaves a copy behind, and every later edit to `references/` then had no effect while `git status` said nothing, because it is gitignored. Filenames are spelled out literally in each `join(__dirname, …)` — the docs gate parses those calls for string literals, and a variable would make it check a directory |
 | `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them. npm's `files` cannot reach outside the package root, hence a copy |
