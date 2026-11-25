@@ -317,7 +317,7 @@ Precedence: an explicit option of the call wins over the view's value, which win
 
 | Interface | How a view is passed |
 |---|---|
-| CLI | `--view=<name\|path>`: a value that looks like a view name is looked up in `views/`, anything else is read as a file |
+| CLI | `--view=<name\|path>` or `--view <name\|path>`: a value that looks like a view name is looked up in `views/`, anything else is read as a file |
 | Library | `runPipeline(lc, { view })` with a path or an inline object |
 | MCP | `view` as a name on `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn` |
 | HTTP | `view` as an inline object on `/api/v1/generate`, `/api/v1/validate` and `/api/v1/orchestrate`; it must not carry `ruleProfile` (the request's own `ruleProfile` field applies). A rejected view answers `400` with status `view_error` |
