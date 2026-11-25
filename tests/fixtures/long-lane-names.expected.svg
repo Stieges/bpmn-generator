@@ -64,8 +64,8 @@
 <circle cx="1084" cy="556.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="4"/>
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="1084" y="594.4">Fertig</tspan></text>
 </g>
-<path data-element-id="f1" data-waypoints="206,140.5 346,140.5" d="M 206 140.5 L 346 140.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f1" data-waypoints="206,140.8 346,140.8" d="M 206 140.8 L 346 140.8" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f2" data-waypoints="446,141 516,141 516,332 586,332" d="M 446 141 L 511 141 C 513.5 141 516 143.5 516 146 L 516 327 C 516 329.5 518.5 332 521 332 L 586 332" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f3" data-waypoints="686,332 756,332 756,557 826,557" d="M 686 332 L 751 332 C 753.5 332 756 334.5 756 337 L 756 552 C 756 554.5 758.5 557 761 557 L 826 557" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f4" data-waypoints="926,556.5 1066,556.5" d="M 926 556.5 L 1066 556.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f4" data-waypoints="926,556.8 1066,556.8" d="M 926 556.8 L 1066 556.8" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 </svg>

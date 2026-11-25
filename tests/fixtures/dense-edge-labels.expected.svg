@@ -44,7 +44,7 @@
 <g data-element-id="gw">
 <polygon points="311,364.5 336,389.5 311,414.5 286,389.5" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
 <g transform="translate(286,364.5)"><path d="m 16,15 7.429,9.714 -7.429,9.714 3.429,0 5.714,-7.464 5.714,7.464 3.429,0 -7.429,-9.714 7.429,-9.714 -3.429,0 -5.714,7.464 -5.714,-7.464 -3.429,0 z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
-<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="311" y="434.4">Welche?</tspan></text>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="342.4" y="434.4">Welche?</tspan></text>
 </g>
 <g data-element-id="t1">
 <rect x="496" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
@@ -85,16 +85,16 @@
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="403.5" y="101.9">Option Alpha</tspan></text>
 <path data-element-id="f2" data-waypoints="311,364.5 311,250 496,250" d="M 311 364.5 L 311 255 C 311 252.5 313.5 250 316 250 L 496 250" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="403.5" y="241.9">Option Beta</tspan></text>
-<path data-element-id="f3" data-waypoints="336,389.5 496,389.5" d="M 336 389.5 L 496 389.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f3" data-waypoints="336,389.8 496,389.8" d="M 336 389.8 L 496 389.8" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="416" y="366.4">Option Gamma</tspan></text>
-<path data-element-id="f4" data-waypoints="336,389.5 416,389.5 416,530 496,530" d="M 336 389.5 L 411 389.5 C 413.5 389.5 416 392 416 394.5 L 416 525 C 416 527.5 418.5 530 421 530 L 496 530" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="376" y="381.4">Option Delta</tspan></text>
+<path data-element-id="f4" data-waypoints="311,414.5 311,530 496,530" d="M 311 414.5 L 311 525 C 311 527.5 313.5 530 316 530 L 496 530" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="345.6" y="475.2">Option Delta</tspan></text>
 <path data-element-id="f5" data-waypoints="336,389.5 416,389.5 416,670 496,670" d="M 336 389.5 L 411 389.5 C 413.5 389.5 416 392 416 394.5 L 416 665 C 416 667.5 418.5 670 421 670 L 496 670" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="376" y="381.4">Option Epsilon</tspan></text>
 <path data-element-id="f6" data-waypoints="596,110 701,110 701,364.5" d="M 596 110 L 696 110 C 698.5 110 701 112.5 701 115 L 701 364.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f7" data-waypoints="596,250 701,250 701,364.5" d="M 596 250 L 696 250 C 698.5 250 701 252.5 701 255 L 701 364.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f8" data-waypoints="596,389.5 676,389.5" d="M 596 389.5 L 676 389.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f7" data-waypoints="596,250 636,250 636,389.5 676,389.5" d="M 596 250 L 631 250 C 633.5 250 636 252.5 636 255 L 636 384.5 C 636 387 638.5 389.5 641 389.5 L 676 389.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f8" data-waypoints="596,389.8 676,389.8" d="M 596 389.8 L 676 389.8" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f9" data-waypoints="596,530 701,530 701,414.5" d="M 596 530 L 696 530 C 698.5 530 701 527.5 701 525 L 701 414.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="f10" data-waypoints="596,670 636,670 636,389.5 676,389.5" d="M 596 670 L 631 670 C 633.5 670 636 667.5 636 665 L 636 394.5 C 636 392 638.5 389.5 641 389.5 L 676 389.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="f10" data-waypoints="596,670 644,670 644,389.5 676,389.5" d="M 596 670 L 639 670 C 641.5 670 644 667.5 644 665 L 644 394.5 C 644 392 646.5 389.5 649 389.5 L 676 389.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="f11" data-waypoints="726,389.5 806,389.5" d="M 726 389.5 L 806 389.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 </svg>

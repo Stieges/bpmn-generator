@@ -22,10 +22,20 @@
     <bpmn:subProcess id="sub1" name="Detailprüfung">
       <bpmn:incoming>f2</bpmn:incoming>
       <bpmn:outgoing>f3</bpmn:outgoing>
-      <bpmn:startEvent id="sub1_start" name="Start" />
-      <bpmn:userTask id="sub1_task1" name="Dokumente prüfen" />
-      <bpmn:serviceTask id="sub1_task2" name="Ergebnis speichern" />
-      <bpmn:endEvent id="sub1_end" name="Ende" />
+      <bpmn:startEvent id="sub1_start" name="Start">
+        <bpmn:outgoing>sub1_f1</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:userTask id="sub1_task1" name="Dokumente prüfen">
+        <bpmn:incoming>sub1_f1</bpmn:incoming>
+        <bpmn:outgoing>sub1_f2</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:serviceTask id="sub1_task2" name="Ergebnis speichern">
+        <bpmn:incoming>sub1_f2</bpmn:incoming>
+        <bpmn:outgoing>sub1_f3</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:endEvent id="sub1_end" name="Ende">
+        <bpmn:incoming>sub1_f3</bpmn:incoming>
+      </bpmn:endEvent>
       <bpmn:sequenceFlow id="sub1_f1" sourceRef="sub1_start" targetRef="sub1_task1" />
       <bpmn:sequenceFlow id="sub1_f2" sourceRef="sub1_task1" targetRef="sub1_task2" />
       <bpmn:sequenceFlow id="sub1_f3" sourceRef="sub1_task2" targetRef="sub1_end" />
@@ -94,16 +104,16 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
-        <di:waypoint x="176" y="149.5" />
-        <di:waypoint x="256" y="149.5" />
+        <di:waypoint x="176" y="149.8" />
+        <di:waypoint x="256" y="149.8" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
         <di:waypoint x="356" y="150" />
         <di:waypoint x="436" y="150" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
-        <di:waypoint x="988" y="149.5" />
-        <di:waypoint x="1068" y="149.5" />
+        <di:waypoint x="988" y="149.8" />
+        <di:waypoint x="1068" y="149.8" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
