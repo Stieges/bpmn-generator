@@ -17,6 +17,7 @@ import { fileURLToPath } from 'url';
 import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep } from './moddle-import.js';
 import { isBpmnArtifact, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
 import { isMainModule } from '../shared/entry-point.js';
+import { removeDerivedElements } from './derivations.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -109,18 +110,27 @@ function decodeXmlEntities(s) {
 /**
  * Import BPMN XML → Logic-Core JSON (async, uses bpmn-moddle).
  * Falls back to legacy parser on moddle failure.
+ *
+ * Derived elements are removed OUTSIDE the `try`: the bare `catch` exists for files moddle cannot
+ * read, and a defect in removeDerivedElements must surface instead of quietly switching readers.
  */
 async function bpmnToLogicCore(xml) {
+  let raw;
   try {
     const { rootElement } = await moddleParse(xml);
-    return moddleToLogicCore(rootElement);
+    raw = moddleToLogicCore(rootElement);
   } catch {
     return bpmnToLogicCoreLegacy(xml);
   }
+  return removeDerivedElements(raw);
 }
 
 /** Legacy sync parser (custom XML parser, kept for fallback/comparison). */
 function bpmnToLogicCoreLegacy(xml) {
+  return removeDerivedElements(readLegacy(xml));
+}
+
+function readLegacy(xml) {
   const root = parseXml(xml);
   if (!root) throw new Error('Failed to parse BPMN XML');
 
@@ -414,6 +424,10 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     // system — same extensionElements. The text node is already decoded by `parseElement`.
     const systemEl = findChild(findChild(child, 'extensionElements'), 'system');
     if (systemEl?.text) node.system = systemEl.text;
+
+    // derived — the view marker; see the twin read in moddle-import.js.
+    const derivedEl = findChild(findChild(child, 'extensionElements'), 'derived');
+    if (derivedEl?.text) node._derived = derivedEl.text;
 
     // role — the same single form moddle-import.js's `readRole` reads, over the raw DOM.
     const roleName = readRoleFromDom(child, resourcesById);

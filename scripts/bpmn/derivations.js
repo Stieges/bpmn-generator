@@ -85,3 +85,69 @@ export function applyDerivations(lc, derivations) {
   }
   return { lc: copy, derived };
 }
+
+// What a derived join gateway and its onward flow carry when they come back exactly as the
+// writer left them — after applyDerivations, and after either importer read the XML. Any other
+// key (documentation, a colour, a label, a condition, a default mark, a foreign attribute) is an
+// edit a person made, and an edited element is theirs.
+const UNTOUCHED_JOIN_KEYS = new Set(['id', 'type', 'name', 'lane', 'has_join', '_derived']);
+const UNTOUCHED_ONWARD_KEYS = new Set(['id', 'source', 'target', 'isHappyPath']);
+const onlyKeys = (obj, allowed) => Object.keys(obj).every(key => allowed.has(key));
+
+/** Drop `id` from every `nodeIds` list in a lane tree. */
+function dropFromLanes(lanes, id) {
+  for (const lane of lanes || []) {
+    if (Array.isArray(lane.nodeIds)) lane.nodeIds = lane.nodeIds.filter(x => x !== id);
+    dropFromLanes(lane.children, id);
+  }
+}
+
+/**
+ * Remove the untouched derived elements of one container (a process, a pool or a subprocess,
+ * nested containers first) and unmark the rest. `lanes` is the enclosing process's lane tree.
+ */
+function removeDerivedIn(container, lanes, referenced) {
+  if (!Array.isArray(container.nodes)) return;
+  for (const node of container.nodes) removeDerivedIn(node, lanes, referenced);
+  const edges = Array.isArray(container.edges) ? container.edges : [];
+
+  for (const node of [...container.nodes]) {
+    if (!('_derived' in node)) continue;
+    const kind = node._derived;
+    delete node._derived;
+    const outgoing = edges.filter(edge => edge.source === node.id);
+    const [onward] = outgoing;
+    const untouched = kind === 'joinGateway'
+      && node.type === 'exclusiveGateway' && !node.name && onlyKeys(node, UNTOUCHED_JOIN_KEYS)
+      && outgoing.length === 1 && onward.target !== node.id && onlyKeys(onward, UNTOUCHED_ONWARD_KEYS)
+      && !referenced.has(node.id);
+    if (!untouched) continue;
+
+    for (const edge of edges) if (edge.target === node.id) edge.target = onward.target;
+    edges.splice(edges.indexOf(onward), 1);
+    container.nodes.splice(container.nodes.indexOf(node), 1);
+    dropFromLanes(lanes, node.id);
+  }
+}
+
+/**
+ * The inverse of applyDerivations, for a model read back from XML: every derived element still as
+ * the writer left it is removed — a join gateway's incoming flows end at the onward flow's target
+ * again, the gateway, the onward flow and the gateway's lane `nodeIds` entries go. A derived
+ * element a person edited stays and loses its marker. The result carries no `_derived` key at
+ * any depth (references/input-schema.json allows no unknown node key).
+ *
+ * @param {object} lc - Logic-Core (single process or collaboration); never changed
+ * @returns {object} a copy without derived elements
+ */
+export function removeDerivedElements(lc) {
+  const copy = JSON.parse(JSON.stringify(lc));
+  // An association or message flow that ends at the gateway was drawn by a person.
+  const referenced = new Set();
+  for (const link of [...(copy.associations || []), ...(copy.messageFlows || [])]) {
+    referenced.add(link.source);
+    referenced.add(link.target);
+  }
+  for (const proc of copy.pools || [copy]) removeDerivedIn(proc, proc.lanes, referenced);
+  return copy;
+}

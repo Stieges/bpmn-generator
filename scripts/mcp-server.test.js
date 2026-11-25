@@ -273,3 +273,18 @@ describe('visualRefinement over MCP', () => {
     }
   });
 });
+
+describe('import_bpmn removes derived elements', () => {
+  test('the explicit-joins XML of simple-approval comes back without gw_join_task1', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const view = resolve(__dirname, '../views/explicit-joins-view.json');
+    const { bpmnXml } = await runPipeline(fixture('simple-approval.json'), { view });
+    expect(bpmnXml).toContain('id="gw_join_task1"');
+
+    const logicCore = parse(await call('import_bpmn', { bpmnXml }));
+    const procs = logicCore.pools || [logicCore];
+    expect(procs.flatMap((p) => p.nodes).map((n) => n.id)).not.toContain('gw_join_task1');
+    expect(procs.flatMap((p) => p.edges).find((e) => e.id === 'f5').target).toBe('task1');
+    expect(JSON.stringify(logicCore)).not.toContain('_derived');
+  });
+});
