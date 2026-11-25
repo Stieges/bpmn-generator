@@ -12,6 +12,7 @@
 - [POST /api/v1/chat](#post-apiv1chat)
 - [POST /api/v1/telemetry](#post-apiv1telemetry)
 - [GET /api/v1/config](#get-apiv1config)
+- [Message codes](#message-codes)
 - [GET /health](#get-health)
 - [GET /](#get-)
 
@@ -552,6 +553,45 @@ curl http://localhost:3000/api/v1/config
 ```
 
 ---
+
+## Message codes
+
+Every message a format 2.x model produces carries a code from one registry (`scripts/shared/message-codes.js`). A text carrier keeps its string and leads with `[<code>] `; an object carrier has a `code` field; a thrown error has `messageCode`. Text stays English. A request whose model is 1.x, or has no `$schemaVersion`, gets responses without codes.
+
+| Code | Family | Meaning |
+|------|--------|---------|
+| C01 | catalogue | a reference to an actor or unit that the catalogue does not have, or assignments without a catalogue |
+| C02 | catalogue | an actor's unit is a role, not a unit |
+| C03 | catalogue | an actor id occurs more than once in the catalogue |
+| C04 | catalogue | an assignment type outside the scheme, or more than one performer on a node |
+| C05 | catalogue | an assignment type not allowed on this kind of node |
+| C06 | catalogue | the responsibility scheme is unknown or malformed |
+| C10 | catalogue | a lane id collides with another id of the model |
+| C11 | catalogue | the catalogue cannot be read: missing, not a regular file, too large, not JSON, or an empty path |
+| C12 | catalogue | the catalogue content is refused: bounds or catalogue schema, also model-carried actors |
+| C13 | catalogue | the catalogue source is wrong for a 2.x model: a path without an object, a catalogue besides model-carried actors, or a catalog field on stdin |
+| F01 | format | a format 2.0 schema violation (one per schema error) |
+| F02 | format | a `$schemaVersion` of the 2 line other than "2.0" |
+| F03 | format | format 2.0 is not accepted at this entry point |
+| F04 | format | an option or mode that is not available for format 2.0 |
+| F05 | format | a `decisions` option that fails the Decision-Core schema |
+| H01 | hint | a join gateway was derived in front of a node that more than one flow enters |
+| H02 | hint | a node has no performer and is placed in the unassigned lane |
+| H03 | hint | an automatic step has no performer and is placed in its neighbour's lane |
+| H04 | hint | the unit of a performer is not recorded |
+| H05 | hint | a lane name is longer than the lane name limit |
+| H06 | hint | a process has no assignments, so no lanes |
+| H08 | hint | a node has no neighbour with a lane and is placed in the unassigned lane |
+| N01 | notice | a format 2.0 import notice |
+
+Not coded, on purpose (each stays a plain string or field):
+
+- the lanes-view error on a 1.x model (`assertViewFitsModel`);
+- `resolveFields` called directly with a 1.x model;
+- the `runPipeline` TypeErrors `catalog must be a catalogue object …` and `catalog applies to format 2.0 models only`, and the CLI line `--catalog applies to format 2.0 models only`: API misuse, also reached with 1.x models;
+- layout notes in `validation.infos` and `validation.xmlWarnings`;
+- the `formLanes internal error: …` message of `checkProjection`;
+- `diagnostics.issues` (DI) and `netDiagnostics.issues` (NC), which are coded in their own fields.
 
 ## GET /health
 
