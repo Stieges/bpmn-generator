@@ -518,6 +518,12 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
       $body: node.system,
     }));
   }
+  // assignments — who is responsible for the step, one element per assignment (design 11 a). BPMN
+  // has no element for free assignment types nor for assignments on events and gateways, so these
+  // are the tool's own extension data. Only a 2.0 model's intermediate form carries `_assignments`.
+  for (const { type, actor } of node._assignments ?? []) {
+    extensionValues.push(moddle.createAny(`${EXTENSION_PREFIX}:assignment`, EXTENSION_NS, { type, actor }));
+  }
   // derived — the element is not the author's but a view's (derivations.js), so the import can
   // drop it again. Only a derived node carries the key: without a view the XML gains nothing.
   if (node._derived) extensionValues.push(derivedMarker(node._derived));
@@ -733,6 +739,13 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
 
 function buildLane(lane, nodes, flowNodeMap) {
   const laneEl = create('bpmn:Lane', { id: lane.id, name: lane.name || lane.id });
+  // A lane formed from the assignments (design 11 a) says so, and by what and for whom: the marker
+  // tells it from a drawn lane. moddle writes extensionElements ahead of flowNodeRef, as the XSD wants.
+  if (lane._derived === 'lane') {
+    laneEl.extensionElements = create('bpmn:ExtensionElements', { values: [
+      moddle.createAny(`${EXTENSION_PREFIX}:derived`, EXTENSION_NS, { by: lane._laneBy, actor: lane._laneActor, $body: 'lane' }),
+    ] });
+  }
   // Lane#flowNodeRef is typed FlowNode. Artifacts are not FlowNodes at all, and
   // data references are FlowElements but still not FlowNodes — listing either
   // makes the lane reference something it is not allowed to hold. Which lane an
@@ -1144,6 +1157,19 @@ async function generateBpmnXml(lc, coordMap) {
     id: 'Definitions_1',
     targetNamespace: 'http://bpmn.io/schema/bpmn',
   });
+  // The origin of a 2.0 model (design 11 a): attributes, because tDefinitions has no
+  // extensionElements but allows ##other attributes. `xmlns:bg` is declared explicitly — without
+  // it moddle drops the attributes silently, and a model with no `bg:` element would not declare
+  // it. No exporterVersion: `bg:modelVersion` names the format already.
+  if (lc._modelInfo) {
+    definitions.exporter = 'bpmn-generator';
+    Object.assign(definitions.$attrs, {
+      [`xmlns:${EXTENSION_PREFIX}`]: EXTENSION_NS,
+      [`${EXTENSION_PREFIX}:modelVersion`]: lc._modelInfo.version,
+      [`${EXTENSION_PREFIX}:view`]: lc._modelInfo.view,
+      [`${EXTENSION_PREFIX}:catalog`]: lc._modelInfo.catalogFingerprint,
+    });
+  }
 
   const rootElements = definitions.get('rootElements');
 
