@@ -1,0 +1,121 @@
+{
+  "description": "Sorted diagnostics.issues codes (all severities) per top-level fixture under the default view and under explicit-joins. An inventory of the picture quality, not a quality gate; compared by scripts/bpmn/views-roundtrip.test.js. Rewrite with UPDATE_VIEW_INVENTORIES=1 npm test -- --testPathPatterns=views-roundtrip (from scripts/).",
+  "fixtures": {
+    "all-element-classes.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "artifacts-laneless-pool.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "boundary-event-shapes.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "bpmn-generator-pipeline.json": {
+      "default": [
+        "DI05",
+        "DI05",
+        "DI05"
+      ],
+      "explicit-joins": [
+        "DI05",
+        "DI05",
+        "DI05"
+      ]
+    },
+    "dense-edge-labels.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "example-bestellung-versand.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "example-kreditantrag.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "example-onboarding.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "example-rechnungspruefung.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "example-schadenmeldung.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "example-urlaubsantrag.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "expanded-subprocess.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "long-lane-names.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "loop-with-join.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "message-flow-participant-ports.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "messageflow-to-subprocess.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "multi-pool-collaboration.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "parallel-split-join.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "realistic-collaboration.json": {
+      "default": [
+        "DI05"
+      ],
+      "explicit-joins": [
+        "DI05"
+      ]
+    },
+    "simple-approval.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "sparse-lanes.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "subprocess-child-fidelity.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "subprocess-collapsed-children.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "subprocess-merge-fanout.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "wide-pipeline.json": {
+      "default": [],
+      "explicit-joins": []
+    },
+    "wrapping-back-edge.json": {
+      "default": [],
+      "explicit-joins": []
+    }
+  }
+}
