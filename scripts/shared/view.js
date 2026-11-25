@@ -17,6 +17,7 @@ import { resolve, join, sep } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {
   PROFILE_LIMITS, ProfileRejectedError, readBoundedJsonText, exceedsBounds, quoteForMessage,
+  isPlainObject, describeSchemaError, jsonErrorLocation,
 } from './rule-profile.js';
 import { viewSchemaPath, viewsDirPath } from './resource-paths.js';
 
@@ -34,20 +35,6 @@ export class ViewRejectedError extends Error {
 
 const validateSchema = new Ajv2020({ allErrors: true, strict: true })
   .compile(JSON.parse(readFileSync(viewSchemaPath(), 'utf8')));
-
-function isPlainObject(value) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
-function describeSchemaError(e) {
-  const where = quoteForMessage(e.instancePath || '/');
-  if (e.keyword === 'enum') return `${where} must be one of ${e.params.allowedValues.join(', ')}`;
-  if (e.keyword === 'additionalProperties') return `${where} has an unknown key ${quoteForMessage(e.params.additionalProperty)}`;
-  if (e.keyword === 'required') return `${where} needs the key ${quoteForMessage(e.params.missingProperty)}`;
-  return `${where} ${e.message}`;
-}
 
 /** Refuse anything that is not a view: not a plain object, too deep or large, or off the schema. Returns the view. */
 export function assertView(view, label) {
@@ -84,10 +71,7 @@ function parseView(text, label) {
     view = JSON.parse(json);
   } catch (err) {
     // The parser's own message quotes the start of the input; only the position is passed on.
-    const m = /position (\d+)/.exec(err.message);
-    const pos = m ? Number(m[1]) : json.length;
-    const before = json.slice(0, pos);
-    throw new ViewRejectedError(`view ${label} is not valid JSON at line ${before.split('\n').length}, column ${pos - before.lastIndexOf('\n')}`);
+    throw new ViewRejectedError(`view ${label} is not valid JSON at ${jsonErrorLocation(json, err)}`);
   }
   return assertView(view, label);
 }

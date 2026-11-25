@@ -40,9 +40,14 @@ describe('assertView', () => {
     expect(() => assertView({
       view: 'x', version: '1.0', ruleProfile: 'strict',
       layout: { bendRule: true, nodeLabelsAvoidFlows: false, foreignShapeRepair: true,
-        visualRefinement: { a: 1 }, poolOrder: 'declared', elkWrapping: 'auto' },
+        visualRefinement: { laneCompaction: true }, poolOrder: 'declared', elkWrapping: 'auto' },
       derivations: { joinGateways: true },
     })).not.toThrow();
+  });
+
+  test('visualRefinement takes no keys beyond the shared option schema', () => {
+    expect(() => assertView({ view: 'x', version: '1.0', layout: { visualRefinement: { laneCompaction: 'yes' } } })).toThrow(ViewRejectedError);
+    expect(() => assertView({ view: 'x', version: '1.0', layout: { visualRefinement: { anything: true } } })).toThrow(/anything/);
   });
 
   test('refuses a bad enum, a path as rule profile, a wrong version, a non-object', () => {

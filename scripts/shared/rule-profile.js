@@ -109,13 +109,13 @@ function profileLabel(profile) {
 const profileSchema = JSON.parse(readFileSync(ruleProfileSchemaPath(), 'utf8'));
 const validateSchema = new Ajv2020({ allErrors: true, strict: true }).compile(profileSchema);
 
-function isPlainObject(value) {
+export function isPlainObject(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
 
-function describeSchemaError(e) {
+export function describeSchemaError(e) {
   const where = quoteForMessage(e.instancePath || '/');
   if (e.keyword === 'enum') return `${where} must be one of ${e.params.allowedValues.join(', ')}`;
   if (e.keyword === 'additionalProperties') return `${where} has an unknown key ${quoteForMessage(e.params.additionalProperty)}`;
@@ -258,7 +258,7 @@ function parseProfile(text, label) {
 }
 
 /** "line L, column C" of a JSON.parse failure; the end of the text when the parser names no position. */
-function jsonErrorLocation(text, err) {
+export function jsonErrorLocation(text, err) {
   const m = /position (\d+)/.exec(err.message);
   const pos = m ? Number(m[1]) : text.length;
   const before = text.slice(0, pos);

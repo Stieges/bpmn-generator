@@ -25,7 +25,15 @@
         "visualRefinement": {
           "oneOf": [
             { "type": "boolean" },
-            { "type": "object", "maxProperties": 32 }
+            {
+              "description": "Mirrors VisualRefinementOption in references/api-schema.json.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "laneCompaction": { "type": "boolean" },
+                "edgeLabelCollisionRepair": { "type": "boolean" }
+              }
+            }
           ]
         },
         "poolOrder": { "enum": ["auto", "declared"] },
