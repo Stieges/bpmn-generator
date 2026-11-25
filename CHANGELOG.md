@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Views.** A view is a small named JSON file under `views/`, outside the model, that decides how
+  a model is processed: its rule profile, layout switches and derivations. The model is not
+  changed. Two views ship: `default` (derives nothing) and `explicit-joins`. Choose one with
+  `--view=<name|path>` (CLI), `view` (a name on MCP `generate_bpmn`, `validate_bpmn` and
+  `orchestrate_bpmn`; an inline object on HTTP `/api/v1/generate`, `/api/v1/validate` and
+  `/api/v1/orchestrate`) or `runPipeline(lc, { view })`. An explicit option of the call wins over the
+  view, which wins over `scripts/config.json`.
+- **Join-gateway derivation.** With `derivations.joinGateways`, the output gets an explicit exclusive
+  join gateway in front of every node with two or more incoming flows. Import removes a derived
+  gateway that nobody changed again, through both importers (`import_bpmn` and `/api/v1/import`);
+  a gateway edited in a modeler stays. Each derived gateway is reported as hint `H01` in
+  `validation.hints`; hints never fail `--strict`. For every example model, the `explicit-joins`
+  diagram imports to the same model as the default one. Not covered yet: joins inside subprocesses,
+  splitting mixed gateways, and layout parameters per view.
+
+Default output is unchanged: a call without a view, or with `default`, produces the same bytes as
+before.
+
 ### Fixed
 
 - **A derived top-level definition is always referenced** (#121). Without explicit `definitions`

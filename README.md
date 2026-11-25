@@ -245,6 +245,7 @@ bpmn-generator/
 │   ├── omg-spec/                         Normative DMN 1.3 XSDs
 │   └── review-set/                       Third-party fixtures for visual review (sources and licenses in its README)
 ├── rules/                                Rule profiles (default, strict, DMN default/best-practice; custom/)
+├── views/                                Views (default, explicit-joins): named processing settings outside the model
 ├── scripts/                              Pipeline modules (see above)
 ├── docs/                                 Screenshots and guides
 └── tests/
@@ -284,6 +285,66 @@ opt-in: it runs only when a profile enables `workflow_net` (`rules/default-profi
 off). See
 [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md) for full rule
 documentation.
+
+## Views
+
+A view is a small named JSON file that decides how a model is processed: which rule profile
+applies, which layout switches are set, and which derivations run. Model + view = output. The
+model (Logic-Core JSON) holds what the author knows about the process; a view adds no knowledge
+about the process. Views live outside the model, under [`views/`](views/), and each file passes
+[`references/view-schema.json`](references/view-schema.json) before anything reads it.
+
+```json
+{
+  "view": "explicit-joins",
+  "version": "1.0",
+  "description": "Makes joins explicit: a task that several flows enter gets a joining gateway in front of it.",
+  "derivations": { "joinGateways": true }
+}
+```
+
+The format: `view` (the name), `version` (`"1.0"`), and the optional `description`, `ruleProfile`
+(a rule-profile *name*), `layout` (`bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair`,
+`visualRefinement`, `poolOrder`, `elkWrapping`) and `derivations` (`joinGateways`). Unknown keys are
+rejected at every level.
+
+Two views ship. `default` derives nothing, and its output is byte-identical to a call without a
+view. `explicit-joins` switches on the join-gateway derivation and names no rule profile.
+
+Precedence: an explicit option of the call wins over the view's value, which wins over
+`scripts/config.json`.
+
+| Interface | How a view is passed |
+|---|---|
+| CLI | `--view=<name\|path>`: a value that looks like a view name is looked up in `views/`, anything else is read as a file |
+| Library | `runPipeline(lc, { view })` with a path or an inline object |
+| MCP | `view` as a name on `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn` |
+| HTTP | `view` as an inline object on `/api/v1/generate`, `/api/v1/validate` and `/api/v1/orchestrate`; it must not carry `ruleProfile` (the request's own `ruleProfile` field applies). A rejected view answers `400` with status `view_error` |
+
+### The join-gateway derivation
+
+With `derivations.joinGateways: true`, the pipeline inserts an exclusive join gateway in front of
+every node that is not a gateway and has two or more incoming sequence flows. It works on its own
+copy: the author's model is never changed, and validation and the rules judge that model. The new
+elements get the ids `gw_join_<target>` and `flow_<gateway>_<target>` (`_2`, `_3`, … on a
+collision) and are marked in the XML with `<bg:derived>joinGateway</bg:derived>` in their
+`extensionElements`.
+
+On import (both importers, so MCP `import_bpmn` and `POST /api/v1/import` too), a derived gateway
+that nobody changed is removed again, and its incoming flows point at the original target. A
+gateway a person changed in a modeler stays a real gateway: a new name or type, a second outgoing
+flow, a label or condition on its outgoing flow, documentation, an extra extension element, a
+foreign attribute, or an attached artefact.
+
+Each derived gateway is reported as hint `H01` in `validation.hints` (`{ code, message, elements }`,
+where `elements` is `[gatewayId, targetId]`); the CLI prints it as `ℹ [H01] …`. Hints never fail
+`--strict`, and `validation.infos` is unchanged.
+
+For every example model, importing the diagram generated with `explicit-joins` gives the same model
+as importing the one generated with the default view. 10 of the 27 example models get at least one
+derived gateway (14 in total).
+
+Not covered yet: joins inside subprocesses, splitting mixed gateways, and layout parameters per view.
 
 ## Programmatic API
 
@@ -445,10 +506,10 @@ The BPMN Generator can be used as an MCP (Model Context Protocol) server, exposi
 
 | Tool | Description | Optional parameters (besides the required input) |
 |------|-------------|------|
-| `generate_bpmn` | Logic-Core JSON → BPMN 2.0 XML + SVG | `mode`, `ruleProfile` (a name), `poolOrder`, `drillDown`, `include`, `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` |
-| `validate_bpmn` | Validate Logic-Core without generating output | `mode`, `ruleProfile` |
+| `generate_bpmn` | Logic-Core JSON → BPMN 2.0 XML + SVG | `mode`, `ruleProfile` (a name), `view` (a name), `poolOrder`, `drillDown`, `include`, `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` |
+| `validate_bpmn` | Validate Logic-Core without generating output | `mode`, `ruleProfile`, `view` (a name) |
 | `import_bpmn` | BPMN 2.0 XML → Logic-Core JSON | — |
-| `orchestrate_bpmn` | Multi-agent review + generate + compliance | `mode`, `ruleProfile`, `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` |
+| `orchestrate_bpmn` | Multi-agent review + generate + compliance | `mode`, `ruleProfile`, `view` (a name), `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair` |
 
 Every Logic-Core argument passes the same JSON Schema gate as the HTTP API. Parameter details:
 [references/api-reference.md](references/api-reference.md).
@@ -504,6 +565,9 @@ Optional fields on `/api/v1/generate`: `mode` (`document`/`optimize`), `poolOrde
 `nodeLabelsAvoidFlows`, `foreignShapeRepair`, `callbackUrl` (async delivery with retry),
 `clientId` (audit), `correlationId` (tracking, `^[A-Za-z0-9_-]{1,64}$`). The other endpoints take a
 subset; [references/api-reference.md](references/api-reference.md) lists them per endpoint.
+
+`view` (an inline view object, see [Views](#views)) is accepted by `/api/v1/generate`,
+`/api/v1/validate` and `/api/v1/orchestrate`.
 
 ### Security defaults
 

@@ -409,6 +409,7 @@ membership instead of coordinates.
 | `references/omg-compliance.md` | OMG BPMN 2.0.2 → code mapping |
 | `rules/default-profile.json` | Default rule profile (all layers active) |
 | `rules/strict-profile.json` | Strict profile (style warnings → errors) |
+| `views/default-view.json`, `views/explicit-joins-view.json` | Shipped views (`default`, `explicit-joins`); validated by `references/view-schema.json`, loaded by `scripts/shared/view.js` |
 
 ## Development
 
@@ -622,6 +623,21 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    simply more crossings, and DI05 reports them.
 3. Verify: `result.diagnostics.issues.filter(i => i.code === 'DI05')` — fewer is better.
 
+### Choose or write a view
+
+1. A view is a named file in `views/` (`references/view-schema.json`), outside the model. Choose one
+   per call: `runPipeline(lc, { view: 'explicit-joins' })` (a name, a path or an object), CLI
+   `--view=explicit-joins` (a value that is not a view name is read as a path), MCP `"view"` on
+   `generate_bpmn`/`validate_bpmn`/`orchestrate_bpmn` (a name only), HTTP `"view"` as an inline
+   object (no `ruleProfile` in it; the request's own field applies). Precedence: explicit option →
+   view → `scripts/config.json`.
+2. Write one: copy `views/default-view.json`, set a new `view` name (`^[a-z0-9][a-z0-9-]{0,63}$`) and
+   only the keys you need. Unknown keys are refused. Only `derivations.joinGateways` derives anything
+   today (see README, [Views](README.md#views)).
+3. Verify: `node bpmn/pipeline.js input.json out --view=explicit-joins` prints one `ℹ [H01]` line per
+   derived gateway, and `cd scripts && npm test -- --testPathPatterns=views-roundtrip` checks the
+   round trip over every example model.
+
 ### Run a robustness benchmark
 
 1. Synthetic-data run: `cd scripts/robustness && node cli.js run --target=lc-json`.
@@ -776,6 +792,10 @@ node bpmn/pipeline.js input.json output --wrap
 # force it on over a project config; each pair is mutually exclusive):
 node bpmn/pipeline.js input.json output --no-bend-rule --no-label-avoidance --no-foreign-shape-repair
 
+# Views: a name in views/ or a path to a view file; the explicit options above still win over it.
+# explicit-joins adds a join gateway in front of every node with two or more incoming flows (hint H01):
+node bpmn/pipeline.js input.json output --view=explicit-joins
+
 # Project-wide config override (merged over scripts/config.json, one level deep):
 BPMN_CONFIG=my-config.json node bpmn/pipeline.js input.json output
 
@@ -887,9 +907,10 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - The DI check (`di-check.js`) covers participants, lane bands, node containment, message flow crossings, and (DI07) that a sequence flow starts and ends on its own node, (DI08) that no sequence-flow end runs along its own endpoint's outline, (DI09) that no sequence flow runs through its own source or target, (DI10) that no message flow runs through a shape that is not one of its endpoints, and (DI11) that no sequence flow runs through a shape that is neither its source nor its target. It says nothing about sequence-flow *crossings*, label collisions or readability
 - A single-process Logic-Core (no `pools`) may omit `id` (`input-schema.json`'s `SingleProcess`
   branch, unlike `Pool`). `assignProcessId` (`topology.js`) gives it `Process_1` (`_2`, … on a
-  collision) once at `runPipeline` entry, on the pipeline's own copy; `generateBpmnXml`,
-  `logicCoreToDot` and `runScenarioPipeline` apply the pure `withProcessId` to a direct call. The
-  caller's object is never changed, so a document you serialise yourself still has no `id` (#37).
+  collision). Callers reach it through the pure `withProcessId`: `generateBpmnXml` (which
+  `runPipeline` calls for its XML, on the copy it already works on), `logicCoreToDot` and
+  `runScenarioPipeline` apply it to a direct call. `runPipeline` itself does not call it at entry.
+  The caller's object is never changed, so a document you serialise yourself still has no `id` (#37).
   `composeCollaboration` keeps its `pool_<n>` fallback for callers that hand `enumerateCollaboration`
   an id-less pool directly; the pipeline path never reaches it
 - No ESLint — CLAUDE.md's own "Do NOT" rules (no CommonJS, no hard-coded constants where
