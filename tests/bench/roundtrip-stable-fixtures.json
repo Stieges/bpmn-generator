@@ -7,6 +7,7 @@
       "message-flow-participant-ports.json",
       "messageflow-to-subprocess.json",
       "multi-pool-collaboration.json",
+      "nested-lanes-role-system.json",
       "realistic-collaboration.json"
     ],
     "explicit-joins": [
@@ -15,6 +16,7 @@
       "message-flow-participant-ports.json",
       "messageflow-to-subprocess.json",
       "multi-pool-collaboration.json",
+      "nested-lanes-role-system.json",
       "realistic-collaboration.json"
     ]
   }

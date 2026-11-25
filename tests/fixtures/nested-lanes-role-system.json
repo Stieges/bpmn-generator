@@ -1,0 +1,13 @@
+{ "id": "Process_Antrag", "name": "Antrag bearbeiten",
+  "lanes": [ { "id": "lane_service", "name": "Kundenservice" },
+             { "id": "lane_fach", "name": "Fachabteilung", "children": [ { "id": "lane_pruefung", "name": "Prüfung" }, { "id": "lane_freigabe", "name": "Freigabe" } ] } ],
+  "nodes": [
+    { "id": "start", "type": "startEvent", "name": "Antrag eingegangen", "lane": "lane_service" },
+    { "id": "erfassen", "type": "userTask", "name": "Antrag erfassen", "lane": "lane_service", "role": "Sachbearbeitung", "system": "CRM" },
+    { "id": "gw", "type": "exclusiveGateway", "name": "Betrag über Grenze?", "lane": "lane_service" },
+    { "id": "pruefen", "type": "userTask", "name": "Antrag prüfen", "lane": "lane_pruefung", "role": "Prüfer" },
+    { "id": "freigeben", "type": "userTask", "name": "Antrag freigeben", "lane": "lane_freigabe", "role": "Teamleitung", "system": "Workflow-System" },
+    { "id": "end", "type": "endEvent", "name": "Antrag entschieden", "lane": "lane_service" } ],
+  "edges": [ { "source": "start", "target": "erfassen" }, { "source": "erfassen", "target": "gw" },
+             { "source": "gw", "target": "pruefen", "label": "nein" }, { "source": "gw", "target": "freigeben", "label": "ja" },
+             { "source": "pruefen", "target": "end" }, { "source": "freigeben", "target": "end" } ] }

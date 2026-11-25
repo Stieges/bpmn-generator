@@ -77,6 +77,10 @@
       "default": [],
       "explicit-joins": []
     },
+    "nested-lanes-role-system.json": {
+      "default": [],
+      "explicit-joins": []
+    },
     "parallel-split-join.json": {
       "default": [],
       "explicit-joins": []
