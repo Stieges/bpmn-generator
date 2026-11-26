@@ -8,7 +8,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
-import { runPipeline } from './pipeline.js';
+import { runPipeline, generateDiagramSet } from './pipeline.js';
 import { validateLogicCore } from './validate.js';
 import { runRules } from './rules.js';
 import { loadNamedView } from '../shared/view.js';
@@ -70,6 +70,24 @@ describe('validation.findings on format 2.x runs', () => {
       ...validation.errors.map((message) => ({ code: 'C10', severity: 'ERROR', message })),
       ...validation.warnings.map((message) => ({ code: 'M02', severity: 'WARNING', message })),
     ]);
+  });
+
+  test('strict profile: errors of every layer come before any warning, each in emission order', async () => {
+    // The catalogue walks S, M, P, WF, so under the strict profile an S warning (S07) is emitted
+    // before an M or WF error; the findings still list all errors first.
+    const model = copy(SCHADEN);
+    model.nodes.find((n) => n.id === 'gw').name = 'Regress';
+    model.nodes = model.nodes.filter((n) => n.id !== 'end');
+    model.edges = model.edges.filter((e) => e.target !== 'end');
+    const { validation } = await run(model, { ruleProfile: resolve(root, 'rules/strict-profile.json') });
+    expect(validation.warnings.length).toBeGreaterThan(0);
+    expect(new Set(validation.findings.map((f) => f.code.slice(0, 1)))).toEqual(new Set(['S', 'M', 'W']));
+    expect(validation.findings.map((f) => f.message)).toEqual([...validation.errors, ...validation.warnings]);
+  });
+
+  test('generateDiagramSet with a 2.x model: the F04 refusal of its parent carries its finding', async () => {
+    const { parent } = await generateDiagramSet(copy(SCHADEN), { catalog: copy(CATALOG) });
+    expect(parent.validation.findings).toEqual([{ code: 'F04', severity: 'ERROR', message: parent.validation.errors[0] }]);
   });
 
   test('a mode not available for 2.0: one F04 finding', async () => {

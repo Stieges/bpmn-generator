@@ -243,9 +243,12 @@ async function runPipeline(logicCore, callerOpts = {}) {
 
   const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
   // A 2.x run also gives its rule findings as objects (`validation.findings`); rule infos are
-  // dropped here as their strings are.
+  // dropped here as their strings are. runRules emits layer by layer (S, M, P, WF), so a warning
+  // can precede a later layer's error: a stable partition lists the errors, then the warnings.
   const { errors, warnings, advisories = [], metrics, findings: allRuleFindings } = validateLogicCore(lc, profile, { withFindings: v2 });
-  const ruleFindings = v2 ? allRuleFindings.filter((f) => f.severity !== 'INFO') : undefined;
+  const ruleFindings = v2
+    ? [...allRuleFindings.filter((f) => f.severity === 'ERROR'), ...allRuleFindings.filter((f) => f.severity === 'WARNING')]
+    : undefined;
   if (errors.length) {
     return blockedResult(errors, { warnings, advisories, metrics }, ruleFindings);
   }
@@ -619,8 +622,9 @@ async function generateDiagramSet(logicCore, opts = {}) {
   // Format 2.0 (design 9): drill-down does not read it yet; refused before any work, as a blocked
   // parent result like runPipeline's, so every caller reports it as a pipeline error.
   if (modelFormat(logicCore) === '2') {
+    const refusal = [coded('F04', 'drill-down is not available for format 2.0 models yet')];
     return {
-      parent: blockedResult([coded('F04', 'drill-down is not available for format 2.0 models yet')]),
+      parent: blockedResult(refusal, undefined, errorFindings(refusal)),
       subProcesses: {},
       navigation: { subProcesses: [] },
     };
