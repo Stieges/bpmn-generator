@@ -17,7 +17,7 @@ import { LANE_HEADER_W } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { languageTag } from './naming/index.js';
 import { inferGatewayDirections, assignEdgeIds, withProcessId, resolveFlowSemantics } from './topology.js';
-import { inferEventMarker } from './icons.js';
+import { resolvedMarkerOf } from './icons.js';
 import { edgeLabelBox } from './coordinates.js';
 
 const moddle = new BpmnModdle();
@@ -136,7 +136,7 @@ const DEFINITION_REF_FIELD = {
  * Build event definition moddle element for a node.
  */
 function buildEventDefinition(node, topLevelDefsMap) {
-  const marker = node.marker || inferEventMarker(node.name || '');
+  const marker = resolvedMarkerOf(node);
   if (!marker) return null;
 
   const bpmnType = EVENT_DEFINITION_BY_MARKER.get(marker);
@@ -209,7 +209,7 @@ function buildTopLevelDefinitions(processes, explicitDefs) {
   for (const proc of processes) {
     for (const node of (proc.nodes || [])) {
       if (!isEvent(node.type)) continue;
-      const marker = node.marker || inferEventMarker(node.name || '');
+      const marker = resolvedMarkerOf(node);
       if (!marker || seen.has(marker)) continue;
 
       const tagMap = {

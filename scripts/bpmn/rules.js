@@ -27,7 +27,7 @@ import { resolveFlowSemantics, resolveLaneId, emptyLeafLanes } from './topology.
 import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
-import { inferEventMarker } from './icons.js';
+import { markerOf } from './icons.js';
 import { modelLanguage, namingFor, namingMessage } from './naming/index.js';
 
 /** How a finding names an edge: its id, or `source→target` for an edge that has none yet. */
@@ -939,6 +939,7 @@ const SOUNDNESS_CHECKS = [
     check: (_proc, lc) => {
       const msgs = [];
       const defs = lc.definitions || [];
+      const language = modelLanguage(lc);
       for (const n of everyNode(lc)) {
         for (const spec of DEFINITION_REF_ROWS) {
           const value = n[spec.field];
@@ -953,7 +954,7 @@ const SOUNDNESS_CHECKS = [
             continue;
           }
           if (isEvent(n.type)) {
-            const marker = n.marker || inferEventMarker(n.name || '');
+            const marker = markerOf(n, language);
             if (marker !== spec.kind) {
               msgs.push(`${label} carries "${spec.field}" ("${value}"), but its marker is ${marker ? `"${marker}"` : 'absent'}, not "${spec.kind}". The reference is not written — set marker "${spec.kind}" or remove the field.`);
               continue;
@@ -989,9 +990,10 @@ const SOUNDNESS_CHECKS = [
     check: (_proc, lc) => {
       const defs = lc.definitions || [];
       const msgs = [];
+      const language = modelLanguage(lc);
       for (const n of everyNode(lc)) {
         if (!isEvent(n.type)) continue;
-        const marker = n.marker || inferEventMarker(n.name || '');
+        const marker = markerOf(n, language);
         const spec = DEFINITION_REF_ROWS.find((r) => r.kind === marker);
         if (!spec) continue;
         if (resolveDefinitionRef(n, marker, defs).reason !== 'ambiguous') continue;   // a chosen ref is S16's to judge

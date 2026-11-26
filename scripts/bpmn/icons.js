@@ -18,6 +18,9 @@
 import { CLR } from './constants.js';
 import { esc } from '../shared/utils.js';
 import { scaledPath, num } from './pathmap.js';
+// A cycle with naming/index.js (it imports `inferEventMarker`): both sides use the other's binding
+// inside functions only, never while the module is evaluated.
+import { namingFor } from './naming/index.js';
 
 /**
  * The element's colours: its own `color` (bioc), else config.json's — bpmn-js `getStrokeColor` /
@@ -113,6 +116,31 @@ function inferEventMarker(name) {
   if (n.includes('abbruch') || n.includes('cancel') || n.includes('abgebrochen') || n.includes('stornierung')) return 'cancel';
   if (n.includes('terminat') || n.includes('beendet') || n.includes('sofortiger abbruch')) return 'terminate';
   return null;
+}
+
+/**
+ * The marker of an event as the rules see it: its `marker`; else, for a model in a supported
+ * `language` (the primary subtag, `modelLanguage(lc)`), the marker `resolveEventMarkers` wrote as
+ * `_marker`, or what the language's strategy reads from the name when nothing was written; else the
+ * legacy inference. Without a supported language `_marker` is never read.
+ */
+function markerOf(node, language = null) {
+  if (node.marker) return node.marker;
+  const strategy = namingFor(language);
+  if (strategy !== null) {
+    return Object.hasOwn(node, '_marker') ? node._marker : strategy.eventMarker(node.name || '', node.type);
+  }
+  return inferEventMarker(node.name || '');
+}
+
+/**
+ * The marker of an event as the writers draw it: its `marker`; else the `_marker` that
+ * `resolveEventMarkers` wrote on runPipeline's copy (a string or `null`); else the legacy inference.
+ */
+function resolvedMarkerOf(node) {
+  if (node.marker) return node.marker;
+  if (Object.hasOwn(node, '_marker')) return node._marker;
+  return inferEventMarker(node.name || '');
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -265,6 +293,6 @@ function renderTextAnnotationShape(w, h, { sw = 2 } = {}, col) {
 }
 
 export {
-  renderEventMarker, inferEventMarker, renderTaskIcon, renderTaskMarkers, renderGatewaySymbol,
+  renderEventMarker, inferEventMarker, markerOf, resolvedMarkerOf, renderTaskIcon, renderTaskMarkers, renderGatewaySymbol,
   renderDataObjectShape, renderDataStoreShape, renderTextAnnotationShape,
 };
