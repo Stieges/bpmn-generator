@@ -2,13 +2,16 @@
 /**
  * v2-output-hashes.mjs
  *
- * The two format 2.0 golden diagrams (design 9, slice 1): tests/fixtures-v2/schaden.json with its
- * catalogue, once in view `rollen` and once in view `einheiten`, generated with default options.
- * The fixtures live outside tests/fixtures/ so no folder-driven 1.x test reads them; their hashes
- * live in tests/bench/v2-output-hashes.json, apart from default-output-hashes.json. No more pairs
- * than these two.
+ * The three format 2.0 golden diagrams, generated with default options: tests/fixtures-v2/schaden.json
+ * with its catalogue, once in view `rollen` and once in view `einheiten` (design 9, slice 1), and
+ * tests/fixtures-v2/organigramm.json, the same model on a catalogue whose units nest with `partOf`,
+ * in view `organigramm` (slice 2): the one diagram with lanes nested along the organigram, including
+ * a unit's own lane. The fixtures live outside tests/fixtures/ so no folder-driven 1.x test reads
+ * them; their hashes live in tests/bench/v2-output-hashes.json, apart from default-output-hashes.json.
+ * No more pairs than these three: the flat level view adds no layout path the two flat goldens do
+ * not already draw, and is pinned by unit tests instead.
  *
- * Rewrite the hash file and the four golden files: `node bench/v2-output-hashes.mjs` from `scripts/`.
+ * Rewrite the hash file and the six golden files: `node bench/v2-output-hashes.mjs` from `scripts/`.
  * Regenerate only when a change to the 2.0 output is intended, after inspecting the diff like a golden.
  * Fenced by v2-output-hashes.test.js.
  */
@@ -25,7 +28,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_V2_DIR = join(__dirname, '..', '..', 'tests', 'fixtures-v2');
 export const V2_SNAPSHOT_PATH = join(__dirname, '..', '..', 'tests', 'bench', 'v2-output-hashes.json');
 
-export const V2_PAIRS = [['schaden.json', 'rollen'], ['schaden.json', 'einheiten']];
+export const V2_PAIRS = [['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm']];
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -40,7 +43,7 @@ export async function generateV2(name, viewName) {
   return { bpmnXml, svg, validation };
 }
 
-/** { "<model> × <view>": { xml, svg } } for the two pairs. */
+/** { "<model> × <view>": { xml, svg } } for every pair. */
 export async function computeV2Hashes() {
   const out = {};
   for (const [name, viewName] of V2_PAIRS) {
