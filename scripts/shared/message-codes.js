@@ -35,7 +35,7 @@ export const MESSAGE_CODES = Object.freeze({
   H04: entry('hint', 'the unit of a performer is not recorded'),
   H05: entry('hint', 'a lane name is longer than the lane name limit'),
   H06: entry('hint', 'a process has no assignments, so no lanes'),
-  H08: entry('hint', 'a node has no neighbour with a lane and is placed in the unassigned lane'),
+  H08: entry('hint', 'a node has no neighbour with a lane (or a boundary event no host with a lane) and is placed in the unassigned lane'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 

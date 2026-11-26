@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Default output is unchanged: a call without a view, or with `default`, produces the same bytes as
 before. Every `validation` result gains the key `hints`, an empty array without a view.
 
+- **Message codes for format 2.x.** Every message a format 2.x model produces carries a code from one registry
+  (`scripts/shared/message-codes.js`): a string leads with `[<code>] `, an object has `code`. New codes: C11–C13
+  (catalogue unreadable, refused, wrong source), F01–F05 (format, entry points, options, `decisions`), N01 (import
+  notice). `validation.findings` (`{ code, severity, message }`) appears on 2.x runs only; import `notices` are
+  `[{ code, message }]` and MCP `import_bpmn` sends them as a JSON second block; HTTP error bodies gain `code`,
+  thrown errors `messageCode`. Responses for 1.x models are unchanged on every surface. Table: `references/api-reference.md`, "Message codes".
+- **`aligned-ports` view.** `views/aligned-ports-view.json` sets `layout.alignParticipantPorts: true`; the default
+  stays `false`.
+
 ### Fixed
 
 - **A derived top-level definition is always referenced** (#121). Without explicit `definitions`
