@@ -231,11 +231,12 @@ describe('German', () => {
   });
 
   test('durationKeywords are timer keywords that name a duration; expiryWords are sorted and folded on load', () => {
-    expect(de.durationKeywords).toEqual(['wartezeit', 'zeit']);
+    expect(de.durationKeywords).toEqual(['wartezeit', 'zeit', 'zeiten']);
     for (const k of de.durationKeywords) expect(de.eventMarkers.timer).toContain(k);
     for (const k of ['frist', 'fristen', 'deadline', 'deadlines', 'timer', 'warten']) expect(de.durationKeywords).not.toContain(k);
     expect(data.expiryWords).toEqual([...data.expiryWords].sort());
-    expect(de.expiryWords).toEqual(expect.arrayContaining(['abgelaufen', 'ueberschritten', 'verstrichen', 'um', 'ueberfaellig']));
+    expect(de.expiryWords).toEqual(expect.arrayContaining(['abgelaufen', 'ueberschritten', 'verstrichen', 'um', 'ab', 'ende', 'ablauf', 'ueberschreitung', 'verpasst']));
+    expect(de.expiryWords).not.toContain('beendet');
   });
 
   test('validates and has the declared switches', () => {

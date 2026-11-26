@@ -207,7 +207,7 @@ export function verbLast(lexicon) {
     eventName: guard(eventName),
     messageName: guard(messageName),
     isQuestion,
-    eventMarker: (name, eventType) => inferMarker(lexicon, name, eventType),
+    eventMarker: (name, eventType, parent = null) => inferMarker(lexicon, name, eventType, parent),
     examples: lexicon.examples,
   });
 }

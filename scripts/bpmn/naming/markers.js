@@ -76,13 +76,14 @@ function hasExpiryWord(tokens, expiryWords) {
 }
 
 /**
- * Does `marker` match the label? A timer that matches only at the end of compounds through
- * `durationKeywords` (Arbeitszeit: a duration, not its end) matches only with an expiry word
- * (Lieferzeit überschritten); every other match counts on its own.
+ * Does `marker` match the label? On an event that may be plain (`plainAllowed`), a timer that
+ * matches only at the end of compounds through `durationKeywords` (Arbeitszeit: a duration, not its
+ * end) matches only with an expiry word (Lieferzeit überschritten); on an event that needs a
+ * trigger, and for every other match, the match counts on its own.
  */
-function markerMatches(lexicon, marker, tokens, compound, exceptions) {
+function markerMatches(lexicon, marker, tokens, compound, exceptions, plainAllowed) {
   const keywords = lexicon.eventMarkers?.[marker] ?? [];
-  const durations = marker === 'timer' ? (lexicon.durationKeywords ?? []) : [];
+  const durations = marker === 'timer' && plainAllowed ? (lexicon.durationKeywords ?? []) : [];
   let durationEnd = false;
   for (const k of keywords) {
     for (const t of tokens) {
@@ -98,9 +99,11 @@ function markerMatches(lexicon, marker, tokens, compound, exceptions) {
 /**
  * The marker a label's words imply, if that marker is legal on `eventType`: the first marker of
  * `INFERABLE_MARKERS` with a keyword matching a token decides; there is no fall-through to a later
- * one. `null` when nothing matches or the marker is not allowed on the type. Never throws.
+ * one. `null` when nothing matches or the marker is not allowed on the type. `parent` is the
+ * node that contains the event (`null` at process level): with it, the start event of an event
+ * subprocess counts as an event that needs a trigger (`allowsMarkerNone`). Never throws.
  */
-export function inferMarker(lexicon, name, eventType) {
+export function inferMarker(lexicon, name, eventType, parent = null) {
   try {
     const tokens = labelTokens(name).tokens.map((t) => t.folded);
     if (tokens.length === 0) return null;
@@ -108,8 +111,10 @@ export function inferMarker(lexicon, name, eventType) {
     const compound = lexicon.compoundMarkers === true;
     // Words that begin with a keyword but name no such event (`compoundExceptions`), checked before the compound match.
     const exceptions = lexicon.compoundExceptions ?? [];
+    // The expiry-word requirement applies only where a plain event is valid; an event that needs a trigger keeps the timer.
+    const plainAllowed = allowsMarkerNone({ type: eventType }, parent);
     for (const marker of INFERABLE_MARKERS) {
-      if (markerMatches(lexicon, marker, tokens, compound, exceptions)) {
+      if (markerMatches(lexicon, marker, tokens, compound, exceptions, plainAllowed)) {
         return MARKER_ALLOWED_ON[marker].includes(eventType) ? marker : null;
       }
     }
