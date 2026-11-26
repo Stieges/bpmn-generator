@@ -6,6 +6,7 @@ import { inferMarker } from './markers.js';
 const de = loadLexicon('de');
 const s = verbLast(de);
 const flagged = (j, name) => j(name) !== null;
+const STATE_REASON = 'A task name is an instruction, not a state; write "Rechnung zahlen", not "Rechnung zu zahlen".';
 
 describe('verb-last strategy shape', () => {
   test('exposes language, word order, examples and the judges', () => {
@@ -32,13 +33,23 @@ describe('taskName', () => {
     'Kunde zu Termin einladen',
     // `anzünden` folds to `anzuenden`: a folded `zu` test would read an + zu + enden; the raw word has no `zu`.
     'Feuer anzünden',
+    // Capitalised `Soll`, `Ist` are nouns, not state markers.
+    'Soll-Ist vergleichen', 'Soll/Ist abgleichen', 'Soll und Ist vergleichen',
+    // `dazu` is a separable prefix, not `da` + `zu`.
+    'Tarif dazubuchen', 'Betrag dazurechnen', 'Artikel dazugeben',
+    // `zu` + a rest without a vowel before its suffix is no zu-infinitive.
+    'Ladung festzurren', 'Unkraut auszupfen',
+    // The first letter decides lower case, not a leading quote.
+    'Antrag "prüfen"', 'Antrag „prüfen“',
   ])('passes %s', (n) => expect(s.taskName(n)).toBeNull());
 
   test.each([
     'Prüfen', 'Schritt 3', 'Klärung mit Lieferant', 'Erinnerung an Vorgesetzten', 'Antrag eingegangen',
-    'Antrag abgelehnt', 'Lieferung offen', 'Text gegengelesen', 'Rechnung zu zahlen', 'Kunde möchte kündigen',
-    'Betrag auszuzahlen',
+    'Antrag abgelehnt', 'Lieferung offen', 'Text gegengelesen',
   ])('flags %s', (n) => expect(flagged(s.taskName, n)).toBe(true));
+
+  test.each(['Rechnung zu zahlen', 'Kunde möchte kündigen', 'Betrag auszuzahlen', 'Betrag abzurechnen', 'Daten zuzuordnen'])(
+    'flags %s as a state', (n) => expect(s.taskName(n)).toEqual({ reason: STATE_REASON }));
 
   test('a conjunction is not the object', () => expect(flagged(s.taskName, 'und prüfen')).toBe(true));
   test('non-strings never throw', () => {
@@ -51,9 +62,14 @@ describe('containerName', () => {
   test.each([
     'Kommissionierung', 'Schadenprüfung', 'Prüfung der Unterlagen', 'Antrag prüfen', 'Daten', 'Wareneingang',
     'Versand', 'Einkauf', 'Mahnwesen', 'Monatsabschluss', 'Onboarding', 'Schreiben',
+    // A verb ending in `ieren` is no `ge…en` participle.
+    'Adresse geocodieren',
   ])('passes %s', (n) => expect(s.containerName(n)).toBeNull());
   test.each(['Antrag geprüft', 'Rechnung storniert', 'Prüfen', 'Validieren'])('flags %s', (n) =>
     expect(flagged(s.containerName, n)).toBe(true));
+  // split takes the longest prefix: `hinzu` + `gefügt` is a participle; `hin` + `zugefügt` would not be.
+  test('flags Daten hinzugefügt (longest prefix hinzu)', () =>
+    expect(s.containerName('Daten hinzugefügt')).toEqual({ reason: 'A container names a topic, not a state; avoid a participle at the end.' }));
 });
 
 describe('eventName', () => {
