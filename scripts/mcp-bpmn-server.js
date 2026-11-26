@@ -27,7 +27,7 @@ import { loadNamedView, ViewRejectedError, resolveViewOptions } from './shared/v
 import { rulesDirPath } from './shared/resource-paths.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
-import { validateModelSchema, v2RequestErrors, modelFormat, validateLayoutOptions, boundSchemaErrors, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA, assertViewFitsModel } from './bpmn/schema-gate.js';
+import { validateModelSchema, v2RequestErrors, catalogOptionFor, validateLayoutOptions, boundSchemaErrors, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
 import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -193,10 +193,6 @@ function viewOf(args) {
  * stays `undefined` (not null), so the view's own profile can apply; it is resolved here, once, so
  * the reviewer and compliance agents judge the model by the same profile the layout runs with.
  */
-function catalogOpt(args) {
-  return modelFormat(args.logicCore) === '2' && args.catalog != null ? { catalog: args.catalog } : {};
-}
-
 function viewAndProfileOf(args) {
   const view = viewOf(args);
   assertViewFitsModel(args.logicCore, view);
@@ -214,7 +210,7 @@ async function handleToolCall(request) {
 
     const include = new Set(args.include ?? ['xml', 'svg', 'validation', 'diagnostics']);
     const { view, ruleProfile } = viewAndProfileOf(args);
-    const opts = { mode: args.mode, ruleProfile, view, poolOrder: args.poolOrder, ...layoutOptionsOf(args), ...catalogOpt(args) };
+    const opts = { mode: args.mode, ruleProfile, view, poolOrder: args.poolOrder, ...layoutOptionsOf(args), ...catalogOptionFor(args.logicCore, args.catalog) };
 
     if (args.drillDown) {
       const set = await generateDiagramSet(args.logicCore, opts);
@@ -252,7 +248,7 @@ async function handleToolCall(request) {
     if (rejected) return rejected;
     // infos and metrics used to be dropped here, which silently killed the
     // whole P layer (complexity metrics) for every MCP caller.
-    const result = validateModel(args.logicCore, profileForMode(viewAndProfileOf(args).ruleProfile ?? null, args.mode), catalogOpt(args));
+    const result = validateModel(args.logicCore, profileForMode(viewAndProfileOf(args).ruleProfile ?? null, args.mode), catalogOptionFor(args.logicCore, args.catalog));
     return text(result);
   }
 
@@ -276,7 +272,7 @@ async function handleToolCall(request) {
       view,
       mode: args.mode,
       ...layoutOptionsOf(args),
-      ...catalogOpt(args),
+      ...catalogOptionFor(args.logicCore, args.catalog),
     });
     return text({
       bpmnXml: result.bpmnXml,

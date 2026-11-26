@@ -165,7 +165,7 @@ export function resolveFields(model, options) {
   // a catalogue that was given; its C01 lines stay.
   const noCatalog = !source && nodes.some((n) => (n.assignments ?? []).length > 0);
   if (noCatalog) {
-    errors.push('[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file or the catalog option of runPipeline');
+    errors.push('[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file, the catalog option of runPipeline or the `catalog` object of an MCP or HTTP request');
   } else {
     for (const node of nodes) {
       for (const a of node.assignments ?? []) {
