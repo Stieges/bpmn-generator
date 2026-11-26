@@ -41,7 +41,7 @@ describe('taskName', () => {
     'Commit changes', 'Alert on-call', 'Lock account', 'Upgrade system', 'Integrate data', 'Mail letter',
   ])('passes %s', (n) => expect(s.taskName(n)).toBeNull());
 
-  test.each(['Check', 'Checking invoice', 'Invoice check', 'Path A', 'Follow-up', 'Step 1', 'SAP: Review invoice', '1. 2.'])(
+  test.each(['Check', 'Checking invoice', 'Invoice checked', 'Path A', 'Follow-up', 'Step 1', 'SAP: Review invoice', '1. 2.'])(
     'flags %s', (n) => expect(flagged(s.taskName, n)).toBe(true));
 
   test('Re-check order passes', () => expect(s.taskName('Re-check order')).toBeNull());
@@ -51,8 +51,8 @@ describe('taskName', () => {
       ['a single word', 'Escalate'],
       ['no word with a letter after the first', 'Step 3'],
       ['no letter at all', '1. 2.'],
-      ['a placeholder letter', 'Path A'],
-      ['placeholder letters and numbers', 'Option B 2'],
+      ['a placeholder noun and a letter', 'Path A'],
+      ['a placeholder noun, a letter and a number', 'Option B 2'],
       ['a gerund of a listed verb', 'Checking invoice'],
       ['a gerund with a doubled consonant', 'Shipping order'],
       ['a gerund of a verb with a final e', 'Updating records'],
@@ -60,11 +60,15 @@ describe('taskName', () => {
       ['a participle at the end', 'Invoice checked'],
       ['an irregular participle at the end', 'Contract sent'],
       ['a state word at the end', 'Payment due'],
-      ['reversed order', 'Invoice check'],
-      ['reversed order, three words', 'Monthly invoice check'],
-      ['an action noun of a listed verb at the end', 'Invoice approval'],
-      ['an action noun in -ation', 'Customer registration'],
-      ['two words: a noun that is also a verb, then a participle', 'Order shipped'],
+      ['a verb at the end after a known non-verb', 'Certificate check'],
+      ['a frequent adjective, then reversed order', 'Monthly invoice check'],
+      ['an action noun after a known non-verb', 'Template approval'],
+      ['an -ification noun after a known non-verb', 'Template verification'],
+      ['an action noun after a frequent noun', 'Customer registration'],
+      ['two words ending in a participle', 'Order shipped'],
+      ['two words ending in a participle, any first word', 'Contract signed'],
+      ['an auxiliary as second word', 'Invoice is checked'],
+      ['to and an auxiliary', 'Invoice to be checked'],
       ['two words: a noun that is also a verb, then a state word', 'Request pending'],
       ['a determiner', 'The invoice'],
       ['a preposition', 'For approval'],
@@ -80,6 +84,8 @@ describe('taskName', () => {
       'Set up workstation', 'Log in to portal', 'Sign off timesheet', 'Roll back deployment', 'Opt out of tracking',
       'Write off bad debt', 'Wind down operations', 'Stress-test portfolio', 'X-ray chest', 'Double-check figures',
       'Calibrate sensor', 'Duplicate invoice', 'Delegate task', 'Mark invoice as paid', 'Set status to closed',
+      'Quality-check part', 'Risk-assess loan', 'Fast-track claim', 'E-sign contract', 'Ensure contract is signed',
+      'Handle X', 'Confirm A',
     ])('passes %s without a hint', (n) => {
       expect(s.taskName(n)).toBeNull();
       expect(s.unlistedFirstWord(n)).toBeNull();
@@ -90,13 +96,17 @@ describe('taskName', () => {
       ['Apostille certificate', 'Apostille'],
       ['1. Escrow funds', 'Escrow'],
       ['Kit components for line 2', 'Kit'],
+      ['Invoice check', 'Invoice'],
+      ['Groom change request', 'Groom'],
+      ['Apostille document approval', 'Apostille'],
+      ['Hot-desk staff', 'Hot-desk'],
     ])('passes %s; its first word %s is unlisted', (n, word) => {
       expect(s.taskName(n)).toBeNull();
       expect(s.unlistedFirstWord(n)).toBe(word);
     });
 
     test('unlistedFirstWord is null for a flagged name, a listed verb and a non-string', () => {
-      for (const n of ['Checking invoice', 'Invoice check', 'Check', 'Review application', 'Re-check order', undefined, null, 5, '']) {
+      for (const n of ['Checking invoice', 'Invoice checked', 'Check', 'Review application', 'Re-check order', undefined, null, 5, '']) {
         expect(s.unlistedFirstWord(n)).toBeNull();
       }
     });
@@ -145,10 +155,11 @@ describe('messageName', () => {
     expect(flagged(s.messageName, n)).toBe(true));
 
   describe('a message noun at the end', () => {
-    test.each(['Deploy request', 'Sell order', 'Cancel notice', 'Renew offer', 'Approve request'])(
+    test.each(['Deploy request', 'Sell order', 'Renew offer', 'Print invoice'])(
       'exempts %s from the verb-first branch', (n) => expect(s.messageName(n)).toBeNull());
-    test.each(['Send invoice', 'Submit application', 'Transmit report', 'Notify customer', 'Deploy requested', 'Approve invoice received'])(
-      'not when the verb sends the message, the last word is no message noun or a participle: flags %s', (n) =>
+    test.each(['Send invoice', 'Submit application', 'Transmit report', 'Resend reminder', 'Approve order', 'Confirm order',
+      'Cancel order', 'Approve request', 'Notify customer', 'Deploy requested', 'Approve invoice received'])(
+      'not when the verb sends or decides on the message, the last word is no message noun or a participle: flags %s', (n) =>
         expect(flagged(s.messageName, n)).toBe(true));
   });
 });

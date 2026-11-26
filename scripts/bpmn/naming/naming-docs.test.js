@@ -28,7 +28,7 @@ const schema = readJson(namingSchemaPath());
 const DOC_KEYS = ['purpose', 'listNotes'];
 const LIST_NAMES = ['verbs', 'verbPhrases', 'verbPrefixes', 'nounVerbHomographs', 'participles', 'stateWords', 'stateMarkers',
   'infinitiveSuffixes', 'participleHomographs', 'inseparablePrefixes', 'separablePrefixes', 'geInfinitives',
-  'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks', 'nonVerbStarters', 'nounStarters', 'messageNouns', 'sendVerbs'];
+  'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks', 'nonVerbStarters', 'nounStarters', 'auxiliaries', 'messageNouns', 'instructionVerbs'];
 const SHIPPED = { de: namingDePath(), en: namingEnPath() };
 
 describe('schema', () => {
@@ -111,7 +111,7 @@ describe.each(Object.keys(SHIPPED))('shipped %s file', (language) => {
       ? ['verbs', 'nounVerbHomographs', 'participles', 'stateMarkers', 'infinitiveSuffixes', 'participleHomographs',
         'inseparablePrefixes', 'separablePrefixes', 'geInfinitives', 'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks']
       : ['verbs', 'verbPhrases', 'verbPrefixes', 'nounVerbHomographs', 'participles', 'stateWords', 'infinitiveSuffixes',
-        'nonVerbStarters', 'nounStarters', 'messageNouns', 'sendVerbs', 'eventMarkers', 'questionMarks'];
+        'nonVerbStarters', 'nounStarters', 'auxiliaries', 'messageNouns', 'instructionVerbs', 'eventMarkers', 'questionMarks'];
     expect(Object.keys(data.listNotes).sort()).toEqual([...read].sort());
   });
 

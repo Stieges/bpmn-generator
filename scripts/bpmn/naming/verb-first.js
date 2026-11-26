@@ -8,7 +8,7 @@
  * that word for the hint H14.
  */
 
-import { labelTokens } from './tokens.js';
+import { labelTokenWords } from './tokens.js';
 import { inferMarker } from './markers.js';
 
 const HAS_LETTER = /\p{L}/u;
@@ -16,7 +16,11 @@ const MIN_PARTICIPLE = 5;
 const MIN_PREFIX_REST = 3;
 const MIN_GERUND = 6;
 const MIN_ACTION_STEM = 3;
-const ACTION_NOUN_SUFFIXES = ['ation', 'ment', 'ance', 'ence', 'ion', 'al'];
+/** Suffix of an action noun → the endings that give back its verb. */
+const ACTION_NOUN_SUFFIXES = [
+  ['ification', ['ify']], ['ation', ['', 'e', 'ate']], ['ment', ['']], ['ance', ['', 'e']], ['ence', ['', 'e']],
+  ['ion', ['', 'e']], ['al', ['', 'e']],
+];
 
 const ok = null;
 const flag = (reason) => ({ reason });
@@ -24,7 +28,7 @@ const flag = (reason) => ({ reason });
 /** The folded words of a label, as the judges see them (never throws). */
 function read(name) {
   try {
-    return labelTokens(name);
+    return labelTokenWords(name);
   } catch {
     return { wordCount: 0, tokens: [] };
   }
@@ -34,8 +38,9 @@ export function verbFirst(lexicon) {
   const { verbs, nounVerbHomographs, stateWords, verbPrefixes, verbPhrases, infinitiveSuffixes, participles } = lexicon;
   const nonVerbStarters = lexicon.nonVerbStarters ?? new Set();
   const nounStarters = lexicon.nounStarters ?? new Set();
+  const auxiliaries = lexicon.auxiliaries ?? new Set();
   const messageNouns = lexicon.messageNouns ?? new Set();
-  const sendVerbs = lexicon.sendVerbs ?? new Set();
+  const instructionVerbs = lexicon.instructionVerbs ?? new Set();
 
   const isVerb = (x) => verbs.has(x);
 
@@ -65,7 +70,18 @@ export function verbFirst(lexicon) {
       if (match) return phrase.length;
     }
     if (rest >= 2 && verbPrefixes.includes(t0) && isVerb(tokens[from + 1].folded)) return 2;
-    return isVerbWord(t0) ? 1 : 0;
+    if (isVerbWord(t0)) return 1;
+    // Quality-check, Fast-track: a hyphenated first word whose last part is a verb.
+    const parts = wordParts(tokens, from);
+    if (parts > 1 && parts < rest && isVerbWord(tokens[from + parts - 1].folded)) return parts;
+    return 0;
+  }
+
+  /** Number of tokens from `from` that belong to the same whitespace word. */
+  function wordParts(tokens, from) {
+    let n = 1;
+    while (from + n < tokens.length && tokens[from + n].word === tokens[from].word) n++;
+    return n;
   }
 
   /** A single folded word is a verb: listed, a listed prefix joined to a listed verb, or a verb suffix. */
@@ -88,18 +104,25 @@ export function verbFirst(lexicon) {
     return stem.length >= 2 && stem.at(-1) === stem.at(-2) && isVerbWord(stem.slice(0, -1));
   }
 
-  /** `approval`, `assessment`, `validation`, `registration`: a noun formed from a listed verb. */
+  /**
+   * A noun formed from a listed verb: `approval`, `assessment`, `acceptance`, `validation`
+   * (validate), `registration` (register), `verification` (verify).
+   */
   function isActionNoun(x) {
-    for (const suffix of ACTION_NOUN_SUFFIXES) {
+    for (const [suffix, endings] of ACTION_NOUN_SUFFIXES) {
       if (x.length < suffix.length + MIN_ACTION_STEM || !x.endsWith(suffix)) continue;
       const base = x.slice(0, -suffix.length);
-      if (isVerb(base) || isVerb(`${base}e`)) return true;
+      if (endings.some((e) => isVerb(base + e))) return true;
     }
     return false;
   }
 
+  /** A word the data names as no verb: the -ate nouns and adjectives (certificate, template). */
+  function knownNonVerb(x) {
+    return (infinitiveSuffixes ?? []).some(({ suffix, exceptions }) => x.endsWith(suffix) && exceptions?.has(x));
+  }
+
   const hasLetter = (t) => HAS_LETTER.test(t.raw);
-  const isPlaceholder = (t) => !hasLetter(t) || t.folded.length === 1;
 
   const NEEDS_VERB = 'A task name needs a verb and an object, e.g. "Review application".';
   const STARTS_WITH_VERB = 'A task name starts with a verb in the imperative, e.g. "Review application".';
@@ -113,25 +136,38 @@ export function verbFirst(lexicon) {
     if (wordCount < 2) return flag(NEEDS_VERB);
     const from = firstWord(tokens);
     if (from === tokens.length) return flag(STARTS_WITH_VERB);
-    const k = lead(tokens, from);
     const first = tokens[from];
     const last = tokens[tokens.length - 1].folded;
+    // The rules up to the verb test do not read the verb list, and after it only a listed word can
+    // flag: a shorter verb list therefore never adds a finding (en-sample.test.js proves it).
+    if (!tokens.slice(from + 1).some(hasLetter)) return flag(STARTS_WITH_VERB); // Step 3
+    if (first.raw.endsWith(':')) return flag(STARTS_WITH_VERB); // SAP: Review invoice
+    if (tokens.length - from === 2 && isParticiple(last)) return flag(STARTS_WITH_VERB); // Invoice checked
+    const second = tokens[from + 1]?.folded;
+    if (auxiliaries.has(second) || (second === 'to' && auxiliaries.has(tokens[from + 2]?.folded))) {
+      return flag(STARTS_WITH_VERB); // Invoice is checked, Invoice to be checked
+    }
+    const k = lead(tokens, from);
     if (k > 0) {
       if (!tokens.slice(from + k).some(hasLetter)) return flag('A task name needs an object after the verb.');
-      // Order shipped, Request pending: a noun that is also a verb, then a state.
-      if (k === 1 && tokens.length - from === 2 && nounVerbHomographs.has(first.folded) && (isParticiple(last) || stateWords.has(last))) {
+      // Request pending, Document missing: a noun that is also a verb, then a state.
+      if (k === 1 && tokens.length - from === 2 && nounVerbHomographs.has(first.folded) && stateWords.has(last)) {
         return flag(STARTS_WITH_VERB);
       }
       return ok;
     }
-    const rest = tokens.slice(from + 1);
-    if (rest.every(isPlaceholder)) return flag(STARTS_WITH_VERB); // Step 3, Path A
-    if (first.raw.endsWith(':')) return flag(STARTS_WITH_VERB); // SAP: Review invoice
-    if (nonVerbStarters.has(first.folded) || nounStarters.has(first.folded)) return flag(STARTS_WITH_VERB);
+    // A whole first word only: in Quality-check the first part is no verb but the word may be one.
+    const whole = wordParts(tokens, from) === 1;
+    if (whole && (nonVerbStarters.has(first.folded) || nounStarters.has(first.folded))) return flag(STARTS_WITH_VERB);
     if (isGerund(first.folded)) return flag(STARTS_WITH_VERB); // Checking invoice
-    if (isParticiple(last) || stateWords.has(last)) return flag(STARTS_WITH_VERB); // Invoice checked
-    if (isVerb(last) || isActionNoun(last)) return flag(STARTS_WITH_VERB); // Invoice check, Invoice approval
-    return { unlisted: first.raw };
+    // The end of a name counts only after a first word known not to be a verb (certificate): an
+    // object such as "request" or "document" is often a verb too, and a verb that is merely
+    // unlisted must give the hint, never a finding.
+    if (knownNonVerb(first.folded)
+      && (isParticiple(last) || stateWords.has(last) || isVerb(last) || isActionNoun(last))) {
+      return flag(STARTS_WITH_VERB); // Certificate check
+    }
+    return { unlisted: tokens.slice(from, from + wordParts(tokens, from)).map((t) => t.raw).join('-') };
   }
 
   function taskName(name) {
@@ -173,7 +209,7 @@ export function verbFirst(lexicon) {
     const t0 = tokens[0].folded;
     const last = tokens[tokens.length - 1].folded;
     // Deploy request, Sell order: a compound that ends in a message noun, unless the verb sends it (Send invoice).
-    const compound = messageNouns.has(last) && !sendVerbs.has(t0);
+    const compound = messageNouns.has(last) && !instructionVerbs.has(t0);
     if (isVerb(t0) && !nounVerbHomographs.has(t0) && !compound) {
       return flag('A message names its content, e.g. "Invoice", not an instruction.');
     }

@@ -131,7 +131,12 @@
           "minLength": 1,
           "maxLength": 300
         },
-        "sendVerbs": {
+        "instructionVerbs": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "auxiliaries": {
           "type": "string",
           "minLength": 1,
           "maxLength": 300
@@ -454,7 +459,15 @@
         "$ref": "#/$defs/Word"
       }
     },
-    "sendVerbs": {
+    "instructionVerbs": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "auxiliaries": {
       "type": "array",
       "uniqueItems": true,
       "maxItems": 2000,
