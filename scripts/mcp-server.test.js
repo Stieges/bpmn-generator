@@ -6,9 +6,11 @@
  * could not be switched off, and drill-down ignoring the mode.
  */
 
-import { describe, test, expect } from '@jest/globals';
-import { readFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { describe, test, expect, jest } from '@jest/globals';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'fs';
+import { resolve, dirname, join } from 'path';
+import { tmpdir } from 'os';
+import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 import { TOOLS, handleToolCall } from './mcp-bpmn-server.js';
@@ -505,4 +507,67 @@ describe('format 2.0 models with an embedded catalogue', () => {
     const v = parse(await call('validate_bpmn', { logicCore: lc, catalog: 'junk' }));
     expect(v).toEqual(parse(await call('validate_bpmn', { logicCore: lc })));
   });
+});
+
+describe('BPMN_NAMING: a broken word-list overlay', () => {
+  test('the server does not start: exit 1, the path on stderr, never connecting', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'naming-'));
+    const missing = join(dir, 'nonexistent.json');
+    let res;
+    try {
+      res = spawnSync(process.execPath, [resolve(__dirname, 'mcp-bpmn-server.js')], {
+        env: { ...process.env, BPMN_NAMING: missing },
+        input: '', encoding: 'utf8', timeout: 20_000, killSignal: 'SIGKILL',
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    expect(res.error).toBeUndefined(); // not killed by the timeout
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain(`✗ BPMN_NAMING: naming data "${missing}"`);
+    expect(res.stdout).toBe('');
+  }, 60_000);
+
+  // Request time. Until the naming rules consult the word lists (the task after this one), no rule
+  // on the request path calls namingFor. The failure is injected where it will then come from:
+  // runRules (scripts/bpmn/rules.js) is wrapped so that it first calls the real
+  // namingFor(modelLanguage(model)) — which loads the lexicon with the real, broken BPMN_NAMING
+  // file and throws a genuine NamingDataError — and then runs the real rules. The next task makes
+  // this path real and adds an un-mocked end-to-end assertion.
+  test('generate_bpmn with language rejects with exactly "naming data unavailable"; without language it works', async () => {
+    jest.resetModules();
+    const actualRules = await import('./bpmn/rules.js');
+    const naming = await import('./bpmn/naming/index.js');
+    jest.unstable_mockModule('./bpmn/rules.js', () => ({
+      ...actualRules,
+      runRules: (lc, ...rest) => {
+        naming.namingFor(naming.modelLanguage(lc));
+        return actualRules.runRules(lc, ...rest);
+      },
+    }));
+    const { handleToolCall: mockedCall } = await import('./mcp-bpmn-server.js');
+    const callMocked = (name, args) => mockedCall({ params: { name, arguments: args } });
+
+    const dir = mkdtempSync(join(tmpdir(), 'naming-'));
+    const broken = join(dir, 'broken-overlay.json');
+    writeFileSync(broken, '{ not json');
+    const before = process.env.BPMN_NAMING;
+    const realError = console.error;
+    const errors = [];
+    try {
+      process.env.BPMN_NAMING = broken;
+      console.error = (...args) => { errors.push(args.join(' ')); };
+      const lc = fixture('simple-approval.json');
+      const err = await callMocked('generate_bpmn', { logicCore: { ...lc, language: 'en' } }).then(() => null, (e) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(err.message).toBe('naming data unavailable');
+      expect(errors.some((l) => l.includes(broken))).toBe(true);
+      const ok = parse(await callMocked('generate_bpmn', { logicCore: lc, include: ['validation'] }));
+      expect(ok.validation.errors).toEqual([]);
+    } finally {
+      console.error = realError;
+      if (before === undefined) delete process.env.BPMN_NAMING; else process.env.BPMN_NAMING = before;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000); // a fresh module graph and two generate runs; slow under a loaded full run
 });

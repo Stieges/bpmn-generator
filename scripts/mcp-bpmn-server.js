@@ -31,6 +31,7 @@ import { validateModelSchema, v2RequestErrors, catalogOptionFor, validateLayoutO
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
 import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
+import { checkNamingOverlay, NamingDataError } from './bpmn/naming/index.js';
 
 const PROFILE_PARAM = {
   type: 'string',
@@ -201,7 +202,23 @@ function viewAndProfileOf(args) {
   return { view, ruleProfile: resolveViewOptions(view, { ruleProfile: ruleProfile ?? undefined }).ruleProfile };
 }
 
+/**
+ * A naming data failure (an unusable `BPMN_NAMING` file) is the operator's to fix: its message,
+ * which names the file, goes to stderr; the client gets only the class.
+ */
 async function handleToolCall(request) {
+  try {
+    return await dispatchToolCall(request);
+  } catch (err) {
+    if (err instanceof NamingDataError) {
+      console.error(`Naming data failure: ${err.message}`);
+      throw new Error('naming data unavailable');
+    }
+    throw err;
+  }
+}
+
+async function dispatchToolCall(request) {
   const { name, arguments: args } = request.params;
 
   if (name === 'generate_bpmn') {
@@ -294,6 +311,13 @@ server.setRequestHandler(CallToolRequestSchema, handleToolCall);
 // not open a stdio transport.
 const isEntryPoint = isMainModule(import.meta.url, process.argv[1]);
 if (isEntryPoint) {
+  try {
+    checkNamingOverlay(process.env);
+  } catch (err) {
+    if (!(err instanceof NamingDataError)) throw err;
+    process.stderr.write(`✗ BPMN_NAMING: ${err.message}\n`);
+    process.exit(1);
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
