@@ -1187,17 +1187,13 @@ async function generateBpmnXml(lc, coordMap) {
   // The language of the labels, after the origin attributes; only a valid tag is written, so a
   // model without one (or with an invalid one) is serialized exactly as before. No exporter: the
   // attribute is no origin marker.
-  const language = languageTag(lc);
-  if (language !== null) {
-    const xmlnsBg = `xmlns:${EXTENSION_PREFIX}`;
-    if (!(xmlnsBg in definitions.$attrs)) definitions.$attrs[xmlnsBg] = EXTENSION_NS;
-    definitions.$attrs[`${EXTENSION_PREFIX}:language`] = language;
-  }
   // `bg:marker="none"` on an event needs the declaration too; without such an event nothing is added.
-  if (anyMarkerNone(processes)) {
-    const xmlnsBg = `xmlns:${EXTENSION_PREFIX}`;
-    if (!(xmlnsBg in definitions.$attrs)) definitions.$attrs[xmlnsBg] = EXTENSION_NS;
+  const language = languageTag(lc);
+  const xmlnsBg = `xmlns:${EXTENSION_PREFIX}`;
+  if ((language !== null || anyMarkerNone(processes)) && !(xmlnsBg in definitions.$attrs)) {
+    definitions.$attrs[xmlnsBg] = EXTENSION_NS;
   }
+  if (language !== null) definitions.$attrs[`${EXTENSION_PREFIX}:language`] = language;
 
   const rootElements = definitions.get('rootElements');
 

@@ -873,7 +873,7 @@ const SOUNDNESS_CHECKS = [
           // definition, `bg:marker`), and this says it is no plain event.
           if (node.marker === MARKER_NONE && isEvent(node.type) && !allowsMarkerNone(node, parent)) {
             const espStart = node.type === 'startEvent';
-            msgs.push(`Node "${node.id}" (${node.name || ''}) is a ${node.type}${espStart ? ' of an event subprocess' : ''} `
+            msgs.push(`Node "${node.id}" (${node.name || ''}) is ${/^[aeiou]/i.test(node.type) ? 'an' : 'a'} ${node.type}${espStart ? ' of an event subprocess' : ''} `
               + 'and carries "marker": "none", but OMG requires '
               + (espStart ? 'the start event of an event subprocess' : 'a boundary event or an intermediate catch event')
               + ' to carry an event definition (its trigger). The event is written without one — set "marker" '

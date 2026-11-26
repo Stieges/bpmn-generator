@@ -9,7 +9,7 @@
  * never `an` + `zu` + `enden`. Word lists are compared in folded form.
  */
 
-import { foldWord, labelTokens, isPlaceholderShape } from './tokens.js';
+import { foldWord, labelTokens, isPlaceholderShape, PLACEHOLDER_CONTAINER } from './tokens.js';
 import { inferMarker } from './markers.js';
 
 const HAS_LETTER = /\p{L}/u;
@@ -140,7 +140,7 @@ export function verbLast(lexicon) {
     const { wordCount, tokens } = read(name);
     if (tokens.length === 0) return ok;
     const last = tokens[tokens.length - 1];
-    if (isPlaceholderShape(tokens)) return flag('A container names a topic, not a placeholder; a number after one word says nothing.'); // Teil 2
+    if (isPlaceholderShape(tokens)) return flag(PLACEHOLDER_CONTAINER); // Teil 2
     if (isLower(last) && (gePart(last) || isParticipleEnd(last))) {
       return flag('A container names a topic, not a state; avoid a participle at the end.');
     }

@@ -8,7 +8,7 @@
  * that word for the hint H14.
  */
 
-import { labelTokenWords, isPlaceholderShape, tokensAfterFirstWord } from './tokens.js';
+import { labelTokenWords, isPlaceholderShape, PLACEHOLDER_CONTAINER, tokensAfterFirstWord } from './tokens.js';
 import { inferMarker } from './markers.js';
 
 const HAS_LETTER = /\p{L}/u;
@@ -138,9 +138,9 @@ export function verbFirst(lexicon) {
     if (from === tokens.length) return flag(STARTS_WITH_VERB);
     const first = tokens[from];
     const last = tokens[tokens.length - 1].folded;
-    // The rules up to the verb test do not read the verb list. After it the list is read only to
-    // recognise a word as a verb, and a recognised verb can only end a test: a shorter verb list
-    // therefore never adds a finding (en-sample.test.js proves it over both samples).
+    // The verb list is read only to recognise a verb, and a recognised verb only ends a test with
+    // "ok" or with the object check: a finding for an unlisted first word never needs a recognised
+    // verb, so a shorter list never adds a finding (en-sample.test.js proves it over both samples).
     if (!tokensAfterFirstWord(tokens).some(hasLetter)) return flag(STARTS_WITH_VERB); // Step 3
     if (first.raw.endsWith(':')) return flag(STARTS_WITH_VERB); // SAP: Review invoice
     if (tokens.length - from === 2 && isParticiple(last)) return flag(STARTS_WITH_VERB); // Invoice checked
@@ -151,9 +151,10 @@ export function verbFirst(lexicon) {
       || (second === 'to' && third && auxiliaries.has(third.folded) && third.word !== tokens[from + 1].word)) {
       return flag(STARTS_WITH_VERB); // Invoice is checked, Invoice to be checked
     }
+    const parts = wordParts(tokens, from);
     const k = lead(tokens, from);
     if (k > 0) {
-      if (!tokens.slice(from + k).some(hasLetter)) return flag('A task name needs an object after the verb.');
+      if (!tokens.slice(from + Math.max(k, parts)).some(hasLetter)) return flag('A task name needs an object after the verb.');
       // Request pending, Document missing: a noun that is also a verb, then a state.
       if (k === 1 && tokens.length - from === 2 && nounVerbHomographs.has(first.folded) && stateWords.has(last)) {
         return flag(STARTS_WITH_VERB);
@@ -161,17 +162,17 @@ export function verbFirst(lexicon) {
       return ok;
     }
     // A whole first word only: in Quality-check the first part is no verb but the word may be one.
-    const whole = wordParts(tokens, from) === 1;
+    const whole = parts === 1;
     if (whole && (nonVerbStarters.has(first.folded) || nounStarters.has(first.folded))) return flag(STARTS_WITH_VERB);
     if (whole && isGerund(first.folded)) return flag(STARTS_WITH_VERB); // Checking invoice, not Billing-check
     // The end of a name counts only after a first word known not to be a verb (certificate): an
     // object such as "request" or "document" is often a verb too, and a verb that is merely
     // unlisted must give the hint, never a finding.
-    if (knownNonVerb(first.folded)
+    if (whole && knownNonVerb(first.folded)
       && (isParticiple(last) || stateWords.has(last) || isVerb(last) || isActionNoun(last))) {
       return flag(STARTS_WITH_VERB); // Certificate check
     }
-    return { unlisted: tokens.slice(from, from + wordParts(tokens, from)).map((t) => t.raw).join('-') };
+    return { unlisted: tokens.slice(from, from + parts).map((t) => t.raw).join('-') };
   }
 
   function taskName(name) {
@@ -189,7 +190,7 @@ export function verbFirst(lexicon) {
     const { wordCount, tokens } = read(name);
     if (tokens.length === 0) return ok;
     const last = tokens[tokens.length - 1].folded;
-    if (isPlaceholderShape(tokens)) return flag('A container names a topic, not a placeholder; a number after one word says nothing.'); // Step 3
+    if (isPlaceholderShape(tokens)) return flag(PLACEHOLDER_CONTAINER); // Step 3
     if (isParticiple(last)) return flag('A container names a topic, not a state; avoid a participle at the end.');
     // A one-word noun-verb homograph (Review, Order, Support) is a noun here; only a pure verb reads as a task.
     if (wordCount === 1 && tokens.length === 1 && isVerb(tokens[0].folded) && !nounVerbHomographs.has(tokens[0].folded)) {

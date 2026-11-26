@@ -91,7 +91,9 @@ describe('a shorter verb list gives more hints, never more findings', () => {
   // verb flags the name only if the judge with it does. Synthetic hyphen groups (a gerund or a
   // starter word joined to a verb) and to-be shapes are added, the shapes a verb test reads.
   const VERBS = ['check', 'confirm', 'review', 'approve', 'track', 'sign'];
-  const synthetic = ['Billing', 'Booking', 'Shipping', 'Customer', 'The', 'Phase'].flatMap((w) => VERBS.map((v) => `${w}-${v} unit`));
+  const synthetic = ['Billing', 'Booking', 'Shipping', 'Customer', 'The', 'Phase'].flatMap((w) => VERBS.map((v) => `${w}-${v} unit`))
+    .concat(['Template', 'Certificate'].flatMap((w) => ['document', 'order'].flatMap((o) => VERBS.map((v) => `${w}-${v} ${o}`))))
+    .concat(VERBS.flatMap((v) => [`Check-${v} 3`, `Cross-${v} 4`]));
   const names = [...sample.correct, ...sample.wrong, ...sample.heldOut.correct, ...sample.heldOut.wrong, ...synthetic,
     'Design to-be process', 'Step up KYC checks', 'Team up with partner', 'Phase out legacy system'];
   test('over every sample name and each of its listed words', () => {
