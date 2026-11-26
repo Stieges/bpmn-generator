@@ -48,7 +48,12 @@ export function readLexiconFile(path) {
   } catch (e) {
     throw failure(path, `cannot be read: ${e.message}`);
   }
-  const check = validator();
+  let check;
+  try {
+    check = validator();
+  } catch (e) {
+    throw failure(path, `cannot be validated: ${e.message}`);
+  }
   if (!check(data)) {
     throw failure(path, `does not match the naming schema: ${describeFirstError(check.errors)}`);
   }

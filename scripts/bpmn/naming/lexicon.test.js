@@ -2,7 +2,7 @@ import { describe, test, expect, afterAll } from '@jest/globals';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { readLexiconFile, NamingDataError, namingSchemaPath } from './lexicon.js';
 import { resolveWithFallback } from '../../shared/resource-paths.js';
@@ -91,19 +91,57 @@ describe('readLexiconFile', () => {
 });
 
 describe('importing lexicon.js', () => {
+  // Patches fs on the default export AND syncs the named ESM exports, so named imports are seen.
+  const probe = (importLine) => `
+    import fs from 'node:fs';
+    import { syncBuiltinESMExports } from 'node:module';
+    const seen = [];
+    for (const k of ['readFileSync', 'openSync']) {
+      const orig = fs[k];
+      fs[k] = (p, ...a) => { seen.push(String(p)); return orig(p, ...a); };
+    }
+    syncBuiltinESMExports();
+    ${importLine}
+    console.log(JSON.stringify(seen.filter(p => /[\\\\/]references[\\\\/]/.test(p))));
+  `;
+  const run = (code) => JSON.parse(
+    execFileSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' }).trim());
+
   test('reads no file under references/', () => {
+    expect(run(probe(`await import(${JSON.stringify(join(here, 'lexicon.js'))});`))).toEqual([]);
+  });
+
+  test('positive control: the probe reports a named-import read of the schema', () => {
+    const scratch = join(dir, 'control.mjs');
+    writeFileSync(scratch, `import { readFileSync } from 'node:fs';
+import { namingSchemaPath } from ${JSON.stringify(pathToFileURL(join(here, '..', '..', 'shared', 'resource-paths.js')).href)};
+readFileSync(namingSchemaPath(), 'utf8');
+`);
+    const seen = run(probe(`await import(${JSON.stringify(pathToFileURL(scratch).href)});`));
+    expect(seen.length).toBeGreaterThan(0);
+  });
+});
+
+describe('a validator that cannot be built', () => {
+  test('is a NamingDataError naming the data path and the reason', () => {
+    const data = write('{}');
     const code = `
       import fs from 'node:fs';
-      const seen = [];
-      for (const k of ['readFileSync', 'openSync']) {
-        const orig = fs[k];
-        fs[k] = (p, ...a) => { seen.push(String(p)); return orig(p, ...a); };
-      }
-      await import(${JSON.stringify(join(here, 'lexicon.js'))});
-      console.log(JSON.stringify(seen.filter(p => /[\\\\/]references[\\\\/]/.test(p))));
+      import { syncBuiltinESMExports } from 'node:module';
+      const orig = fs.readFileSync;
+      fs.readFileSync = (p, ...a) => {
+        if (String(p).endsWith('naming-schema.json')) throw new Error('schema gone');
+        return orig(p, ...a);
+      };
+      syncBuiltinESMExports();
+      const { readLexiconFile, NamingDataError } = await import(${JSON.stringify(pathToFileURL(join(here, 'lexicon.js')).href)});
+      try { readLexiconFile(${JSON.stringify(data)}); console.log('no throw'); }
+      catch (e) { console.log(JSON.stringify({ named: e instanceof NamingDataError, message: e.message })); }
     `;
-    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' });
-    expect(JSON.parse(out.trim())).toEqual([]);
+    const out = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' }).trim());
+    expect(out.named).toBe(true);
+    expect(out.message).toContain(data);
+    expect(out.message).toContain('cannot be validated: schema gone');
   });
 });
 
