@@ -1,6 +1,6 @@
 /**
  * Layout Agent — Runs the BPMN pipeline (ELK layout → XML + SVG) with the caller's rule profile and
- * mode, the ones the reviewer and compliance apply.
+ * mode, the ones the reviewer and compliance apply, and the actor catalogue of a format 2.0 model.
  * Optionally reviews the diagram via an LLM: the SVG markup goes as text (the first 50 000
  * characters), not as an image.
  *
@@ -64,6 +64,7 @@ export async function layoutAgent(state) {
     nodeLabelsAvoidFlows: state.options?.nodeLabelsAvoidFlows,
     foreignShapeRepair: state.options?.foreignShapeRepair,
     view: state.options?.view,
+    ...(state.options?.catalog != null && { catalog: state.options.catalog }),
   });
 
   const update = {

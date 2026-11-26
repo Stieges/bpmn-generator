@@ -143,7 +143,7 @@ the two integrity passes: an ERROR from the diagram check (DI) or the net check 
 ### Install as a package
 
 `bpmn-generator` (directory `scripts/`) exports `.` (`runPipeline` and the pipeline modules),
-`./import` (`bpmnToLogicCore`), `./validate` (`validateLogicCore`), `./orchestrator`
+`./import` (`bpmnToLogicCore`), `./validate` (`validateLogicCore`, `validateModel`), `./orchestrator`
 (`orchestrate`) and `./ontology` (the vocabulary, see below). The package also ships the CLIs
 (`bpmn/`, `dmn/`, `scenarios/`), the HTTP and MCP servers and `config.json`. The `rules/` profiles
 live outside the package: in an npm install, MCP profile names are refused and file profiles are

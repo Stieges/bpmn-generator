@@ -587,12 +587,16 @@ The fingerprint is SHA-256 (hex, prefixed `sha256:`) over the UTF-8 bytes of the
 arrays in their order, and no whitespace. A 2.0 output has no `bpmn:performer`, `bpmn:resource` or
 `bg:system`.
 
-**Which entry points read 2.0.** Only the CLI generate path (`node bpmn/pipeline.js`) and the
-library function `runPipeline`. The library function `generateDiagramSet` refuses a 2.0 model with a
+**Which entry points read 2.0.** The CLI generate path (`node bpmn/pipeline.js`), the library
+functions `runPipeline`, `validateModel` (`bpmn/validate.js`: the catalogue errors, else the rule
+verdict with `findings`; it forms no lanes, so it never reports C10) and `orchestrate` (option
+`catalog`; reviewer, layout and compliance judge the model, compliance gains `findings`; the
+Modeler, which writes 1.x, is not asked to refine or amend a 2.0 model — the history records
+`skipped: 'format 2.0'` — and `mode` optimize or soll throws F04 before any agent). The library function `generateDiagramSet` refuses a 2.0 model with a
 blocked parent result ("[F04] drill-down is not available for format 2.0 models yet"). Every other entry point refuses a 2.0 model before any work with
 one message, "format 2.0 is not accepted here yet": the MCP tools `generate_bpmn`, `validate_bpmn`
 and `orchestrate_bpmn`, the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
-`/api/v1/orchestrate`, the orchestrator, `redesign-cli.js` and the scenario pipeline. On the CLI a
+`/api/v1/orchestrate`, `redesign-cli.js` and the scenario pipeline. On the CLI a
 2.0 model refuses `--optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`; `--doc`
 works. The importers (`node bpmn/import.js`, MCP `import_bpmn`, HTTP `/api/v1/import`) read the
 diagram of a 2.0 model and report that it was generated from one as notice N01 (the CLI on stderr

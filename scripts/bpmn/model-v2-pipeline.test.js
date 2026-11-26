@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPipeline, generateDiagramSet } from './pipeline.js';
+import { validateModel, validateLogicCore } from './validate.js';
 import { loadNamedView, ViewRejectedError } from '../shared/view.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -322,5 +323,80 @@ describe('generateDiagramSet refuses format 2.0 (design 9: drill-down does not r
     expect(set.subProcesses).toEqual({});
     expect(set.navigation).toEqual({ subProcesses: [] });
     expect(JSON.stringify(model)).toBe(before);
+  });
+});
+
+describe('validateModel — one judgement for both formats', () => {
+  // An inclusive split and join: the workflow-net layer gives the WF_OR INFO finding.
+  const OR_MODEL = () => {
+    const m = copy(MODEL);
+    m.nodes.splice(1, 1, { id: 'gw', type: 'inclusiveGateway', name: 'Welche Prüfungen?' },
+      { id: 'gj', type: 'inclusiveGateway', name: '', has_join: true });
+    m.edges = [
+      { source: 'start', target: 'gw' }, { source: 'gw', target: 'pruefen' }, { source: 'gw', target: 'regr' },
+      { source: 'pruefen', target: 'gj' }, { source: 'regr', target: 'gj' }, { source: 'gj', target: 'zahlen' },
+      { source: 'zahlen', target: 'end' },
+    ];
+    return m;
+  };
+  const strict = resolve(root, 'rules/strict-profile.json');
+
+  test('a 1.x model: exactly validateLogicCore, no findings key', () => {
+    const result = validateModel(simpleApproval(), strict);
+    expect(result).toEqual(validateLogicCore(simpleApproval(), strict));
+    expect(result).not.toHaveProperty('findings');
+  });
+
+  test('a valid 2.0 model: the rule verdict on the resolved model, findings of all severities', () => {
+    // The strict profile runs the workflow-net layer (and makes M07 an error).
+    const result = validateModel(OR_MODEL(), strict, { catalog: copy(CATALOG) });
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'WF_OR', severity: 'INFO' }));
+    const bySeverity = (s) => result.findings.filter((f) => f.severity === s).map((f) => f.message);
+    expect(bySeverity('ERROR')).toEqual(result.errors);
+    expect(bySeverity('WARNING')).toEqual(result.warnings);
+    expect(bySeverity('INFO')).toEqual(result.infos);
+  });
+
+  test('a 2.0 model with an unknown actor: the C01 errors, nothing else', () => {
+    const model = copy(MODEL);
+    model.nodes[2].assignments = [{ type: 'D', actor: 'niemand' }];
+    const result = validateModel(model, null, { catalog: copy(CATALOG) });
+    const message = '[C01] node "pruefen": actor "niemand" is not in the catalogue';
+    expect(result).toEqual({
+      errors: [message], warnings: [], infos: [], advisories: [], metrics: {},
+      findings: [{ code: 'C01', severity: 'ERROR', message }],
+    });
+  });
+
+  test('a 2.0 model naming its catalogue as a path, no catalogue object: C13', () => {
+    const result = validateModel(copy(MODEL));
+    expect(result.errors).toEqual([expect.stringMatching(/^\[C13\] the model names catalogue/)]);
+    expect(result.findings).toEqual([{ code: 'C13', severity: 'ERROR', message: result.errors[0] }]);
+  });
+
+  test('no C10: validateModel forms no lanes (C10 depends on the view; generate reports it)', async () => {
+    // An edge whose id is the lane id the role view would form for the performer of "zahlen".
+    const model = copy(MODEL);
+    model.edges[5].id = L('zahlung');
+    const result = validateModel(model, null, { catalog: copy(CATALOG) });
+    expect(result.errors.filter((e) => e.startsWith('[C10]'))).toEqual([]);
+    expect(result.findings.some((f) => f.code === 'C10')).toBe(false);
+    expect((await run({}, model)).validation.errors).toContainEqual(expect.stringMatching(/^\[C10\] /));
+  });
+
+  test('the caller\'s model and catalogue are not changed', () => {
+    const model = copy(MODEL);
+    const catalog = copy(CATALOG);
+    validateModel(model, null, { catalog });
+    expect(model).toEqual(MODEL);
+    expect(catalog).toEqual(CATALOG);
+  });
+
+  test('the catalog option as runPipeline takes it: an object, for 2.0 models only', () => {
+    expect(() => validateModel(copy(MODEL), null, { catalog: '../bpmn-catalog.json' }))
+      .toThrow(new TypeError('catalog must be a catalogue object; read a file with loadCatalog'));
+    expect(() => validateModel(simpleApproval(), null, { catalog: copy(CATALOG) }))
+      .toThrow(new TypeError('catalog applies to format 2.0 models only'));
   });
 });

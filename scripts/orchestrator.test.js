@@ -829,3 +829,106 @@ describe('orchestrate — a bad view does not change the 1.x gate errors (as at 
     expect(llmProvider).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// Format 2.0: reviewer, layout and compliance judge it; the modeler (1.x) is skipped
+// ═══════════════════════════════════════════════════════════════
+
+describe('orchestrate — a format 2.0 model', () => {
+  const v2Dir = resolve(__dirname, '../tests/fixtures-v2');
+  const readV2 = (name) => JSON.parse(readFileSync(resolve(v2Dir, name), 'utf8'));
+  const schaden = () => readV2('schaden.json');
+  const catalog = () => readV2('schaden-catalog.json');
+  // The C01 model: the performer of "Schaden prüfen" is not in the catalogue.
+  const withUnknownActor = () => {
+    const m = schaden();
+    m.nodes.find((n) => n.id === 'pruefen').assignments = [{ type: 'D', actor: 'niemand' }];
+    return m;
+  };
+  const C01 = '[C01] node "pruefen": actor "niemand" is not in the catalogue';
+
+  test('schaden with its catalogue and view rollen: the rollen golden, compliant, the 2.0 model returned', async () => {
+    const { loadNamedView } = await import('./shared/view.js');
+    const input = schaden();
+    const result = await orchestrate(input, { catalog: catalog(), view: loadNamedView('rollen') });
+    expect(result.bpmnXml).toBe(readFileSync(resolve(v2Dir, 'schaden.rollen.expected.bpmn'), 'utf8'));
+    expect(result.compliance.isCompliant).toBe(true);
+    expect(result.compliance.findings).toEqual(expect.any(Array));
+    expect(result.logicCore).toEqual(schaden());
+    expect(result.logicCore).toBe(input);
+  });
+
+  test('without a view: the role lanes', async () => {
+    const result = await orchestrate(schaden(), { catalog: catalog() });
+    for (const actor of ['sb_schaden', 'regress', 'zahlung']) {
+      expect(result.bpmnXml).toContain(`<bpmn:lane id="L.Process_Schaden.${actor}"`);
+    }
+    expect(result.compliance.isCompliant).toBe(true);
+  });
+
+  test('a C01 model: the reviewer reports [C01], compliance is not compliant, no diagram', async () => {
+    const result = await orchestrate(withUnknownActor(), { catalog: catalog() });
+    const review = await reviewerAgent({ logicCore: withUnknownActor(), options: { catalog: catalog() } });
+    expect(review.reviewIssues).toEqual([{ severity: 'ERROR', problem: C01 }]);
+    expect(review.isValid).toBe(false);
+    expect(result.history.find((h) => h.agent === 'reviewer')).toMatchObject({ isValid: false, issueCount: 1 });
+    expect(result.compliance.isCompliant).toBe(false);
+    expect(result.compliance.errors).toEqual([C01]);
+    expect(result.compliance.findings).toEqual([{ code: 'C01', severity: 'ERROR', message: C01 }]);
+    expect(result.bpmnXml).toBeNull();
+  });
+
+  test('with an LLM: no modeler call for the refinement, a skipped history entry', async () => {
+    const llmProvider = jest.fn(async () => { throw new Error('the modeler must not be asked'); });
+    const result = await orchestrate(withUnknownActor(), { catalog: catalog(), llmProvider });
+    expect(llmProvider).not.toHaveBeenCalled();
+    expect(result.history.filter((h) => h.agent === 'modeler')).toEqual([
+      { agent: 'modeler', phase: 'refine', iteration: 0, skipped: 'format 2.0', ts: expect.any(String) },
+    ]);
+    expect(result.history.filter((h) => h.agent === 'reviewer')).toHaveLength(1);
+  });
+
+  test('with an LLM and structural layout feedback: only the layout review is asked, the amendment skipped', async () => {
+    const prompts = [];
+    const llmProvider = jest.fn(async (system) => {
+      prompts.push(system);
+      return JSON.stringify({ feedback: [{ issue: 'Too long', suggestion: 'Split it', requiresLogicCoreChange: true }] });
+    });
+    const result = await orchestrate(schaden(), { catalog: catalog(), llmProvider, enableLayoutReview: true });
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toMatch(/^You are a BPMN diagram layout reviewer/);
+    expect(result.history.filter((h) => h.agent === 'modeler')).toEqual([
+      { agent: 'modeler', phase: 'amend', iteration: 0, skipped: 'format 2.0', ts: expect.any(String) },
+    ]);
+    expect(result.logicCore).toEqual(schaden());
+    expect(result.compliance.isCompliant).toBe(true);
+  });
+
+  test('a schema-invalid 2.0 model: the F01 gate errors', async () => {
+    const err = await orchestrate({ ...schaden(), nodes: 'nope' }, { catalog: catalog() }).catch((e) => e);
+    expect(err.message).toMatch(/^Logic-Core failed schema validation:\n\[F01\] /);
+  });
+
+  test('the catalog option as runPipeline takes it: an object, for 2.0 models only', async () => {
+    await expect(orchestrate(schaden(), { catalog: 'schaden-catalog.json' }))
+      .rejects.toThrow(new TypeError('catalog must be a catalogue object; read a file with loadCatalog'));
+    await expect(orchestrate(loadFixture('simple-approval.json'), { catalog: catalog() }))
+      .rejects.toThrow(new TypeError('catalog applies to format 2.0 models only'));
+  });
+});
+
+describe('orchestrate — mode optimize or soll on a format 2.0 model', () => {
+  test.each(['optimize', 'soll'])('mode %s: F04 before any agent, the reviewer never called', async (mode) => {
+    jest.resetModules();
+    const reviewer = jest.fn(async () => ({ isValid: true, reviewIssues: [], done: true }));
+    jest.unstable_mockModule('./agents/reviewer.js', () => ({ reviewerAgent: reviewer }));
+    const { orchestrate: orchestrateMocked } = await import('./orchestrator.js');
+    const model = JSON.parse(readFileSync(resolve(__dirname, '../tests/fixtures-v2/schaden.json'), 'utf8'));
+    const catalog = JSON.parse(readFileSync(resolve(__dirname, '../tests/fixtures-v2/schaden-catalog.json'), 'utf8'));
+    const err = await orchestrateMocked(model, { catalog, mode }).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe(`[F04] mode "${mode}" is not available for format 2.0 models yet`);
+    expect(err.messageCode).toBe('F04');
+    expect(reviewer).not.toHaveBeenCalled();
+  });
+});

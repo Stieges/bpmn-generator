@@ -23,10 +23,11 @@ import { modelerAgent } from './agents/modeler.js';
 import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
-import { validateLogicCoreSchema, formatSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, validateModelSchema, formatSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { ViewRejectedError, loadView } from './shared/view.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { isMainModule } from './shared/entry-point.js';
+import { withCode } from './shared/message-codes.js';
 
 const ts = () => new Date().toISOString();
 
@@ -77,7 +78,11 @@ async function gatedModelerCall(state, phase) {
  *   `llmProvider`, `ruleProfile` and `mode`, the
  *   per-call layout options `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows` and
  *   `foreignShapeRepair`, which the layout agent forwards to runPipeline unchanged. Callers on a client surface gate them first
- *   (`validateLayoutOptions` in bpmn/schema-gate.js).
+ *   (`validateLayoutOptions` in bpmn/schema-gate.js). `catalog`: the actor catalogue object of a
+ *   format 2.0 model, as runPipeline takes it (a non-object, or one with a 1.x model, throws a
+ *   TypeError before any agent). A 2.0 model is judged by reviewer, layout and compliance; the
+ *   Modeler writes 1.x, so its refine and amend steps are skipped (history `skipped: 'format 2.0'`),
+ *   and `mode` optimize/soll throws F04 before any agent. A text input still yields a 1.x model.
  */
 export async function orchestrate(input, options = {}) {
   const maxReviewIterations = options.maxReviewIterations ?? 3;
@@ -125,10 +130,21 @@ export async function orchestrate(input, options = {}) {
   // Schema-strict gate for a Logic-Core passed in directly (a Modeler output has passed it in
   // gatedModelerCall already): caught at the boundary, before reviewer and layout; not repaired —
   // there is no LLM to ask, and the caller's input is the caller's to fix.
-  const schemaCheck = validateLogicCoreSchema(state.logicCore);
+  // Both formats are read here; a Modeler output (1.x) has passed the 1.x gate already.
+  const schemaCheck = validateModelSchema(state.logicCore, { accept: ['1', '2'] });
   if (!schemaCheck.valid) {
     state.history.push({ agent: 'schema-gate', phase: 'reject', errors: schemaCheck.errors, ts: new Date().toISOString() });
     throw new Error(`Logic-Core failed schema validation:\n${formatSchemaErrors(schemaCheck.errors)}`);
+  }
+  // Format 2.0 (question 6 of slice 2): the catalog option as runPipeline takes it, and the modes
+  // that read the model's lanes refused before any agent runs.
+  const isV2 = schemaCheck.format === '2';
+  if (options.catalog != null && (typeof options.catalog !== 'object' || Array.isArray(options.catalog))) {
+    throw new TypeError('catalog must be a catalogue object; read a file with loadCatalog');
+  }
+  if (!isV2 && options.catalog != null) throw new TypeError('catalog applies to format 2.0 models only');
+  if (isV2 && (options.mode === 'optimize' || options.mode === 'soll')) {
+    throw withCode(new Error(`mode "${options.mode}" is not available for format 2.0 models yet`), 'F04');
   }
   // A lanes view on a 1.x model is the caller's view error: refused before the reviewer runs.
   if (!textWithLlm && options.view != null) options = { ...options, view: loadView(options.view) };
@@ -157,7 +173,11 @@ export async function orchestrate(input, options = {}) {
     // Last iteration — don't try to fix, just proceed with what we have
     if (i === maxReviewIterations - 1) break;
 
-    // Try to fix issues via Modeler (requires LLM)
+    // Try to fix issues via Modeler (requires LLM). The Modeler writes 1.x: a 2.0 model is not refined.
+    if (options.llmProvider && isV2) {
+      state.history.push({ agent: 'modeler', phase: 'refine', iteration: i, skipped: 'format 2.0', ts: new Date().toISOString() });
+      break;
+    }
     if (options.llmProvider) {
       try {
         state.logicCore = await gatedModelerCall(state, 'refine');
@@ -204,6 +224,11 @@ export async function orchestrate(input, options = {}) {
     // nobody laid out.
     if (i === maxLayoutIterations - 1) break;
 
+    // As in the review loop: a 2.0 model is not amended by the 1.x Modeler.
+    if (options.llmProvider && isV2) {
+      state.history.push({ agent: 'modeler', phase: 'amend', iteration: i, skipped: 'format 2.0', ts: new Date().toISOString() });
+      break;
+    }
     if (options.llmProvider) {
       try {
         state.layoutFeedback = structural;
