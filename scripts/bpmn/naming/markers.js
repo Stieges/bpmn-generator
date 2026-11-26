@@ -3,7 +3,7 @@
  * and 10.93). Data and one pure function; no I/O.
  */
 
-import { labelTokens, foldWord } from './tokens.js';
+import { labelTokens } from './tokens.js';
 
 /** The markers a label can imply, in the order they are tried. */
 export const INFERABLE_MARKERS = Object.freeze(['message', 'timer', 'error', 'signal', 'escalation', 'conditional']);
@@ -22,11 +22,16 @@ export const MARKER_ALLOWED_ON = Object.freeze({
 
 const COMPOUND_REST = 4;
 
+// "Further letters" counts letters only (digits do not count), so `frist2024` is not a compound.
+const letterCount = (s) => (s.match(/\p{L}/gu) ?? []).length;
+
 function matches(token, keyword, compound) {
   if (token === keyword) return true;
-  if (!compound.has(keyword) || keyword === '') return false;
-  if (token.length < keyword.length + COMPOUND_REST) return false;
-  return token.startsWith(keyword) || token.endsWith(keyword);
+  if (!compound || keyword === '') return false;
+  if (token.length <= keyword.length) return false;
+  if (token.startsWith(keyword)) return letterCount(token.slice(keyword.length)) >= COMPOUND_REST;
+  if (token.endsWith(keyword)) return letterCount(token.slice(0, token.length - keyword.length)) >= COMPOUND_REST;
+  return false;
 }
 
 /**
@@ -38,8 +43,8 @@ export function inferMarker(lexicon, name, eventType) {
   try {
     const tokens = labelTokens(name).tokens.map((t) => t.folded);
     if (tokens.length === 0) return null;
-    // `compoundMarkers` lists the keywords that may also match inside a compound word.
-    const compound = new Set((lexicon.compoundMarkers ?? []).map(foldWord));
+    // `compoundMarkers: true` is a language-wide switch: every keyword may also match inside a compound word.
+    const compound = lexicon.compoundMarkers === true;
     for (const marker of INFERABLE_MARKERS) {
       const keywords = lexicon.eventMarkers?.[marker] ?? [];
       if (keywords.some((k) => tokens.some((t) => matches(t, k, compound)))) {
