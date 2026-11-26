@@ -342,6 +342,13 @@ function buildCoordinateMap(elkResult, lc) {
     }
   }
 
+  // §5.0c2  Same-lane forward-chain leveling (geometry; no isHappyPath required).
+  //         Snap near-cy clusters to a shared centerline, seed straight H routes.
+  //         Controlled by layout.sameLaneChainAlign (default on). Re-run after compactLanes.
+  if (CFG.layout?.sameLaneChainAlign !== false) {
+    alignSameLaneChains({ coords, laneCoords, edgeCoords }, lc);
+  }
+
   // §5.0d  Fan-out alignment: when an exclusive gateway fans out to 3+ targets,
   //        snap those targets to the same x-column, and their direct successors
   //        (typically end events) to a second aligned x-column.
@@ -491,10 +498,18 @@ function buildCoordinateMap(elkResult, lc) {
 
     if (srcCoord && srcNode) {
       pts[0] = clipOrthogonal(srcCoord, srcNode.type, pts[0], pts[1], 'source');
+      // Gateway/event cardinal snap may move y (or x) off the old stub axis —
+      // keep the first segment orthogonal so §5.3 does not invent an extra dog-leg.
+      if (isGateway(srcNode.type) || isEvent(srcNode.type)) {
+        alignStubToGatewayTip(pts, 0, 1, srcCoord);
+      }
     }
     if (tgtCoord && tgtNode) {
       const last = pts.length - 1;
       pts[last] = clipOrthogonal(tgtCoord, tgtNode.type, pts[last], pts[last - 1], 'target');
+      if (isGateway(tgtNode.type) || isEvent(tgtNode.type)) {
+        alignStubToGatewayTip(pts, last, last - 1, tgtCoord);
+      }
     }
   }
 
@@ -979,7 +994,24 @@ function placeEdgeLabel(text, pts, { preferred = null, fallback = null, avoidLin
   for (const [a, b] of segs) if (isV(a, b)) cands.push(beside(a, b, 'left'));
 
   const boxOf = (c) => ({ x: c.x - w / 2, y: c.y - h / 2, w, h });
-  const offOwn = (c) => !labelHitsRoute(boxOf(c), pts);
+  // Non-overlap alone is not enough: beside a short vertical stub the box can sit
+  // < edgeLabelGap from the next horizontal leg without crossing either stroke
+  // (bpmn-generator-pipeline fo8). Require gap clearance to every own segment.
+  const distToRoute = (b, route) => {
+    if (!route || route.length < 2) return Infinity;
+    let best = Infinity;
+    for (let i = 0; i < route.length - 1; i++) {
+      const a = route[i], z = route[i + 1];
+      const dx = Math.max(0, b.x - Math.max(a.x, z.x), Math.min(a.x, z.x) - (b.x + b.w));
+      const dy = Math.max(0, b.y - Math.max(a.y, z.y), Math.min(a.y, z.y) - (b.y + b.h));
+      best = Math.min(best, Math.hypot(dx, dy));
+    }
+    return best;
+  };
+  const offOwn = (c) => {
+    const b = boxOf(c);
+    return !labelHitsRoute(b, pts) && distToRoute(b, pts) >= gap - 0.2;
+  };
   const offOthers = (c) => !avoidRoutes.some(r => labelHitsRoute(boxOf(c), r));
   const allClear = avoidRoutes.length > 0 && cands.some(c => offOwn(c) && offOthers(c));
   const offRoute = allClear ? (c) => offOwn(c) && offOthers(c) : offOwn;
@@ -1300,6 +1332,215 @@ function laneOfNode(node, proc) {
   return undefined;
 }
 
+/**
+ * Same-lane forward chains → shared centerline Y + straight left-in/right-out seeds.
+ *
+ * Forward edges only (`source.cx + eps < target.cx`), so rework/back-edges stay out of the
+ * chain graph. Within each connected component, nodes already near each other in Y form a
+ * row (cluster threshold); each row of 2+ snaps to its median center Y. Branches that ELK
+ * already placed on a distant rank keep their own row.
+ *
+ * After the snap, same-lane forward edges whose ends share cy get a 2-point horizontal
+ * route (right mid → left mid). Bend-rule may still rewrite exceptions (join right taken,
+ * multi-in/out, envelope).
+ *
+ * @param {{ coords: object, laneCoords?: object, edgeCoords?: object }} coordMap
+ * @param {object} lc Logic-Core
+ * @param {{ clusterThreshPx?: number, enabled?: boolean }} [opts]
+ * @returns {{ moved: string[], seeded: string[] }}
+ */
+function alignSameLaneChains(coordMap, lc, opts = {}) {
+  const enabled = opts.enabled ?? (CFG.layout?.sameLaneChainAlign !== false);
+  if (!enabled) return { moved: [], seeded: [] };
+
+  const coords = coordMap.coords || {};
+  const laneCoords = coordMap.laneCoords || {};
+  const edgeCoords = coordMap.edgeCoords || (coordMap.edgeCoords = {});
+  const allProcesses = lc.pools ? lc.pools : [lc];
+  const cyEps = 1;
+  const forwardEps = 10;
+  const taskH = SHAPE?.task?.height ?? SHAPE?.task?.h ?? 80;
+  const clusterThresh = opts.clusterThreshPx ?? Math.max(36, taskH / 2);
+
+  const moved = new Set();
+  const seeded = [];
+
+  for (const proc of allProcesses) {
+    const procNodes = flattenProcessNodes(proc.nodes || [])
+      .filter((n) => !isArtifact(n.type) && !isBoundaryEvent(n.type) && coords[n.id]);
+    const edges = flattenProcessEdges(proc);
+    const nodeById = Object.fromEntries(procNodes.map((n) => [n.id, n]));
+
+    const byLane = new Map();
+    for (const n of procNodes) {
+      const lid = laneOfNode(n, proc);
+      if (!lid) continue;
+      if (!byLane.has(lid)) byLane.set(lid, []);
+      byLane.get(lid).push(n);
+    }
+
+    for (const [laneId, laneNodes] of byLane) {
+      const idSet = new Set(laneNodes.map((n) => n.id));
+      const adj = new Map([...idSet].map((id) => [id, []]));
+      const forwardEdges = [];
+      for (const e of edges) {
+        if (!idSet.has(e.source) || !idSet.has(e.target)) continue;
+        const s = coords[e.source], t = coords[e.target];
+        if (!s || !t) continue;
+        const scx = s.x + s.w / 2, tcx = t.x + t.w / 2;
+        if (scx + forwardEps >= tcx) continue;
+        forwardEdges.push(e);
+        adj.get(e.source).push(e.target);
+        adj.get(e.target).push(e.source);
+      }
+
+      const seen = new Set();
+      for (const start of idSet) {
+        if (seen.has(start)) continue;
+        const comp = [];
+        const stack = [start];
+        seen.add(start);
+        while (stack.length) {
+          const u = stack.pop();
+          comp.push(u);
+          for (const v of adj.get(u) || []) {
+            if (!seen.has(v)) {
+              seen.add(v);
+              stack.push(v);
+            }
+          }
+        }
+        if (comp.length < 2) continue;
+
+        const ranked = comp
+          .map((id) => ({ id, cy: coords[id].y + coords[id].h / 2 }))
+          .sort((a, b) => a.cy - b.cy);
+        const clusters = [];
+        let cur = [ranked[0]];
+        for (let i = 1; i < ranked.length; i++) {
+          if (ranked[i].cy - cur[cur.length - 1].cy <= clusterThresh) cur.push(ranked[i]);
+          else {
+            clusters.push(cur);
+            cur = [ranked[i]];
+          }
+        }
+        clusters.push(cur);
+
+        const band = laneCoords[laneId];
+        const snapToCy = (ids, medianCy) => {
+          for (const id of ids) {
+            const box = coords[id];
+            if (!box) continue;
+            let newY = medianCy - box.h / 2;
+            if (band) {
+              const pad = 4;
+              const lo = band.y + pad;
+              const hi = band.y + band.h - box.h - pad;
+              if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
+            }
+            if (Math.abs(newY - box.y) > cyEps) {
+              box.y = newY;
+              moved.add(id);
+            }
+          }
+        };
+        for (const cluster of clusters) {
+          if (cluster.length < 2) continue;
+          const ys = cluster.map((c) => c.cy).sort((a, b) => a - b);
+          snapToCy(cluster.map((c) => c.id), ys[Math.floor(ys.length / 2)]);
+        }
+      }
+
+      // Peer exclusive gateways on a short forward succession:
+      // snap the path (both diamonds + intermediates) to one centerline even when ELK ranked
+      // them on different cy bands. Named XOR only — empty-name auto-joins are intermediates.
+      const maxGwHops = opts.maxGatewayPathHops ?? 4;
+      const namedXor = laneNodes.filter(
+        (n) => n.type === 'exclusiveGateway' && String(n.name || '').trim().length > 0,
+      );
+      const fwdAdj = new Map([...idSet].map((id) => [id, []]));
+      for (const e of forwardEdges) fwdAdj.get(e.source)?.push(e.target);
+      const shortestFwdPath = (from, to) => {
+        const q = [[from]];
+        const seen = new Set([from]);
+        while (q.length) {
+          const path = q.shift();
+          const u = path[path.length - 1];
+          if (u === to) return path;
+          if (path.length - 1 >= maxGwHops) continue;
+          for (const v of fwdAdj.get(u) || []) {
+            if (seen.has(v)) continue;
+            seen.add(v);
+            q.push([...path, v]);
+          }
+        }
+        return null;
+      };
+      namedXor.sort((a, b) => (coords[a.id].x + coords[a.id].w / 2) - (coords[b.id].x + coords[b.id].w / 2));
+      for (let i = 0; i < namedXor.length; i++) {
+        for (let j = i + 1; j < namedXor.length; j++) {
+          const a = namedXor[i], b = namedXor[j];
+          const path = shortestFwdPath(a.id, b.id);
+          if (!path || path.length < 2) continue;
+          const cys = path.map((id) => coords[id].y + coords[id].h / 2).sort((x, y) => x - y);
+          const medianCy = cys[Math.floor(cys.length / 2)];
+          // Only worth it when the two diamonds disagree vertically.
+          const aCy = coords[a.id].y + coords[a.id].h / 2;
+          const bCy = coords[b.id].y + coords[b.id].h / 2;
+          if (Math.abs(aCy - bCy) <= cyEps) continue;
+          const band = laneCoords[laneId];
+          for (const id of path) {
+            const box = coords[id];
+            let newY = medianCy - box.h / 2;
+            if (band) {
+              const pad = 4;
+              const lo = band.y + pad;
+              const hi = band.y + band.h - box.h - pad;
+              if (hi >= lo) newY = Math.max(lo, Math.min(hi, newY));
+            }
+            if (Math.abs(newY - box.y) > cyEps) {
+              box.y = newY;
+              moved.add(id);
+            }
+          }
+        }
+      }
+
+      // Straight H seed for forward same-lane edges now on a shared centerline.
+      for (const e of forwardEdges) {
+        const s = coords[e.source], t = coords[e.target];
+        if (!s || !t) continue;
+        const scy = s.y + s.h / 2, tcy = t.y + t.h / 2;
+        if (Math.abs(scy - tcy) > cyEps) {
+          // Ends no longer match the old route — drop so §5.2 / bend-rule rebuild.
+          if (moved.has(e.source) || moved.has(e.target)) delete edgeCoords[e.id];
+          continue;
+        }
+        const cy = (scy + tcy) / 2;
+        edgeCoords[e.id] = [
+          { x: s.x + s.w, y: cy },
+          { x: t.x, y: cy },
+        ];
+        seeded.push(e.id);
+      }
+    }
+
+    // Cross-lane / back-edges that touch a moved node: invalidate stale waypoints.
+    for (const e of edges) {
+      if (!moved.has(e.source) && !moved.has(e.target)) continue;
+      if (seeded.includes(e.id)) continue;
+      const sn = nodeById[e.source], tn = nodeById[e.target];
+      if (!sn || !tn) {
+        delete edgeCoords[e.id];
+        continue;
+      }
+      delete edgeCoords[e.id];
+    }
+  }
+
+  return { moved: [...moved], seeded };
+}
+
 function flattenProcessNodes(nodes) {
   const out = [];
   for (const n of nodes || []) {
@@ -1417,11 +1658,16 @@ function orthogonalConnect(srcC, tgtC, opts = {}) {
   // A boundary event straddles its host's outline, so half of it is inside the
   // host. The side-choice above only asks where the target is, which for a
   // target on the far side of the host means leaving through the host's body —
-  // the flow then reads as if it came out of the activity itself. Only rebuild
-  // when that actually happened: running ALONG the outline is normal, and the
-  // space directly outward is often occupied by the host's own artifacts.
-  if (hostC && entersInterior(route, hostC)) {
-    route = boundaryOutwardRoute(srcC, tgtC, hostC, clearance);
+  // the flow then reads as if it came out of the activity itself.
+  // Top-edge events (#91) always leave upward: a mostly-horizontal target still
+  // must not exit sideways along the host's top (that runs through sibling
+  // boundary events on the same edge). Bottom-edge events keep the old gate —
+  // running along the outline toward a side target is normal there.
+  if (hostC) {
+    const leaveUp = outwardFromHost(srcC, hostC) === 'up';
+    if (leaveUp || entersInterior(route, hostC)) {
+      route = boundaryOutwardRoute(srcC, tgtC, hostC, clearance);
+    }
   }
   return route;
 }
@@ -1652,35 +1898,22 @@ function clipOrthogonal(shape, type, edgePt, nextPt, role) {
  * For vertical approach, place at cy ± r on the x-level of nextPt.
  */
 function clipCircleOrthogonal(cx, cy, r, nextPt, isHorizontal) {
+  // Cardinal docks only (L/R/T/B). Miragon flow-connection-side requires events
+  // entered from the left / exited to the right — mid-arc docks on the lower
+  // half of the circle are reported as "from the bottom" even on a horizontal leg.
   if (isHorizontal) {
-    // Horizontal segment: keep y from nextPt, compute x on circle boundary
-    const y = nextPt.y;
-    const dyc = y - cy;
-    // Clamp: if nextPt.y is outside the circle, snap to center height
-    if (Math.abs(dyc) >= r) {
-      return { x: nextPt.x > cx ? cx + r : cx - r, y: cy };
-    }
-    const xOffset = Math.sqrt(r * r - dyc * dyc);
-    const x = nextPt.x > cx ? cx + xOffset : cx - xOffset;
-    return { x, y };
-  } else {
-    // Vertical segment: keep x from nextPt, compute y on circle boundary
-    const x = nextPt.x;
-    const dxc = x - cx;
-    if (Math.abs(dxc) >= r) {
-      return { x: cx, y: nextPt.y > cy ? cy + r : cy - r };
-    }
-    const yOffset = Math.sqrt(r * r - dxc * dxc);
-    const y = nextPt.y > cy ? cy + yOffset : cy - yOffset;
-    return { x, y };
+    return { x: nextPt.x > cx ? cx + r : cx - r, y: cy };
   }
+  return { x: cx, y: nextPt.y > cy ? cy + r : cy - r };
 }
 
 /**
- * Diamond: for horizontal approach, find x where the diamond edge crosses the y-level.
- * For vertical, find y where the diamond edge crosses the x-level.
- * Diamond with center (cx,cy) and half-widths (hw,hh):
- *   |x-cx|/hw + |y-cy|/hh = 1
+ * Diamond: dock only at a tip (left/right/top/bottom vertex). Miragon's
+ * `flow-connection-side` rule rejects mid-facet docks even when the segment is
+ * axis-aligned; the four vertices are the only legal connection points.
+ * Callers that clip an endpoint must keep the adjacent stub orthogonal (see
+ * §5.1 tip-stub alignment) — snapping y to cy on a horizontal approach can
+ * otherwise leave a diagonal first segment.
  */
 function clipDiamondOrthogonal(shape, nextPt, isHorizontal) {
   const cx = shape.x + shape.w / 2;
@@ -1688,24 +1921,22 @@ function clipDiamondOrthogonal(shape, nextPt, isHorizontal) {
   const hw = shape.w / 2, hh = shape.h / 2;
 
   if (isHorizontal) {
-    const y = nextPt.y;
-    const dyc = Math.abs(y - cy);
-    if (dyc >= hh) {
-      // Outside diamond vertically, snap to tip
-      return { x: cx, y: nextPt.y > cy ? cy + hh : cy - hh };
-    }
-    const xOffset = hw * (1 - dyc / hh);
-    const x = nextPt.x > cx ? cx + xOffset : cx - xOffset;
-    return { x, y };
-  } else {
-    const x = nextPt.x;
-    const dxc = Math.abs(x - cx);
-    if (dxc >= hw) {
-      return { x: nextPt.x > cx ? cx + hw : cx - hw, y: cy };
-    }
-    const yOffset = hh * (1 - dxc / hw);
-    const y = nextPt.y > cy ? cy + yOffset : cy - yOffset;
-    return { x, y };
+    return { x: nextPt.x > cx ? cx + hw : cx - hw, y: cy };
+  }
+  return { x: cx, y: nextPt.y > cy ? cy + hh : cy - hh };
+}
+
+/** Keep the stub next to a gateway tip on the tip's axis (horizontal for L/R tips). */
+function alignStubToGatewayTip(pts, endIdx, adjIdx, shape) {
+  const tip = pts[endIdx];
+  if (!tip || !pts[adjIdx]) return;
+  const cx = shape.x + shape.w / 2;
+  const cy = shape.y + shape.h / 2;
+  const adj = pts[adjIdx];
+  if (Math.abs(tip.y - cy) < 1e-6) {
+    pts[adjIdx] = { x: adj.x, y: tip.y };
+  } else if (Math.abs(tip.x - cx) < 1e-6) {
+    pts[adjIdx] = { x: tip.x, y: adj.y };
   }
 }
 
@@ -2409,4 +2640,4 @@ function besideDistance(L, a, b, horizontal) {
   return Math.hypot(L.x - a.x, dy);
 }
 
-export { buildCoordinateMap, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, alignSameLaneChains, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
