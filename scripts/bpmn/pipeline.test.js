@@ -4101,7 +4101,7 @@ describe('CLI refinement flags', () => {
     expect(res.status).toBe(0);
     const lib = await runPipeline(loadFixture('sparse-lanes.json'), { visualRefinement: false });
     expect(fs.readFileSync(path.join(dir, 'out.bpmn'), 'utf8')).toBe(lib.bpmnXml);
-  });
+  }, 30_000); // a spawned CLI plus a pipeline run; the default 5 s timed out under a full parallel run, like the layout-switch CLI tests below
   test('--refine and --no-refine together are refused', async () => {
     const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refine-'));
