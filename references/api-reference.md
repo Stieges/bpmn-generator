@@ -564,7 +564,7 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 | Code | Family | Meaning |
 |------|--------|---------|
 | C01 | catalogue | a reference to an actor or unit that the catalogue does not have, or assignments without a catalogue |
-| C02 | catalogue | an actor's unit is a role, not a unit |
+| C02 | catalogue | an actor's unit or `partOf` is a role, not a unit |
 | C03 | catalogue | an actor id occurs more than once in the catalogue |
 | C04 | catalogue | an assignment type outside the scheme, or more than one performer on a node |
 | C05 | catalogue | an assignment type not allowed on this kind of node |
@@ -591,7 +591,7 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 
 Where each kind of code appears (2.x runs only):
 
-- **Strings** lead with `[<code>] `: `validation.errors` and `warnings` entries for C01–C06, C10, C12, C13, F01, F02 and F04 (for example `[F04] drill-down is not available for format 2.0 models yet`), the message of a thrown `CatalogRejectedError` (C11, C12) and CLI lines (`✗ [C11] …`). C11 is never in `validation.errors`: it is thrown or printed by the CLI only. The CLI prints a schema error as `  · [F03] /$schemaVersion <message>` (no colon); `formatSchemaErrors` writes `[F03] /$schemaVersion: <message>` (with a colon), as in the error `orchestrate()` throws. F05 is the exception: its string keeps the form shared with 1.x runs and only the finding has the code.
+- **Strings** lead with `[<code>] `: `validation.errors` and `warnings` entries for C01–C07, C10, C12, C13, F01, F02 and F04 (for example `[F04] drill-down is not available for format 2.0 models yet`), the message of a thrown `CatalogRejectedError` (C11, C12) and CLI lines (`✗ [C11] …`). C11 is never in `validation.errors`: it is thrown or printed by the CLI only. The CLI prints a schema error as `  · [F03] /$schemaVersion <message>` (no colon); `formatSchemaErrors` writes `[F03] /$schemaVersion: <message>` (with a colon), as in the error `orchestrate()` throws. F05 is the exception: its string keeps the form shared with 1.x runs and only the finding has the code.
 - **Objects** carry `code`: the `schema_error` entries of the HTTP gate, of the MCP tools (JSON entries) and the schema gate result (`{ path, message, params, code }`; the "… and N more" entry has none), `validation.hints` (`H01`–`H06`, `H08`, `H09`), `validation.findings` and import `notices`.
 - **Thrown errors**: only `CatalogRejectedError` (C11, C12) carries `messageCode`; a `400` error body (`profile_error`, `view_error`) gains `code` when the error has one. Exception: `orchestrate()` with a 2.x model throws `Logic-Core failed schema validation:\n[F03] /$schemaVersion: …`; the code leads line 2, not the message, and the error has no `messageCode`.
 

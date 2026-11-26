@@ -613,7 +613,7 @@ Modeler, which writes 1.x, is not asked to refine or amend a 2.0 model — the h
 `skipped: 'format 2.0'` — and `mode` optimize or soll throws F04 before any agent). The library function `generateDiagramSet` refuses a 2.0 model with a
 blocked parent result ("[F04] drill-down is not available for format 2.0 models yet"). The MCP tools `generate_bpmn`, `validate_bpmn` and
 `orchestrate_bpmn` and the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
-`/api/v1/orchestrate` read a 2.0 model with the catalogue embedded as an object (`catalog`; a path is never read: a `catalog` field that is a path without a `catalog` object is C13). `/api/v1/import` is unchanged. `validate_bpmn` and `/validate` do not report C10, which depends on the view. `mode` optimize or soll and `drillDown` are F04 on every surface. Every other entry point
+`/api/v1/orchestrate` read a 2.0 model with the catalogue embedded as an object (`catalog`; a path is never read: a `catalog` field that is a path without a `catalog` object is C13). `/api/v1/import` is unchanged. `validate_bpmn` and `/validate` do not report C10, which depends on the view. `mode` optimize or soll and `drillDown` are F04 (`drillDown`: library and MCP; HTTP has no such parameter). Every other entry point
 (`redesign-cli.js`, the scenario pipeline) refuses a 2.0 model before any work with
 one message, "format 2.0 is not accepted here yet". On the CLI a
 2.0 model refuses `--optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`; `--doc`

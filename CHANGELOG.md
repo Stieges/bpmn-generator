@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   diagram imports to the same model as the default one. Not covered yet: joins inside subprocesses,
   splitting mixed gateways, and layout parameters per view.
 
-- **Format 2.0: catalogue and lane views (first slice).** A model with `"$schemaVersion": "2.0"` has no
+- **Format 2.0: catalogue and lane views.** A model with `"$schemaVersion": "2.0"` has no
   lanes. Its steps carry `assignments` (a type of the DEMI responsibility scheme, `D` for the performer, and an
   actor id) that point into an actor catalogue, passed with `--catalog <path>`, named by the model's `"catalog"`
   field, or given as an object to `runPipeline(model, { catalog })`. The view decides the lanes: `rollen` (one
@@ -41,12 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The rules are in `references/logic-core-schema.md`, section Format 2.0.
   - Known limitations: redesign and the scenario pipeline refuse 2.0 (F03). On the CLI `--optimize`,
     `--mode=soll`, `--dot` and `--drill-down` refuse it; `--doc` works. 2.0 output has no
-    `bpmn:performer`. The other entry points are listed under the second slice below.
+    `bpmn:performer`. The other entry points are listed under the continued entry below.
 
 Default output is unchanged: a call without a view, or with `default`, produces the same bytes as
 before. Every `validation` result gains the key `hints`, an empty array without a view.
 
-- **Format 2.0: organigram, replacement and every generate surface (second slice).** A unit (and an
+- **Format 2.0 (continued): organigram, replacement and every generate surface.** A unit (and an
   actor without `kind`) may carry `partOf`, the parent unit; roles do not (a role's unit is `unit`). A
   cycle is error C07, once per cycle. An actor without `kind` that another actor names as `unit` or
   `partOf` counts as a unit, so a unit view keys such a performer on itself; one with a `partOf` of its
@@ -62,7 +62,7 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   `orchestrate_bpmn` (an embedded `catalog` object) and HTTP `/generate`, `/validate` and `/orchestrate`
   (a body `catalog` object) read 2.0 now; a path is never read, `/import` is unchanged, and `validate`
   does not report C10, which depends on the view. `orchestrate` skips the Modeler's refine and amend
-  steps for a 2.0 model (history `skipped: 'format 2.0'`); `optimize`, `soll` and drill-down are F04.
+  steps for a 2.0 model (history `skipped: 'format 2.0'`); `optimize` and `soll` are F04, and so is drill-down (library and MCP; HTTP has no drill-down parameter).
   Redesign and the scenario pipeline still refuse 2.0 (F03). Responses for 1.x models are unchanged.
   Rules: `references/logic-core-schema.md`, section Format 2.0.
 - **Message codes for format 2.x.** The messages of the 2.0-specific path (catalogue, format, lane formation, import
