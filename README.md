@@ -366,9 +366,10 @@ one lane per unit of the performer; without a lanes view a 2.0 model gets role l
 `runPipeline` accept 2.0; the other entry points refuse it. The rules for lanes, placeholders and hints are in
 [`references/logic-core-schema.md`](references/logic-core-schema.md#format-20-catalogue-and-lane-views).
 
-Every message of a 2.x model carries a code: strings lead with `[<code>] `, objects carry `code`
-(`validation.findings` on 2.x runs, import `notices`, `code` on HTTP error bodies, `messageCode` on thrown errors).
-Responses for 1.x models are unchanged. The table is in
+The messages of the 2.0-specific path (catalogue, format, lane formation, import notice) carry a code: strings lead with
+`[<code>] `, objects carry `code` (`validation.findings` on 2.x runs, import `notices`, `code` on HTTP error bodies,
+`messageCode` on `CatalogRejectedError`). Rule messages (S, M, P, WF) keep their text unprefixed and get their id only as
+`code` in `validation.findings`. Responses for 1.x models are unchanged. The table is in
 [`references/api-reference.md`](references/api-reference.md#message-codes).
 
 ## Programmatic API

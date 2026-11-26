@@ -557,7 +557,7 @@ curl http://localhost:3000/api/v1/config
 
 ## Message codes
 
-Every message a format 2.x model produces carries a code from one registry (`scripts/shared/message-codes.js`). A text carrier keeps its string and leads with `[<code>] `; an object carrier has a `code` field; a thrown error has `messageCode`. Text stays English. A request whose model is 1.x, or has no `$schemaVersion`, gets responses without codes.
+The messages of the format 2.0-specific path (catalogue C, format F, lane formation C/H, import notice N) carry a code from one registry (`scripts/shared/message-codes.js`). A text carrier keeps its string and leads with `[<code>] `; an object carrier has a `code` field; a `CatalogRejectedError` has `messageCode`. Rule messages (S, M, P, WF) keep their text unprefixed and get their rule id only as `code` in `validation.findings`. Text stays English. A request whose model is 1.x, or has no `$schemaVersion`, gets responses without codes.
 
 | Code | Family | Meaning |
 |------|--------|---------|
@@ -587,9 +587,9 @@ Every message a format 2.x model produces carries a code from one registry (`scr
 
 Where each kind of code appears (2.x runs only):
 
-- **Strings** lead with `[<code>] `: `validation.errors` and `warnings` entries for C01–C06, C10–C13, F01, F02 and F04 (for example `[F04] drill-down is not available for format 2.0 models yet`), thrown error messages, CLI lines (`✗ [C11] …`) and the schema-error lines the MCP tools and the CLI print (`[F03] /$schemaVersion: …`). F05 is the exception: its string keeps the form shared with 1.x runs and only the finding has the code.
-- **Objects** carry `code`: the `schema_error` entries of the HTTP gate and the schema gate result (`{ path, message, params, code }`; the "… and N more" entry has none), `validation.hints` (`H01`–`H06`, `H08`), `validation.findings` and import `notices`.
-- **Thrown errors** carry `messageCode`; a `400` error body (`profile_error`, `view_error`) gains `code` when the error has one.
+- **Strings** lead with `[<code>] `: `validation.errors` and `warnings` entries for C01–C06, C10, C12, C13, F01, F02 and F04 (for example `[F04] drill-down is not available for format 2.0 models yet`), the message of a thrown `CatalogRejectedError` (C11, C12) and CLI lines (`✗ [C11] …`). C11 is never in `validation.errors`: it is thrown or printed by the CLI only. The CLI prints a schema error as `  · [F03] /$schemaVersion <message>` (no colon); `formatSchemaErrors` writes `[F03] /$schemaVersion: <message>` (with a colon), as in the error `orchestrate()` throws. F05 is the exception: its string keeps the form shared with 1.x runs and only the finding has the code.
+- **Objects** carry `code`: the `schema_error` entries of the HTTP gate, of the MCP tools (JSON entries) and the schema gate result (`{ path, message, params, code }`; the "… and N more" entry has none), `validation.hints` (`H01`–`H06`, `H08`), `validation.findings` and import `notices`.
+- **Thrown errors**: only `CatalogRejectedError` (C11, C12) carries `messageCode`; a `400` error body (`profile_error`, `view_error`) gains `code` when the error has one. Exception: `orchestrate()` with a 2.x model throws `Logic-Core failed schema validation:\n[F03] /$schemaVersion: …`; the code leads line 2, not the message, and the error has no `messageCode`.
 
 ### `validation.findings`
 
@@ -610,7 +610,7 @@ For a diagram generated from a format 2.0 model, `/api/v1/import` adds `"notices
 
 Not coded, on purpose (each stays a plain string or field):
 
-- the lanes-view error on a 1.x model (`assertViewFitsModel`);
+- the lanes-view error on a 1.x model (`assertViewFitsModel`), and every other view or rule-profile rejection (`view_error`, `profile_error`), on every run;
 - `resolveFields` called directly with a 1.x model;
 - the `runPipeline` TypeErrors `catalog must be a catalogue object …` and `catalog applies to format 2.0 models only`, and the CLI line `--catalog applies to format 2.0 models only`: API misuse, also reached with 1.x models;
 - layout notes in `validation.infos` and `validation.xmlWarnings`;

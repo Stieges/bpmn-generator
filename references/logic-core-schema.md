@@ -587,9 +587,10 @@ diagram of a 2.0 model and report that it was generated from one as notice N01 (
 as `[N01] …`, MCP as a second text block holding the JSON `{"notices":[…]}`, HTTP as
 `notices: [{ code, message }]`); the result is a 1.x model.
 
-**Message codes.** Every message of the 2.0 path carries a code from `scripts/shared/message-codes.js`:
-a string leads with `[<code>] ` (C01–C06, C10–C13, F01, F02, F04), an object has a `code` field (gate
-errors, hints H01–H06 and H08, `validation.findings`, notices), a thrown error has `messageCode`. C12
+**Message codes.** The messages of the 2.0-specific path (catalogue, format, lane formation, import notice) carry a code
+from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C06, C10–C13, F01–F04; the redesign and
+scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06 and H08,
+`validation.findings`, notices), a thrown `CatalogRejectedError` has `messageCode`. Rule messages (S, M, P, WF) keep their text and get their id only in `validation.findings`. C12
 covers the catalogue's bounds and schema; a model-carried `actors` list shares the catalogue's Actor
 schema, so its schema failures surface as F01 at the format gate and only its bounds reach C12. The
 table and the list of messages that stay uncoded are in

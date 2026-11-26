@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Views.** A view is a small named JSON file under `views/`, outside the model, that decides how
   a model is processed: its rule profile, layout switches and derivations. The model is not
-  changed. Two views ship: `default` (derives nothing) and `explicit-joins`. Choose one with
+  changed. Five views ship (`aligned-ports`, `default`, `einheiten`, `explicit-joins`, `rollen`); `default` derives nothing. Choose one with
   `--view=<name|path>` (CLI), `view` (a name on MCP `generate_bpmn`, `validate_bpmn` and
   `orchestrate_bpmn`; an inline object on HTTP `/api/v1/generate`, `/api/v1/validate` and
   `/api/v1/orchestrate`) or `runPipeline(lc, { view })`, which takes a path or an object. An
@@ -47,12 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Default output is unchanged: a call without a view, or with `default`, produces the same bytes as
 before. Every `validation` result gains the key `hints`, an empty array without a view.
 
-- **Message codes for format 2.x.** Every message a format 2.x model produces carries a code from one registry
-  (`scripts/shared/message-codes.js`): a string leads with `[<code>] `, an object has `code`. New codes: C11–C13
+- **Message codes for format 2.x.** The messages of the 2.0-specific path (catalogue, format, lane formation, import
+  notice) carry a code from one registry (`scripts/shared/message-codes.js`): a string leads with `[<code>] `, an object
+  has `code`. Rule messages keep their text; their rule id is only the `code` in `validation.findings`. New codes: C11–C13
   (catalogue unreadable, refused, wrong source), F01–F05 (format, entry points, options, `decisions`), N01 (import
   notice). `validation.findings` (`{ code, severity, message }`) appears on 2.x runs only; import `notices` are
   `[{ code, message }]` and MCP `import_bpmn` sends them as a JSON second block; HTTP error bodies gain `code`,
-  thrown errors `messageCode`. Responses for 1.x models are unchanged on every surface. Table: `references/api-reference.md`, "Message codes".
+  `CatalogRejectedError` `messageCode`. Responses for 1.x models are unchanged on every surface. Table: `references/api-reference.md`, "Message codes".
 - **`aligned-ports` view.** `views/aligned-ports-view.json` sets `layout.alignParticipantPorts: true`; the default
   stays `false`.
 

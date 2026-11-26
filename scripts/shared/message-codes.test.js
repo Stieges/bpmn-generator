@@ -85,6 +85,40 @@ describe('fences', () => {
     expect(bad).toEqual([]);
   });
 
+  // Codes carried by an object or a constant, or in the middle of a literal. Only the registry families
+  // (C, F, H, N) are read here: rule ids (S, M, P, WF), DI and NC codes are not registry codes.
+  const OBJECT_FORMS = {
+    'code field or variable': /\bcode\s*[:=]\s*(?:[^;\n]*?\?\s*)?['"]([CFHN]\d{2})['"]/g,
+    'errorFindings(…, code)': /\berrorFindings\([^;]*?,\s*['"]([CFHN]\d{2})['"]\s*\)/g,
+    'constant *_CODE': /_CODE\s*=\s*['"]([CFHN]\d{2})['"]/g,
+    'prefix inside a literal': /['"`][^'"`\n]*?\[([CFHN]\d{2})\] /g,
+  };
+
+  test('fence 1b: every code carried by an object, a constant or a mid-literal prefix is registered', () => {
+    const bad = [];
+    for (const [file, text] of files) {
+      for (const [form, re] of Object.entries(OBJECT_FORMS)) {
+        for (const m of text.matchAll(re)) {
+          if (!Object.hasOwn(MESSAGE_CODES, m[1])) bad.push(`${file}: ${form} ${m[1]}`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  test('fence 1b finds at least one of each form, and no rule id, DI or NC code', () => {
+    const all = files.map(([, t]) => t).join('\n');
+    for (const [form, re] of Object.entries(OBJECT_FORMS)) {
+      expect([form, [...all.matchAll(re)].length > 0]).toEqual([form, true]);
+    }
+    const seen = new Set(Object.values(OBJECT_FORMS).flatMap((re) => [...all.matchAll(re)].map((m) => m[1])));
+    for (const c of seen) expect(c).toMatch(/^[CFHN]\d{2}$/);
+    for (const c of ['H01', 'F01', 'F02', 'F03', 'F05', 'N01']) expect(seen.has(c)).toBe(true);
+    expect('code: "S02"').not.toMatch(OBJECT_FORMS['code field or variable']);
+    expect("code: 'NC03'").not.toMatch(OBJECT_FORMS['code field or variable']);
+    expect("code: 'WF01'").not.toMatch(OBJECT_FORMS['code field or variable']);
+  });
+
   test('fence 1 sees the sources it is meant to read', () => {
     expect(files.some(([f]) => f === join('bpmn', 'model-v2.js'))).toBe(true);
   });

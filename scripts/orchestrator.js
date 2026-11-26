@@ -87,7 +87,7 @@ export async function orchestrate(input, options = {}) {
   // An explicit option still wins over what the view sets (the pipeline resolves that, as before).
   // Before the Modeler call a text input is loaded here (a lanes view is refused before the LLM call, as the
   // Modeler answers with a 1.x model); every other input is loaded after the 1.x gates, so their errors stay as they were.
-  const textWithLlm = typeof input === 'string' && Boolean(options.llmProvider);
+  const textWithLlm = typeof input === 'string' && input !== '' && Boolean(options.llmProvider);
   if (textWithLlm && options.view != null) options = { ...options, view: loadView(options.view) };
   if (textWithLlm) assertViewFitsModel({}, options.view);
 

@@ -100,6 +100,22 @@ describe('validation.findings on format 2.x runs', () => {
     expect(validation).not.toHaveProperty('findings');
   });
 
+  test('a 1.x run with a failing decisions option carries no findings key', async () => {
+    const { validation } = await runPipeline(readJson('tests/fixtures/simple-approval.json'), { decisions: [{}] });
+    expect(validation.errors.length).toBeGreaterThan(0);
+    expect(validation).not.toHaveProperty('findings');
+  });
+
+  test('a 1.x run blocked by a rule error carries no findings key', async () => {
+    const model = readJson('tests/fixtures/simple-approval.json');
+    const pool = model.pools[0];
+    pool.nodes = pool.nodes.filter((n) => n.type !== 'endEvent');
+    pool.edges = pool.edges.filter((e) => pool.nodes.some((n) => n.id === e.target));
+    const { validation } = await runPipeline(model);
+    expect(validation.errors).toContain('[Main Pool] Missing endEvent.');
+    expect(validation).not.toHaveProperty('findings');
+  });
+
   test('a GenerateResponse built from a 2.x run validates against the published contract', async () => {
     const gen = await run(SCHADEN, { view: loadNamedView('rollen') });
     const hasErrors = gen.validation.errors.length > 0;
