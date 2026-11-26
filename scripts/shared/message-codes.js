@@ -42,6 +42,7 @@ export const MESSAGE_CODES = Object.freeze({
   H11: entry('hint', 'the name of an event gave a marker before a language was declared and gives none or another one under it'),
   H12: entry('hint', 'the declared language has no naming conventions, so the naming rules M01, M05 and M06 are skipped'),
   H13: entry('hint', 'the task names follow the naming convention of another registered language than the declared one'),
+  H14: entry('hint', 'task names pass the naming convention only because their first word is not on the verb list of the declared language'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 

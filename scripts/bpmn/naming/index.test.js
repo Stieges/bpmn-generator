@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync, execFileSync } from 'node:child_process';
 import {
   LANGUAGE_TAG, languageTag, modelLanguage, namingFor, checkNamingOverlay, namingHints, NAMING_LANGUAGES, NamingDataError, namingDataErrorOf,
+  H14_MAX_WORDS,
 } from './index.js';
 
 const readSchema = (name) => JSON.parse(readFileSync(new URL(`../../../references/${name}`, import.meta.url), 'utf8'));
@@ -244,5 +245,65 @@ describe('namingHints: H12 and H13', () => {
     const lc = model('de', ENGLISH);
     const marked = { inferred: [{ id: 'e', name: 'Fristablauf', type: 'startEvent', marker: 'timer', legacy: null, pool: null }], changed: [] };
     expect(namingHints(lc, marked).map((h) => h.code)).toEqual(['H13', 'H10']);
+  });
+});
+
+describe('namingHints: H14', () => {
+  const tasks = (...names) => names.map((name, i) => ({ id: `t${i}`, type: 'userTask', name }));
+  const model = (language, names) => ({ id: 'p', language, nodes: tasks(...names) });
+  const TAIL = 'If these are verbs nothing is wrong; add them to "verbs" through BPMN_NAMING to silence this hint.';
+
+  test('names the unlisted first words of English task names once, in order of first occurrence', () => {
+    expect(namingHints(model('en', ['Groom backlog', 'Review request', 'Apostille certificate', 'groom team']))).toEqual([{
+      code: 'H14',
+      message: `First word not in the English verb list: 'Groom', 'Apostille'. ${TAIL}`,
+      elements: [],
+    }]);
+  });
+
+  test('lists at most 10 words and says how many more there are', () => {
+    expect(H14_MAX_WORDS).toBe(10);
+    const words = ['Alfa', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliett', 'Kilo', 'Lima'];
+    const [hint] = namingHints(model('en', [...words.map((w) => `${w} widget`), 'Alfa widget']));
+    expect(hint.message).toBe(`First word not in the English verb list: ${words.slice(0, 10).map((w) => `'${w}'`).join(', ')} and 2 more. ${TAIL}`);
+  });
+
+  test('only task names count: containers, events, flagged and verb-first names give none', () => {
+    const lc = model('en', ['Review request', 'Checking invoice', 'Invoice check', 'Groom']);
+    lc.nodes.push({ id: 's', type: 'subProcess', name: 'Backlog grooming', nodes: [] }, { id: 'e', type: 'endEvent', name: 'Groom done' });
+    expect(namingHints(lc)).toEqual([]);
+  });
+
+  test('task names at every level and in every pool count', () => {
+    const lc = { id: 'c', language: 'en', pools: [
+      { id: 'a', name: 'A', nodes: [{ id: 's', type: 'subProcess', name: 'Backlog handling', nodes: tasks('Groom backlog') }] },
+      { id: 'b', name: 'B', nodes: [{ id: 'x', type: 'task', name: 'Escrow funds' }] },
+    ] };
+    expect(namingHints(lc).map((h) => h.message)).toEqual([`First word not in the English verb list: 'Groom', 'Escrow'. ${TAIL}`]);
+  });
+
+  test('never for German, without a language, with H12 or with H13', () => {
+    expect(namingHints(model('de', ['Antrag prüfen', 'Rechnung freigeben', 'Groom backlog']))).toEqual([]);
+    expect(namingHints(model(undefined, ['Groom backlog']))).toEqual([]);
+    expect(namingHints(model('fr', ['Groom backlog'])).map((h) => h.code)).toEqual(['H12']);
+    expect(namingHints(model('en', ['Antrag prüfen', 'Rechnung freigeben', 'Kunde informieren'])).map((h) => h.code)).toEqual(['H13']);
+  });
+
+  test('comes after H12/H13 and before H10 and H11', () => {
+    const marked = { inferred: [{ id: 'e', name: 'Deadline missed', type: 'boundaryEvent', marker: 'timer', legacy: 'timer', pool: null }], changed: [] };
+    expect(namingHints(model('en', ['Groom backlog']), marked).map((h) => h.code)).toEqual(['H14', 'H10']);
+  });
+
+  test('an overlay that lists the word silences it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'naming-h14-'));
+    const before = process.env.BPMN_NAMING;
+    try {
+      process.env.BPMN_NAMING = join(dir, 'h14.json');
+      writeFileSync(process.env.BPMN_NAMING, JSON.stringify({ languages: { en: { add: { verbs: ['groom'] } } } }));
+      expect(namingHints(model('en', ['Groom backlog']))).toEqual([]);
+    } finally {
+      if (before === undefined) delete process.env.BPMN_NAMING; else process.env.BPMN_NAMING = before;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

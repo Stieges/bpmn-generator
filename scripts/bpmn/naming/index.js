@@ -12,6 +12,7 @@ export const LANGUAGE_TAG = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 import { loadLexicon, NAMING_LANGUAGES, NamingDataError } from './lexicon.js';
 import { verbFirst } from './verb-first.js';
 import { verbLast } from './verb-last.js';
+import { foldWord } from './tokens.js';
 import { isEvent, TASK_TYPES } from '../types.js';
 // A cycle with ../icons.js (it imports `namingFor`): both sides use the other's binding inside
 // functions only, never while the module is evaluated.
@@ -196,10 +197,39 @@ function mismatchHint(lc, declared, declaredStrategy) {
   };
 }
 
+/** The most first words H14 names; the rest is counted. */
+export const H14_MAX_WORDS = 10;
+
+/**
+ * H14 of a model in a supported language: task names (all levels, all pools) that pass M01 only
+ * because their first word is not on the verb list. Names the distinct words (compared folded, in
+ * the spelling and order of their first occurrence), at most `H14_MAX_WORDS`. Else `null`.
+ */
+function unlistedVerbHint(lc, language, strategy) {
+  const words = new Map();
+  for (const { node } of nodesWithPool(lc)) {
+    if (!TASK_TYPES.has(node.type) || typeof node.name !== 'string') continue;
+    const word = strategy.unlistedFirstWord(node.name);
+    if (word === null) continue;
+    const key = foldWord(word);
+    if (!words.has(key)) words.set(key, word);
+  }
+  if (words.size === 0) return null;
+  const all = [...words.values()];
+  const shown = all.slice(0, H14_MAX_WORDS).map((w) => `'${w}'`).join(', ');
+  const more = all.length > H14_MAX_WORDS ? ` and ${all.length - H14_MAX_WORDS} more` : '';
+  return {
+    code: 'H14',
+    message: `First word not in the ${languageName(language)} verb list: ${shown}${more}. If these are verbs nothing is wrong; add them to "verbs" through BPMN_NAMING to silence this hint.`,
+    elements: [],
+  };
+}
+
 /**
  * The hints of the naming layer for a model with a valid `language`, in this order: H12 when the
  * language has no strategy (the rules M01, M05 and M06 are skipped), else H13 when the task names
- * look like another registered language; then, from the lists of `resolveEventMarkers`, H10 per
+ * look like another registered language, else H14 when task names pass only because their first
+ * word is not on the verb list; then, from the lists of `resolveEventMarkers`, H10 per
  * event whose marker was inferred from its name, then H11 per event whose name gave a marker before
  * a language was declared and now gives none or another one (such an event gets H11 only). In a
  * collaboration the H10/H11 message starts with `[<pool name>] `. Without a valid `language`: `[]`.
@@ -220,7 +250,9 @@ export function namingHints(lc, { inferred = [], changed = [] } = {}) {
     });
   } else {
     const mismatch = mismatchHint(lc, language, strategy);
+    const unlisted = mismatch ? null : unlistedVerbHint(lc, language, strategy);
     if (mismatch) first.push(mismatch);
+    if (unlisted) first.push(unlisted);
   }
   return [
     ...first,
