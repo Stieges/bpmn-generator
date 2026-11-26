@@ -259,7 +259,7 @@
       ]
     },
     "EventMarker": {
-      "description": "The event definition (trigger or result) of an event. \"none\" is a plain event on purpose: no event definition and no marker inferred from the name; valid on a start, end and intermediate throw event (rule S15 reports it on a boundary or intermediate catch event).",
+      "description": "The event definition (trigger or result) of an event. \"none\" is a plain event on purpose: no event definition and no marker inferred from the name; valid on an end and intermediate throw event and on a start event outside an event subprocess (rule S15 reports it on a boundary or intermediate catch event and on the start event of an event subprocess).",
       "enum": [
         "message", "timer", "error", "signal", "escalation", "compensation",
         "conditional", "link", "cancel", "terminate", "multiple", "parallelMultiple", "none"

@@ -208,9 +208,10 @@ Set `marker` on event nodes to specify the trigger type:
 
 If `marker` is not set, the pipeline infers it from the event name (e.g. "Frist abgelaufen" → timer).
 `marker: "none"` stops that: the event is drawn and written as a plain event, without an event
-definition, whatever its name says (with or without a declared `language`). It is valid on a start,
-end and intermediate throw event; on a boundary or intermediate catch event, which need a trigger,
-rule S15 reports it. In the XML the event carries `bg:marker="none"` (namespace
+definition, whatever its name says (with or without a declared `language`). It is valid on an end and
+intermediate throw event and on a start event outside an event subprocess; on a boundary or
+intermediate catch event and on the start event of an event subprocess, which need a trigger, rule
+S15 reports it. In the XML the event carries `bg:marker="none"` (namespace
 `http://bpmn-generator/schema/1.0`, declared on `bpmn:definitions`), and both importers read it back
 as `marker: "none"`; an event definition on the same event wins over the attribute. A model without
 `"none"` writes no such attribute.
@@ -226,7 +227,7 @@ Which markers the generator draws per event type:
 | Boundary            | timer, error, message, signal, escalation, compensation, cancel, conditional |
 
 `none` in this table is a plain event: no `marker` and no marker inferred from the name, or
-`marker: "none"`.
+`marker: "none"` (on a start event only outside an event subprocess).
 
 ### Referencing a definition: `messageRef`, `signalRef`, `errorRef`, `escalationRef`
 

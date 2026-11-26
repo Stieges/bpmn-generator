@@ -136,8 +136,10 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   plain event on purpose. It stops the marker inference from the name, with and without a declared
   `language` (no H10, no H11 for that event), and the event is drawn and written without an event
   definition. The XML carries `bg:marker="none"` on the event, and only then; both importers read
-  it back. Valid on start, end and intermediate throw events; S15 reports it on a boundary or
-  intermediate catch event. A model without `"none"` gives the same output as before.
+  it back. Valid on end and intermediate throw events and on start events outside an event
+  subprocess; S15 reports it on a boundary or intermediate catch event and on the start event of
+  an event subprocess. A model without `"none"` gives the same output as before, except that the
+  schema error for an invalid `marker` value now lists `none` among the allowed values.
 - **`BPMN_NAMING` overlay.** The environment variable names a JSON file that adds words to, and
   removes words from, eleven flat word lists of a shipped language
   (`{ "languages": { "en": { "add": { "verbs": ["invoice"] }, "remove": { … } } } }`, add first,
