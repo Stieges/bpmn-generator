@@ -224,6 +224,28 @@ describe('German', () => {
     for (const w of ['bzw', 'zu', 'muss']) expect(de.verbs.has(w)).toBe(false);
   });
 
+  test('geInfinitives lists every verb whose rest after the separable prefix looks like a participle', () => {
+    const seps = [...data.separablePrefixes].sort((a, b) => b.length - a.length);
+    const rest = (x) => {
+      const p = seps.find((s) => x.startsWith(s) && x.length - s.length >= 3);
+      return p ? x.slice(p.length) : x;
+    };
+    const gePart = (x) => /^ge.+(t|en)$/.test(x);
+    const missing = data.verbs.filter((v) => gePart(rest(v)) && !data.geInfinitives.includes(rest(v)));
+    expect(missing).toEqual([]);
+    expect(data.geInfinitives).toContain('generieren');
+    expect(data.geInfinitives.length).toBe(31);
+  });
+
+  test('everyday nouns equal to a verb are nounVerbHomographs', () => {
+    for (const w of ['fragen', 'laden', 'messen', 'schulen', 'sichten', 'sperren', 'stellen', 'steuern', 'zahlen']) {
+      expect(data.nounVerbHomographs).toContain(w);
+    }
+    expect(data.nounVerbHomographs.length).toBe(27);
+    expect(data.verbs).not.toContain('instandhalten');
+    expect(data.verbs).not.toContain('instandsetzen');
+  });
+
   test('every event-marker keyword contains a legacy keyword', () => {
     expect(Object.keys(data.eventMarkers).sort()).toEqual(['conditional', 'error', 'escalation', 'message', 'signal', 'timer']);
     for (const words of Object.values(data.eventMarkers)) {
