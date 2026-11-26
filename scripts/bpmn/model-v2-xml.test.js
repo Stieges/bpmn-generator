@@ -136,6 +136,29 @@ describe('2.0 XML places (design 11 a)', () => {
     expect(bpmnXml).not.toContain('<bg:system');
   });
 
+  test('a collaboration: assignments and lane markers of both pools are written', async () => {
+    const pool = (id, nodePrefix) => ({
+      id, name: `Pool ${id}`,
+      lanes: [{ id: `L.${id}`, name: 'Sachbearbeitung Schaden', _derived: 'lane', _laneBy: 'role', _laneActor: 'sb_schaden' }],
+      nodes: [
+        { id: `${nodePrefix}s`, type: 'startEvent', name: 'Schaden gemeldet', lane: `L.${id}`, _assignments: D },
+        { id: `${nodePrefix}t`, type: 'userTask', name: 'Schaden prüfen', lane: `L.${id}`, _assignments: D },
+        { id: `${nodePrefix}e`, type: 'endEvent', name: 'Schaden geprüft', lane: `L.${id}` },
+      ],
+      edges: [{ id: `${nodePrefix}f1`, source: `${nodePrefix}s`, target: `${nodePrefix}t` }, { id: `${nodePrefix}f2`, source: `${nodePrefix}t`, target: `${nodePrefix}e` }],
+    });
+    const model = { id: 'C', name: 'Schaden', _modelInfo: { ...MODEL_INFO }, pools: [pool('PA', 'a'), pool('PB', 'b')],
+      messageFlows: [{ id: 'm1', source: 'at', target: 'bs' }] };
+    const { bpmnXml, validation } = await generate(model);
+    expect(validation.xmlWarnings).toEqual([]);
+    expect(count(bpmnXml, /<bg:assignment\b/g)).toBe(4);
+    expect(count(bpmnXml, /<bg:derived\b/g)).toBe(2);
+    for (const [tag, id] of [['userTask', 'at'], ['startEvent', 'as'], ['userTask', 'bt'], ['startEvent', 'bs']]) {
+      expect(extensionOf(element(bpmnXml, tag, id))).toContain(ASSIGNMENT);
+    }
+    expect(count(bpmnXml, /xmlns:bg=/g)).toBe(1);
+  });
+
   test('without the private fields nothing of it is written', async () => {
     const { bpmnXml } = await generate(stripPrivate(formed()));
     expect(bpmnXml).not.toMatch(/bg:assignment|bg:derived|bg:modelVersion|exporter=/);

@@ -65,15 +65,20 @@ function validateBatch(files) {
     return [];
   } catch (e) {
     const out = `${e.stdout ?? ''}${e.stderr ?? ''}`;
-    const failed = out.split('\n').filter((l) => l.includes('fails to validate')).map((l) => l.replace(/ fails to validate.*$/, ''));
-    return failed.length ? failed : [`xmllint error: ${out.slice(0, 500) || e.message}`];
+    const lines = out.split('\n').filter((l) => l.trim());
+    const failed = lines.filter((l) => l.includes('fails to validate')).map((l) => l.replace(/ fails to validate.*$/, ''));
+    // Besides the failing files: every other error line (parser errors, files xmllint could not load). Per-file detail
+    // of a listed file and the "validates" lines are left out.
+    const other = lines.filter((l) => !l.includes('fails to validate') && !l.includes('Schemas validity error') && !/ validates$/.test(l));
+    const found = [...failed, ...other.map((l) => `xmllint: ${l}`)];
+    return found.length ? found : [`xmllint error: ${out.slice(0, 500) || e.message}`];
   }
 }
 
 if (status.mismatch) {
   describe('BPMN XSD conformance', () => {
     test('BPMN XSD files carry the pinned SHA-256', () => {
-      throw new Error(`BPMN XSD file has the wrong SHA-256 — delete it and run ${FIX_HINT} (${status.reason})`);
+      throw new Error(`BPMN XSD file has the wrong SHA-256 — run ${FIX_HINT} to replace it (${status.reason})`);
     });
   });
 } else if (!status.available && process.env.CI) {
@@ -90,6 +95,21 @@ if (status.mismatch) {
   });
 } else {
   describe('BPMN XSD conformance', () => {
+    test('validateBatch reports files that fail and any other xmllint error line', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'bpmn-xsd-batch-'));
+      try {
+        const broken = join(dir, 'broken.bpmn');
+        const invalid = join(dir, 'invalid.bpmn');
+        writeFileSync(broken, '<a');
+        writeFileSync(invalid, '<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><x/></definitions>');
+        const result = validateBatch([broken, invalid]);
+        expect(result).toContain(invalid);
+        expect(result.some((l) => l.includes(`${broken}:`) && l.includes('parser error'))).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     test('generated and committed BPMN XML validates against BPMN20.xsd', async () => {
       const out = mkdtempSync(join(tmpdir(), 'bpmn-xsd-'));
       try {

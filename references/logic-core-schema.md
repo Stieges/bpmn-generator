@@ -545,8 +545,10 @@ nothing changes:
 
 Behind a boundary event, an activity that is not automatic and has no performer goes to `(nicht zugeordnet)`
 with H02 before any round, whatever its neighbours. An event, a gateway or an automatic task there has no
-predecessor lane during the rounds (the boundary event takes no part), so the other direction applies and it
-takes the lane of its successors if they have one; without any neighbour lane it lands in `(nicht zugeordnet)`
+predecessor lane during the rounds (the boundary event takes no part). For the nodes whose direction is the
+predecessor (an intermediate event, an end event, an automatic task, a splitting gateway) the other direction
+then applies and the node takes the lane of its successors if they have one; a start event or a merging
+gateway there already takes its lane from its successors; without any neighbour lane it lands in `(nicht zugeordnet)`
 with H08.
 
 A process without any performer gets no lanes (hint H06). The placeholders are ids

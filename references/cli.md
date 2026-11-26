@@ -55,7 +55,7 @@ node bpmn/pipeline.js my-process.json my-process --doc --dot   # extra outputs
 ### Format 2.0
 
 A model with `"$schemaVersion": "2.0"` is read by the generate path only, so the commands above
-apply with these limits: `--optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`
+apply with these limits: `--optimize`, `--mode=optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`
 are refused for a 2.0 model; `--doc` works. The catalogue comes from `--catalog`, else from the
 model's `"catalog"` field (relative to the model file; on standard input only `--catalog` works).
 The lanes come from the view: `--view=rollen` gives lanes per performer, `--view=einheiten` lanes per
