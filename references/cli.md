@@ -67,7 +67,7 @@ node bpmn/pipeline.js my-process.json my-process --strict --view=rollen --catalo
 node bpmn/pipeline.js my-process.json my-process --strict --view=einheiten   # the model names its catalogue in "catalog"
 ```
 
-A 2.0 model's hints (H02–H06, H08) are listed in `validation.hints` and never fail `--strict`. The
+A 2.0 model's hints (H02–H06, H08) are listed in `validation.hints` and never fail `--strict`. Every message of a 2.0 run leads with its code, for example `✗ [C11] …` or `[F04] …` (exit 1, no stack trace); `validation.findings` lists errors and warnings as `{ code, severity, message }`. `--view=aligned-ports` docks message flows to or from a participant level with their other end. 1.x output is unchanged. The codes are in [`api-reference.md`](api-reference.md#message-codes). `node bpmn/import.js` prints `[N01] …` on stderr for a diagram generated from a 2.0 model. The
 full rule for lanes and the entry points that accept 2.0 are in
 [`logic-core-schema.md`](logic-core-schema.md#format-20-catalogue-and-lane-views).
 

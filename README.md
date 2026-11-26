@@ -246,7 +246,7 @@ bpmn-generator/
 │   ├── omg-spec/                         Normative DMN 1.3 XSDs
 │   └── review-set/                       Third-party fixtures for visual review (sources and licenses in its README)
 ├── rules/                                Rule profiles (default, strict, DMN default/best-practice; custom/)
-├── views/                                Views (default, explicit-joins, rollen, einheiten): named processing settings outside the model
+├── views/                                Views (default, explicit-joins, aligned-ports, rollen, einheiten): named processing settings outside the model
 ├── scripts/                              Pipeline modules (see above)
 ├── docs/                                 Screenshots and guides
 └── tests/
@@ -306,11 +306,11 @@ is `scripts/shared/view.js`.
 ```
 
 The format: `view` (the name), `version` (`"1.0"`), and the optional `description`, `ruleProfile`
-(a rule-profile *name*), `layout` (`bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair`,
+(a rule-profile *name*), `layout` (`bendRule`, `nodeLabelsAvoidFlows`, `foreignShapeRepair`, `alignParticipantPorts`,
 `visualRefinement`, `poolOrder`, `elkWrapping`) and `derivations` (`joinGateways`). Unknown keys are
 rejected at every level.
 
-Two views ship. `default` derives nothing, and its output is byte-identical to a call without a
+Five views ship. `aligned-ports` sets `layout.alignParticipantPorts` (a message flow to or from a participant docks level with its other end; the default stays `false`), and `rollen` and `einheiten` form the lanes of a format 2.0 model. `default` derives nothing, and its output is byte-identical to a call without a
 view. `explicit-joins` switches on the join-gateway derivation and names no rule profile. Like the
 `rules/` profiles, the `views/` files are part of a repository checkout and live outside the npm
 package: in an npm install, view names are refused and view files are read by path.
@@ -365,6 +365,11 @@ model's `"catalog"` field, or passed as an object to `runPipeline(model, { catal
 one lane per unit of the performer; without a lanes view a 2.0 model gets role lanes. Only the CLI generate path and
 `runPipeline` accept 2.0; the other entry points refuse it. The rules for lanes, placeholders and hints are in
 [`references/logic-core-schema.md`](references/logic-core-schema.md#format-20-catalogue-and-lane-views).
+
+Every message of a 2.x model carries a code: strings lead with `[<code>] `, objects carry `code`
+(`validation.findings` on 2.x runs, import `notices`, `code` on HTTP error bodies, `messageCode` on thrown errors).
+Responses for 1.x models are unchanged. The table is in
+[`references/api-reference.md`](references/api-reference.md#message-codes).
 
 ## Programmatic API
 

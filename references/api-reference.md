@@ -29,6 +29,7 @@ Complete reference for the BPMN Generator HTTP API. For a high-level overview se
 - **Correlation:** All POST endpoints accept optional `correlationId` (echoed back; generated if absent) and `clientId` (recorded in the audit log). `correlationId` must be 1–64 characters from `A–Z a–z 0–9 _ -` (a UUID qualifies); anything else, including another type → `400 { "error": "correlationId must be …" }`, not echoed. `clientId` is recorded cut to 128 characters with control and format characters escaped (a non-string is recorded as its JSON text).
 - **Schema errors:** a `400 schema_error` lists at most 20 `errors`, then one entry `{ path: "(root)", message: "… and N more", params: { more: N } }`; paths, messages and parameter strings are cut to 200 characters with control and format characters escaped.
 - **Format 2.0:** `/api/v1/generate`, `/api/v1/validate` and `/api/v1/orchestrate` refuse a `logicCore` with `"$schemaVersion": "2.0"` with `400 schema_error` and one error, "format 2.0 is not accepted here yet — only the CLI generate path (node bpmn/pipeline.js) and runPipeline read it". The import still reads its diagram (see `/api/v1/import`). The format is described in [`logic-core-schema.md`](logic-core-schema.md#format-20-catalogue-and-lane-views).
+- **Codes:** a `400` body for a format 2.x model carries `code` where the error has a message code (`schema_error` entries, `profile_error`, `view_error`); see [Message codes](#message-codes). A request with a 1.x model gets no codes.
 - **Error messages:** the `error` of a `500 internal_error` (and its audit line) is cut to 500 characters with control and format characters escaped.
 - **Method:** A non-`POST` request to any API path (known or unknown) other than `GET /health` and `GET /api/v1/config` → `405 { "error": "Method Not Allowed" }`. A `POST` to a path that isn't one of the six POST endpoints below → `404 { "error": "Not Found" }`.
 
@@ -128,7 +129,7 @@ the request's own `ruleProfile` field applies. On `/generate` and `/orchestrate`
 values (among them `poolOrder` and `elkWrapping`) and its `derivations` apply. `/validate` checks the
 view, but judges the model by the request's `ruleProfile` alone and derives nothing.
 
-The MCP tools are not described in this file: they take `view` as a view name (see the MCP table in
+The shipped views are `default`, `explicit-joins`, `aligned-ports` (sets `layout.alignParticipantPorts`), `rollen` and `einheiten`. The MCP tools are not described in this file: they take `view` as a view name (see the MCP table in
 the README). The library call `runPipeline(lc, { view })` takes a path or an object. The derivation
 and its hints: [README, Views](../README.md#views).
 
@@ -379,7 +380,7 @@ BPMN 2.0 XML → Logic-Core JSON (round-trip via the DOM parser).
 
 **Response 200:** `{ "correlationId": "uuid", "status": "success", "logicCore": {...} }`
 
-For a diagram generated from a format 2.0 model (the attributes `bg:modelVersion`, `bg:view`, `bg:catalog` on `bpmn:definitions`), the response also carries `"notices": ["Diagram generated from a format 2.0 model. Changes belong in the model. Importing yields a format 1.x model; assignments and catalogue references are lost."]`. The import never refuses: `logicCore` is a format 1.x model (formed lanes as ordinary lanes). A modeler that drops the `bg:` attributes on saving also drops the notice. A 1.x response has no `notices` key. The CLI (`node bpmn/import.js`) prints the same notice on stderr, MCP `import_bpmn` as a second text block.
+For a diagram generated from a format 2.0 model (the attributes `bg:modelVersion`, `bg:view`, `bg:catalog` on `bpmn:definitions`), the response also carries `"notices": [{ "code": "N01", "message": "Diagram generated from a format 2.0 model. Changes belong in the model. Importing yields a format 1.x model; assignments and catalogue references are lost." }]`. The import never refuses: `logicCore` is a format 1.x model (formed lanes as ordinary lanes). A modeler that drops the `bg:` attributes on saving also drops the notice. A 1.x response has no `notices` key. The CLI (`node bpmn/import.js`) prints `[N01] <message>` on stderr; MCP `import_bpmn` adds a second text block, the JSON `{"notices":[…]}` (see "Message codes").
 
 **Errors:** `500 { correlationId, status: "internal_error", error }` — parse failure.
 
@@ -568,7 +569,7 @@ Every message a format 2.x model produces carries a code from one registry (`scr
 | C06 | catalogue | the responsibility scheme is unknown or malformed |
 | C10 | catalogue | a lane id collides with another id of the model |
 | C11 | catalogue | the catalogue cannot be read: missing, not a regular file, too large, not JSON, or an empty path |
-| C12 | catalogue | the catalogue content is refused: bounds or catalogue schema, also model-carried actors |
+| C12 | catalogue | the catalogue content is refused: the bounds, or the catalogue schema (a model-carried `actors` list shares the catalogue's Actor schema, so its schema failures surface as F01 at the format gate; only the bounds reach C12) |
 | C13 | catalogue | the catalogue source is wrong for a 2.x model: a path without an object, a catalogue besides model-carried actors, or a catalog field on stdin |
 | F01 | format | a format 2.0 schema violation (one per schema error) |
 | F02 | format | a `$schemaVersion` of the 2 line other than "2.0" |
@@ -581,8 +582,31 @@ Every message a format 2.x model produces carries a code from one registry (`scr
 | H04 | hint | the unit of a performer is not recorded |
 | H05 | hint | a lane name is longer than the lane name limit |
 | H06 | hint | a process has no assignments, so no lanes |
-| H08 | hint | a node has no neighbour with a lane and is placed in the unassigned lane |
+| H08 | hint | a node has no neighbour with a lane, or a boundary event no host with a lane (`Boundary event "<name>" (<id>) has no host with a lane: lane "(nicht zugeordnet)".`, reached only without prior validation), and is placed in the unassigned lane |
 | N01 | notice | a format 2.0 import notice |
+
+Where each kind of code appears (2.x runs only):
+
+- **Strings** lead with `[<code>] `: `validation.errors` and `warnings` entries for C01–C06, C10–C13, F01, F02 and F04 (for example `[F04] drill-down is not available for format 2.0 models yet`), thrown error messages, CLI lines (`✗ [C11] …`) and the schema-error lines the MCP tools and the CLI print (`[F03] /$schemaVersion: …`). F05 is the exception: its string keeps the form shared with 1.x runs and only the finding has the code.
+- **Objects** carry `code`: the `schema_error` entries of the HTTP gate and the schema gate result (`{ path, message, params, code }`; the "… and N more" entry has none), `validation.hints` (`H01`–`H06`, `H08`), `validation.findings` and import `notices`.
+- **Thrown errors** carry `messageCode`; a `400` error body (`profile_error`, `view_error`) gains `code` when the error has one.
+
+### `validation.findings`
+
+Format 2.x runs of `runPipeline` add `validation.findings`, an array of `{ code, severity, message }` (`severity` is `ERROR` or `WARNING`). `message` is the very string in `errors` or `warnings`, so a consumer can join the two. A 1.x run, or a model without `$schemaVersion`, has no `findings` key; `errors`, `warnings` and `infos` stay `string[]` everywhere.
+
+Per path:
+
+- the format, entry-point and option gates (`resolveFields`, F04): one finding per message, `code` read from the `[code] ` prefix of the string;
+- a failing `decisions` option: F05, code only; the string stays `[decisions #i] <path> <message>` because 1.x runs share it;
+- the rules: errors first, then warnings, each with its rule id (`S`, `M`, `P`, `WF` families) as `code`, text unchanged; rule infos are not included;
+- lane formation (`formLanes`): the C10 errors, followed by the rule warnings.
+
+Layout notes in `validation.infos` and moddle round-trip warnings in `validation.xmlWarnings` get no finding. `validation.hints` is separate and keeps its own `code`.
+
+### Import notices
+
+For a diagram generated from a format 2.0 model, `/api/v1/import` adds `"notices": [{ "code": "N01", "message": "…" }]`, the CLI prints `[N01] …` on stderr, and MCP `import_bpmn` adds a second text block that is JSON, `{"notices":[{"code":"N01","message":"…"}]}`. A diagram without the `bg:` attributes (for example after a modeler dropped them) has no notice, no `notices` key and one block.
 
 Not coded, on purpose (each stays a plain string or field):
 

@@ -148,7 +148,7 @@ function errorFindings(errors, code = null) {
  * @param {object} [opts={}] - Pipeline options
  * @param {boolean|object} [opts.visualRefinement] - true/false switch every refinement pass; an object { laneCompaction?, edgeLabelCollisionRepair? } switches single passes; omitted -> config.json -> visualRefinement.<pass>
  * @param {boolean} [opts.bendRule] - the bend rule pass (bend-rule.js); default config.json -> layout.bendRule (true)
- * @param {boolean} [opts.alignParticipantPorts] - a message flow to or from a participant (black-box or expanded pool as endpoint) docks level with its other end, not at the middle of the band (routeMessageFlows); default config.json -> layout.alignParticipantPorts (false)
+ * @param {boolean} [opts.alignParticipantPorts] - a message flow to or from a participant (black-box or expanded pool as endpoint) docks level with its other end, not at the middle of the band (routeMessageFlows); default config.json -> layout.alignParticipantPorts (false); a view can set it (views/aligned-ports-view.json)
  * @param {boolean} [opts.messageFlowLabelRepair] - message-flow labels off routes, shapes, labels, headers and lane separators (repairMessageFlowLabels); default config.json -> layout.messageFlowLabelRepair (true)
  * @param {boolean} [opts.nodeLabelsAvoidFlows] - event and gateway labels off their flows (placeNodeLabelsAvoidingFlows); default config.json -> layout.nodeLabelsAvoidFlows (true)
  * @param {boolean} [opts.foreignShapeRepair] - the stuck-end pass also re-routes a sequence flow through a foreign shape (reclipStuckEnds' foreignShapes, #91); default config.json -> layout.foreignShapeRepair (true)

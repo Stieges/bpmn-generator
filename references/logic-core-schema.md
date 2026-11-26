@@ -558,7 +558,7 @@ lane id, or of its `<lane-id>_di`, with another id of the document is error C10,
 
 **Hints.** Hints go to `validation.hints` and never fail `--strict`. H02 (activity without
 performer), H03 (automatic step placed with its neighbour), H04 (unit not recorded), H05 (lane name
-over 25 characters), H06 (process without performer) and H08 (node without a neighbour with a lane)
+over 25 characters), H06 (process without performer) and H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation)
 come from the lane formation; H01 is the view's join-gateway derivation.
 
 **Output of a 2.0 model (XML).** The assignments and the origin are kept in the XML so that the
@@ -577,14 +577,23 @@ arrays in their order, and no whitespace. A 2.0 output has no `bpmn:performer`, 
 
 **Which entry points read 2.0.** Only the CLI generate path (`node bpmn/pipeline.js`) and the
 library function `runPipeline`. The library function `generateDiagramSet` refuses a 2.0 model with a
-blocked parent result ("drill-down is not available for format 2.0 models yet"). Every other entry point refuses a 2.0 model before any work with
+blocked parent result ("[F04] drill-down is not available for format 2.0 models yet"). Every other entry point refuses a 2.0 model before any work with
 one message, "format 2.0 is not accepted here yet": the MCP tools `generate_bpmn`, `validate_bpmn`
 and `orchestrate_bpmn`, the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
 `/api/v1/orchestrate`, the orchestrator, `redesign-cli.js` and the scenario pipeline. On the CLI a
 2.0 model refuses `--optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`; `--doc`
 works. The importers (`node bpmn/import.js`, MCP `import_bpmn`, HTTP `/api/v1/import`) read the
-diagram of a 2.0 model and report that it was generated from one (the CLI on stderr, MCP as a
-second text block, HTTP as `notices`); the result is a 1.x model.
+diagram of a 2.0 model and report that it was generated from one as notice N01 (the CLI on stderr
+as `[N01] …`, MCP as a second text block holding the JSON `{"notices":[…]}`, HTTP as
+`notices: [{ code, message }]`); the result is a 1.x model.
+
+**Message codes.** Every message of the 2.0 path carries a code from `scripts/shared/message-codes.js`:
+a string leads with `[<code>] ` (C01–C06, C10–C13, F01, F02, F04), an object has a `code` field (gate
+errors, hints H01–H06 and H08, `validation.findings`, notices), a thrown error has `messageCode`. C12
+covers the catalogue's bounds and schema; a model-carried `actors` list shares the catalogue's Actor
+schema, so its schema failures surface as F01 at the format gate and only its bounds reach C12. The
+table and the list of messages that stay uncoded are in
+[`api-reference.md`](api-reference.md#message-codes). A 1.x model gets responses without codes.
 
 ## Views (outside the model)
 
