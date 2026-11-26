@@ -48,6 +48,9 @@ export function tokensAfterFirstWord(tokens) {
 }
 
 /** A label with a first word and nothing but numbers or symbols after it (`Step 3`, `Teil 2`, `Phase 1.1`). */
+/** The finding for a container named by a placeholder shape (Step 3, Teil 2). */
+export const PLACEHOLDER_CONTAINER = 'A container names a topic, not a placeholder; a number after one word says nothing.';
+
 export function isPlaceholderShape(tokens) {
   const tail = tokensAfterFirstWord(tokens);
   return tail !== null && tail.length > 0 && !tail.some((t) => /\p{L}/u.test(t.raw));

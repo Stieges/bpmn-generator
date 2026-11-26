@@ -106,6 +106,7 @@ describe('HTTP /api/v1/orchestrate', () => {
     const realFetch = global.fetch;
     const model = { ...fixture('simple-approval.json'), language: 'en' };
     // The operator's own LLM config (env) is not checked against private addresses.
+    const priorKey = process.env.OPENAI_API_KEY;
     process.env.OPENAI_API_KEY = 'env-key';
     global.fetch = async (url, init) => (String(url).startsWith(base)
       ? realFetch(url, init)
@@ -123,7 +124,8 @@ describe('HTTP /api/v1/orchestrate', () => {
       expect(errors.some((l) => l.includes(broken))).toBe(true);
     } finally {
       global.fetch = realFetch;
-      delete process.env.OPENAI_API_KEY;
+      if (priorKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = priorKey;
     }
   }, 60_000);
 });
@@ -133,7 +135,7 @@ describe('MCP orchestrate_bpmn', () => {
     const call = (lc) => handleToolCall({ params: { name: 'orchestrate_bpmn', arguments: { logicCore: lc } } });
     const err = await call({ ...fixture('simple-approval.json'), language: 'en' }).then(() => null, (e) => e);
     expect(err.message).toBe(PUBLIC);
-    expect(JSON.stringify({ message: err.message, stack: undefined })).not.toContain(broken);
+    expect(String(err.stack)).not.toContain(broken);
     expect(errors.some((l) => l.includes(broken))).toBe(true);
     const ok = JSON.parse((await call(fixture('simple-approval.json'))).content[0].text);
     expect(JSON.stringify(ok)).not.toContain(broken);

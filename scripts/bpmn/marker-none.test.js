@@ -165,7 +165,7 @@ describe('S15 reports "none" where BPMN needs an event definition', () => {
         + 'one — set "marker" to its trigger, or use a start, end or intermediate throw event for a plain event.',
     ]);
     expect(s15(warnings, 'c')).toHaveLength(1);
-    expect(s15(warnings, 'c')[0]).toContain('is a intermediateCatchEvent and carries "marker": "none"');
+    expect(s15(warnings, 'c')[0]).toContain('is an intermediateCatchEvent and carries "marker": "none"');
     for (const id of ['s', 'th', 'e']) expect(s15(warnings, id)).toEqual([]);
   });
   test('inside a subprocess too', () => {
