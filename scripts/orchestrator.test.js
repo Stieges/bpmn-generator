@@ -818,4 +818,14 @@ describe('orchestrate — a bad view does not change the 1.x gate errors (as at 
     const err = await orchestrate(null, { view: '/no/such/view.json' }).catch((e) => e);
     expect(err.message).toBe('No logicCore — provide text + llmProvider, or a logicCore object');
   });
+
+  test.each([
+    ['a bad view path', () => '/no/such/view.json'],
+    ['a lanes view', rollen],
+  ])('empty text + llmProvider + %s: the "No logicCore" message, not a view error', async (_, makeView) => {
+    const llmProvider = jest.fn(async () => '{}');
+    const err = await orchestrate('', { llmProvider, view: makeView() }).catch((e) => e);
+    expect(err.message).toBe('No logicCore — provide text + llmProvider, or a logicCore object');
+    expect(llmProvider).not.toHaveBeenCalled();
+  });
 });
