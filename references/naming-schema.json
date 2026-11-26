@@ -140,6 +140,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300
+        },
+        "compoundExceptions": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
         }
       }
     },
@@ -474,6 +479,14 @@
       "items": {
         "$ref": "#/$defs/Word"
       }
+    },
+    "compoundExceptions": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
     }
   },
   "allOf": [
@@ -626,6 +639,14 @@
               "items": {
                 "$ref": "#/$defs/Word"
               }
+            },
+            "compoundExceptions": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
             }
           }
         },
@@ -706,6 +727,14 @@
               }
             },
             "messageNouns": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "compoundExceptions": {
               "type": "array",
               "uniqueItems": true,
               "maxItems": 2000,

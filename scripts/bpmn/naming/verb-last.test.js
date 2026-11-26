@@ -126,9 +126,54 @@ describe('markers', () => {
   });
 });
 
+describe('compoundExceptions: words that begin with a marker keyword and name no such event', () => {
+  // [exception family, [words that begin with the exception], [true compounds of the same keyword that still match], marker]
+  const families = [
+    ['Zeitschrift', ['Zeitschrift', 'Zeitschriften', 'Zeitschriftenabo', 'Zeitschriftenabo gekündigt'], ['Zeitablauf'], 'timer'],
+    ['Zeitung', ['Zeitungen', 'Zeitungsabo', 'Zeitungsabonnement'], ['Zeitüberschreitung'], 'timer'],
+    ['Zeitarbeit', ['Zeitarbeit', 'Zeitarbeitnehmer', 'Zeitarbeiter', 'Zeitarbeitsvertrag'], ['Zeitablauf'], 'timer'],
+    ['Zeitkonto', ['Zeitkonto', 'Zeitkonten', 'Zeitkontostand'], ['Zeitablauf'], 'timer'],
+    ['Zeitwert', ['Zeitwert', 'Zeitwerte', 'Zeitwertermittlung'], ['Zeitablauf'], 'timer'],
+    ['Zeitzeuge', ['Zeitzeuge', 'Zeitzeugen', 'Zeitzeugenbericht'], ['Zeitablauf'], 'timer'],
+    ['Zeitvertrag', ['Zeitvertrag', 'Zeitverträge', 'Zeitvertragsende'], ['Zeitablauf'], 'timer'],
+    ['Zeitgeist', ['Zeitgeist', 'Zeitgeistthema'], ['Zeitablauf'], 'timer'],
+    ['Zeitzone', ['Zeitzone', 'Zeitzonen', 'Zeitzonenwechsel'], ['Zeitablauf'], 'timer'],
+    ['Fehlerfrei', ['Fehlerfrei', 'Fehlerfreie', 'Fehlerfreiheit'], ['Fehlerfall'], 'error'],
+    ['Fehlerkultur', ['Fehlerkultur', 'Fehlerkulturprojekt'], ['Fehlermeldung'], 'error'],
+    ['Signalwirkung', ['Signalwirkung', 'Signalwirkungen'], ['Signalempfang'], 'signal'],
+    ['Signalfarbe', ['Signalfarbe', 'Signalfarben'], ['Signalempfang'], 'signal'],
+    ['Nachrichtendienst', ['Nachrichtendienst', 'Nachrichtendienste', 'Nachrichtendienstgesetz'], ['Nachrichteneingang'], 'message'],
+    ['Nachrichtensprecher', ['Nachrichtensprecher', 'Nachrichtensprecherin'], ['Nachrichteneingang'], 'message'],
+    ['Mailänder', ['Mailänder', 'Mailänderin', 'Mailaender'], ['Mailversand'], 'message'],
+  ];
+  test.each(families.flatMap(([f, words]) => words.map((w) => [f, w])))('%s: "%s geändert" gets no marker', (_f, w) => {
+    expect(inferMarker(de, `${w} geändert`, 'boundaryEvent')).toBeNull();
+    expect(s.eventMarker(`${w} geändert`, 'boundaryEvent')).toBeNull();
+  });
+  test.each(families.flatMap(([f, , real, marker]) => real.map((w) => [f, w, marker])))('%s: the true compound "%s" still gives %s', (_f, w, marker) => {
+    expect(inferMarker(de, `${w} erfasst`, 'boundaryEvent')).toBe(marker);
+  });
+  test('an exception blocks only the leading match: a keyword at the end of the same word still decides', () => {
+    expect(inferMarker(de, 'Zeitungsfehler erkannt', 'boundaryEvent')).toBe('error');
+    expect(inferMarker(de, 'Zeitschriftenmail eingegangen', 'boundaryEvent')).toBe('message');
+  });
+  test('the match is on the folded token (ß/ss, ae/oe/ue) and an exception does not catch a different word', () => {
+    expect(inferMarker(de, 'Zeitschriften geändert', 'boundaryEvent')).toBeNull();
+    expect(inferMarker(de, 'Zeitvertraege beendet', 'boundaryEvent')).toBeNull();
+    expect(inferMarker(de, 'Mailaender erfasst', 'boundaryEvent')).toBeNull();
+    // prefix collision: "Zeitkontrolle" is not "Zeitkonto"+x, "Zeitungleichheit" is the one known collision
+    expect(inferMarker(de, 'Zeitkontrolle abgelaufen', 'boundaryEvent')).toBe('timer');
+    expect(inferMarker(de, 'Zeitungültigkeit abgelaufen', 'boundaryEvent')).toBeNull();
+  });
+  test('without the switch or without the list nothing changes', () => {
+    expect(inferMarker({ ...de, compoundExceptions: [] }, 'Zeitschriften geändert', 'boundaryEvent')).toBe('timer');
+    expect(inferMarker({ ...de, compoundExceptions: undefined }, 'Zeitschriften geändert', 'boundaryEvent')).toBe('timer');
+  });
+});
+
 describe('Review Focus 4: robustness and linear time', () => {
   const huge = [
-    'a'.repeat(200000), ('(' + 'x ').repeat(50000), 'Antrag ' + 'prüfen '.repeat(50000), '-'.repeat(100000),
+    'a'.repeat(200000), ('('+ 'x ').repeat(50000), 'Antrag ' + 'prüfen '.repeat(50000), '-'.repeat(100000),
     '\n'.repeat(100000), 'aus' + 'zu'.repeat(100000) + 'zahlen', 'ge'.repeat(100000) + 't', 'ä'.repeat(200000),
   ];
   test.each(huge.map((h, i) => [i, h]))('input %i never throws and finishes fast', (_i, h) => {

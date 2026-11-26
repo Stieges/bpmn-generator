@@ -101,6 +101,7 @@ function buildLexicon(data) {
     eventMarkers: Object.fromEntries(Object.entries(data.eventMarkers).map(([k, v]) => [k, v.map(foldWord)])),
     nounsCapitalized: data.nounsCapitalized,
     compoundMarkers: data.compoundMarkers,
+    compoundExceptions: (data.compoundExceptions ?? []).map(foldWord),
     questionMarks: data.questionMarks,
     examples: data.examples,
     sources: data.sources,

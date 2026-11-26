@@ -25,11 +25,18 @@ const COMPOUND_REST = 4;
 // "Further letters" counts letters only (digits do not count), so `frist2024` is not a compound.
 const letterCount = (s) => (s.match(/\p{L}/gu) ?? []).length;
 
-function matches(token, keyword, compound) {
+/** True when the token begins with one of the folded `exceptions`: it is a known non-event compound. */
+const isException = (token, exceptions) => exceptions.some((e) => token.startsWith(e));
+
+function matches(token, keyword, compound, exceptions) {
   if (token === keyword) return true;
   if (!compound || keyword === '') return false;
   if (token.length <= keyword.length) return false;
-  if (token.startsWith(keyword)) return letterCount(token.slice(keyword.length)) >= COMPOUND_REST;
+  if (token.startsWith(keyword)) {
+    // A known exception (Zeitschrift) blocks only the leading match; a keyword at the end of the word still counts.
+    if (!isException(token, exceptions)) return letterCount(token.slice(keyword.length)) >= COMPOUND_REST;
+    return token.endsWith(keyword) && letterCount(token.slice(0, token.length - keyword.length)) >= COMPOUND_REST;
+  }
   if (token.endsWith(keyword)) return letterCount(token.slice(0, token.length - keyword.length)) >= COMPOUND_REST;
   return false;
 }
@@ -45,9 +52,11 @@ export function inferMarker(lexicon, name, eventType) {
     if (tokens.length === 0) return null;
     // `compoundMarkers: true` is a language-wide switch: every keyword may also match inside a compound word.
     const compound = lexicon.compoundMarkers === true;
+    // Words that begin with a keyword but name no such event (`compoundExceptions`), checked before the compound match.
+    const exceptions = lexicon.compoundExceptions ?? [];
     for (const marker of INFERABLE_MARKERS) {
       const keywords = lexicon.eventMarkers?.[marker] ?? [];
-      if (keywords.some((k) => tokens.some((t) => matches(t, k, compound)))) {
+      if (keywords.some((k) => tokens.some((t) => matches(t, k, compound, exceptions)))) {
         return MARKER_ALLOWED_ON[marker].includes(eventType) ? marker : null;
       }
     }
