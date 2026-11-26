@@ -106,7 +106,7 @@ describe.each(Object.keys(SHIPPED))('shipped %s file', (language) => {
     }
   });
 
-  test('every list of the file that a judge or marker inference reads has a note', () => {
+  test('every list present in the file has a note', () => {
     const read = language === 'de'
       ? ['verbs', 'nounVerbHomographs', 'participles', 'stateMarkers', 'infinitiveSuffixes', 'participleHomographs',
         'inseparablePrefixes', 'separablePrefixes', 'geInfinitives', 'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks']
