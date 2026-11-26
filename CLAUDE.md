@@ -80,7 +80,7 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
     │                          namingMessage: the finding text of a broken convention, used by rules.js;
     │                          resolveEventMarkers, namingHints: the marker of every event under a language and
     │                          the hints H10–H14, called by runPipeline)
-    ├── naming/tokens.js     (no deps — foldWord, labelTokens, labelTokenWords: the words and tokens of a label)
+    ├── naming/tokens.js     (no deps — foldWord, labelTokens, labelTokenWords, tokensAfterFirstWord, isPlaceholderShape: the words and tokens of a label)
     ├── naming/lexicon.js    ← naming/tokens.js, ../shared/resource-paths.js, ../shared/rule-profile.js, ajv (readLexiconFile, loadLexicon, NamingDataError:
     │                          a naming data file against references/naming-schema.json, plus the BPMN_NAMING overlay; validator compiled on first call)
     ├── naming/markers.js    ← naming/tokens.js (INFERABLE_MARKERS, MARKER_ALLOWED_ON, inferMarker: the event marker a label implies)
