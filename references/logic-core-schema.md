@@ -481,14 +481,22 @@ the 2 line (`"2"`, `"2.1"`, `"2.7"`) is refused with one error that names the va
 - An activity, event or gateway may carry `assignments`: `[ { "type": "D", "actor": "sb_schaden" } ]`.
   `type` is a key of the responsibility scheme, `actor` an id of the catalogue. At most one
   performer per node. Events and gateways carry only the performer type.
-- Actors come from a catalogue: `{ "actors": [ { "id", "name", "kind"?, "unit"? } ] }`, with `kind`
-  `role` or `unit` (omitted: not recorded) and `unit` naming the unit a role works in. The schema is
+- Actors come from a catalogue: `{ "actors": [ { "id", "name", "kind"?, "unit"?, "partOf"? } ] }`,
+  with `kind` `role` or `unit` (omitted: not recorded), `unit` naming the unit a role works in and
+  `partOf` naming the parent unit of a unit (the organigram). The schema is
   [`catalog-schema.json`](catalog-schema.json).
 - Every process needs an `id` matching `^[A-Za-z_][A-Za-z0-9_-]*$`; it is part of the lane ids.
 
-**What 2.0 is not (yet):** no systems or data nodes, no `partOf` between units, no positions or
-persons, no matrices (RACI), no migration tool. Within this release the catalogue can only be
-passed; with a catalogue, the model's `actors` replace entries of it by id (hint H09 each) or add new ones, and a `scheme` there is C13.
+**The organigram.** `partOf` names the parent unit and is allowed on units (`kind: "unit"`) and on
+actors without `kind`, not on roles (a role's unit is `unit`). It must lead to a unit. Units that
+nest in a cycle, including a unit that is part of itself, are error C07, once per cycle. Who counts
+as a unit: an actor with `kind: "unit"`, and an actor without `kind` that another actor names as its
+`unit` or `partOf`. An actor without `kind` that has a `partOf` of its own nests under its parent
+like a unit. The organigram only matters to a view whose `lanes` is the object form (see "Lanes by
+view").
+
+**What 2.0 is not (yet):** no systems or data nodes, no positions or persons, no matrices (RACI),
+no migration tool.
 
 **The catalogue (three ways to pass it).**
 
@@ -499,8 +507,14 @@ passed; with a catalogue, the model's `actors` replace entries of it by id (hint
 3. Library: `runPipeline(model, { catalog })` with a catalogue object. A string is a `TypeError`;
    read a file with `loadCatalog` (`scripts/shared/catalog.js`) first.
 
-A model may instead carry `actors` (and `scheme`) itself. That is not combined with `catalog`,
-neither in the file nor in the call. `--catalog` with a 1.x model is an error.
+A model may carry `actors` (and `scheme`) itself, without a catalogue. Beside a catalogue (the file's
+`catalog` field, `--catalog`, or the `catalog` option) its `actors` **replace** the entry of the same
+id as a whole, in place, and an actor with a new id is appended after the catalogue's actors in the
+model's order; hint H09 names each replaced entry (`elements` is `[id]`): one id then means different
+things in two processes. Rules C01–C07 judge the effective catalogue, so replacing a unit by a role
+(or the reverse) that other actors reference is C02. A `scheme` beside a catalogue is error C13; the
+process file cannot change the scheme. The fingerprint `bg:catalog` is over the effective catalogue.
+`--catalog` with a 1.x model is an error.
 
 **The responsibility scheme.** `scheme` is the name of a shipped scheme or an embedded object; when
 it is absent the scheme is `demi`. `demi` ([`schemes/demi-scheme.json`](schemes/demi-scheme.json))
@@ -509,8 +523,10 @@ performs), `E` Ergebnisverantwortung, `M` Mitarbeit, `I` Information. The labels
 external source; the design chose them deliberately, so treat them as this project's wording and
 not as a quotation of a standard.
 
-**Lanes by view.** The view's `lanes` (`role`, `unit`, `none`) forms the lanes. Shipped:
-`views/rollen-view.json` (`role`) and `views/einheiten-view.json` (`unit`). Without `lanes` a 2.0
+**Lanes by view.** The view's `lanes` (`role`, `unit`, `none`, or the object form
+`{ "by": "unit", "level"?: 1–16, "nested"?: boolean }`) forms the lanes. Shipped:
+`views/rollen-view.json` (`role`), `views/einheiten-view.json` (`unit`) and
+`views/organigramm-view.json` (`{ "by": "unit", "nested": true }`). Without `lanes` a 2.0
 model gets role lanes; `none` gives no lanes. A `lanes` view on a 1.x model is a view error on
 every surface.
 
@@ -520,13 +536,15 @@ every surface.
   actor without `kind` that another actor names as its `unit` or `partOf`), else its `unit`; when
   that is missing the placeholder `(Einheit nicht erhoben)`, with hint H04. With the object form
   `{ "by": "unit", "level": k }` the lane is the unit at depth `k` of that unit's `partOf` chain
-  (1 = a unit without `partOf`); a unit shallower than `k` keeps its own lane. Without `level` each
+  (1 = a unit without `partOf`, counted from the top; `k` is 1–16); a unit shallower than `k` keeps its own lane. Without `level` each
   performer stays in its own unit.
 - `{ "by": "unit", "nested": true }` (shipped as `views/organigramm-view.json`): the unit lanes nest
   along the organigram. Each unit a step is keyed on gets a lane for every unit of its `partOf` chain,
   as child lanes (`childLaneSet`), siblings in catalogue order; the layout may stack them along the
   flow. A unit that has steps of its own and child lanes holds those steps in an extra first child
   lane `L.<process-id>.<unit-id>._own`, named like the unit, so a parent lane holds no step itself.
+  A performer without `kind` follows its own `partOf` chain: with a `partOf` it nests under its
+  parent like a unit, without one it is a top-level lane.
   With `level` as well, the steps are mapped to depth `k` first, so the deepest lane is the unit at
   depth `k`. The placeholders are top-level lanes after the tree. Every lane of the tree, parent and
   own lane included, carries `bg:derived` with the unit's id as `actor`.
@@ -570,7 +588,7 @@ lane id, or of its `<lane-id>_di`, with another id of the document is error C10,
 
 **Hints.** Hints go to `validation.hints` and never fail `--strict`. H02 (activity without
 performer), H03 (automatic step placed with its neighbour), H04 (unit not recorded), H05 (lane name
-over 25 characters), H06 (process without performer) and H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation)
+over 25 characters), H06 (process without performer), H09 (a catalogue entry replaced by the process file) and H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation)
 come from the lane formation; H01 is the view's join-gateway derivation.
 
 **Output of a 2.0 model (XML).** The assignments and the origin are kept in the XML so that the
@@ -595,7 +613,7 @@ Modeler, which writes 1.x, is not asked to refine or amend a 2.0 model — the h
 `skipped: 'format 2.0'` — and `mode` optimize or soll throws F04 before any agent). The library function `generateDiagramSet` refuses a 2.0 model with a
 blocked parent result ("[F04] drill-down is not available for format 2.0 models yet"). The MCP tools `generate_bpmn`, `validate_bpmn` and
 `orchestrate_bpmn` and the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
-`/api/v1/orchestrate` read a 2.0 model with the catalogue embedded as an object (`catalog`; a path is never read). Every other entry point
+`/api/v1/orchestrate` read a 2.0 model with the catalogue embedded as an object (`catalog`; a path is never read: a `catalog` field that is a path without a `catalog` object is C13). `/api/v1/import` is unchanged. `validate_bpmn` and `/validate` do not report C10, which depends on the view. `mode` optimize or soll and `drillDown` are F04 on every surface. Every other entry point
 (`redesign-cli.js`, the scenario pipeline) refuses a 2.0 model before any work with
 one message, "format 2.0 is not accepted here yet". On the CLI a
 2.0 model refuses `--optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`; `--doc`
@@ -605,8 +623,8 @@ as `[N01] …`, MCP as a second text block holding the JSON `{"notices":[…]}`,
 `notices: [{ code, message }]`); the result is a 1.x model.
 
 **Message codes.** The messages of the 2.0-specific path (catalogue, format, lane formation, import notice) carry a code
-from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C06, C10–C13, F01–F04; the redesign and
-scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06 and H08,
+from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C07, C10–C13, F01–F04; the redesign and
+scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06, H08 and H09,
 `validation.findings`, notices), a thrown `CatalogRejectedError` has `messageCode`. Rule messages (S, M, P, WF) keep their text and get their id only in `validation.findings`. C12
 covers the catalogue's bounds and schema; a model-carried `actors` list shares the catalogue's Actor
 schema, so its schema failures surface as F01 at the format gate and only its bounds reach C12. The

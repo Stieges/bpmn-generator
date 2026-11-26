@@ -138,7 +138,7 @@ node bpmn/pipeline.js process.json out --decisions decision.json   # table into 
 node bpmn/pipeline.js process.json out --view=explicit-joins      # joins as explicit gateways (hint H01)
 ```
 
-Format 2.0 (actor catalogue, lanes chosen by a view such as `--view=rollen`) is read by the CLI generate path only; the extraction rules above describe format 1.x. See `references/logic-core-schema.md`, section Format 2.0.
+Format 2.0 (actor catalogue, lanes chosen by a view such as `--view=rollen` or `--view=organigramm`) is read by the CLI generate path, the library and, with the catalogue as an embedded `catalog` object, by MCP and HTTP; the extraction rules above describe format 1.x. See `references/logic-core-schema.md`, section Format 2.0.
 
 Outputs: `*.bpmn` opens in Camunda Modeler, bpmn.io, ADONIS, Signavio; `*.svg` in a browser or
 Office; `*.dmn` in dmn.io or Camunda Modeler; `*.tables.html` pastes into a wiki page. Keep the Logic-Core JSON — it is the source for every

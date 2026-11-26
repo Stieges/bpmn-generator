@@ -41,7 +41,7 @@
         },
         "scheme": {
           "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/SchemeRef",
-          "description": "Responsibility scheme, only together with `actors`."
+          "description": "Responsibility scheme of the inline `actors`. Beside a catalogue passed by the call it is refused (C13): the process file cannot change the scheme."
         },
         "id": {
           "type": "string",
@@ -116,7 +116,7 @@
         },
         "scheme": {
           "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/SchemeRef",
-          "description": "Responsibility scheme, only together with `actors`."
+          "description": "Responsibility scheme of the inline `actors`. Beside a catalogue passed by the call it is refused (C13): the process file cannot change the scheme."
         },
         "pools": {
           "type": "array",
