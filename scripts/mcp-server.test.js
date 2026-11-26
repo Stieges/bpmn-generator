@@ -389,8 +389,25 @@ describe('import_bpmn reports a diagram generated from a format 2.0 model', () =
   test('2.0 output gives a second text block with the notice', async () => {
     const result = await call('import_bpmn', { bpmnXml: xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn') });
     expect(result.content).toHaveLength(2);
-    expect(result.content[1]).toEqual({ type: 'text', text: MODEL_V2_IMPORT_NOTICE });
+    expect(result.content[1]).toEqual({
+      type: 'text',
+      text: JSON.stringify({ notices: [{ code: 'N01', message: MODEL_V2_IMPORT_NOTICE }] }),
+    });
     expect(parse(result).lanes.map((l) => l.id)).toContain('L.Process_Schaden.regress');
+  });
+
+  test('an edited 2.0 golden (bg: attributes removed) gives one block and no notices key', async () => {
+    const xml = xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn')
+      .replace(/<bpmn:definitions[^>]*>/, (tag) => tag.replace(/\s+bg:(modelVersion|view|catalog)="[^"]*"/g, ''));
+    expect(xml).not.toMatch(/bg:modelVersion/);
+    const result = await call('import_bpmn', { bpmnXml: xml });
+    expect(result.content).toHaveLength(1);
+    expect(parse(result)).not.toHaveProperty('notices');
+  });
+
+  test('the tool description names the second block', () => {
+    const tool = TOOLS.find((t) => t.name === 'import_bpmn');
+    expect(tool.description).toContain('a diagram generated from a format 2.0 model adds a second text block with `notices`');
   });
 
   test('1.x output gives one block', async () => {

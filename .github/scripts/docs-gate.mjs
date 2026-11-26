@@ -82,7 +82,7 @@ export class ToolingError extends Error {}
 // ============================================================ 1. response-contract
 
 /**
- * Builds one real response per endpoint, exactly the way scripts/http-server.js
+ * Builds real responses as `[defName, label, payload]` (one per endpoint, two for import), exactly the way scripts/http-server.js
  * assembles its JSON payload — imports the same functions http-server.js imports
  * and mirrors its field selection. Drifts here (a field added to the pipeline
  * result but not to the handler's payload, or vice versa) are exactly the class
@@ -127,6 +127,23 @@ async function buildRealResponses() {
   const logicCore = await importMod.bpmnToLogicCore(gen.bpmnXml);
   const importResponse = { correlationId: 'docs-gate', status: 'success', logicCore };
 
+  // A diagram generated from a format 2.0 model: the response carries `notices`.
+  const goldenPath = join(REPO_ROOT, 'tests', 'fixtures-v2', 'schaden.rollen.expected.bpmn');
+  let goldenXml;
+  try {
+    goldenXml = readFileSync(goldenPath, 'utf8');
+  } catch (err) {
+    throw new ToolingError(`could not read fixture ${goldenPath}: ${err.message}`);
+  }
+  const importV2Response = {
+    correlationId: 'docs-gate',
+    status: 'success',
+    logicCore: await importMod.bpmnToLogicCore(goldenXml),
+    ...(importMod.readModelMarker(goldenXml)
+      ? { notices: [{ code: importMod.MODEL_V2_IMPORT_NOTICE_CODE, message: importMod.MODEL_V2_IMPORT_NOTICE }] }
+      : {}),
+  };
+
   const orch = await orchestratorMod.orchestrate(lc, {});
   const orchestrateResponse = {
     correlationId: 'docs-gate',
@@ -141,8 +158,13 @@ async function buildRealResponses() {
     iterations: orch.iterations,
   };
 
-  return { GenerateResponse: generateResponse, ValidateResponse: validateResponse,
-    ImportResponse: importResponse, OrchestrateResponse: orchestrateResponse };
+  return [
+    ['GenerateResponse', 'generate of a 1.x model', generateResponse],
+    ['ValidateResponse', 'validate of a 1.x model', validateResponse],
+    ['ImportResponse', 'import of a 1.x diagram', importResponse],
+    ['ImportResponse', 'import of a 2.0 golden', importV2Response],
+    ['OrchestrateResponse', 'orchestrate of a 1.x model', orchestrateResponse],
+  ];
 }
 
 function loadAjv() {
@@ -158,7 +180,7 @@ function loadAjv() {
 export function checkResponseContract(responses, schema, ajv) {
   ajv.addSchema(schema, schema.$id);
   const findings = [];
-  for (const [defName, payload] of Object.entries(responses)) {
+  for (const [defName, label, payload] of responses) {
     const validate = ajv.getSchema(`${schema.$id}#/$defs/${defName}`);
     if (!validate) {
       throw new ToolingError(`references/api-schema.json has no $defs/${defName}`);
@@ -166,7 +188,7 @@ export function checkResponseContract(responses, schema, ajv) {
     if (!validate(payload)) {
       findings.push({
         check: 'response-contract',
-        detail: `${defName}: ` + validate.errors.map((e) => `${e.instancePath || '(root)'} ${e.message}`).join('; '),
+        detail: `${defName} (${label}): ` + validate.errors.map((e) => `${e.instancePath || '(root)'} ${e.message}`).join('; '),
       });
     }
   }

@@ -1095,10 +1095,19 @@ describe('POST /api/v1/import reports a diagram generated from a format 2.0 mode
     const res = await importXml(xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn'));
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.notices).toEqual([MODEL_V2_IMPORT_NOTICE]);
+    expect(data.notices).toEqual([{ code: 'N01', message: MODEL_V2_IMPORT_NOTICE }]);
     expect(data.logicCore.lanes.map((l) => l.id)).toContain('L.Process_Schaden.regress');
     const validate = await importResponseSchema();
     expect(validate(data)).toBe(true);
+  });
+
+  test('an edited 2.0 golden (bg: attributes removed) has no notices key', async () => {
+    const xml = xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn')
+      .replace(/<bpmn:definitions[^>]*>/, (tag) => tag.replace(/\s+bg:(modelVersion|view|catalog)="[^"]*"/g, ''));
+    expect(xml).not.toMatch(/bg:modelVersion/);
+    const res = await importXml(xml);
+    expect(res.status).toBe(200);
+    expect(Object.keys(await res.json()).sort()).toEqual(['correlationId', 'logicCore', 'status']);
   });
 
   test('1.x output keeps its exact keys: no notices key', async () => {
