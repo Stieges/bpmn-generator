@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { readLexiconFile, NamingDataError, namingSchemaPath } from './lexicon.js';
+import { readLexiconFile, loadLexicon, NamingDataError, namingSchemaPath } from './lexicon.js';
 import { resolveWithFallback } from '../../shared/resource-paths.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -110,12 +110,14 @@ describe('importing lexicon.js', () => {
     }
     syncBuiltinESMExports();
     ${importLine}
-    console.log(JSON.stringify(seen.filter(p => /[\\\\/]references[\\\\/]/.test(p))));
+    // Naming data only: importing shared/rule-profile.js (for readBoundedJsonText) reads its own
+    // rule-profile-schema.json, which rules.js already does on every run.
+    console.log(JSON.stringify(seen.filter(p => /[\\\\/]references[\\\\/]naming/.test(p))));
   `;
   const run = (code) => JSON.parse(
     execFileSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' }).trim());
 
-  test('reads no file under references/', () => {
+  test('reads no naming data file', () => {
     expect(run(probe(`await import(${JSON.stringify(join(here, 'lexicon.js'))});`))).toEqual([]);
   });
 
@@ -163,5 +165,60 @@ describe('namingSchemaPath', () => {
     const packaged = join(dir, 'naming-schema.json');
     writeFileSync(packaged, '{}');
     expect(resolveWithFallback(join(dir, 'nope.json'), packaged, 'naming-schema.json')).toBe(packaged);
+  });
+});
+
+describe('loadLexicon with an overlay', () => {
+  const overlay = (languages) => write({ languages });
+  const load = (language, overlayPath) => loadLexicon(language, { overlayPath });
+
+  test('add puts a word on a list, remove takes one off; add comes first', () => {
+    const p = overlay({ en: { add: { verbs: ['invoice', 'zzzword'] }, remove: { verbs: ['check', 'zzzword'] } } });
+    const lex = load('en', p);
+    expect(lex.verbs.has('invoice')).toBe(true);
+    expect(lex.verbs.has('check')).toBe(false);
+    expect(lex.verbs.has('zzzword')).toBe(false);
+    expect(loadLexicon('en').verbs.has('check')).toBe(true);
+    expect(loadLexicon('en').verbs.has('invoice')).toBe(false);
+  });
+
+  test('verbPhrases are added and removed as whole phrases', () => {
+    const p = overlay({ de: { add: { verbPhrases: ['zur kenntnis nehmen'] } } });
+    expect(load('de', p).verbPhrases).toContainEqual(['zur', 'kenntnis', 'nehmen']);
+  });
+
+  test('the cache is keyed by the overlay path', () => {
+    const a = overlay({ en: { add: { verbs: ['alphaword'] } } });
+    const b = overlay({ en: { add: { verbs: ['betaword'] } } });
+    expect(load('en', a)).toBe(load('en', a));
+    expect(load('en', b).verbs.has('alphaword')).toBe(false);
+    expect(load('en', b).verbs.has('betaword')).toBe(true);
+  });
+
+  test('an overlay for another registered language leaves this one as shipped', () => {
+    const p = overlay({ de: { add: { verbs: ['fooen'] } } });
+    expect(load('en', p).verbs.has('fooen')).toBe(false);
+  });
+
+  const big = join(dir, 'big.json');
+  writeFileSync(big, ' '.repeat(300 * 1024));
+  test.each([
+    ['an unknown top-level key', () => write({ languages: {}, surprise: 1 })],
+    ['an unknown key in a language', () => overlay({ en: { replace: {} } })],
+    ['an unknown list', () => overlay({ en: { add: { nouns: ['house'] } } })],
+    ['a language without shipped data', () => overlay({ fr: { add: { verbs: ['aller'] } } })],
+    ['an upper-case word', () => overlay({ en: { add: { verbs: ['Invoice'] } } })],
+    ['a directory', () => dir],
+    ['a file over the limit', () => big],
+    ['invalid JSON', () => write('{ nope')],
+    ['a missing file', () => join(dir, 'gone-overlay.json')],
+    ['an array', () => write('[]')],
+  ])('%s throws a NamingDataError naming the path', (_n, make) => {
+    const p = make();
+    let err;
+    try { load('en', p); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(NamingDataError);
+    expect(err.constructor.name).not.toBe('ProfileRejectedError');
+    expect(err.message).toContain(p);
   });
 });

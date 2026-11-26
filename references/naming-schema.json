@@ -374,6 +374,171 @@
     "Phrase": {
       "type": "string",
       "pattern": "^[\\p{Ll}]+( [\\p{Ll}]+)*$"
+    },
+    "LanguageOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "verbs": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "verbPhrases": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Phrase"
+              }
+            },
+            "nounVerbHomographs": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "stateWords": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "stateMarkers": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "participleHomographs": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "geInfinitives": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "adjectiveStoplist": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            }
+          }
+        },
+        "remove": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "verbs": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "verbPhrases": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Phrase"
+              }
+            },
+            "nounVerbHomographs": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "stateWords": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "stateMarkers": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "participleHomographs": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "geInfinitives": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "adjectiveStoplist": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            }
+          }
+        }
+      }
+    },
+    "Overlay": {
+      "description": "The BPMN_NAMING overlay: words added to, then removed from, the flat word lists of a shipped language.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "languages"
+      ],
+      "properties": {
+        "languages": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z]{2,3}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/LanguageOverlay"
+          }
+        }
+      }
     }
   }
 }

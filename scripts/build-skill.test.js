@@ -151,3 +151,14 @@ describe('build-skill — the bundle is closed under its own imports', () => {
     expect(() => collectIncludes(root)).toThrow(/gone\.js is imported but does not exist/);
   });
 });
+
+describe('build-skill — the naming data and modules ship', () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  test('collectIncludes lists the naming schema, both data files and the six modules', () => {
+    const files = collectIncludes(repoRoot);
+    for (const f of [
+      'references/naming-schema.json', 'references/naming/de.json', 'references/naming/en.json',
+      ...['index', 'lexicon', 'tokens', 'verb-first', 'verb-last', 'markers'].map(m => `scripts/bpmn/naming/${m}.js`),
+    ]) expect(files).toContain(f);
+  });
+});
