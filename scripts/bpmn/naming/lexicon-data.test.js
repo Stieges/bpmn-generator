@@ -218,6 +218,18 @@ describe('German', () => {
   const de = loadLexicon('de');
   const data = JSON.parse(readFileSync(namingDePath(), 'utf8'));
 
+  test('compoundExceptions: each word begins with a marker keyword, none repeats another one\'s start', () => {
+    const keywords = Object.values(de.eventMarkers).flat();
+    const list = [...de.compoundExceptions];
+    expect(list.length).toBeGreaterThanOrEqual(10);
+    for (const e of list) {
+      expect(keywords.some((k) => e.startsWith(k) && e.length > k.length)).toBe(true);
+      expect(list.filter((o) => o !== e && e.startsWith(o))).toEqual([]);
+    }
+    expect(list).toEqual(expect.arrayContaining(['zeitschrift', 'zeitung', 'zeitarbeit', 'zeitkonto', 'zeitwert', 'zeitzeuge', 'zeitvertrag', 'signalwirkung']));
+    expect(data.compoundExceptions).toEqual([...data.compoundExceptions].sort());
+  });
+
   test('validates and has the declared switches', () => {
     expect(de.language).toBe('de');
     expect(de.wordOrder).toBe('verb-last');

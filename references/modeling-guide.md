@@ -130,8 +130,11 @@ Behaviours worth knowing:
 - Under `en`, M05 does not flag a message flow that ends in a message noun (`Deploy request`, `Sell
   order`) for starting with a verb, unless the verb sends or decides on the message (`Send invoice`,
   `Approve order` are flagged).
-- German compounds count for the event markers: `Zeitschrift gelesen` suggests a timer because the
-  name starts with `Zeit`. Set `marker` on such an event yourself.
+- German compounds count for the event markers: `Fristablauf` suggests a timer and `Fehlermeldung`
+  an error because the name starts with the keyword. Words that only begin like a keyword are
+  listed in `compoundExceptions` and give no marker (`Zeitschrift gelesen`, `Zeitung`, `Zeitarbeit`,
+  `Signalwirkung`). A word the list misses, and a keyword at the end of a word (`Arbeitszeit`), is
+  fixed by setting `marker` on the event yourself.
 - The marker of an event without `marker` is inferred from its name only where BPMN allows it:
   `Deadline missed` is a timer on a boundary event and nothing on an end event; `Error raised` is
   an error on an end event and nothing on a start event. Error and escalation are never inferred on a

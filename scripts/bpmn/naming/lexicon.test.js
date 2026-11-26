@@ -195,6 +195,14 @@ describe('loadLexicon with an overlay', () => {
     expect(() => load('en', closed)).toThrow(NamingDataError);
   });
 
+  test('compoundExceptions can be extended and trimmed (domain vocabulary)', () => {
+    const p = overlay({ de: { add: { compoundExceptions: ['Zeitplanung'.toLowerCase()] }, remove: { compoundExceptions: ['zeitung'] } } });
+    expect(load('de', p).compoundExceptions).toContain('zeitplanung');
+    expect(load('de', p).compoundExceptions).not.toContain('zeitung');
+    expect(loadLexicon('de').compoundExceptions).toContain('zeitung');
+    expect(() => load('de', overlay({ de: { add: { compoundExceptions: ['Zeitplanung'] } } }))).toThrow(NamingDataError);
+  });
+
   test('messageNouns can be extended; instructionVerbs cannot', () => {
     const p = overlay({ en: { add: { messageNouns: ['manifest'] } } });
     expect(load('en', p).messageNouns.has('manifest')).toBe(true);
