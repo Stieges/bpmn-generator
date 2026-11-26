@@ -1,7 +1,7 @@
 {
   "language": "de",
   "wordOrder": "verb-last",
-  "purpose": "German puts the verb last, so task names (M01) are decided mostly by form: the last word is lower case and ends in an infinitive suffix, and most task verbs need no entry. The verb list carries what form cannot tell. Events (M06) are flagged only when the last word is a listed verb or ends in -ieren, because words such as eingegangen or offen also end in -en. For tasks and messages (M01, M05) a listed verb counts as an infinitive and is never taken for a ge-participle, and a zu-infinitive such as auszuzahlen is recognised when its verb is listed or, unlisted, ends in an infinitive suffix after a vowel. A word missing from the verb list is mostly missed, not flagged; the exemption lists (geInfinitives, participleHomographs, adjectiveStoplist, stateMarkers, nounVerbHomographs) are the ones that can cause findings when shortened. Extend or trim the verbs and the exemption lists with a BPMN_NAMING overlay; it accepts only the lists of its schema (here verbs, stateMarkers, participleHomographs, geInfinitives, adjectiveStoplist, nounVerbHomographs, compoundExceptions).",
+  "purpose": "German puts the verb last, so task names (M01) are decided mostly by form: the last word is lower case and ends in an infinitive suffix, and most task verbs need no entry. The verb list carries what form cannot tell. Events (M06) are flagged only when the last word is a listed verb or ends in -ieren, because words such as eingegangen or offen also end in -en. For tasks and messages (M01, M05) a listed verb counts as an infinitive and is never taken for a ge-participle, and a zu-infinitive such as auszuzahlen is recognised when its verb is listed or, unlisted, ends in an infinitive suffix after a vowel. A word missing from the verb list is mostly missed, not flagged; the exemption lists (geInfinitives, participleHomographs, adjectiveStoplist, stateMarkers, nounVerbHomographs) are the ones that can cause findings when shortened. Extend or trim the verbs and the exemption lists with a BPMN_NAMING overlay; it accepts only the lists of its schema (here verbs, stateMarkers, participleHomographs, geInfinitives, adjectiveStoplist, nounVerbHomographs, compoundExceptions, expiryWords).",
   "listNotes": {
     "questionMarks": "M02 reads it: a gateway name counts as a question when it contains one of these strings.",
     "conjunctions": "M01 does not count these words as the object of a task name, so a name made only of a conjunction and a verb is flagged.",
@@ -16,7 +16,9 @@
     "stateMarkers": "Lower-case words (ist, soll, zu) that make a name a state or a plan: M01 flags a task name with one right before its last word; M05 and M06 skip a name with one before its last word.",
     "nounVerbHomographs": "Words that are both verb and noun (zahlen, essen): M01 does not flag a lower-case container made only of such a word. Shortening it makes M01 flag more containers.",
     "eventMarkers": "Read by the marker inference for events (message, timer, error, signal, escalation, conditional), not by M01, M05 or M06; with compoundMarkers a keyword also matches at the start or end of a compound word with at least four further letters, unless a word of compoundExceptions applies.",
-    "compoundExceptions": "Words that begin with a marker keyword but name no such event (Zeitschrift, Fehlerfrei); the marker inference skips the leading match for them, also in inflected or longer forms. A word it misses: set `marker` on the event to the symbol you want, or to `none` for a plain event."
+    "compoundExceptions": "Words that begin with a marker keyword but name no such event (Zeitschrift, Fehlerfrei); the marker inference skips the leading match for them, also in inflected or longer forms. A word it misses: set `marker` on the event to the symbol you want, or to `none` for a plain event.",
+    "durationKeywords": "Timer keywords that name a duration (Arbeitszeit), not its end: a timer found only where a compound ends in one (Lieferzeit) needs a word of expiryWords as well; a whole-word or leading match counts on its own.",
+    "expiryWords": "Words that say a time has run out (abgelaufen, überschritten): they make a compound ending in a durationKeywords word a timer (Lieferzeit überschritten); a word of two letters (um) counts only last. Without one, set `marker` on the event."
   },
   "nounsCapitalized": true,
   "compoundMarkers": true,
@@ -70,6 +72,26 @@
     "zeitwirtschaft",
     "zeitzeuge",
     "zeitzone"
+  ],
+  "durationKeywords": [
+    "wartezeit",
+    "zeit"
+  ],
+  "expiryWords": [
+    "abgelaufen",
+    "abläuft",
+    "endet",
+    "erreicht",
+    "fällig",
+    "um",
+    "verfallen",
+    "verfällt",
+    "verstreicht",
+    "verstrichen",
+    "vorbei",
+    "überfällig",
+    "überschreitet",
+    "überschritten"
   ],
   "questionMarks": [
     "?"

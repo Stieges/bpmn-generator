@@ -203,6 +203,14 @@ describe('loadLexicon with an overlay', () => {
     expect(() => load('de', overlay({ de: { add: { compoundExceptions: ['Zeitplanung'] } } }))).toThrow(NamingDataError);
   });
 
+  test('expiryWords can be extended and trimmed; durationKeywords cannot', () => {
+    const p = overlay({ de: { add: { expiryWords: ['ausgelaufen'] }, remove: { expiryWords: ['vorbei'] } } });
+    expect(load('de', p).expiryWords).toContain('ausgelaufen');
+    expect(load('de', p).expiryWords).not.toContain('vorbei');
+    expect(loadLexicon('de').expiryWords).toContain('vorbei');
+    expect(() => load('de', overlay({ de: { add: { durationKeywords: ['dauer'] } } }))).toThrow(NamingDataError);
+  });
+
   test('messageNouns can be extended; instructionVerbs cannot', () => {
     const p = overlay({ en: { add: { messageNouns: ['manifest'] } } });
     expect(load('en', p).messageNouns.has('manifest')).toBe(true);
