@@ -7,10 +7,11 @@
  */
 import { describe, test, expect } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bpmnToLogicCore, bpmnToLogicCoreLegacy, readModelMarker, MODEL_V2_IMPORT_NOTICE } from './import.js';
+import { bpmnToLogicCore, bpmnToLogicCoreLegacy, readModelMarker, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './import.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 import { runPipeline } from './pipeline.js';
 import { loadNamedView, ViewRejectedError } from '../shared/view.js';
@@ -37,6 +38,12 @@ function keysOf(value, out = []) {
 
 /** The golden as a foreign modeler might save it: the `bg:` attributes on `definitions` gone. */
 const edited = (xml) => xml.replace(/<bpmn:definitions[^>]*>/, (tag) => tag.replace(/\s+bg:(modelVersion|view|catalog)="[^"]*"/g, ''));
+
+describe('MODEL_V2_IMPORT_NOTICE_CODE', () => {
+  test('is N01', () => {
+    expect(MODEL_V2_IMPORT_NOTICE_CODE).toBe('N01');
+  });
+});
 
 describe('MODEL_V2_IMPORT_NOTICE', () => {
   test('is the agreed text', () => {
@@ -135,7 +142,7 @@ describe('CLI node bpmn/import.js', () => {
   test('prints the notice on stderr, not on stdout, for 2.0 output', () => {
     const { status, stdout, stderr } = cli(golden('rollen'));
     expect(status).toBe(0);
-    expect(stderr).toContain(MODEL_V2_IMPORT_NOTICE);
+    expect(stderr).toContain(`[N01] ${MODEL_V2_IMPORT_NOTICE}`);
     expect(stdout).not.toContain(MODEL_V2_IMPORT_NOTICE);
     expect(stdout).toContain('"L.Process_Schaden.regress"');
   });
@@ -144,5 +151,17 @@ describe('CLI node bpmn/import.js', () => {
     const { status, stderr } = cli(resolve(root, 'tests/fixtures/simple-approval.expected.bpmn'));
     expect(status).toBe(0);
     expect(stderr).not.toContain(MODEL_V2_IMPORT_NOTICE);
+  });
+
+  test('prints no notice for an edited 2.0 golden (bg: attributes removed)', () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'import-edited-'));
+    try {
+      const file = resolve(dir, 'edited.bpmn');
+      writeFileSync(file, edited(read(golden('rollen'))));
+      const { status, stderr } = cli(file);
+      expect(status).toBe(0);
+      expect(stderr).not.toContain(MODEL_V2_IMPORT_NOTICE);
+      expect(stderr).not.toContain('N01');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

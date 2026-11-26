@@ -679,6 +679,9 @@ function findChildren(element, localName) {
 export const MODEL_V2_IMPORT_NOTICE = 'Diagram generated from a format 2.0 model. Changes belong in the model. '
   + 'Importing yields a format 1.x model; assignments and catalogue references are lost.';
 
+/** The code of the import notice in `shared/message-codes.js`. */
+export const MODEL_V2_IMPORT_NOTICE_CODE = 'N01';
+
 /**
  * The origin attributes a format 2.0 model leaves on `bpmn:definitions` (`modelVersion`, `view`,
  * `catalog` in the namespace `EXTENSION_NS`), or `null` when there are none or the text cannot be
@@ -753,7 +756,7 @@ async function main() {
   if (logicCore.collapsedPools?.length) console.log(`  Black-Box:  ${logicCore.collapsedPools.length}`);
   console.log(`  Nodes:      ${totalNodes}`);
   console.log(`  Edges:      ${totalEdges}`);
-  if (readModelMarker(xmlInput)) console.error(MODEL_V2_IMPORT_NOTICE);
+  if (readModelMarker(xmlInput)) console.error(`[${MODEL_V2_IMPORT_NOTICE_CODE}] ${MODEL_V2_IMPORT_NOTICE}`);
 }
 
 export { bpmnToLogicCore, bpmnToLogicCoreLegacy, parseXml };

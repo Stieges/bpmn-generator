@@ -47,12 +47,12 @@ describe('docs-gate — checkResponseContract', () => {
   };
 
   test('responses matching their $defs yield nothing', () => {
-    const findings = checkResponseContract({ Thing: { a: 'x' }, Other: { b: 1 } }, SCHEMA, newAjv());
+    const findings = checkResponseContract([['Thing', 'a', { a: 'x' }], ['Other', 'b', { b: 1 }]], SCHEMA, newAjv());
     expect(findings).toEqual([]);
   });
 
   test('a response missing a required field is a finding naming the $def', () => {
-    const findings = checkResponseContract({ Thing: {} }, SCHEMA, newAjv());
+    const findings = checkResponseContract([['Thing', 'empty', {}]], SCHEMA, newAjv());
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ check: 'response-contract' });
     expect(findings[0].detail).toContain('Thing');
@@ -62,21 +62,41 @@ describe('docs-gate — checkResponseContract', () => {
     // Shape of the real regression this check exists for: a field silently
     // dropped from a handler shows up as missing-required; a field added to
     // the handler but never documented shows up here instead.
-    const findings = checkResponseContract({ Thing: { a: 'x', surprise: true } }, SCHEMA, newAjv());
+    const findings = checkResponseContract([['Thing', 'extra', { a: 'x', surprise: true }]], SCHEMA, newAjv());
     expect(findings).toHaveLength(1);
   });
 
   test('only the failing response kind is reported, not its passing sibling', () => {
-    const findings = checkResponseContract({ Thing: { a: 'x' }, Other: {} }, SCHEMA, newAjv());
+    const findings = checkResponseContract([['Thing', 'good', { a: 'x' }], ['Other', 'bad', {}]], SCHEMA, newAjv());
     expect(findings).toHaveLength(1);
-    expect(findings[0].detail.startsWith('Other:')).toBe(true);
+    expect(findings[0].detail.startsWith('Other (bad):')).toBe(true);
+  });
+
+  test('several samples of one $def are all checked; the finding names the label', () => {
+    const findings = checkResponseContract(
+      [['Thing', 'import of a 1.x diagram', { a: 'x' }], ['Thing', 'import of a 2.0 golden', { a: 'x', surprise: ['x'] }]],
+      SCHEMA, newAjv());
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('import of a 2.0 golden');
+    expect(findings[0].detail).not.toContain('1.x');
+  });
+
+  test('the real ImportResponse: a 2.0 sample with string notices is the one finding, naming its label', () => {
+    const api = JSON.parse(readFileSync(join(__dirname, '..', 'references', 'api-schema.json'), 'utf8'));
+    const base = { correlationId: 'c', status: 'success', logicCore: {} };
+    const findings = checkResponseContract([
+      ['ImportResponse', 'import of a 1.x diagram', base],
+      ['ImportResponse', 'import of a 2.0 golden', { ...base, notices: ['x'] }],
+    ], api, newAjv());
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('import of a 2.0 golden');
   });
 
   test('a response key with no matching $def is a tooling error, not a silent skip', () => {
     // The response-building side and api-schema.json are maintained
     // separately — a typo in one must stop the build, not read as "nothing to
     // check".
-    expect(() => checkResponseContract({ Nope: { a: 'x' } }, SCHEMA, newAjv())).toThrow(ToolingError);
+    expect(() => checkResponseContract([['Nope', 'x', { a: 'x' }]], SCHEMA, newAjv())).toThrow(ToolingError);
   });
 });
 

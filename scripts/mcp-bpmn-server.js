@@ -28,7 +28,7 @@ import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
 import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
-import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE } from './bpmn/import.js';
+import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
 
 const PROFILE_PARAM = {
@@ -111,7 +111,7 @@ const TOOLS = [
   },
   {
     name: 'import_bpmn',
-    description: 'Import BPMN 2.0 XML and convert to Logic-Core JSON',
+    description: 'Import BPMN 2.0 XML and convert to Logic-Core JSON; a diagram generated from a format 2.0 model adds a second text block with `notices`',
     inputSchema: {
       type: 'object',
       required: ['bpmnXml'],
@@ -248,7 +248,9 @@ async function handleToolCall(request) {
   if (name === 'import_bpmn') {
     const logicCore = await bpmnToLogicCore(args.bpmnXml);
     const content = [{ type: 'text', text: JSON.stringify(logicCore, null, 2) }];
-    if (readModelMarker(args.bpmnXml)) content.push({ type: 'text', text: MODEL_V2_IMPORT_NOTICE });
+    if (readModelMarker(args.bpmnXml)) {
+      content.push({ type: 'text', text: JSON.stringify({ notices: [{ code: MODEL_V2_IMPORT_NOTICE_CODE, message: MODEL_V2_IMPORT_NOTICE }] }) });
+    }
     return { content };
   }
 
