@@ -110,9 +110,18 @@ describe('English', () => {
     }
   });
 
+  test('examples are single strings', () => {
+    expect(en.examples).toEqual({ task: 'Review application', event: 'Application received', message: 'Invoice', subprocess: 'Claims handling' });
+  });
+
   test('sources credit the contributor', () => {
     const credited = en.sources.find((s) => s.reference === '#151');
     expect(credited.author).toBe('Jérôme Fenal (@jfenal)');
+    expect(en.sources).toEqual([
+      { name: 'built-in M01 verb list of bpmn-generator (39 verbs)' },
+      { name: 'verb corpus and verb phrases of pull request #151 (109 verbs, 8 phrases)', author: 'Jérôme Fenal (@jfenal)', reference: '#151' },
+      { name: 'common analyst verbs, compiled for this file' },
+    ]);
   });
 
   test('namingEnPath resolves, the registry lists en, an unregistered language throws', () => {
