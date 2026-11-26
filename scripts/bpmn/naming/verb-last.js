@@ -13,7 +13,9 @@ import { foldWord, labelTokens } from './tokens.js';
 import { inferMarker } from './markers.js';
 
 const HAS_LETTER = /\p{L}/u;
-const LOWER_START = /^\p{Ll}/u;
+const FIRST_LETTER = /\p{L}/u;
+const LOWER = /\p{Ll}/u;
+const VOWEL = /[aeiouy]/;
 const LETTERS = /\p{L}/gu;
 const MIN_PREFIX_REST = 3;
 const VERB_SUFFIX = 'ieren';
@@ -31,7 +33,11 @@ function read(name) {
   }
 }
 
-const isLower = (token) => LOWER_START.test(token.raw);
+/** The first letter of the raw token is lower case; a leading quote or digit does not count. */
+const isLower = (token) => {
+  const m = FIRST_LETTER.exec(token.raw);
+  return m !== null && LOWER.test(m[0]);
+};
 
 export function verbLast(lexicon) {
   const {
@@ -62,12 +68,19 @@ export function verbLast(lexicon) {
     return ['', lower];
   }
 
-  function suffixInf(x) {
-    return infinitiveSuffixes.some(({ suffix, minLength }) => x.length >= minLength && x.endsWith(suffix));
+  /** The `infinitiveSuffixes` entry x ends in with its `minLength`, or `null`. */
+  function matchedSuffix(x) {
+    return infinitiveSuffixes.find(({ suffix, minLength }) => x.length >= minLength && x.endsWith(suffix)) ?? null;
   }
 
-  /** `ge…t` / `ge…en` after the separable prefix, unless that rest is an infinitive beginning with `ge`. */
+  const suffixInf = (x) => matchedSuffix(x) !== null;
+
+  /**
+   * `ge…t` / `ge…en` after the separable prefix, unless that rest is an infinitive beginning with
+   * `ge`, or the word is a known verb or ends in `ieren` (`geocodieren`).
+   */
   function gePart(token) {
+    if (verbs.has(token.folded) || token.folded.endsWith(VERB_SUFFIX)) return false;
     const r = foldWord(split(token.raw)[1]);
     if (!r.startsWith('ge') || geInfinitives.has(r)) return false;
     return (r.length >= 4 && r.endsWith('t')) || (r.length >= 5 && r.endsWith('en'));
@@ -79,18 +92,27 @@ export function verbLast(lexicon) {
     return suffixInf(x) && !gePart(token) && !adjectiveStoplist.has(x);
   }
 
-  /** A separable prefix, then `zu`, then a verb: `auszuzahlen`, `abzurechnen`, `zuzuordnen`. */
+  /**
+   * A separable prefix, then `zu`, then a verb: `auszuzahlen`, `abzurechnen`, `zuzuordnen`. A rest
+   * outside `verbs` needs a vowel before its infinitive suffix, so `festzurren` (`rr` + `en`) and
+   * `auszupfen` (`pf` + `en`) are no zu-infinitives.
+   */
   function zuInf(token) {
     const [p, r] = split(token.raw);
     if (p === '' || !r.startsWith('zu')) return false;
     const rest = foldWord(r.slice(2));
-    return verbs.has(rest) || suffixInf(rest);
+    if (verbs.has(rest)) return true;
+    const m = matchedSuffix(rest);
+    return m !== null && VOWEL.test(rest.slice(0, rest.length - m.suffix.length));
   }
+
+  /** A state marker is a lower-case word: `soll`, `ist`, `zu`; the nouns `Soll`, `Ist` are none. */
+  const isStateMarker = (token) => isLower(token) && stateMarkers.has(token.folded);
 
   const isParticipleEnd = (token) => token.folded.endsWith(participles.suffix);
 
   function stateGuard(tokens) {
-    for (let i = 0; i < tokens.length - 1; i++) if (stateMarkers.has(tokens[i].folded)) return true;
+    for (let i = 0; i < tokens.length - 1; i++) if (isStateMarker(tokens[i])) return true;
     return zuInf(tokens[tokens.length - 1]);
   }
 
@@ -99,7 +121,7 @@ export function verbLast(lexicon) {
     if (wordCount < 2 || tokens.length < 2) return flag('A task name needs an object and a verb, e.g. "Antrag prüfen".');
     const last = tokens[tokens.length - 1];
     if (!isLower(last) || !infinitive(last)) return flag('A task name ends with a verb in the infinitive, e.g. "Antrag prüfen".');
-    if (stateMarkers.has(tokens[tokens.length - 2].folded) || zuInf(last)) {
+    if (isStateMarker(tokens[tokens.length - 2]) || zuInf(last)) {
       return flag('A task name is an instruction, not a state; write "Rechnung zahlen", not "Rechnung zu zahlen".');
     }
     const others = tokens.slice(0, -1);
