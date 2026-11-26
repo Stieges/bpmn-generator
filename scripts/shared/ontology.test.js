@@ -58,7 +58,7 @@ describe('rules in the ontology', () => {
 
   test.each(['ERROR', 'WARNING', 'INFO', 'ADVISORY', 'OFF'])('severity %s is a vocabulary entry rules can point at', (name) => {
     expect(VOCABULARY.severities.map((s) => s.name)).toContain(name);
-    expect(raw()['@graph'].some((e) => e['@type'] === 'bg:Rule' && e.defaultSeverity === `bg:severity-${name}`)).toBe(true);
+    if (name !== 'OFF') expect(raw()['@graph'].some((e) => e['@type'] === 'bg:Rule' && e.defaultSeverity === `bg:severity-${name}`)).toBe(true);
   });
 
   test('ERROR, WARNING, INFO point at SHACL as a hint only; ADVISORY and OFF do not', () => {
@@ -67,8 +67,8 @@ describe('rules in the ontology', () => {
     expect(readFileSync(ontologyPath(), 'utf8')).not.toMatch(/equivalentClass|exactMatch|sameAs/);
   });
 
-  test('M05/M06 are OFF and O01–O04 ADVISORY', () => {
-    expect(['M05', 'M06'].map((id) => rule(id).defaultSeverity)).toEqual(['WARNING', 'OFF']);
+  test('M05/M06 are WARNING and O01–O04 ADVISORY', () => {
+    expect(['M05', 'M06'].map((id) => rule(id).defaultSeverity)).toEqual(['WARNING', 'WARNING']);
     expect(['O01', 'O02', 'O03', 'O04'].map((id) => rule(id).defaultSeverity)).toEqual(Array(4).fill('ADVISORY'));
   });
 

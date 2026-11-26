@@ -3193,11 +3193,11 @@ describe('Rule Engine — individual rules', () => {
     expect(result.warnings.some(w => w.includes('missing label'))).toBe(true);
   });
 
-  test('M05/M06: placeholder rules are OFF by default', () => {
+  test('M05/M06: WARNING by default (they run only under a declared language)', () => {
     const m05 = RULES.find(r => r.id === 'M05');
     const m06 = RULES.find(r => r.id === 'M06');
     expect(m05.defaultSeverity).toBe('WARNING');
-    expect(m06.defaultSeverity).toBe('OFF');
+    expect(m06.defaultSeverity).toBe('WARNING');
   });
 
   test('M07: inclusive gateway present → WARNING', () => {

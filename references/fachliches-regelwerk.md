@@ -13,6 +13,7 @@
 - [Regel-Objekt Schema](#regel-objekt-schema)
 - [Regel M01: Objekt+Verb-Heuristik](#regel-m01-objektverb-heuristik)
 - [Regel M05: Nachrichtenfluss-Bezeichnungen](#regel-m05-nachrichtenfluss-bezeichnungen)
+- [Regel M06: Ereignis-Bezeichnungen](#regel-m06-ereignis-bezeichnungen)
 - [Regel M10: Lane/Pool Name Length](#regel-m10-lanepool-name-length)
 - [Rule M11: decisionRef Placement](#rule-m11-decisionref-placement)
 - [Rule M12: no empty lane](#rule-m12-no-empty-lane)
@@ -25,7 +26,7 @@
 - [DMN Rules — a separate engine, three layers, two modes](#dmn-rules--a-separate-engine-three-layers-two-modes)
 - [Erweiterung](#erweiterung)
 
-Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **40 registrierte Regeln**, davon 39 aktiv (nur M06 steht auf `severity: OFF`; M05 ist WARNING, prueft aber nur Modelle mit deklarierter `language`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
+Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **40 registrierte Regeln**, davon 40 aktiv (keine steht auf `severity: OFF`; M05 und M06 sind WARNING, pruefen aber nur Modelle mit deklarierter `language`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
 
 ## Architektur
 
@@ -282,12 +283,12 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 
 | ID | Regel | Referenz | Status |
 |----|-------|----------|--------|
-| M01 | Tasks benennen mit Objekt+Verb-Pattern (Verb im Infinitiv) | 7PMG G6, Silver Ch.3 | implementiert (Heuristik) |
+| M01 | Tasks benennen mit Objekt+Verb-Pattern (Verb im Infinitiv) | 7PMG G6, Silver Ch.3 | implementiert (Heuristik; mit `language` die Sprachstrategie) |
 | M02 | Divergierende XOR-Gateways: Label als Frage formulieren | Silver Ch.5, MG.org | implementiert |
 | M03 | Convergierende Gateways: kein Label an ausgehenden Kanten | Silver Ch.5 | implementiert |
 | M04 | Divergierende XOR-Gateways: Kanten muessen Labels haben | Silver Ch.5, OMG §10.5.1 | implementiert |
 | M05 | Message-Flow-Labels: Nominalphrase in der deklarierten Sprache (`language`) | Silver Ch.5 | implementiert (nur mit `language`) |
-| M06 | Event-Labels: Partizip/Zustand oder Substantiv | Silver Ch.3 (POS-Tagger-Problem, siehe ROADMAP) | Platzhalter |
+| M06 | Event-Labels: Zustand oder Substantiv in der deklarierten Sprache (`language`) | Silver Ch.3 | implementiert (nur mit `language`) |
 | M07 | Vermeide OR-Gateways (inclusive) | Silver Ch.5, 7PMG G5 | implementiert |
 | M08 | Jeder XOR-Split hat einen Default-Flow | Silver Ch.5 | implementiert |
 | M09 | Lane-Node-Zuweisung: Format B (lane.nodeIds) ohne Format A (node.lane) | OMG §10.5 | implementiert |
@@ -442,12 +443,18 @@ Three rule sets, one per notation plus one across notations: 42 BPMN rules, 5 la
 
 Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvention: Verb am Ende im Infinitiv, z.B. "Antrag pruefen", "Zahlung anweisen"). Reine Substantive oder Substantivketten ohne Verb ("Pruefung", "Vorgang zur Klaerung") sind unklar und werden gewarnt.
 
-**Heuristik (bewusst konservativ):** M01 ist **kein** POS-Tagger. Die Pruefung nutzt:
+M01 hat zwei Pfade, je nachdem, ob das Modell eine gueltige `language` deklariert.
+
+**Ohne `language` (Heuristik, bewusst konservativ):** M01 ist **kein** POS-Tagger. Die Pruefung betrachtet nur die Tasks des eigenen Prozesses und nutzt:
 1. **< 2 Tokens** → Verstoss (Einzelwort wie "Pruefung").
 2. **Deutsch (primaer):** valide, wenn das letzte Token wie ein Infinitiv aussieht (Endung `-en`/`-eln`/`-ern`/`-ieren`, Laenge ≥ 4). Klammer-/Bracket-Meta `(…)`/`[…]` und Slashes werden vorher normalisiert ("erfassen/aendern" → beide Verben).
 3. **Englischer Escape-Hatch:** valide, wenn das erste Token in einer kleinen kuratierten Verbliste steht ("Review Application"), um False-Positives zu vermeiden.
 
-**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Mit deklarierter `language` ersetzt die Sprachstrategie diese Heuristik; die Namensregeln fuer Nachrichtenfluesse stehen in M05, die fuer Ereignisse (M06) sind noch Platzhalter/OFF. M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
+Dieser Pfad liest keine Woerterliste; seine Meldung ist deutsch und enthaelt `Objekt+Verb`. Die Ergebnisse bleiben byte-identisch.
+
+**Mit `language`** (z.B. `de`, `en`) ersetzt die Sprachstrategie des Modells die Heuristik: sie beurteilt jeden benannten Task (`taskName`) und jeden Container, d.h. Unterprozess und Aufruf (`containerName`), auf jeder Verschachtelungsebene des Prozesses. Die Woerterlisten liegen unter `references/naming/`, eine Ueberlagerung per `BPMN_NAMING`. Die Meldung ist englisch und nennt die Konvention der Sprache. Fuer eine Sprache ohne Namensdaten prueft M01 nichts.
+
+**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Die Namensregeln fuer Nachrichtenfluesse stehen in M05, die fuer Ereignisse in M06. M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
 
 **Beispiele:**
 
@@ -482,6 +489,27 @@ Ein Nachrichtenfluss benennt seinen Inhalt, nicht eine Handlung: eine Nominalphr
 | schlecht | `Send invoice` (Anweisung) |
 | schlecht | `Order received` (Zustand, Partizip am Ende) |
 | schlecht | `Case closed` (Zustand, Partizip am Ende) |
+
+---
+
+## Regel M06: Ereignis-Bezeichnungen
+
+**Layer:** Style | **Default Severity:** WARNING | **Scope:** process
+
+Ein Ereignis benennt einen Zustand oder ein Substantiv, keine Handlung: `Akte erhalten`, `Rechnung zu zahlen`, `Start`, nicht `Antrag pruefen`. M06 prueft jedes Ereignis mit einem `name` auf jeder Verschachtelungsebene des Prozesses (auch in aufgeklappten Unterprozessen) ueber das Urteil `eventName` der Sprachstrategie des Modells (`language`; Woerterlisten unter `references/naming/`, Ueberlagerung per `BPMN_NAMING`).
+
+**Ohne `language`** (fehlend oder ungueltig) laeuft M06 nicht: kein Befund, keine Woerterliste wird gelesen, die Ergebnisse bleiben byte-identisch. Gleiches gilt fuer eine Sprache ohne Namensdaten. Unter dem Strict-Profil ist M06 ein ERROR, ein Profil-Override `M06: OFF` schaltet die Regel ab.
+
+**Meldung:** `Event "<Name>" is named like an activity; the <Sprache> convention for events is a state or a noun (e.g. "<Beispiel>").`
+
+**Beispiele:**
+
+| Bewertung | Name |
+|-----------|------|
+| gut (Deutsch) | `Akte erhalten`, `Start`, `Kunde moechte kuendigen`, `Rechnung zu zahlen` |
+| schlecht (Deutsch) | `Antrag pruefen`, `Daten validieren` (Anweisung) |
+| gut (Englisch) | `Start X`, `Archive start`, `Follow-up`, `Build broken` |
+| schlecht (Englisch) | `Send invoice`, `Notify customer` (Anweisung) |
 
 ---
 

@@ -194,7 +194,7 @@ Ad-hoc subprocesses as containers for LLM decisions, deploy to Camunda Zeebe.
 
 ## 5 Placeholder Rules — Assessment
 
-At the time of this assessment, 6 placeholders were registered in rules.js (`check: () => ({ pass: true })`). M07, M08, P02, P03 and M05 (under a declared `language`) have since been implemented; M06 remains registered with severity OFF.
+At the time of this assessment, 6 placeholders were registered in rules.js (`check: () => ({ pass: true })`). M07, M08, P02, P03 and, under a declared `language`, M05 and M06 have since been implemented; none is left as a placeholder.
 
 ### IMPLEMENT
 
@@ -205,12 +205,12 @@ At the time of this assessment, 6 placeholders were registered in rules.js (`che
 | **P02** | Pragmatics (INFO) | Gateway nesting depth ≤ 3 (DFS with depth counter) | 30 LOC |
 | **P03** | Pragmatics (INFO) | Control-flow complexity score (Cardoso metric: Σ XOR splits + 2^n AND splits) | 40 LOC |
 
-### DEFERRED
+### IMPLEMENTED LATER
 
 | Rule | Layer | Description | Rationale |
 |------|-------|-------------|-----------|
 | **M05** | Style (WARNING) | Message flow labels: noun phrases | Implemented for models with a declared `language` (`de`, `en`) through the language strategies, without a POS tagger; a model without `language` is not checked. |
-| **M06** | Style (WARNING) | Event labels: participle/state | Same POS tagger issue as M05. German compounds and participle constructions cannot be reliably detected via regex. |
+| **M06** | Style (WARNING) | Event labels: participle/state | Implemented for models with a declared `language` (`de`, `en`) through the language strategies, without a POS tagger; a model without `language` is not checked. |
 
 ---
 
@@ -238,7 +238,6 @@ Test suite green after all changes (current count verified via `npm test`).
 | Edge crossing on synthetic paths | Synthetic paths (not ELK-routed) had no crossing avoidance. | Largely addressed in 4.0: crossing repair with the orthogonal router and foreign-shape repair; remaining cases tracked as #71–#78 |
 | Inline mode without task icons | HTML inline template renders simplified shapes. For full fidelity: pipeline.js. | — (by design) |
 | Formal soundness only for XOR/AND | WF-Net check covers XOR/AND gateways. OR gateways warning only, event-based GW skipped. | — (classical WF-Net limitation) |
-| Language analysis rule M06 | German labels require POS tagger — no reliable npm package available. | — (deferred) |
 | `evaluate-slm.js` measures structure, not extraction quality | Checks are JSON-parseable, has the required top-level keys (`pools` or `nodes`+`edges` — not the full `input-schema.json` ajv gate), pipeline validation passes, and node count is roughly right. No precision/recall against a ground-truth structure — gateway types, roles/lanes, conditions, and exception paths are not compared. | — (deferred; would need a scored fixture set with a hand-labeled ground truth per element class) |
 
 ---

@@ -23,7 +23,7 @@ export function cloneLc(lc) {
  *
  * style ist ABSICHTLICH aktiviert (enabled: true), obwohl das Ergebnis nie
  * daran scheitern kann: die Stil-Schicht hat ausschliesslich defaultSeverity
- * WARNING (siehe rules.js STYLE_RULES; M05/M06 sind ohnehin severity=OFF),
+ * WARNING (siehe rules.js STYLE_RULES; M05/M06 laufen nur mit deklarierter Sprache),
  * checkGate().ok prueft ausschliesslich r.errors — Warnungen bleiben also
  * folgenlos fuers Rollback. Ohne diese Aktivierung wuerden Stil-Verstoesse,
  * die ein Eingriff neu einfuehrt (z. B. applyMergeTasks vergibt einen vom

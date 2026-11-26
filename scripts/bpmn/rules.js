@@ -1011,7 +1011,7 @@ const SOUNDNESS_CHECKS = [
 export const LANE_NAME_LIMIT = 25;
 
 // M01 Objekt+Verb-Heuristik. Bewusst konservativ und nur WARNING — das ist KEIN
-// echter POS-Tagger (Wortartanalyse: M05 mit deklarierter Sprache, M06 aktuell OFF). Die
+// echter POS-Tagger (Wortartanalyse: M05 und M06 mit deklarierter Sprache). Die
 // deutsche BA-Konvention setzt das Verb ans Ende im Infinitiv ("Antrag prüfen");
 // zusätzlich akzeptieren wir das englische Verb-first-Muster ("Review application")
 // über eine kleine kuratierte Liste, um False-Positives zu vermeiden.
@@ -1176,13 +1176,27 @@ const STYLE_CHECKS = [
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
-  // Platzhalter für zukünftige Style-Regeln
+  // M06: under a declared language, event names are a state or a noun; without one, nothing runs.
   {
-    id: 'M06', // NOT_IMPLEMENTED
-    description: 'Event-Labels: Partizip/Zustand oder Substantiv',
+    id: 'M06',
+    description: 'Event-Labels: Zustand oder Substantiv (Sprache des Modells)',
     ref: { silver: 'Ch.3' },
     scope: 'process',
-    check: () => ({ pass: true }),
+    check: (proc, lc) => {
+      const language = modelLanguage(lc);
+      if (language === null) return { pass: true };
+      const naming = namingFor(language);
+      if (!naming) return { pass: true };
+      const msgs = [];
+      const walk = (nodes) => {
+        for (const n of (nodes || [])) {
+          if (isEvent(n.type) && typeof n.name === 'string' && naming.eventName(n.name)) msgs.push(namingMessage(naming, 'event', n.name));
+          walk(n.nodes);
+        }
+      };
+      walk(proc.nodes);
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
+    }
   },
   {
     id: 'M07',

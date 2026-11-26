@@ -39,7 +39,7 @@ function v2Form(path) {
   return r.lc;
 }
 
-/** The measured entry of one model: M01 and M05; M06 stays empty until its rule reads the language. */
+/** The measured entry of one model: M01, M05 and M06. */
 function measure(lc) {
   const r = withFindings(lc);
   return { language: lc.language, M01: messagesOf(r, 'M01'), M05: messagesOf(r, 'M05'), M06: messagesOf(r, 'M06') };
@@ -264,6 +264,95 @@ describe('M05 with a declared language', () => {
     expect(m05({ ...flowModel('x'), messageFlows: 'nope' })).toEqual([]);
     expect(m05({ ...flowModel('x'), messageFlows: [{ id: 'm' }, { id: 'n', name: 7 }] })).toEqual([]);
     expect(m05({ ...flowModel('x'), language: 'fr' })).toEqual([]);
+  });
+});
+
+describe('M06 with a declared language', () => {
+  const strict = () => profileForMode(loadRuleProfile(join(ROOT, 'rules', 'strict-profile.json')), 'document');
+  const eventModel = (startName, endName, language) => ({
+    language,
+    nodes: [
+      { id: 's', type: 'startEvent', ...(startName === undefined ? {} : { name: startName }) },
+      { id: 'a', type: 'task', name: language === 'en' ? 'Check order' : 'Antrag prüfen' },
+      { id: 'e', type: 'endEvent', ...(endName === undefined ? {} : { name: endName }) },
+    ],
+    edges: [{ id: 'f1', source: 's', target: 'a' }, { id: 'f2', source: 'a', target: 'e' }],
+  });
+  const m06 = (lc, profile = null) => messagesOf(withFindings(lc, profile), 'M06');
+  const msg = (name, language) => namingMessage(namingFor(language), 'event', name);
+
+  test('every fixture with its true language gives 0 M06 findings', () => {
+    for (const [file, language] of Object.entries(LANGUAGES)) {
+      expect([file, m06({ ...fixture(file), language })]).toEqual([file, []]);
+    }
+  });
+
+  test('German: "Antrag prüfen" and "Daten validieren" are flagged; states, nouns and unnamed events are not', () => {
+    expect(m06(eventModel('Antrag prüfen', 'Daten validieren', 'de'))).toEqual([msg('Antrag prüfen', 'de'), msg('Daten validieren', 'de')]);
+    for (const ok of ['Akte erhalten', 'Start', 'Kunde möchte kündigen', 'Rechnung zu zahlen', undefined]) {
+      expect([ok, m06(eventModel(ok, ok, 'de'))]).toEqual([ok, []]);
+    }
+  });
+
+  test('English: "Send invoice" and "Notify customer" are flagged; "Start X", "Archive start", "Follow-up", "Build broken" are not', () => {
+    expect(m06(eventModel('Send invoice', 'Notify customer', 'en'))).toEqual([msg('Send invoice', 'en'), msg('Notify customer', 'en')]);
+    for (const ok of ['Start X', 'Archive start', 'Follow-up', 'Build broken']) {
+      expect([ok, m06(eventModel(ok, ok, 'en'))]).toEqual([ok, []]);
+    }
+  });
+
+  test('an event inside an expanded subprocess is reported', () => {
+    const lc = {
+      language: 'de',
+      nodes: [
+        { id: 's', type: 'startEvent' },
+        { id: 'sp', type: 'subProcess', name: 'Antrag bearbeiten', nodes: [
+          { id: 'ss', type: 'startEvent', name: 'Antrag prüfen' },
+          { id: 'st', type: 'task', name: 'Akte anlegen' },
+          { id: 'se', type: 'endEvent' },
+        ], edges: [{ id: 'g1', source: 'ss', target: 'st' }, { id: 'g2', source: 'st', target: 'se' }] },
+        { id: 'e', type: 'endEvent' },
+      ],
+      edges: [{ id: 'f1', source: 's', target: 'sp' }, { id: 'f2', source: 'sp', target: 'e' }],
+    };
+    expect(m06(lc)).toEqual([msg('Antrag prüfen', 'de')]);
+  });
+
+  test('a collapsed pool and a pool without nodes do not throw', () => {
+    const lc = {
+      language: 'de',
+      pools: [
+        { id: 'p1', name: 'Kunde', nodes: eventModel('Antrag prüfen', undefined, 'de').nodes, edges: eventModel('x', 'y', 'de').edges },
+        { id: 'p2', name: 'Bank', collapsed: true },
+        { id: 'p3', name: 'Amt' },
+      ],
+    };
+    expect(m06(lc)).toEqual([`[Kunde] ${msg('Antrag prüfen', 'de')}`]);
+  });
+
+  test('an unregistered language does not throw and flags nothing', () => {
+    expect(m06({ ...eventModel('Antrag prüfen', 'x', 'de'), language: 'fr' })).toEqual([]);
+  });
+
+  test('under the strict profile with "de", "Antrag prüfen" is an ERROR and blocks', () => {
+    const r = runRules(eventModel('Antrag prüfen', undefined, 'de'), strict(), undefined, { withFindings: true });
+    const f = r.findings.filter((x) => x.code === 'M06');
+    expect(f).toHaveLength(1);
+    expect(f[0].severity).toBe('ERROR');
+    expect(r.errors).toContain(f[0].message);
+  });
+
+  test('without language the strict profile has no M05 or M06 output', () => {
+    const lc = eventModel('Antrag prüfen', 'Daten validieren', 'de');
+    delete lc.language;
+    const r = runRules(lc, strict(), undefined, { withFindings: true });
+    expect(r.findings.filter((x) => x.code === 'M05' || x.code === 'M06')).toEqual([]);
+  });
+
+  test('no rule of the ontology points at severity OFF any more, and OFF is still a vocabulary entry', () => {
+    const graph = readJson(join(ROOT, 'references', 'ontology.jsonld'))['@graph'];
+    expect(graph.filter((e) => e['@type'] === 'bg:Rule' && e.defaultSeverity === 'bg:severity-OFF')).toEqual([]);
+    expect(graph.some((e) => e['@id'] === 'bg:severity-OFF')).toBe(true);
   });
 });
 
