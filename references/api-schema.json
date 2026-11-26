@@ -199,6 +199,20 @@
             },
             "additionalProperties": false
           }
+        },
+        "findings": {
+          "type": "array",
+          "description": "format 2.x runs only: every message of `errors` and `warnings` once more with its code and severity, errors first, then warnings; `message` is the very string in the list it mirrors. Codes: C01-C06, C10, C12, C13, F01, F02, F04 (the `[code] ` prefix of the message), F05 (a `decisions` option failing the Decision-Core schema; the message carries no prefix), the rule ids S/M/P/WF (rule messages carry no prefix). Layout notes in `infos` and `xmlWarnings` get no finding. Absent on format 1.x runs.",
+          "items": {
+            "type": "object",
+            "required": ["code", "severity", "message"],
+            "properties": {
+              "code": { "type": "string", "pattern": "^([A-Z]{1,2}[0-9]{2}[a-z]?|WF_[A-Z]+)$" },
+              "severity": { "enum": ["ERROR", "WARNING", "INFO"] },
+              "message": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

@@ -47,7 +47,7 @@ import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, lane
 import { isMainModule } from '../shared/entry-point.js';
 import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOptions } from '../shared/view.js';
 import { applyDerivations } from './derivations.js';
-import { coded } from '../shared/message-codes.js';
+import { coded, codeOf } from '../shared/message-codes.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
 // reachable from here.
@@ -126,12 +126,20 @@ function derivationHints(derived, lc) {
   }));
 }
 
-/** A pipeline result that stopped before any diagram: `errors`, and `rest` for the other validation lists. */
-function blockedResult(errors, rest = { warnings: [], advisories: [], metrics: {} }) {
+/**
+ * A pipeline result that stopped before any diagram: `errors`, and `rest` for the other validation
+ * lists. `findings` is given on format 2.x runs only; without it the result has no `findings` key.
+ */
+function blockedResult(errors, rest = { warnings: [], advisories: [], metrics: {} }, findings = undefined) {
   return {
     bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
-    validation: { errors, ...rest, hints: [] },
+    validation: { errors, ...rest, hints: [], ...(findings ? { findings } : {}) },
   };
+}
+
+/** One ERROR finding per message, `code` read from its `[code] ` prefix unless given. */
+function errorFindings(errors, code = null) {
+  return errors.map((message) => ({ code: code ?? codeOf(message), severity: 'ERROR', message }));
 }
 
 /**
@@ -177,10 +185,16 @@ function blockedResult(errors, rest = { warnings: [], advisories: [], metrics: {
  *     references/api-schema.json
  *   validation: {errors: string[], warnings: string[], advisories: object[], metrics: object,
  *                hints: Array<{code: string, message: string, elements: string[]}>,
- *                infos?: string[], xmlWarnings?: string[]}
+ *                infos?: string[], xmlWarnings?: string[],
+ *                findings?: Array<{code: string, severity: string, message: string}>}
  *     `hints` (always present, empty on an early return): first the lane hints of a format 2.0
  *     model (formLanes: H02–H06, H08), then one entry per element the view derived — H01 a join
  *     gateway and its onward flow, `elements: [gatewayId, targetId, flowId]`
+ *     `findings` (format 2.x runs only, absent on 1.x): Array<{code, severity, message}>, each
+ *     `message` the very string in `errors` or `warnings` — errors first, then warnings. The
+ *     resolveFields and F04 findings code their prefix, a failing `decisions` gate F05, the rule
+ *     findings their rule id (S/M/P/WF; rule infos dropped as above), formLanes C10 followed by the
+ *     rule warnings. Layout notes in `infos` and `xmlWarnings` get no finding
  * }>}
  */
 async function runPipeline(logicCore, callerOpts = {}) {
@@ -200,10 +214,11 @@ async function runPipeline(logicCore, callerOpts = {}) {
   let resolved = null;
   if (v2) {
     if (opts.mode === 'optimize' || opts.mode === 'soll') {
-      return blockedResult([coded('F04', `mode "${opts.mode}" is not available for format 2.0 models yet`)]);
+      const modeErrors = [coded('F04', `mode "${opts.mode}" is not available for format 2.0 models yet`)];
+      return blockedResult(modeErrors, undefined, errorFindings(modeErrors));
     }
     const fields = resolveFields(logicCore, { catalog: opts.catalog ?? undefined, viewName: opts.viewName ?? 'default' });
-    if (fields.errors.length) return blockedResult(fields.errors);
+    if (fields.errors.length) return blockedResult(fields.errors, undefined, errorFindings(fields.errors));
     ({ lc: source, resolved } = fields);
   } else {
     if (opts.catalog != null) throw new TypeError('catalog applies to format 2.0 models only');
@@ -221,15 +236,18 @@ async function runPipeline(logicCore, callerOpts = {}) {
     if (!Array.isArray(opts.decisions)) throw new TypeError('decisions must be an array of Decision-Core documents');
     const decisionErrors = decisionCoreErrors(opts.decisions);
     if (decisionErrors.length) {
-      return blockedResult(decisionErrors);
+      return blockedResult(decisionErrors, undefined, v2 ? errorFindings(decisionErrors, 'F05') : undefined);
     }
     lc = applyDecisionDocumentation(lc, opts.decisions, { locale: opts.locale });
   }
 
   const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
-  const { errors, warnings, advisories = [], metrics } = validateLogicCore(lc, profile);
+  // A 2.x run also gives its rule findings as objects (`validation.findings`); rule infos are
+  // dropped here as their strings are.
+  const { errors, warnings, advisories = [], metrics, findings: allRuleFindings } = validateLogicCore(lc, profile, { withFindings: v2 });
+  const ruleFindings = v2 ? allRuleFindings.filter((f) => f.severity !== 'INFO') : undefined;
   if (errors.length) {
-    return blockedResult(errors, { warnings, advisories, metrics });
+    return blockedResult(errors, { warnings, advisories, metrics }, ruleFindings);
   }
 
   // The lanes of a 2.0 model AFTER validation (design 7.3 step 5): the rules judged the model
@@ -238,7 +256,9 @@ async function runPipeline(logicCore, callerOpts = {}) {
   let laneHints = [];
   if (v2) {
     const formed = formLanes(lc, resolved, { lanes: opts.lanes ?? 'role' });
-    if (formed.errors.length) return blockedResult(formed.errors, { warnings, advisories, metrics });
+    if (formed.errors.length) {
+      return blockedResult(formed.errors, { warnings, advisories, metrics }, [...errorFindings(formed.errors), ...ruleFindings]);
+    }
     lc = formed.lc;
     laneHints = formed.hints;
   }
@@ -457,7 +477,10 @@ async function runPipeline(logicCore, callerOpts = {}) {
 
   return {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
-    validation: { errors: [], warnings, infos: layoutInfos, advisories, metrics, xmlWarnings: roundTrip.warnings, hints },
+    validation: {
+      errors: [], warnings, infos: layoutInfos, advisories, metrics, xmlWarnings: roundTrip.warnings, hints,
+      ...(v2 ? { findings: ruleFindings } : {}),
+    },
   };
 }
 

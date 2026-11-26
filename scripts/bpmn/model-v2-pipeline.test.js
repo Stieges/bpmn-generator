@@ -117,20 +117,24 @@ describe('runPipeline — format 2.0, the two views of design 5.6', () => {
 });
 
 describe('runPipeline — format 2.0 early returns', () => {
-  const early = (errors) => ({
+  // A 2.x early return also carries `validation.findings`: one ERROR finding per error.
+  const early = (errors, code) => ({
     bpmnXml: null, svg: null, coordMap: null, diagnostics: null, netDiagnostics: null,
-    validation: { errors, warnings: [], advisories: [], metrics: {}, hints: [] },
+    validation: {
+      errors, warnings: [], advisories: [], metrics: {}, hints: [],
+      findings: errors.map((message) => ({ code, severity: 'ERROR', message })),
+    },
   });
 
   test.each(['optimize', 'soll'])('mode %s is refused', async (mode) => {
-    expect(await run({ mode })).toEqual(early([`[F04] mode "${mode}" is not available for format 2.0 models yet`]));
+    expect(await run({ mode })).toEqual(early([`[F04] mode "${mode}" is not available for format 2.0 models yet`], 'F04'));
   });
 
   test('a C01 finding stops the run with no artefact and no hints', async () => {
     const model = copy(MODEL);
     model.nodes.find((n) => n.id === 'zahlen').assignments[0].actor = 'kasse';
     const result = await run({ view: loadNamedView('rollen') }, model);
-    expect(result).toEqual(early([expect.stringMatching(/^\[C01\] node "zahlen": actor "kasse"/)]));
+    expect(result).toEqual(early([expect.stringMatching(/^\[C01\] node "zahlen": actor "kasse"/)], 'C01'));
   });
 
   test('a model naming its catalogue as a path without a catalogue object is an error', async () => {
