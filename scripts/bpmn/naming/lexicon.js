@@ -13,10 +13,10 @@ import { foldWord } from './tokens.js';
 
 export { namingSchemaPath };
 
-/** Naming data that cannot be read or does not match the naming schema. */
 /** The one text a client may see of a naming data failure: the message names a server path. */
 export const NAMING_DATA_PUBLIC_MESSAGE = 'naming data unavailable';
 
+/** Naming data that cannot be read or does not match the naming schema. */
 export class NamingDataError extends Error {
   constructor(message) {
     super(message);
