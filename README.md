@@ -299,17 +299,21 @@ back. Without the field nothing changes: M01 is the legacy `Objekt+Verb` heurist
 stay silent. A valid tag with no word lists here (`fr`) skips M01, M05 and M06 and gives hint `H12`;
 labels that look like another supported language give `H13`.
 
-A heuristic over word lists flags the odd correct label: under `en`, `Invoice customer` is flagged
-because `invoice` is not in the verb list. The remedy is data, not code. Point `BPMN_NAMING` at a
-JSON file that adds words to, or removes words from, the lists of a shipped language:
+No word list holds every English verb, so under `en` M01 flags a task name only on evidence of a
+wrong form (`Check`, `Step 3`, `Checking invoice`, `Invoice checked`, `Invoice check`, `The
+invoice`). A name whose first word is simply not in the verb list passes, and the model gets one
+hint `H14` naming up to ten such words: `Invoice customer` gives `'Invoice'`. If the word is a verb
+nothing is wrong. The remedy, for that hint or for a correct label a rule flags, is data, not code.
+Point `BPMN_NAMING` at a JSON file that adds words to, or removes words from, the lists of a
+shipped language:
 
 ```json
 { "languages": { "en": { "add": { "verbs": ["invoice"] } } } }
 ```
 
-Eight flat lists can be extended: `verbs`, `verbPhrases`, `nounVerbHomographs`, `stateWords`,
-`stateMarkers`, `participleHomographs`, `geInfinitives` and `adjectiveStoplist` (each language uses
-the lists it has). Words are added first, then removed. Each shipped data file
+Ten flat lists can be extended: `verbs`, `verbPhrases`, `nounVerbHomographs`, `stateWords`,
+`nounStarters`, `messageNouns`, `stateMarkers`, `participleHomographs`, `geInfinitives` and
+`adjectiveStoplist` (each language uses the lists it has). Words are added first, then removed. Each shipped data file
 (`references/naming/<language>.json`) says why its lists exist in the optional top-level `purpose`
 and `listNotes` (one sentence per list); they are documentation only, no rule reads them, and the
 overlay format has no such fields. The conventions per language are in
