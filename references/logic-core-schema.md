@@ -593,10 +593,11 @@ verdict with `findings`; it forms no lanes, so it never reports C10) and `orches
 `catalog`; reviewer, layout and compliance judge the model, compliance gains `findings`; the
 Modeler, which writes 1.x, is not asked to refine or amend a 2.0 model — the history records
 `skipped: 'format 2.0'` — and `mode` optimize or soll throws F04 before any agent). The library function `generateDiagramSet` refuses a 2.0 model with a
-blocked parent result ("[F04] drill-down is not available for format 2.0 models yet"). Every other entry point refuses a 2.0 model before any work with
-one message, "format 2.0 is not accepted here yet": the MCP tools `generate_bpmn`, `validate_bpmn`
-and `orchestrate_bpmn`, the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
-`/api/v1/orchestrate`, `redesign-cli.js` and the scenario pipeline. On the CLI a
+blocked parent result ("[F04] drill-down is not available for format 2.0 models yet"). The MCP tools `generate_bpmn`, `validate_bpmn` and
+`orchestrate_bpmn` and the HTTP endpoints `/api/v1/generate`, `/api/v1/validate` and
+`/api/v1/orchestrate` read a 2.0 model with the catalogue embedded as an object (`catalog`; a path is never read). Every other entry point
+(`redesign-cli.js`, the scenario pipeline) refuses a 2.0 model before any work with
+one message, "format 2.0 is not accepted here yet". On the CLI a
 2.0 model refuses `--optimize`, `--mode=soll`, `--dot`, `--format=dot` and `--drill-down`; `--doc`
 works. The importers (`node bpmn/import.js`, MCP `import_bpmn`, HTTP `/api/v1/import`) read the
 diagram of a 2.0 model and report that it was generated from one as notice N01 (the CLI on stderr

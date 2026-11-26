@@ -92,6 +92,18 @@ describe('docs-gate — checkResponseContract', () => {
     expect(findings[0].detail).toContain('import of a 2.0 golden');
   });
 
+  test('the real GenerateResponse: a crafted bad 2.0 sample is the one finding, naming its label', () => {
+    const api = JSON.parse(readFileSync(join(__dirname, '..', 'references', 'api-schema.json'), 'utf8'));
+    const base = { correlationId: 'c', status: 'success', bpmnXml: '<x/>', svg: '<svg/>', validation: { errors: [], warnings: [], advisories: [], metrics: {} }, diagnostics: { ok: true, issues: [] }, callbackStatus: 'not_requested' };
+    const findings = checkResponseContract([
+      ['GenerateResponse', 'generate of a 1.x model', base],
+      ['GenerateResponse', 'generate of a 2.0 model', { ...base, status: 'bogus' }],
+    ], api, newAjv());
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail).toContain('generate of a 2.0 model');
+    expect(findings[0].detail).not.toContain('1.x');
+  });
+
   test('a response key with no matching $def is a tooling error, not a silent skip', () => {
     // The response-building side and api-schema.json are maintained
     // separately — a typo in one must stop the build, not read as "nothing to

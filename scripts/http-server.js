@@ -20,7 +20,8 @@ const NO_FRONTEND = {
 
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
-import { runPipeline, validateLogicCore } from './bpmn/pipeline.js';
+import { runPipeline } from './bpmn/pipeline.js';
+import { validateModel } from './bpmn/validate.js';
 import { profileForMode, checkRuleProfile } from './bpmn/rules.js';
 import { ProfileRejectedError, assertLayerNotWeakened } from './shared/rule-profile.js';
 import { ViewRejectedError, assertView } from './shared/view.js';
@@ -31,7 +32,7 @@ import { chatAgent } from './agents/chat.js';
 import { createLlmProvider, LlmProviderError } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
-import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, boundSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
+import { validateModelSchema, v2RequestErrors, modelFormat, validateLayoutOptions, layoutOptionsOf, boundSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
@@ -215,6 +216,22 @@ export function clientView(body) {
     throw new ViewRejectedError('an inline view may not name a ruleProfile over HTTP (profile names are not accepted); send the profile in the request field ruleProfile instead');
   }
   return view;
+}
+
+/**
+ * The schema gate of a request that reads format 1.x and 2.0: the model's schema, then (2.0 only) the
+ * embedded catalogue and the mode. Returns the errors, or null when the model is fine. A path is never read.
+ */
+function modelGateErrors(body) {
+  const check = validateModelSchema(body.logicCore, { accept: ['1', '2'] });
+  if (!check.valid) return check.errors;
+  const v2 = v2RequestErrors(body.logicCore, { catalog: body.catalog, mode: body.mode });
+  return v2.length ? v2 : null;
+}
+
+/** The catalogue object to hand on: only a 2.x model takes one (the library throws for a 1.x model). */
+function catalogOpt(model, body) {
+  return modelFormat(model) === '2' && body.catalog != null ? { catalog: body.catalog } : {};
 }
 
 const AUDIT_ID_MAX = 128;
@@ -410,10 +427,10 @@ const server = createServer(async (req, res) => {
     // Generate
     if (url === '/api/v1/generate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/generate' });
-      const schemaCheck = validateLogicCoreSchema(body.logicCore);
-      if (!schemaCheck.valid) {
-        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: schemaCheck.errors.length });
-        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
+      const gateErrors = modelGateErrors(body);
+      if (gateErrors) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/generate', errorCount: gateErrors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(gateErrors) });
       }
       // visualRefinement, bendRule, nodeLabelsAvoidFlows, foreignShapeRepair — client options, gated before use
       const layoutCheck = validateLayoutOptions(body);
@@ -428,7 +445,7 @@ const server = createServer(async (req, res) => {
       // value can apply. Without a view every value but 'declared' is 'auto', as before.
       const poolOrder = body.poolOrder === 'declared' ? 'declared' : (view && body.poolOrder == null ? undefined : 'auto');
       const ruleProfile = clientRuleProfile(body) ?? (view ? undefined : null);
-      const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile, view: view ?? undefined, ...layoutOptionsOf(body) });
+      const result = await runPipeline(body.logicCore, { mode, poolOrder, ruleProfile, view: view ?? undefined, ...layoutOptionsOf(body), ...catalogOpt(body.logicCore, body) });
       const durationMs = Date.now() - t0;
       const hasErrors = result.validation.errors.length > 0;
       // A green validation says nothing about the layout — the rule engine never
@@ -467,17 +484,17 @@ const server = createServer(async (req, res) => {
     // Validate
     if (url === '/api/v1/validate') {
       auditLog({ event: 'request', correlationId, clientId, endpoint: '/validate' });
-      const schemaCheck = validateLogicCoreSchema(body.logicCore);
-      if (!schemaCheck.valid) {
-        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/validate', errorCount: schemaCheck.errors.length });
-        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
+      const gateErrors = modelGateErrors(body);
+      if (gateErrors) {
+        auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/validate', errorCount: gateErrors.length });
+        return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(gateErrors) });
       }
       const mode = (body.mode === 'optimize' || body.mode === 'soll') ? 'optimize' : 'document';
       // Gated like the other endpoints; a view's values reach validation only through runPipeline,
       // but a lanes view on a 1.x model is refused here too (one view error on every surface).
       assertViewFitsModel(body.logicCore, clientView(body));
       const ruleProfile = clientRuleProfile(body);
-      const validation = validateLogicCore(body.logicCore, profileForMode(ruleProfile, mode));
+      const validation = validateModel(body.logicCore, profileForMode(ruleProfile, mode), catalogOpt(body.logicCore, body));
       const durationMs = Date.now() - t0;
       auditLog({ event: 'completed', correlationId, durationMs, hasErrors: validation.errors.length > 0 });
       return json(res, 200, { correlationId, status: 'success', validation });
@@ -532,12 +549,14 @@ const server = createServer(async (req, res) => {
       }
 
       if (body.logicCore) {
-        const schemaCheck = validateLogicCoreSchema(body.logicCore);
-        if (!schemaCheck.valid) {
-          auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: schemaCheck.errors.length });
-          return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(schemaCheck.errors) });
+        const gateErrors = modelGateErrors(body);
+        if (gateErrors) {
+          auditLog({ event: 'schema_rejected', correlationId, clientId, endpoint: '/orchestrate', errorCount: gateErrors.length });
+          return json(res, 400, { correlationId, status: 'schema_error', errors: boundSchemaErrors(gateErrors) });
         }
       }
+      // userText always yields a 1.x model (the library throws for a catalogue beside one): no catalogue then
+      if (input === body.logicCore) Object.assign(options, catalogOpt(body.logicCore, body));
 
       const result = await orchestrate(input, options);
       const durationMs = Date.now() - t0;

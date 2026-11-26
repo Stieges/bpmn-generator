@@ -13,7 +13,6 @@ import { server, resolveEnvLlmConfig, _resetRateLimit, clientRuleProfile, _setDn
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { CFG } from './shared/utils.js';
 import { getAuditPath } from './audit.js';
-import { FORMAT_V2_NOT_ACCEPTED } from './bpmn/schema-gate.js';
 import { MODEL_V2_IMPORT_NOTICE } from './bpmn/import.js';
 
 let baseUrl;
@@ -774,30 +773,104 @@ describe('schema-gate errors in responses are capped and bounded', () => {
   }
 });
 
-describe('a 2.0 model is not accepted over HTTP yet', () => {
-  const m = { $schemaVersion: '2.0', id: 'P', nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }], edges: [{ source: 's', target: 'e' }] };
-  for (const path of ['/api/v1/generate', '/api/v1/validate', '/api/v1/orchestrate']) {
-    test(`${path}: 400 schema_error with the one not-accepted entry`, async () => {
-      const res = await realFetch(`${baseUrl}${path}`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ logicCore: m }),
-      });
-      const data = await res.json();
-      expect(res.status).toBe(400);
-      expect(data.status).toBe('schema_error');
-      expect(data.errors).toEqual([{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] }, code: 'F03' }]);
-    });
-  }
+describe('format 2.0 over HTTP with an embedded catalogue', () => {
+  const v2 = (name) => JSON.parse(readFileSync(new URL(`../tests/fixtures-v2/${name}`, import.meta.url), 'utf8'));
+  const golden = (name) => readFileSync(new URL(`../tests/fixtures-v2/${name}`, import.meta.url), 'utf8');
+  const rollen = () => JSON.parse(readFileSync(new URL('../views/rollen-view.json', import.meta.url), 'utf8'));
+  const post = (path, body) => realFetch(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  // history entries carry a wall-clock `ts`
+  const noTs = (d) => JSON.parse(JSON.stringify(d, (k, v) => (k === 'ts' ? undefined : v)));
+  const ENDPOINTS = ['/api/v1/generate', '/api/v1/validate', '/api/v1/orchestrate'];
+  beforeEach(() => _resetRateLimit());
 
-  test.each([['2.0', 'F03'], ['2.7', 'F02']])('/generate with the schaden model as %s: one entry with code %s', async (version, code) => {
-    const model = JSON.parse(readFileSync(new URL('../tests/fixtures-v2/schaden.json', import.meta.url), 'utf8'));
-    const res = await realFetch(`${baseUrl}/api/v1/generate`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ logicCore: { ...model, $schemaVersion: version } }),
-    });
+  test('/generate with schaden.json, its catalogue and the inline rollen view gives the rollen golden', async () => {
+    const res = await post('/api/v1/generate', { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json'), view: rollen() });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.bpmnXml).toBe(golden('schaden.rollen.expected.bpmn'));
+  });
+
+  test('/validate returns findings', async () => {
+    const res = await post('/api/v1/validate', { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json') });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.validation.errors).toEqual([]);
+    expect(Array.isArray(data.validation.findings)).toBe(true);
+  });
+
+  test('/orchestrate with a 2.0 logicCore keeps the rollen golden', async () => {
+    const res = await post('/api/v1/orchestrate', { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json'), view: rollen() });
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.bpmnXml).toBe(golden('schaden.rollen.expected.bpmn'));
+    expect(data.compliance.isCompliant).toBe(true);
+  });
+
+  test.each(ENDPOINTS)('%s: the model catalog field names an existing valid catalogue and no object is sent: one C13, no file read', async (path) => {
+    const abs = fileURLToPath(new URL('../tests/fixtures-v2/schaden-catalog.json', import.meta.url));
+    const res = await post(path, { logicCore: { ...v2('schaden.json'), catalog: abs } });
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.status).toBe('schema_error');
     expect(data.errors).toHaveLength(1);
+    expect(data.errors[0]).toMatchObject({ path: '/catalog', code: 'C13' });
+  });
+
+  test.each(ENDPOINTS)('%s: a catalog that is not an object is C13 at /catalog', async (path) => {
+    const res = await post(path, { logicCore: v2('schaden.json'), catalog: 'schaden-catalog.json' });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.errors).toHaveLength(1);
+    expect(data.errors[0]).toMatchObject({ path: '/catalog', code: 'C13' });
+  });
+
+  test.each(ENDPOINTS)('%s: a catalogue over 1 MiB is C12 from the catalogue bound, not a 413', async (path) => {
+    const big = { actors: [{ id: 'x', name: 'x'.repeat(1100 * 1024) }] };
+    const res = await post(path, { logicCore: v2('schaden.json'), catalog: big });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.status).toBe('schema_error');
+    expect(data.errors[0]).toMatchObject({ path: '/catalog', code: 'C12' });
+  });
+
+  test.each(['/api/v1/generate', '/api/v1/validate'])('%s: mode optimize on a 2.0 model is F04 at /mode', async (path) => {
+    const res = await post(path, { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json'), mode: 'optimize' });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.errors[0]).toMatchObject({ path: '/mode', code: 'F04' });
+  });
+
+  test.each([['2.7', 'F02']])('/generate with the schaden model as %s: one entry with code %s', async (version, code) => {
+    const res = await post('/api/v1/generate', { logicCore: { ...v2('schaden.json'), $schemaVersion: version }, catalog: v2('schaden-catalog.json') });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.errors).toHaveLength(1);
     expect(data.errors[0].code).toBe(code);
+  });
+
+  test.each(ENDPOINTS)('%s: a catalog beside a 1.x model is ignored; the response equals the one without it', async (path) => {
+    const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+    const a = await post(path, { logicCore: lc, correlationId: 'same' });
+    const b = await post(path, { logicCore: lc, correlationId: 'same', catalog: { actors: [] } });
+    expect(b.status).toBe(a.status);
+    expect(noTs(await b.json())).toEqual(noTs(await a.json()));
+  });
+
+  test('/orchestrate with userText and a catalog is no 500: the response equals the one without a catalog', async () => {
+    const lc = JSON.parse(readFileSync(new URL('../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+    process.env.OPENAI_API_KEY = 'k';
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith(baseUrl)) return realFetch(url, init);
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify(lc) } }] }) };
+    };
+    const body = { userText: 'An approval process', correlationId: 'same' };
+    const a = await post('/api/v1/orchestrate', body);
+    const withCat = await post('/api/v1/orchestrate', { ...body, catalog: v2('schaden-catalog.json') });
+    expect(withCat.status).not.toBe(500);
+    expect(withCat.status).toBe(a.status);
+    expect(noTs(await withCat.json())).toEqual(noTs(await a.json()));
   });
 });
 
