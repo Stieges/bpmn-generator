@@ -124,13 +124,20 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   escalation, conditional), only where the marker is legal on the event type; the rules and both
   writers read the same marker. New hints in `validation.hints`, on the generate path only and
   never failing `--strict`: `H10` per marker inferred, `H11` per event whose name gave a marker
-  before a language was declared and gives none or another one now (set `marker` explicitly),
+  before a language was declared and gives none or another one now (set `marker` to the symbol
+  you want, or to `"none"` for a plain event),
   `H12` for a valid tag without naming conventions (M01, M05, M06 are skipped; supported: `de`,
   `en`), `H13` when the task names look like another supported language than the declared one and
   else `H14` naming the first words of English task names that are not on the verb list.
   Under `de` a keyword also matches in a compound (`Fristablauf`, `Fehlermeldung`); the data list
   `compoundExceptions` names words that only begin like a keyword (`Zeitschrift`, `Zeitung`,
   `Zeitarbeit`, `Signalwirkung`) and give no marker, in any inflected or longer form.
+- **`marker: "none"`.** A new value of `marker` (input schemas 1.3 and 2.0, ontology 1.3): a
+  plain event on purpose. It stops the marker inference from the name, with and without a declared
+  `language` (no H10, no H11 for that event), and the event is drawn and written without an event
+  definition. The XML carries `bg:marker="none"` on the event, and only then; both importers read
+  it back. Valid on start, end and intermediate throw events; S15 reports it on a boundary or
+  intermediate catch event. A model without `"none"` gives the same output as before.
 - **`BPMN_NAMING` overlay.** The environment variable names a JSON file that adds words to, and
   removes words from, eleven flat word lists of a shipped language
   (`{ "languages": { "en": { "add": { "verbs": ["invoice"] }, "remove": { … } } } }`, add first,

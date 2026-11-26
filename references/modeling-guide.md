@@ -134,12 +134,16 @@ Behaviours worth knowing:
   an error because the name starts with the keyword. Words that only begin like a keyword are
   listed in `compoundExceptions` and give no marker (`Zeitschrift gelesen`, `Zeitung`, `Zeitarbeit`,
   `Signalwirkung`). A word the list misses, and a keyword at the end of a word (`Arbeitszeit`), is
-  fixed by setting `marker` on the event yourself.
+  fixed by setting `marker` on the event yourself: to the symbol you want, or to `"none"` for a
+  plain event.
 - The marker of an event without `marker` is inferred from its name only where BPMN allows it:
   `Deadline missed` is a timer on a boundary event and nothing on an end event; `Error raised` is
   an error on an end event and nothing on a start event. Error and escalation are never inferred on a
   start event (a start event inside an ordinary sub-process still gets an inferred marker). Every
   inferred marker is reported as hint `H10`; a name that gave a marker before the language was
-  declared and now gives none or another one is `H11`: set `marker` explicitly.
+  declared and now gives none or another one is `H11`. Either way, set `marker` to the symbol you
+  want, or to `"none"` for a plain event (start, end and intermediate throw events only; a
+  boundary or intermediate catch event needs a trigger, and S15 reports `"none"` there).
+  `"none"` also stops the inference without a declared language.
 - A valid tag without word lists (`fr`) skips M01, M05 and M06 (hint `H12`); labels that look like
   another supported language than the declared one give hint `H13` (and then no `H14`).
