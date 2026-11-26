@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'node:fs';
 import Ajv2020 from 'ajv/dist/2020.js';
-import { namingSchemaPath } from '../../shared/resource-paths.js';
+import { namingSchemaPath, namingEnPath } from '../../shared/resource-paths.js';
 import { foldWord } from './tokens.js';
 
 export { namingSchemaPath };
@@ -86,4 +86,18 @@ export function readLexiconFile(path) {
     sources: data.sources,
   };
   return Object.freeze(lexicon);
+}
+
+/** Language → path function of its naming data file: the one registry line per language. */
+export const NAMING_LANGUAGES = Object.freeze({ en: namingEnPath });
+
+const loaded = new Map();
+
+/** The lexicon of a registered language, read once. Throws `NamingDataError` for any other. */
+export function loadLexicon(language) {
+  if (!Object.hasOwn(NAMING_LANGUAGES, language)) {
+    throw new NamingDataError(`no naming data for language "${language}"`);
+  }
+  if (!loaded.has(language)) loaded.set(language, readLexiconFile(NAMING_LANGUAGES[language]()));
+  return loaded.get(language);
 }

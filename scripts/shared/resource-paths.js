@@ -64,6 +64,8 @@ const SOURCE_CATALOG_SCHEMA   = join(__dirname, '..', '..', 'references', 'catal
 const PACKAGED_CATALOG_SCHEMA = join(__dirname, '..', 'references', 'catalog-schema.json');
 const SOURCE_NAMING_SCHEMA   = join(__dirname, '..', '..', 'references', 'naming-schema.json');
 const PACKAGED_NAMING_SCHEMA = join(__dirname, '..', 'references', 'naming-schema.json');
+const SOURCE_NAMING_EN   = join(__dirname, '..', '..', 'references', 'naming', 'en.json');
+const PACKAGED_NAMING_EN = join(__dirname, '..', 'references', 'naming', 'en.json');
 const SOURCE_DEMI_SCHEME   = join(__dirname, '..', '..', 'references', 'schemes', 'demi-scheme.json');
 const PACKAGED_DEMI_SCHEME = join(__dirname, '..', 'references', 'schemes', 'demi-scheme.json');
 
@@ -128,6 +130,11 @@ export function catalogSchemaPath() {
 /** Absolute path to references/naming-schema.json. */
 export function namingSchemaPath() {
   return resolveWithFallback(SOURCE_NAMING_SCHEMA, PACKAGED_NAMING_SCHEMA, 'naming-schema.json');
+}
+
+/** Absolute path to references/naming/en.json. */
+export function namingEnPath() {
+  return resolveWithFallback(SOURCE_NAMING_EN, PACKAGED_NAMING_EN, 'naming/en.json');
 }
 
 /** Absolute path to references/schemes/demi-scheme.json. */
