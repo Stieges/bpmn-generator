@@ -45,6 +45,8 @@ export function verbLast(lexicon) {
     conjunctions, separablePrefixes, infinitiveSuffixes, participles,
   } = lexicon;
 
+  const maxPrefix = separablePrefixes.reduce((m, p) => Math.max(m, p.length), 0);
+
   /**
    * `[prefix, rest]`: the longest separable prefix (folded) the raw word starts with, ending on a
    * raw character boundary, with a rest of at least three letters; the rest is the raw lower-case
@@ -55,7 +57,9 @@ export function verbLast(lexicon) {
     let folded = '';
     const boundary = new Map(); // folded length → raw index after the character that reached it
     let i = 0;
+    // Only the longest separable prefix can match: stop once the folded text is that long.
     for (const ch of lower) {
+      if (folded.length >= maxPrefix) break;
       i += ch.length;
       folded += foldWord(ch);
       boundary.set(folded.length, i);

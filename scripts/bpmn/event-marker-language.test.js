@@ -502,3 +502,27 @@ describe('the response contract', () => {
     expect(hintCode.test('H20')).toBe(false);
   }, PIPELINE_TIMEOUT);
 });
+
+describe('format 2.0 and blocked results', () => {
+  test('a format 2.0 model with language de: inferred definition in the XML and an H10 hint', async () => {
+    const v2 = JSON.parse(readFileSync(join(REPO, 'tests', 'fixtures-v2', 'schaden.json'), 'utf8'));
+    const catalog = JSON.parse(readFileSync(join(REPO, 'tests', 'fixtures-v2', 'schaden-catalog.json'), 'utf8'));
+    const model = { ...structuredClone(v2), language: 'de' };
+    model.nodes.find((n) => n.id === 'start').name = 'Nachricht eingegangen';
+    const result = await runPipeline(model, { catalog: structuredClone(catalog) });
+    expect(result.validation.errors).toEqual([]);
+    expect(xmlElement(result.bpmnXml, 'start')).toContain('messageEventDefinition');
+    const h10 = hintsOf(result, 'H10');
+    expect(h10).toHaveLength(1);
+    expect(h10[0].message).toContain('start');
+  }, PIPELINE_TIMEOUT);
+
+  test('a blocked de result keeps hints: []', async () => {
+    const model = withLanguage(fixture('simple-approval'), 'de');
+    model.pools[0].edges.push({ source: 'start1', target: 'does_not_exist' });
+    const result = await runPipeline(model);
+    expect(result.bpmnXml).toBeNull();
+    expect(result.validation.errors.length).toBeGreaterThan(0);
+    expect(result.validation.hints).toEqual([]);
+  }, PIPELINE_TIMEOUT);
+});
