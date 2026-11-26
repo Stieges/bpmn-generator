@@ -106,6 +106,8 @@ function buildLexicon(data) {
     nounsCapitalized: data.nounsCapitalized,
     compoundMarkers: data.compoundMarkers,
     compoundExceptions: (data.compoundExceptions ?? []).map(foldWord),
+    durationKeywords: (data.durationKeywords ?? []).map(foldWord),
+    expiryWords: (data.expiryWords ?? []).map(foldWord),
     questionMarks: data.questionMarks,
     examples: data.examples,
     sources: data.sources,

@@ -192,6 +192,61 @@ describe('compoundExceptions: words that begin with a marker keyword and name no
   });
 });
 
+describe('a duration keyword at the end of a compound gives a timer only with an expiry word', () => {
+  // [label, marker on a boundary event]
+  const table = [
+    ['Wartezeit abgelaufen', 'timer'],
+    ['Lieferzeit überschritten', 'timer'],
+    ['Bearbeitungsfrist verstrichen', 'timer'],
+    ['Lieferzeit erreicht', 'timer'],
+    ['Reaktionszeit vorbei', 'timer'],
+    ['Wartezeit um', 'timer'],
+    ['Haltezeit endet', 'timer'],
+    ['Kundenwartezeit überschritten', 'timer'],
+    ['Lieferzeit überfällig', 'timer'],
+    ['Zahlungsfrist erfasst', 'timer'],
+    ['Zeitablauf', 'timer'],
+    ['Arbeitszeit erfasst', null],
+    ['Lieferzeit bestätigt', null],
+    ['Öffnungszeit geändert', null],
+    ['Arbeitszeit um 8 Uhr erfasst', null],
+    ['Kundenwartezeit erfasst', null],
+    ['Bearbeitungszeit gemessen', null],
+    ['Reaktionszeit dokumentiert', null],
+    ['Durchlaufzeit berechnet', null],
+    ['Rüstzeit gebucht', null],
+    ['Zykluszeit protokolliert', null],
+    ['Arbeitszeitfehler erkannt', 'error'],
+    ['Lieferzeitnachricht eingegangen', 'message'],
+  ];
+  test.each(table)('"%s" gives %s', (label, marker) => {
+    expect(inferMarker(de, label, 'boundaryEvent')).toBe(marker);
+    expect(s.eventMarker(label, 'boundaryEvent')).toBe(marker);
+  });
+  test('the table has at least ten labels of each outcome', () => {
+    expect(table.filter(([, m]) => m === 'timer').length).toBeGreaterThanOrEqual(10);
+    expect(table.filter(([, m]) => m === null).length).toBeGreaterThanOrEqual(10);
+  });
+  test('a whole word, a leading match and a deadline keyword at the end keep their timer without an expiry word', () => {
+    for (const label of ['Zeit erfasst', 'Wartezeit erfasst', 'Zeitüberschreitung erfasst', 'Zahlungsfrist erfasst', 'Projektdeadline erfasst', 'Eieruhrtimer gestellt']) {
+      expect([label, inferMarker(de, label, 'boundaryEvent')]).toEqual([label, 'timer']);
+    }
+  });
+  test('"um" counts only as the last token; the other expiry words anywhere', () => {
+    expect(inferMarker(de, 'Lieferzeit um', 'boundaryEvent')).toBe('timer');
+    expect(inferMarker(de, 'Lieferzeit um Tag verschoben', 'boundaryEvent')).toBeNull();
+    expect(inferMarker(de, 'Lieferzeit überschritten um 2 Tage', 'boundaryEvent')).toBe('timer');
+  });
+  test('without durationKeywords the end match counts as before; without expiryWords it never does', () => {
+    expect(inferMarker({ ...de, durationKeywords: undefined }, 'Arbeitszeit erfasst', 'boundaryEvent')).toBe('timer');
+    expect(inferMarker({ ...de, expiryWords: [] }, 'Lieferzeit überschritten', 'boundaryEvent')).toBeNull();
+  });
+  test('the inferred timer still has to be legal on the event type', () => {
+    expect(inferMarker(de, 'Lieferzeit überschritten', 'endEvent')).toBeNull();
+    expect(inferMarker(de, 'Lieferzeit überschritten', 'startEvent')).toBe('timer');
+  });
+});
+
 describe('Review Focus 4: robustness and linear time', () => {
   const huge = [
     'a'.repeat(200000), ('('+ 'x ').repeat(50000), 'Antrag ' + 'prüfen '.repeat(50000), '-'.repeat(100000),

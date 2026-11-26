@@ -28,7 +28,8 @@ const schema = readJson(namingSchemaPath());
 const DOC_KEYS = ['purpose', 'listNotes'];
 const LIST_NAMES = ['verbs', 'verbPhrases', 'verbPrefixes', 'nounVerbHomographs', 'participles', 'stateWords', 'stateMarkers',
   'infinitiveSuffixes', 'participleHomographs', 'inseparablePrefixes', 'separablePrefixes', 'geInfinitives',
-  'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks', 'nonVerbStarters', 'nounStarters', 'auxiliaries', 'messageNouns', 'instructionVerbs', 'compoundExceptions'];
+  'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks', 'nonVerbStarters', 'nounStarters', 'auxiliaries', 'messageNouns', 'instructionVerbs', 'compoundExceptions',
+  'durationKeywords', 'expiryWords'];
 const SHIPPED = { de: namingDePath(), en: namingEnPath() };
 
 describe('schema', () => {
@@ -109,7 +110,8 @@ describe.each(Object.keys(SHIPPED))('shipped %s file', (language) => {
   test('every list present in the file has a note', () => {
     const read = language === 'de'
       ? ['verbs', 'nounVerbHomographs', 'participles', 'stateMarkers', 'infinitiveSuffixes', 'participleHomographs',
-        'inseparablePrefixes', 'separablePrefixes', 'geInfinitives', 'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks', 'compoundExceptions']
+        'inseparablePrefixes', 'separablePrefixes', 'geInfinitives', 'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks', 'compoundExceptions',
+        'durationKeywords', 'expiryWords']
       : ['verbs', 'verbPhrases', 'verbPrefixes', 'nounVerbHomographs', 'participles', 'stateWords', 'infinitiveSuffixes',
         'nonVerbStarters', 'nounStarters', 'auxiliaries', 'messageNouns', 'instructionVerbs', 'eventMarkers', 'questionMarks'];
     expect(Object.keys(data.listNotes).sort()).toEqual([...read].sort());

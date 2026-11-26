@@ -230,6 +230,18 @@ describe('compoundMarkers is a language switch', () => {
   });
 });
 
+describe('the duration/expiry rule does not touch English', () => {
+  const en = loadLexicon('en');
+  test('English ships neither list, and its timer labels keep their marker', () => {
+    expect(en.durationKeywords).toEqual([]);
+    expect(en.expiryWords).toEqual([]);
+    for (const [n, e] of [['Deadline reached', 'timer'], ['Deadline missed', 'timer'], ['Timer expired', 'timer'],
+      ['Payment deadline recorded', 'timer'], ['Working time recorded', null], ['Delivery time exceeded', null]]) {
+      expect([n, inferMarker(en, n, 'boundaryEvent')]).toEqual([n, e]);
+    }
+  });
+});
+
 describe('Review Focus 4: robustness and linear time', () => {
   const huge = ['a'.repeat(200000), ('(' + 'x ').repeat(50000), 'Check ' + 'order '.repeat(50000), '-'.repeat(100000), '\n'.repeat(100000)];
   test.each(huge.map((h, i) => [i, h]))('input %i never throws and finishes fast', (_i, h) => {

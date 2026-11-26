@@ -230,6 +230,14 @@ describe('German', () => {
     expect(data.compoundExceptions).toEqual([...data.compoundExceptions].sort());
   });
 
+  test('durationKeywords are timer keywords that name a duration; expiryWords are sorted and folded on load', () => {
+    expect(de.durationKeywords).toEqual(['wartezeit', 'zeit']);
+    for (const k of de.durationKeywords) expect(de.eventMarkers.timer).toContain(k);
+    for (const k of ['frist', 'fristen', 'deadline', 'deadlines', 'timer', 'warten']) expect(de.durationKeywords).not.toContain(k);
+    expect(data.expiryWords).toEqual([...data.expiryWords].sort());
+    expect(de.expiryWords).toEqual(expect.arrayContaining(['abgelaufen', 'ueberschritten', 'verstrichen', 'um', 'ueberfaellig']));
+  });
+
   test('validates and has the declared switches', () => {
     expect(de.language).toBe('de');
     expect(de.wordOrder).toBe('verb-last');
