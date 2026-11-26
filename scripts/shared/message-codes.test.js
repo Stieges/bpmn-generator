@@ -8,9 +8,12 @@ import { MESSAGE_CODES, coded, codeOf, withCode } from './message-codes.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS = resolve(__dirname, '..');
 
+// references/ inside scripts/ is the prepack build artifact (JSON and Markdown, no source). It is
+// skipped like node_modules: resource-paths.test.js creates and removes it while this file walks
+// the tree in a parallel worker, and a directory listed and then removed fails the walk (ENOENT).
 function sources(dir, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (e.name === 'node_modules') continue;
+    if (e.name === 'node_modules' || (dir === SCRIPTS && e.name === 'references')) continue;
     const p = join(dir, e.name);
     if (e.isDirectory()) sources(p, out);
     else if (e.name.endsWith('.js') && !e.name.endsWith('.test.js')) out.push(p);
