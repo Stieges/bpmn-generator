@@ -20,6 +20,16 @@ export const MARKER_ALLOWED_ON = Object.freeze({
   conditional: Object.freeze(['startEvent', 'intermediateCatchEvent', 'boundaryEvent']),
 });
 
+/** The `marker` value of a plain event on purpose: no event definition, and no marker is inferred from the name. */
+export const MARKER_NONE = 'none';
+
+/**
+ * The event types that may be plain, without an event definition (`marker: "none"`): start, end
+ * and intermediate throw (the None event of BPMN 2.0.2 §10.5). A boundary event and an intermediate
+ * catch event need a trigger; S15 reports `"none"` on them.
+ */
+export const MARKER_NONE_ALLOWED_ON = Object.freeze(['startEvent', 'endEvent', 'intermediateThrowEvent']);
+
 const COMPOUND_REST = 4;
 
 // "Further letters" counts letters only (digits do not count), so `frist2024` is not a compound.

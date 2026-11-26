@@ -29,6 +29,7 @@ import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
 import { markerOf } from './icons.js';
 import { modelLanguage, namingFor, namingMessage } from './naming/index.js';
+import { MARKER_NONE, MARKER_NONE_ALLOWED_ON } from './naming/markers.js';
 
 /** How a finding names an edge: its id, or `source→target` for an edge that has none yet. */
 function edgeRef(e) {
@@ -783,9 +784,10 @@ const SOUNDNESS_CHECKS = [
       + 'EventBasedGateway, instantiate to EventBasedGateway and ReceiveTask, loop and '
       + 'multi-instance characteristics to an Activity, a role (performer) to an Activity, a '
       + 'system (generator extension) to a Task, and decisionRef to a businessRuleTask; '
-      + 'isInterrupting means something only on the start event of an event subprocess, and a '
+      + 'isInterrupting means something only on the start event of an event subprocess, a '
       + 'sequence-flow condition only on a non-default flow leaving an Activity or an exclusive, '
-      + 'inclusive or complex Gateway',
+      + 'inclusive or complex Gateway, and marker "none" (a plain event) only on a start, end or '
+      + 'intermediate throw event',
     ref: {
       omg: '§10.2 (Activity), §10.2.2/§10.2.3 (Task attributes), §10.2.5 (SubProcess), §10.2.6 (CallActivity), '
         + '§10.3.1 (Sequence Flow conditionExpression), §10.3.5 (StartEvent isInterrupting in an Event '
@@ -865,6 +867,14 @@ const SOUNDNESS_CHECKS = [
               + 'only on the start event of an event subprocess. The field is dropped when the BPMN is '
               + 'written, so it has no effect — remove it, or mark the enclosing subprocess '
               + '`isEventSubProcess`.');
+          }
+          // A boundary or intermediate catch event without a trigger has no meaning in OMG (§10.5):
+          // `"none"` is written as asked (no definition, `bg:marker`), and this says it is no plain event.
+          if (node.marker === MARKER_NONE && isEvent(node.type) && !MARKER_NONE_ALLOWED_ON.includes(node.type)) {
+            msgs.push(`Node "${node.id}" (${node.name || ''}) is a ${node.type} and carries "marker": "none", `
+              + 'but OMG requires a boundary event or an intermediate catch event to carry an event '
+              + 'definition (its trigger). The event is written without one — set "marker" to its '
+              + 'trigger, or use a start, end or intermediate throw event for a plain event.');
           }
           // `enforcedBy: 'table'` and nothing else. The table now covers every `$defs.Node`
           // property, but this rule's message says the field "is dropped when the BPMN is written",

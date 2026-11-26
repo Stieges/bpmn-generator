@@ -30,6 +30,7 @@
     "reason": "bg:reason",
     "element": "bg:element",
     "eventDefinition": "bg:eventDefinition",
+    "plain": "bg:plain",
     "groups": {
       "@id": "bg:markerGroup",
       "@container": "@set"
@@ -707,6 +708,18 @@
       "label": "Parallel Multiple",
       "status": "lossy",
       "reason": "No single OMG EventDefinition expresses it; the serialiser writes none and both importers read it back as no marker (see the marker row in OMG_NODE_FIELD_SCOPE and field-fidelity.test.js).",
+      "groups": []
+    },
+    {
+      "@id": "bg:marker-none",
+      "@type": "bg:EventMarker",
+      "name": "none",
+      "label": "None",
+      "status": "supported",
+      "plain": true,
+      "seeAlso": [
+        "omg:Event"
+      ],
       "groups": []
     },
     {

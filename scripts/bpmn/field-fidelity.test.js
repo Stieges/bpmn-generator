@@ -305,6 +305,7 @@ const SAMPLES = {
     { label: 'message (mappable)', value: 'message' },
     { label: 'multiple (no single EventDefinition class)', value: 'multiple' },
     { label: 'parallelMultiple (likewise)', value: 'parallelMultiple' },
+    { label: 'none (a plain event: no definition, bg:marker="none")', value: 'none' },
   ],
   linkName: [
     { label: 'with marker link', value: 'ZumZweitenTeil', extra: { marker: 'link' } },

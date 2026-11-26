@@ -14,8 +14,11 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep } from './moddle-import.js';
-import { isBpmnArtifact, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
+import {
+  moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep, extensionPrefixes, markerNoneAttribute,
+} from './moddle-import.js';
+import { isBpmnArtifact, isEvent, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
+import { MARKER_NONE } from './naming/markers.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { removeDerivedElements, DERIVED_JOIN_FLOW } from './derivations.js';
 import { EXTENSION_NS } from '../shared/utils.js';
@@ -199,10 +202,11 @@ function readLegacy(xml) {
     }
   }
 
-  // Convert each process
+  // Convert each process; `prefixes` are those `definitions` binds to the extension namespace.
+  const prefixes = extensionPrefixes(defs.attrs);
   const pools = [];
   for (const proc of processes) {
-    const pool = convertProcess(proc, partMap, categoryValues, expandedIds, resourcesById);
+    const pool = convertProcess(proc, partMap, categoryValues, expandedIds, resourcesById, prefixes);
     pools.push(pool);
   }
 
@@ -299,7 +303,7 @@ function edgeFromSeqFlow(sf, siblings = []) {
   return edge;
 }
 
-function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Set(), resourcesById = {}) {
+function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Set(), resourcesById = {}, prefixes = []) {
   const processId = proc.attrs.id;
   const processName = proc.attrs.name || findPartNameForProcess(processId, partMap) || processId;
 
@@ -378,6 +382,9 @@ function convertProcess(proc, partMap, categoryValues = {}, expandedIds = new Se
     // Event marker + event-definition details
     const markerInfo = detectEventMarkerFull(child);
     if (markerInfo.marker) node.marker = markerInfo.marker;
+    // `bg:marker="none"`: a plain event on purpose, read only when the event has no event definition.
+    const hasDefinition = child.children.some((c) => stripNs(c.tag).endsWith('EventDefinition'));
+    if (isEvent(tag) && !hasDefinition && markerNoneAttribute(child.attrs, prefixes)) node.marker = MARKER_NONE;
     if (markerInfo.linkName) node.linkName = markerInfo.linkName;
     if (markerInfo.conditionExpression) node.conditionExpression = markerInfo.conditionExpression;
     if (markerInfo.timerExpression) node.timerExpression = markerInfo.timerExpression;

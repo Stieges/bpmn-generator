@@ -13,6 +13,7 @@ import { loadLexicon, NAMING_LANGUAGES, NamingDataError } from './lexicon.js';
 import { verbFirst } from './verb-first.js';
 import { verbLast } from './verb-last.js';
 import { foldWord } from './tokens.js';
+import { MARKER_NONE, MARKER_NONE_ALLOWED_ON } from './markers.js';
 import { isEvent, TASK_TYPES } from '../types.js';
 // A cycle with ../icons.js (it imports `namingFor`): both sides use the other's binding inside
 // functions only, never while the module is evaluated.
@@ -240,6 +241,8 @@ export function namingHints(lc, { inferred = [], changed = [] } = {}) {
   const language = modelLanguage(lc);
   const strategy = namingFor(language);
   const lead = (e) => `${e.pool === null ? '' : `[${e.pool}] `}Event "${e.name}" (${e.id})`;
+  // The way out names `"none"` only where a plain event is valid (S15 reports it elsewhere).
+  const symbol = (e) => `"marker" to the symbol you want${MARKER_NONE_ALLOWED_ON.includes(e.type) ? `, or to "${MARKER_NONE}" for a plain event` : ''}.`;
   const isChanged = new Set(changed);
   const first = [];
   if (strategy === null) {
@@ -258,12 +261,12 @@ export function namingHints(lc, { inferred = [], changed = [] } = {}) {
     ...first,
     ...inferred.filter((e) => !isChanged.has(e)).map((e) => ({
       code: 'H10',
-      message: `${lead(e)}: marker "${e.marker}" inferred from its name (language "${tag}").`,
+      message: `${lead(e)}: marker "${e.marker}" inferred from its name (language "${tag}"). To change it, set ${symbol(e)}`,
       elements: [String(e.id)],
     })),
     ...changed.map((e) => ({
       code: 'H11',
-      message: `${lead(e)}: its name gave marker "${e.legacy}" before a language was declared; under language "${tag}" it gives ${e.marker === null ? 'no marker' : `"${e.marker}"`}. Set "marker" explicitly.`,
+      message: `${lead(e)}: its name gave marker "${e.legacy}" before a language was declared; under language "${tag}" it gives ${e.marker === null ? 'no marker' : `"${e.marker}"`}. Set ${symbol(e)}`,
       elements: [String(e.id)],
     })),
   ];

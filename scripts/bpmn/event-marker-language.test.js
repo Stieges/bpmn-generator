@@ -181,10 +181,10 @@ describe('proof (d): the marker differences under each fixture\'s true language'
     }
     expect(h11).toEqual({
       'example-schadenmeldung': [
-        '[Versicherung] Event "Prüfung beendet" (sp_end): its name gave marker "terminate" before a language was declared; under language "de" it gives no marker. Set "marker" explicitly.',
+        '[Versicherung] Event "Prüfung beendet" (sp_end): its name gave marker "terminate" before a language was declared; under language "de" it gives no marker. Set "marker" to the symbol you want, or to "none" for a plain event.',
       ],
       'subprocess-child-fidelity': [
-        expect.stringMatching(/Event "Deadline missed" \(c_end2\): its name gave marker "timer" before a language was declared; under language "en" it gives no marker\. Set "marker" explicitly\.$/),
+        expect.stringMatching(/Event "Deadline missed" \(c_end2\): its name gave marker "timer" before a language was declared; under language "en" it gives no marker\. Set "marker" to the symbol you want, or to "none" for a plain event\.$/),
       ],
     });
     expect(h10).toEqual({ 'example-bestellung-versand': [['b_end2']] });
@@ -270,10 +270,21 @@ describe('namingHints', () => {
 
   test('H10 per inferred marker, then H11 per changed one; an event in both lists gets H11 only', () => {
     expect(namingHints({ language: 'de-CH' }, { inferred: [a, c, d], changed: [b, c] })).toEqual([
-      { code: 'H10', message: 'Event "Fristablauf" (a): marker "timer" inferred from its name (language "de-CH").', elements: ['a'] },
-      { code: 'H10', message: '[Bank] Event "Fehlerfall" (d): marker "error" inferred from its name (language "de-CH").', elements: ['d'] },
-      { code: 'H11', message: '[Bank] Event "Zeitung gelesen" (b): its name gave marker "timer" before a language was declared; under language "de-CH" it gives no marker. Set "marker" explicitly.', elements: ['b'] },
-      { code: 'H11', message: 'Event "Mail zur Frist" (c): its name gave marker "timer" before a language was declared; under language "de-CH" it gives "message". Set "marker" explicitly.', elements: ['c'] },
+      { code: 'H10', message: 'Event "Fristablauf" (a): marker "timer" inferred from its name (language "de-CH"). To change it, set "marker" to the symbol you want.', elements: ['a'] },
+      { code: 'H10', message: '[Bank] Event "Fehlerfall" (d): marker "error" inferred from its name (language "de-CH"). To change it, set "marker" to the symbol you want.', elements: ['d'] },
+      { code: 'H11', message: '[Bank] Event "Zeitung gelesen" (b): its name gave marker "timer" before a language was declared; under language "de-CH" it gives no marker. Set "marker" to the symbol you want, or to "none" for a plain event.', elements: ['b'] },
+      { code: 'H11', message: 'Event "Mail zur Frist" (c): its name gave marker "timer" before a language was declared; under language "de-CH" it gives "message". Set "marker" to the symbol you want, or to "none" for a plain event.', elements: ['c'] },
+    ]);
+  });
+
+  test('"none" is offered only where a plain event is valid: start, end, intermediate throw', () => {
+    const end = { id: 'x', name: 'Eskalation erfasst', type: 'endEvent', marker: 'escalation', legacy: 'escalation', pool: null };
+    const thr = { id: 'y', name: 'Eskalation erfasst', type: 'intermediateThrowEvent', marker: 'escalation', legacy: 'escalation', pool: null };
+    const catchEv = { id: 'z', name: 'Zeitung erhalten', type: 'intermediateCatchEvent', marker: null, legacy: 'timer', pool: null };
+    expect(namingHints({ language: 'de' }, { inferred: [end, thr], changed: [catchEv] }).map((h) => h.message)).toEqual([
+      'Event "Eskalation erfasst" (x): marker "escalation" inferred from its name (language "de"). To change it, set "marker" to the symbol you want, or to "none" for a plain event.',
+      'Event "Eskalation erfasst" (y): marker "escalation" inferred from its name (language "de"). To change it, set "marker" to the symbol you want, or to "none" for a plain event.',
+      'Event "Zeitung erhalten" (z): its name gave marker "timer" before a language was declared; under language "de" it gives no marker. Set "marker" to the symbol you want.',
     ]);
   });
 
@@ -344,11 +355,11 @@ describe('Review Focus 5: XML, SVG and rules agree under a declared language', (
     expect(xmlElement(result.bpmnXml, 'b_fehler')).toContain('errorEventDefinition');
     expect(xmlElement(result.bpmnXml, 'start')).not.toContain('EventDefinition');
     expect(hintsOf(result, 'H10')).toEqual([
-      { code: 'H10', message: 'Event "Fristablauf" (b_frist): marker "timer" inferred from its name (language "de").', elements: ['b_frist'] },
-      { code: 'H10', message: 'Event "Fehlerfall" (b_fehler): marker "error" inferred from its name (language "de").', elements: ['b_fehler'] },
+      { code: 'H10', message: 'Event "Fristablauf" (b_frist): marker "timer" inferred from its name (language "de"). To change it, set "marker" to the symbol you want.', elements: ['b_frist'] },
+      { code: 'H10', message: 'Event "Fehlerfall" (b_fehler): marker "error" inferred from its name (language "de"). To change it, set "marker" to the symbol you want.', elements: ['b_fehler'] },
     ]);
     expect(hintsOf(result, 'H11')).toEqual([
-      { code: 'H11', message: 'Event "Zeitung gelesen" (start): its name gave marker "timer" before a language was declared; under language "de" it gives no marker. Set "marker" explicitly.', elements: ['start'] },
+      { code: 'H11', message: 'Event "Zeitung gelesen" (start): its name gave marker "timer" before a language was declared; under language "de" it gives no marker. Set "marker" to the symbol you want, or to "none" for a plain event.', elements: ['start'] },
     ]);
     const sFrist = result.coordMap.coords.b_frist;
     expect(result.svg).toContain(renderEventMarker('timer', sFrist.w, sFrist.h, false, undefined));

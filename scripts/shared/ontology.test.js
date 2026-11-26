@@ -312,7 +312,7 @@ describe('DMN vocabulary', () => {
 
   test('the BPMN views are unchanged by the DMN vocabulary', () => {
     expect(VOCABULARY.nodeTypeNames()).toHaveLength(26);
-    expect(VOCABULARY.markerNames()).toHaveLength(12);
+    expect(VOCABULARY.markerNames()).toHaveLength(13);   // the 12 event symbols and `none`
     expect(VOCABULARY.definitionKinds).toHaveLength(4);
     const dmnNames = new Set(VOCABULARY.dmnTerms.map((t) => t.name));
     expect(VOCABULARY.nodeTypeNames().filter((n) => dmnNames.has(n))).toEqual([]);

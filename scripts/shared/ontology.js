@@ -78,6 +78,8 @@ const ONTOLOGY_SCHEMA = {
             then: { required: ['name', 'label', 'status', 'groups'],
                     properties: { ...BASE, name: { type: 'string' }, label: { type: 'string' }, status: STATUS,
                                   eventDefinition: { type: 'string', pattern: '^bpmn:[A-Za-z]+EventDefinition$' },
+                                  // `plain: true`: the marker of an event without an event definition (`none`).
+                                  plain: { const: true },
                                   reason: { type: 'string' }, groups: { type: 'array', items: { type: 'string' } }, seeAlso: LINKS },
                     additionalProperties: false } },
           { if: { properties: { '@type': { const: 'bg:DefinitionKind' } } },
@@ -125,7 +127,10 @@ const ONTOLOGY_SCHEMA = {
           { if: { required: ['status'], properties: { status: { const: 'lossy' } } }, then: { required: ['reason'] } },
           // a lossy node type joins SUPPORTED_NODE_TYPES, where bpmnXmlTag must resolve it
           { if: { required: ['status'], properties: { '@type': { const: 'bg:NodeType' }, status: { enum: ['supported', 'lossy'] } } }, then: { required: ['xmlTag'] } },
-          { if: { required: ['status'], properties: { '@type': { const: 'bg:EventMarker' }, status: { const: 'supported' } } }, then: { required: ['eventDefinition'] } },
+          // A supported marker names its event definition, except the plain one, which has none and belongs to no group.
+          { if: { required: ['status'], properties: { '@type': { const: 'bg:EventMarker' }, status: { const: 'supported' } }, not: { required: ['plain'] } }, then: { required: ['eventDefinition'] } },
+          { if: { required: ['plain'], properties: { '@type': { const: 'bg:EventMarker' } } },
+            then: { not: { required: ['eventDefinition'] }, properties: { groups: { maxItems: 0 } } } },
         ],
       },
     },
@@ -239,7 +244,7 @@ export function buildVocabulary(onto) {
   }));
   const markers = graph.filter(e => e['@type'] === 'bg:EventMarker').map(e => ({
     name: e.name, label: e.label, status: e.status, eventDefinition: e.eventDefinition ?? null,
-    groups: new Set(e.groups), reason: e.reason ?? null,
+    plain: e.plain === true, groups: new Set(e.groups), reason: e.reason ?? null,
   }));
   const properties = graph.filter(e => e['@type'] === 'rdf:Property');
   const typeById = new Map(graph.filter(e => e['@type'] === 'bg:NodeType').map(e => [e['@id'], e.name]));

@@ -18,6 +18,7 @@ import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
 import { languageTag } from './naming/index.js';
 import { inferGatewayDirections, assignEdgeIds, withProcessId, resolveFlowSemantics } from './topology.js';
 import { resolvedMarkerOf } from './icons.js';
+import { MARKER_NONE } from './naming/markers.js';
 import { edgeLabelBox } from './coordinates.js';
 
 const moddle = new BpmnModdle();
@@ -131,6 +132,15 @@ function moddleType(lcType) {
 const DEFINITION_REF_FIELD = {
   message: 'messageRef', error: 'errorRef', signal: 'signalRef', escalation: 'escalationRef',
 };
+
+/** True for an event the model marks as plain on purpose (`marker: "none"`): it gets `bg:marker="none"`. */
+const writesMarkerNone = (node) => isEvent(node.type) && node.marker === MARKER_NONE;
+
+/** True when an event at any nesting level of `processes` gets `bg:marker="none"`. */
+function anyMarkerNone(processes) {
+  const walk = (nodes) => (nodes || []).some((n) => writesMarkerNone(n) || walk(n.nodes));
+  return processes.some((proc) => walk(proc.nodes));
+}
 
 /**
  * Build event definition moddle element for a node.
@@ -450,6 +460,9 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
   if (eventDef && el.$descriptor.properties.some(p => p.name === 'eventDefinitions')) {
     el.get('eventDefinitions').push(eventDef);
   }
+  // A plain event on purpose: no definition, and the attribute that tells the importers so (an
+  // event without it reads back as no marker). `xmlns:bg` is declared on `bpmn:definitions`.
+  if (writesMarkerNone(node)) el.$attrs[`${EXTENSION_PREFIX}:marker`] = MARKER_NONE;
 
   // Loop / Multi-instance.
   //
@@ -1179,6 +1192,11 @@ async function generateBpmnXml(lc, coordMap) {
     const xmlnsBg = `xmlns:${EXTENSION_PREFIX}`;
     if (!(xmlnsBg in definitions.$attrs)) definitions.$attrs[xmlnsBg] = EXTENSION_NS;
     definitions.$attrs[`${EXTENSION_PREFIX}:language`] = language;
+  }
+  // `bg:marker="none"` on an event needs the declaration too; without such an event nothing is added.
+  if (anyMarkerNone(processes)) {
+    const xmlnsBg = `xmlns:${EXTENSION_PREFIX}`;
+    if (!(xmlnsBg in definitions.$attrs)) definitions.$attrs[xmlnsBg] = EXTENSION_NS;
   }
 
   const rootElements = definitions.get('rootElements');

@@ -21,6 +21,7 @@ import { scaledPath, num } from './pathmap.js';
 // A cycle with naming/index.js (it imports `inferEventMarker`): both sides use the other's binding
 // inside functions only, never while the module is evaluated.
 import { namingFor } from './naming/index.js';
+import { MARKER_NONE } from './naming/markers.js';
 
 /**
  * The element's colours: its own `color` (bioc), else config.json's — bpmn-js `getStrokeColor` /
@@ -125,6 +126,7 @@ function inferEventMarker(name) {
  * legacy inference. Without a supported language `_marker` is never read.
  */
 function markerOf(node, language = null) {
+  if (node.marker === MARKER_NONE) return null;
   if (node.marker) return node.marker;
   const strategy = namingFor(language);
   if (strategy !== null) {
@@ -140,6 +142,7 @@ function markerOf(node, language = null) {
  * legacy markers. A node key starting with `_` is reserved for the pipeline.
  */
 function resolvedMarkerOf(node) {
+  if (node.marker === MARKER_NONE) return null;
   if (node.marker) return node.marker;
   if (Object.hasOwn(node, '_marker')) return node._marker;
   return inferEventMarker(node.name || '');

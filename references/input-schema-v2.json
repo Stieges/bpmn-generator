@@ -605,6 +605,7 @@
       ]
     },
     "EventMarker": {
+      "description": "The event definition (trigger or result) of an event. \"none\" is a plain event on purpose: no event definition and no marker inferred from the name; valid on a start, end and intermediate throw event (rule S15 reports it on a boundary or intermediate catch event).",
       "enum": [
         "message",
         "timer",
@@ -617,7 +618,8 @@
         "cancel",
         "terminate",
         "multiple",
-        "parallelMultiple"
+        "parallelMultiple",
+        "none"
       ]
     },
     "TopLevelDefinition": {

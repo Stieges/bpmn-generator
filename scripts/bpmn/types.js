@@ -644,8 +644,10 @@ export const OMG_NODE_FIELD_SCOPE = [
   // to, and all of them are lost for every other marker.
   { field: 'marker', attr: 'eventDefinitions', type: 'string', on: 'self', allowed: domain('Node', 'marker'), scope: 'an Event',
     shape: 'eventDefinition', writeSite: 'buildEventDefinition', enforcedBy: 'moddle', roundTrip: 'lossy',
-    reason: '`references/input-schema.json`\'s EventMarker enum has 12 members; '
-      + '`buildEventDefinition`\'s typeMap covers 10. `multiple` and `parallelMultiple` have no '
+    reason: '`references/input-schema.json`\'s EventMarker enum has 13 members; '
+      + '`buildEventDefinition`\'s typeMap covers 10. `none` is a plain event on purpose: no '
+      + 'definition, and the event carries `bg:marker="none"`, which both importers read back. '
+      + '`multiple` and `parallelMultiple` have no '
       + 'single `<bpmn:*EventDefinition>` class — OMG expresses them as two or more '
       + 'eventDefinitions on one event — so both are dropped without an element and without a '
       + 'warning. Every other marker round-trips exactly.' },
