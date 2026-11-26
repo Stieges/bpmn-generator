@@ -56,7 +56,7 @@ describe('containerName', () => {
   test.each([
     'Claims handling', 'Onboarding', 'Order fulfilment', 'Handle case', 'Call rating', 'Credit check',
     'Background check', 'Quality control', 'Customer support', 'Account setup', 'Month-end close',
-    'Fraud review', 'Hire to retire', 'Intake', 'Customer need',
+    'Fraud review', 'Hire to retire', 'Intake', 'Customer need', 'Newsfeed',
   ])('passes %s', (n) => expect(s.containerName(n)).toBeNull());
   test.each(['Validate', 'Archive', 'Review', 'Order received'])('flags %s', (n) =>
     expect(flagged(s.containerName, n)).toBe(true));
@@ -75,7 +75,7 @@ describe('eventName', () => {
 describe('messageName', () => {
   test.each([
     'Request for details', 'Register query', 'Customer need', 'Data set', 'Lead details', 'Build artifacts',
-    'Pay slip', 'Read receipt', 'Pay run', 'Train schedule', 'Merge request', 'Follow-up', 'Pay-out', 'Clean-up',
+    'Pay slip', 'Read receipt', 'Pay run', 'Train schedule', 'Merge request', 'Follow-up', 'Pay-out', 'Clean-up', 'Newsfeed',
   ])('passes %s', (n) => expect(s.messageName(n)).toBeNull());
   test.each(['Send invoice', 'Order received', 'Case closed'])('flags %s', (n) =>
     expect(flagged(s.messageName, n)).toBe(true));

@@ -640,7 +640,7 @@ subset; [references/api-reference.md](references/api-reference.md) lists them pe
 | `AUDIT_LOG_PATH` | Audit log file (default below) |
 | `DEAD_LETTER_PATH` | Dead-letter directory (default below) |
 | `BPMN_CONFIG` | JSON file merged over `config.json` (see [Visual Refinement](#visual-refinement)) |
-| `BPMN_NAMING` | JSON file that adds words to, or removes words from, the naming word lists (see [Naming languages](#naming-languages)). Set by the operator, never taken from a request. A file that is not usable stops the server at start; at request time the answer is a `500` `naming data unavailable` |
+| `BPMN_NAMING` | JSON file that adds words to, or removes words from, the naming word lists (see [Naming languages](#naming-languages)). Set by the operator, never taken from a request. The file is read once per process (the servers at start, the CLI and the library on first use); a change needs a restart. A file that is not usable stops the server at start; the `500` `naming data unavailable` is only a safeguard for a process that did not run that check (an embedding library caller) |
 
 Fixed limits: 10 MB request body, 30 requests per minute per client. Every Logic-Core input passes
 the JSON Schema gate; `callbackUrl` and an allowlisted `baseUrl` pass an SSRF guard (http/https
