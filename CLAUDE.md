@@ -33,7 +33,7 @@ scripts/bpmn/ — Core Pipeline (run on every generate call)
   pipeline.js (Orchestrator, public API runPipeline; its imports outside bpmn/ are
   │                            ../cross/decision-doc.js, for the opt-in `decisions` option — text, no rule,
   │                            fenced in shared/rule-registers.test.js and shared/rule-catalog.test.js — and
-  │                            ../shared/catalog.js (`loadCatalog`, for `--catalog`); its import within bpmn/
+  │                            ../shared/catalog.js (`loadCliCatalog`, for `--catalog`); its import within bpmn/
   │                            for format 2.0 is model-v2.js: resolveFields before the rules, formLanes after them)
     ├── validate.js          ← rules.js
     ├── rules.js             ← types.js, workflow-net.js, optimize.js
@@ -108,7 +108,7 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
                                profile, layout switches and derivations; `ViewRejectedError`)
   catalog.js                 ← rule-profile.js, resource-paths.js, ajv (actor catalogue gate `catalogErrors`, `loadCatalog`,
                                `resolveScheme` (ships references/schemes/demi-scheme.json), `catalogFingerprint`;
-                               `CatalogRejectedError`; used by bpmn/pipeline.js for `--catalog` and by model-v2.js)
+                               `loadCliCatalog`, `CatalogRejectedError`; used by bpmn/pipeline.js and orchestrator.js for `--catalog` and by model-v2.js)
   resource-paths.js          (no deps — where references/ lives in each layout, and the repository's rules/ and
                                views/ for named profiles and views: rulesDirPath, viewsDirPath, null outside a checkout)
   ontology.js                ← resource-paths.js, ajv (loads + validates references/ontology.jsonld at import; `VOCABULARY`)
@@ -373,7 +373,7 @@ membership instead of coordinates.
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
 | `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`); `/generate`, `/validate`, `/orchestrate` read format 2.0 with the request field `catalog` (an object, never a path) |
 | `scripts/mcp-bpmn-server.js` | MCP server entry point; `generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn` read format 2.0 with an embedded `catalog` object (never a path; forwarded for 2.x models only, ignored for 1.x) |
-| `scripts/orchestrator.js` | Multi-agent orchestration (modeler → layout → reviewer → compliance); reads 1.x and 2.0 (`catalog` option): for 2.0 the modeler's refine and amend are skipped (history `skipped: 'format 2.0'`), `mode` optimize/soll throws F04 before any agent |
+| `scripts/orchestrator.js` | Multi-agent orchestration (modeler → layout → reviewer → compliance); reads 1.x and 2.0 (`catalog` option; the CLI takes `--catalog <path>` or the model's `catalog` field, as `bpmn/pipeline.js` does): for 2.0 the modeler's refine and amend are skipped (history `skipped: 'format 2.0'`), `mode` optimize/soll throws F04 before any agent |
 | `scripts/audit.js` | Append-only audit log (JSONL) |
 | `scripts/delivery.js` | Webhook delivery + dead-letter queue |
 | `scripts/evaluate-slm.js` | Evaluation runner against fixture sets |
@@ -408,7 +408,7 @@ membership instead of coordinates.
 | `rules/dmn-best-practice-profile.json` | Adds the opt-in `best_practice` layer |
 | `rules/custom/` | Project-specific profiles, loaded by path only — see its README |
 | `scripts/shared/geometry.js` | `clipStraight`, `clipToRect` — straight-segment clip maths shared by `bpmn/coordinates.js` and `dmn/coordinates.js` (DMN's DRD draws requirement connections as unstyled straight lines, same as a BPMN Association). The orthogonal clip helpers stay in `scripts/bpmn/coordinates.js` |
-| `scripts/shared/catalog.js` | `catalogErrors`, `loadCatalog`, `resolveScheme`, `canonicalJson`, `catalogFingerprint`, `CatalogRejectedError`, `CATALOG_LIMITS`, `SHIPPED_SCHEMES` — the actor catalogue (`actors` of role/unit with optional `unit`, optional `scheme`) gated by `references/catalog-schema.json` (ajv strict, `additionalProperties: false`; 1 MiB / 5-level bound). `resolveScheme` maps no ref to the shipped DEMI scheme, a shipped name to its file, an unknown name to `null`, an object to itself. `catalogFingerprint` is `sha256:` over the canonical JSON (sorted keys, no whitespace) of `{ actors, scheme }`. Imported by `bpmn/model-v2.js` and by `bpmn/pipeline.js` (`--catalog`) |
+| `scripts/shared/catalog.js` | `catalogErrors`, `loadCatalog`, `loadCliCatalog`, `resolveScheme`, `canonicalJson`, `catalogFingerprint`, `CatalogRejectedError`, `CATALOG_LIMITS`, `SHIPPED_SCHEMES` — the actor catalogue (`actors` of role/unit with optional `unit`, optional `scheme`) gated by `references/catalog-schema.json` (ajv strict, `additionalProperties: false`; 1 MiB / 5-level bound). `resolveScheme` maps no ref to the shipped DEMI scheme, a shipped name to its file, an unknown name to `null`, an object to itself. `catalogFingerprint` is `sha256:` over the canonical JSON (sorted keys, no whitespace) of `{ actors, scheme }`. `loadCliCatalog` is the command-line intake (`--catalog` wins over the model's `catalog` field, relative to the model file). Imported by `bpmn/model-v2.js`, by `bpmn/pipeline.js` and `orchestrator.js` (`--catalog`) |
 | `scripts/shared/view.js` | `assertView`, `loadView`, `loadNamedView`, `ViewRejectedError`, `VIEW_LIMITS` — a view is a small named JSON file, outside the model, that decides how it is processed (`ruleProfile` name, `layout` switches, `derivations`). Same posture as a rule profile: 64 KiB / 4-level bound, then `references/view-schema.json` (ajv strict, `additionalProperties: false` at every level), files read through `readBoundedJsonText`. Unlike a profile, a missing file **throws**. `loadNamedView` reads `views/<name>-view.json` only (shipped: `aligned-ports`, `default`, `einheiten`, `explicit-joins`, `organigramm` (nested along `partOf`, format 2.0 models only), `rollen`; no `custom/`), realpath-contained, an unknown name lists the available ones |
 | `scripts/shared/resource-paths.js` | `inputSchemaPath`, `promptTemplatePath` — the single place that decides where `references/` lives. **The source outranks the in-package copy.** The reverse precedence was a silent trap: `npm pack` (including the `--dry-run` the docs gate runs) leaves a copy behind, and every later edit to `references/` then had no effect while `git status` said nothing, because it is gitignored. Filenames are spelled out literally in each `join(__dirname, …)` — the docs gate parses those calls for string literals, and a variable would make it check a directory |
 | `scripts/prepack-copy-references.mjs` | `prepack` lifecycle script — copies `input-schema.json`/`prompt-template.md` from repo-root `references/` into `scripts/references/` (gitignored) so the npm package ships them. npm's `files` cannot reach outside the package root, hence a copy |

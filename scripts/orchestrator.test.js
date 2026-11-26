@@ -932,3 +932,80 @@ describe('orchestrate — mode optimize or soll on a format 2.0 model', () => {
     expect(reviewer).not.toHaveBeenCalled();
   });
 });
+
+describe('orchestrator CLI — the catalogue of a format 2.0 model', () => {
+  const V2 = resolve(__dirname, '../tests/fixtures-v2/schaden.json');
+  const V1 = resolve(fixturesDir, 'simple-approval.json');
+  const run = async (args) => {
+    const { mkdtempSync, rmSync, existsSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { spawnSync } = await import('node:child_process');
+    const dir = mkdtempSync(resolve(tmpdir(), 'orch-cli-'));
+    try {
+      const out = resolve(dir, 'out');
+      const res = spawnSync(process.execPath, [resolve(__dirname, 'orchestrator.js'), ...args, '--output', out], { encoding: 'utf8', cwd: dir });
+      const xml = existsSync(`${out}.bpmn`) ? readFileSync(`${out}.bpmn`, 'utf8') : null;
+      return { ...res, xml };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const tempFile = async (name, content) => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const file = resolve(mkdtempSync(resolve(tmpdir(), 'orch-cat-')), name);
+    writeFileSync(file, content);
+    return file;
+  };
+  const ROLE_LANES = ['sb_schaden', 'regress', 'zahlung'].map((id) => `id="L.Process_Schaden.${id}"`);
+
+  test('the model\'s "catalog" field is read relative to the model file: COMPLIANT, role lanes', async () => {
+    const res = await run(['--input', V2]);
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('— COMPLIANT');
+    expect(res.stdout).not.toContain('[C13]');
+    for (const lane of ROLE_LANES) expect(res.xml).toContain(lane);
+    expect(res.xml).toContain('bg:catalog="sha256:');
+  }, 60_000);
+
+  test.each([['--catalog=<path>'], ['--catalog <path>']])('%s wins over the model\'s own field', async (form) => {
+    const other = await tempFile('other.json', JSON.stringify({ scheme: 'demi', actors: [
+      { id: 'sb_schaden', name: 'Andere Rolle', kind: 'role' }, { id: 'regress', name: 'Regress', kind: 'role' }, { id: 'zahlung', name: 'Zahlung', kind: 'role' }] }));
+    const flag = form === '--catalog=<path>' ? [`--catalog=${other}`] : ['--catalog', other];
+    const res = await run(['--input', V2, ...flag]);
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('— COMPLIANT');
+    expect(res.xml).toContain('Andere Rolle');
+    expect(res.xml).not.toContain('Sachbearbeitung Schaden');
+  }, 60_000);
+
+  test('a catalogue that is not valid JSON: one [C11] line, exit 1, no stack trace', async () => {
+    const bad = await tempFile('bad.json', '{ "scheme": "demi", "actors": [ ], }');
+    const res = await run(['--input', V2, `--catalog=${bad}`]);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toMatch(/^✗ \[C11\] catalog .*not valid JSON at line 1, column \d+\n$/);
+    expect(res.xml).toBeNull();
+  });
+
+  test('an empty --catalog= with a 2.0 model: [C11], exit 1', async () => {
+    const res = await run(['--input', V2, '--catalog=']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toBe('✗ [C11] --catalog needs a path\n');
+  });
+
+  test('--catalog with a 1.x model: the pipeline CLI\'s message, exit 1', async () => {
+    const res = await run(['--input', V1, '--catalog=x']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toBe('✗ --catalog applies to format 2.0 models only\n');
+    expect(res.stdout).toBe('');
+    expect(res.xml).toBeNull();
+  });
+
+  test('a 1.x model without --catalog: output unchanged', async () => {
+    const res = await run(['--input', V1]);
+    expect(res.status).toBe(0);
+    expect(res.stderr).toBe('');
+    expect(res.stdout).toMatch(/^✓ Orchestration complete \(1 iteration\) — COMPLIANT\n {2}BPMN → .*out\.bpmn\n {2}SVG {2}→ .*out\.svg\n {2}Log {2}→ .*out\.orchestration\.json\n$/);
+    expect(res.xml).toBe(readFileSync(resolve(fixturesDir, 'simple-approval.expected.bpmn'), 'utf8'));
+  }, 60_000);
+});

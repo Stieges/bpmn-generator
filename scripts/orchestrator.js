@@ -16,14 +16,16 @@
  *   node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL --output /tmp/result
  *   (--timeout <seconds>: LLM request timeout, default 120; --retries <n>: attempts after the first
  *   on a transport error or 408/429/5xx, default config.json → llm.retry; --extra-body '<json>':
- *   extra request fields, e.g. '{"chat_template_kwargs":{"enable_thinking":false}}')
+ *   extra request fields, e.g. '{"chat_template_kwargs":{"enable_thinking":false}}';
+ *   --catalog <path>: the actor catalogue of a format 2.0 model, relative to the working directory;
+ *   without it the model's "catalog" field, relative to the model file)
  */
 
 import { modelerAgent } from './agents/modeler.js';
 import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
-import { validateLogicCoreSchema, validateModelSchema, formatSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
+import { validateLogicCoreSchema, validateModelSchema, formatSchemaErrors, assertViewFitsModel, modelFormat } from './bpmn/schema-gate.js';
 import { ViewRejectedError, loadView } from './shared/view.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { isMainModule } from './shared/entry-point.js';
@@ -293,6 +295,17 @@ const isMain = isMainModule(import.meta.url, process.argv[1]);
 if (isMain) {
   const args = process.argv.slice(2);
   const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
+  // --catalog <path> or --catalog=<path>, as node bpmn/pipeline.js takes it
+  const catalogAt = args.findIndex((a) => a === '--catalog' || a.startsWith('--catalog='));
+  let catalogArg = null;
+  if (catalogAt >= 0) {
+    if (args[catalogAt] !== '--catalog') catalogArg = args[catalogAt].slice('--catalog='.length);
+    else if (catalogAt + 1 < args.length) catalogArg = args[catalogAt + 1];
+    else {
+      console.error('✗ --catalog requires a value (a path to an actor catalogue file)');
+      process.exit(1);
+    }
+  }
 
   const inputPath = flag('--input');
   const textInput = flag('--text');
@@ -324,7 +337,7 @@ if (isMain) {
   }
 
   if (!inputPath && !textInput) {
-    console.error('Usage: node orchestrator.js --input <logic-core.json> [--output <base>]');
+    console.error('Usage: node orchestrator.js --input <logic-core.json> [--output <base>] [--catalog <path>]');
     console.error('       node orchestrator.js --text "..." --api-url URL --api-key KEY --model MODEL [--timeout <seconds>] [--retries <n>] [--extra-body <json>]');
     process.exit(1);
   }
@@ -335,7 +348,26 @@ if (isMain) {
   if (inputPath) {
     const { readFileSync } = await import('node:fs');
     input = JSON.parse(readFileSync(inputPath, 'utf8'));
-  } else {
+  }
+  // The catalogue of a 2.0 model, read as the pipeline CLI reads it: --catalog wins over the
+  // model's "catalog" field, which is relative to the model file. Text mode yields 1.x.
+  const isV2Input = Boolean(inputPath) && modelFormat(input) === '2';
+  if (catalogArg !== null && !isV2Input) {
+    console.error('✗ --catalog applies to format 2.0 models only');
+    process.exit(1);
+  }
+  if (isV2Input) {
+    const { loadCliCatalog, CatalogRejectedError } = await import('./shared/catalog.js');
+    try {
+      const catalog = loadCliCatalog(input, { catalogArg, inputPath });
+      if (catalog) options.catalog = catalog;
+    } catch (e) {
+      if (!(e instanceof CatalogRejectedError)) throw e;
+      console.error(`✗ ${e.message}`);
+      process.exit(1);
+    }
+  }
+  if (!inputPath) {
     input = textInput;
     if (!apiUrl || !apiKey || !model) {
       console.error('Text mode requires --api-url, --api-key, and --model');

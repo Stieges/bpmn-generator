@@ -513,6 +513,8 @@ Modeler (LLM) → Reviewer → Layout/Pipeline → Compliance → Done
 ```bash
 # Review-only (no LLM needed):
 node orchestrator.js --input logic-core.json --output /tmp/result
+# A format 2.0 model: the catalogue from --catalog <path>, else from the model's "catalog" field
+node orchestrator.js --input my-process.json --catalog my-catalog.json --output /tmp/result
 
 # Full cycle with LLM (text → BPMN):
 node orchestrator.js --text "Process description..." \

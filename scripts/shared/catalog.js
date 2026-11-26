@@ -11,7 +11,7 @@
 
 import { readFileSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {
   ProfileRejectedError, readBoundedJsonText, exceedsBounds, quoteForMessage,
@@ -89,6 +89,23 @@ export function loadCatalog(path) {
     throw withCode(new CatalogRejectedError(`catalog ${label} is refused: ${listed.join('; ')}`), 'C12');
   }
   return catalog;
+}
+
+/**
+ * The catalogue a command line reads for a format 2.0 model (design 5.3): `catalogArg` (the value of
+ * `--catalog`, relative to the working directory) wins over the model's "catalog" field (relative to
+ * the model file; `inputPath` '-' is standard input, which has no file). `undefined` when neither
+ * names one. Throws `CatalogRejectedError`: C11 for an empty `--catalog=`, C13 for a "catalog" field
+ * on standard input, and what `loadCatalog` throws.
+ */
+export function loadCliCatalog(model, { catalogArg = null, inputPath }) {
+  if (catalogArg === '') throw withCode(new CatalogRejectedError('--catalog needs a path'), 'C11');
+  if (catalogArg !== null) return loadCatalog(resolve(catalogArg));
+  if (typeof model?.catalog !== 'string') return undefined;
+  if (inputPath === '-') {
+    throw withCode(new CatalogRejectedError(`the model names catalogue "${model.catalog}" but is read from standard input; pass --catalog <path>`), 'C13');
+  }
+  return loadCatalog(resolve(dirname(resolve(inputPath)), model.catalog));
 }
 
 /** Names of the schemes that ship in references/schemes/<name>-scheme.json. */
