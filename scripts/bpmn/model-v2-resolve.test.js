@@ -383,3 +383,11 @@ describe('resolveFields — the process file replaces and adds catalogue entries
     expect(() => resolveWith([REGRESS])).not.toThrow();
   });
 });
+
+describe('resolveFields and language', () => {
+  test('the intermediate form keeps language', () => {
+    const { lc, errors } = resolveFields({ ...copy(MODEL), language: 'de' }, { catalog: copy(CATALOG) });
+    expect(errors).toEqual([]);
+    expect(lc.language).toBe('de');
+  });
+});

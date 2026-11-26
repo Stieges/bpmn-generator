@@ -47,6 +47,7 @@ import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, lane
 import { isMainModule } from '../shared/entry-point.js';
 import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOptions } from '../shared/view.js';
 import { applyDerivations } from './derivations.js';
+import { languageTag } from './naming/index.js';
 import { coded, codeOf } from '../shared/message-codes.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
@@ -561,9 +562,16 @@ function collapseSubProcesses(logicCore) {
 }
 
 /**
- * Extract a subprocess's internal flow as a standalone Logic-Core.
+ * Extract a subprocess's internal flow as a standalone Logic-Core. A valid `language` of the
+ * source root comes along (first key), so a child diagram names the language of its parent.
  */
 function extractSubProcessAsLogicCore(logicCore, subProcessId) {
+  const sub = findSubProcessAsLogicCore(logicCore, subProcessId);
+  const language = languageTag(logicCore);
+  return sub && language !== null ? { language, ...sub } : sub;
+}
+
+function findSubProcessAsLogicCore(logicCore, subProcessId) {
   const processes = logicCore.pools ? logicCore.pools : [logicCore];
   for (const proc of processes) {
     for (const node of (proc.nodes || [])) {
@@ -585,7 +593,7 @@ function extractSubProcessAsLogicCore(logicCore, subProcessId) {
       }
       // Recurse for nested subprocesses
       if (node.type === 'subProcess' && node.isExpanded && node.nodes?.length) {
-        const nested = extractSubProcessAsLogicCore(
+        const nested = findSubProcessAsLogicCore(
           { pools: [{ ...proc, nodes: node.nodes, edges: node.edges || [] }] },
           subProcessId,
         );

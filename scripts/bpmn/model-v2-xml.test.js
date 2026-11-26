@@ -6,7 +6,7 @@
  */
 import { describe, test, expect } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bpmnXsdStatus, xsdDir } from '../../.github/scripts/fetch-bpmn-xsd.mjs';
@@ -185,6 +185,79 @@ const xsd = bpmnXsdStatus();
       files.push(file);
     }
     // Throws with xmllint's message when a file fails to validate.
+    execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), ...files], { encoding: 'utf8', stdio: 'pipe' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── the language of a model on bpmn:definitions ───────────────────────────────────────────────
+const fixture = (path) => JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8'));
+const withoutDefinitionsTag = (xml) => xml.replace(/<bpmn:definitions\b[^>]*>/, '<bpmn:definitions>');
+const ONE_X = [
+  ['simple-approval (no bg: element)', 'tests/fixtures/simple-approval.json'],
+  ['nested-lanes-role-system (bg:system elements)', 'tests/fixtures/nested-lanes-role-system.json'],
+];
+
+describe('bg:language on bpmn:definitions', () => {
+  test.each(ONE_X)('a 1.x model %s: one xmlns:bg, bg:language, no other difference', async (_name, path) => {
+    const plain = await generate(fixture(path));
+    const tagged = await generate({ ...fixture(path), language: 'de' });
+    const defs = definitionsTag(tagged.bpmnXml);
+    expect(defs).toContain('bg:language="de"');
+    expect(defs).toContain('xmlns:bg="http://bpmn-generator/schema/1.0"');
+    expect(count(tagged.bpmnXml, /xmlns:bg=/g)).toBe(1);
+    expect(defs).not.toContain('exporter=');
+    expect(tagged.bpmnXml).not.toBe(plain.bpmnXml);
+    expect(withoutDefinitionsTag(tagged.bpmnXml)).toBe(withoutDefinitionsTag(plain.bpmnXml));
+    expect(tagged.svg).toBe(plain.svg);
+    expect(tagged.validation.xmlWarnings).toEqual(plain.validation.xmlWarnings);
+  });
+
+  test('the attribute follows the origin attributes', async () => {
+    const defs = definitionsTag((await generate({ ...formed(), language: 'en-GB' })).bpmnXml);
+    expect(defs).toContain('bg:language="en-GB"');
+    expect(defs.indexOf('bg:catalog=')).toBeLessThan(defs.indexOf('bg:language='));
+    expect(count(defs, /xmlns:bg=/g)).toBe(1);
+  });
+
+  test('a 2.0 model carries modelVersion, view, catalog and language', async () => {
+    const model = { ...fixture('tests/fixtures-v2/schaden.json'), language: 'de' };
+    const r = await runPipeline(model, { catalog: fixture('tests/fixtures-v2/schaden-catalog.json') });
+    expect(r.validation.errors).toEqual([]);
+    const defs = definitionsTag(r.bpmnXml);
+    expect(defs).toMatch(/bg:modelVersion="2\.0" bg:view="default" bg:catalog="sha256:[0-9a-f]{64}" bg:language="de"/);
+    expect(count(r.bpmnXml, /xmlns:bg=/g)).toBe(1);
+  });
+
+  test.each([['German'], ['DE'], [5], [null], ['de" x="1']])('an invalid language %p writes no attribute (Review Focus 1)', async (language) => {
+    const plain = await generate(fixture('tests/fixtures/simple-approval.json'));
+    const r = await runPipeline({ ...fixture('tests/fixtures/simple-approval.json'), language });
+    expect(r.bpmnXml).toBe(plain.bpmnXml);
+    expect(r.svg).toBe(plain.svg);
+  });
+
+  test.each([
+    ['bpmnToLogicCore', (xml) => bpmnToLogicCore(xml)],
+    ['bpmnToLogicCoreLegacy', async (xml) => bpmnToLogicCoreLegacy(xml)],
+  ])('%s reads language back as the last key', async (_name, read) => {
+    const lc = await read((await generate({ ...fixture('tests/fixtures/simple-approval.json'), language: 'en-GB' })).bpmnXml);
+    expect(lc.language).toBe('en-GB');
+    expect(Object.keys(lc).at(-1)).toBe('language');
+    const { language: _drop, ...rest } = lc;
+    expect(rest).toEqual(await read((await generate(fixture('tests/fixtures/simple-approval.json'))).bpmnXml));
+  });
+});
+
+(xsd.available ? test : test.skip)('1.x output with bg:language validates against BPMN20.xsd', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'model-v2-xml-lang-'));
+  try {
+    const files = [];
+    for (const [i, [, path]] of ONE_X.entries()) {
+      const file = join(dir, `lang-${i}.bpmn`);
+      writeFileSync(file, (await generate({ ...fixture(path), language: 'de' })).bpmnXml);
+      files.push(file);
+    }
     execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), ...files], { encoding: 'utf8', stdio: 'pipe' });
   } finally {
     rmSync(dir, { recursive: true, force: true });

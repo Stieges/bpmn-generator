@@ -15,6 +15,7 @@ import {
 
 import { LANE_HEADER_W } from './constants.js';
 import { rn, EXTENSION_NS, EXTENSION_PREFIX } from '../shared/utils.js';
+import { languageTag } from './naming/index.js';
 import { inferGatewayDirections, assignEdgeIds, withProcessId, resolveFlowSemantics } from './topology.js';
 import { inferEventMarker } from './icons.js';
 import { edgeLabelBox } from './coordinates.js';
@@ -1169,6 +1170,15 @@ async function generateBpmnXml(lc, coordMap) {
       [`${EXTENSION_PREFIX}:view`]: lc._modelInfo.view,
       [`${EXTENSION_PREFIX}:catalog`]: lc._modelInfo.catalogFingerprint,
     });
+  }
+  // The language of the labels, after the origin attributes; only a valid tag is written, so a
+  // model without one (or with an invalid one) is serialized exactly as before. No exporter: the
+  // attribute is no origin marker.
+  const language = languageTag(lc);
+  if (language !== null) {
+    const xmlnsBg = `xmlns:${EXTENSION_PREFIX}`;
+    if (!(xmlnsBg in definitions.$attrs)) definitions.$attrs[xmlnsBg] = EXTENSION_NS;
+    definitions.$attrs[`${EXTENSION_PREFIX}:language`] = language;
   }
 
   const rootElements = definitions.get('rootElements');
