@@ -60,7 +60,7 @@ export function namingFor(language) {
 }
 
 /** The English name of a language ("German"), else `language "<code>"`. */
-function languageName(code) {
+export function languageName(code) {
   let name;
   try {
     name = new Intl.DisplayNames(['en'], { type: 'language' }).of(code);
