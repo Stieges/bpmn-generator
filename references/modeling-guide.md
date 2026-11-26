@@ -120,7 +120,7 @@ Behaviours worth knowing:
   letter after the first word (`Step 3`), a label prefix (`SAP: Review invoice`), two words ending in
   a participle (`Invoice checked`), an auxiliary as second word (`Invoice is checked`), a first word
   that is an article, pronoun, preposition, a frequent noun or a placeholder noun (`The invoice`,
-  `Customer data`, `Path A`), or a gerund (`Checking invoice`). A first word that is simply not in the
+  `Customer data`, `Path A`), a gerund (`Checking invoice`), a noun that is also a verb before a state word (`Request pending`), or a participle, state, verb or action noun at the end after a first word known as no verb (`Certificate check`). A first word that is simply not in the
   verb list passes, even when the object could be a verb (`Queue request`), and the model gets one
   hint `H14` naming up to ten such words (a hyphenated word whole: `'Hot-desk'`); if they are verbs
   nothing is wrong, and adding them to `verbs` through `BPMN_NAMING` silences the hint. A shorter

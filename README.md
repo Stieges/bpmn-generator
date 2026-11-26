@@ -295,7 +295,7 @@ prüfen`), English verb-first (`Review application`). It applies to M01 (tasks, 
 call-activity names, at every level), M02 (gateway questions), M05 (message-flow names) and M06
 (event names), and it selects the keywords that infer an event's marker from its name (hints
 `H10`, `H11`). To keep an event plain whatever its name says, set `marker: "none"` (end and
-intermediate throw events, start events outside an event subprocess; with or without `language`). The XML carries it as `bg:language` on `bpmn:definitions` and the importers read it
+intermediate throw events, start events outside an event subprocess; with or without `language`); the XML writes it as `bg:marker="none"` on the event. The XML carries the language as `bg:language` on `bpmn:definitions` and the importers read it
 back. Without the field nothing changes: M01 is the legacy `Objekt+Verb` heuristic and M05 and M06
 stay silent. A valid tag with no word lists here (`fr`) skips M01, M05 and M06 and gives hint `H12`;
 labels that look like another supported language give `H13`.
