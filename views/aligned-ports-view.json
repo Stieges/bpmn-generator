@@ -1,0 +1,6 @@
+{
+  "view": "aligned-ports",
+  "version": "1.0",
+  "description": "Message flows to or from a participant dock level with their other end.",
+  "layout": { "alignParticipantPorts": true }
+}

@@ -7,7 +7,7 @@ import { PROFILE_LIMITS } from './rule-profile.js';
 import { viewsDirFor, viewsDirPath } from './resource-paths.js';
 
 describe('shipped views', () => {
-  test.each(['default', 'einheiten', 'explicit-joins', 'rollen'])('%s loads by name and passes the gate', (name) => {
+  test.each(['aligned-ports', 'default', 'einheiten', 'explicit-joins', 'rollen'])('%s loads by name and passes the gate', (name) => {
     const view = loadNamedView(name);
     expect(view.view).toBe(name);
     expect(() => assertView(view)).not.toThrow();
@@ -83,6 +83,18 @@ describe('assertView', () => {
   test('refuses an object deeper than 4 levels', () => {
     expect(() => assertView({ view: 'x', version: '1.0', layout: { visualRefinement: { a: { b: { c: 1 } } } } }))
       .toThrow(/deeper than 4/);
+  });
+});
+
+describe('layout.alignParticipantPorts in a view', () => {
+  test('aligned-ports carries the key into the resolved options; the explicit option wins; others leave it absent', () => {
+    expect(resolveViewOptions(loadNamedView('aligned-ports')).alignParticipantPorts).toBe(true);
+    expect(resolveViewOptions(loadNamedView('aligned-ports'), { alignParticipantPorts: false }).alignParticipantPorts).toBe(false);
+    expect('alignParticipantPorts' in resolveViewOptions(loadNamedView('default'))).toBe(false);
+  });
+
+  test('a non-boolean value is refused', () => {
+    expect(() => assertView({ view: 'x', version: '1.0', layout: { alignParticipantPorts: 'yes' } })).toThrow(ViewRejectedError);
   });
 });
 

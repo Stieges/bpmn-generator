@@ -140,6 +140,8 @@ export function loadNamedView(name) {
  * The options a pipeline run uses under `view` (an already loaded view, or null for none). For
  * `ruleProfile` and every `layout` key the explicit option wins when it is not `undefined`, then
  * the view's value; a key neither sets stays absent, so config.json's default applies unchanged.
+ * `layout.alignParticipantPorts` is one such key (read from the schema like the rest): the view
+ * `aligned-ports` switches it on, the explicit option still wins, config.json's `false` otherwise.
  * A view names its rule profile, which resolves inside rules/ only (loadNamedRuleProfile); a
  * name that does not resolve rejects the view. The view's `derivations` and `lanes` and its name
  * (`viewName`) are passed on as given; without a view all three are `undefined`.

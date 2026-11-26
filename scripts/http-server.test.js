@@ -1013,6 +1013,16 @@ describe('views over HTTP — inline objects only, gated, bounded', () => {
     expect(data.error).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
   });
 
+  test('/api/v1/generate: an inline view with alignParticipantPorts gives the aligned routes', async () => {
+    const { runPipeline } = await import('./bpmn/pipeline.js');
+    const ports = JSON.parse(readFileSync(new URL('../tests/fixtures/message-flow-participant-ports.json', import.meta.url), 'utf8'));
+    const view = { view: 'aligned-ports', version: '1.0', layout: { alignParticipantPorts: true } };
+    const aligned = (await runPipeline(ports, { alignParticipantPorts: true })).bpmnXml;
+    expect(aligned).not.toBe((await runPipeline(ports, {})).bpmnXml);
+    const data = await (await post('/api/v1/generate', { logicCore: ports, view })).json();
+    expect(data.bpmnXml).toBe(aligned);
+  });
+
   test('/api/v1/orchestrate forwards the inline view to the layout agent', async () => {
     const res = await post('/api/v1/orchestrate', { logicCore: lc, view: joins });
     const data = await res.json();
