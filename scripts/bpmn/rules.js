@@ -1507,11 +1507,16 @@ function resolveRuleProfile(given = null, mode = 'document') {
  * @param {object} lc - Logic-Core JSON
  * @param {object|null} profile - Rule profile (or null for defaults)
  * @param {object[]} [catalog=RULES] - the rule catalog to walk; tests pass one built from a modified ontology
- * @returns {{ errors: string[], warnings: string[], infos: string[], metrics: object }}
+ * @param {{ withFindings?: boolean }} [options] - `withFindings`: also return `findings`, every message
+ *   as `{ code, severity, message }` in emission order (`code` the rule id, `WF_OR` included), `message`
+ *   the very string in its list. Format 2.x runs ask for it; without it the result has no `findings` key
+ * @returns {{ errors: string[], warnings: string[], infos: string[], advisories: object[], metrics: object,
+ *   findings?: Array<{code: string, severity: 'ERROR'|'WARNING'|'INFO', message: string}> }}
  */
-function runRules(lc, profile = null, catalog = RULES) {
+function runRules(lc, profile = null, catalog = RULES, { withFindings = false } = {}) {
   reportProfile(profile);
   const errors = [], warnings = [], infos = [], advisories = [];
+  const findings = withFindings ? [] : null;
   const metrics = {};
   const processes = lc.pools ? lc.pools : [lc];
 
@@ -1524,7 +1529,7 @@ function runRules(lc, profile = null, catalog = RULES) {
       // Run once for the whole model
       const result = rule.check(null, lc, profile);
       if (!result.pass) {
-        classifyResult(result, severity, errors, warnings, infos, '');
+        classifyResult(result, severity, errors, warnings, infos, '', findings, rule.id);
       }
     } else {
       // Run per process
@@ -1532,7 +1537,7 @@ function runRules(lc, profile = null, catalog = RULES) {
         const prefix = lc.pools ? `[${proc.name || proc.id}] ` : '';
         const result = rule.check(proc, lc, profile);
         if (!result.pass) {
-          classifyResult(result, severity, errors, warnings, infos, prefix);
+          classifyResult(result, severity, errors, warnings, infos, prefix, findings, rule.id);
         }
       }
     }
@@ -1550,6 +1555,8 @@ function runRules(lc, profile = null, catalog = RULES) {
       if (severity === 'ERROR') errors.push(issue.message);
       else if (severity === 'WARNING') warnings.push(issue.message);
       else if (severity === 'INFO') infos.push(issue.message);
+      else continue;
+      findings?.push({ code: issue.rule, severity, message: issue.message });
     }
     metrics.workflowNet = wfResult.stats;
   }
@@ -1562,7 +1569,7 @@ function runRules(lc, profile = null, catalog = RULES) {
     metrics.optimization = optResult.metrics;
   }
 
-  return { errors, warnings, infos, advisories, metrics };
+  return findings ? { errors, warnings, infos, advisories, metrics, findings } : { errors, warnings, infos, advisories, metrics };
 }
 
 /**
@@ -1585,8 +1592,10 @@ function runRules(lc, profile = null, catalog = RULES) {
  * actually closes it — with `messages`, a separator inside a finding is just a character.
  *
  * Purely additive at the rule level: `message` still works, it simply no longer splits.
+ *
+ * `findings` (runRules' `withFindings`) gets one `{ code, severity, message }` per pushed message.
  */
-function classifyResult(result, severity, errors, warnings, infos, prefix) {
+function classifyResult(result, severity, errors, warnings, infos, prefix, findings = null, code = null) {
   const msgs = Array.isArray(result.messages) ? result.messages : [result.message];
   // Fail loudly on a rule that reports a failure without saying what it is. The old `.split('; ')`
   // provided this by accident — it threw a TypeError on `undefined`, so a `{ pass: false }` with a
@@ -1612,6 +1621,8 @@ function classifyResult(result, severity, errors, warnings, infos, prefix) {
     if (severity === 'ERROR') errors.push(fullMsg);
     else if (severity === 'WARNING') warnings.push(fullMsg);
     else if (severity === 'INFO') infos.push(fullMsg);
+    else continue;
+    findings?.push({ code, severity, message: fullMsg });
   }
 }
 
