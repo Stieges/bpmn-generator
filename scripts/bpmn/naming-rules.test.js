@@ -149,11 +149,11 @@ describe('the messages', () => {
     expect(namingMessage(en, 'task', 'Step 1'))
       .toBe('Task "Step 1" does not follow the English convention verb + object (e.g. "Review application").');
     expect(namingMessage(en, 'container', 'Validate', 'subProcess'))
-      .toBe('Subprocess "Validate" is named like a state or a bare verb; name it as an activity (e.g. "Review application" or "Claims handling").');
+      .toBe('Subprocess "Validate" is not named as a topic (a state, a bare verb or a placeholder like "Step 3"); name the subject area (e.g. "Claims handling").');
     expect(namingMessage(de, 'container', 'Geprüft', 'callActivity'))
-      .toBe('Call activity "Geprüft" is named like a state or a bare verb; name it as an activity (e.g. "Antrag prüfen" or "Schadenprüfung").');
+      .toBe('Call activity "Geprüft" is not named as a topic (a state, a bare verb or a placeholder like "Step 3"); name the subject area (e.g. "Schadenprüfung").');
     expect(namingMessage(de, 'container', 'Geprüft', 'transaction'))
-      .toBe('Subprocess "Geprüft" is named like a state or a bare verb; name it as an activity (e.g. "Antrag prüfen" or "Schadenprüfung").');
+      .toBe('Subprocess "Geprüft" is not named as a topic (a state, a bare verb or a placeholder like "Step 3"); name the subject area (e.g. "Schadenprüfung").');
     expect(namingMessage(de, 'event', 'Antrag prüfen'))
       .toBe('Event "Antrag prüfen" is named like an activity; the German convention for events is a state or a noun (e.g. "Antrag eingegangen").');
     expect(namingMessage(en, 'message', 'Send invoice'))
@@ -190,7 +190,7 @@ describe('M01 with a declared language', () => {
     };
     expect(messagesOf(withFindings(lc), 'M01')).toEqual([
       '[Shop] Task "Continue" does not follow the English convention verb + object (e.g. "Review application").',
-      '[Shop] Call activity "Validate" is named like a state or a bare verb; name it as an activity (e.g. "Review application" or "Claims handling").',
+      '[Shop] Call activity "Validate" is not named as a topic (a state, a bare verb or a placeholder like "Step 3"); name the subject area (e.g. "Claims handling").',
       '[Bank] Task "Validate" does not follow the English convention verb + object (e.g. "Review application").',
     ]);
   });

@@ -175,7 +175,7 @@
   "subprocess-collapsed-children.json": {
     "language": "en",
     "M01": [
-      "[Collapsed Containers] Subprocess \"Validate\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\")."
+      "[Collapsed Containers] Subprocess \"Validate\" is not named as a topic (a state, a bare verb or a placeholder like \"Step 3\"); name the subject area (e.g. \"Claims handling\")."
     ],
     "M05": [],
     "M06": []
