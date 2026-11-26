@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { inputSchemaPath, promptTemplatePath, resolveWithFallback, ontologyPath } from './resource-paths.js';
+import { inputSchemaPath, promptTemplatePath, resolveWithFallback, ontologyPath, namingSchemaPath } from './resource-paths.js';
 import { loadOntology } from './ontology.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -115,5 +115,20 @@ describe('the renamed ontology (references/ontology.jsonld)', () => {
   test('a missing ontology names both searched paths and the new file name', () => {
     expect(() => resolveWithFallback('/nope/references/ontology.jsonld', '/nope/scripts/references/ontology.jsonld', 'ontology.jsonld'))
       .toThrow(/^ontology\.jsonld not found — looked for "\/nope\/references\/ontology\.jsonld".*"\/nope\/scripts\/references\/ontology\.jsonld"/);
+  });
+});
+
+describe('the naming schema (references/naming-schema.json)', () => {
+  test('namingSchemaPath resolves in the repo-root references/ and a stale packaged copy loses', () => {
+    mkdirSync(PACKAGED_DIR, { recursive: true });
+    writeFileSync(join(PACKAGED_DIR, 'naming-schema.json'), '{}');
+    expect(namingSchemaPath()).toBe(join(REPO_REFERENCES, 'naming-schema.json'));
+  });
+
+  test('without a source it falls back to the packaged twin', () => {
+    const packaged = join(PACKAGED_DIR, 'naming-schema.json');
+    mkdirSync(PACKAGED_DIR, { recursive: true });
+    writeFileSync(packaged, '{}');
+    expect(resolveWithFallback(join(__dirname, '__no_such_dir__', 'naming-schema.json'), packaged, 'naming-schema.json')).toBe(packaged);
   });
 });

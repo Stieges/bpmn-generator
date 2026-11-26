@@ -1,0 +1,403 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpmn-generator.local/naming.schema.json",
+  "title": "Naming data",
+  "description": "The word lists and switches the naming rules use for one language (references/naming/<language>.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "language",
+    "wordOrder",
+    "verbs",
+    "nounVerbHomographs",
+    "participles",
+    "eventMarkers",
+    "questionMarks",
+    "examples",
+    "sources"
+  ],
+  "properties": {
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "wordOrder": {
+      "enum": [
+        "verb-last",
+        "verb-first"
+      ]
+    },
+    "verbs": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "nounVerbHomographs": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "participles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suffix"
+      ],
+      "properties": {
+        "suffix": {
+          "type": "string",
+          "pattern": "^[\\p{Ll}]+$"
+        },
+        "irregular": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        },
+        "exceptions": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        }
+      }
+    },
+    "eventMarkers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "timer",
+        "error",
+        "signal",
+        "escalation",
+        "conditional"
+      ],
+      "properties": {
+        "message": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        },
+        "timer": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        },
+        "error": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        },
+        "signal": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        },
+        "escalation": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        },
+        "conditional": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/Word"
+          }
+        }
+      }
+    },
+    "questionMarks": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+      }
+    },
+    "examples": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "event",
+        "message",
+        "subprocess"
+      ],
+      "properties": {
+        "task": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "event": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "message": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "subprocess": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 2000,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "author": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "verbPhrases": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Phrase"
+      }
+    },
+    "verbPrefixes": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "stateWords": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "stateMarkers": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "infinitiveSuffixes": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "suffix",
+          "minLength"
+        ],
+        "properties": {
+          "suffix": {
+            "type": "string",
+            "pattern": "^[\\p{Ll}]+$"
+          },
+          "minLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    "nounsCapitalized": {
+      "type": "boolean"
+    },
+    "compoundMarkers": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "participleHomographs": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "inseparablePrefixes": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "separablePrefixes": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "geInfinitives": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "adjectiveStoplist": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "conjunctions": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "wordOrder": {
+            "const": "verb-first"
+          }
+        },
+        "required": [
+          "wordOrder"
+        ]
+      },
+      "then": {
+        "required": [
+          "verbPrefixes",
+          "stateWords"
+        ],
+        "properties": {
+          "verbPrefixes": true,
+          "stateWords": true
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "wordOrder": {
+            "const": "verb-last"
+          }
+        },
+        "required": [
+          "wordOrder"
+        ]
+      },
+      "then": {
+        "required": [
+          "infinitiveSuffixes",
+          "geInfinitives",
+          "separablePrefixes",
+          "adjectiveStoplist",
+          "participleHomographs",
+          "stateMarkers"
+        ],
+        "properties": {
+          "infinitiveSuffixes": true,
+          "geInfinitives": true,
+          "separablePrefixes": true,
+          "adjectiveStoplist": true,
+          "participleHomographs": true,
+          "stateMarkers": true
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Word": {
+      "type": "string",
+      "pattern": "^[\\p{Ll}]+$"
+    },
+    "Phrase": {
+      "type": "string",
+      "pattern": "^[\\p{Ll}]+( [\\p{Ll}]+)*$"
+    }
+  }
+}
