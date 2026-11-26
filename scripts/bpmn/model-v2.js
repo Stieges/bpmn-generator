@@ -62,6 +62,27 @@ function schemeErrors(ref, scheme) {
   return errors;
 }
 
+/** C07, once per cycle of the parent map, named at the member that comes first in the catalogue. */
+function partOfCycles(parentOf, order) {
+  const errors = [];
+  const done = new Set();
+  for (const start of parentOf.keys()) {
+    if (done.has(start)) continue;
+    const path = [];
+    let at = start;
+    while (at !== undefined && !done.has(at) && !path.includes(at)) { path.push(at); at = parentOf.get(at); }
+    if (at !== undefined && path.includes(at)) {
+      const ring = path.slice(path.indexOf(at));
+      let first = 0;
+      ring.forEach((id, i) => { if (order.get(id) < order.get(ring[first])) first = i; });
+      const named = [...ring.slice(first), ...ring.slice(0, first)];
+      errors.push(`[C07] unit "${q(named[0])}": partOf forms a cycle (${[...named, named[0]].map(q).join(' \u2192 ')})`);
+    }
+    for (const id of path) done.add(id);
+  }
+  return errors;
+}
+
 /**
  * Checks a 2.0 model and translates it into the intermediate form. Neither argument is changed.
  * `catalog` is `{ actors, scheme? }`; a model without one may carry `actors` (and `scheme`) itself.
@@ -136,6 +157,20 @@ export function resolveFields(model, options) {
       errors.push(`[C02] actor "${q(actor.id)}": unit "${q(actor.unit)}" is a role, not a unit`);
     }
   }
+  // partOf: the parent unit (organigram). Only edges that pass C01/C02 take part in the cycle search.
+  const parentOf = new Map();
+  for (const actor of actors) {
+    if (actor.partOf === undefined || parentOf.has(actor.id) || byId.get(actor.id) !== actor) continue;
+    const target = byId.get(actor.partOf);
+    if (!target) {
+      errors.push(`[C01] actor "${q(actor.id)}": partOf "${q(actor.partOf)}" is not in the catalogue`);
+    } else if (target.kind !== undefined && target.kind !== 'unit') {
+      errors.push(`[C02] actor "${q(actor.id)}": partOf "${q(actor.partOf)}" is a role, not a unit`);
+    } else {
+      parentOf.set(actor.id, actor.partOf);
+    }
+  }
+  errors.push(...partOfCycles(parentOf, order));
 
   const performsType = schemeOk ? scheme.types.find((t) => t.performs === true).key : null;
   if (schemeOk) {
@@ -161,7 +196,24 @@ export function resolveFields(model, options) {
   if (errors.length) return fail(errors);
 
   const fingerprint = catalogFingerprint(actors, scheme);
-  const resolved = { actors, byId, order, scheme: clone(scheme), performsType, fingerprint };
+  const namedAsUnit = new Set();
+  for (const actor of actors) {
+    for (const ref of [actor.unit, actor.partOf]) if (ref !== undefined && ref !== actor.id) namedAsUnit.add(ref);
+  }
+  const isUnit = (id) => {
+    const actor = byId.get(id);
+    return actor !== undefined && (actor.kind === 'unit' || (actor.kind === undefined && namedAsUnit.has(id)));
+  };
+  const unitChain = (id) => {
+    const chain = [id];
+    const seen = new Set(chain);
+    for (let up = parentOf.get(id); up !== undefined && !seen.has(up); up = parentOf.get(up)) {
+      chain.unshift(up);
+      seen.add(up);
+    }
+    return chain;
+  };
+  const resolved = { actors, byId, order, scheme: clone(scheme), performsType, fingerprint, parentOf, isUnit, unitChain };
 
   // the intermediate form
   const lc = clone(model);

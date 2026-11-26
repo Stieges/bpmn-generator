@@ -261,3 +261,53 @@ describe('resolveFields', () => {
     expect(lc.nodes[0].nodes[0]).not.toHaveProperty('assignments');
   });
 });
+
+describe('organigram: partOf, parentOf, isUnit, unitChain', () => {
+  const org = (...actors) => run(withNodes([{ id: 'start', type: 'startEvent', name: 'S' }]), { actors });
+  const u = (id, partOf) => ({ id, name: id, kind: 'unit', ...(partOf ? { partOf } : {}) });
+
+  test('a catalogue without partOf keeps its fingerprint', () => {
+    const { resolved } = run(MODEL);
+    expect(resolved.fingerprint).toBe(PINNED);
+    expect(resolved.parentOf.size).toBe(0);
+  });
+
+  test('unitChain of a depth-3 unit runs root first and ends with the unit', () => {
+    const { resolved, errors } = org(u('a'), u('b', 'a'), u('c', 'b'), { id: 'r', name: 'R', kind: 'role', unit: 'c' });
+    expect(errors).toEqual([]);
+    expect(resolved.unitChain('c')).toEqual(['a', 'b', 'c']);
+    expect(resolved.unitChain('a')).toEqual(['a']);
+    expect(resolved.parentOf.get('c')).toBe('b');
+  });
+
+  test('isUnit: kind unit, or kind-less and named as unit or partOf', () => {
+    const { resolved } = org(
+      { id: 'k1', name: 'K1' }, { id: 'k2', name: 'K2' }, { id: 'k3', name: 'K3' },
+      { id: 'x', name: 'X', unit: 'k1' }, { id: 'y', name: 'Y', partOf: 'k2' }, u('real'),
+      { id: 'role', name: 'Role', kind: 'role' },
+    );
+    expect(['k1', 'k2', 'k3', 'real', 'role', 'x', 'nope'].map((id) => resolved.isUnit(id))).toEqual([true, true, false, true, false, false, false]);
+  });
+
+  test('partOf to a missing actor is C01, to a role is C02', () => {
+    expect(org(u('a', 'ghost')).errors).toEqual(['[C01] actor "a": partOf "ghost" is not in the catalogue']);
+    expect(org({ id: 'r', name: 'R', kind: 'role' }, u('a', 'r')).errors).toEqual(['[C02] actor "a": partOf "r" is a role, not a unit']);
+  });
+
+  test('a self-cycle gives one C07', () => {
+    expect(org(u('a', 'a')).errors).toEqual(['[C07] unit "a": partOf forms a cycle (a \u2192 a)']);
+  });
+
+  test('a two-cycle gives one C07, named at its first member in catalogue order', () => {
+    expect(org(u('a', 'b'), u('b', 'a')).errors).toEqual(['[C07] unit "a": partOf forms a cycle (a \u2192 b \u2192 a)']);
+  });
+
+  test('a cycle behind a chain gives exactly one C07, none for the chain', () => {
+    const { errors } = org(u('t1', 't2'), u('t2', 'c'), u('c', 'd'), u('d', 'c'));
+    expect(errors).toEqual(['[C07] unit "c": partOf forms a cycle (c \u2192 d \u2192 c)']);
+  });
+
+  test('two separate cycles give two C07', () => {
+    expect(org(u('a', 'a'), u('b', 'c'), u('c', 'b')).errors).toHaveLength(2);
+  });
+});
