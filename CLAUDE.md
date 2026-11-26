@@ -706,6 +706,28 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    derived gateway (`elements: [gatewayId, targetId, flowId]`), and `cd scripts && npm test -- --testPathPatterns=views-roundtrip` checks the
    round trip over every example model.
 
+### Adding a naming language
+
+A language is one data file plus the registration of its path; the judges are shared by word order.
+
+1. Write `references/naming/<tag>.json` (primary subtag, two or three lower-case letters) against
+   `references/naming-schema.json`: `wordOrder` `verb-first` or `verb-last` picks `verbFirst` or
+   `verbLast`, then the word lists, `eventMarkers`, `examples` and `sources`. Word lists are sorted
+   ascending by `foldWord`, ties by the raw string (`lexicon-data.test.js` fences it).
+2. `scripts/shared/resource-paths.js`: a `naming<Tag>Path()` function through `resolveWithFallback`
+   (source path and packaged path).
+3. `scripts/prepack-copy-references.mjs`: add `naming/<tag>.json` to `FILES`.
+4. `scripts/bpmn/naming/lexicon.js`: add the language to `NAMING_LANGUAGES`. That registers it for
+   `namingFor`, `checkNamingOverlay` and the overlay's language check at once.
+5. Add the file to the packed-file lists of `scripts/docs-gate.test.js` and `scripts/build-skill.test.js`,
+   cases to `lexicon-data.test.js` and a strategy test (see `verb-first.test.js`) and the language in
+   the `references/modeling-guide.md` table. `tests/fixtures/rules-characterization/fixture-languages.json`
+   maps each example fixture to its language and is a pinned test input: do not edit it for a new language. A word-order that neither judge covers needs a new strategy
+   module and a line in `BUILDERS` of `naming/index.js`.
+
+A label a list does not know is not a reason to change the data file for one site: `BPMN_NAMING` adds
+it without a code change (README, "Naming languages").
+
 ### Run a robustness benchmark
 
 1. Synthetic-data run: `cd scripts/robustness && node cli.js run --target=lc-json`.
@@ -797,6 +819,7 @@ failing on.
 - `DEAD_LETTER_PATH` env var: where failed webhook deliveries are written. Default `<os.tmpdir>/bpmn-generator/dead-letter/`. Files are named `<uuid>.json` by the server (created with `wx`, path asserted inside the directory) — never from `correlationId`, which the HTTP entry accepts only as `^[A-Za-z0-9_-]{1,64}$`.
 - SSRF: every outbound request to a client-supplied URL goes through `scripts/shared/outbound-url.js` — http/https only, no credentials, `localhost` names refused, every resolved address checked against the IPv4/IPv6 special-purpose ranges (IPv6 forms embedding an IPv4 address checked as that address), the connection pinned to the checked addresses (`pinnedRequest`), redirects never followed. Never call `fetch` on a client-supplied URL directly.
 - `LLM_EXTRA_BODY` env var: a JSON object of extra request fields for the server's own LLM endpoint (e.g. `chat_template_kwargs.enable_thinking: false`); operator-only — a client's `llmConfig` cannot carry extra fields. Every LLM call retries a transport error or a 408/429/5xx with backoff (`config.json → llm.retry`, `createLlmProvider`'s `retry`), honouring Retry-After up to `retryAfterMaxMs`, so one call can take up to `(retries + 1) × timeout` plus the waits.
+- `BPMN_NAMING` env var: a JSON file that adds to or removes from the naming word lists; set by the operator, never by a request. A regular file of at most 256 KiB that passes `references/naming-schema.json` (`$defs/Overlay`). `http-server.js` and `mcp-bpmn-server.js` load it for every registered language at start (`checkNamingOverlay`) and exit 1 naming the path when it is broken; at request time a `NamingDataError` (also one wrapped by the orchestrator, found through `cause`) is a `500` `naming data unavailable` (MCP: a tool error with that text), the path only on stderr and `naming_data_error` in the audit log.
 - `LLM_BASE_URL_ALLOWLIST` env var: comma-separated origins a client may name as `llmConfig.baseUrl`; empty (default) = a client `baseUrl` is a `400`. Allowlisted URLs still pass the validator above. Without `baseUrl` the server's endpoint (`OPENAI_BASE_URL`) is used. Provider failures are `502 llm_error`; the upstream body is never returned to a client.
 - Client strings into the audit log or a response go through `boundText` (`scripts/shared/safe-text.js`): 128 characters for identifiers, 500 for messages, control/format characters escaped. Telemetry `details` above 8 KiB is a `400`. A non-object JSON body is a `400`.
 - Schema-strict gate: every Logic-Core input at the HTTP entry and on every MCP tool that takes one (`generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn`) passes through `scripts/bpmn/schema-gate.js` (ajv draft-2020-12) before reaching the pipeline. LLM output is never trusted raw: in `scripts/orchestrator.js` every Modeler output (extract, refine, amend) passes the gate (`gatedModelerCall`), a rejected one gets `maxSchemaRepairs` (default 1) repair attempts through the refinement prompt, and a refinement or amendment still invalid is dropped for the last valid model. The JSON examples of `references/prompt-template.md` are fenced against the schema (`scripts/agents/prompt-examples.test.js`). The per-call layout options — `visualRefinement`, `bendRule`, `nodeLabelsAvoidFlows` — pass `validateLayoutOptions` (same module; schemas mirrored in `references/api-schema.json` `$defs`, fenced by tests) on `/api/v1/generate`, `/api/v1/orchestrate` (before any LLM or callback work), `generate_bpmn` and `orchestrate_bpmn`; an invalid value is a `400 schema_error` resp. `{ status: 'schema_error' }`. `/api/v1/validate` and `validate_bpmn` take none of them.
@@ -975,6 +998,10 @@ node scenarios/pipeline.js input.json --decisions table.dmn
   `isAdHoc` (#99): the SVG draws the tilde, the XML has a plain `subProcess` (`adHocSubProcess` is
   `announced`). `scripts/bpmn/symbol-fidelity.test.js` pins both, so a fix turns it red
 - M05 and M06 (Style, WARNING) run only for a model with a declared `language`; without one they report nothing
+- The naming hints H10–H13 exist on the generate path only (`runPipeline`: CLI, `/api/v1/generate`, `generate_bpmn`, `orchestrate`). `validate_bpmn`, `/api/v1/validate`, `validateModel` and `validateLogicCore` run the rules but skip a language without naming data silently: no H12, no H13
+- `generateBpmnXml` and `generateSvg` expect `runPipeline`'s copy of the model. Called directly on a model with `language` they write the legacy markers (the language-aware ones are resolved by `resolveEventMarkers` inside `runPipeline`). Node keys that start with `_` (`_marker`) are reserved for the pipeline and removed from the input there
+- The naming rules are word lists, not a tagger. `Invoice customer` is flagged under `en` because `invoice` is not a verb in the list; the remedy is a `BPMN_NAMING` overlay (`{ "languages": { "en": { "add": { "verbs": ["invoice"] } } } }`), not a rule change. A single-word nominalised infinitive as a sub-process name (`Verpacken`, `Prüfen`, `Validate`) is flagged as a bare verb; a one-word noun that equals an infinitive (`Schreiben`, `Zahlen`) is not
+- Event markers inferred by language: error and escalation are never inferred on a start event; a start event inside an ordinary sub-process still gets an inferred marker. Under `de` a compound that starts with a marker keyword matches: `Zeitschrift gelesen` becomes a timer (`compoundMarkers`). Set `marker` explicitly where that is wrong; H10 and H11 name every inferred or changed marker
 - No Camunda extensions (`camunda:` namespace)
 - DOT import is a subset parser (only output from `logicCoreToDot` is guaranteed round-trip)
 - Round-trip fidelity (BPMN→Logic-Core→BPMN) verified for ~25 OMG examples + unit tests; not exhaustive across all BPMN element types. Two classes were recently added to that coverage after both turned out to be lossy: text annotations and groups (the primary importer walked only `flowElements`, where bpmn-moddle never places an Artifact), and **subprocess children**, which reached the XML with only their id and name — documentation, loop/multi-instance, script, `calledElement`, `gatewayDirection` and the mandatory `attachedToRef` were all dropped, grandchildren entirely. Both directions were affected, so the round trip looked intact while both ends lost the same fields. The guard is now a field-set comparison over `tests/fixtures/subprocess-child-fidelity.json`, not a per-field assertion. The annotation/group half of that was closed at top level only, and the identical `flowElements`-vs-`artifacts` gap survived one level down until `scripts/bpmn/field-fidelity.test.js` measured it; both levels now read from `artifacts` through the same function

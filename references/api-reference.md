@@ -48,7 +48,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
   "callbackUrl": "https://example.com/webhook"
 }
 ```
-- `logicCore` (required, object) — validated against `references/input-schema.json` via the ajv strict gate.
+- `logicCore` (required, object) — validated against `references/input-schema.json` via the ajv strict gate. Its optional top-level `language` (a tag such as `"de"` or `"en-GB"`) selects the naming conventions of M01, M02, M05 and M06 and the event-marker inference, see "Naming languages" below.
 - `mode` (optional, string) — `"document"` (default, faithful IST) or `"optimize"`/`"soll"`. In optimize mode the response `validation` gains `advisories` (redesign suggestions) and `metrics.optimization` (Lean metrics). Advisories are heuristic, non-blocking, never auto-applied.
 - `ruleProfile` (optional, object) — an inline rule profile, see "Rule profiles over HTTP" below.
 - `catalog` (optional, object) — the actor catalogue of a format 2.0 `logicCore`, embedded; see "Format 2.0" under Conventions. Ignored for a 1.x model.
@@ -94,6 +94,16 @@ None of this is applied automatically; turning an advisory into an actual model 
 - `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused; see "Rule profiles over HTTP" below.
 - `400 { correlationId, status: "view_error", error }` — the `view` was refused; see "Views over HTTP" below.
 - `500 { correlationId, status: "internal_error", error }` — pipeline threw.
+- `500 { correlationId, status: "internal_error", error: "naming data unavailable" }` — the file the operator set in `BPMN_NAMING` became unusable after the server started; see "Naming languages" below. The same answer, with the same fixed text, comes from `/api/v1/validate`, `/api/v1/orchestrate` (also when the failure sits inside an agent run).
+
+### Naming languages
+
+`language` is an optional top-level field of a Logic-Core, 1.x and 2.0, on every surface that takes one: `/api/v1/generate`, `/api/v1/validate`, `/api/v1/orchestrate` (`logicCore`), the MCP tools `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn`, the CLI and `runPipeline`. A value that is no language tag counts as absent. `/api/v1/import` and MCP `import_bpmn` return it as `language` when the diagram carries `bg:language`. The conventions per language are in `references/modeling-guide.md`; the field in `references/logic-core-schema.md`.
+
+- Without a valid `language`, no naming file is read, no naming hint is given and the results are the ones from before the field existed.
+- With `de` or `en`, M01, M02, M05 and M06 judge the labels by that language, an event without `marker` gets the marker its name implies (hints `H10`, `H11`) and `H13` may report labels in another language. With a valid tag that has no data here (`fr`), M01, M05 and M06 skip the model and `H12` says so.
+- **Hints exist on the generate path only** (`/generate`, `/orchestrate`, `generate_bpmn`, `orchestrate_bpmn`, the CLI): `/api/v1/validate` and `validate_bpmn` carry none, and skip an unsupported language silently.
+- **`BPMN_NAMING`** (operator environment, never a request field): a JSON file `{ "languages": { "<tag>": { "add": { … }, "remove": { … } } } }` over the eight flat word lists (`verbs`, `verbPhrases`, `nounVerbHomographs`, `stateWords`, `stateMarkers`, `participleHomographs`, `geInfinitives`, `adjectiveStoplist`); schema `references/naming-schema.json`, `$defs/Overlay`. It must be a regular file of at most 256 KiB. Both servers load it for every registered language at start and exit 1 with `✗ BPMN_NAMING: <reason>` when it cannot be used. If it fails later (the file changed), the request answers `500` with `error: "naming data unavailable"` (MCP: a tool error with that text); the path and reason go only to the server log and the audit line carries the event `naming_data_error` without them.
 
 ### Rule profiles over HTTP
 
@@ -362,7 +372,7 @@ Validate Logic-Core against the rule engine without generating output.
 ```
 `status` is always `"success"` here (unlike `/generate`, it does not flip to an error status when `validation.errors` is non-empty — a non-empty `errors` array is itself the signal).
 
-**Errors:** `400 { correlationId, status: "schema_error", errors }` — schema gate rejected the input.
+**Errors:** `400 { correlationId, status: "schema_error", errors }` — schema gate rejected the input. `500 { …, error: "naming data unavailable" }` as for `/api/v1/generate`.
 
 **Example:**
 ```bash
@@ -445,6 +455,7 @@ Multi-agent flow: (LLM extraction if `userText`) → reviewer → pipeline → c
 - `400 { correlationId, status: "profile_error", error }` — the `ruleProfile` was refused (see `/api/v1/generate`).
 - `502 { correlationId, status: "llm_error", error: "LLM provider request failed" }` — the LLM endpoint failed (unreachable, non-2xx, unusable answer). The provider's response is never passed through; the server logs the detail.
 - `500 { correlationId, status: "internal_error", error }`.
+- `500 { correlationId, status: "internal_error", error: "naming data unavailable" }` — see "Naming languages" under `/api/v1/generate`; `refine` and `amend` keep the model's `language`.
 
 **Example:**
 ```bash

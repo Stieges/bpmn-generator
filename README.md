@@ -287,6 +287,31 @@ off). See
 [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md) for full rule
 documentation.
 
+### Naming languages
+
+Set the optional top-level `language` of a model (`"de"`, `"en"`, `"en-GB"`; both input formats)
+and the naming rules judge its labels by that language's convention: German is verb-last (`Antrag
+prüfen`), English verb-first (`Review application`). It applies to M01 (tasks, sub-process and
+call-activity names, at every level), M02 (gateway questions), M05 (message-flow names) and M06
+(event names), and it selects the keywords that infer an event's marker from its name (hints
+`H10`, `H11`). The XML carries it as `bg:language` on `bpmn:definitions` and the importers read it
+back. Without the field nothing changes: M01 is the legacy `Objekt+Verb` heuristic and M05 and M06
+stay silent. A valid tag with no word lists here (`fr`) skips M01, M05 and M06 and gives hint `H12`;
+labels that look like another supported language give `H13`.
+
+A heuristic over word lists flags the odd correct label: under `en`, `Invoice customer` is flagged
+because `invoice` is not in the verb list. The remedy is data, not code. Point `BPMN_NAMING` at a
+JSON file that adds words to, or removes words from, the lists of a shipped language:
+
+```json
+{ "languages": { "en": { "add": { "verbs": ["invoice"] } } } }
+```
+
+Eight flat lists can be extended: `verbs`, `verbPhrases`, `nounVerbHomographs`, `stateWords`,
+`stateMarkers`, `participleHomographs`, `geInfinitives` and `adjectiveStoplist` (each language uses
+the lists it has). Words are added first, then removed. The conventions per language are in
+[`references/modeling-guide.md`](references/modeling-guide.md).
+
 ## Views
 
 A view is a small named JSON file that decides how a model is processed: which rule profile
@@ -612,6 +637,7 @@ subset; [references/api-reference.md](references/api-reference.md) lists them pe
 | `AUDIT_LOG_PATH` | Audit log file (default below) |
 | `DEAD_LETTER_PATH` | Dead-letter directory (default below) |
 | `BPMN_CONFIG` | JSON file merged over `config.json` (see [Visual Refinement](#visual-refinement)) |
+| `BPMN_NAMING` | JSON file that adds words to, or removes words from, the naming word lists (see [Naming languages](#naming-languages)). Set by the operator, never taken from a request. A file that is not usable stops the server at start; at request time the answer is a `500` `naming data unavailable` |
 
 Fixed limits: 10 MB request body, 30 requests per minute per client. Every Logic-Core input passes
 the JSON Schema gate; `callbackUrl` and an allowlisted `baseUrl` pass an SSRF guard (http/https
