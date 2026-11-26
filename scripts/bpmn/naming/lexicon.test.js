@@ -34,6 +34,13 @@ const write = (content) => {
   return p;
 };
 
+describe('compoundMarkers schema', () => {
+  test('a boolean is accepted, an array is rejected', () => {
+    expect(readLexiconFile(write({ ...verbFirst, compoundMarkers: true })).compoundMarkers).toBe(true);
+    expect(() => readLexiconFile(write({ ...verbFirst, compoundMarkers: ['x'] }))).toThrow(NamingDataError);
+  });
+});
+
 describe('readLexiconFile', () => {
   test('a valid verb-first file loads with folded sets', () => {
     const lex = readLexiconFile(write(verbFirst));

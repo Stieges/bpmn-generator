@@ -261,12 +261,7 @@
       "type": "boolean"
     },
     "compoundMarkers": {
-      "type": "array",
-      "uniqueItems": true,
-      "maxItems": 2000,
-      "items": {
-        "$ref": "#/$defs/Word"
-      }
+      "type": "boolean"
     },
     "participleHomographs": {
       "type": "array",

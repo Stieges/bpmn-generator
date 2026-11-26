@@ -115,6 +115,27 @@ describe('markers', () => {
   });
 });
 
+describe('compoundMarkers is a language switch', () => {
+  const en = loadLexicon('en');
+  const withTimer = (compoundMarkers) => ({ ...en, compoundMarkers, eventMarkers: { ...en.eventMarkers, timer: ['frist'] } });
+  const on = withTimer(true);
+  test.each([
+    ['Fristablauf', 'timer'],
+    ['Zahlungsfrist abgelaufen', 'timer'],
+    ['Frist abgelaufen', 'timer'],
+    ['Fristen', null],
+    ['Erfrist', null],
+    ['Frist2024', null],
+  ])('on: inferMarker(%s) = %s', (n, e) => {
+    expect(inferMarker(on, n, 'boundaryEvent')).toBe(e);
+  });
+  test('off: compounds do not match, exact still does', () => {
+    expect(inferMarker(withTimer(undefined), 'Fristablauf', 'boundaryEvent')).toBeNull();
+    expect(inferMarker(withTimer(false), 'Zahlungsfrist abgelaufen', 'boundaryEvent')).toBeNull();
+    expect(inferMarker(withTimer(undefined), 'Frist abgelaufen', 'boundaryEvent')).toBe('timer');
+  });
+});
+
 describe('Review Focus 4: robustness and linear time', () => {
   const huge = ['a'.repeat(200000), ('(' + 'x ').repeat(50000), 'Check ' + 'order '.repeat(50000), '-'.repeat(100000), '\n'.repeat(100000)];
   test.each(huge.map((h, i) => [i, h]))('input %i never throws and finishes fast', (_i, h) => {
