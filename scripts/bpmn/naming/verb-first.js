@@ -8,7 +8,7 @@
  * that word for the hint H14.
  */
 
-import { labelTokenWords } from './tokens.js';
+import { labelTokenWords, isPlaceholderShape, tokensAfterFirstWord } from './tokens.js';
 import { inferMarker } from './markers.js';
 
 const HAS_LETTER = /\p{L}/u;
@@ -141,7 +141,7 @@ export function verbFirst(lexicon) {
     // The rules up to the verb test do not read the verb list. After it the list is read only to
     // recognise a word as a verb, and a recognised verb can only end a test: a shorter verb list
     // therefore never adds a finding (en-sample.test.js proves it over both samples).
-    if (!tokens.slice(from + 1).some(hasLetter)) return flag(STARTS_WITH_VERB); // Step 3
+    if (!tokensAfterFirstWord(tokens).some(hasLetter)) return flag(STARTS_WITH_VERB); // Step 3
     if (first.raw.endsWith(':')) return flag(STARTS_WITH_VERB); // SAP: Review invoice
     if (tokens.length - from === 2 && isParticiple(last)) return flag(STARTS_WITH_VERB); // Invoice checked
     const second = tokens[from + 1]?.folded;
@@ -189,6 +189,7 @@ export function verbFirst(lexicon) {
     const { wordCount, tokens } = read(name);
     if (tokens.length === 0) return ok;
     const last = tokens[tokens.length - 1].folded;
+    if (isPlaceholderShape(tokens)) return flag('A container names a topic, not a placeholder; a number after one word says nothing.'); // Step 3
     if (isParticiple(last)) return flag('A container names a topic, not a state; avoid a participle at the end.');
     // A one-word noun-verb homograph (Review, Order, Support) is a noun here; only a pure verb reads as a task.
     if (wordCount === 1 && tokens.length === 1 && isVerb(tokens[0].folded) && !nounVerbHomographs.has(tokens[0].folded)) {

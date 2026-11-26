@@ -38,6 +38,21 @@ export function labelTokens(name) {
   return split(name, false);
 }
 
+/**
+ * The tokens after the first token that has a letter (`Step 3` → `[3]`; the tokens before it are
+ * numbering: `1. Review`); `null` when no token has a letter. No word list is read.
+ */
+export function tokensAfterFirstWord(tokens) {
+  const i = tokens.findIndex((t) => /\p{L}/u.test(t.raw));
+  return i === -1 ? null : tokens.slice(i + 1);
+}
+
+/** A label with a first word and nothing but numbers or symbols after it (`Step 3`, `Teil 2`, `Phase 1.1`). */
+export function isPlaceholderShape(tokens) {
+  const tail = tokensAfterFirstWord(tokens);
+  return tail !== null && tail.length > 0 && !tail.some((t) => /\p{L}/u.test(t.raw));
+}
+
 /** `labelTokens` with `word` on every token: the 0-based index of the whitespace word it is a part of. */
 export function labelTokenWords(name) {
   return split(name, true);

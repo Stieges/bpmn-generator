@@ -113,7 +113,9 @@ Behaviours worth knowing:
 - Under `en`, a one-word sub-process or call-activity name is flagged only when it is a listed
   verb that is no noun-verb homograph (`Validate`); `Review`, `Audit`, `Support`, `Order`,
   `Archive` are nouns and pass, and so does an unlisted word. A state form (`Order shipped`) is
-  flagged.
+  flagged. A placeholder in either language (`Step 3`, `Teil 2`: a word, then only numbers) is
+  flagged; a plain noun (`Daten`, `Data`) is not. Under `de` a capitalised one-word participle
+  (`Geprüft`) is not recognised (known limit).
 - Under `en`, M01 flags a task name only on evidence of a wrong form: one word, nothing with a
   letter after the first word (`Step 3`), a label prefix (`SAP: Review invoice`), two words ending in
   a participle (`Invoice checked`), an auxiliary as second word (`Invoice is checked`), a first word
