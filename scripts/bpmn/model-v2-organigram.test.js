@@ -2,7 +2,8 @@
  * The organigram level of the unit view (design 7.1): with `lanes: { by: 'unit', level: k }` each
  * performer keys on the unit at depth k of its unit's chain (1 = units without `partOf`); a unit
  * shallower than k keeps its own lane. Without a level each performer keys on its own unit. A
- * kind-less actor that another actor names as `unit` or `partOf` counts as a unit.
+ * kind-less actor that another actor names as `unit` or `partOf`, or that has a `partOf` of its own,
+ * counts as a unit.
  *
  * With `nested: true` the lanes follow the organigram: each key unit gets a lane for every unit of
  * its chain, as children; a key unit with child lanes holds its own steps in the extra first child
@@ -147,6 +148,49 @@ describe('unit view — a kind-less actor named as a unit', () => {
     expect(out.hints).toEqual([]);
     expect(members(out.lc)).toEqual({ x: ['T1', 'T2', 'T3'] });
     expect(members(form(MODEL, catalog, 'unit').lc)).toEqual({ x: ['T1'], y: ['T2', 'T3'] });
+  });
+});
+
+describe('unit view — a kind-less actor with a partOf of its own, named by nobody', () => {
+  const catalog = {
+    actors: [
+      { id: 'top', name: 'Oben', kind: 'unit' },
+      { id: 'kl', name: 'Kindlos', partOf: 'top' },
+    ],
+  };
+  const task = (id, actor) => ({ id, type: 'userTask', name: id, assignments: [{ type: 'D', actor }] });
+  const MODEL = {
+    $schemaVersion: '2.0', id: 'P',
+    nodes: [task('T1', 'kl'), task('T2', 'top')],
+    edges: [{ source: 'T1', target: 'T2' }],
+  };
+
+  test('it is a unit', () => {
+    const r = resolveFields(copy(MODEL), { catalog: copy(catalog) });
+    expect(r.errors).toEqual([]);
+    expect(r.resolved.isUnit('kl')).toBe(true);
+  });
+
+  test('flat unit view: its own lane L.P.kl, no H04', () => {
+    const out = form(MODEL, catalog, 'unit');
+    expect(out.hints).toEqual([]);
+    expect(lanesOf(out)).toEqual([['L.P.top', 'Oben'], ['L.P.kl', 'Kindlos']]);
+    expect(members(out.lc)).toEqual({ kl: ['T1'], top: ['T2'] });
+  });
+
+  test('level 1: mapped to its parent top', () => {
+    const out = form(MODEL, catalog, { by: 'unit', level: 1 });
+    expect(out.hints).toEqual([]);
+    expect(members(out.lc)).toEqual({ top: ['T1', 'T2'] });
+  });
+
+  test('nested: kl is a child lane of top', () => {
+    const out = form(MODEL, catalog, { by: 'unit', nested: true });
+    expect(out.hints).toEqual([]);
+    expect(tree(out.lc.lanes)).toEqual([
+      ['L.P.top', 'Oben', 'top', [['L.P.top._own', 'Oben', 'top'], ['L.P.kl', 'Kindlos', 'kl']]],
+    ]);
+    expect(byLane(out.lc)).toEqual({ 'L.P.kl': ['T1'], 'L.P.top._own': ['T2'] });
   });
 });
 

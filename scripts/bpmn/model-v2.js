@@ -229,7 +229,8 @@ export function resolveFields(model, options) {
   }
   const isUnit = (id) => {
     const actor = byId.get(id);
-    return actor !== undefined && (actor.kind === 'unit' || (actor.kind === undefined && namedAsUnit.has(id)));
+    // a kind-less actor is a unit when another actor names it, or when its own partOf was accepted
+    return actor !== undefined && (actor.kind === 'unit' || (actor.kind === undefined && (namedAsUnit.has(id) || parentOf.has(id))));
   };
   const unitChain = (id) => {
     const chain = [id];

@@ -49,8 +49,8 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 - **Format 2.0 (continued): organigram, replacement and every generate surface.** A unit (and an
   actor without `kind`) may carry `partOf`, the parent unit; roles do not (a role's unit is `unit`). A
   cycle is error C07, once per cycle. An actor without `kind` that another actor names as `unit` or
-  `partOf` counts as a unit, so a unit view keys such a performer on itself; one with a `partOf` of its
-  own nests under its parent. The view's `lanes` also takes the object `{ "by": "unit", "level"?, "nested"? }`
+  `partOf`, or that has a `partOf` of its own, counts as a unit, so a unit view keys such a performer on
+  itself; one with a `partOf` of its own nests under its parent. The view's `lanes` also takes the object `{ "by": "unit", "level"?, "nested"? }`
   (the view schema stays `1.0`): `level` (1–16) counts from the top, 1 being a unit without `partOf`, and
   a unit shallower than the level keeps its own lane; `nested` draws every unit of a chain as child lanes
   along the organigram, a unit with sub-units and steps of its own holding them in the child lane

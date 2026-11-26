@@ -491,8 +491,8 @@ the 2 line (`"2"`, `"2.1"`, `"2.7"`) is refused with one error that names the va
 actors without `kind`, not on roles (a role's unit is `unit`). It must lead to a unit. Units that
 nest in a cycle, including a unit that is part of itself, are error C07, once per cycle. Who counts
 as a unit: an actor with `kind: "unit"`, and an actor without `kind` that another actor names as its
-`unit` or `partOf`. An actor without `kind` that has a `partOf` of its own nests under its parent
-like a unit. The organigram only matters to a view whose `lanes` is the object form (see "Lanes by
+`unit` or `partOf` or that has a valid `partOf` of its own; the latter nests under its parent like a
+unit. The organigram only matters to a view whose `lanes` is the object form (see "Lanes by
 view").
 
 **What 2.0 is not (yet):** no systems or data nodes, no positions or persons, no matrices (RACI),
@@ -533,7 +533,8 @@ every surface.
 - `role`: the lane is the performer of the step (a role, an actor without `kind`, or a unit that
   performs the step directly).
 - `unit`: the unit of the performer: the performer itself when it is a unit (`kind: "unit"`, or an
-  actor without `kind` that another actor names as its `unit` or `partOf`), else its `unit`; when
+  actor without `kind` that another actor names as its `unit` or `partOf` or that has a `partOf` of
+  its own), else its `unit`; when
   that is missing the placeholder `(Einheit nicht erhoben)`, with hint H04. With the object form
   `{ "by": "unit", "level": k }` the lane is the unit at depth `k` of that unit's `partOf` chain
   (1 = a unit without `partOf`, counted from the top; `k` is 1–16); a unit shallower than `k` keeps its own lane. Without `level` each
