@@ -292,7 +292,7 @@ function keyRank(resolved, key) {
  * flow node and the hints that do not need the lane name; `inherited` lists the automatic
  * activities that took their key in a round (H03, written once the lanes exist).
  */
-function inheritKeys(proc, resolved, laneBy, performerOf, prefix) {
+function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
   const hints = [];
   const flowNodes = proc.container.nodes.filter(isFlowNode);
   const ids = new Set(flowNodes.map((n) => n.id));
@@ -315,8 +315,13 @@ function inheritKeys(proc, resolved, laneBy, performerOf, prefix) {
     const p = performerOf(n);
     if (p) {
       let k = p.id;
-      if (laneBy === 'unit' && p.kind !== 'unit') {
-        k = p.unit ?? UNIT_UNKNOWN;
+      if (laneBy === 'unit') {
+        k = resolved.isUnit(p.id) ? p.id : p.unit ?? UNIT_UNKNOWN;
+        if (k !== UNIT_UNKNOWN && level !== null) {
+          // the unit at the chosen depth; a unit shallower than the level keeps its own lane
+          const chain = resolved.unitChain(k);
+          if (chain.length >= level) k = chain[level - 1];
+        }
         if (k === UNIT_UNKNOWN) {
           hints.push({
             code: 'H04',
@@ -414,7 +419,7 @@ export function normalizeLanesOption(lanes) {
  * Neither argument is changed. A C10 collision stops the run: `{ lc: null, hints: [], errors }`.
  */
 export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
-  const { by: lanes } = normalizeLanesOption(lanesOption);
+  const { by: lanes, level } = normalizeLanesOption(lanesOption);
   const out = clone(lc);
   if (lanes === 'none') return { lc: out, hints: [], errors: [] };
 
@@ -430,7 +435,7 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
       hints.push({ code: 'H06', message: `${proc.prefix}No assignments in process "${proc.label}": no lanes.`, elements: [proc.id] });
       continue;
     }
-    const { key, hints: found, inherited } = inheritKeys(proc, resolved, lanes, performerOf, proc.prefix);
+    const { key, hints: found, inherited } = inheritKeys(proc, resolved, lanes, level, performerOf, proc.prefix);
 
     // step 8: one lane per key used, in declaration order
     const keys = [...new Set(key.values())].sort((a, b) => keyRank(resolved, a) - keyRank(resolved, b));
