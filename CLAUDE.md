@@ -131,7 +131,7 @@ scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
                                'unknown' if unreadable)
 
 Standalone tooling (top-level scripts/)
-  http-server.js             HTTP API (/api/v1/generate, /orchestrate, /chat)
+  http-server.js             HTTP API (/api/v1/generate, /orchestrate, /chat); reads format 2.0 with an embedded `catalog` object
   mcp-bpmn-server.js         MCP server entry point
   evaluate-slm.js            Pipeline evaluation runner
   prepare-training-data.js   Training-data prep script
@@ -371,7 +371,7 @@ membership instead of coordinates.
 | `scripts/bpmn/schema-gate.js` | `validateLogicCoreSchema` — ajv draft-2020-12 strict gate for the HTTP API and MCP; also `validateVisualRefinementOption`; `v2RequestErrors(model, { catalog, mode })` — the shared request check for 2.0 over MCP and HTTP (C13/C12 catalogue object, F04 mode; `[]` for 1.x) |
 | `scripts/bpmn/model-v2.js` | `resolveFields(model, { catalog, viewName })` → `{ lc, resolved, errors, hints }` — checks a 2.0 model on a copy (the model's `actors` replace catalogue entries in place, new ids are appended, H09 per replacement, `scheme` beside a catalogue is C13) (format schema, catalogue source, C06, C03, C01, C02, C04, C05) and translates it into the lane-less intermediate form (`_assignments`, `_modelInfo`; no `role`/`system`/`lane`). `formLanes(lc, resolved, { lanes })` → `{ lc, hints, errors }` — forms the lanes of the view (`role`, `unit`, `none`, or `{ by: 'unit', level?, nested? }`: the unit view keys a performer on its unit, mapped up its `partOf` chain to `level`; `nested` gives each key unit a lane for every unit of its chain, as child lanes, a key unit with child lanes holding its own steps in the first child `L.<process>.<unit>._own`) by the inheritance rule (design 7.2): lane ids `L.<process>.<actor>`, placeholders `_unassigned`/`_unitUnknown` (names in `config.json` `laneFormation`; top-level, after the tree), C10 on a lane-id collision over the whole tree, hints H02–H06/H08, check P (`checkProjection`: every node in a leaf lane). Called by `runPipeline` for format 2.0 models only |
 | `scripts/bpmn/moddle-import.js` | BPMN XML → Logic-Core via bpmn-moddle (parallel to import.js) |
-| `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`) |
+| `scripts/http-server.js` | HTTP API server (`/api/v1/generate`, `/orchestrate`, `/chat`); `/generate`, `/validate`, `/orchestrate` read format 2.0 with the request field `catalog` (an object, never a path) |
 | `scripts/mcp-bpmn-server.js` | MCP server entry point; `generate_bpmn`, `validate_bpmn`, `orchestrate_bpmn` read format 2.0 with an embedded `catalog` object (never a path; forwarded for 2.x models only, ignored for 1.x) |
 | `scripts/orchestrator.js` | Multi-agent orchestration (modeler → layout → reviewer → compliance); reads 1.x and 2.0 (`catalog` option): for 2.0 the modeler's refine and amend are skipped (history `skipped: 'format 2.0'`), `mode` optimize/soll throws F04 before any agent |
 | `scripts/audit.js` | Append-only audit log (JSONL) |

@@ -82,7 +82,7 @@ export class ToolingError extends Error {}
 // ============================================================ 1. response-contract
 
 /**
- * Builds real responses as `[defName, label, payload]` (one per endpoint, two for import), exactly the way scripts/http-server.js
+ * Builds real responses as `[defName, label, payload]` (one per endpoint, two for generate and import), exactly the way scripts/http-server.js
  * assembles its JSON payload — imports the same functions http-server.js imports
  * and mirrors its field selection. Drifts here (a field added to the pipeline
  * result but not to the handler's payload, or vice versa) are exactly the class
@@ -118,6 +118,29 @@ async function buildRealResponses() {
     svg: gen.svg,
     validation: gen.validation,
     diagnostics: gen.diagnostics,
+    callbackStatus: 'not_requested',
+  };
+
+  // A generate of a format 2.0 model: schaden.json, its catalogue and the view rollen (embedded, as over HTTP).
+  const v2Dir = join(REPO_ROOT, 'tests', 'fixtures-v2');
+  const readJson = (path) => {
+    try {
+      return JSON.parse(readFileSync(path, 'utf8'));
+    } catch (err) {
+      throw new ToolingError(`could not read fixture ${path}: ${err.message}`);
+    }
+  };
+  const gen2 = await pipelineMod.runPipeline(readJson(join(v2Dir, 'schaden.json')), {
+    catalog: readJson(join(v2Dir, 'schaden-catalog.json')),
+    view: readJson(join(REPO_ROOT, 'views', 'rollen-view.json')),
+  });
+  const generateV2Response = {
+    correlationId: 'docs-gate',
+    status: gen2.validation.errors.length > 0 ? 'validation_error' : (gen2.diagnostics && !gen2.diagnostics.ok ? 'diagram_error' : 'success'),
+    bpmnXml: gen2.bpmnXml,
+    svg: gen2.svg,
+    validation: gen2.validation,
+    diagnostics: gen2.diagnostics,
     callbackStatus: 'not_requested',
   };
 
@@ -160,6 +183,7 @@ async function buildRealResponses() {
 
   return [
     ['GenerateResponse', 'generate of a 1.x model', generateResponse],
+    ['GenerateResponse', 'generate of a 2.0 model', generateV2Response],
     ['ValidateResponse', 'validate of a 1.x model', validateResponse],
     ['ImportResponse', 'import of a 1.x diagram', importResponse],
     ['ImportResponse', 'import of a 2.0 golden', importV2Response],
