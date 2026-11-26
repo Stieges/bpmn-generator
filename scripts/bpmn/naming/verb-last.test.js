@@ -67,8 +67,12 @@ describe('containerName', () => {
     'Versand', 'Einkauf', 'Mahnwesen', 'Monatsabschluss', 'Onboarding', 'Schreiben',
     // A verb ending in `ieren` is no `ge…en` participle.
     'Adresse geocodieren',
+    // A capitalised infinitive is a nominalised verb (das Verpacken).
+    'Verpacken', 'Versenden', 'Kommissionieren', 'Bezahlen', 'Prüfen', 'Validieren', 'Fahren', 'Teil 2',
   ])('passes %s', (n) => expect(s.containerName(n)).toBeNull());
-  test.each(['Antrag geprüft', 'Rechnung storniert', 'Prüfen', 'Validieren'])('flags %s', (n) =>
+  // Lower case is no nominalisation, so a lower-case single infinitive stays flagged, and so does a state form.
+  // A bare noun (Daten) or a placeholder (Teil 2) was never a container finding and still is none.
+  test.each(['Antrag geprüft', 'Rechnung storniert', 'prüfen', 'validieren', 'geprüft'])('flags %s', (n) =>
     expect(flagged(s.containerName, n)).toBe(true));
   // split takes the longest prefix: `hinzu` + `gefügt` is a participle; `hin` + `zugefügt` would not be.
   test('flags Daten hinzugefügt (longest prefix hinzu)', () =>

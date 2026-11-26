@@ -143,7 +143,8 @@ export function verbLast(lexicon) {
     if (isLower(last) && (gePart(last) || isParticipleEnd(last))) {
       return flag('A container names a topic, not a state; avoid a participle at the end.');
     }
-    if (wordCount === 1 && tokens.length === 1) {
+    // Only a lower-case infinitive reads as a task; a capitalised one is a nominalised verb (das Verpacken).
+    if (wordCount === 1 && tokens.length === 1 && isLower(last)) {
       const x = last.folded;
       if ((verbs.has(x) || x.endsWith(VERB_SUFFIX)) && !nounVerbHomographs.has(x)) {
         return flag('A container names a topic, not an instruction; a bare verb reads as a task.');

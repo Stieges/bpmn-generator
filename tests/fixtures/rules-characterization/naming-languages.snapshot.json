@@ -168,17 +168,14 @@
   },
   "subprocess-child-fidelity.json": {
     "language": "en",
-    "M01": [
-      "[Fidelity] Subprocess \"Archive\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\")."
-    ],
+    "M01": [],
     "M05": [],
     "M06": []
   },
   "subprocess-collapsed-children.json": {
     "language": "en",
     "M01": [
-      "[Collapsed Containers] Subprocess \"Validate\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\").",
-      "[Collapsed Containers] Subprocess \"Archive\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\")."
+      "[Collapsed Containers] Subprocess \"Validate\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\")."
     ],
     "M05": [],
     "M06": []

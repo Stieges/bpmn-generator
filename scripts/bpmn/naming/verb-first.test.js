@@ -134,8 +134,17 @@ describe('containerName', () => {
     'Background check', 'Quality control', 'Customer support', 'Account setup', 'Month-end close',
     'Fraud review', 'Hire to retire', 'Intake', 'Customer need', 'Newsfeed',
   ])('passes %s', (n) => expect(s.containerName(n)).toBeNull());
-  test.each(['Validate', 'Archive', 'Review', 'Order received'])('flags %s', (n) =>
+  // A one-word container is flagged only when it is a listed verb that is no noun-verb homograph.
+  const HOMOGRAPHS = ['Review', 'Audit', 'Support', 'Order', 'Check', 'Test', 'Search', 'Transfer', 'Transport', 'Repair',
+    'Exchange', 'Return', 'Dispatch', 'Purchase', 'Request', 'Release', 'Change', 'Control', 'Design', 'Research',
+    'Survey', 'Trade', 'Archive'];
+  test.each(HOMOGRAPHS)('passes the one-word noun %s', (n) => expect(s.containerName(n)).toBeNull());
+  test.each(['Validate', 'Order received', 'Order shipped', 'Archived'])('flags %s', (n) =>
     expect(flagged(s.containerName, n)).toBe(true));
+  test('an unlisted one-word container passes', () => {
+    // Not a verb, no state form: unchanged. A bare noun or a placeholder is no container finding (pinned, not new).
+    for (const n of ['Groom', 'Onboarding', 'Data', 'Zebra', 'Step 2']) expect(s.containerName(n)).toBeNull();
+  });
 });
 
 describe('eventName', () => {

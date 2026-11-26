@@ -75,13 +75,13 @@ const COUNTS = {
     'realistic-collaboration': [6, 0],
     'simple-approval': [1, 0],
     'sparse-lanes': [4, 0],
-    'subprocess-child-fidelity': [0, 1],
-    'subprocess-collapsed-children': [1, 2],
+    'subprocess-child-fidelity': [0, 0],
+    'subprocess-collapsed-children': [1, 1],
     'subprocess-merge-fanout': [0, 0],
     'wrapping-back-edge': [20, 20],
   },
 };
-const TOTALS = { de: [36, 37], en: [41, 28] };
+const TOTALS = { de: [36, 37], en: [41, 26] };
 
 describe('the count table', () => {
   test('covers every top-level fixture with its true language', () => {
@@ -148,8 +148,8 @@ describe('the messages', () => {
     const en = namingFor('en');
     expect(namingMessage(en, 'task', 'Step 1'))
       .toBe('Task "Step 1" does not follow the English convention verb + object (e.g. "Review application").');
-    expect(namingMessage(en, 'container', 'Archive', 'subProcess'))
-      .toBe('Subprocess "Archive" is named like a state or a bare verb; name it as an activity (e.g. "Review application" or "Claims handling").');
+    expect(namingMessage(en, 'container', 'Validate', 'subProcess'))
+      .toBe('Subprocess "Validate" is named like a state or a bare verb; name it as an activity (e.g. "Review application" or "Claims handling").');
     expect(namingMessage(de, 'container', 'Geprüft', 'callActivity'))
       .toBe('Call activity "Geprüft" is named like a state or a bare verb; name it as an activity (e.g. "Antrag prüfen" or "Schadenprüfung").');
     expect(namingMessage(de, 'container', 'Geprüft', 'transaction'))
@@ -178,7 +178,7 @@ describe('M01 with a declared language', () => {
             { id: 'sp', type: 'subProcess', name: 'Handle order', isExpanded: true, nodes: [
               { id: 'sp_s', type: 'startEvent' },
               { id: 't', type: 'task', name: 'Continue' },
-              { id: 'ca', type: 'callActivity', name: 'Archive' },
+              { id: 'ca', type: 'callActivity', name: 'Validate' },
               { id: 'sp_e', type: 'endEvent' },
             ], edges: [{ id: 'f1', source: 'sp_s', target: 't' }, { id: 'f2', source: 't', target: 'ca' }, { id: 'f3', source: 'ca', target: 'sp_e' }] },
             { id: 'e', type: 'endEvent', name: 'Order handled' },
@@ -190,7 +190,7 @@ describe('M01 with a declared language', () => {
     };
     expect(messagesOf(withFindings(lc), 'M01')).toEqual([
       '[Shop] Task "Continue" does not follow the English convention verb + object (e.g. "Review application").',
-      '[Shop] Call activity "Archive" is named like a state or a bare verb; name it as an activity (e.g. "Review application" or "Claims handling").',
+      '[Shop] Call activity "Validate" is named like a state or a bare verb; name it as an activity (e.g. "Review application" or "Claims handling").',
       '[Bank] Task "Validate" does not follow the English convention verb + object (e.g. "Review application").',
     ]);
   });
@@ -201,13 +201,15 @@ describe('M01 with a declared language', () => {
     }
   });
 
-  test('under the strict profile, the English container "Archive" is an ERROR', () => {
+  test('under the strict profile, the English container "Validate" is an ERROR', () => {
     const profile = profileForMode(loadRuleProfile(join(ROOT, 'rules', 'strict-profile.json')), 'document');
     const r = runRules({ ...fixture('subprocess-collapsed-children.json'), language: 'en' }, profile, undefined, { withFindings: true });
-    const archive = r.findings.filter((f) => f.code === 'M01' && f.message.includes('"Archive"'));
-    expect(archive).toHaveLength(1);
-    expect(archive[0].severity).toBe('ERROR');
-    expect(r.errors).toContain(archive[0].message);
+    const validate = r.findings.filter((f) => f.code === 'M01' && f.message.includes('Subprocess "Validate"'));
+    expect(validate).toHaveLength(1);
+    expect(validate[0].severity).toBe('ERROR');
+    expect(r.errors).toContain(validate[0].message);
+    // Archive is a noun-verb homograph and a noun here: no finding.
+    expect(r.findings.filter((f) => f.code === 'M01' && f.message.includes('"Archive"'))).toHaveLength(0);
   });
 });
 
