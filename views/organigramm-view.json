@@ -1,0 +1,6 @@
+{
+  "view": "organigramm",
+  "version": "1.0",
+  "description": "Lanes per unit, nested along the organigram (partOf). Format 2.0 models only.",
+  "lanes": { "by": "unit", "nested": true }
+}

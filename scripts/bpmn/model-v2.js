@@ -391,11 +391,30 @@ function inheritKeys(proc, resolved, laneBy, performerOf, prefix) {
 }
 
 /**
- * Forms the lanes of the chosen view (`role`, `unit` or `none`) from the assignments of an
- * intermediate form made by `resolveFields`. Neither argument is changed. A C10 collision stops
- * the run: `{ lc: null, hints: [], errors }`.
+ * The lanes option of a view in one shape: the strings `role`, `unit`, `none` or the object
+ * `{ by: 'unit', level?, nested? }`; `undefined` means `role`. Anything else is an unknown option
+ * and throws instead of being treated as a default.
+ * @returns {{ by: 'role'|'unit'|'none', level: number|null, nested: boolean }}
  */
-export function formLanes(lc, resolved, { lanes = 'role' } = {}) {
+export function normalizeLanesOption(lanes) {
+  if (lanes === undefined) return { by: 'role', level: null, nested: false };
+  if (lanes === 'role' || lanes === 'unit' || lanes === 'none') return { by: lanes, level: null, nested: false };
+  if (isPlainObject(lanes) && lanes.by === 'unit'
+    && Object.keys(lanes).every((k) => k === 'by' || k === 'level' || k === 'nested')
+    && (lanes.level === undefined || (Number.isInteger(lanes.level) && lanes.level >= 1 && lanes.level <= 16))
+    && (lanes.nested === undefined || typeof lanes.nested === 'boolean')) {
+    return { by: 'unit', level: lanes.level ?? null, nested: lanes.nested ?? false };
+  }
+  throw new TypeError(`unknown lanes option ${JSON.stringify(lanes)}`);
+}
+
+/**
+ * Forms the lanes of the chosen view (`role`, `unit`, `none` or the object form, see
+ * `normalizeLanesOption`) from the assignments of an intermediate form made by `resolveFields`.
+ * Neither argument is changed. A C10 collision stops the run: `{ lc: null, hints: [], errors }`.
+ */
+export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
+  const { by: lanes } = normalizeLanesOption(lanesOption);
   const out = clone(lc);
   if (lanes === 'none') return { lc: out, hints: [], errors: [] };
 

@@ -273,7 +273,7 @@ describe('view over MCP is a name inside views/, never a path or an object', () 
     });
 
     test(`${name} refuses an unknown name (listing the available ones) and a non-string`, async () => {
-      await expect(call(name, { logicCore: lc, view: 'no-such-view' })).rejects.toThrow(/unknown view "no-such-view" — available: aligned-ports, default, einheiten, explicit-joins, rollen$/);
+      await expect(call(name, { logicCore: lc, view: 'no-such-view' })).rejects.toThrow(/unknown view "no-such-view" — available: aligned-ports, default, einheiten, explicit-joins, organigramm, rollen$/);
       await expect(call(name, { logicCore: lc, view: { view: 'x', version: '1.0' } })).rejects.toThrow(/view name/);
     });
 

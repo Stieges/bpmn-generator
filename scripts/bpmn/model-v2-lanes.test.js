@@ -5,7 +5,7 @@
  */
 import { describe, test, expect } from '@jest/globals';
 import {
-  resolveFields, formLanes, laneIdFor, checkProjection, UNASSIGNED, UNIT_UNKNOWN, AUTOMATIC_ACTIVITY_TYPES,
+  resolveFields, formLanes, normalizeLanesOption, laneIdFor, checkProjection, UNASSIGNED, UNIT_UNKNOWN, AUTOMATIC_ACTIVITY_TYPES,
 } from './model-v2.js';
 import { LANE_NAME_LIMIT } from './rules.js';
 import { TASK_TYPES } from './types.js';
@@ -451,5 +451,30 @@ describe('formLanes — further behaviour', () => {
     expect([...AUTOMATIC_ACTIVITY_TYPES].every((t) => TASK_TYPES.has(t))).toBe(true);
     expect(AUTOMATIC_ACTIVITY_TYPES.size).toBe(5);
     expect(LANE_NAME_LIMIT).toBe(25);
+  });
+});
+
+describe('normalizeLanesOption', () => {
+  test.each([
+    [undefined, { by: 'role', level: null, nested: false }],
+    ['role', { by: 'role', level: null, nested: false }],
+    ['unit', { by: 'unit', level: null, nested: false }],
+    ['none', { by: 'none', level: null, nested: false }],
+    [{ by: 'unit' }, { by: 'unit', level: null, nested: false }],
+    [{ by: 'unit', level: 2 }, { by: 'unit', level: 2, nested: false }],
+    [{ by: 'unit', nested: true }, { by: 'unit', level: null, nested: true }],
+  ])('%j', (value, expected) => {
+    expect(normalizeLanesOption(value)).toEqual(expected);
+  });
+
+  test.each([['system'], [null], [3], [{ by: 'role' }], [{ by: 'unit', level: 0 }], [{ by: 'unit', level: 17 }], [{ by: 'unit', nested: 1 }], [{ by: 'unit', x: 1 }], [['unit']]])('%j throws', (value) => {
+    expect(() => normalizeLanesOption(value)).toThrow(TypeError);
+    expect(() => normalizeLanesOption(value)).toThrow(/^unknown lanes option /);
+  });
+
+  test('formLanes with an unknown lanes value throws and accepts the object form', () => {
+    const model = proc([{ id: 's', type: 'startEvent' }], []);
+    expect(() => form(model, { lanes: 'system' })).toThrow(TypeError);
+    expect(() => form(model, { lanes: { by: 'unit', level: 2, nested: true } })).not.toThrow();
   });
 });
