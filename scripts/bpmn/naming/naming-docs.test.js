@@ -28,7 +28,7 @@ const schema = readJson(namingSchemaPath());
 const DOC_KEYS = ['purpose', 'listNotes'];
 const LIST_NAMES = ['verbs', 'verbPhrases', 'verbPrefixes', 'nounVerbHomographs', 'participles', 'stateWords', 'stateMarkers',
   'infinitiveSuffixes', 'participleHomographs', 'inseparablePrefixes', 'separablePrefixes', 'geInfinitives',
-  'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks'];
+  'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks', 'nonVerbStarters', 'nounStarters'];
 const SHIPPED = { de: namingDePath(), en: namingEnPath() };
 
 describe('schema', () => {
@@ -111,7 +111,7 @@ describe.each(Object.keys(SHIPPED))('shipped %s file', (language) => {
       ? ['verbs', 'nounVerbHomographs', 'participles', 'stateMarkers', 'infinitiveSuffixes', 'participleHomographs',
         'inseparablePrefixes', 'separablePrefixes', 'geInfinitives', 'adjectiveStoplist', 'conjunctions', 'eventMarkers', 'questionMarks']
       : ['verbs', 'verbPhrases', 'verbPrefixes', 'nounVerbHomographs', 'participles', 'stateWords', 'infinitiveSuffixes',
-        'eventMarkers', 'questionMarks'];
+        'nonVerbStarters', 'nounStarters', 'eventMarkers', 'questionMarks'];
     expect(Object.keys(data.listNotes).sort()).toEqual([...read].sort());
   });
 

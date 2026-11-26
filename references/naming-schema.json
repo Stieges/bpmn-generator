@@ -115,6 +115,16 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300
+        },
+        "nonVerbStarters": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "nounStarters": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
         }
       }
     },
@@ -344,6 +354,14 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          },
+          "exceptions": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 2000,
+            "items": {
+              "$ref": "#/$defs/Word"
+            }
           }
         }
       }
@@ -395,6 +413,22 @@
       }
     },
     "conjunctions": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "nonVerbStarters": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "nounStarters": {
       "type": "array",
       "uniqueItems": true,
       "maxItems": 2000,
@@ -537,6 +571,14 @@
               "items": {
                 "$ref": "#/$defs/Word"
               }
+            },
+            "nounStarters": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
             }
           }
         },
@@ -601,6 +643,14 @@
               }
             },
             "adjectiveStoplist": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "nounStarters": {
               "type": "array",
               "uniqueItems": true,
               "maxItems": 2000,

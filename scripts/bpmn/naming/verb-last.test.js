@@ -13,10 +13,13 @@ describe('verb-last strategy shape', () => {
     expect(s.language).toBe('de');
     expect(s.wordOrder).toBe('verb-last');
     expect(s.examples.task).toBe('Antrag prüfen');
-    for (const f of ['taskName', 'containerName', 'eventName', 'messageName', 'isQuestion', 'eventMarker']) {
+    for (const f of ['taskName', 'unlistedFirstWord', 'containerName', 'eventName', 'messageName', 'isQuestion', 'eventMarker']) {
       expect(typeof s[f]).toBe('function');
     }
     expect(Object.isFrozen(s)).toBe(true);
+  });
+  test('German has no unlisted first word: the form decides', () => {
+    for (const n of ['Antrag prüfen', 'Klärung mit Lieferant', 'Prüfen', undefined]) expect(s.unlistedFirstWord(n)).toBeNull();
   });
   test('a verdict is null or { reason }', () => {
     const r = s.taskName('Prüfen');

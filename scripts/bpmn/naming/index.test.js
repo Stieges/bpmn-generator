@@ -114,8 +114,10 @@ describe('the registry', () => {
   test('BPMN_NAMING is read at call time: add makes a name pass, remove makes it fail', () => {
     const add = overlayFile('add.json', { languages: { en: { add: { verbs: ['invoice'] } } } });
     const remove = overlayFile('remove.json', { languages: { en: { remove: { verbs: ['check'] } } } });
-    expect(withEnv(undefined, () => namingFor('en').taskName('Invoice customer'))).not.toBeNull();
-    expect(withEnv(add, () => namingFor('en').taskName('Invoice customer'))).toBeNull();
+    expect(withEnv(undefined, () => namingFor('en').taskName('Invoice check'))).not.toBeNull();
+    expect(withEnv(add, () => namingFor('en').taskName('Invoice check'))).toBeNull();
+    expect(withEnv(undefined, () => namingFor('en').unlistedFirstWord('Invoice customer'))).toBe('Invoice');
+    expect(withEnv(add, () => namingFor('en').unlistedFirstWord('Invoice customer'))).toBeNull();
     expect(withEnv(undefined, () => namingFor('en').taskName('Check order'))).toBeNull();
     expect(withEnv(remove, () => namingFor('en').taskName('Check order'))).not.toBeNull();
   });

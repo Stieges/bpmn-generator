@@ -2,6 +2,10 @@
  * The verb-first naming conventions (English): a task starts with an imperative verb, a container
  * names a topic, an event or message does not. A pure strategy object built from a lexicon; every
  * judge returns `null` (ok) or `{ reason }` and never throws. Nothing here reads a file.
+ *
+ * No closed word list holds every English verb, so a task name is flagged only on positive evidence
+ * of a wrong form; a name whose first word is merely unlisted passes, and `unlistedFirstWord` names
+ * that word for the hint H14.
  */
 
 import { labelTokens } from './tokens.js';
@@ -10,6 +14,9 @@ import { inferMarker } from './markers.js';
 const HAS_LETTER = /\p{L}/u;
 const MIN_PARTICIPLE = 5;
 const MIN_PREFIX_REST = 3;
+const MIN_GERUND = 6;
+const MIN_ACTION_STEM = 3;
+const ACTION_NOUN_SUFFIXES = ['ation', 'ment', 'ance', 'ence', 'ion', 'al'];
 
 const ok = null;
 const flag = (reason) => ({ reason });
@@ -25,6 +32,8 @@ function read(name) {
 
 export function verbFirst(lexicon) {
   const { verbs, nounVerbHomographs, stateWords, verbPrefixes, verbPhrases, infinitiveSuffixes, participles } = lexicon;
+  const nonVerbStarters = lexicon.nonVerbStarters ?? new Set();
+  const nounStarters = lexicon.nounStarters ?? new Set();
 
   const isVerb = (x) => verbs.has(x);
 
@@ -53,26 +62,85 @@ export function verbFirst(lexicon) {
       }
       if (match) return phrase.length;
     }
-    if (isVerb(t0)) return 1;
     if (rest >= 2 && verbPrefixes.includes(t0) && isVerb(tokens[from + 1].folded)) return 2;
+    return isVerbWord(t0) ? 1 : 0;
+  }
+
+  /** A single folded word is a verb: listed, a listed prefix joined to a listed verb, or a verb suffix. */
+  function isVerbWord(x) {
+    if (isVerb(x)) return true;
     for (const prefix of verbPrefixes) {
-      if (t0.length >= prefix.length + MIN_PREFIX_REST && t0.startsWith(prefix) && isVerb(t0.slice(prefix.length))) return 1;
+      if (x.length >= prefix.length + MIN_PREFIX_REST && x.startsWith(prefix) && isVerb(x.slice(prefix.length))) return true;
     }
-    for (const { suffix, minLength } of infinitiveSuffixes ?? []) {
-      if (t0.length >= minLength && t0.endsWith(suffix)) return 1;
+    for (const { suffix, minLength, exceptions } of infinitiveSuffixes ?? []) {
+      if (x.length >= minLength && x.endsWith(suffix) && !exceptions?.has(x)) return true;
     }
-    return 0;
+    return false;
+  }
+
+  /** `checking`, `shipping`, `updating`: -ing on a verb (as is, with its final e, or with a doubled consonant). */
+  function isGerund(x) {
+    if (x.length < MIN_GERUND || !x.endsWith('ing')) return false;
+    const stem = x.slice(0, -3);
+    if (isVerbWord(stem) || isVerbWord(`${stem}e`)) return true;
+    return stem.length >= 2 && stem.at(-1) === stem.at(-2) && isVerbWord(stem.slice(0, -1));
+  }
+
+  /** `approval`, `assessment`, `validation`, `registration`: a noun formed from a listed verb. */
+  function isActionNoun(x) {
+    for (const suffix of ACTION_NOUN_SUFFIXES) {
+      if (x.length < suffix.length + MIN_ACTION_STEM || !x.endsWith(suffix)) continue;
+      const base = x.slice(0, -suffix.length);
+      if (isVerb(base) || isVerb(`${base}e`)) return true;
+    }
+    return false;
+  }
+
+  const hasLetter = (t) => HAS_LETTER.test(t.raw);
+  const isPlaceholder = (t) => !hasLetter(t) || t.folded.length === 1;
+
+  const NEEDS_VERB = 'A task name needs a verb and an object, e.g. "Review application".';
+  const STARTS_WITH_VERB = 'A task name starts with a verb in the imperative, e.g. "Review application".';
+
+  /**
+   * `{ reason }` for a task name with positive evidence of a wrong form, `{ unlisted }` (the raw
+   * first word) for one without a recognised verb and without such evidence, else `null`.
+   */
+  function judgeTask(name) {
+    const { wordCount, tokens } = read(name);
+    if (wordCount < 2) return flag(NEEDS_VERB);
+    const from = firstWord(tokens);
+    if (from === tokens.length) return flag(STARTS_WITH_VERB);
+    const k = lead(tokens, from);
+    const first = tokens[from];
+    const last = tokens[tokens.length - 1].folded;
+    if (k > 0) {
+      if (!tokens.slice(from + k).some(hasLetter)) return flag('A task name needs an object after the verb.');
+      // Order shipped, Request pending: a noun that is also a verb, then a state.
+      if (k === 1 && tokens.length - from === 2 && nounVerbHomographs.has(first.folded) && (isParticiple(last) || stateWords.has(last))) {
+        return flag(STARTS_WITH_VERB);
+      }
+      return ok;
+    }
+    const rest = tokens.slice(from + 1);
+    if (rest.every(isPlaceholder)) return flag(STARTS_WITH_VERB); // Step 3, Path A
+    if (first.raw.endsWith(':')) return flag(STARTS_WITH_VERB); // SAP: Review invoice
+    if (nonVerbStarters.has(first.folded) || nounStarters.has(first.folded)) return flag(STARTS_WITH_VERB);
+    if (isGerund(first.folded)) return flag(STARTS_WITH_VERB); // Checking invoice
+    if (isParticiple(last) || stateWords.has(last)) return flag(STARTS_WITH_VERB); // Invoice checked
+    if (isVerb(last) || isActionNoun(last)) return flag(STARTS_WITH_VERB); // Invoice check, Invoice approval
+    return { unlisted: first.raw };
   }
 
   function taskName(name) {
-    const { wordCount, tokens } = read(name);
-    if (wordCount < 2) return flag('A task name needs a verb and an object, e.g. "Review application".');
-    const from = firstWord(tokens);
-    const k = lead(tokens, from);
-    if (k === 0) return flag('A task name starts with a verb in the imperative, e.g. "Review application".');
-    const after = tokens.slice(from + k);
-    if (!after.some((t) => HAS_LETTER.test(t.raw))) return flag('A task name needs an object after the verb.');
-    return ok;
+    const verdict = judgeTask(name);
+    return verdict === null || verdict.unlisted !== undefined ? ok : verdict;
+  }
+
+  /** The raw first word of a task name that passes without a recognised verb, else `null`. */
+  function unlistedFirstWord(name) {
+    const verdict = judgeTask(name);
+    return verdict?.unlisted ?? null;
   }
 
   function containerName(name) {
@@ -133,6 +201,7 @@ export function verbFirst(lexicon) {
     language: lexicon.language,
     wordOrder: lexicon.wordOrder,
     taskName: guard(taskName),
+    unlistedFirstWord: guard(unlistedFirstWord),
     containerName: guard(containerName),
     eventName: guard(eventName),
     messageName: guard(messageName),

@@ -81,6 +81,8 @@ function buildLexicon(data) {
     geInfinitives: foldedSet(data.geInfinitives),
     adjectiveStoplist: foldedSet(data.adjectiveStoplist),
     conjunctions: foldedSet(data.conjunctions),
+    nonVerbStarters: foldedSet(data.nonVerbStarters),
+    nounStarters: foldedSet(data.nounStarters),
     participles: {
       suffix: data.participles.suffix,
       irregular: foldedSet(data.participles.irregular),
@@ -90,7 +92,9 @@ function buildLexicon(data) {
     verbPrefixes: foldedPrefixes(data.verbPrefixes),
     separablePrefixes: foldedPrefixes(data.separablePrefixes),
     inseparablePrefixes: foldedPrefixes(data.inseparablePrefixes),
-    infinitiveSuffixes: (data.infinitiveSuffixes ?? []).map((s) => ({ suffix: s.suffix, minLength: s.minLength })),
+    infinitiveSuffixes: (data.infinitiveSuffixes ?? []).map((s) => (s.exceptions
+      ? { suffix: s.suffix, minLength: s.minLength, exceptions: foldedSet(s.exceptions) }
+      : { suffix: s.suffix, minLength: s.minLength })),
     eventMarkers: Object.fromEntries(Object.entries(data.eventMarkers).map(([k, v]) => [k, v.map(foldWord)])),
     nounsCapitalized: data.nounsCapitalized,
     compoundMarkers: data.compoundMarkers,
