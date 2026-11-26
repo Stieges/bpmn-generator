@@ -142,7 +142,22 @@ describe('Review Focus 4: robustness and linear time', () => {
     const t = Date.now();
     for (const f of ['taskName', 'containerName', 'eventName', 'messageName', 'isQuestion']) expect(() => s[f](h)).not.toThrow();
     for (const t2 of ['startEvent', 'boundaryEvent']) expect(() => s.eventMarker(h, t2)).not.toThrow();
-    expect(Date.now() - t).toBeLessThan(2000);
+    // Generous wall-clock bound (catastrophic behaviour is orders of magnitude slower); the
+    // scaling test below is the real guard against super-linear time.
+    expect(Date.now() - t).toBeLessThan(10000);
+  });
+  test('time scales sub-quadratically: 4n costs less than 16 times n', () => {
+    const make = (k) => 'Check ' + 'order '.repeat(k);
+    const cost = (k) => {
+      const h = make(k);
+      const t = performance.now();
+      for (const fn of ['taskName', 'eventName', 'isQuestion']) s[fn](h);
+      s.eventMarker(h, 'startEvent');
+      return Math.max(performance.now() - t, 1);
+    };
+    const ratio = () => cost(40000) / cost(10000);
+    // One retry: a load spike in one measurement must not fail a sound implementation.
+    expect(Math.min(ratio(), ratio())).toBeLessThan(16);
   });
   test('non-string input never throws', () => {
     for (const v of [undefined, null, 1, {}, [], Symbol.iterator]) {

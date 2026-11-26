@@ -676,6 +676,9 @@ async function generateDiagramSet(logicCore, opts = {}) {
   return { parent, subProcesses, navigation };
 }
 
+// Note on `generateBpmnXml` and `generateSvg`: they expect runPipeline's copy of the model. Called
+// directly on a model with `language`, they write legacy markers (only runPipeline resolves the
+// language-aware ones); a node key starting with `_` is reserved for the pipeline.
 export {
   runPipeline,
   validateLogicCore,

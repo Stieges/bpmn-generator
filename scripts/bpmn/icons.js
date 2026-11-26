@@ -136,6 +136,8 @@ function markerOf(node, language = null) {
 /**
  * The marker of an event as the writers draw it: its `marker`; else the `_marker` that
  * `resolveEventMarkers` wrote on runPipeline's copy (a string or `null`); else the legacy inference.
+ * The writers expect runPipeline's copy: called directly on a model with `language`, they write
+ * legacy markers. A node key starting with `_` is reserved for the pipeline.
  */
 function resolvedMarkerOf(node) {
   if (node.marker) return node.marker;
