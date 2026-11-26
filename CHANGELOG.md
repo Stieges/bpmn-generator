@@ -77,7 +77,6 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 - **`aligned-ports` view.** `views/aligned-ports-view.json` sets `layout.alignParticipantPorts: true`; the default
   stays `false`.
 
-
 - **Language-aware naming rules (`de`, `en`).** A model may declare the language of its labels in
   the optional top-level field `language`, a language tag with a lowercase primary subtag
   (`"de"`, `"en-GB"`; both input formats). Ontology version 1.3; both `$schemaVersion` defaults
@@ -93,7 +92,8 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   and silent without `language`; before they were registered with severity `OFF`, so a profile
   that sets either to `OFF` still switches it off. The word lists are data, not code:
   `references/naming/de.json`, `references/naming/en.json`, checked by
-  `references/naming-schema.json`.
+  `references/naming-schema.json`. Each file says why its lists exist: the optional top-level
+  `purpose` and `listNotes` (documentation only; no rule reads them, and the overlay has neither).
 - **English word lists.** `references/naming/en.json` builds on the verb corpus, the verb phrases
   (`hand off`, `carry out`) and the hyphen handling of PR #151, adapted to the data format above, so
   that `Hand off case`, `Pre-approve loan` and `E-mail customer` pass the verb-first convention.
@@ -114,6 +114,7 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   reason. The HTTP and MCP servers check it at start and refuse to start with a broken file; at
   request time (also inside `orchestrate`) a failure is a `500` `naming data unavailable` (MCP: a
   tool error with that text) and the path goes only to the server log.
+
 ### Fixed
 
 - **Nested lanes of 1.x models are drawn.** A lane with `children` was written to the XML

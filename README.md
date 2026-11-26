@@ -309,7 +309,10 @@ JSON file that adds words to, or removes words from, the lists of a shipped lang
 
 Eight flat lists can be extended: `verbs`, `verbPhrases`, `nounVerbHomographs`, `stateWords`,
 `stateMarkers`, `participleHomographs`, `geInfinitives` and `adjectiveStoplist` (each language uses
-the lists it has). Words are added first, then removed. The conventions per language are in
+the lists it has). Words are added first, then removed. Each shipped data file
+(`references/naming/<language>.json`) says why its lists exist in the optional top-level `purpose`
+and `listNotes` (one sentence per list); they are documentation only, no rule reads them, and the
+overlay format has no such fields. The conventions per language are in
 [`references/modeling-guide.md`](references/modeling-guide.md).
 
 ## Views
