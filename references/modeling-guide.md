@@ -99,7 +99,7 @@ To see why a list exists and what it changes, read the `purpose` and `listNotes`
 
 | Element | Rule | `de` (verb last) | `en` (verb first) |
 |---|---|---|---|
-| Task | M01 | object, then the infinitive: `Antrag prüfen`, `Paket an Paketdienst übergeben`, `Antrag prüfen und freigeben`. Not: `Prüfen`, `Antrag eingegangen`, `Klärung mit Lieferant`, `Rechnung zu zahlen` (a state, not an instruction) | imperative, then the object: `Review application`, `Hand off case`, `Re-check order`, `E-mail customer`. Not: `Check`, `Checking invoice`, `Invoice checked`, `Invoice check`, `The invoice`, `Path A`, `Follow-up` |
+| Task | M01 | object, then the infinitive: `Antrag prüfen`, `Paket an Paketdienst übergeben`, `Antrag prüfen und freigeben`. Not: `Prüfen`, `Antrag eingegangen`, `Klärung mit Lieferant`, `Rechnung zu zahlen` (a state, not an instruction) | imperative, then the object: `Review application`, `Hand off case`, `Re-check order`, `E-mail customer`. Not: `Check`, `Checking invoice`, `Invoice checked`, `Invoice is checked`, `The invoice`, `Path A`, `Follow-up` |
 | Sub-process, call activity | M01 | a topic, not an instruction or a state: `Kommissionierung`, `Prüfung der Unterlagen`. Not: `Antrag geprüft`, `Prüfen` | a topic: `Claims handling`, `Credit check`, `Onboarding`. Not: `Order received`, `Validate` |
 | Gateway | M02 | a question: `Vollständig?` | a question: `Complete?` |
 | Event | M06 | a state or occurrence: `Antrag eingegangen`, `Plan aktiv`, `Start`. Not an instruction: `Antrag prüfen` | `Application received`, `7 days elapsed`, `Follow-up`. Not an instruction: `Send invoice` |
@@ -113,17 +113,20 @@ Behaviours worth knowing:
 - Under `en`, a one-word sub-process or call-activity name that is a listed verb is flagged as a
   bare verb even when it is also a common noun (`Review`, `Audit`, `Support`, `Order`); two words
   (`Order handling`, `Fraud review`) pass.
-- Under `en`, M01 flags a task name only on evidence of a wrong form: one word, a placeholder
-  (`Step 3`, `Path A`), a label prefix (`SAP: Review invoice`), a first word that is an article,
-  pronoun, preposition or a frequent noun (`The invoice`, `Customer data`), a gerund (`Checking
-  invoice`), or a first word that is no verb before a participle, state word, verb or action noun at
-  the end (`Invoice checked`, `Invoice check`, `Invoice approval`). A first word that is simply not
-  in the verb list passes (`Diagnose fault`, `Back up data` and `Authenticate user` are known anyway)
-  and the model gets one hint `H14` naming up to ten such words; if they are verbs nothing is wrong,
-  and adding them to `verbs` through `BPMN_NAMING` silences the hint. M01 misses wrong names that
-  start with a noun that is also a verb (`Credit check`, `Change request`).
+- Under `en`, M01 flags a task name only on evidence of a wrong form: one word, nothing with a
+  letter after the first word (`Step 3`), a label prefix (`SAP: Review invoice`), two words ending in
+  a participle (`Invoice checked`), an auxiliary as second word (`Invoice is checked`), a first word
+  that is an article, pronoun, preposition, a frequent noun or a placeholder noun (`The invoice`,
+  `Customer data`, `Path A`), or a gerund (`Checking invoice`). A first word that is simply not in the
+  verb list passes, even when the object could be a verb (`Queue request`), and the model gets one
+  hint `H14` naming up to ten such words (a hyphenated word whole: `'Hot-desk'`); if they are verbs
+  nothing is wrong, and adding them to `verbs` through `BPMN_NAMING` silences the hint. A shorter
+  verb list gives more hints, never more findings. A hyphenated first word whose last part is a verb
+  is a verb (`Quality-check part`). M01 misses wrong names whose first word is a verb too or unknown
+  (`Credit check`, `Change request`, `Invoice check`: hint only).
 - Under `en`, M05 does not flag a message flow that ends in a message noun (`Deploy request`, `Sell
-  order`) for starting with a verb, unless the verb sends the message (`Send invoice` is flagged).
+  order`) for starting with a verb, unless the verb sends or decides on the message (`Send invoice`,
+  `Approve order` are flagged).
 - German compounds count for the event markers: `Zeitschrift gelesen` suggests a timer because the
   name starts with `Zeit`. Set `marker` on such an event yourself.
 - The marker of an event without `marker` is inferred from its name only where BPMN allows it:
