@@ -92,3 +92,32 @@ describe('formatSchemaErrors', () => {
     expect(formatSchemaErrors(errors, 2).split('\n')).toEqual(['/nodes/0: bad', '/nodes/1: bad', '… and 3 more']);
   });
 });
+
+describe('language: the natural language of the labels (1.x)', () => {
+  const single = (extra = {}) => ({ nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }], edges: [{ source: 'a', target: 'b' }], ...extra });
+  const collab = (extra = {}) => ({ pools: [{ id: 'Pool_A', name: 'A', nodes: [{ id: 'a', type: 'startEvent' }, { id: 'b', type: 'endEvent' }], edges: [{ source: 'a', target: 'b' }] }], ...extra });
+  const shapes = { 'single process': single, collaboration: collab };
+
+  describe.each(Object.entries(shapes))('%s', (_n, make) => {
+    test.each(['de', 'en-GB', 'fr', 'zh-Hant-TW'])('%s is valid', (language) => {
+      expect(validateLogicCoreSchema(make({ language }))).toEqual({ valid: true, errors: [] });
+    });
+    test.each(['German', 'DE', 'd', '', 5, null])('%j is rejected with one error at /language', (language) => {
+      const { valid, errors } = validateLogicCoreSchema(make({ language }));
+      expect(valid).toBe(false);
+      expect(errors.map((e) => e.path)).toEqual(['/language']);
+    });
+  });
+
+  test('language on a pool, a node or a lane is an additional property', () => {
+    for (const lc of [
+      (() => { const c = collab(); c.pools[0].language = 'de'; return c; })(),
+      (() => { const s = single(); s.nodes[0].language = 'de'; return s; })(),
+      single({ lanes: [{ id: 'l', name: 'L', language: 'de' }] }),
+    ]) {
+      const { valid, errors } = validateLogicCoreSchema(lc);
+      expect(valid).toBe(false);
+      expect(errors.map((e) => e.message).join('\n')).toContain('must NOT have additional properties');
+    }
+  });
+});
