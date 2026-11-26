@@ -83,8 +83,9 @@ function buildLexicon(data) {
     conjunctions: foldedSet(data.conjunctions),
     nonVerbStarters: foldedSet(data.nonVerbStarters),
     nounStarters: foldedSet(data.nounStarters),
+    auxiliaries: foldedSet(data.auxiliaries),
     messageNouns: foldedSet(data.messageNouns),
-    sendVerbs: foldedSet(data.sendVerbs),
+    instructionVerbs: foldedSet(data.instructionVerbs),
     participles: {
       suffix: data.participles.suffix,
       irregular: foldedSet(data.participles.irregular),

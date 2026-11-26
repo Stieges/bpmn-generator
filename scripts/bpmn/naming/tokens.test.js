@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { foldWord, labelTokens } from './tokens.js';
+import { foldWord, labelTokens, labelTokenWords } from './tokens.js';
 
 describe('foldWord', () => {
   test.each([
@@ -52,5 +52,17 @@ describe('labelTokens', () => {
     const r = labelTokens(input);
     expect(Date.now() - t0).toBeLessThan(5000);
     expect(Number.isFinite(r.wordCount)).toBe(true);
+  });
+});
+
+describe('labelTokenWords', () => {
+  test('is labelTokens with the index of the whitespace word on each token', () => {
+    const r = labelTokenWords('Quality-check (draft) part-2 x');
+    expect(r.wordCount).toBe(labelTokens('Quality-check (draft) part-2 x').wordCount);
+    expect(r.tokens).toEqual([
+      { raw: 'Quality', folded: 'quality', word: 0 }, { raw: 'check', folded: 'check', word: 0 },
+      { raw: 'part', folded: 'part', word: 1 }, { raw: '2', folded: '2', word: 1 }, { raw: 'x', folded: 'x', word: 2 },
+    ]);
+    expect(labelTokenWords(undefined)).toEqual({ wordCount: 0, tokens: [] });
   });
 });

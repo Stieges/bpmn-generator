@@ -35,6 +35,15 @@ function removeSpans(text, open, close) {
  * empty, `raw` keeping the case.
  */
 export function labelTokens(name) {
+  return split(name, false);
+}
+
+/** `labelTokens` with `word` on every token: the 0-based index of the whitespace word it is a part of. */
+export function labelTokenWords(name) {
+  return split(name, true);
+}
+
+function split(name, withWord) {
   if (typeof name !== 'string') return { wordCount: 0, tokens: [] };
   const text = removeSpans(removeSpans(name, '(', ')'), '[', ']').replace(/[/\r\n]/g, ' ');
   let wordCount = 0;
@@ -44,7 +53,7 @@ export function labelTokens(name) {
     wordCount++;
     for (const raw of word.split('-')) {
       const folded = foldWord(raw);
-      if (folded !== '') tokens.push({ raw, folded });
+      if (folded !== '') tokens.push(withWord ? { raw, folded, word: wordCount - 1 } : { raw, folded });
     }
   }
   return { wordCount, tokens };

@@ -112,15 +112,15 @@ describe('the registry', () => {
     expect(namingDataErrorOf(a)).toBeNull();
   });
 
-  test('BPMN_NAMING is read at call time: add makes a name pass, remove makes it fail', () => {
+  test('BPMN_NAMING is read at call time: add makes a word listed, remove unlisted', () => {
     const add = overlayFile('add.json', { languages: { en: { add: { verbs: ['invoice'] } } } });
     const remove = overlayFile('remove.json', { languages: { en: { remove: { verbs: ['check'] } } } });
-    expect(withEnv(undefined, () => namingFor('en').taskName('Invoice check'))).not.toBeNull();
-    expect(withEnv(add, () => namingFor('en').taskName('Invoice check'))).toBeNull();
     expect(withEnv(undefined, () => namingFor('en').unlistedFirstWord('Invoice customer'))).toBe('Invoice');
     expect(withEnv(add, () => namingFor('en').unlistedFirstWord('Invoice customer'))).toBeNull();
-    expect(withEnv(undefined, () => namingFor('en').taskName('Check order'))).toBeNull();
-    expect(withEnv(remove, () => namingFor('en').taskName('Check order'))).not.toBeNull();
+    expect(withEnv(undefined, () => namingFor('en').unlistedFirstWord('Check order'))).toBeNull();
+    expect(withEnv(remove, () => namingFor('en').unlistedFirstWord('Check order'))).toBe('Check');
+    // A shorter list never adds a finding: without "check" the name passes with the hint.
+    expect(withEnv(remove, () => namingFor('en').taskName('Check order'))).toBeNull();
   });
 
   test('a broken overlay makes namingFor throw a NamingDataError naming the path', () => {
@@ -269,7 +269,7 @@ describe('namingHints: H14', () => {
   });
 
   test('only task names count: containers, events, flagged and verb-first names give none', () => {
-    const lc = model('en', ['Review request', 'Checking invoice', 'Invoice check', 'Groom']);
+    const lc = model('en', ['Review request', 'Checking invoice', 'Invoice checked', 'Groom']);
     lc.nodes.push({ id: 's', type: 'subProcess', name: 'Backlog grooming', nodes: [] }, { id: 'e', type: 'endEvent', name: 'Groom done' });
     expect(namingHints(lc)).toEqual([]);
   });
