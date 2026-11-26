@@ -49,7 +49,7 @@ describe('schema gate on every tool that takes a Logic-Core', () => {
     });
   }
 
-  test.each([['2.0', 'F03'], ['2.7', 'F02']])('generate_bpmn with a %s model: the schema_error entry carries %s', async (version, code) => {
+  test.each([['2.7', 'F02']])('generate_bpmn with a %s model: the schema_error entry carries %s', async (version, code) => {
     const model = JSON.parse(readFileSync(new URL('../tests/fixtures-v2/schaden.json', import.meta.url), 'utf8'));
     const result = parse(await call('generate_bpmn', { logicCore: { ...model, $schemaVersion: version } }));
     expect(result.status).toBe('schema_error');
@@ -413,5 +413,96 @@ describe('import_bpmn reports a diagram generated from a format 2.0 model', () =
   test('1.x output gives one block', async () => {
     const result = await call('import_bpmn', { bpmnXml: xmlOf('tests/fixtures/simple-approval.expected.bpmn') });
     expect(result.content).toHaveLength(1);
+  });
+});
+
+describe('format 2.0 models with an embedded catalogue', () => {
+  const v2 = (name) => JSON.parse(readFileSync(resolve(__dirname, '../tests/fixtures-v2', name), 'utf8'));
+  const golden = (name) => readFileSync(resolve(__dirname, '../tests/fixtures-v2', name), 'utf8');
+  const schaden = () => v2('schaden.json');
+  const catalog = () => v2('schaden-catalog.json');
+  const props = (name) => TOOLS.find((t) => t.name === name).inputSchema.properties;
+
+  test.each(['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'])('%s declares the catalog object parameter', (name) => {
+    expect(props(name).catalog).toEqual({
+      type: 'object',
+      description: 'Actor catalogue { actors, scheme? } of a format 2.0 model; embedded, paths are never read',
+    });
+  });
+
+  test('generate_bpmn with the catalogue and view rollen gives the rollen golden', async () => {
+    const result = parse(await call('generate_bpmn', { logicCore: schaden(), catalog: catalog(), view: 'rollen' }));
+    expect(result.bpmnXml).toBe(golden('schaden.rollen.expected.bpmn'));
+  });
+
+  test('validate_bpmn returns findings', async () => {
+    const result = parse(await call('validate_bpmn', { logicCore: schaden(), catalog: catalog() }));
+    expect(result.errors).toEqual([]);
+    expect(Array.isArray(result.findings)).toBe(true);
+  });
+
+  test('validate_bpmn reports a C01 error of the catalogue check', async () => {
+    const m = schaden();
+    m.nodes.find((n) => n.id === 'pruefen').assignments = [{ type: 'D', actor: 'niemand' }];
+    const result = parse(await call('validate_bpmn', { logicCore: m, catalog: catalog() }));
+    expect(result.errors[0]).toMatch(/^\[C01\]/);
+  });
+
+  test('orchestrate_bpmn works and keeps the rollen golden', async () => {
+    const result = parse(await call('orchestrate_bpmn', { logicCore: schaden(), catalog: catalog(), view: 'rollen' }));
+    expect(result.bpmnXml).toBe(golden('schaden.rollen.expected.bpmn'));
+    expect(result.compliance.isCompliant).toBe(true);
+  });
+
+  test.each(['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'])('%s: a model catalog path without an object is one C13 entry, nothing is read', async (name) => {
+    const model = { ...schaden(), catalog: resolve(__dirname, '../tests/fixtures-v2/schaden-catalog.json') };
+    const result = parse(await call(name, { logicCore: model }));
+    expect(result.status).toBe('schema_error');
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({ path: '/catalog', code: 'C13' });
+  });
+
+  test('a model catalog path beside an object: the object is used, the path ignored', async () => {
+    const model = { ...schaden(), catalog: '/does/not/exist.json' };
+    const result = parse(await call('validate_bpmn', { logicCore: model, catalog: catalog() }));
+    expect(result.status).toBeUndefined();
+    expect(result.errors).toEqual([]);
+  });
+
+  test.each([[['x']], ['a/path.json'], [7]])('a catalog that is not an object (%j) is C13 at /catalog', async (bad) => {
+    const result = parse(await call('validate_bpmn', { logicCore: schaden(), catalog: bad }));
+    expect(result.status).toBe('schema_error');
+    expect(result.errors).toEqual([expect.objectContaining({ path: '/catalog', code: 'C13' })]);
+  });
+
+  test('a malformed catalogue object gives C12 entries at /catalog', async () => {
+    const result = parse(await call('generate_bpmn', { logicCore: schaden(), catalog: { actors: [{ id: 1 }] } }));
+    expect(result.status).toBe('schema_error');
+    expect(result.errors.length).toBeGreaterThan(0);
+    for (const e of result.errors) expect(e).toMatchObject({ code: 'C12' });
+    expect(result.errors[0].path.startsWith('/catalog')).toBe(true);
+  });
+
+  test('mode optimize on a 2.0 model is F04 at /mode on generate and orchestrate', async () => {
+    for (const name of ['generate_bpmn', 'orchestrate_bpmn']) {
+      const result = parse(await call(name, { logicCore: schaden(), catalog: catalog(), mode: 'optimize' }));
+      expect(result.status).toBe('schema_error');
+      expect(result.errors).toEqual([expect.objectContaining({ path: '/mode', code: 'F04' })]);
+    }
+  });
+
+  test('drillDown on a 2.0 model answers the blocked F04 parent, no 1.x diagram', async () => {
+    const result = parse(await call('generate_bpmn', { logicCore: schaden(), catalog: catalog(), drillDown: true }));
+    expect(JSON.stringify(result)).toContain('F04');
+    expect(result.parent.bpmnXml ?? '').toBe('');
+  });
+
+  test('1.x: catalog is ignored like any unknown argument', async () => {
+    const lc = fixture('simple-approval.json');
+    const plain = parse(await call('generate_bpmn', { logicCore: lc }));
+    const withCatalog = parse(await call('generate_bpmn', { logicCore: lc, catalog: catalog(), mode: 'document' }));
+    expect(withCatalog).toEqual(plain);
+    const v = parse(await call('validate_bpmn', { logicCore: lc, catalog: 'junk' }));
+    expect(v).toEqual(parse(await call('validate_bpmn', { logicCore: lc })));
   });
 });

@@ -190,11 +190,12 @@ describe('validateLogicCoreSchema stays the 1.x gate', () => {
 describe('surfaces that have not opted in reject a 2.0 model with the one error', () => {
   const entry = { path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] }, code: 'F03' };
 
-  test.each(['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'])('MCP %s', async (name) => {
+  // MCP opted in (embedded catalogue object): the model's own catalogue path is never read, one C13 entry.
+  test.each(['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'])('MCP %s reads 2.0: a catalogue path without an object is C13', async (name) => {
     expect(TOOLS.some((t) => t.name === name)).toBe(true);
     const r = JSON.parse((await handleToolCall({ params: { name, arguments: { logicCore: m56() } } })).content[0].text);
     expect(r.status).toBe('schema_error');
-    expect(r.errors).toEqual([entry]);
+    expect(r.errors).toEqual([expect.objectContaining({ path: '/catalog', code: 'C13' })]);
   });
 
   test.each(['2', '2.7'])('MCP validate_bpmn names the unsupported version %s, not the fixed text', async (version) => {
@@ -203,12 +204,10 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
     expect(r.errors).toEqual([{ path: '/$schemaVersion', message: `$schemaVersion "${version}" is not supported; only "2.0" is supported`, params: { allowedValue: '2.0' }, code: 'F02' }]);
   });
 
-  // generate_bpmn with drillDown never reaches generateDiagramSet for a 2.0 model: the MCP schema
-  // gate (1.x only) refuses it first, with the one error.
-  test('MCP generate_bpmn with drillDown', async () => {
+  test('MCP generate_bpmn with drillDown: the same C13 gate answers first', async () => {
     const r = JSON.parse((await handleToolCall({ params: { name: 'generate_bpmn', arguments: { logicCore: m56(), drillDown: true } } })).content[0].text);
     expect(r.status).toBe('schema_error');
-    expect(r.errors).toEqual([entry]);
+    expect(r.errors).toEqual([expect.objectContaining({ path: '/catalog', code: 'C13' })]);
   });
 
   test.each(['2', '2.7'])('generateDiagramSet names the unsupported version %s as the F02 error of a blocked parent', async (version) => {

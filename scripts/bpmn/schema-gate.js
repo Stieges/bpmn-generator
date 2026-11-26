@@ -5,6 +5,8 @@ import { inputSchemaPath, inputSchemaV2Path, catalogSchemaPath } from '../shared
 import { boundText } from '../shared/safe-text.js';
 import { ViewRejectedError } from '../shared/view.js';
 import { quoteForMessage } from '../shared/rule-profile.js';
+import { catalogErrors } from '../shared/catalog.js';
+import { coded } from '../shared/message-codes.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './visual-refinement.js';
 
 // Which of the two layouts applies — and why the source wins over the in-package
@@ -116,6 +118,34 @@ export function validateModelSchema(input, { accept = ['1'] } = {}) {
     if (branch && !branch(input)) return { valid: false, format, errors: asGateErrors(branch.errors, code) };
   }
   return { valid: false, format, errors: asGateErrors(all, code) };
+}
+
+const stripCode = (text) => text.replace(/^\[[A-Z]{1,2}\d{2}\] /, '');
+const requestEntry = (code, path, text) => ({ path, message: stripCode(coded(code, text)), params: {}, code });
+
+/**
+ * The request-level checks of a format 2.0 call over MCP or HTTP, as gate entries: the catalogue
+ * is an embedded object (a path is never read), and the modes that need 1.x are refused.
+ * `catalog` not an object: C13; a 2.0 model whose own `catalog` field is a path and no object
+ * given: C13; a malformed catalogue: C12 entries at `/catalog`; `mode` optimize/soll: F04 at `/mode`.
+ * For a 1.x model always `[]`: `catalog` and `mode` are left to the caller as unknown arguments.
+ */
+export function v2RequestErrors(model, { catalog, mode } = {}) {
+  if (modelFormat(model) !== '2') return [];
+  const errors = [];
+  if (catalog !== undefined && catalog !== null) {
+    if (!isPlainObject(catalog)) {
+      errors.push(requestEntry('C13', '/catalog', 'catalog must be an object { actors, scheme? }; a path is never read here'));
+    } else {
+      errors.push(...catalogErrors(catalog).map((e) => requestEntry('C12', '/catalog', stripCode(e))));
+    }
+  } else if (typeof model.catalog === 'string') {
+    errors.push(requestEntry('C13', '/catalog', 'the model names a catalogue path; pass the catalogue as the catalog object, a path is never read here'));
+  }
+  if (mode === 'optimize' || mode === 'soll') {
+    errors.push(requestEntry('F04', '/mode', `mode "${mode}" is not available for format 2.0 models yet`));
+  }
+  return errors;
 }
 
 /** The 1.x gate every caller that has not opted into format 2.0 uses. */
