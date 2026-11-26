@@ -832,13 +832,17 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.status).toBe('schema_error');
+    expect(data.errors).toHaveLength(1);
     expect(data.errors[0]).toMatchObject({ path: '/catalog', code: 'C12' });
+    expect(data.errors[0].message).toMatch(/larger than 1024 KiB/);
   });
 
-  test.each(['/api/v1/generate', '/api/v1/validate'])('%s: mode optimize on a 2.0 model is F04 at /mode', async (path) => {
+  test.each(ENDPOINTS)('%s: mode optimize on a 2.0 model is F04 at /mode', async (path) => {
     const res = await post(path, { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json'), mode: 'optimize' });
     const data = await res.json();
     expect(res.status).toBe(400);
+    expect(data.status).toBe('schema_error');
+    expect(data.errors).toHaveLength(1);
     expect(data.errors[0]).toMatchObject({ path: '/mode', code: 'F04' });
   });
 

@@ -155,7 +155,7 @@ describe('resolveFields', () => {
   });
 
   describe('assignments without any catalogue given', () => {
-    const NONE = '[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file or the catalog option of runPipeline';
+    const NONE = '[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file, the catalog option of runPipeline or the `catalog` object of an MCP or HTTP request';
     const { catalog: _drop, ...bare } = MODEL;
 
     test('exactly one leading error, not one C01 line per assignment', () => {

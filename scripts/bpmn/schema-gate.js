@@ -123,6 +123,11 @@ export function validateModelSchema(input, { accept = ['1'] } = {}) {
 const stripCode = (text) => text.replace(/^\[[A-Z]{1,2}\d{2}\] /, '');
 const requestEntry = (code, path, text) => ({ path, message: stripCode(coded(code, text)), params: {}, code });
 
+/** The catalogue option to hand to the pipeline: only a 2.x model takes one (the library throws for a 1.x model). */
+export function catalogOptionFor(model, catalog) {
+  return modelFormat(model) === '2' && catalog != null ? { catalog } : {};
+}
+
 /**
  * The request-level checks of a format 2.0 call over MCP or HTTP, as gate entries: the catalogue
  * is an embedded object (a path is never read), and the modes that need 1.x are refused.
