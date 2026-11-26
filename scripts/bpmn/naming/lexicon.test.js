@@ -195,6 +195,12 @@ describe('loadLexicon with an overlay', () => {
     expect(() => load('en', closed)).toThrow(NamingDataError);
   });
 
+  test('messageNouns can be extended; sendVerbs cannot', () => {
+    const p = overlay({ en: { add: { messageNouns: ['manifest'] } } });
+    expect(load('en', p).messageNouns.has('manifest')).toBe(true);
+    expect(() => load('en', overlay({ en: { add: { sendVerbs: ['deploy'] } } }))).toThrow(NamingDataError);
+  });
+
   test('the cache is keyed by the overlay path', () => {
     const a = overlay({ en: { add: { verbs: ['alphaword'] } } });
     const b = overlay({ en: { add: { verbs: ['betaword'] } } });

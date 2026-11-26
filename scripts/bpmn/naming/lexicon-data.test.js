@@ -115,7 +115,7 @@ describe('English', () => {
   test('lists are sorted by foldWord and unique after it', () => {
     const data = raw();
     const lists = [data.verbs, data.verbPhrases, data.nounVerbHomographs, data.participles.irregular,
-      data.participles.exceptions, data.stateWords, data.nonVerbStarters, data.nounStarters,
+      data.participles.exceptions, data.stateWords, data.nonVerbStarters, data.nounStarters, data.messageNouns, data.sendVerbs,
       data.infinitiveSuffixes[0].exceptions, ...Object.values(data.eventMarkers)];
     for (const list of lists) {
       expect([...list]).toEqual([...list].sort(cmp));
@@ -130,6 +130,16 @@ describe('English', () => {
     for (const w of [...data.nonVerbStarters, ...data.nounStarters]) expect([w, en.verbs.has(w)]).toEqual([w, false]);
     for (const w of ['the', 'a', 'for', 'our', 'is', 'and']) expect(en.nonVerbStarters.has(w)).toBe(true);
     for (const w of ['customer', 'final', 'system']) expect(en.nounStarters.has(w)).toBe(true);
+  });
+
+  test('message nouns and the verbs that send a message', () => {
+    const data = raw();
+    expect(data.messageNouns).toHaveLength(40);
+    expect(data.sendVerbs).toHaveLength(17);
+    for (const w of ['request', 'order', 'notice', 'notification', 'response', 'reply', 'confirmation', 'report', 'message',
+      'offer', 'invoice', 'receipt', 'reminder', 'alert', 'update']) expect(en.messageNouns.has(w)).toBe(true);
+    for (const w of ['send', 'submit', 'forward', 'transmit']) expect(en.sendVerbs.has(w)).toBe(true);
+    for (const w of data.sendVerbs) expect([w, en.verbs.has(w) || w === 'resend']).toEqual([w, true]);
   });
 
   test('-ate is a verb ending from six letters; its exceptions are nouns and adjectives in -ate', () => {
