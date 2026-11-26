@@ -516,8 +516,12 @@ every surface.
 
 - `role`: the lane is the performer of the step (a role, an actor without `kind`, or a unit that
   performs the step directly).
-- `unit`: the unit of the performer: the performer itself when it is a unit, else its `unit`; when
-  that is missing the placeholder `(Einheit nicht erhoben)`, with hint H04.
+- `unit`: the unit of the performer: the performer itself when it is a unit (`kind: "unit"`, or an
+  actor without `kind` that another actor names as its `unit` or `partOf`), else its `unit`; when
+  that is missing the placeholder `(Einheit nicht erhoben)`, with hint H04. With the object form
+  `{ "by": "unit", "level": k }` the lane is the unit at depth `k` of that unit's `partOf` chain
+  (1 = a unit without `partOf`); a unit shallower than `k` keeps its own lane. Without `level` each
+  performer stays in its own unit.
 
 **The inheritance rule.** Only top-level flow nodes of each modelled process take a lane (children of
 subprocesses get none, and only sequence flows count), and a node with a performer takes the lane of that
