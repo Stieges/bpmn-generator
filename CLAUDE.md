@@ -662,7 +662,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
 
 1. Give units a `partOf` (the parent unit) in the catalogue; roles name their unit with `unit`, a
    role has no `partOf`. A cycle is C07. An actor without `kind` that another actor names as `unit`
-   or `partOf` counts as a unit.
+   or `partOf`, or that has a `partOf` of its own, counts as a unit.
 2. Choose `--view=organigramm` (nested lanes along the tree; a unit with sub-units and steps of its
    own gets the child lane `L.<process>.<unit>._own`; placeholders follow the tree) or write a view
    with `"lanes": { "by": "unit", "level": 2 }` (level counts from the top, shallower units keep
