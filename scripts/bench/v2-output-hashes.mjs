@@ -5,7 +5,7 @@
  * The three format 2.0 golden diagrams, generated with default options: tests/fixtures-v2/schaden.json
  * with its catalogue, once in view `rollen` and once in view `einheiten` (design 9, slice 1), and
  * tests/fixtures-v2/organigramm.json, the same model on a catalogue whose units nest with `partOf`,
- * in view `organigramm` (slice 2): the one diagram with lanes nested along the organigram, including
+ * in view `organigramm`: the one diagram with lanes nested along the organigram, including
  * a unit's own lane. The fixtures live outside tests/fixtures/ so no folder-driven 1.x test reads
  * them; their hashes live in tests/bench/v2-output-hashes.json, apart from default-output-hashes.json.
  * No more pairs than these three: the flat level view adds no layout path the two flat goldens do
