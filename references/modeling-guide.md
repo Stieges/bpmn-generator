@@ -125,8 +125,11 @@ Behaviours worth knowing:
   hint `H14` naming up to ten such words (a hyphenated word whole: `'Hot-desk'`); if they are verbs
   nothing is wrong, and adding them to `verbs` through `BPMN_NAMING` silences the hint. A shorter
   verb list gives more hints, never more findings. A hyphenated first word whose last part is a verb
-  is a verb (`Quality-check part`). M01 misses wrong names whose first word is a verb too or unknown
-  (`Credit check`, `Change request`, `Invoice check`: hint only).
+  is a verb (`Quality-check part`). Two words ending in a participle are flagged even when the
+  first is a verb (`Mark paid`, `Get started`), an error under the strict profile; write the full
+  form (`Mark invoice as paid`). M01 misses wrong names whose first word is a verb too or unknown
+  (`Credit check`, `Change request` pass without a hint, since `credit` and `change` are listed verbs;
+  `Invoice check` passes with hint `H14`).
 - Under `en`, M05 does not flag a message flow that ends in a message noun (`Deploy request`, `Sell
   order`) for starting with a verb, unless the verb sends or decides on the message (`Send invoice`,
   `Approve order` are flagged).
