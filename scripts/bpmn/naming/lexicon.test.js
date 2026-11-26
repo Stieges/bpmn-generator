@@ -187,6 +187,14 @@ describe('loadLexicon with an overlay', () => {
     expect(load('de', p).verbPhrases).toContainEqual(['zur', 'kenntnis', 'nehmen']);
   });
 
+  test('nounStarters can be extended and trimmed; the closed class nonVerbStarters cannot', () => {
+    const p = overlay({ en: { add: { nounStarters: ['ledger'] }, remove: { nounStarters: ['customer'] } } });
+    expect(load('en', p).nounStarters.has('ledger')).toBe(true);
+    expect(load('en', p).nounStarters.has('customer')).toBe(false);
+    const closed = overlay({ en: { add: { nonVerbStarters: ['ledger'] } } });
+    expect(() => load('en', closed)).toThrow(NamingDataError);
+  });
+
   test('the cache is keyed by the overlay path', () => {
     const a = overlay({ en: { add: { verbs: ['alphaword'] } } });
     const b = overlay({ en: { add: { verbs: ['betaword'] } } });

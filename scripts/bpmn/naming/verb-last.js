@@ -200,6 +200,7 @@ export function verbLast(lexicon) {
     language: lexicon.language,
     wordOrder: lexicon.wordOrder,
     taskName: guard(taskName),
+    unlistedFirstWord: () => null,
     containerName: guard(containerName),
     eventName: guard(eventName),
     messageName: guard(messageName),

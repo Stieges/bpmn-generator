@@ -26,6 +26,10 @@ const CORPUS_109 = ['accept', 'add', 'adjust', 'apply', 'approve', 'archive', 'a
 
 const PHRASES_8 = ['stand up', 'stand down', 'hand off', 'hand over', 'kick off', 'pre qualify', 'pre screen', 'pre approve'];
 
+const TWO_WORD_VERBS = ['back up', 'shut down', 'set up', 'log in', 'log out', 'sign off', 'sign up', 'roll back',
+  'roll out', 'follow up', 'hand over', 'check in', 'check out', 'clean up', 'look up', 'fill in', 'fill out', 'opt in',
+  'opt out', 'write off', 'phase out', 'scale up', 'scale down', 'ramp up', 'wind down'];
+
 const NAMED_22 = ['print', 'pack', 'book', 'await', 'register', 'query', 'assess', 'schedule', 'decide', 'revise',
   'render', 'log', 'deploy', 'run', 'route', 'repair', 'do', 'compute', 'repeat', 'fulfil', 'fulfill', 'call'];
 
@@ -53,7 +57,10 @@ describe('English', () => {
     expect(en.wordOrder).toBe('verb-first');
     expect(en.questionMarks).toEqual(['?']);
     expect(en.verbPrefixes).toEqual(['pre', 'co', 're'].sort((a, b) => b.length - a.length || (a < b ? -1 : 1)));
-    expect(en.infinitiveSuffixes).toEqual([{ suffix: 'ify', minLength: 6 }, { suffix: 'ise', minLength: 6 }, { suffix: 'ize', minLength: 6 }]);
+    expect(en.infinitiveSuffixes).toEqual([
+      { suffix: 'ate', minLength: 6, exceptions: new Set(raw().infinitiveSuffixes[0].exceptions) },
+      { suffix: 'ify', minLength: 6 }, { suffix: 'ise', minLength: 6 }, { suffix: 'ize', minLength: 6 },
+    ]);
     expect(en.participles.suffix).toBe('ed');
   });
 
@@ -61,27 +68,29 @@ describe('English', () => {
     expect(loadLexicon('en')).toBe(en);
   });
 
-  test('verbs: exactly 296 and every sourced literal is in', () => {
+  test('verbs: exactly 429 and every sourced literal is in', () => {
     expect(BUILT_IN_39).toHaveLength(39);
     expect(CORPUS_109).toHaveLength(109);
     expect(NAMED_22).toHaveLength(22);
     expect(RULING_44).toHaveLength(44);
-    expect(en.verbs.size).toBe(296);
+    expect(en.verbs.size).toBe(429);
+    for (const v of ['diagnose', 'screen', 'underwrite', 'disburse', 'patch', 'provision', 'decommission']) expect(en.verbs.has(v)).toBe(true);
     for (const v of [...BUILT_IN_39, ...CORPUS_109, ...NAMED_22, ...RULING_44]) expect(en.verbs.has(v)).toBe(true);
     expect(en.verbs.has('invoice')).toBe(false);
     for (const v of ['nudge', 'path', 'step', 'case', 'need']) expect(en.verbs.has(v)).toBe(false);
   });
 
-  test('verb phrases: the 8 of the contributor plus three', () => {
+  test('verb phrases: the 8 of the contributor, three more and the common two-word verbs', () => {
     expect(PHRASES_8).toHaveLength(8);
     const phrases = raw().verbPhrases;
-    expect(phrases).toHaveLength(11);
+    expect(phrases).toHaveLength(50);
     for (const p of [...PHRASES_8, 'carry out', 'look up', 'e mail']) expect(phrases).toContain(p);
-    expect(en.verbPhrases).toHaveLength(11);
+    for (const p of TWO_WORD_VERBS) expect(phrases).toContain(p);
+    expect(en.verbPhrases).toHaveLength(50);
   });
 
-  test('homographs: 167, a subset of verbs, with the named members', () => {
-    expect(en.nounVerbHomographs.size).toBe(167);
+  test('homographs: 226, a subset of verbs, with the named members', () => {
+    expect(en.nounVerbHomographs.size).toBe(226);
     for (const w of en.nounVerbHomographs) expect(en.verbs.has(w)).toBe(true);
     for (const w of ['start', 'order', 'request', 'register', 'archive', 'report', 'lead', 'build', 'pay', 'merge', 'read', 'close', 'follow']) {
       expect(en.nounVerbHomographs.has(w)).toBe(true);
@@ -106,11 +115,35 @@ describe('English', () => {
   test('lists are sorted by foldWord and unique after it', () => {
     const data = raw();
     const lists = [data.verbs, data.verbPhrases, data.nounVerbHomographs, data.participles.irregular,
-      data.participles.exceptions, data.stateWords, ...Object.values(data.eventMarkers)];
+      data.participles.exceptions, data.stateWords, data.nonVerbStarters, data.nounStarters,
+      data.infinitiveSuffixes[0].exceptions, ...Object.values(data.eventMarkers)];
     for (const list of lists) {
       expect([...list]).toEqual([...list].sort(cmp));
       expect(new Set(list.map(foldWord)).size).toBe(list.length);
     }
+  });
+
+  test('the word lists that make a task name fail hold no verb', () => {
+    const data = raw();
+    expect(data.nonVerbStarters).toHaveLength(86);
+    expect(data.nounStarters).toHaveLength(38);
+    for (const w of [...data.nonVerbStarters, ...data.nounStarters]) expect([w, en.verbs.has(w)]).toEqual([w, false]);
+    for (const w of ['the', 'a', 'for', 'our', 'is', 'and']) expect(en.nonVerbStarters.has(w)).toBe(true);
+    for (const w of ['customer', 'final', 'system']) expect(en.nounStarters.has(w)).toBe(true);
+  });
+
+  test('-ate is a verb ending from six letters; its exceptions are nouns and adjectives in -ate', () => {
+    const [ate] = raw().infinitiveSuffixes;
+    expect([ate.suffix, ate.minLength]).toEqual(['ate', 6]);
+    expect(ate.exceptions).toHaveLength(30);
+    for (const w of ate.exceptions) {
+      expect(w.endsWith('ate') && w.length >= 6).toBe(true);
+      expect(en.verbs.has(w)).toBe(false);
+    }
+    for (const w of ['certificate', 'candidate', 'template', 'climate', 'private', 'corporate', 'accurate', 'appropriate', 'surrogate']) {
+      expect(ate.exceptions).toContain(w);
+    }
+    for (const w of ['duplicate', 'delegate']) expect(ate.exceptions).not.toContain(w);
   });
 
   test('examples are single strings', () => {

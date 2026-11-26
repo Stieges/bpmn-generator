@@ -175,14 +175,17 @@ function mismatchHint(lc, declared, declaredStrategy) {
     .map(({ node }) => node.name);
   const n = names.length;
   if (n < 3) return null;
-  const f = names.filter((name) => declaredStrategy.taskName(name)).length;
+  // A name that passes only because its first word is unlisted counts as failing the declared
+  // convention and as not passing another one: it carries no evidence for either language.
+  const conforms = (strategy, name) => !strategy.taskName(name) && strategy.unlistedFirstWord(name) === null;
+  const f = names.filter((name) => !conforms(declaredStrategy, name)).length;
   if (f * 100 < n * 60) return null;
   let other = null;
   let pass = -1;
   for (const code of Object.keys(NAMING_LANGUAGES)) {
     if (code === declared) continue;
     const strategy = namingFor(code);
-    const p = names.filter((name) => !strategy.taskName(name)).length;
+    const p = names.filter((name) => conforms(strategy, name)).length;
     if (p > pass) { pass = p; other = code; }
   }
   if (other === null || pass * 100 < n * 80) return null;

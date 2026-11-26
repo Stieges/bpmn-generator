@@ -19,7 +19,7 @@ describe('verb-first strategy shape', () => {
     expect(s.language).toBe('en');
     expect(s.wordOrder).toBe('verb-first');
     expect(typeof s.examples.task).toBe('string');
-    for (const f of ['taskName', 'containerName', 'eventName', 'messageName', 'isQuestion', 'eventMarker']) {
+    for (const f of ['taskName', 'unlistedFirstWord', 'containerName', 'eventName', 'messageName', 'isQuestion', 'eventMarker']) {
       expect(typeof s[f]).toBe('function');
     }
   });
@@ -45,6 +45,70 @@ describe('taskName', () => {
     'flags %s', (n) => expect(flagged(s.taskName, n)).toBe(true));
 
   test('Re-check order passes', () => expect(s.taskName('Re-check order')).toBeNull());
+
+  describe('M01 flags only on positive evidence of a wrong form', () => {
+    test.each([
+      ['a single word', 'Escalate'],
+      ['no word with a letter after the first', 'Step 3'],
+      ['no letter at all', '1. 2.'],
+      ['a placeholder letter', 'Path A'],
+      ['placeholder letters and numbers', 'Option B 2'],
+      ['a gerund of a listed verb', 'Checking invoice'],
+      ['a gerund with a doubled consonant', 'Shipping order'],
+      ['a gerund of a verb with a final e', 'Updating records'],
+      ['a gerund of a suffix verb', 'Optimizing costs'],
+      ['a participle at the end', 'Invoice checked'],
+      ['an irregular participle at the end', 'Contract sent'],
+      ['a state word at the end', 'Payment due'],
+      ['reversed order', 'Invoice check'],
+      ['reversed order, three words', 'Monthly invoice check'],
+      ['an action noun of a listed verb at the end', 'Invoice approval'],
+      ['an action noun in -ation', 'Customer registration'],
+      ['two words: a noun that is also a verb, then a participle', 'Order shipped'],
+      ['two words: a noun that is also a verb, then a state word', 'Request pending'],
+      ['a determiner', 'The invoice'],
+      ['a preposition', 'For approval'],
+      ['a pronoun', 'Our review of the file'],
+      ['an auxiliary', 'Is approved by manager'],
+      ['a frequent noun', 'Customer data'],
+      ['a frequent adjective', 'Final approval'],
+      ['a label prefix', 'SAP: Review invoice'],
+    ])('flags %s: %s', (_kind, n) => expect(flagged(s.taskName, n)).toBe(true));
+
+    test.each([
+      'Diagnose fault', 'Screen applications', 'Authenticate user', 'Back up data', 'Shut down system',
+      'Set up workstation', 'Log in to portal', 'Sign off timesheet', 'Roll back deployment', 'Opt out of tracking',
+      'Write off bad debt', 'Wind down operations', 'Stress-test portfolio', 'X-ray chest', 'Double-check figures',
+      'Calibrate sensor', 'Duplicate invoice', 'Delegate task', 'Mark invoice as paid', 'Set status to closed',
+    ])('passes %s without a hint', (n) => {
+      expect(s.taskName(n)).toBeNull();
+      expect(s.unlistedFirstWord(n)).toBeNull();
+    });
+
+    test.each([
+      ['Groom backlog', 'Groom'],
+      ['Apostille certificate', 'Apostille'],
+      ['1. Escrow funds', 'Escrow'],
+      ['Kit components for line 2', 'Kit'],
+    ])('passes %s; its first word %s is unlisted', (n, word) => {
+      expect(s.taskName(n)).toBeNull();
+      expect(s.unlistedFirstWord(n)).toBe(word);
+    });
+
+    test('unlistedFirstWord is null for a flagged name, a listed verb and a non-string', () => {
+      for (const n of ['Checking invoice', 'Invoice check', 'Check', 'Review application', 'Re-check order', undefined, null, 5, '']) {
+        expect(s.unlistedFirstWord(n)).toBeNull();
+      }
+    });
+
+    test('-ate counts as a verb ending from six letters, less the listed nouns and adjectives', () => {
+      expect(s.unlistedFirstWord('Subrogate claim')).toBeNull();
+      expect(s.unlistedFirstWord('Abate noise')).toBe('Abate');
+      for (const w of ['Candidate', 'Template', 'Climate', 'Private', 'Corporate', 'Accurate', 'Appropriate', 'Surrogate']) {
+        expect(s.unlistedFirstWord(`${w} notes`)).toBe(w);
+      }
+    });
+  });
   test('non-strings never throw', () => {
     for (const v of [undefined, null, 5, {}, [], '']) expect(() => s.taskName(v)).not.toThrow();
     expect(flagged(s.taskName, undefined)).toBe(true);
