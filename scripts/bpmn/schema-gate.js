@@ -31,9 +31,11 @@ ajv.addSchema(JSON.parse(readFileSync(catalogSchemaPath(), 'utf8')));
 const validateV2 = ajv.compile(schemaV2);
 const validateBranchV2 = branchValidators(schemaV2.$id);
 
-const asGateErrors = (errors, code) => (errors || []).map(e => ({
+// For a 2.x model (`code` given), an `if` error only says that a `then` or `else` failed — that one
+// is the entry — and a `false` property schema reads "is not allowed here". 1.x entries stay as ajv words them.
+const asGateErrors = (errors, code) => (errors || []).filter(e => !(code && e.keyword === 'if')).map(e => ({
   path: e.instancePath || '(root)',
-  message: e.message,
+  message: code && e.keyword === 'false schema' ? 'is not allowed here' : e.message,
   params: e.params,
   ...(code ? { code } : {}),
 }));

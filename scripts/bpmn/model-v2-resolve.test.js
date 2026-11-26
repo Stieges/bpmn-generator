@@ -83,6 +83,32 @@ describe('resolveFields', () => {
     expect(errors.every((e) => e.startsWith('[F01] '))).toBe(true);
   });
 
+  test('an annotation with assignments: exactly one F01 entry', () => {
+    const m = withNodes([{ id: 'ta', type: 'textAnnotation', assignments: [] }]);
+    expect(run(m).errors).toEqual(['[F01] /nodes/0/assignments is not allowed here']);
+  });
+
+  test('options null behave as no options', () => {
+    expect(resolveFields(copy(MODEL), null)).toEqual(resolveFields(copy(MODEL)));
+    expect(resolveFields(withNodes([task('t', [])], { catalog: undefined }), null).errors).toEqual([]);
+  });
+
+  test('resolved.scheme is a clone: changing it leaves the caller catalogue alone', () => {
+    const scheme = { scheme: 'own', types: [{ key: 'A', label: 'a', performs: true }] };
+    const catalog = { actors: [], scheme };
+    const { resolved } = resolveFields(withNodes([task('t', [])]), { catalog });
+    resolved.scheme.types[0].label = 'changed';
+    resolved.scheme.types.push({ key: 'B', label: 'b' });
+    expect(scheme).toEqual({ scheme: 'own', types: [{ key: 'A', label: 'a', performs: true }] });
+    expect(catalog.scheme).toBe(scheme);
+  });
+
+  test('model-carried actors that pass the format schema but fail the catalogue bounds give [C12]', () => {
+    const { catalog: _drop, ...rest } = copy(MODEL);
+    const actors = Array.from({ length: 5000 }, (_, i) => ({ id: `a${i}`, name: 'x'.repeat(200) }));
+    expect(resolveFields({ ...rest, actors }).errors).toEqual(['[C12] "/" is larger than 1024 KiB']);
+  });
+
   test('a 1.x model is not a format 2.0 model: the text carries no code', () => {
     expect(resolveFields(simpleApproval()).errors).toEqual(['this is not a format 2.0 model ($schemaVersion absent)']);
     expect(resolveFields({ ...simpleApproval(), $schemaVersion: '1.2' }).errors).toEqual(['this is not a format 2.0 model ($schemaVersion "1.2")']);
@@ -204,6 +230,27 @@ describe('resolveFields', () => {
       '[C05] event "e": only the performer type "D" is allowed, not "I"',
       '[C05] gateway "g": only the performer type "D" is allowed, not "E"',
     ]);
+  });
+
+  test('C04 and C05 are found inside a subprocess', () => {
+    const sub = { id: 'sp', type: 'subProcess', name: 'sp', isExpanded: true, edges: [], nodes: [
+      task('inner', [{ type: 'X', actor: 'regress' }]),
+      { id: 'ie', type: 'startEvent', name: 'ie', assignments: [{ type: 'I', actor: 'regress' }] },
+    ] };
+    expect(run(withNodes([sub])).errors).toEqual([
+      '[C04] node "inner": type "X" is not in scheme "demi"',
+      '[C05] event "ie": only the performer type "D" is allowed, not "I"',
+    ]);
+  });
+
+  test('C04 and C05 stay silent when C06 fails', () => {
+    const nodes = [
+      task('t', [{ type: 'X', actor: 'regress' }, { type: 'X', actor: 'zahlung' }]),
+      { id: 'e', type: 'startEvent', name: 'e', assignments: [{ type: 'I', actor: 'regress' }] },
+    ];
+    const scheme = { scheme: 'own', types: [{ key: 'A', label: 'a' }] };
+    const errors = run(withNodes(nodes), { ...CATALOG, scheme }).errors;
+    expect(errors).toEqual(['[C06] scheme "own" must have exactly one type with performs (has 0)']);
   });
 
   test('assignments inside a subprocess are carried at every depth', () => {

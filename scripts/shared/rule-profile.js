@@ -119,6 +119,7 @@ export function describeSchemaError(e) {
   const where = quoteForMessage(e.instancePath || '/');
   if (e.keyword === 'enum') return `${where} must be one of ${e.params.allowedValues.join(', ')}`;
   if (e.keyword === 'additionalProperties') return `${where} has an unknown key ${quoteForMessage(e.params.additionalProperty)}`;
+  if (e.keyword === 'false schema') return `${where} is not allowed here`;
   if (e.keyword === 'propertyNames') return `${where} has a key that is not a valid name`;
   return `${where} ${e.message}`;
 }

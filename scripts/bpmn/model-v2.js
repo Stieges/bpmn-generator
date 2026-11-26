@@ -67,7 +67,8 @@ function schemeErrors(ref, scheme) {
  * `catalog` is `{ actors, scheme? }`; a model without one may carry `actors` (and `scheme`) itself.
  * With findings the result is `{ lc: null, resolved: null, errors }`.
  */
-export function resolveFields(model, { catalog, viewName = 'default' } = {}) {
+export function resolveFields(model, options) {
+  const { catalog, viewName = 'default' } = options ?? {};
   const fail = (errors) => ({ lc: null, resolved: null, errors });
 
   // (1) format schema
@@ -160,7 +161,7 @@ export function resolveFields(model, { catalog, viewName = 'default' } = {}) {
   if (errors.length) return fail(errors);
 
   const fingerprint = catalogFingerprint(actors, scheme);
-  const resolved = { actors, byId, order, scheme, performsType, fingerprint };
+  const resolved = { actors, byId, order, scheme: clone(scheme), performsType, fingerprint };
 
   // the intermediate form
   const lc = clone(model);
