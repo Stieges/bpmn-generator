@@ -57,9 +57,10 @@ export function verbLast(lexicon) {
     let folded = '';
     const boundary = new Map(); // folded length → raw index after the character that reached it
     let i = 0;
-    // Only the longest separable prefix can match: stop once the folded text is that long.
+    // Only the longest separable prefix can match: stop once the folded text is that long, but keep
+    // consuming characters that fold to nothing (hyphen, dot, combining marks): the rest starts after them.
     for (const ch of lower) {
-      if (folded.length >= maxPrefix) break;
+      if (folded.length >= maxPrefix && foldWord(ch) !== '') break;
       i += ch.length;
       folded += foldWord(ch);
       boundary.set(folded.length, i);
