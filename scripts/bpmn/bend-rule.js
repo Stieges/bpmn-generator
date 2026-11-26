@@ -33,7 +33,9 @@
  *     (crowdingPx, as scripts/bench/flow-metrics.mjs counts it), hits on external node labels
  *     (coordMap.nodeLabels), side conflicts (in and out on the same side of a node), shared ports
  *     (two flows out of — or into — one gateway/event side, or one rectangle point), and overlap
- *     with the line a message flow will take at a message-flow node's centre;
+ *     with the line a message flow will take at a message-flow node's centre; in a process with
+ *     nested lanes also the collinear overlap with the flows it meets end to end — the ones that
+ *     leave its target or enter its source — taken on its own (see `through` in makeChecker);
  *  7. length at most lengthFactor × the current length + lengthSlackPx;
  *  8. at a node carrying a message flow, no NEW port on top or bottom — routeMessageFlows runs after
  *     this pass and docks there; this holds for projection ports as well.
@@ -386,9 +388,10 @@ function buildContext(coordMap, lc) {
   for (const g of lc.groups || []) groups.add(g.id);
   const shapeOf = (id) => (isEvent(typeOf[id]) ? 'circle' : isGateway(typeOf[id]) ? 'diamond' : 'rect');
   // Region of each participant (its lane stack, else its pool body right of the header) and its inner lane lines.
-  const regionOf = {}, linesOf = {};
+  const regionOf = {}, linesOf = {}, nestedOf = {};
   for (const p of procs) {
     const pid = p.id ?? '_singlePool';
+    nestedOf[pid] = hasNestedLanes(p);
     const bands = (p.lanes || []).map((l) => coordMap.laneCoords?.[l.id]).filter(Boolean).sort((a, b) => a.y - b.y);
     const pc = coordMap.poolCoords?.[pid] ?? coordMap.poolCoords?._singlePool;
     if (bands.length) {
@@ -407,7 +410,7 @@ function buildContext(coordMap, lc) {
   }
   const mfNodes = new Set((lc.messageFlows || []).flatMap((m) => [m.source, m.target]));
   const labelBoxes = Object.values(coordMap.nodeLabels ?? {});
-  return { coords: coordMap.coords, labelBoxes, mfNodes, typeOf, partOf, attached, expanded, groups, shapeOf, regionOf, linesOf };
+  return { coords: coordMap.coords, labelBoxes, mfNodes, typeOf, partOf, attached, expanded, groups, shapeOf, regionOf, linesOf, nestedOf };
 }
 
 function regionFor(entry, ctx) {
@@ -501,8 +504,17 @@ function makeChecker(entry, entries, ctx, cfg) {
   const obstacles = Object.entries(ctx.coords)
     .filter(([id, b]) => id !== entry.source && id !== entry.target && !ctx.groups.has(id) && !contains(b, sb) && !contains(b, tb))
     .map(([, b]) => b);
+  // Nested lanes only (a flat process runs without it): the flows this one meets end to end, i.e.
+  // those leaving its target or entering its source. The total in `over` lets a route trade overlap
+  // with one flow for more with another; with the taller, uncompacted bands of a nested process that
+  // trade made the flow into a task run on the very leg the task's outgoing flow leaves by, the
+  // arrow of one on the line of the other. Their share may not grow either.
+  const through = ctx.nestedOf[ctx.partOf[entry.source]]
+    ? entries.filter((o) => o.id !== entry.id && (o.source === entry.target || o.target === entry.source))
+    : null;
   const cur = {
     len: pathLen(curPts),
+    thru: through ? collinearOverlap(entry, curPts, through, limits.collinearPx) : 0,
     hug: laneLineHug(curPts, lines, limits.laneLineHugPx),
     cross: crossings(entry, curPts, entries),
     over: collinearOverlap(entry, curPts, entries, limits.collinearPx),
@@ -526,6 +538,7 @@ function makeChecker(entry, entries, ctx, cfg) {
     if (laneLineHug(pts, lines, limits.laneLineHugPx) > cur.hug + EPS) return false;
     if (crossings(entry, pts, entries) > cur.cross) return false;
     if (collinearOverlap(entry, pts, entries, limits.collinearPx) > cur.over + EPS) return false;
+    if (through && collinearOverlap(entry, pts, through, limits.collinearPx) > cur.thru + EPS) return false;
     if (guards.crowding && crowdPairs(entry, pts, entries, limits.crowdingPx) > cur.crowd) return false;
     if (guards.sideConflicts && sideConflicts(entry, pts, entries) > cur.side) return false;
     if (guards.sharedPorts && sharedPorts(entry, pts, entries, ctx, limits.collinearPx) > cur.ports) return false;

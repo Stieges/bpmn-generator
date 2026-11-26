@@ -66,7 +66,9 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   its child lanes. Steps placed directly in a parent lane get a band of their own at the top of
   that parent. This changes the diagram of every 1.x model with nested lanes; models without
   them are drawn exactly as before. Lane compaction leaves a process with nested lanes as laid
-  out, so such a diagram is taller than a flat one.
+  out, so such a diagram is taller than a flat one. In such a process the bend rule does not move
+  a flow onto the leg of the flow it meets at a step: the flow into a task no longer ends at the
+  point where the task's outgoing flow starts and runs back along it.
 - **A derived top-level definition is always referenced** (#121). Without explicit `definitions`
   the writer derived a `Message` / `Error` / `Signal` / `Escalation` from every node's name, so a
   user task called "Review via e-mail" left a `Message_1` that no element pointed at, and
