@@ -303,8 +303,8 @@ No word list holds every English verb, so under `en` M01 flags a task name only 
 wrong form (`Check`, `Step 3`, `Checking invoice`, `Invoice checked`, `Invoice is checked`, `The
 invoice`, `Path A`). A name whose first word is simply not in the verb list passes, and the model
 gets one hint `H14` naming up to ten such words: `Invoice customer` gives `'Invoice'`. If the word
-is a verb nothing is wrong. No rule reads the verb list to find a fault, so a shorter list gives
-more hints, never more findings. The remedy, for that hint or for a correct label a rule flags, is data, not code.
+is a verb nothing is wrong. The verb list is read only to recognise a word as a verb, so a shorter
+list gives more hints, never more findings. The remedy, for that hint or for a correct label a rule flags, is data, not code.
 Point `BPMN_NAMING` at a JSON file that adds words to, or removes words from, the lists of a
 shipped language:
 
