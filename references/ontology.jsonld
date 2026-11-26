@@ -1958,7 +1958,7 @@
         "bg:notation-BPMN"
       ],
       "layer": "bg:layer-BPMN-style",
-      "defaultSeverity": "bg:severity-OFF",
+      "defaultSeverity": "bg:severity-WARNING",
       "runsIn": "main"
     },
     {

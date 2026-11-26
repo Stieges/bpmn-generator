@@ -12,6 +12,7 @@
 - [Regel-Profile](#regel-profile)
 - [Regel-Objekt Schema](#regel-objekt-schema)
 - [Regel M01: Objekt+Verb-Heuristik](#regel-m01-objektverb-heuristik)
+- [Regel M05: Nachrichtenfluss-Bezeichnungen](#regel-m05-nachrichtenfluss-bezeichnungen)
 - [Regel M10: Lane/Pool Name Length](#regel-m10-lanepool-name-length)
 - [Rule M11: decisionRef Placement](#rule-m11-decisionref-placement)
 - [Rule M12: no empty lane](#rule-m12-no-empty-lane)
@@ -24,7 +25,7 @@
 - [DMN Rules — a separate engine, three layers, two modes](#dmn-rules--a-separate-engine-three-layers-two-modes)
 - [Erweiterung](#erweiterung)
 
-Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **40 registrierte Regeln**, davon 38 aktiv (M05/M06 stehen auf `severity: OFF`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
+Konfigurierbare Validierungsregeln fuer BPMN-Prozesse. 5 Schichten, **40 registrierte Regeln**, davon 39 aktiv (nur M06 steht auf `severity: OFF`; M05 ist WARNING, prueft aber nur Modelle mit deklarierter `language`). Schicht 4 (Workflow-Net) und Schicht 5 (Optimization) sind opt-in.
 
 ## Architektur
 
@@ -285,7 +286,7 @@ Modellierungsrichtlinien. Warnt, blockiert nicht.
 | M02 | Divergierende XOR-Gateways: Label als Frage formulieren | Silver Ch.5, MG.org | implementiert |
 | M03 | Convergierende Gateways: kein Label an ausgehenden Kanten | Silver Ch.5 | implementiert |
 | M04 | Divergierende XOR-Gateways: Kanten muessen Labels haben | Silver Ch.5, OMG §10.5.1 | implementiert |
-| M05 | Message-Flow-Labels: nur Substantive | Silver Ch.5 (POS-Tagger-Problem, siehe ROADMAP) | Platzhalter |
+| M05 | Message-Flow-Labels: Nominalphrase in der deklarierten Sprache (`language`) | Silver Ch.5 | implementiert (nur mit `language`) |
 | M06 | Event-Labels: Partizip/Zustand oder Substantiv | Silver Ch.3 (POS-Tagger-Problem, siehe ROADMAP) | Platzhalter |
 | M07 | Vermeide OR-Gateways (inclusive) | Silver Ch.5, 7PMG G5 | implementiert |
 | M08 | Jeder XOR-Split hat einen Default-Flow | Silver Ch.5 | implementiert |
@@ -446,7 +447,7 @@ Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvent
 2. **Deutsch (primaer):** valide, wenn das letzte Token wie ein Infinitiv aussieht (Endung `-en`/`-eln`/`-ern`/`-ieren`, Laenge ≥ 4). Klammer-/Bracket-Meta `(…)`/`[…]` und Slashes werden vorher normalisiert ("erfassen/aendern" → beide Verben).
 3. **Englischer Escape-Hatch:** valide, wenn das erste Token in einer kleinen kuratierten Verbliste steht ("Review Application"), um False-Positives zu vermeiden.
 
-**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Die exakte Wortartanalyse ist als **M05/M06** vorgesehen (Status: Platzhalter/OFF — POS-Tagger-Problem, siehe ROADMAP). M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
+**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Mit deklarierter `language` ersetzt die Sprachstrategie diese Heuristik; die Namensregeln fuer Nachrichtenfluesse stehen in M05, die fuer Ereignisse (M06) sind noch Platzhalter/OFF. M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
 
 **Beispiele:**
 
@@ -460,6 +461,27 @@ Aktivitaets-Labels sollen der Objekt+Verb-Konvention folgen (deutsche BA-Konvent
 | schlecht | `Vorgang zur Klaerung` (kein Verb) |
 
 **Referenz:** 7PMG G6 "use verb-object activity labels" (Mendling, Reijers, van der Aalst, 2010), Bruce Silver: BPMN Method & Style, Ch.3
+
+---
+
+## Regel M05: Nachrichtenfluss-Bezeichnungen
+
+**Layer:** Style | **Default Severity:** WARNING | **Scope:** global
+
+Ein Nachrichtenfluss benennt seinen Inhalt, nicht eine Handlung: eine Nominalphrase wie `Invoice` oder `Rechnung`, kein Verb-Objekt-Satz (`Send invoice`) und kein Zustand (`Order received`). M05 prueft jeden Eintrag von `messageFlows` mit einem `name` ueber das Urteil `messageName` der Sprachstrategie des Modells (`language`, z.B. `de` oder `en`; Woerterlisten unter `references/naming/`, Ueberlagerung per `BPMN_NAMING`).
+
+**Ohne `language`** (fehlend oder ungueltig) laeuft M05 nicht: kein Befund, keine Woerterliste wird gelesen, die Ergebnisse bleiben byte-identisch. Gleiches gilt fuer eine Sprache ohne Namensdaten. Unter dem Strict-Profil ist M05 ein ERROR, ein Profil-Override `M05: OFF` schaltet die Regel ab.
+
+**Meldung:** `Message flow "<Name>" is named like an activity or a state; the <Sprache> convention for message flows is a noun phrase (e.g. "<Beispiel>").`
+
+**Beispiele (Englisch):**
+
+| Bewertung | Name |
+|-----------|------|
+| gut | `Invoice`, `Merge request`, `Follow-up` |
+| schlecht | `Send invoice` (Anweisung) |
+| schlecht | `Order received` (Zustand, Partizip am Ende) |
+| schlecht | `Case closed` (Zustand, Partizip am Ende) |
 
 ---
 

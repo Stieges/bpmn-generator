@@ -3196,7 +3196,7 @@ describe('Rule Engine — individual rules', () => {
   test('M05/M06: placeholder rules are OFF by default', () => {
     const m05 = RULES.find(r => r.id === 'M05');
     const m06 = RULES.find(r => r.id === 'M06');
-    expect(m05.defaultSeverity).toBe('OFF');
+    expect(m05.defaultSeverity).toBe('WARNING');
     expect(m06.defaultSeverity).toBe('OFF');
   });
 
