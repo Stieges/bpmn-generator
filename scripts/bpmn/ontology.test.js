@@ -269,6 +269,7 @@ const LIST_ALLOWLIST = new Map([
   ['scripts/bpmn/net-check.js', 'Deliberately independent of types.js: a checker that shares predicates with the code it checks cannot see a bug in them. Fenced by equality above.'],
   ['scripts/dmn/requirement-order.js', 'Deliberately dependency-free, and the list is an ORDER (the DMN13.xsd sequence the writer emits), not a membership set. Fenced by equality, in order, below.'],
   ['scripts/bpmn/model-v2.js', 'The automatic activities of the inheritance rule (information model design 7.2 step 5): a category, not the vocabulary. Fenced below: every entry is a TASK_TYPES member.'],
+  ['scripts/bpmn/naming/markers.js', 'The markers a label can imply and the event types each may sit on (BPMN 2.0.2, Tables 10.84-10.90 and 10.93): a spec table the ontology does not carry, kept as data. Fenced in naming/verb-first.test.js: every entry is a marker name or an EVENT_TYPES member.'],
   ['scripts/scenarios/decision-table.js', 'Two hit-policy CATEGORIES (one branch per rule vs. aggregated), not the vocabulary itself. Fenced below: together they are exactly the ontology hit policies.'],
 ]);
 
