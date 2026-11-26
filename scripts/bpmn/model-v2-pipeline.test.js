@@ -292,7 +292,7 @@ describe('response contract', () => {
       return undefined;
     };
     const re = new RegExp(find(api));
-    for (const code of ['H01', 'H02', 'H06', 'H08', 'H09', 'H10', 'H11']) expect(re.test(code)).toBe(true);
+    for (const code of ['H01', 'H02', 'H06', 'H08', 'H09', 'H10', 'H11', 'H12', 'H13', 'H14']) expect(re.test(code)).toBe(true);
     for (const code of ['H00', 'H20', 'H1', 'H100']) expect(re.test(code)).toBe(false);
   });
 });
