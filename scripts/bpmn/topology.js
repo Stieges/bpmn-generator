@@ -336,9 +336,13 @@ export function findBackEdges(nodes, edges, { restartFromUnvisited = true } = {}
     if (!outMap.has(e.source)) outMap.set(e.source, []);
     outMap.get(e.source).push(e);
   }
-  const starts = nodes.filter(n => n.type === 'startEvent').map(n => n.id);
-  const roots = starts.length ? starts : (nodes[0] ? [nodes[0].id] : []);
-  if (restartFromUnvisited) roots.push(...nodes.map(n => n.id));
+  // Roots in order, each once (a loop, not a spread: a spread of a large array can exceed the argument limit).
+  const roots = [];
+  const queued = new Set();
+  const addRoot = (id) => { if (!queued.has(id)) { queued.add(id); roots.push(id); } };
+  for (const n of nodes) if (n.type === 'startEvent') addRoot(n.id);
+  if (!roots.length && nodes[0]) addRoot(nodes[0].id);
+  if (restartFromUnvisited) for (const n of nodes) addRoot(n.id);
   const state = new Map(); // absent=unvisited,1=on-stack,2=done
   const back = new Set();
   const dfs = (id) => {

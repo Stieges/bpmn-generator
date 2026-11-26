@@ -6,7 +6,7 @@
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import { readFileSync, readdirSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -224,7 +224,7 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
   describe('CLIs', () => {
     let dir;
     beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'v2-gate-')); writeFileSync(join(dir, 'm56.json'), JSON.stringify(m56())); });
-    afterAll(() => {});
+    afterAll(() => { rmSync(dir, { recursive: true, force: true }); });
     const run = (script, ...args) => spawnSync('node', [resolve(__dirname, '..', script), ...args], { encoding: 'utf8' });
 
     test('redesign-cli exits 1 and says so in German', () => {

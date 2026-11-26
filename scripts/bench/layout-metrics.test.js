@@ -337,6 +337,7 @@ const BUDGET_PLAIN = {
   'message-flow-participant-ports.json': same(r({ overlapLen: 62 })),
   'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }),
                                           on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
+  // labelFar 1 is measured, not a defect of this fixture.
   'nested-lanes-role-system.json':      same(r({ labelFar: 1 })),
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
   'realistic-collaboration.json':       { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 386 }),
@@ -462,6 +463,7 @@ const DIRECTION = {
   'message-flow-participant-ports.json': dir(NONE),
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
+  // d(4, 0) is measured, not a defect of this fixture.
   'nested-lanes-role-system.json':      dir(d(4, 0)),
   'parallel-split-join.json':           dir(NONE),
   // #91 raised the plain rows (bend rule off) from d(2, 4) / d(1, 1); default, off and on stay 0,
