@@ -85,7 +85,7 @@ export function namingMessage(naming, kind, name, nodeType) {
     case 'task':
       return `Task "${name}" does not follow the ${language} convention ${CONVENTIONS[naming.wordOrder]} (e.g. "${examples.task}").`;
     case 'container':
-      return `${nodeType === 'callActivity' ? 'Call activity' : 'Subprocess'} "${name}" is named like a state or a bare verb; name it as an activity (e.g. "${examples.task}" or "${examples.subprocess}").`;
+      return `${nodeType === 'callActivity' ? 'Call activity' : 'Subprocess'} "${name}" is not named as a topic (a state, a bare verb or a placeholder like "Step 3"); name the subject area (e.g. "${examples.subprocess}").`;
     case 'event':
       return `Event "${name}" is named like an activity; the ${language} convention for events is a state or a noun (e.g. "${examples.event}").`;
     case 'message':
