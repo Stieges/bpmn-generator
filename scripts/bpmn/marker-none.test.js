@@ -10,7 +10,8 @@ import { validateLogicCoreSchema, validateModelSchema } from './schema-gate.js';
 import { validateLogicCore } from './validate.js';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { markerOf, resolvedMarkerOf, renderEventMarker } from './icons.js';
-import { MARKER_NONE_ALLOWED_ON } from './naming/markers.js';
+import { MARKER_NONE_ALLOWED_ON, allowsMarkerNone } from './naming/markers.js';
+import { resolveEventMarkers, namingHints } from './naming/index.js';
 
 const PIPELINE_TIMEOUT = 120_000;
 const READERS = [['moddle', bpmnToLogicCore], ['legacy', bpmnToLogicCoreLegacy]];
@@ -78,6 +79,69 @@ describe('schema: "none" is a marker value in 1.x and 2.0', () => {
   });
   test('the event types a plain event may be: start, end, intermediate throw', () => {
     expect(MARKER_NONE_ALLOWED_ON).toEqual(PLAIN_TYPES);
+  });
+});
+
+/** A process with an ordinary subprocess and an event subprocess, each starting with `startName`. */
+function withEventSubProcess({ language, startMarker, nested = false } = {}) {
+  const esp = { id: 'esp', type: 'subProcess', name: 'Frist überwachen', isEventSubProcess: true, isExpanded: true,
+    nodes: [{ id: 'es', type: 'startEvent', name: 'Frist abgelaufen' }, { id: 'ee', type: 'endEvent', name: 'Frist gemeldet' }],
+    edges: [{ source: 'es', target: 'ee' }] };
+  if (startMarker) esp.nodes[0].marker = startMarker;
+  const sp = { id: 'sp', type: 'subProcess', name: 'Teil', isExpanded: true,
+    nodes: [{ id: 'cs', type: 'startEvent', name: 'Frist abgelaufen', ...(startMarker ? { marker: startMarker } : {}) },
+      { id: 'ce', type: 'endEvent', name: 'Teil erledigt' }, ...(nested ? [esp] : [])],
+    edges: [{ source: 'cs', target: 'ce' }] };
+  const lc = { id: 'p', name: 'P', nodes: [{ id: 's', type: 'startEvent', name: 'Beginn' }, sp,
+    { id: 'e', type: 'endEvent', name: 'Ende' }, ...(nested ? [] : [esp])],
+  edges: [{ source: 's', target: 'sp' }, { source: 'sp', target: 'e' }] };
+  if (language) lc.language = language;
+  return lc;
+}
+
+describe('the start event of an event subprocess needs a trigger', () => {
+  test('allowsMarkerNone: not on such a start, yes on the start of an ordinary subprocess', () => {
+    const start = { id: 'x', type: 'startEvent' };
+    expect(allowsMarkerNone(start, null)).toBe(true);
+    expect(allowsMarkerNone(start, { type: 'subProcess' })).toBe(true);
+    expect(allowsMarkerNone(start, { type: 'subProcess', isEventSubProcess: true })).toBe(false);
+    expect(allowsMarkerNone(start, { type: 'transaction', isEventSubProcess: true })).toBe(false);
+    expect(allowsMarkerNone({ id: 'y', type: 'endEvent' }, { type: 'subProcess', isEventSubProcess: true })).toBe(true);
+    expect(allowsMarkerNone({ id: 'z', type: 'boundaryEvent' }, null)).toBe(false);
+  });
+  test.each([[false], [true]])('S15 reports "none" on it (nested in a subprocess: %s), not on an ordinary subprocess start', (nested) => {
+    const { warnings } = validateLogicCore(withEventSubProcess({ startMarker: 'none', nested }));
+    expect(s15(warnings, 'es')).toEqual([
+      'Node "es" (Frist abgelaufen) is a startEvent of an event subprocess and carries "marker": "none", but OMG '
+        + 'requires the start event of an event subprocess to carry an event definition (its trigger). The event is '
+        + 'written without one — set "marker" to its trigger, or use a start, end or intermediate throw event outside '
+        + 'an event subprocess for a plain event.',
+    ]);
+    expect(s15(warnings, 'cs')).toEqual([]);
+  });
+  test.each([[false], [true]])('H10 offers "none" for the ordinary start only (nested: %s)', (nested) => {
+    const lc = withEventSubProcess({ language: 'de', nested });
+    const marked = resolveEventMarkers(lc);
+    const h10 = Object.fromEntries(namingHints(lc, marked).filter((h) => h.code === 'H10').map((h) => [h.elements[0], h.message]));
+    expect(h10.cs).toBe('Event "Frist abgelaufen" (cs): marker "timer" inferred from its name (language "de"). '
+      + 'To change it, set "marker" to the symbol you want, or to "none" for a plain event.');
+    expect(h10.es).toBe('Event "Frist abgelaufen" (es): marker "timer" inferred from its name (language "de"). '
+      + 'To change it, set "marker" to the symbol you want.');
+  });
+});
+
+describe('S16 names "none"', () => {
+  test('a messageRef on a "none" event: the marker is named as a plain event; without marker the text is as before', () => {
+    const lc = (marker) => ({ id: 'p', definitions: [{ id: 'M1', type: 'message', name: 'Bestellung' }],
+      nodes: [{ id: 's', type: 'startEvent', name: 'Beginn', messageRef: 'M1', ...(marker ? { marker } : {}) },
+        { id: 'e', type: 'endEvent', name: 'Ende' }], edges: [{ source: 's', target: 'e' }] });
+    const s16 = (r) => r.errors.filter((m) => m.includes('carries "messageRef"'));
+    expect(s16(validateLogicCore(lc('none')))).toEqual([
+      'Node "s" (Beginn) carries "messageRef" ("M1"), but its marker is "none" (a plain event), not "message". The reference is not written — set marker "message" or remove the field.',
+    ]);
+    expect(s16(validateLogicCore(lc()))).toEqual([
+      'Node "s" (Beginn) carries "messageRef" ("M1"), but its marker is absent, not "message". The reference is not written — set marker "message" or remove the field.',
+    ]);
   });
 });
 
@@ -210,6 +274,8 @@ describe('round trip through both importers', () => {
     const withDef = bpmnXml.replace(el, el.replace('</bpmn:endEvent>', '<bpmn:terminateEventDefinition /></bpmn:endEvent>'));
     expect(withDef).toMatch(/<bpmn:endEvent id="e"[^>]*bg:marker="none"/);
     expect(findNode(await read(withDef), 'e').marker).toBe('terminate');
+    // Both importers give the same model: the superseded attribute is no foreign attribute either.
+    expect(findNode(await read(withDef), 'e').extensions).toBeUndefined();
     // An attribute in another namespace is no marker.
     const foreign = bpmnXml.replace(/bg:marker="none"/, 'xx:marker="none" xmlns:xx="urn:other"');
     expect(findNode(await read(foreign), 'e').marker).toBeUndefined();

@@ -4,6 +4,7 @@
  */
 
 import { labelTokens } from './tokens.js';
+import { isWrittenEventSubProcess } from '../types.js';
 
 /** The markers a label can imply, in the order they are tried. */
 export const INFERABLE_MARKERS = Object.freeze(['message', 'timer', 'error', 'signal', 'escalation', 'conditional']);
@@ -26,9 +27,19 @@ export const MARKER_NONE = 'none';
 /**
  * The event types that may be plain, without an event definition (`marker: "none"`): start, end
  * and intermediate throw (the None event of BPMN 2.0.2 §10.5). A boundary event and an intermediate
- * catch event need a trigger; S15 reports `"none"` on them.
+ * catch event need a trigger, and so does the start event of an event subprocess (§10.5.2):
+ * `allowsMarkerNone` says which, and S15 reports `"none"` everywhere else.
  */
 export const MARKER_NONE_ALLOWED_ON = Object.freeze(['startEvent', 'endEvent', 'intermediateThrowEvent']);
+
+/**
+ * May `node` inside `parent` (`null` at process level) be a plain event (`marker: "none"`)? Its type
+ * is in `MARKER_NONE_ALLOWED_ON`, and it is not the start event of an event subprocess.
+ */
+export function allowsMarkerNone(node, parent) {
+  if (!MARKER_NONE_ALLOWED_ON.includes(node?.type)) return false;
+  return !(node.type === 'startEvent' && isWrittenEventSubProcess(parent));
+}
 
 const COMPOUND_REST = 4;
 

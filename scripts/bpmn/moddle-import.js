@@ -398,9 +398,10 @@ function convertProcess(proc, partMap, expandedIds = new Set(), prefixes = []) {
     const markerInfo = detectEventMarkerModdle(el);
     if (markerInfo.marker) node.marker = markerInfo.marker;
     // `bg:marker="none"`: a plain event on purpose. An event definition wins over the attribute
-    // (a foreign tool may have given the event a trigger and kept the attribute).
-    const noneAttr = isEvent(type) && !(el.eventDefinitions?.length) ? markerNoneAttribute(el.$attrs, prefixes) : null;
-    if (noneAttr) node.marker = MARKER_NONE;
+    // (a foreign tool may have given the event a trigger and kept the attribute); either way the
+    // attribute is no foreign attribute, so the legacy importer and this one give the same model.
+    const noneAttr = isEvent(type) ? markerNoneAttribute(el.$attrs, prefixes) : null;
+    if (noneAttr && !(el.eventDefinitions?.length)) node.marker = MARKER_NONE;
     if (markerInfo.linkName) node.linkName = markerInfo.linkName;
     if (markerInfo.conditionExpression) node.conditionExpression = markerInfo.conditionExpression;
     if (markerInfo.timerExpression) node.timerExpression = markerInfo.timerExpression;

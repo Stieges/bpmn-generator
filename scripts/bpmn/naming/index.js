@@ -13,7 +13,7 @@ import { loadLexicon, NAMING_LANGUAGES, NamingDataError } from './lexicon.js';
 import { verbFirst } from './verb-first.js';
 import { verbLast } from './verb-last.js';
 import { foldWord } from './tokens.js';
-import { MARKER_NONE, MARKER_NONE_ALLOWED_ON } from './markers.js';
+import { MARKER_NONE, allowsMarkerNone } from './markers.js';
 import { isEvent, TASK_TYPES } from '../types.js';
 // A cycle with ../icons.js (it imports `namingFor`): both sides use the other's binding inside
 // functions only, never while the module is evaluated.
@@ -117,18 +117,18 @@ export function checkNamingOverlay(env = process.env) {
 function nodesWithPool(lc) {
   const out = [];
   if (!isPlainObject(lc)) return out;
-  const walk = (nodes, pool) => {
+  const walk = (nodes, pool, parent) => {
     if (!Array.isArray(nodes)) return;
     for (const node of nodes) {
       if (!isPlainObject(node)) continue;
-      out.push({ node, pool });
-      walk(node.nodes, pool);
+      out.push({ node, pool, parent });
+      walk(node.nodes, pool, node);
     }
   };
   if (Array.isArray(lc.pools)) {
-    for (const p of lc.pools) if (isPlainObject(p)) walk(p.nodes, String(p.name || p.id));
+    for (const p of lc.pools) if (isPlainObject(p)) walk(p.nodes, String(p.name || p.id), null);
   } else {
-    walk(lc.nodes, null);
+    walk(lc.nodes, null, null);
   }
   return out;
 }
@@ -142,7 +142,8 @@ function nodesWithPool(lc) {
  * the marker its name implies in that language, or `null`. Without a strategy nothing is written.
  *
  * @returns {{ inferred: Marked[], changed: Marked[] }} `Marked` is `{ id, name, type, marker,
- *   legacy, pool }` (`marker` what was written, `legacy` what the inference without a language reads
+ *   legacy, pool, needsTrigger? }` (`needsTrigger: true` only on the start event of an event
+ *   subprocess, where `"none"` is not valid; `marker` what was written, `legacy` what the inference without a language reads
  *   from the name, `pool` the pool's name in a collaboration, else `null`). `inferred`: the events
  *   that got a marker; `changed`: the events whose `legacy` is a marker and not the one written.
  *   Both in document order.
@@ -154,13 +155,15 @@ export function resolveEventMarkers(lc) {
   const inferred = [];
   const changed = [];
   if (strategy === null) return { inferred, changed };
-  for (const { node, pool } of all) {
+  for (const { node, pool, parent } of all) {
     if (!isEvent(node.type) || node.marker) continue;
     const name = typeof node.name === 'string' ? node.name : '';
     const marker = strategy.eventMarker(name, node.type);
     node._marker = marker;
     const legacy = inferEventMarker(name);
     const entry = { id: node.id, name, type: node.type, marker, legacy, pool };
+    // The start event of an event subprocess needs a trigger: its hint does not offer "none".
+    if (node.type === 'startEvent' && !allowsMarkerNone(node, parent)) entry.needsTrigger = true;
     if (marker !== null) inferred.push(entry);
     if (legacy !== null && legacy !== marker) changed.push(entry);
   }
@@ -242,7 +245,7 @@ export function namingHints(lc, { inferred = [], changed = [] } = {}) {
   const strategy = namingFor(language);
   const lead = (e) => `${e.pool === null ? '' : `[${e.pool}] `}Event "${e.name}" (${e.id})`;
   // The way out names `"none"` only where a plain event is valid (S15 reports it elsewhere).
-  const symbol = (e) => `"marker" to the symbol you want${MARKER_NONE_ALLOWED_ON.includes(e.type) ? `, or to "${MARKER_NONE}" for a plain event` : ''}.`;
+  const symbol = (e) => `"marker" to the symbol you want${allowsMarkerNone(e, null) && !e.needsTrigger ? `, or to "${MARKER_NONE}" for a plain event` : ''}.`;
   const isChanged = new Set(changed);
   const first = [];
   if (strategy === null) {
