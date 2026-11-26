@@ -764,6 +764,18 @@ describe('a 2.0 model is not accepted over HTTP yet', () => {
       expect(data.errors).toEqual([{ path: '/$schemaVersion', message: FORMAT_V2_NOT_ACCEPTED, params: { accepted: ['1'] }, code: 'F03' }]);
     });
   }
+
+  test.each([['2.0', 'F03'], ['2.7', 'F02']])('/generate with the schaden model as %s: one entry with code %s', async (version, code) => {
+    const model = JSON.parse(readFileSync(new URL('../tests/fixtures-v2/schaden.json', import.meta.url), 'utf8'));
+    const res = await realFetch(`${baseUrl}/api/v1/generate`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ logicCore: { ...model, $schemaVersion: version } }),
+    });
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.status).toBe('schema_error');
+    expect(data.errors).toHaveLength(1);
+    expect(data.errors[0].code).toBe(code);
+  });
 });
 
 // bendRule / nodeLabelsAvoidFlows: simple-approval.json changes when either is switched off, so a

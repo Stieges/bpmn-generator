@@ -209,14 +209,21 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
     test('redesign-cli exits 1 and says so in German', () => {
       const r = run('bpmn/redesign-cli.js', join(dir, 'm56.json'), 'parallelize');
       expect(r.status).toBe(1);
-      expect(r.stderr).toContain('✗ Format 2.0 wird hier noch nicht angenommen.');
+      expect(r.stderr).toContain('✗ [F03] Format 2.0 wird hier noch nicht angenommen.');
+    });
+
+    test.each(['redesign-cli', 'scenarios'])('%s names an unsupported version with F02', (which) => {
+      writeFileSync(join(dir, 'm27.json'), JSON.stringify({ ...m56(), $schemaVersion: '2.7' }));
+      const r = which === 'redesign-cli' ? run('bpmn/redesign-cli.js', join(dir, 'm27.json'), 'parallelize') : run('scenarios/pipeline.js', join(dir, 'm27.json'));
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('✗ [F02] $schemaVersion "2.7" is not supported; only "2.0" is supported');
     });
 
     test('scenarios/pipeline.js exits 1 with a message naming 2.0', () => {
       const r = run('scenarios/pipeline.js', join(dir, 'm56.json'));
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('2.0');
-      expect(r.stderr).toContain(`✗ ${FORMAT_V2_NOT_ACCEPTED}`);
+      expect(r.stderr).toContain(`✗ [F03] ${FORMAT_V2_NOT_ACCEPTED}`);
     });
   });
 });

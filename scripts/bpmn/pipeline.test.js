@@ -4314,6 +4314,15 @@ describe('CLI format 2.0 and --catalog', () => {
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('✗ Schema-Gate: Logic-Core input violates references/input-schema-v2.json:');
     expect(res.stderr).not.toContain('references/input-schema.json');
+    expect(res.stderr).toContain('  · [F01] (root) must NOT have additional properties');
+    expect(res.xml).toBeNull();
+  });
+
+  test('an empty --catalog= with a 2.0 model: one [C11] line, exit 1, no stack trace', async () => {
+    const res = await run([V2, '<out>', '--view=rollen', '--catalog=']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('✗ [C11] --catalog needs a path');
+    expect(res.stderr).not.toMatch(/at .*\.js:\d+/);
     expect(res.xml).toBeNull();
   });
 
@@ -4327,7 +4336,7 @@ describe('CLI format 2.0 and --catalog', () => {
   test('stdin with a "catalog" field and no --catalog fails with the message', async () => {
     const res = await run(['-', '<out>', '--view=rollen'], { input: (await import('node:fs')).readFileSync(V2, 'utf8') });
     expect(res.status).toBe(1);
-    expect(res.stderr).toContain('✗ the model names catalogue "schaden-catalog.json" but is read from standard input; pass --catalog <path>');
+    expect(res.stderr).toContain('✗ [C13] the model names catalogue "schaden-catalog.json" but is read from standard input; pass --catalog <path>');
     expect(res.xml).toBeNull();
   });
 
@@ -4374,7 +4383,7 @@ describe('CLI format 2.0 and --catalog', () => {
     '%s on a 2.0 model exits 1 before any work', async (flag) => {
       const res = await run([V2, '<out>', '--view=rollen', flag]);
       expect(res.status).toBe(1);
-      expect(res.stderr).toContain(`✗ ${flag} is not available for format 2.0 models yet`);
+      expect(res.stderr).toContain(`✗ [F04] ${flag} is not available for format 2.0 models yet`);
       expect(res.xml).toBeNull();
     });
 

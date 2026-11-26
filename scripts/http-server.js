@@ -607,12 +607,12 @@ const server = createServer(async (req, res) => {
     // A refused rule profile is the caller's input, not a server fault.
     if (err instanceof ProfileRejectedError) {
       auditLog({ event: 'profile_rejected', correlationId, error: truncateForAudit(err.message) });
-      return json(res, 400, { correlationId, status: 'profile_error', error: err.message });
+      return json(res, 400, { correlationId, status: 'profile_error', error: err.message, ...(err.messageCode ? { code: err.messageCode } : {}) });
     }
     // Likewise a refused view.
     if (err instanceof ViewRejectedError) {
       auditLog({ event: 'view_rejected', correlationId, error: truncateForAudit(err.message) });
-      return json(res, 400, { correlationId, status: 'view_error', error: err.message });
+      return json(res, 400, { correlationId, status: 'view_error', error: err.message, ...(err.messageCode ? { code: err.messageCode } : {}) });
     }
     // An LLM endpoint's answer can carry anything: log the detail here, return only the class.
     const llmFailure = llmFailureOf(err);
