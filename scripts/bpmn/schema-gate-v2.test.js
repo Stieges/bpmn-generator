@@ -257,3 +257,30 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
     });
   });
 });
+
+describe('language: the natural language of the labels (2.0)', () => {
+  const ACC = { accept: ['2'] };
+  const shapes = { 'single process': m56, collaboration: collab };
+
+  describe.each(Object.entries(shapes))('%s', (_n, make) => {
+    test.each(['de', 'en-GB', 'fr', 'zh-Hant-TW'])('%s is valid', (language) => {
+      expect(validateModelSchema({ ...make(), language }, ACC)).toEqual({ valid: true, errors: [], format: '2' });
+    });
+    test.each(['German', 'DE', 'd', '', 5, null])('%j is rejected with one error at /language', (language) => {
+      const { valid, errors } = validateModelSchema({ ...make(), language }, ACC);
+      expect(valid).toBe(false);
+      expect(errors.map((e) => e.path)).toEqual(['/language']);
+    });
+  });
+
+  test('language on a pool, a node or a lane is an additional property', () => {
+    const onPool = collab(); onPool.pools[0].language = 'de';
+    const onNode = m56(); onNode.nodes[0].language = 'de';
+    const onLane = m56(); onLane.lanes = [{ id: 'l', name: 'L', language: 'de' }];
+    for (const m of [onPool, onNode, onLane]) {
+      const { valid, errors } = validateModelSchema(m, ACC);
+      expect(valid).toBe(false);
+      expect(errors.map((e) => e.message).join('\n')).toContain('must NOT have additional properties');
+    }
+  });
+});

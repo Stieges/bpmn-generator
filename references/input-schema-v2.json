@@ -26,6 +26,11 @@
           "const": "2.0",
           "description": "Format version. Required; exactly the string \"2.0\" is format 2.0, any other value is refused."
         },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "description": "Natural language of the labels as a language tag with a lowercase primary subtag (\"de\", \"en-GB\"). Selects the naming conventions of the rules M01, M02, M05, M06 and of the event-marker inference. Absent: the checks run as before the field existed."
+        },
         "catalog": {
           "type": "string",
           "minLength": 1,
@@ -100,6 +105,11 @@
           "type": "string",
           "const": "2.0",
           "description": "Format version. Required; exactly the string \"2.0\" is format 2.0, any other value is refused."
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "description": "Natural language of the labels as a language tag with a lowercase primary subtag (\"de\", \"en-GB\"). Selects the naming conventions of the rules M01, M02, M05, M06 and of the event-marker inference. Absent: the checks run as before the field existed."
         },
         "catalog": {
           "type": "string",
