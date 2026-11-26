@@ -128,8 +128,11 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   `H12` for a valid tag without naming conventions (M01, M05, M06 are skipped; supported: `de`,
   `en`), `H13` when the task names look like another supported language than the declared one and
   else `H14` naming the first words of English task names that are not on the verb list.
+  Under `de` a keyword also matches in a compound (`Fristablauf`, `Fehlermeldung`); the data list
+  `compoundExceptions` names words that only begin like a keyword (`Zeitschrift`, `Zeitung`,
+  `Zeitarbeit`, `Signalwirkung`) and give no marker, in any inflected or longer form.
 - **`BPMN_NAMING` overlay.** The environment variable names a JSON file that adds words to, and
-  removes words from, ten flat word lists of a shipped language
+  removes words from, eleven flat word lists of a shipped language
   (`{ "languages": { "en": { "add": { "verbs": ["invoice"] }, "remove": { … } } } }`, add first,
   then remove), so a correct label that a rule flags is fixed by data. The file is read once per
   process (the servers at start, the CLI and the library on first use) and a change needs a restart;
