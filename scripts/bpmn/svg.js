@@ -3,7 +3,7 @@
  * Produces standalone SVG diagrams from coordinate maps.
  */
 
-import { assignEdgeIds, resolveFlowSemantics } from './topology.js';
+import { assignEdgeIds, resolveFlowSemantics, flattenLanes } from './topology.js';
 import { isEvent, isGateway, isActivity, isDataArtifact, nodeFieldSpec, writesIsInterrupting, CONTAINER_TYPES } from './types.js';
 import { CLR as CLR_CONFIG, SW, SYM, LANE_HEADER_W, TASK_RX, INNER_OUTER_GAP, FIRST_BASELINE } from './constants.js';
 import { esc, rn } from '../shared/utils.js';
@@ -45,13 +45,14 @@ function generateSvg(lc, coordMap) {
   const nodeLabels = coordMap.nodeLabels ?? {};
   const processes = lc.pools ? lc.pools : [lc];
   const allNodes  = processes.flatMap(p => p.nodes || []);
-  const allLanes  = processes.flatMap(p => p.lanes || []);
+  // Every lane of every lane tree, a parent before its child lanes (so a child is drawn on top).
+  const allLanes  = processes.flatMap(p => flattenLanes(p.lanes));
 
   // Build lane-id → pool-key lookup for laneHeaderW resolution
   const laneToPoolKey = {};
   if (lc.pools) {
     for (const proc of lc.pools) {
-      for (const lane of (proc.lanes || [])) laneToPoolKey[lane.id] = proc.id;
+      for (const lane of flattenLanes(proc.lanes)) laneToPoolKey[lane.id] = proc.id;
     }
   } else {
     for (const lane of allLanes) laneToPoolKey[lane.id] = '_singlePool';

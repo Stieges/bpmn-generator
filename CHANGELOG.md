@@ -59,6 +59,14 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 
 ### Fixed
 
+- **Nested lanes of 1.x models are drawn.** A lane with `children` was written to the XML
+  but not laid out: its child lanes had no shape, their steps were drawn in the band of another
+  lane or outside the pool, and the parent stayed an empty strip. Each child lane is now its own
+  band inside its parent, one header strip further in per level, at any depth; the parent spans
+  its child lanes. Steps placed directly in a parent lane get a band of their own at the top of
+  that parent. This changes the diagram of every 1.x model with nested lanes; models without
+  them are drawn exactly as before. Lane compaction leaves a process with nested lanes as laid
+  out, so such a diagram is taller than a flat one.
 - **A derived top-level definition is always referenced** (#121). Without explicit `definitions`
   the writer derived a `Message` / `Error` / `Signal` / `Escalation` from every node's name, so a
   user task called "Review via e-mail" left a `Message_1` that no element pointed at, and

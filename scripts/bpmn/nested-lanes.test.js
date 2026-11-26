@@ -1,7 +1,7 @@
 /**
  * Slice-0 fixture `nested-lanes-role-system.json`: a flat lane plus a parent lane with two child
  * lanes, activities carrying `role` and `system`. Pins that this 1.x form lays out clean; the
- * broken neighbours are characterised in nested-lanes-matrix.test.js.
+ * layout of nested lanes itself is pinned in nested-lanes-matrix.test.js.
  */
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';

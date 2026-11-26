@@ -337,8 +337,7 @@ const BUDGET_PLAIN = {
   'message-flow-participant-ports.json': same(r({ overlapLen: 62 })),
   'multi-pool-collaboration.json':      { default: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }),
                                           on: r({ bendsMax: 2, offOver5: 2, overlapLen: 50 }) },
-  // labelFar 1 is measured, not a defect of this fixture.
-  'nested-lanes-role-system.json':      same(r({ labelFar: 1 })),
+  'nested-lanes-role-system.json':      same(r({})),
   'parallel-split-join.json':           same(r({ bendsMax: 1, offOver5: 4 })),
   'realistic-collaboration.json':       { default: r({ bendsMax: 2, offOver5: 4, overlapLen: 386 }),
                                           on: r({ bendsMax: 4, mfCrowd: 7, offOver5: 4, overlapLen: 646 }) },
@@ -463,8 +462,9 @@ const DIRECTION = {
   'message-flow-participant-ports.json': dir(NONE),
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
-  // d(4, 0) is measured, not a defect of this fixture.
-  'nested-lanes-role-system.json':      dir(d(4, 0)),
+  // d(4, 4) is measured, not a defect of this fixture: lane compaction skips a process with nested
+  // lanes, so the cross-lane flows keep the routes coordinates.js §5.2 gives them (plain: no bend rule).
+  'nested-lanes-role-system.json':      dir(d(4, 4)),
   'parallel-split-join.json':           dir(NONE),
   // #91 raised the plain rows (bend rule off) from d(2, 4) / d(1, 1); default, off and on stay 0,
   // so the shipped output is unaffected — the rule takes the routes below. plain (+1, +1): inf8

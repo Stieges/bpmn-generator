@@ -5452,13 +5452,14 @@ describe('B1 — boundary events reach the layout', () => {
     expect(byEvent).toEqual(byTarget);
   });
 
-  test('a target in a nested child lane cannot be ordered against the host: the event keeps the bottom edge', async () => {
+  test('a target in a nested child lane above the host: the event sits on the top edge, as with flat lanes', async () => {
     const lc = twoLanes();
     lc.lanes = [{ id: 'L1', name: 'Above', children: [{ id: 'L1a', name: 'Above, nested' }] }, { id: 'L2', name: 'Host lane' }];
     for (const n of lc.nodes) if (n.lane === 'L1') n.lane = 'L1a';
     const r = await runPipeline(lc);
     const { t: host, up } = r.coordMap.coords;
-    expect(up.y + up.h / 2).toBeCloseTo(host.y + host.h, 5);
+    expect(up.y + up.h / 2).toBeCloseTo(host.y, 5);
+    expect(r.diagnostics.issues.map(i => i.code)).toEqual([]);
   });
 
   test('a top-edge boundary event: the DI label bounds equal coordMap\'s box, above the event', async () => {

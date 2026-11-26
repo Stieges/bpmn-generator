@@ -31,7 +31,7 @@ export const SNAPSHOT_PATH = join(__dirname, '..', '..', 'tests', 'bench', 'defa
 export const FIXTURES = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
 
 // The new switches are named explicitly: the fence must keep meaning "off" if a default ever flips.
-const OFF = { bendRule: false, nodeLabelsAvoidFlows: false, foreignShapeRepair: false, messageFlowLabelRepair: false, alignParticipantPorts: false };
+export const OFF = { bendRule: false, nodeLabelsAvoidFlows: false, foreignShapeRepair: false, messageFlowLabelRepair: false, alignParticipantPorts: false };
 export const MODES = {
   default: {},
   'no-refine': { visualRefinement: false },

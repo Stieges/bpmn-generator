@@ -66,6 +66,7 @@ import { CFG } from '../shared/utils.js';
 // ten times slower under test than under node. Same object, so no behaviour change.
 const Math = globalThis.Math;
 import { isEvent, isGateway } from './types.js';
+import { hasNestedLanes, leafLaneBands } from './topology.js';
 
 const DEFAULT_LIMITS = Object.freeze({
   shapeClearance: 8,
@@ -394,7 +395,10 @@ function buildContext(coordMap, lc) {
       const x = Math.min(...bands.map((b) => b.x)), y = bands[0].y;
       const last = bands[bands.length - 1];
       regionOf[pid] = { x, y, w: Math.max(...bands.map((b) => b.x + b.w)) - x, h: last.y + last.h - y };
-      linesOf[pid] = bands.slice(1).map((b) => b.y);
+      // Nested lanes: the region is the top-level stack as above, the lines are the leaf bands'.
+      linesOf[pid] = hasNestedLanes(p)
+        ? leafLaneBands(p, coordMap.laneCoords).sort((a, b) => a.y - b.y).slice(1).map((b) => b.y)
+        : bands.slice(1).map((b) => b.y);
     } else if (pc) {
       const hw = pc.laneHeaderWidth ?? 0;
       regionOf[pid] = { x: pc.x + hw, y: pc.y, w: pc.w - hw, h: pc.h };

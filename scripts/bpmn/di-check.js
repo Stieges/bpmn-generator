@@ -19,6 +19,7 @@
  */
 
 import { isArtifact } from './types.js';
+import { hasNestedLanes, leafLaneBands } from './topology.js';
 
 const DEFAULT_TOLERANCE = 1;
 const DEFAULT_ALONG_MIN_PX = 5; // bpmn-js arrowhead length — see DI08; the pipeline passes layout.alongOutlineMinPx
@@ -99,8 +100,10 @@ function checkDiagramIntegrity(coordMap, lc, opts = {}) {
   // The vertical axis is ours, not ELK's (coordinates.js §5.0a): if two bands
   // intersect, a node's lane can no longer be read off the diagram.
   for (const proc of (lc.pools || [lc])) {
-    const bands = (proc.lanes || [])
-      .map(l => ({ id: l.id, ...laneCoords[l.id] }))
+    // Nested lanes: the leaf bands are compared — a parent's rectangle encloses its children.
+    const bands = (hasNestedLanes(proc)
+      ? leafLaneBands(proc, laneCoords)
+      : (proc.lanes || []).map(l => ({ id: l.id, ...laneCoords[l.id] })))
       .filter(b => Number.isFinite(b.x) && Number.isFinite(b.y));
     for (let i = 0; i < bands.length; i++) {
       for (let j = i + 1; j < bands.length; j++) {
