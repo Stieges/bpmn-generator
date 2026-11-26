@@ -454,7 +454,17 @@ Dieser Pfad liest keine Woerterliste; seine Meldung ist deutsch und enthaelt `Ob
 
 **Mit `language`** (z.B. `de`, `en`) ersetzt die Sprachstrategie des Modells die Heuristik: sie beurteilt jeden benannten Task (`taskName`) und jeden Container, d.h. Unterprozess und Aufruf (`containerName`), auf jeder Verschachtelungsebene des Prozesses. Die Woerterlisten liegen unter `references/naming/`, eine Ueberlagerung per `BPMN_NAMING`. Die Meldung ist englisch und nennt die Konvention der Sprache. Fuer eine Sprache ohne Namensdaten prueft M01 nichts.
 
-**Bewusste Grenzen:** Die Heuristik kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Die Namensregeln fuer Nachrichtenfluesse stehen in M05, die fuer Ereignisse in M06. M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
+**Englisch (`en`): Befund nur bei positivem Beleg.** Keine geschlossene Liste kennt jedes englische Verb, darum meldet M01 einen englischen Task nur, wenn die Form belegt falsch ist:
+1. ein einziges Wort (`Check`, `Follow-up`);
+2. nach dem ersten Wort kein Wort mit Buchstaben oder nur Platzhalter-Buchstaben (`Step 3`, `Path A`), oder ein Etikett mit Doppelpunkt vorn (`SAP: Review invoice`);
+3. das erste Wort steht in `nonVerbStarters` (Artikel, Pronomen, Praepositionen, Konjunktionen, Hilfsverben: `The invoice`, `For approval`) oder `nounStarters` (haeufige Substantive und Adjektive: `Customer data`, `Final approval`);
+4. das erste Wort ist ein Gerundium eines Verbs (`Checking invoice`);
+5. das erste Wort ist kein Verb und das letzte ein Partizip, ein Zustandswort, ein gelistetes Verb oder ein daraus gebildetes Substantiv (`Invoice checked`, `Payment due`, `Invoice check`, `Invoice approval`);
+6. zwei Woerter aus einem Substantiv, das auch Verb ist, und einem Zustand (`Order shipped`, `Request pending`).
+
+Ein erstes Wort, das ein gelistetes Verb, ein Praefix plus gelistetes Verb (`Re-check`), eine Verbphrase (`back up`, `shut down`, `log in`) ist oder auf eine Verbendung endet (`-ate` ab sechs Buchstaben ohne die Ausnahmen wie `certificate` oder `template`, `-ize`, `-ise`, `-ify`), braucht ein Objekt dahinter. Jedes andere erste Wort ist **kein Befund**: das Modell erhaelt einmal den Hinweis `H14`, der bis zu zehn solcher Woerter nennt (`Groom backlog` → `'Groom'`). Ist das Wort ein Verb, ist nichts falsch; ein Eintrag in `verbs` per `BPMN_NAMING` schaltet den Hinweis ab. Eine kuerzere Verbliste ergibt also mehr Hinweise, nicht mehr Befunde. Gemessen an einer Stichprobe von 539 korrekten und 115 klar falschen englischen Task-Namen (`tests/fixtures/naming/en-task-names.json`): 0 Befunde auf den korrekten, 105 der falschen gemeldet, 25 korrekte mit Hinweis.
+
+**Bewusste Grenzen:** Die Heuristik (ohne `language`) kann deutsche Plural-Substantive auf `-en` nicht sicher von Verben unterscheiden und deckt nur einen kleinen englischen Verbwortschatz ab. Sie ist deshalb WARNING, nie blockierend. Unter `en` verfehlt M01 falsche Namen, deren erstes Wort ein Substantiv ist, das auch Verb ist (`Credit check`, `Change request`), und solche ohne Beleg (`Claims handling`). Die Namensregeln fuer Nachrichtenfluesse stehen in M05, die fuer Ereignisse in M06. M01 faengt die haeufigen, offensichtlichen Verstoesse ab.
 
 **Beispiele:**
 
@@ -466,6 +476,9 @@ Dieser Pfad liest keine Woerterliste; seine Meldung ist deutsch und enthaelt `Ob
 | gut | `Review Application` (englischer Escape-Hatch) |
 | schlecht | `Pruefung` (Einzelwort) |
 | schlecht | `Vorgang zur Klaerung` (kein Verb) |
+| gut (`en`) | `Diagnose fault`, `Back up data`, `Authenticate user` |
+| gut (`en`), Hinweis `H14` | `Groom backlog` |
+| schlecht (`en`) | `Checking invoice`, `Invoice checked`, `Invoice check`, `The invoice`, `Path A` |
 
 **Referenz:** 7PMG G6 "use verb-object activity labels" (Mendling, Reijers, van der Aalst, 2010), Bruce Silver: BPMN Method & Style, Ch.3
 
@@ -486,7 +499,8 @@ Ein Nachrichtenfluss benennt seinen Inhalt, nicht eine Handlung: eine Nominalphr
 | Bewertung | Name |
 |-----------|------|
 | gut | `Invoice`, `Merge request`, `Follow-up` |
-| schlecht | `Send invoice` (Anweisung) |
+| gut | `Deploy request`, `Sell order` (endet auf ein Nachrichten-Substantiv aus `messageNouns`) |
+| schlecht | `Send invoice` (Anweisung; `send` steht in `sendVerbs`, sein Objekt ist die Nachricht selbst) |
 | schlecht | `Order received` (Zustand, Partizip am Ende) |
 | schlecht | `Case closed` (Zustand, Partizip am Ende) |
 
