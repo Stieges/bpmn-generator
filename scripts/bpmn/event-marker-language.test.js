@@ -427,7 +427,11 @@ describe('Review Focus 1: a language that is no supported tag behaves like no la
     // "fr" is a valid tag without naming data: the XML names it (the attribute and its namespace
     // declaration) and nothing else differs.
     const french = await runPipeline(withLanguage(fixture('example-schadenmeldung'), 'fr'));
-    expect(french.validation.hints).toEqual(base.validation.hints);
+    expect(french.validation.hints).toEqual([{
+      code: 'H12',
+      message: 'Language "fr" has no naming conventions here; the naming rules M01, M05 and M06 are skipped (supported: de, en).',
+      elements: [],
+    }]);
     expect(french.svg).toBe(base.svg);
     expect(french.bpmnXml).toContain(' bg:language="fr"');
     expect(french.bpmnXml.replace(' bg:language="fr"', '').replace(' xmlns:bg="http://bpmn-generator/schema/1.0"', '')).toBe(base.bpmnXml);

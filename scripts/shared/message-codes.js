@@ -40,6 +40,8 @@ export const MESSAGE_CODES = Object.freeze({
   H09: entry('hint', 'a catalogue entry is replaced by an actor of the process file'),
   H10: entry('hint', 'the marker of an event was inferred from its name, under the declared language'),
   H11: entry('hint', 'the name of an event gave a marker before a language was declared and gives none or another one under it'),
+  H12: entry('hint', 'the declared language has no naming conventions, so the naming rules M01, M05 and M06 are skipped'),
+  H13: entry('hint', 'the task names follow the naming convention of another registered language than the declared one'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 

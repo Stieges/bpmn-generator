@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync, execFileSync } from 'node:child_process';
 import {
-  LANGUAGE_TAG, languageTag, modelLanguage, namingFor, checkNamingOverlay, NAMING_LANGUAGES, NamingDataError, namingDataErrorOf,
+  LANGUAGE_TAG, languageTag, modelLanguage, namingFor, checkNamingOverlay, namingHints, NAMING_LANGUAGES, NamingDataError, namingDataErrorOf,
 } from './index.js';
 
 const readSchema = (name) => JSON.parse(readFileSync(new URL(`../../../references/${name}`, import.meta.url), 'utf8'));
@@ -176,5 +176,71 @@ describe('importing naming/index.js', () => {
     `;
     const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' }).trim();
     expect(JSON.parse(out)).toEqual([]);
+  });
+});
+
+describe('namingHints: H12 and H13', () => {
+  const tasks = (...names) => names.map((name, i) => ({ id: `t${i}`, type: 'userTask', name }));
+  const model = (language, names, extra = {}) => ({ id: 'p', language, nodes: tasks(...names), ...extra });
+  const ENGLISH = ['Review request', 'Approve invoice', 'Send letter'];
+  const GERMAN = ['Antrag prüfen', 'Rechnung freigeben', 'Kunde informieren'];
+  // Passes both conventions ("Brief" is also an English verb).
+  const BOTH = 'Brief versenden';
+  const codes = (lc) => namingHints(lc).map((h) => h.code);
+
+  test('H12 for a valid tag without a strategy, with the whole tag; elements empty', () => {
+    expect(namingHints(model('fr-CA', ENGLISH))).toEqual([{
+      code: 'H12',
+      message: 'Language "fr-CA" has no naming conventions here; the naming rules M01, M05 and M06 are skipped (supported: de, en).',
+      elements: [],
+    }]);
+  });
+
+  test('no valid language: no hint', () => {
+    for (const language of [undefined, 'German', 'DE', 5, null, 'de" x="1']) expect(namingHints(model(language, ENGLISH))).toEqual([]);
+  });
+
+  test('H13 at 3 tasks, 3 of 3 fail and pass; never both H12 and H13', () => {
+    expect(namingHints(model('de', ENGLISH))).toEqual([{
+      code: 'H13',
+      message: 'The task names look like "en" but the model declares "de": 3 of 3 fail the German convention, 3 pass the English one.',
+      elements: [],
+    }]);
+    expect(namingHints(model('en', GERMAN)).map((h) => h.message)).toEqual([
+      'The task names look like "de" but the model declares "en": 3 of 3 fail the English convention, 3 pass the German one.',
+    ]);
+  });
+
+  test('two named tasks never give H13; unnamed tasks and non-tasks do not count', () => {
+    expect(codes(model('de', ENGLISH.slice(0, 2)))).toEqual([]);
+    const lc = model('de', ENGLISH.slice(0, 2), {});
+    lc.nodes.push({ id: 'u', type: 'userTask' }, { id: 'g', type: 'exclusiveGateway', name: 'Approve invoice' });
+    expect(codes(lc)).toEqual([]);
+  });
+
+  test('tasks in a subprocess and in a second pool count', () => {
+    const lc = { id: 'c', language: 'de', pools: [
+      { id: 'a', name: 'A', nodes: [{ id: 's', type: 'subProcess', name: 'Handle case', nodes: tasks('Review request', 'Approve invoice') }] },
+      { id: 'b', name: 'B', nodes: [{ id: 'x', type: 'task', name: 'Send letter' }] },
+    ] };
+    expect(namingHints(lc).map((h) => h.code)).toEqual(['H13']);
+  });
+
+  test('thresholds: 60 percent must fail the declared, 80 percent must pass the other', () => {
+    const E = ['Review request', 'Approve invoice', 'Send letter'];
+    // 3 of 5 fail de (60 %), all 5 pass en: hint
+    expect(codes(model('de', [...E, BOTH, BOTH]))).toEqual(['H13']);
+    // 2 of 5 fail de (40 %): none
+    expect(codes(model('de', [E[0], E[1], BOTH, BOTH, BOTH]))).toEqual([]);
+    // all 5 fail de, 4 pass en (80 %): hint
+    expect(codes(model('de', [...E, 'Handle case', 'Antrag prüfen']))).toEqual(['H13']);
+    // all 5 fail de, 3 pass en (60 %): none
+    expect(codes(model('de', [...E, 'Antrag prüfen', 'Rechnung freigeben']))).toEqual([]);
+  });
+
+  test('H12 or H13 come before H10 and H11', () => {
+    const lc = model('de', ENGLISH);
+    const marked = { inferred: [{ id: 'e', name: 'Fristablauf', type: 'startEvent', marker: 'timer', legacy: null, pool: null }], changed: [] };
+    expect(namingHints(lc, marked).map((h) => h.code)).toEqual(['H13', 'H10']);
   });
 });
