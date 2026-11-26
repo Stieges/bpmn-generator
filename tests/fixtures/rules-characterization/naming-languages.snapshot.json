@@ -1,0 +1,259 @@
+{
+  "all-element-classes.json": {
+    "language": "en",
+    "M01": [
+      "[Pool One] Task \"Check\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Pool One] Task \"Escalate\" does not follow the English convention verb + object (e.g. \"Review application\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "artifacts-laneless-pool.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "boundary-event-shapes.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "bpmn-generator-pipeline.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "deadlock-process.json": {
+    "language": "en",
+    "M01": [
+      "[Deadlock Demo] Task \"Path A\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Deadlock Demo] Task \"Path B\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Deadlock Demo] Task \"Continue\" does not follow the English convention verb + object (e.g. \"Review application\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "dense-edge-labels.json": {
+    "language": "de",
+    "M01": [
+      "[Dense Edges] Task \"Variante A\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Dense Edges] Task \"Variante B\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Dense Edges] Task \"Variante C\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Dense Edges] Task \"Variante D\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Dense Edges] Task \"Variante E\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "example-bestellung-versand.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "example-kreditantrag.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "example-onboarding.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "example-rechnungspruefung.json": {
+    "language": "de",
+    "M01": [
+      "[Rechnungsprüfung] Task \"Klärung mit Lieferant\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "example-schadenmeldung.json": {
+    "language": "de",
+    "M01": [
+      "[Versicherung] Task \"Rückfrage an Versicherungsnehmer\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "example-urlaubsantrag.json": {
+    "language": "de",
+    "M01": [
+      "[Urlaubsantrag] Task \"Erinnerung an Vorgesetzten\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "expanded-subprocess.json": {
+    "language": "de",
+    "M01": [
+      "[Hauptprozess] Task \"Vorprüfung\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "long-lane-names.json": {
+    "language": "de",
+    "M01": [
+      "[Long Names Test] Task \"Erfassen\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Long Names Test] Task \"Prüfen\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Long Names Test] Task \"Freigeben\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "loop-with-join.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "message-flow-participant-ports.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "messageflow-to-subprocess.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "multi-pool-collaboration.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "nested-lanes-role-system.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "parallel-split-join.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "realistic-collaboration.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "simple-approval.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "sparse-lanes.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "subprocess-child-fidelity.json": {
+    "language": "en",
+    "M01": [
+      "[Fidelity] Subprocess \"Archive\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "subprocess-collapsed-children.json": {
+    "language": "en",
+    "M01": [
+      "[Collapsed Containers] Subprocess \"Validate\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\").",
+      "[Collapsed Containers] Subprocess \"Archive\" is named like a state or a bare verb; name it as an activity (e.g. \"Review application\" or \"Claims handling\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "subprocess-merge-fanout.json": {
+    "language": "en",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "wide-pipeline.json": {
+    "language": "de",
+    "M01": [
+      "[Wide Pipeline] Task \"Schritt 1\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 2\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 3\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 4\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 5\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 6\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 7\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 8\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 9\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 10\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 11\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 12\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 13\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 14\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 15\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 16\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 17\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 18\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 19\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 20\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 21\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 22\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 23\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 24\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\").",
+      "[Wide Pipeline] Task \"Schritt 25\" does not follow the German convention object + infinitive (e.g. \"Antrag prüfen\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "wrapping-back-edge.json": {
+    "language": "en",
+    "M01": [
+      "[Rework Chain] Task \"Step 1\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 2\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 3\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 4\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 5\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 6\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 7\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 8\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 9\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 10\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 11\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 12\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 13\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 14\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 15\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 16\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 17\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 18\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 19\" does not follow the English convention verb + object (e.g. \"Review application\").",
+      "[Rework Chain] Task \"Step 20\" does not follow the English convention verb + object (e.g. \"Review application\")."
+    ],
+    "M05": [],
+    "M06": []
+  },
+  "fixtures-v2/schaden.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  },
+  "fixtures-v2/organigramm.json": {
+    "language": "de",
+    "M01": [],
+    "M05": [],
+    "M06": []
+  }
+}

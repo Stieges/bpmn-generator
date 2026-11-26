@@ -28,6 +28,7 @@ import { checkWorkflowNetSoundness } from './workflow-net.js';
 import { runOptimizationAnalysis } from './optimize.js';
 import { CFG } from '../shared/utils.js';
 import { inferEventMarker } from './icons.js';
+import { modelLanguage, namingFor, namingMessage } from './naming/index.js';
 
 /** How a finding names an edge: its id, or `source→target` for an edge that has none yet. */
 function edgeRef(e) {
@@ -1040,18 +1041,39 @@ function violatesVerbObject(name) {
   return true;
 }
 
+// M01 for a model without a (valid) language: the heuristic above on the process's own nodes.
+// Reads no word list and no BPMN_NAMING.
+function legacyM01(proc) {
+  const msgs = [];
+  for (const n of (proc.nodes || [])) {
+    if (TASK_TYPES.has(n.type) && n.name && violatesVerbObject(n.name))
+      msgs.push(`Task "${n.name}" folgt nicht der Objekt+Verb-Konvention (z.B. "Antrag prüfen"). Heuristik — exakte Wortartprüfung: M05/M06.`);
+  }
+  return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
+}
+
 const STYLE_CHECKS = [
   {
     id: 'M01',
     description: 'Activity-Labels: Objekt + Verb (Verb im Infinitiv)',
     ref: { silver: 'Ch.3', pmg: 'G6' },
     scope: 'process',
-    check: (proc) => {
+    check: (proc, lc) => {
+      const language = modelLanguage(lc);
+      if (language === null) return legacyM01(proc);
+      const naming = namingFor(language);
+      if (!naming) return { pass: true };
       const msgs = [];
-      for (const n of (proc.nodes || [])) {
-        if (TASK_TYPES.has(n.type) && n.name && violatesVerbObject(n.name))
-          msgs.push(`Task "${n.name}" folgt nicht der Objekt+Verb-Konvention (z.B. "Antrag prüfen"). Heuristik — exakte Wortartprüfung: M05/M06.`);
-      }
+      const walk = (nodes) => {
+        for (const n of (nodes || [])) {
+          if (n.name) {
+            if (TASK_TYPES.has(n.type) && naming.taskName(n.name)) msgs.push(namingMessage(naming, 'task', n.name));
+            else if (CONTAINER_TYPES.has(n.type) && naming.containerName(n.name)) msgs.push(namingMessage(naming, 'container', n.name, n.type));
+          }
+          walk(n.nodes);
+        }
+      };
+      walk(proc.nodes);
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
@@ -1060,14 +1082,16 @@ const STYLE_CHECKS = [
     description: 'XOR-Gateway-Labels: Frageform (endet mit ?)',
     ref: { silver: 'Ch.3' },
     scope: 'process',
-    check: (proc) => {
+    check: (proc, lc) => {
+      const language = modelLanguage(lc);
+      const naming = language === null ? null : namingFor(language);
       const msgs = [];
       const edges = proc.edges || [];
       for (const n of (proc.nodes || [])) {
         if (n.type !== 'exclusiveGateway' || n.has_join) continue;
         const outCount = edges.filter(e => e.source === n.id).length;
         if (outCount <= 1) continue; // converging/merge gateway — no label needed
-        if (!(n.name || '').replace(/\n/g, ' ').includes('?'))
+        if (naming ? !naming.isQuestion(n.name || '') : !(n.name || '').replace(/\n/g, ' ').includes('?'))
           msgs.push(`XOR gateway "${n.id}" should be a question (e.g. "Antrag gültig?").`);
       }
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };

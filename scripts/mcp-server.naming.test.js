@@ -35,12 +35,10 @@ describe('BPMN_NAMING: a broken word-list overlay', () => {
     expect(res.stdout).toBe('');
   }, 60_000);
 
-  // Request time. Until the naming rules consult the word lists (the task after this one), no rule
-  // on the request path calls namingFor. The failure is injected where it will then come from:
-  // runRules (scripts/bpmn/rules.js) is wrapped so that it first calls the real
+  // Request time. runRules (scripts/bpmn/rules.js) is wrapped so that it first calls the real
   // namingFor(modelLanguage(model)) — which loads the lexicon with the real, broken BPMN_NAMING
-  // file and throws a genuine NamingDataError — and then runs the real rules. The next task makes
-  // this path real and adds an un-mocked end-to-end assertion.
+  // file and throws a genuine NamingDataError — and then runs the real rules. M01 now does that
+  // itself; the un-mocked end-to-end assertion is in scripts/bpmn/naming-rules.test.js.
   // Loaded once: a module mock outlives jest.resetModules, so a second load would wrap the mock.
   let mocked = null;
   const loadMocked = () => (mocked ??= loadMockedOnce());
