@@ -9,6 +9,7 @@ an IT system, or which BPMN construct fits a situation. The short version lives 
 - [How to advise](#how-to-advise)
 - [Pools, lanes, roles and systems](#pools-lanes-roles-and-systems)
 - [Which construct when](#which-construct-when)
+- [Naming conventions per language](#naming-conventions-per-language)
 
 ## How to advise
 
@@ -84,3 +85,36 @@ SC = scenario pipeline, which checks a `decisionRef` against DMN files; see
 
 If the user's purpose is unclear, ask rather than pick silently — the same text gives a different
 diagram for a business reader than for an integration team.
+
+## Naming conventions per language
+
+Set the top-level `language` of the model (`"de"`, `"en"`, `"en-GB"`) to the language of its labels.
+The naming rules then judge them by that language's convention; without the field M01 is the
+older `Objekt+Verb` heuristic and M05 and M06 report nothing. A word list decides, not a grammar:
+a correct label the lists do not know is flagged, and the remedy is `BPMN_NAMING` (see the README,
+"Naming languages"), not a rewording. Under `en`, `Invoice customer` is flagged because `invoice` is
+no verb in the list; `{ "languages": { "en": { "add": { "verbs": ["invoice"] } } } }` fixes it.
+
+| Element | Rule | `de` (verb last) | `en` (verb first) |
+|---|---|---|---|
+| Task | M01 | object, then the infinitive: `Antrag prüfen`, `Paket an Paketdienst übergeben`, `Antrag prüfen und freigeben`. Not: `Prüfen`, `Antrag eingegangen`, `Klärung mit Lieferant`, `Rechnung zu zahlen` (a state, not an instruction) | imperative, then the object: `Review application`, `Hand off case`, `Re-check order`, `E-mail customer`. Not: `Check`, `Checking invoice`, `Invoice check`, `Follow-up` |
+| Sub-process, call activity | M01 | a topic, not an instruction or a state: `Kommissionierung`, `Prüfung der Unterlagen`. Not: `Antrag geprüft`, `Prüfen` | a topic: `Claims handling`, `Credit check`, `Onboarding`. Not: `Order received`, `Validate` |
+| Gateway | M02 | a question: `Vollständig?` | a question: `Complete?` |
+| Event | M06 | a state or occurrence: `Antrag eingegangen`, `Plan aktiv`, `Start`. Not an instruction: `Antrag prüfen` | `Application received`, `7 days elapsed`, `Follow-up`. Not an instruction: `Send invoice` |
+| Message flow | M05 | the content, not a state: `Bestellung`, `Rechnung zu zahlen`. Not: `Rechnung gesendet`, `Rechnung senden` | `Request for details`, `Pay slip`. Not: `Order received`, `Send invoice` |
+
+Behaviours worth knowing:
+
+- A single word that is a nominalised infinitive is a bare verb as a sub-process name and is
+  flagged (`Verpacken`, `Prüfen`, `Validate`); a one-word noun that equals an infinitive is not
+  (`Schreiben`, `Zahlen`).
+- German compounds count for the event markers: `Zeitschrift gelesen` suggests a timer because the
+  name starts with `Zeit`. Set `marker` on such an event yourself.
+- The marker of an event without `marker` is inferred from its name only where BPMN allows it:
+  `Deadline missed` is a timer on a boundary event and nothing on an end event; `Error raised` is
+  an error on an end event and nothing on a start event. Error and escalation are never inferred on a
+  start event (a start event inside an ordinary sub-process still gets an inferred marker). Every
+  inferred marker is reported as hint `H10`; a name that gave a marker before the language was
+  declared and now gives none or another one is `H11`: set `marker` explicitly.
+- A valid tag without word lists (`fr`) skips M01, M05 and M06 (hint `H12`); labels that look like
+  another supported language than the declared one give hint `H13`.

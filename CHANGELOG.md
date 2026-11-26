@@ -77,6 +77,43 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 - **`aligned-ports` view.** `views/aligned-ports-view.json` sets `layout.alignParticipantPorts: true`; the default
   stays `false`.
 
+
+- **Language-aware naming rules (`de`, `en`).** A model may declare the language of its labels in
+  the optional top-level field `language`, a language tag with a lowercase primary subtag
+  (`"de"`, `"en-GB"`; both input formats). Ontology version 1.3; both `$schemaVersion` defaults
+  follow (1.0–1.2 documents stay valid). The XML carries it as `bg:language` on
+  `bpmn:definitions`, both importers read it back, and drill-down child diagrams, `refine` and
+  `amend` keep it. A model without the field, or with a value that is no tag, gives the output it
+  gave before: M01 is the legacy `Objekt+Verb` heuristic, no naming file is read, no hint appears.
+  Under `de` (verb last) and `en` (verb first) the rules judge each label by that language's
+  convention: M01 every named task and every sub-process and call-activity name at every nesting
+  level (a task is an instruction, a sub-process names a topic and not a bare verb or a state),
+  M02 gateway names through the language's question test, M05 message-flow names and M06 event
+  names (an event names a state, a message its content). M05 and M06 are WARNING by default now
+  and silent without `language`; before they were registered with severity `OFF`, so a profile
+  that sets either to `OFF` still switches it off. The word lists are data, not code:
+  `references/naming/de.json`, `references/naming/en.json`, checked by
+  `references/naming-schema.json`.
+- **English word lists.** `references/naming/en.json` builds on the verb corpus, the verb phrases
+  (`hand off`, `carry out`) and the hyphen handling of PR #151, adapted to the data format above, so
+  that `Hand off case`, `Pre-approve loan` and `E-mail customer` pass the verb-first convention.
+  Contributed by Jérôme Fenal (@jfenal) in #151.
+- **Event markers by language.** Under a supported `language` the marker of an event without
+  `marker` is inferred from its name by that language's keywords (message, timer, error, signal,
+  escalation, conditional), only where the marker is legal on the event type; the rules and both
+  writers read the same marker. New hints in `validation.hints`, on the generate path only and
+  never failing `--strict`: `H10` per marker inferred, `H11` per event whose name gave a marker
+  before a language was declared and gives none or another one now (set `marker` explicitly),
+  `H12` for a valid tag without naming conventions (M01, M05, M06 are skipped; supported: `de`,
+  `en`) and `H13` when the task names look like another supported language than the declared one.
+- **`BPMN_NAMING` overlay.** The environment variable names a JSON file that adds words to, and
+  removes words from, eight flat word lists of a shipped language
+  (`{ "languages": { "en": { "add": { "verbs": ["invoice"] }, "remove": { … } } } }`, add first,
+  then remove), so a correct label that a rule flags is fixed by data. The file is read when a
+  naming strategy is first used; any failure is a `NamingDataError` naming the path and the
+  reason. The HTTP and MCP servers check it at start and refuse to start with a broken file; at
+  request time (also inside `orchestrate`) a failure is a `500` `naming data unavailable` (MCP: a
+  tool error with that text) and the path goes only to the server log.
 ### Fixed
 
 - **Nested lanes of 1.x models are drawn.** A lane with `children` was written to the XML

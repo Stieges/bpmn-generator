@@ -94,7 +94,9 @@ a lowercase primary subtag: it matches `^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$` (`"de"
 origin marker, so it raises no import notice. Drill-down child diagrams carry the language of their
 parent. A model without the field, or with a value that is no such tag, gives the output it gave
 before the field existed: nothing is written. Node keys that start with `_` (`_marker` among them)
-are reserved for the pipeline; on input they are ignored or removed.
+are reserved for the pipeline; on input they are ignored or removed. The language-aware marker is
+resolved by `runPipeline` on its own copy of the model: `generateBpmnXml` and `generateSvg` called
+directly on a model with `language` write the legacy markers.
 
 ---
 

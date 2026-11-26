@@ -70,7 +70,8 @@ Extraction Prompt in `references/prompt-template.md`. These rules always apply:
 
 **Naming**
 - Tasks: object + verb — German `Antrag prüfen` (infinitive last) or English verb-first
-  `Review application`. Not `Prüfung`. (M01)
+  `Review application`. Not `Prüfung`. (M01) Set the top-level `language` (`"de"` or `"en"`) to the
+  language of the labels you extract; the rules then judge them by that language.
 - XOR gateways: a question — `Antrag gültig?`. AND/OR gateways: empty or a brief label.
 - Every outgoing edge of an XOR split is labelled (`Ja`/`Nein`, `approved`/`rejected`); mark one
   `isDefault: true`.
