@@ -228,6 +228,75 @@ describe('formLanes — the example of design 5.6', () => {
   });
 });
 
+// deterministic shuffle: mulberry32 with a fixed seed per run
+function seededShuffle(list, seed) {
+  let a = seed >>> 0;
+  const rnd = () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+describe('formLanes — pinned edge cases', () => {
+  test('hint order of 5.6 with one unassigned and one automatic step', () => {
+    const model = copy(MODEL_56);
+    model.nodes.push({ id: 'u', type: 'userTask', name: 'Ohne Zuständigkeit' }, { id: 'x', type: 'serviceTask', name: 'Automatik' });
+    model.edges.push({ source: 'regr', target: 'u' }, { source: 'u', target: 'x' }, { source: 'x', target: 'zahlen' });
+    const out = form(model, { catalog: CATALOG_56 });
+    expect(out.errors).toEqual([]);
+    expect(out.hints).toEqual([
+      { code: 'H02', message: 'No performer for "Ohne Zuständigkeit" (u): lane "(nicht zugeordnet)".', elements: ['u'] },
+      { code: 'H03', message: 'Automatic step "Automatik" (x) has no performer; it is placed with its neighbour in lane "(nicht zugeordnet)".', elements: ['x', 'L.Process_Schaden._unassigned'] },
+    ]);
+  });
+
+  test('7.2 (d) and a loop with a tie do not depend on the order of edges (50 seeded shuffles)', () => {
+    const d = proc(
+      [node('S', 'startEvent'), node('G', 'exclusiveGateway'), node('T1', 'userTask', 'A'), node('T2', 'userTask', 'B'),
+        node('G2', 'exclusiveGateway'), node('E', 'endEvent')],
+      [['S', 'G'], ['G', 'T1'], ['T1', 'T2'], ['T2', 'G2'], ['G2', 'G'], ['G2', 'E']],
+    );
+    // a loop whose automatic step sees B and A equally often: the tie goes to A, the role declared first
+    const tie = proc(
+      [node('T1', 'userTask', 'B'), node('T2', 'userTask', 'A'), node('X', 'serviceTask'), node('T3', 'userTask', 'C')],
+      [['T1', 'X'], ['T2', 'X'], ['X', 'T3'], ['T3', 'T1']],
+    );
+    for (const model of [d, tie]) {
+      const reference = form(model);
+      for (let seed = 1; seed <= 50; seed++) {
+        const shuffled = { ...copy(model), edges: seededShuffle(model.edges, seed) };
+        const out = form(shuffled);
+        expect(members(out.lc)).toEqual(members(reference.lc));
+        expect(out.hints).toEqual(reference.hints);
+      }
+    }
+    expect(members(form(tie).lc)).toEqual({ B: ['T1'], A: ['T2', 'X'], C: ['T3'] });
+  });
+
+  test('a boundary event whose host is no top-level flow node: H08 with its own wording', () => {
+    const out = form(proc(
+      [node('T', 'userTask', 'A'), node('BE', 'boundaryEvent', undefined, { attachedTo: 'nirgends' })],
+      [['T', 'BE']],
+    ));
+    expect(out.errors).toEqual([]);
+    expect(out.hints).toEqual([{
+      code: 'H08',
+      message: 'Boundary event "BE" (BE) has no host with a lane: lane "(nicht zugeordnet)".',
+      elements: ['BE'],
+    }]);
+    expect(members(out.lc)).toEqual({ A: ['T'], [UNASSIGNED]: ['BE'] });
+  });
+});
+
 describe('formLanes — further behaviour', () => {
   test('unit collapsing: two roles of one unit form one unit lane', () => {
     const catalog = {
@@ -330,6 +399,23 @@ describe('formLanes — further behaviour', () => {
     expect(out.lc.nodes.find((n) => n.id === 'N2').lane).toBe('L.P.A');
   });
 
+  test('an annotation associated with a subprocess child takes the lane of the top-level subprocess', () => {
+    const out = form(proc(
+      [node('T1', 'userTask', 'A'), node('T2', 'userTask', 'B'),
+        node('SP', 'subProcess', 'B', {
+          isExpanded: true,
+          nodes: [node('c1', 'userTask', 'A'), node('inner', 'subProcess', undefined, { isExpanded: true, nodes: [node('c2', 'userTask')], edges: [] })],
+          edges: [],
+        }),
+        { id: 'N', type: 'textAnnotation', name: 'Kind' }, { id: 'N2', type: 'textAnnotation', name: 'Enkel' }],
+      [['T1', 'T2'], ['T2', 'SP']],
+      { associations: [{ id: 'as1', source: 'N', target: 'c1' }, { id: 'as2', source: 'c2', target: 'N2' }] },
+    ));
+    expect(out.errors).toEqual([]);
+    expect(out.lc.nodes.find((n) => n.id === 'N').lane).toBe('L.P.B');
+    expect(out.lc.nodes.find((n) => n.id === 'N2').lane).toBe('L.P.B');
+  });
+
   test("lanes: 'none' gives no lanes and no hints", () => {
     const out = form(MODEL_56, { catalog: CATALOG_56, lanes: 'none' });
     expect(out.errors).toEqual([]);
@@ -340,10 +426,12 @@ describe('formLanes — further behaviour', () => {
 
   test('the arguments are unchanged', () => {
     const { lc, resolved } = resolve(MODEL_56, CATALOG_56);
-    const before = [JSON.stringify(lc), JSON.stringify(resolved.actors), JSON.stringify(resolved.scheme)];
+    const snap = () => [JSON.stringify(lc), JSON.stringify(resolved.actors), JSON.stringify(resolved.scheme),
+      JSON.stringify([...resolved.byId]), JSON.stringify([...resolved.order])];
+    const before = snap();
     const out = formLanes(lc, resolved, { lanes: 'unit' });
     expect(out.lc).not.toBe(lc);
-    expect([JSON.stringify(lc), JSON.stringify(resolved.actors), JSON.stringify(resolved.scheme)]).toEqual(before);
+    expect(snap()).toEqual(before);
   });
 
   test('checkProjection throws on a flow node without lane', () => {
