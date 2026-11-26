@@ -136,12 +136,19 @@ Behaviours worth knowing:
 - German compounds count for the event markers: `Fristablauf` suggests a timer and `Fehlermeldung`
   an error because the name starts with the keyword. Words that only begin like a keyword are
   listed in `compoundExceptions` and give no marker (`Zeitschrift gelesen`, `Zeitung`, `Zeitarbeit`,
-  `Signalwirkung`). A keyword that names a duration (`zeit`, `wartezeit`: list `durationKeywords`)
+  `Signalwirkung`; also words that measure or set a time or a deadline: `Zeitermittlung`,
+  `Wartezeitermittlung`, `Fristverlängerung`, `Fristsetzung`). On an event that may be plain (a
+  start event outside an event subprocess; end and intermediate throw events take no timer
+  anyway), a keyword that names a duration (`zeit`, `zeiten`, `wartezeit`: list `durationKeywords`)
   at the end of a compound gives a timer only when the name also says the time ran out, with a
-  word of `expiryWords` (`Lieferzeit überschritten`, `Wartezeit abgelaufen`; `um` only as the last
-  word: `Wartezeit um`); `Arbeitszeit erfasst` and `Lieferzeit bestätigt` get no marker and no
-  `H10`. A deadline keyword at the end (`Bearbeitungsfrist`) and a whole or leading keyword
-  (`Wartezeit`, `Zeitablauf`) still give a timer on their own. A word the lists miss is fixed by
+  word of `expiryWords` (`Lieferzeit überschritten`, `Lieferzeit-Ablauf`, `Garantiezeit
+  ausgelaufen`; `um` and `ab` only as the last word: `Lieferzeit um`, `Lieferzeit läuft ab`);
+  `Arbeitszeit erfasst` and `Lieferzeit bestätigt` get no marker and no `H10`, and `H11` reports
+  that the inference without a language read a timer there. On an event that needs a trigger (a
+  boundary or intermediate catch event, the start event of an event subprocess) the duration word
+  alone gives the timer (`Karenzzeit`, `Lieferzeit 5 Tage`), so `Arbeitszeit erfasst` is a timer
+  there too. A deadline keyword at the end (`Bearbeitungsfrist`) and a whole or leading keyword
+  (`Wartezeit`, `Zeiten`, `Zeitablauf`) give a timer on their own. A word the lists miss is fixed by
   setting `marker` on the event yourself: to the symbol you want, or to `"none"` for a plain event;
   an explicit `marker`, `"none"` included, always wins over the inference.
 - The marker of an event without `marker` is inferred from its name only where BPMN allows it:

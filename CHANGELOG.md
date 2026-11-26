@@ -133,10 +133,14 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   else `H14` naming the first words of English task names that are not on the verb list.
   Under `de` a keyword also matches in a compound (`Fristablauf`, `Fehlermeldung`); the data list
   `compoundExceptions` names words that only begin like a keyword (`Zeitschrift`, `Zeitung`,
-  `Zeitarbeit`, `Signalwirkung`) and give no marker, in any inflected or longer form. A timer
-  keyword that names a duration (`durationKeywords`: `zeit`, `wartezeit`) at the end of a compound
-  gives a timer only when the label also has a word of `expiryWords` (`Lieferzeit überschritten`,
-  `Wartezeit um`); `Arbeitszeit erfasst` and `Lieferzeit bestätigt` get no marker and no `H10`.
+  `Zeitarbeit`, `Signalwirkung`, `Zeitermittlung`, `Fristverlängerung`) and give no marker, in
+  any inflected or longer form. On an event that may be plain (a start event outside an event
+  subprocess), a timer keyword that names a duration (`durationKeywords`: `zeit`, `zeiten`,
+  `wartezeit`) at the end of a compound gives a timer only when the label also has a word of
+  `expiryWords` (`Lieferzeit überschritten`, `Lieferzeit um`); `Arbeitszeit erfasst` and
+  `Lieferzeit bestätigt` get no marker and no `H10`, and `H11` reports the change against the
+  inference without a language. On an event that needs a trigger the duration word alone gives the
+  timer (`Karenzzeit` on a boundary event).
 - **`marker: "none"`.** A new value of `marker` (input schemas 1.3 and 2.0, ontology 1.3): a
   plain event on purpose. It stops the marker inference from the name, with and without a declared
   `language` (no H10, no H11 for that event), and the event is drawn and written without an event
