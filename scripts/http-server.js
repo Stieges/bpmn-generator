@@ -636,7 +636,7 @@ const server = createServer(async (req, res) => {
     if (namingFailure) {
       console.error(`Naming data failure (correlationId ${correlationId}): ${namingFailure.message}`);
       auditLog({ event: 'naming_data_error', correlationId });
-      return json(res, 500, { correlationId, status: 'internal_error', error: 'naming data unavailable' });
+      return json(res, 500, { correlationId, status: 'internal_error', error: namingFailure.publicMessage });
     }
     // An LLM endpoint's answer can carry anything: log the detail here, return only the class.
     const llmFailure = llmFailureOf(err);
