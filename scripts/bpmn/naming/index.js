@@ -55,6 +55,17 @@ export function namingFor(language) {
   return strategies.get(key);
 }
 
+/**
+ * The `NamingDataError` behind an error, following `cause` (the orchestrator wraps agent errors),
+ * else `null`. Bounded depth, so a cyclic `cause` chain ends.
+ */
+export function namingDataErrorOf(err) {
+  for (let e = err, depth = 0; e && depth < 8; e = e.cause, depth++) {
+    if (e instanceof NamingDataError) return e;
+  }
+  return null;
+}
+
 /** Fails early on an unusable `BPMN_NAMING` file: loads every registered language with it. */
 export function checkNamingOverlay(env = process.env) {
   if (!env.BPMN_NAMING) return;
