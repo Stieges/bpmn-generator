@@ -256,12 +256,12 @@ bpmn-generator/
 
 ## Rule Engine
 
-42 BPMN rules across 5 layers with configurable severity via JSON profiles (2 are registered as placeholders; SC01 and SC06 run in the scenario pipeline and are not profile-switchable yet). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
+42 BPMN rules across 5 layers with configurable severity via JSON profiles (SC01 and SC06 run in the scenario pipeline and are not profile-switchable yet). The authoritative catalog lives in [`references/fachliches-regelwerk.md`](references/fachliches-regelwerk.md); this README does not duplicate per-rule descriptions.
 
 | Layer | Severity | Rules | Examples |
 |-------|----------|-------|----------|
 | Soundness | ERROR | S01-S17 | Start/End events, deadlocks, boundary events |
-| Style | WARNING | M01-M13 (M06 severity=OFF; M05 checks message flow names only under a declared `language`) | Naming conventions, gateway labels |
+| Style | WARNING | M01-M13 (M05 and M06 check message flow and event names only under a declared `language`) | Naming conventions, gateway labels |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Liveness, boundedness, deadlock-freedom (opt-in) |
 | Optimization | ADVISORY | O01-O04 | Redesign opportunities — `optimize`/`soll` mode only (opt-in); each names a transform in the redesign toolbox |
@@ -434,7 +434,7 @@ const ontology = JSON.parse(readFileSync(path, 'utf8'));   // CommonJS: require.
 - **Round-tripping** (BPMN XML → Logic-Core JSON → BPMN XML)
 - **DOT format** (Graphviz export + import for visualization)
 - **Inline mode** (browser-side ElkJS rendering without Node.js)
-- **Configurable rule engine** (42 BPMN rules, 5 layers, JSON profiles — 2 registered as placeholders)
+- **Configurable rule engine** (42 BPMN rules, 5 layers, JSON profiles)
 - **Integrity checks on every run** — Petri-net translation (NC01–NC06) and post-layout diagram geometry (DI01–DI11), reported apart from the rule engine
 - **Routing repair** — fewest-bends rule, crossing repair with an obstacle-aware orthogonal router, re-routing of flows through foreign shapes, event and gateway labels kept off flows
 - **Ontology** — node types, markers and the rule catalog in one JSON-LD file ([`references/ontology.jsonld`](references/ontology.jsonld)), exported as `bpmn-generator/ontology`

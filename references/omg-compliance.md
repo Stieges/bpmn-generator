@@ -310,7 +310,6 @@ New optional fields on Node: `calledElement`, `scriptFormat`, `script`, `impleme
 
 ## Still Open
 
-- Style rules M05-M08 (placeholders in rules.js)
 - Pragmatics rules P02-P03 (placeholders in rules.js)
 - bpmn-moddle as export layer (long-term — replaces bpmn-xml.js template strings, enables Camunda/Zeebe extensions)
 
