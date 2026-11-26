@@ -85,31 +85,48 @@ function partOfCycles(parentOf, order) {
 
 /**
  * Checks a 2.0 model and translates it into the intermediate form. Neither argument is changed.
- * `catalog` is `{ actors, scheme? }`; a model without one may carry `actors` (and `scheme`) itself.
- * With findings the result is `{ lc: null, resolved: null, errors }`.
+ * `catalog` is `{ actors, scheme? }`; the model's `actors` then replace or extend it (its `scheme` is C13);
+ * a model without one may carry `actors` (and `scheme`) itself.
+ * `hints` lists H09 per catalogue entry the model's `actors` replace (model order). With findings
+ * the result is `{ lc: null, resolved: null, errors, hints: [] }`.
  */
 export function resolveFields(model, options) {
   const { catalog, viewName = 'default' } = options ?? {};
-  const fail = (errors) => ({ lc: null, resolved: null, errors });
+  const fail = (errors) => ({ lc: null, resolved: null, errors, hints: [] });
 
   // (1) format schema
   const gate = validateModelSchema(model, { accept: ['2'] });
   if (!gate.valid) return fail(gate.errors.map((e) => (e.code ? coded(e.code, `${e.path} ${e.message}`) : e.message)));
 
-  // (2) the source of the actors
+  // (2) the source of the actors. With a catalogue object the model's own `actors` replace entries
+  // of it (same id, in place) or are appended (new id); the C rules then run on that effective list.
   let source = null;
+  let ownActors = null;
+  const hints = [];
   if (catalog !== undefined && catalog !== null) {
-    if (model.actors !== undefined) {
-      return fail([coded('C13', 'the model carries actors and a catalogue was passed; replacing entries comes in a later version')]);
-    }
+    if (model.scheme !== undefined) return fail([coded('C13', 'the process file cannot change the responsibility scheme of the catalogue')]);
+    const problems = catalogErrors(catalog);
+    if (problems.length) return fail(problems);
     source = catalog;
+    if (model.actors !== undefined) {
+      ownActors = model.actors;
+      const own = new Map();
+      for (const actor of ownActors) if (!own.has(actor.id)) own.set(actor.id, actor);
+      const inCatalog = new Set(catalog.actors.map((a) => a.id));
+      const merged = catalog.actors.map((a) => own.get(a.id) ?? a);
+      for (const actor of ownActors) if (!inCatalog.has(actor.id)) merged.push(actor);
+      for (const id of own.keys()) {
+        if (inCatalog.has(id)) hints.push({ code: 'H09', message: `Catalogue entry "${q(id)}" is replaced by the process file.`, elements: [id] });
+      }
+      source = { ...catalog, actors: merged };
+      const effective = catalogErrors(source);
+      if (effective.length) return fail(effective);
+    }
   } else if (typeof model.catalog === 'string') {
     return fail([coded('C13', `the model names catalogue "${q(model.catalog)}" but no catalogue object was passed — the CLI reads it relative to the model file, a library caller passes { catalog }`)]);
   } else if (model.actors !== undefined) {
     source = { actors: model.actors };
     if (model.scheme !== undefined) source.scheme = model.scheme;
-  }
-  if (source) {
     const problems = catalogErrors(source);
     if (problems.length) return fail(problems);
   }
@@ -127,10 +144,20 @@ export function resolveFields(model, options) {
   const order = new Map();
   const counts = new Map();
   actors.forEach((actor, index) => {
-    counts.set(actor.id, (counts.get(actor.id) ?? 0) + 1);
     if (!byId.has(actor.id)) { byId.set(actor.id, actor); order.set(actor.id, index); }
   });
-  for (const [id, n] of counts) if (n > 1) errors.push(`[C03] actor id "${q(id)}" occurs ${n} times in the catalogue`);
+  // C03: duplicates inside one source list; a model actor that replaces a catalogue id is none.
+  const duplicates = (list, where) => {
+    const counts = new Map();
+    for (const actor of list) counts.set(actor.id, (counts.get(actor.id) ?? 0) + 1);
+    for (const [id, n] of counts) if (n > 1) errors.push(`[C03] actor id "${q(id)}" occurs ${n} times in ${where}`);
+  };
+  if (ownActors) {
+    duplicates(catalog.actors, 'the catalogue');
+    duplicates(ownActors, 'the actors of the process file');
+  } else {
+    duplicates(actors, 'the catalogue');
+  }
 
   const nodes = allNodes(model);
   // No catalogue handed over at all (no source): one leading error instead of a C01 line per
@@ -222,7 +249,7 @@ export function resolveFields(model, options) {
     if (node.assignments !== undefined) { node._assignments = node.assignments; delete node.assignments; }
   }
   lc._modelInfo = { version: model.$schemaVersion, view: viewName, catalogFingerprint: fingerprint };
-  return { lc, resolved, errors: [] };
+  return { lc, resolved, errors: [], hints };
 }
 
 // ---------------------------------------------------------------------------------------------

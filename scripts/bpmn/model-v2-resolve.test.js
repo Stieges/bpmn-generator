@@ -114,9 +114,10 @@ describe('resolveFields', () => {
     expect(resolveFields({ ...simpleApproval(), $schemaVersion: '1.2' }).errors).toEqual(['this is not a format 2.0 model ($schemaVersion "1.2")']);
   });
 
-  test('catalogue and model actors together', () => {
+  test('scheme beside a catalogue object is C13', () => {
     const { catalog: _drop, ...rest } = copy(MODEL);
-    expect(run({ ...rest, ...copy(CATALOG) }).errors).toEqual(['[C13] the model carries actors and a catalogue was passed; replacing entries comes in a later version']);
+    expect(run({ ...rest, actors: [{ id: 'x', name: 'X' }], scheme: 'demi' }).errors)
+      .toEqual(['[C13] the process file cannot change the responsibility scheme of the catalogue']);
   });
 
   test('a catalogue path without a catalogue object', () => {
@@ -309,5 +310,76 @@ describe('organigram: partOf, parentOf, isUnit, unitChain', () => {
 
   test('two separate cycles give two C07', () => {
     expect(org(u('a', 'a'), u('b', 'c'), u('c', 'b')).errors).toHaveLength(2);
+  });
+});
+
+describe('resolveFields — the process file replaces and adds catalogue entries', () => {
+  const REGRESS = { id: 'regress', name: 'Regress (lokal)', kind: 'role', unit: 'abt_finanzen' };
+  const deepFreeze = (v) => { if (v && typeof v === 'object') { Object.values(v).forEach(deepFreeze); Object.freeze(v); } return v; };
+  const withActors = (actors) => ({ ...copy(MODEL), actors });
+  const resolveWith = (actors) => resolveFields(deepFreeze(withActors(actors)), { catalog: deepFreeze(copy(CATALOG)), viewName: 'einheiten' });
+
+  test('an actor of the catalogue is replaced in place; one H09; fingerprint over the effective list', () => {
+    const { resolved, errors, hints } = resolveWith([REGRESS]);
+    expect(errors).toEqual([]);
+    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_schaden', 'abt_finanzen', 'sb_schaden', 'regress', 'zahlung']);
+    expect(resolved.byId.get('regress')).toEqual(REGRESS);
+    expect(resolved.order.get('regress')).toBe(3);
+    expect(resolved.parentOf.size).toBe(0);
+    expect(hints).toEqual([{ code: 'H09', message: 'Catalogue entry "regress" is replaced by the process file.', elements: ['regress'] }]);
+    expect(resolved.fingerprint).not.toBe(PINNED);
+    expect(resolved.fingerprint).toBe(catalogFingerprint(resolved.actors, resolveScheme('demi')));
+  });
+
+  test('a new id is appended, no hint', () => {
+    const extra = { id: 'neu', name: 'Neu', kind: 'role', unit: 'abt_finanzen' };
+    const { resolved, errors, hints } = resolveWith([extra]);
+    expect(errors).toEqual([]);
+    expect(hints).toEqual([]);
+    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_schaden', 'abt_finanzen', 'sb_schaden', 'regress', 'zahlung', 'neu']);
+    expect(resolved.order.get('neu')).toBe(5);
+  });
+
+  test('hints come in model order', () => {
+    const { hints, resolved } = resolveWith([{ id: 'zahlung', name: 'Z2', kind: 'role' }, { id: 'neu', name: 'N' }, REGRESS]);
+    expect(hints.map((h) => h.elements[0])).toEqual(['zahlung', 'regress']);
+    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_schaden', 'abt_finanzen', 'sb_schaden', 'regress', 'zahlung', 'neu']);
+  });
+
+  test('a plain catalogue keeps its fingerprint and has no hints', () => {
+    const { resolved, hints } = resolveFields(copy(MODEL), { catalog: copy(CATALOG) });
+    expect(resolved.fingerprint).toBe(PINNED);
+    expect(hints).toEqual([]);
+  });
+
+  test('Review Focus 4: the model turns a unit into a role: C02 for the actor that names it', () => {
+    const { errors, resolved } = resolveWith([{ id: 'abt_schaden', name: 'Schaden', kind: 'role' }]);
+    expect(resolved).toBeNull();
+    expect(errors).toEqual(expect.arrayContaining(['[C02] actor "sb_schaden": unit "abt_schaden" is a role, not a unit']));
+  });
+
+  test('C01 on the effective list: a replaced actor names an unknown unit', () => {
+    expect(resolveWith([{ ...REGRESS, unit: 'nirgends' }]).errors).toEqual(['[C01] actor "regress": unit "nirgends" is not in the catalogue']);
+  });
+
+  test('C03 counts duplicates inside the model\'s own actors only', () => {
+    expect(resolveWith([REGRESS, REGRESS]).errors).toEqual(expect.arrayContaining([expect.stringMatching(/^\[C03\] actor id "regress" occurs 2 times/)]));
+    expect(resolveWith([REGRESS]).errors).toEqual([]);
+  });
+
+  test('C07 on the effective list: the model closes a partOf cycle', () => {
+    const { errors } = resolveWith([{ id: 'abt_schaden', name: 'S', kind: 'unit', partOf: 'abt_finanzen' }, { id: 'abt_finanzen', name: 'F', kind: 'unit', partOf: 'abt_schaden' }]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/^\[C07\] /);
+  });
+
+  test('the unit view puts regr into Finanzen after the replacement', () => {
+    const { resolved } = resolveWith([REGRESS]);
+    expect(resolved.byId.get('regress').unit).toBe('abt_finanzen');
+    expect(resolved.isUnit('abt_finanzen')).toBe(true);
+  });
+
+  test('the caller\'s objects are not changed (frozen input passes)', () => {
+    expect(() => resolveWith([REGRESS])).not.toThrow();
   });
 });

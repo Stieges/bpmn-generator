@@ -60,7 +60,7 @@ Logic-Core JSON → BPMN 2.0 XML + SVG. Runs the full pipeline (no LLM).
 
 `validation.advisories` is a list of objects: `{ id, transform, targets, message, tradeoff, ref, judgment, pool? }`.
 
-`validation.hints` is a list of `{ code, message, elements }`, one entry per element a view derives. Over HTTP the only code is `H01` (a join gateway and its onward flow; `elements` is `[gatewayId, targetId, flowId]`); the schema pattern `^H0[1-9]$` also covers the lane hints `H02`–`H06` and `H08` that `runPipeline` reports for a format 2.0 model, which HTTP does not accept yet. It is always present and empty when nothing is derived, and hints never fail a request. See "Views over HTTP" below.
+`validation.hints` is a list of `{ code, message, elements }`, one entry per element a view derives. Over HTTP the only code is `H01` (a join gateway and its onward flow; `elements` is `[gatewayId, targetId, flowId]`); the schema pattern `^H0[1-9]$` also covers the hints `H02`–`H06`, `H08` and `H09` that `runPipeline` reports for a format 2.0 model, which HTTP does not accept yet. It is always present and empty when nothing is derived, and hints never fail a request. See "Views over HTTP" below.
 - `id` — advisory rule id (`O01`–`O04`, see `references/fachliches-regelwerk.md`)
 - `transform` — the matching deterministic intervention in the redesign toolbox (`scripts/bpmn/redesign.js`): `isolateException` (O01), `reorderKnockouts` (O02), `relane` (O03), `parallelize` (O04). Not every toolbox transform has a detector — `mergeTasks` never appears here, it's reachable only by calling `scripts/bpmn/redesign.js`/`redesign-cli.js` directly.
 - `targets` — ids of the affected nodes/gateways
@@ -571,7 +571,7 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 | C10 | catalogue | a lane id collides with another id of the model |
 | C11 | catalogue | the catalogue cannot be read: missing, not a regular file, too large, not JSON, or an empty path |
 | C12 | catalogue | the catalogue content is refused: the bounds, or the catalogue schema (a model-carried `actors` list shares the catalogue's Actor schema, so its schema failures surface as F01 at the format gate; only the bounds reach C12) |
-| C13 | catalogue | the catalogue source is wrong for a 2.x model: a path without an object, a catalogue besides model-carried actors, or a catalog field on stdin |
+| C13 | catalogue | the catalogue source is wrong for a 2.x model: a path without an object, the process file changing the scheme of a catalogue, or a catalog field on stdin |
 | F01 | format | a format 2.0 schema violation (one per schema error) |
 | F02 | format | a `$schemaVersion` of the 2 line other than "2.0" |
 | F03 | format | format 2.0 is not accepted at this entry point |
@@ -584,12 +584,13 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 | H05 | hint | a lane name is longer than the lane name limit |
 | H06 | hint | a process has no assignments, so no lanes |
 | H08 | hint | a node has no neighbour with a lane, or a boundary event no host with a lane (`Boundary event "<name>" (<id>) has no host with a lane: lane "(nicht zugeordnet)".`, reached only without prior validation), and is placed in the unassigned lane |
+| H09 | hint | a catalogue entry is replaced by an actor of the process file (`Catalogue entry "<id>" is replaced by the process file.`, `elements` is `[id]`); one hint per replaced entry, in the order of the process file's `actors` |
 | N01 | notice | a format 2.0 import notice |
 
 Where each kind of code appears (2.x runs only):
 
 - **Strings** lead with `[<code>] `: `validation.errors` and `warnings` entries for C01–C06, C10, C12, C13, F01, F02 and F04 (for example `[F04] drill-down is not available for format 2.0 models yet`), the message of a thrown `CatalogRejectedError` (C11, C12) and CLI lines (`✗ [C11] …`). C11 is never in `validation.errors`: it is thrown or printed by the CLI only. The CLI prints a schema error as `  · [F03] /$schemaVersion <message>` (no colon); `formatSchemaErrors` writes `[F03] /$schemaVersion: <message>` (with a colon), as in the error `orchestrate()` throws. F05 is the exception: its string keeps the form shared with 1.x runs and only the finding has the code.
-- **Objects** carry `code`: the `schema_error` entries of the HTTP gate, of the MCP tools (JSON entries) and the schema gate result (`{ path, message, params, code }`; the "… and N more" entry has none), `validation.hints` (`H01`–`H06`, `H08`), `validation.findings` and import `notices`.
+- **Objects** carry `code`: the `schema_error` entries of the HTTP gate, of the MCP tools (JSON entries) and the schema gate result (`{ path, message, params, code }`; the "… and N more" entry has none), `validation.hints` (`H01`–`H06`, `H08`, `H09`), `validation.findings` and import `notices`.
 - **Thrown errors**: only `CatalogRejectedError` (C11, C12) carries `messageCode`; a `400` error body (`profile_error`, `view_error`) gains `code` when the error has one. Exception: `orchestrate()` with a 2.x model throws `Logic-Core failed schema validation:\n[F03] /$schemaVersion: …`; the code leads line 2, not the message, and the error has no `messageCode`.
 
 ### `validation.findings`
