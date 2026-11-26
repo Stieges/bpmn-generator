@@ -298,7 +298,7 @@ describe('unit view nested along the organigram', () => {
     ]);
   });
 
-  // Review Focus 3
+  // Every placeholder case in one model: they stay top-level lanes after the organigram tree.
   describe('placeholders: a role without unit, a kind-less performer without unit, an unassigned task', () => {
     const catalog = {
       ...ORG,

@@ -138,7 +138,7 @@ export async function orchestrate(input, options = {}) {
     state.history.push({ agent: 'schema-gate', phase: 'reject', errors: schemaCheck.errors, ts: new Date().toISOString() });
     throw new Error(`Logic-Core failed schema validation:\n${formatSchemaErrors(schemaCheck.errors)}`);
   }
-  // Format 2.0 (question 6 of slice 2): the catalog option as runPipeline takes it, and the modes
+  // Format 2.0: the catalog option as runPipeline takes it, and the modes
   // that read the model's lanes refused before any agent runs.
   const isV2 = schemaCheck.format === '2';
   if (options.catalog != null && (typeof options.catalog !== 'object' || Array.isArray(options.catalog))) {

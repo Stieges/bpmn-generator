@@ -352,7 +352,7 @@ describe('resolveFields — the process file replaces and adds catalogue entries
     expect(hints).toEqual([]);
   });
 
-  test('Review Focus 4: the model turns a unit into a role: C02 for the actor that names it', () => {
+  test('C02 is judged on the effective catalogue: the model turns a unit into a role: C02 for the actor that names it', () => {
     const { errors, resolved } = resolveWith([{ id: 'abt_schaden', name: 'Schaden', kind: 'role' }]);
     expect(resolved).toBeNull();
     expect(errors).toEqual(expect.arrayContaining(['[C02] actor "sb_schaden": unit "abt_schaden" is a role, not a unit']));
