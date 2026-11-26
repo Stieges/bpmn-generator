@@ -17,6 +17,7 @@ import {
 import { inputSchemaPath, inputSchemaV2Path } from '../shared/resource-paths.js';
 import { TOOLS, handleToolCall } from '../mcp-bpmn-server.js';
 import { orchestrate } from '../orchestrator.js';
+import { generateDiagramSet } from './pipeline.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, '../../tests/fixtures');
@@ -205,6 +206,15 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
     const r = JSON.parse((await handleToolCall({ params: { name: 'generate_bpmn', arguments: { logicCore: m56(), drillDown: true } } })).content[0].text);
     expect(r.status).toBe('schema_error');
     expect(r.errors).toEqual([entry]);
+  });
+
+  test.each(['2', '2.7'])('generateDiagramSet names the unsupported version %s as the F02 error of a blocked parent', async (version) => {
+    const set = await generateDiagramSet({ ...m56(), $schemaVersion: version });
+    const message = `[F02] $schemaVersion "${version}" is not supported; only "2.0" is supported`;
+    expect(set.parent.bpmnXml).toBeNull();
+    expect(set.parent.validation.errors).toEqual([message]);
+    expect(set.parent.validation.findings).toEqual([{ code: 'F02', severity: 'ERROR', message }]);
+    expect(set.subProcesses).toEqual({});
   });
 
   test('orchestrate() rejects with the message', async () => {

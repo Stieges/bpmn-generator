@@ -783,3 +783,24 @@ describe('createLlmProvider — redirects', () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// A lanes view on a 1.x model is refused before any agent runs
+// ═══════════════════════════════════════════════════════════════
+
+describe('orchestrate — the view is loaded once and checked before any agent', () => {
+  test.each([
+    ['a view object', () => JSON.parse(readFileSync(resolve(__dirname, '../views/rollen-view.json'), 'utf8'))],
+    ['a view path', () => resolve(__dirname, '../views/rollen-view.json')],
+  ])('%s with lanes on a 1.x model: refused, reviewer never called', async (_, makeView) => {
+    jest.resetModules();
+    const reviewer = jest.fn(async () => ({ isValid: true, reviewIssues: [], done: true }));
+    jest.unstable_mockModule('./agents/reviewer.js', () => ({ reviewerAgent: reviewer }));
+    const { orchestrate: orchestrateMocked } = await import('./orchestrator.js');
+    const { ViewRejectedError } = await import('./shared/view.js');
+    const err = await orchestrateMocked(loadFixture('simple-approval.json'), { view: makeView() }).catch((e) => e);
+    expect(err).toBeInstanceOf(ViewRejectedError);
+    expect(err.message).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+    expect(reviewer).not.toHaveBeenCalled();
+  });
+});
