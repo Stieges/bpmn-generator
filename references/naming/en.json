@@ -634,18 +634,10 @@
     ]
   },
   "examples": {
-    "task": [
-      "Review application"
-    ],
-    "event": [
-      "Application received"
-    ],
-    "message": [
-      "Invoice"
-    ],
-    "subprocess": [
-      "Claims handling"
-    ]
+    "task": "Review application",
+    "event": "Application received",
+    "message": "Invoice",
+    "subprocess": "Claims handling"
   },
   "sources": [
     {

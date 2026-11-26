@@ -17,7 +17,7 @@ const common = {
   participles: { suffix: 'ed', irregular: ['done'], exceptions: [] },
   eventMarkers: { message: ['empfangen'], timer: [], error: [], signal: [], escalation: [], conditional: [] },
   questionMarks: ['?'],
-  examples: { task: ['a'], event: ['b'], message: ['c'], subprocess: ['d'] },
+  examples: { task: 'a', event: 'b', message: 'c', subprocess: 'd' },
   sources: [{ name: 'test' }],
 };
 const verbFirst = { language: 'en', wordOrder: 'verb-first', ...common, verbPrefixes: ['re', 'pre'], stateWords: ['ready'] };
@@ -69,6 +69,7 @@ describe('readLexiconFile', () => {
     ['a duplicate word', { ...verbFirst, verbs: ['a', 'a'] }],
     ['an unknown event marker key', { ...verbFirst, eventMarkers: { ...common.eventMarkers, other: [] } }],
     ['a bad language tag', { ...verbFirst, language: 'EN' }],
+    ['an array as an example value', { ...verbFirst, examples: { ...common.examples, task: ['a'] } }],
   ])('%s throws a NamingDataError naming the path', (_n, content) => {
     const p = write(content);
     let err;

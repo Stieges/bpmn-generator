@@ -155,44 +155,24 @@
       ],
       "properties": {
         "task": {
-          "type": "array",
-          "uniqueItems": true,
-          "maxItems": 2000,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          }
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         },
         "event": {
-          "type": "array",
-          "uniqueItems": true,
-          "maxItems": 2000,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          }
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         },
         "message": {
-          "type": "array",
-          "uniqueItems": true,
-          "maxItems": 2000,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          }
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         },
         "subprocess": {
-          "type": "array",
-          "uniqueItems": true,
-          "maxItems": 2000,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          }
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         }
       }
     },
