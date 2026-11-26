@@ -148,7 +148,9 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   any failure is a `NamingDataError` naming the path and the reason. The HTTP and MCP servers check
   it at start and refuse to start with a broken file; the `500` `naming data unavailable` (also
   inside `orchestrate`; MCP: a tool error with that text) is only a safeguard for a process that did
-  not run that check (an embedding library caller), and the path goes only to the server log.
+  not run that check (an embedding library caller), and the path goes only to the server log. A
+  naming data failure that `orchestrate` survives (an LLM amendment, the compliance gate) puts only
+  that fixed text into `history` and `compliance.errors`; the detail goes to stderr.
 
 ### Fixed
 

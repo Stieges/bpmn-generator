@@ -28,6 +28,7 @@ import { complianceAgent } from './agents/compliance.js';
 import { validateLogicCoreSchema, validateModelSchema, formatSchemaErrors, assertViewFitsModel, modelFormat } from './bpmn/schema-gate.js';
 import { ViewRejectedError, loadView } from './shared/view.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
+import { namingDataErrorOf } from './bpmn/naming/index.js';
 import { isMainModule } from './shared/entry-point.js';
 import { withCode } from './shared/message-codes.js';
 
@@ -71,6 +72,18 @@ async function gatedModelerCall(state, phase) {
     restore();
     throw err;
   }
+}
+
+/**
+ * The text of an error that goes into a result (`history`, `compliance`). A naming data failure
+ * (an unusable `BPMN_NAMING` file) names a server path: the result gets its path-free text, the
+ * detail goes to stderr. Any other error keeps its message.
+ */
+function resultText(err) {
+  const naming = namingDataErrorOf(err);
+  if (!naming) return err.message;
+  console.error(`Naming data failure: ${naming.message}`);
+  return naming.publicMessage;
 }
 
 /**
@@ -185,7 +198,7 @@ export async function orchestrate(input, options = {}) {
         state.logicCore = await gatedModelerCall(state, 'refine');
         state.history.push({ agent: 'modeler', phase: 'refine', iteration: i, ts: new Date().toISOString() });
       } catch (err) {
-        state.history.push({ agent: 'modeler', phase: 'refine', iteration: i, error: err.message, ts: new Date().toISOString() });
+        state.history.push({ agent: 'modeler', phase: 'refine', iteration: i, error: resultText(err), ts: new Date().toISOString() });
         break; // Cannot fix, proceed with current logicCore
       }
     } else {
@@ -253,7 +266,7 @@ export async function orchestrate(input, options = {}) {
         state.history.push({ agent: 'modeler', phase: 'amend', iteration: i, ts: new Date().toISOString() });
       } catch (err) {
         state.layoutFeedback = [];
-        state.history.push({ agent: 'modeler', phase: 'amend', iteration: i, error: err.message, ts: new Date().toISOString() });
+        state.history.push({ agent: 'modeler', phase: 'amend', iteration: i, error: resultText(err), ts: new Date().toISOString() });
         break; // Cannot amend, proceed with current layout
       }
     } else {
@@ -273,8 +286,9 @@ export async function orchestrate(input, options = {}) {
   } catch (err) {
     // A refused rule profile is the caller's input, not a compliance verdict on the model.
     if (err instanceof ProfileRejectedError) throw err;
-    state.history.push({ agent: 'compliance', error: err.message, ts: new Date().toISOString() });
-    state.compliance = { isCompliant: false, errors: [`Compliance check failed: ${err.message}`], warnings: [] };
+    const text = resultText(err);
+    state.history.push({ agent: 'compliance', error: text, ts: new Date().toISOString() });
+    state.compliance = { isCompliant: false, errors: [`Compliance check failed: ${text}`], warnings: [] };
   }
 
   return {

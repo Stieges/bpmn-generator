@@ -107,6 +107,14 @@ export function namingDataErrorOf(err) {
   return null;
 }
 
+/**
+ * The path-free text for an error that is, or wraps (through `cause`), a `NamingDataError`, else
+ * `null`. What a response or a result may say of it; the detailed `message` goes to the log.
+ */
+export function publicNamingMessage(err) {
+  return namingDataErrorOf(err)?.publicMessage ?? null;
+}
+
 /** Fails early on an unusable `BPMN_NAMING` file: loads every registered language with it. */
 export function checkNamingOverlay(env = process.env) {
   if (!env.BPMN_NAMING) return;

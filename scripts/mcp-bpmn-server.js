@@ -213,7 +213,7 @@ async function handleToolCall(request) {
     const namingFailure = namingDataErrorOf(err); // through `cause`: the orchestrator wraps agent errors
     if (namingFailure) {
       console.error(`Naming data failure: ${namingFailure.message}`);
-      throw new Error('naming data unavailable');
+      throw new Error(namingFailure.publicMessage);
     }
     throw err;
   }
