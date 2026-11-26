@@ -763,7 +763,7 @@ async function main() {
   if (!schemaCheck.valid) {
     const schemaFile = schemaCheck.format === '2' ? 'input-schema-v2.json' : 'input-schema.json';
     console.error(`\n✗ Schema-Gate: Logic-Core input violates references/${schemaFile}:`);
-    schemaCheck.errors.forEach(e => console.error(`  · ${e.path} ${e.message}`));
+    schemaCheck.errors.forEach(e => console.error(`  · ${e.code ? `[${e.code}] ` : ''}${e.path} ${e.message}`));
     process.exit(1);
   }
 
@@ -771,9 +771,13 @@ async function main() {
   // (optimize, DOT, drill-down) do not yet. Refused before any work.
   const isV2 = schemaCheck.format === '2';
   if (isV2) {
+    if (catalogArg === '') {
+      console.error(`✗ ${coded('C11', '--catalog needs a path')}`);
+      process.exit(1);
+    }
     const lanesFlag = flags.find(f => ['--optimize', '--mode=soll', '--mode=optimize', '--dot', '--format=dot', '--drill-down'].includes(f));
     if (lanesFlag) {
-      console.error(`✗ ${lanesFlag} is not available for format 2.0 models yet`);
+      console.error(`✗ ${coded('F04', `${lanesFlag} is not available for format 2.0 models yet`)}`);
       process.exit(1);
     }
   } else if (catalogArg !== null) {
@@ -789,7 +793,7 @@ async function main() {
     if (catalogArg !== null) catalogPath = resolve(catalogArg);
     else if (typeof parsedInput.catalog === 'string') {
       if (inputArg === '-') {
-        console.error(`✗ the model names catalogue "${parsedInput.catalog}" but is read from standard input; pass --catalog <path>`);
+        console.error(`✗ ${coded('C13', `the model names catalogue "${parsedInput.catalog}" but is read from standard input; pass --catalog <path>`)}`);
         process.exit(1);
       }
       catalogPath = resolve(dirname(resolve(inputArg)), parsedInput.catalog);

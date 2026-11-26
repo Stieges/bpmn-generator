@@ -44,7 +44,7 @@ import { runBpmnScenarioRules } from '../bpmn/scenario-rules.js';
 import { runDmnScenarioRules, tableAnalysisKey, countSkippedTableAnalyses } from '../dmn/scenario-rules.js';
 import { runCrossRules } from '../cross/rules.js';
 import { isMainModule } from '../shared/entry-point.js';
-import { modelFormat, formatV2RefusalMessage } from '../bpmn/schema-gate.js';
+import { modelFormat, validateModelSchema, formatV2RefusalMessage } from '../bpmn/schema-gate.js';
 
 /**
  * One judged finding.
@@ -265,7 +265,7 @@ async function main() {
     process.exit(1);
   }
   if (modelFormat(lc) === '2') {
-    console.error(`✗ ${formatV2RefusalMessage(lc)}`);
+    console.error(`✗ [${validateModelSchema(lc).errors[0].code}] ${formatV2RefusalMessage(lc)}`);
     process.exit(1);
   }
 

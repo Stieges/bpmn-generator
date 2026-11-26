@@ -24,7 +24,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from '../shared/entry-point.js';
-import { modelFormat } from './schema-gate.js';
+import { modelFormat, validateModelSchema, formatV2RefusalMessage } from './schema-gate.js';
 import {
   previewParallelize, applyParallelize,
   previewMergeTasks, applyMergeTasks,
@@ -170,7 +170,9 @@ export function main(argv = process.argv.slice(2)) {
     process.exit(1);
   }
   if (modelFormat(lc) === '2') {
-    console.error('✗ Format 2.0 wird hier noch nicht angenommen.');
+    // "2.0" is not accepted here (F03, German text as before); any other 2.x value names itself (F02).
+    const code = validateModelSchema(lc).errors[0].code;
+    console.error(code === 'F03' ? '✗ [F03] Format 2.0 wird hier noch nicht angenommen.' : `✗ [${code}] ${formatV2RefusalMessage(lc)}`);
     process.exit(1);
   }
 

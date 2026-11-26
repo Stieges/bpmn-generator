@@ -49,6 +49,14 @@ describe('schema gate on every tool that takes a Logic-Core', () => {
     });
   }
 
+  test.each([['2.0', 'F03'], ['2.7', 'F02']])('generate_bpmn with a %s model: the schema_error entry carries %s', async (version, code) => {
+    const model = JSON.parse(readFileSync(new URL('../tests/fixtures-v2/schaden.json', import.meta.url), 'utf8'));
+    const result = parse(await call('generate_bpmn', { logicCore: { ...model, $schemaVersion: version } }));
+    expect(result.status).toBe('schema_error');
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].code).toBe(code);
+  });
+
   test('valid input still passes', async () => {
     const result = parse(await call('validate_bpmn', { logicCore: fixture('simple-approval.json') }));
     expect(result.status).toBeUndefined();
