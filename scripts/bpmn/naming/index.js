@@ -55,6 +55,41 @@ export function namingFor(language) {
   return strategies.get(key);
 }
 
+/** The English name of a language ("German"), else `language "<code>"`. */
+function languageName(code) {
+  let name;
+  try {
+    name = new Intl.DisplayNames(['en'], { type: 'language' }).of(code);
+  } catch {
+    name = undefined;
+  }
+  return !name || name === code ? `language "${code}"` : name;
+}
+
+const CONVENTIONS = { 'verb-last': 'object + infinitive', 'verb-first': 'verb + object' };
+
+/**
+ * The finding text of a name that breaks a naming convention of `naming` (a strategy).
+ * `kind` is `task`, `container` (`nodeType` `callActivity` reads "Call activity", every other
+ * container "Subprocess"), `event` or `message`.
+ */
+export function namingMessage(naming, kind, name, nodeType) {
+  const language = languageName(naming.language);
+  const examples = naming.examples;
+  switch (kind) {
+    case 'task':
+      return `Task "${name}" does not follow the ${language} convention ${CONVENTIONS[naming.wordOrder]} (e.g. "${examples.task}").`;
+    case 'container':
+      return `${nodeType === 'callActivity' ? 'Call activity' : 'Subprocess'} "${name}" is named like a state or a bare verb; name it as an activity (e.g. "${examples.task}" or "${examples.subprocess}").`;
+    case 'event':
+      return `Event "${name}" is named like an activity; the ${language} convention for events is a state or a noun (e.g. "${examples.event}").`;
+    case 'message':
+      return `Message flow "${name}" is named like an activity or a state; the ${language} convention for message flows is a noun phrase (e.g. "${examples.message}").`;
+    default:
+      throw new TypeError(`unknown naming kind "${kind}"`);
+  }
+}
+
 /**
  * The `NamingDataError` behind an error, following `cause` (the orchestrator wraps agent errors),
  * else `null`. Bounded depth, so a cyclic `cause` chain ends.
