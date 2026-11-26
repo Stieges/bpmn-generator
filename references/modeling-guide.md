@@ -107,12 +107,13 @@ To see why a list exists and what it changes, read the `purpose` and `listNotes`
 
 Behaviours worth knowing:
 
-- A single word that is a nominalised infinitive is a bare verb as a sub-process name and is
-  flagged (`Verpacken`, `Prüfen`, `Validate`); a one-word noun that equals an infinitive is not
-  (`Schreiben`, `Zahlen`).
-- Under `en`, a one-word sub-process or call-activity name that is a listed verb is flagged as a
-  bare verb even when it is also a common noun (`Review`, `Audit`, `Support`, `Order`); two words
-  (`Order handling`, `Fraud review`) pass.
+- Under `de`, a capitalised single infinitive as a sub-process name is a nominalised verb and
+  passes (`Verpacken`, `Versenden`, `Kommissionieren`, `Bezahlen`, `Prüfen`); a lower-case one
+  (`prüfen`) reads as a task and is flagged, and so is a state form (`Antrag geprüft`).
+- Under `en`, a one-word sub-process or call-activity name is flagged only when it is a listed
+  verb that is no noun-verb homograph (`Validate`); `Review`, `Audit`, `Support`, `Order`,
+  `Archive` are nouns and pass, and so does an unlisted word. A state form (`Order shipped`) is
+  flagged.
 - Under `en`, M01 flags a task name only on evidence of a wrong form: one word, nothing with a
   letter after the first word (`Step 3`), a label prefix (`SAP: Review invoice`), two words ending in
   a participle (`Invoice checked`), an auxiliary as second word (`Invoice is checked`), a first word
