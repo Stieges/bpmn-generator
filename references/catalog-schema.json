@@ -21,15 +21,19 @@
         "id": { "$ref": "#/$defs/ActorId" },
         "name": { "type": "string", "minLength": 1, "maxLength": 200 },
         "kind": { "enum": ["role", "unit"] },
-        "unit": { "$ref": "#/$defs/ActorId" }
+        "unit": { "$ref": "#/$defs/ActorId" },
+        "partOf": { "$ref": "#/$defs/ActorId" }
       },
-      "if": {
-        "required": ["kind"],
-        "properties": { "kind": { "const": "unit" } }
-      },
-      "then": {
-        "properties": { "unit": false }
-      }
+      "allOf": [
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "unit" } } },
+          "then": { "properties": { "unit": false } }
+        },
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "role" } } },
+          "then": { "properties": { "partOf": false } }
+        }
+      ]
     },
     "SchemeName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
     "SchemeKey": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,7}$" },

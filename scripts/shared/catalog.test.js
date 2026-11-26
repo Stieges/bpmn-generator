@@ -50,6 +50,11 @@ describe('catalogErrors', () => {
     expect(catalogErrors({ actors: [{ id: 'a', name: 'A', kind: 'unit', unit: 'b' }] })).toEqual(['[C12] "/actors/0/unit" is not allowed here']);
   });
 
+  test('partOf on a role gives one entry, on a unit or an actor without kind it is fine', () => {
+    expect(catalogErrors({ actors: [{ id: 'a', name: 'A', kind: 'role', partOf: 'u' }] })).toEqual(['[C12] "/actors/0/partOf" is not allowed here']);
+    expect(catalogErrors({ actors: [{ id: 'a', name: 'A', kind: 'unit', partOf: 'u' }, { id: 'b', name: 'B', partOf: 'u' }] })).toEqual([]);
+  });
+
   test('a bad scheme name gives one entry; a bad embedded type key is named by the shared key rule', () => {
     expect(catalogErrors({ actors: [], scheme: 'Bad Name' })).toHaveLength(1);
     const bad = catalogErrors({ actors: [], scheme: { scheme: 'x', types: [{ key: '1', label: 'L' }] } });

@@ -19,9 +19,9 @@ function sources(dir, out = []) {
 }
 
 describe('registry', () => {
-  test('holds exactly the codes of slice 1b', () => {
+  test('holds exactly the registered codes', () => {
     expect(Object.keys(MESSAGE_CODES).sort()).toEqual([
-      'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C10', 'C11', 'C12', 'C13',
+      'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C10', 'C11', 'C12', 'C13',
       'F01', 'F02', 'F03', 'F04', 'F05', 'H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H08', 'N01',
     ]);
   });

@@ -567,6 +567,7 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 | C04 | catalogue | an assignment type outside the scheme, or more than one performer on a node |
 | C05 | catalogue | an assignment type not allowed on this kind of node |
 | C06 | catalogue | the responsibility scheme is unknown or malformed |
+| C07 | catalogue | units nest in a cycle: partOf leads back to the unit it started from |
 | C10 | catalogue | a lane id collides with another id of the model |
 | C11 | catalogue | the catalogue cannot be read: missing, not a regular file, too large, not JSON, or an empty path |
 | C12 | catalogue | the catalogue content is refused: the bounds, or the catalogue schema (a model-carried `actors` list shares the catalogue's Actor schema, so its schema failures surface as F01 at the format gate; only the bounds reach C12) |
