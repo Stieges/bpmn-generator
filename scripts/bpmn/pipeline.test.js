@@ -676,6 +676,17 @@ describe('extractSubProcessAsLogicCore — Format A', () => {
   });
 });
 
+describe('extractSubProcessAsLogicCore and language', () => {
+  test('a valid tag of the source root comes first; without one the result is { pools }', () => {
+    const lc = loadFixture('expanded-subprocess.json');
+    expect(Object.keys(extractSubProcessAsLogicCore(lc, 'sub1'))).toEqual(['pools']);
+    expect(Object.keys(extractSubProcessAsLogicCore({ ...lc, language: 'German' }, 'sub1'))).toEqual(['pools']);
+    const sub = extractSubProcessAsLogicCore({ ...loadFixture('expanded-subprocess.json'), language: 'en-GB' }, 'sub1');
+    expect(Object.keys(sub)).toEqual(['language', 'pools']);
+    expect(sub.language).toBe('en-GB');
+  });
+});
+
 describe('generateDiagramSet', () => {
   test('generates parent + subprocess diagrams', async () => {
     const lc = loadFixture('expanded-subprocess.json');
@@ -704,6 +715,32 @@ describe('generateDiagramSet', () => {
     expect(set.parent.bpmnXml).toBeDefined();
     expect(Object.keys(set.subProcesses)).toHaveLength(0);
     expect(set.navigation.subProcesses).toHaveLength(0);
+  });
+
+  test('the language of the model reaches parent and child; nothing else changes (Review Focus 2)', async () => {
+    const plain = await generateDiagramSet(loadFixture('example-onboarding.json'));
+    const tagged = await generateDiagramSet({ ...loadFixture('example-onboarding.json'), language: 'de' });
+    const strip = (xml) => xml.replace(/<bpmn:definitions\b[^>]*>/, '<bpmn:definitions>');
+    const results = (set) => [set.parent, ...Object.values(set.subProcesses)];
+    expect(Object.keys(tagged.subProcesses)).toEqual(Object.keys(plain.subProcesses));
+    expect(Object.keys(plain.subProcesses).length).toBeGreaterThan(0);
+    expect(tagged.navigation).toEqual(plain.navigation);
+    const [p, t] = [results(plain), results(tagged)];
+    for (let i = 0; i < p.length; i++) {
+      expect(t[i].bpmnXml.match(/<bpmn:definitions\b[^>]*>/)[0]).toContain('bg:language="de"');
+      expect(p[i].bpmnXml).not.toContain('bg:language');
+      expect(strip(t[i].bpmnXml)).toBe(strip(p[i].bpmnXml));
+      expect(t[i].svg).toBe(p[i].svg);
+    }
+  });
+
+  test('an invalid language changes no drill-down result', async () => {
+    const a = await generateDiagramSet(loadFixture('example-onboarding.json'));
+    const b = await generateDiagramSet({ ...loadFixture('example-onboarding.json'), language: 'German' });
+    for (const [x, y] of [[a.parent, b.parent], ...Object.keys(a.subProcesses).map((k) => [a.subProcesses[k], b.subProcesses[k]])]) {
+      expect(y.bpmnXml).toBe(x.bpmnXml);
+      expect(y.svg).toBe(x.svg);
+    }
   });
 });
 

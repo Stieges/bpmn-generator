@@ -19,6 +19,7 @@ import { isBpmnArtifact, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from
 import { isMainModule } from '../shared/entry-point.js';
 import { removeDerivedElements, DERIVED_JOIN_FLOW } from './derivations.js';
 import { EXTENSION_NS } from '../shared/utils.js';
+import { LANGUAGE_TAG } from './naming/index.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Simple XML parser (no dependencies, handles BPMN subset)
@@ -123,12 +124,19 @@ async function bpmnToLogicCore(xml) {
   } catch {
     return bpmnToLogicCoreLegacy(xml);
   }
-  return removeDerivedElements(raw);
+  return withModelLanguage(removeDerivedElements(raw), xml);
 }
 
 /** Legacy sync parser (custom XML parser, kept for fallback/comparison). */
 function bpmnToLogicCoreLegacy(xml) {
-  return removeDerivedElements(readLegacy(xml));
+  return withModelLanguage(removeDerivedElements(readLegacy(xml)), xml);
+}
+
+/** `result` with `language` as its last key when the XML carries a valid `bg:language`; else unchanged. */
+function withModelLanguage(result, xml) {
+  const language = readModelLanguage(xml);
+  if (language !== null) result.language = language;
+  return result;
 }
 
 function readLegacy(xml) {
@@ -690,14 +698,9 @@ export const MODEL_V2_IMPORT_NOTICE_CODE = 'N01';
  * importers return is the same with or without the marker.
  */
 export function readModelMarker(xml) {
-  if (typeof xml !== 'string') return null;
-  let root;
-  try { root = parseXml(xml); } catch { return null; }
-  const attrs = root?.attrs;
-  if (!attrs || stripNs(root.tag) !== 'definitions') return null;
-  const prefixes = Object.keys(attrs)
-    .filter((name) => name.startsWith('xmlns:') && attrs[name] === EXTENSION_NS)
-    .map((name) => name.slice('xmlns:'.length));
+  const ext = definitionsExtension(xml);
+  if (!ext) return null;
+  const { attrs, prefixes } = ext;
   for (const prefix of prefixes) {
     const modelVersion = attrs[`${prefix}:modelVersion`];
     if (typeof modelVersion !== 'string') continue;
@@ -706,6 +709,37 @@ export function readModelMarker(xml) {
       view: attrs[`${prefix}:view`] ?? null,
       catalog: attrs[`${prefix}:catalog`] ?? null,
     };
+  }
+  return null;
+}
+
+/**
+ * The attributes of the root `definitions` element and the prefixes bound there to
+ * `EXTENSION_NS`, or `null` when the text cannot be parsed or its root is no `definitions`.
+ */
+function definitionsExtension(xml) {
+  if (typeof xml !== 'string') return null;
+  let root;
+  try { root = parseXml(xml); } catch { return null; }
+  const attrs = root?.attrs;
+  if (!attrs || stripNs(root.tag) !== 'definitions') return null;
+  const prefixes = Object.keys(attrs)
+    .filter((name) => name.startsWith('xmlns:') && attrs[name] === EXTENSION_NS)
+    .map((name) => name.slice('xmlns:'.length));
+  return { attrs, prefixes };
+}
+
+/**
+ * The language tag a model left on `bpmn:definitions` (`<prefix>:language` for a prefix bound to
+ * `EXTENSION_NS`, any prefix), when it matches `LANGUAGE_TAG`; else `null`. Never throws. The
+ * attribute is no origin marker: `readModelMarker` and the N01 notice ignore it.
+ */
+export function readModelLanguage(xml) {
+  const ext = definitionsExtension(xml);
+  if (!ext) return null;
+  for (const prefix of ext.prefixes) {
+    const tag = ext.attrs[`${prefix}:language`];
+    if (typeof tag === 'string' && LANGUAGE_TAG.test(tag)) return tag;
   }
   return null;
 }

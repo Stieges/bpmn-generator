@@ -85,6 +85,16 @@ The Logic-Core supports two modes:
 | `lanes`        | No       | Array of lanes/roles                               |
 | `pools`        | No       | Array of process objects (multi-pool mode)          |
 | `messageFlows` | No       | Array of cross-pool message flows                  |
+| `language`     | No       | Language of the labels, a language tag (`"de"`, `"en-GB"`) |
+
+**`language` (1.x, since 1.3).** The natural language of the model's labels, as a language tag with
+a lowercase primary subtag: it matches `^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$` (`"de"`, `"en"`,
+`"en-GB"`). The generated XML carries it as `bg:language="<tag>"` on `bpmn:definitions` (with
+`xmlns:bg`), and both importers read it back as the top-level `language` of the result; it is no
+origin marker, so it raises no import notice. Drill-down child diagrams carry the language of their
+parent. A model without the field, or with a value that is no such tag, gives the output it gave
+before the field existed: nothing is written. Node keys that start with `_` (`_marker` among them)
+are reserved for the pipeline; on input they are ignored or removed.
 
 ---
 
@@ -600,6 +610,11 @@ diagram can be read back:
   formed lane (`by` is `role` or `unit`);
 - on `bpmn:definitions`: `bg:modelVersion="2.0"`, `bg:view="<name>"`, `bg:catalog="sha256:<64 hex>"`
   and `exporter="bpmn-generator"`; there is no `exporterVersion`.
+
+**`language` (2.0).** A 2.0 model may carry the same top-level `language` as a 1.x model (the same
+pattern, see "Top-Level Fields"). It is kept on the intermediate form and written after the origin
+attributes as `bg:language="<tag>"` on `bpmn:definitions`. Importing such a diagram yields a 1.x model
+with the same `language`.
 
 The fingerprint is SHA-256 (hex, prefixed `sha256:`) over the UTF-8 bytes of the canonical JSON of
 `{ "actors": …, "scheme": … }`, with the scheme resolved to its object, keys sorted at every level,

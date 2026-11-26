@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bpmnToLogicCore, bpmnToLogicCoreLegacy, readModelMarker, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './import.js';
+import { bpmnToLogicCore, bpmnToLogicCoreLegacy, readModelMarker, readModelLanguage, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './import.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 import { runPipeline } from './pipeline.js';
 import { loadNamedView, ViewRejectedError } from '../shared/view.js';
@@ -207,6 +207,60 @@ describe('CLI node bpmn/import.js', () => {
       expect(status).toBe(0);
       expect(stderr).not.toContain(MODEL_V2_IMPORT_NOTICE);
       expect(stderr).not.toContain('N01');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+// ─── bg:language on bpmn:definitions ──────────────────────────────────────────────────────────
+describe('readModelLanguage', () => {
+  const plain = read(resolve(root, 'tests/fixtures/simple-approval.expected.bpmn'));
+  /** 1.x output with `attrs` added to the definitions start tag. */
+  const withAttrs = (attrs) => plain.replace(/<bpmn:definitions\b/, (tag) => `${tag} ${attrs}`);
+  const NS = 'http://bpmn-generator/schema/1.0';
+
+  test('reads the tag under any prefix bound to the namespace', () => {
+    expect(readModelLanguage(withAttrs(`xmlns:bg="${NS}" bg:language="en-GB"`))).toBe('en-GB');
+    expect(readModelLanguage(withAttrs(`xmlns:x="${NS}" x:language="de"`))).toBe('de');
+  });
+
+  test('null for a foreign namespace, an invalid tag, no attribute, and text that is no XML', () => {
+    expect(readModelLanguage(withAttrs('xmlns:bg="http://example.org/other" bg:language="de"'))).toBeNull();
+    expect(readModelLanguage(withAttrs(`xmlns:bg="${NS}" bg:language="German"`))).toBeNull();
+    expect(readModelLanguage(withAttrs(`xmlns:bg="${NS}" bg:language=""`))).toBeNull();
+    expect(readModelLanguage(withAttrs(`bg:language="de"`))).toBeNull();
+    expect(readModelLanguage(plain)).toBeNull();
+    expect(readModelLanguage(read(golden('rollen')))).toBeNull();
+    for (const junk of ['', 'not xml', '<', '<a', null, undefined, 7, {}]) expect(readModelLanguage(junk)).toBeNull();
+  });
+
+  for (const [name, reader] of Object.entries(READERS)) {
+    test(`${name}: an invalid tag imports without the field`, async () => {
+      const lc = await reader(withAttrs(`xmlns:bg="${NS}" bg:language="German"`));
+      expect(lc).not.toHaveProperty('language');
+      expect(lc).toEqual(await reader(plain));
+    });
+
+    test(`${name}: a valid tag is the last key, nothing else changes`, async () => {
+      const lc = await reader(withAttrs(`xmlns:bg="${NS}" bg:language="en-GB"`));
+      expect(Object.keys(lc).at(-1)).toBe('language');
+      expect(lc.language).toBe('en-GB');
+      const { language: _drop, ...rest } = lc;
+      expect(rest).toEqual(await reader(plain));
+    });
+  }
+
+  test('a 1.x XML with bg:language is no 2.0 marker and raises no N01', () => {
+    const xml = withAttrs(`xmlns:bg="${NS}" bg:language="de"`);
+    expect(readModelMarker(xml)).toBeNull();
+    const dir = mkdtempSync(resolve(tmpdir(), 'import-language-'));
+    try {
+      const file = resolve(dir, 'language.bpmn');
+      writeFileSync(file, xml);
+      const { status, stdout, stderr } = spawnSync(process.execPath, [resolve(here, 'import.js'), file], { encoding: 'utf8' });
+      expect(status).toBe(0);
+      expect(stderr).not.toContain('N01');
+      expect(stderr).not.toContain(MODEL_V2_IMPORT_NOTICE);
+      expect(stdout).toContain('"language": "de"');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
