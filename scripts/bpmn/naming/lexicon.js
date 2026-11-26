@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'node:fs';
 import Ajv2020 from 'ajv/dist/2020.js';
-import { namingSchemaPath, namingEnPath } from '../../shared/resource-paths.js';
+import { namingSchemaPath, namingEnPath, namingDePath } from '../../shared/resource-paths.js';
 import { foldWord } from './tokens.js';
 
 export { namingSchemaPath };
@@ -89,7 +89,7 @@ export function readLexiconFile(path) {
 }
 
 /** Language → path function of its naming data file: the one registry line per language. */
-export const NAMING_LANGUAGES = Object.freeze({ en: namingEnPath });
+export const NAMING_LANGUAGES = Object.freeze({ de: namingDePath, en: namingEnPath });
 
 const loaded = new Map();
 

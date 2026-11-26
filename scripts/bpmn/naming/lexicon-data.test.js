@@ -1,8 +1,11 @@
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadLexicon, NamingDataError, NAMING_LANGUAGES } from './lexicon.js';
-import { namingEnPath } from '../../shared/resource-paths.js';
-import { foldWord } from './tokens.js';
+import { namingEnPath, namingDePath } from '../../shared/resource-paths.js';
+import { foldWord, labelTokens } from './tokens.js';
+import { TASK_TYPES } from '../types.js';
 
 const BUILT_IN_39 = ['review', 'approve', 'send', 'receive', 'check', 'create', 'update', 'delete',
   'reject', 'submit', 'notify', 'validate', 'process', 'archive', 'assign', 'verify',
@@ -124,10 +127,121 @@ describe('English', () => {
     ]);
   });
 
-  test('namingEnPath resolves, the registry lists en, an unregistered language throws', () => {
+  test('namingEnPath resolves, the registry lists de then en, an unregistered language throws', () => {
     expect(namingEnPath()).toMatch(/references[\\/]naming[\\/]en\.json$/);
-    expect(Object.keys(NAMING_LANGUAGES)).toEqual(['en']);
+    expect(Object.keys(NAMING_LANGUAGES)).toEqual(['de', 'en']);
     expect(() => loadLexicon('xx')).toThrow(NamingDataError);
     expect(() => loadLexicon('xx')).toThrow('no naming data for language "xx"');
+  });
+});
+
+// Strong stems whose past participle equals the infinitive (geben → vergeben, halten → erhalten).
+const HOMOGRAPH_STEMS = ['blasen', 'braten', 'essen', 'fahren', 'fallen', 'fangen', 'fressen', 'geben', 'gessen',
+  'graben', 'halten', 'heißen', 'kommen', 'laden', 'lassen', 'laufen', 'lesen', 'messen', 'raten', 'rufen',
+  'schlafen', 'schlagen', 'sehen', 'stoßen', 'tragen', 'treten', 'wachsen', 'waschen'];
+
+const REQUIRED_DE = ['erhalten', 'empfangen', 'bekommen', 'vergeben', 'übergeben', 'genehmigen', 'gewähren', 'zahlen',
+  'kündigen', 'erstatten', 'erfolgen', 'archivieren', 'gegenlesen', 'gegenzeichnen'];
+
+const fixturesRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures');
+
+/** The last token of every task label of the German fixtures that starts lower-case and ends like an infinitive. */
+function germanFixtureVerbs() {
+  const languages = JSON.parse(readFileSync(join(fixturesRoot, 'rules-characterization', 'fixture-languages.json'), 'utf8'));
+  const files = Object.entries(languages).filter(([, l]) => l === 'de').map(([f]) => f);
+  expect(files).toHaveLength(13);
+  const words = new Set();
+  const walk = (nodes) => {
+    for (const n of nodes ?? []) {
+      if (TASK_TYPES.has(n.type) && typeof n.name === 'string') {
+        const { tokens } = labelTokens(n.name);
+        const last = tokens.at(-1)?.raw;
+        if (last && /^[a-zäöüß]/.test(last) && /(en|eln|ern)$/.test(last)) words.add(last);
+      }
+      walk(n.nodes);
+    }
+  };
+  for (const file of files) {
+    const model = JSON.parse(readFileSync(join(fixturesRoot, file), 'utf8'));
+    for (const p of Array.isArray(model.pools) ? model.pools : [model]) walk(p.nodes);
+  }
+  return [...words];
+}
+
+describe('German', () => {
+  const de = loadLexicon('de');
+  const data = JSON.parse(readFileSync(namingDePath(), 'utf8'));
+
+  test('validates and has the declared switches', () => {
+    expect(de.language).toBe('de');
+    expect(de.wordOrder).toBe('verb-last');
+    expect(de.nounsCapitalized).toBe(true);
+    expect(de.compoundMarkers).toBe(true);
+    expect(de.questionMarks).toEqual(['?']);
+    expect(data.conjunctions).toEqual(['bzw', 'oder', 'sowie', 'und']);
+    expect(de.infinitiveSuffixes).toEqual([{ suffix: 'eln', minLength: 4 }, { suffix: 'en', minLength: 4 }, { suffix: 'ern', minLength: 4 }]);
+    expect(data.participles).toEqual({ suffix: 'iert' });
+    expect(de.examples).toEqual({ task: 'Antrag prüfen', event: 'Antrag eingegangen', message: 'Rechnung', subprocess: 'Schadenprüfung' });
+    expect(loadLexicon('de')).toBe(de);
+  });
+
+  test('verbs: 250 to 400 lower-case infinitives with the required members', () => {
+    expect(de.verbs.size).toBeGreaterThanOrEqual(250);
+    expect(de.verbs.size).toBeLessThanOrEqual(400);
+    for (const v of data.verbs) expect(v).toMatch(/^[a-zäöüß]+(en|eln|ern)$/);
+    for (const v of REQUIRED_DE) expect(de.verbs.has(foldWord(v))).toBe(true);
+  });
+
+  test('every task verb of the German fixtures is a verb', () => {
+    const words = germanFixtureVerbs();
+    expect(words.length).toBeGreaterThanOrEqual(45);
+    for (const w of words) expect([w, de.verbs.has(foldWord(w))]).toEqual([w, true]);
+  });
+
+  test('participleHomographs are exactly the verbs built from a prefix and a strong stem', () => {
+    const insep = data.inseparablePrefixes.map(foldWord);
+    const sep = ['', ...data.separablePrefixes.map(foldWord)];
+    const stems = HOMOGRAPH_STEMS.map(foldWord);
+    const built = new Set(sep.flatMap((s) => insep.flatMap((i) => stems.map((st) => s + i + st))));
+    const derived = data.verbs.map(foldWord).filter((v) => built.has(v)).sort();
+    expect([...de.participleHomographs].sort()).toEqual(derived);
+    for (const w of ['erhalten', 'empfangen', 'bekommen', 'vergeben', 'übergeben']) expect(de.participleHomographs.has(foldWord(w))).toBe(true);
+    for (const w of ['freigeben', 'genehmigen', 'prüfen']) expect(de.participleHomographs.has(foldWord(w))).toBe(false);
+  });
+
+  test('the lists keep their bounds and their shape', () => {
+    expect(data.inseparablePrefixes.length).toBeLessThanOrEqual(16);
+    expect(data.separablePrefixes.length).toBeLessThanOrEqual(50);
+    expect(data.geInfinitives.length).toBeLessThanOrEqual(40);
+    expect(data.adjectiveStoplist.length).toBeLessThanOrEqual(60);
+    expect(data.stateMarkers.length).toBeLessThanOrEqual(20);
+    expect(data.nounVerbHomographs.length).toBeLessThanOrEqual(30);
+    for (const w of data.geInfinitives) expect(w.startsWith('ge')).toBe(true);
+    for (const w of data.adjectiveStoplist) {
+      expect(w).toMatch(/(en|eln|ern)$/);
+      expect(de.verbs.has(foldWord(w))).toBe(false);
+    }
+    for (const w of ['bzw', 'zu', 'muss']) expect(de.verbs.has(w)).toBe(false);
+  });
+
+  test('every event-marker keyword contains a legacy keyword', () => {
+    expect(Object.keys(data.eventMarkers).sort()).toEqual(['conditional', 'error', 'escalation', 'message', 'signal', 'timer']);
+    for (const words of Object.values(data.eventMarkers)) {
+      for (const w of words) expect(LEGACY_EVENT_KEYWORDS.some((k) => w.includes(k))).toBe(true);
+    }
+  });
+
+  test('lists are sorted by foldWord and unique after it', () => {
+    const lists = [data.verbs, data.inseparablePrefixes, data.separablePrefixes, data.geInfinitives,
+      data.participleHomographs, data.adjectiveStoplist, data.stateMarkers, data.nounVerbHomographs, data.conjunctions,
+      ...Object.values(data.eventMarkers)];
+    for (const list of lists) {
+      expect([...list]).toEqual([...list].sort(cmp));
+      expect(new Set(list.map(foldWord)).size).toBe(list.length);
+    }
+  });
+
+  test('namingDePath resolves to the German file', () => {
+    expect(namingDePath()).toMatch(/references[\\/]naming[\\/]de\.json$/);
   });
 });

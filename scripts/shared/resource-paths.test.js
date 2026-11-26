@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { inputSchemaPath, promptTemplatePath, resolveWithFallback, ontologyPath, namingSchemaPath, namingEnPath } from './resource-paths.js';
+import { inputSchemaPath, promptTemplatePath, resolveWithFallback, ontologyPath, namingSchemaPath, namingEnPath, namingDePath } from './resource-paths.js';
 import { loadOntology } from './ontology.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -130,6 +130,21 @@ describe('the naming schema (references/naming-schema.json)', () => {
     mkdirSync(PACKAGED_DIR, { recursive: true });
     writeFileSync(packaged, '{}');
     expect(resolveWithFallback(join(__dirname, '__no_such_dir__', 'naming-schema.json'), packaged, 'naming-schema.json')).toBe(packaged);
+  });
+});
+
+describe('the German naming data (references/naming/de.json)', () => {
+  test('namingDePath resolves in the repo-root references/ and a stale packaged copy loses', () => {
+    mkdirSync(join(PACKAGED_DIR, 'naming'), { recursive: true });
+    writeFileSync(join(PACKAGED_DIR, 'naming', 'de.json'), '{}');
+    expect(namingDePath()).toBe(join(REPO_REFERENCES, 'naming', 'de.json'));
+  });
+
+  test('without a source it falls back to the packaged twin', () => {
+    const packaged = join(PACKAGED_DIR, 'naming', 'de.json');
+    mkdirSync(join(PACKAGED_DIR, 'naming'), { recursive: true });
+    writeFileSync(packaged, '{}');
+    expect(resolveWithFallback(join(__dirname, '__no_such_dir__', 'de.json'), packaged, 'naming/de.json')).toBe(packaged);
   });
 });
 
