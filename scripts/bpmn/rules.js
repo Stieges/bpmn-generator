@@ -1011,7 +1011,7 @@ const SOUNDNESS_CHECKS = [
 export const LANE_NAME_LIMIT = 25;
 
 // M01 Objekt+Verb-Heuristik. Bewusst konservativ und nur WARNING — das ist KEIN
-// echter POS-Tagger (exakte Wortartanalyse bleibt M05/M06, aktuell OFF). Die
+// echter POS-Tagger (Wortartanalyse: M05 mit deklarierter Sprache, M06 aktuell OFF). Die
 // deutsche BA-Konvention setzt das Verb ans Ende im Infinitiv ("Antrag prüfen");
 // zusätzlich akzeptieren wir das englische Verb-first-Muster ("Review application")
 // über eine kleine kuratierte Liste, um False-Positives zu vermeiden.
@@ -1158,14 +1158,25 @@ const STYLE_CHECKS = [
       return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
     }
   },
-  // Platzhalter für zukünftige Style-Regeln
+  // M05: under a declared language, message flow names are noun phrases; without one, nothing runs.
   {
-    id: 'M05', // NOT_IMPLEMENTED
-    description: 'Message-Flow-Labels: nur Substantive',
+    id: 'M05',
+    description: 'Message-Flow-Labels: Nominalphrase (Sprache des Modells)',
     ref: { silver: 'Ch.5' },
     scope: 'global',
-    check: () => ({ pass: true }),
+    check: (_proc, lc) => {
+      const language = modelLanguage(lc);
+      if (language === null) return { pass: true };
+      const naming = namingFor(language);
+      if (!naming || !Array.isArray(lc.messageFlows)) return { pass: true };
+      const msgs = [];
+      for (const mf of lc.messageFlows) {
+        if (mf && typeof mf.name === 'string' && naming.messageName(mf.name)) msgs.push(namingMessage(naming, 'message', mf.name));
+      }
+      return msgs.length === 0 ? { pass: true } : { pass: false, messages: msgs };
+    }
   },
+  // Platzhalter für zukünftige Style-Regeln
   {
     id: 'M06', // NOT_IMPLEMENTED
     description: 'Event-Labels: Partizip/Zustand oder Substantiv',

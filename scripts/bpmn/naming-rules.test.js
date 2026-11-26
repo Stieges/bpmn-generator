@@ -39,7 +39,7 @@ function v2Form(path) {
   return r.lc;
 }
 
-/** The measured entry of one model: M01 now; M05 and M06 stay empty until their rules read the language. */
+/** The measured entry of one model: M01 and M05; M06 stays empty until its rule reads the language. */
 function measure(lc) {
   const r = withFindings(lc);
   return { language: lc.language, M01: messagesOf(r, 'M01'), M05: messagesOf(r, 'M05'), M06: messagesOf(r, 'M06') };
@@ -107,11 +107,10 @@ describe('the pinned snapshot', () => {
   let snapshot;
   beforeAll(() => { snapshot = readJson(SNAPSHOT_PATH); });
 
-  test('has one entry per top-level fixture and per format 2.0 model, M05 and M06 still empty', () => {
+  test('has one entry per top-level fixture and per format 2.0 model, M06 still empty', () => {
     expect(Object.keys(snapshot).sort()).toEqual([...Object.keys(LANGUAGES), ...V2_MODELS].sort());
     for (const entry of Object.values(snapshot)) {
       expect(Object.keys(entry)).toEqual(['language', 'M01', 'M05', 'M06']);
-      expect(entry.M05).toEqual([]);
       expect(entry.M06).toEqual([]);
     }
   });
@@ -208,6 +207,63 @@ describe('M01 with a declared language', () => {
     expect(archive).toHaveLength(1);
     expect(archive[0].severity).toBe('ERROR');
     expect(r.errors).toContain(archive[0].message);
+  });
+});
+
+describe('M05 with a declared language', () => {
+  const strict = () => profileForMode(loadRuleProfile(join(ROOT, 'rules', 'strict-profile.json')), 'document');
+  const flowModel = (name, language = 'en') => ({
+    language,
+    pools: [
+      { id: 'p1', name: 'Shop', nodes: [{ id: 's', type: 'startEvent' }, { id: 'a', type: 'task', name: 'Place order' }, { id: 'e', type: 'endEvent' }], edges: [{ id: 'f1', source: 's', target: 'a' }, { id: 'f2', source: 'a', target: 'e' }] },
+      { id: 'p2', name: 'Bank', nodes: [{ id: 'bs', type: 'startEvent' }, { id: 'b', type: 'task', name: 'Check order' }, { id: 'be', type: 'endEvent' }], edges: [{ id: 'g1', source: 'bs', target: 'b' }, { id: 'g2', source: 'b', target: 'be' }] },
+    ],
+    messageFlows: [{ id: 'm1', source: 'a', target: 'bs', name }],
+  });
+  const m05 = (lc, profile = null) => messagesOf(withFindings(lc, profile), 'M05');
+
+  test('English totals 2, German 0, measured per fixture', () => {
+    const measured = {};
+    for (const [file, language] of Object.entries(LANGUAGES)) measured[file] = m05({ ...fixture(file), language });
+    expect(Object.fromEntries(Object.entries(measured).filter(([, v]) => v.length))).toEqual({
+      'loop-with-join.json': ['Message flow "Order received" is named like an activity or a state; the English convention for message flows is a noun phrase (e.g. "Invoice").'],
+      'realistic-collaboration.json': ['Message flow "Case closed" is named like an activity or a state; the English convention for message flows is a noun phrase (e.g. "Invoice").'],
+    });
+  });
+
+  test('without language: no M05 output under no profile, the default and the strict profile, all fixtures', () => {
+    const files = readdirSync(FIXTURES).filter((f) => Object.hasOwn(LANGUAGES, f));
+    expect(files).toHaveLength(28);
+    const profiles = [null, loadRuleProfile(join(ROOT, 'rules', 'default-profile.json')), strict()];
+    for (const file of files) {
+      for (const p of profiles) {
+        const r = withFindings(fixture(file), p);
+        expect([file, r.findings.filter((f) => f.code === 'M05')]).toEqual([file, []]);
+      }
+    }
+  });
+
+  test('under the strict profile with "en", "Send invoice" is an ERROR and blocks; "Merge request" and "Follow-up" pass', () => {
+    const r = runRules(flowModel('Send invoice'), strict(), undefined, { withFindings: true });
+    const f = r.findings.filter((x) => x.code === 'M05');
+    expect(f).toHaveLength(1);
+    expect(f[0].severity).toBe('ERROR');
+    expect(r.errors).toContain(f[0].message);
+    expect(m05(flowModel('Merge request'), strict())).toEqual([]);
+    expect(m05(flowModel('Follow-up'), strict())).toEqual([]);
+  });
+
+  test('a profile override M05: OFF silences it', () => {
+    const profile = { ...strict(), overrides: { ...strict().overrides, M05: { severity: 'OFF' } } };
+    const r = runRules(flowModel('Send invoice'), profile, undefined, { withFindings: true });
+    expect(r.findings.filter((x) => x.code === 'M05')).toEqual([]);
+  });
+
+  test('a model without messageFlows, a single process, and odd entries do not throw', () => {
+    expect(m05({ language: 'en', nodes: [{ id: 's', type: 'startEvent' }, { id: 'e', type: 'endEvent' }], edges: [{ id: 'f', source: 's', target: 'e' }] })).toEqual([]);
+    expect(m05({ ...flowModel('x'), messageFlows: 'nope' })).toEqual([]);
+    expect(m05({ ...flowModel('x'), messageFlows: [{ id: 'm' }, { id: 'n', name: 7 }] })).toEqual([]);
+    expect(m05({ ...flowModel('x'), language: 'fr' })).toEqual([]);
   });
 });
 

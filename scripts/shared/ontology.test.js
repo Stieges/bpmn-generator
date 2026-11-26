@@ -68,7 +68,7 @@ describe('rules in the ontology', () => {
   });
 
   test('M05/M06 are OFF and O01–O04 ADVISORY', () => {
-    expect(['M05', 'M06'].map((id) => rule(id).defaultSeverity)).toEqual(['OFF', 'OFF']);
+    expect(['M05', 'M06'].map((id) => rule(id).defaultSeverity)).toEqual(['WARNING', 'OFF']);
     expect(['O01', 'O02', 'O03', 'O04'].map((id) => rule(id).defaultSeverity)).toEqual(Array(4).fill('ADVISORY'));
   });
 

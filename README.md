@@ -261,7 +261,7 @@ bpmn-generator/
 | Layer | Severity | Rules | Examples |
 |-------|----------|-------|----------|
 | Soundness | ERROR | S01-S17 | Start/End events, deadlocks, boundary events |
-| Style | WARNING | M01-M13 (M05/M06 severity=OFF) | Naming conventions, gateway labels |
+| Style | WARNING | M01-M13 (M06 severity=OFF; M05 checks message flow names only under a declared `language`) | Naming conventions, gateway labels |
 | Pragmatics | INFO | P01-P03 | Complexity metrics |
 | Workflow-Net | ERROR/WARNING | WF01-WF03 (opt-in); SC01, SC06 (scenario pipeline) | Liveness, boundedness, deadlock-freedom (opt-in) |
 | Optimization | ADVISORY | O01-O04 | Redesign opportunities — `optimize`/`soll` mode only (opt-in); each names a transform in the redesign toolbox |

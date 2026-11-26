@@ -111,7 +111,9 @@
   "loop-with-join.json": {
     "language": "en",
     "M01": [],
-    "M05": [],
+    "M05": [
+      "Message flow \"Order received\" is named like an activity or a state; the English convention for message flows is a noun phrase (e.g. \"Invoice\")."
+    ],
     "M06": []
   },
   "message-flow-participant-ports.json": {
@@ -147,7 +149,9 @@
   "realistic-collaboration.json": {
     "language": "en",
     "M01": [],
-    "M05": [],
+    "M05": [
+      "Message flow \"Case closed\" is named like an activity or a state; the English convention for message flows is a noun phrase (e.g. \"Invoice\")."
+    ],
     "M06": []
   },
   "simple-approval.json": {
