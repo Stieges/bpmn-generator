@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { bpmnXsdStatus, xsdDir } from '../../.github/scripts/fetch-bpmn-xsd.mjs';
 import { runPipeline } from './pipeline.js';
 import { resolveLaneId } from './topology.js';
+import { collinearRun } from './bend-rule.js';
 import { LANE_HEADER_W } from './constants.js';
 import { FIXTURES, MODES, OFF } from '../bench/output-hashes.mjs';
 
@@ -100,6 +101,25 @@ const diCodes = (r) => {
   return out;
 };
 
+/**
+ * Pairs [incoming, outgoing] of sequence flows of one node that run on one line for more than 1 px
+ * (two parallel legs closer than 4 px read as one stroke, the bend rule's `collinearPx`): the flow
+ * into a node ends on the leg its outgoing flow leaves by. No DI check reports this.
+ */
+function sharedThroughLegs(result, lc) {
+  const routes = result.coordMap?.edgeCoords || {};
+  const segs = (pts) => pts.slice(1).map((p, i) => [pts[i], p]);
+  const out = [];
+  for (const proc of lc.pools || [lc]) {
+    const flows = (proc.edges || []).map((e) => ({ ...e, id: e.id ?? `flow_${e.source}_${e.target}` })).filter((e) => routes[e.id]);
+    for (const a of flows) for (const b of flows) {
+      if (a.target !== b.source || a.id === b.id) continue;
+      if (segs(routes[a.id]).some((s) => segs(routes[b.id]).some((q) => collinearRun(s, q, 4) > 0))) out.push([a.id, b.id]);
+    }
+  }
+  return out;
+}
+
 const laneShapeCount = (xml, id) => (xml.match(new RegExp(`<bpmndi:BPMNShape\\b[^>]*\\bbpmnElement="${id}"`, 'g')) || []).length;
 
 const ROWS = [
@@ -165,6 +185,51 @@ describe('nested lanes of 1.x models', () => {
     const lc = F0();
     const r = await runPipeline(lc);
     expect(diCodes(r)).toEqual({});
+    expect(laneFindings(r, lc)).toEqual(CLEAN);
+  });
+
+  // The bend rule may trade overlap with one flow for more with another. With the tall, uncompacted
+  // bands of a nested process that trade put flow_gw_pruefen on the leg flow_pruefen_end leaves
+  // "Antrag prüfen" by: in at the top centre, out at the same point, 186 px on one line.
+  test.each([['default options', {}], ['refinement off', { visualRefinement: false }]])(
+    'f0, %s: the flow into a task does not run on the leg its outgoing flow leaves by', async (_what, opts) => {
+      const lc = F0();
+      const r = await runPipeline(lc, opts);
+      expect(sharedThroughLegs(r, lc)).toEqual([]);
+      expect(diCodes(r)).toEqual({});
+      // Into "Antrag prüfen" from the left, out at the top.
+      const pruefen = r.coordMap.coords.pruefen;
+      const into = r.coordMap.edgeCoords.flow_gw_pruefen;
+      const outOf = r.coordMap.edgeCoords.flow_pruefen_end;
+      expect(into[into.length - 1].x).toBe(pruefen.x);
+      expect(outOf[0].y).toBe(pruefen.y);
+    });
+
+  test('f0 without the bend rule: the oracle sees the shared legs the first routing leaves', async () => {
+    const lc = F0();
+    const r = await runPipeline(lc, { bendRule: false });
+    expect(sharedThroughLegs(r, lc)).toEqual([['flow_gw_pruefen', 'flow_pruefen_end'], ['flow_gw_freigeben', 'flow_freigeben_end']]);
+  });
+
+  test('child lanes declared against the flow are stacked along it: the child with the start event first', async () => {
+    // F2 holds the start event and is declared second; F1, declared first, holds the end of the flow.
+    const lc = model([F('F1', 'F2')], place({ F2: 's t1 t2 g', F1: 't3 t4 e' }));
+    const r = await runPipeline(lc);
+    const { F: f, F1: f1, F2: f2 } = r.coordMap.laneCoords;
+    expect(f2.y).toBe(f.y);
+    expect(f1.y).toBe(f2.y + f2.h);
+    expect(diCodes(r)).toEqual({});
+    expect(laneFindings(r, lc)).toEqual(CLEAN);
+  });
+
+  test('child lanes without a start event are stacked by where their nodes come in the flow', async () => {
+    // A holds the start; under F, F2 (t2, g) comes before F1 (t3, t4, e) although F1 is declared first.
+    const lc = model([A, F('F1', 'F2')], place({ A: 's t1', F2: 't2 g', F1: 't3 t4 e' }));
+    const r = await runPipeline(lc);
+    const { A: a, F: f, F1: f1, F2: f2 } = r.coordMap.laneCoords;
+    expect(f.y).toBe(a.y + a.h);
+    expect(f2.y).toBe(f.y);
+    expect(f1.y).toBe(f2.y + f2.h);
     expect(laneFindings(r, lc)).toEqual(CLEAN);
   });
 

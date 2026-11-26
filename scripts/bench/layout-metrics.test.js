@@ -462,9 +462,11 @@ const DIRECTION = {
   'message-flow-participant-ports.json': dir(NONE),
   'messageflow-to-subprocess.json':     dir(NONE),
   'multi-pool-collaboration.json':      dir(d(2, 1)),
-  // d(4, 4) is measured, not a defect of this fixture: lane compaction skips a process with nested
+  // d(3, 4) is measured, not a defect of this fixture: lane compaction skips a process with nested
   // lanes, so the cross-lane flows keep the routes coordinates.js §5.2 gives them (plain: no bend rule).
-  'nested-lanes-role-system.json':      dir(d(4, 4)),
+  // 3, not 4: with nested lanes the search does not offer flow_gw_pruefen the one-bend route that
+  // would lie on the leg flow_pruefen_end leaves by.
+  'nested-lanes-role-system.json':      dir(d(3, 4)),
   'parallel-split-join.json':           dir(NONE),
   // #91 raised the plain rows (bend rule off) from d(2, 4) / d(1, 1); default, off and on stay 0,
   // so the shipped output is unaffected — the rule takes the routes below. plain (+1, +1): inf8
