@@ -19,14 +19,15 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { runPipeline, validateLogicCore, generateDiagramSet } from './bpmn/pipeline.js';
+import { runPipeline, generateDiagramSet } from './bpmn/pipeline.js';
+import { validateModel } from './bpmn/validate.js';
 import { profileForMode } from './bpmn/rules.js';
 import { loadNamedRuleProfile, ProfileRejectedError } from './shared/rule-profile.js';
 import { loadNamedView, ViewRejectedError, resolveViewOptions } from './shared/view.js';
 import { rulesDirPath } from './shared/resource-paths.js';
 import { isMainModule } from './shared/entry-point.js';
 import { PACKAGE_VERSION } from './shared/version.js';
-import { validateLogicCoreSchema, validateLayoutOptions, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA, assertViewFitsModel } from './bpmn/schema-gate.js';
+import { validateModelSchema, v2RequestErrors, modelFormat, validateLayoutOptions, boundSchemaErrors, layoutOptionsOf, LAYOUT_SWITCH_OPTION_SCHEMA, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
 import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
@@ -78,6 +79,7 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON (nodes, edges, pools etc.)' },
+        catalog: { type: 'object', description: 'Actor catalogue { actors, scheme? } of a format 2.0 model; embedded, paths are never read' },
         drillDown: { type: 'boolean', description: 'Generate per-subprocess diagrams (optional, default false)' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default, faithful IST) or 'optimize' (Soll — adds redesign advisories)" },
         ruleProfile: PROFILE_PARAM,
@@ -103,6 +105,7 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to validate' },
+        catalog: { type: 'object', description: 'Actor catalogue { actors, scheme? } of a format 2.0 model; embedded, paths are never read' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (adds redesign advisories)" },
         ruleProfile: PROFILE_PARAM,
         view: VIEW_PARAM
@@ -128,6 +131,7 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to orchestrate' },
+        catalog: { type: 'object', description: 'Actor catalogue { actors, scheme? } of a format 2.0 model; embedded, paths are never read' },
         ruleProfile: PROFILE_PARAM,
         view: VIEW_PARAM,
         visualRefinement: VISUAL_REFINEMENT_PARAM,
@@ -149,9 +153,12 @@ const text = (payload) => ({ content: [{ type: 'text', text: JSON.stringify(payl
  * Without this, a wrong `type` or an unknown field surfaces much later as an
  * opaque ELK error instead of a pointed schema message.
  */
-function schemaGate(logicCore, layoutOptions) {
-  const check = validateLogicCoreSchema(logicCore);
+function schemaGate(logicCore, layoutOptions, { catalog, mode } = {}) {
+  const check = validateModelSchema(logicCore, { accept: ['1', '2'] });
   if (!check.valid) return text({ status: 'schema_error', errors: check.errors });
+  // A 2.0 model: the embedded catalogue and the mode are checked here; a 1.x model gets [] (unchanged)
+  const v2Errors = v2RequestErrors(logicCore, { catalog, mode });
+  if (v2Errors.length) return text({ status: 'schema_error', errors: boundSchemaErrors(v2Errors) });
   // visualRefinement, bendRule, nodeLabelsAvoidFlows, foreignShapeRepair — only on the tools that lay out
   const layoutCheck = validateLayoutOptions(layoutOptions);
   return layoutCheck.valid ? null : text({ status: 'schema_error', errors: layoutCheck.errors });
@@ -186,6 +193,10 @@ function viewOf(args) {
  * stays `undefined` (not null), so the view's own profile can apply; it is resolved here, once, so
  * the reviewer and compliance agents judge the model by the same profile the layout runs with.
  */
+function catalogOpt(args) {
+  return modelFormat(args.logicCore) === '2' && args.catalog != null ? { catalog: args.catalog } : {};
+}
+
 function viewAndProfileOf(args) {
   const view = viewOf(args);
   assertViewFitsModel(args.logicCore, view);
@@ -198,12 +209,12 @@ async function handleToolCall(request) {
   const { name, arguments: args } = request.params;
 
   if (name === 'generate_bpmn') {
-    const rejected = schemaGate(args.logicCore, args);
+    const rejected = schemaGate(args.logicCore, args, args);
     if (rejected) return rejected;
 
     const include = new Set(args.include ?? ['xml', 'svg', 'validation', 'diagnostics']);
     const { view, ruleProfile } = viewAndProfileOf(args);
-    const opts = { mode: args.mode, ruleProfile, view, poolOrder: args.poolOrder, ...layoutOptionsOf(args) };
+    const opts = { mode: args.mode, ruleProfile, view, poolOrder: args.poolOrder, ...layoutOptionsOf(args), ...catalogOpt(args) };
 
     if (args.drillDown) {
       const set = await generateDiagramSet(args.logicCore, opts);
@@ -237,11 +248,11 @@ async function handleToolCall(request) {
   }
 
   if (name === 'validate_bpmn') {
-    const rejected = schemaGate(args.logicCore);
+    const rejected = schemaGate(args.logicCore, undefined, args);
     if (rejected) return rejected;
     // infos and metrics used to be dropped here, which silently killed the
     // whole P layer (complexity metrics) for every MCP caller.
-    const result = validateLogicCore(args.logicCore, profileForMode(viewAndProfileOf(args).ruleProfile ?? null, args.mode));
+    const result = validateModel(args.logicCore, profileForMode(viewAndProfileOf(args).ruleProfile ?? null, args.mode), catalogOpt(args));
     return text(result);
   }
 
@@ -257,7 +268,7 @@ async function handleToolCall(request) {
   if (name === 'orchestrate_bpmn') {
     // Same gate as the other tools: a string here would otherwise be taken for a process
     // description, and a malformed model would surface as a thrown error, not a schema_error.
-    const rejected = schemaGate(args.logicCore, args);
+    const rejected = schemaGate(args.logicCore, args, args);
     if (rejected) return rejected;
     const { view, ruleProfile } = viewAndProfileOf(args);
     const result = await orchestrate(args.logicCore, {
@@ -265,6 +276,7 @@ async function handleToolCall(request) {
       view,
       mode: args.mode,
       ...layoutOptionsOf(args),
+      ...catalogOpt(args),
     });
     return text({
       bpmnXml: result.bpmnXml,
