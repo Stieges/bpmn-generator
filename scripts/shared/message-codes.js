@@ -1,5 +1,5 @@
 /**
- * The registry of message codes of a format 2.x run.
+ * The registry of message codes.
  *
  * A code names a kind of message, not its wording. A text carrier keeps its string and leads with
  * `[<code>] `; an object carrier (a schema-gate entry, a finding, a notice, an HTTP error body)
@@ -38,6 +38,8 @@ export const MESSAGE_CODES = Object.freeze({
   H06: entry('hint', 'a process has no assignments, so no lanes'),
   H08: entry('hint', 'a node has no neighbour with a lane (or a boundary event no host with a lane) and is placed in the unassigned lane'),
   H09: entry('hint', 'a catalogue entry is replaced by an actor of the process file'),
+  H10: entry('hint', 'the marker of an event was inferred from its name, under the declared language'),
+  H11: entry('hint', 'the name of an event gave a marker before a language was declared and gives none or another one under it'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 

@@ -47,7 +47,7 @@ import { compactLanes, repairEdgeLabels, resolveRefinement, innerLaneLines, lane
 import { isMainModule } from '../shared/entry-point.js';
 import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOptions } from '../shared/view.js';
 import { applyDerivations } from './derivations.js';
-import { languageTag } from './naming/index.js';
+import { languageTag, resolveEventMarkers, namingHints } from './naming/index.js';
 import { coded, codeOf } from '../shared/message-codes.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
@@ -190,7 +190,10 @@ function errorFindings(errors, code = null) {
  *                findings?: Array<{code: string, severity: string, message: string}>}
  *     `hints` (always present, empty on an early return): first the lane hints of a format 2.0
  *     model (formLanes: H02–H06, H08), then one entry per element the view derived — H01 a join
- *     gateway and its onward flow, `elements: [gatewayId, targetId, flowId]`
+ *     gateway and its onward flow, `elements: [gatewayId, targetId, flowId]` —, then, for a model
+ *     with a supported `language`, H10 per event marker inferred from the name and H11 per event
+ *     whose name gave a marker before a language was declared and gives none or another one now
+ *     (naming/index.js namingHints), `elements: [eventId]`
  *     `findings` (format 2.x runs only, absent on 1.x): Array<{code, severity, message}>, each
  *     `message` the very string in `errors` or `warnings` — errors first, then warnings. The
  *     resolveFields and F04 findings code their prefix, a failing `decisions` gate F05, the rule
@@ -244,6 +247,11 @@ async function runPipeline(logicCore, callerOpts = {}) {
     lc = applyDecisionDocumentation(lc, opts.decisions, { locale: opts.locale });
   }
 
+  // The marker of every event, decided once for the rules and both writers (naming/index.js): for
+  // a model in a supported `language` each event without `marker` gets `_marker`; without one this
+  // only drops `_marker` keys a caller supplied, so they decide nothing.
+  const marked = resolveEventMarkers(lc);
+
   const profile = resolveRuleProfile(opts.ruleProfile ?? null, opts.mode);
   // A 2.x run also gives its rule findings as objects (`validation.findings`); rule infos are
   // dropped here as their strings are. runRules emits layer by layer (S, M, P, WF), so a warning
@@ -273,7 +281,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // author's model; the derived one carries `_derived` nodes and edges the input schema does not know.
   const derivation = applyDerivations(lc, opts.derivations);
   lc = derivation.lc;
-  const hints = [...laneHints, ...derivationHints(derivation.derived, lc)];
+  const hints = [...laneHints, ...derivationHints(derivation.derived, lc), ...namingHints(lc, marked)];
 
   const allProcesses = lc.pools ? lc.pools : [lc];
   for (const proc of allProcesses) {

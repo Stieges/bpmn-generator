@@ -12,6 +12,10 @@ export const LANGUAGE_TAG = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 import { loadLexicon, NAMING_LANGUAGES, NamingDataError } from './lexicon.js';
 import { verbFirst } from './verb-first.js';
 import { verbLast } from './verb-last.js';
+import { isEvent } from '../types.js';
+// A cycle with ../icons.js (it imports `namingFor`): both sides use the other's binding inside
+// functions only, never while the module is evaluated.
+import { inferEventMarker } from '../icons.js';
 
 export { NAMING_LANGUAGES, NamingDataError };
 
@@ -105,4 +109,82 @@ export function namingDataErrorOf(err) {
 export function checkNamingOverlay(env = process.env) {
   if (!env.BPMN_NAMING) return;
   for (const language of Object.keys(NAMING_LANGUAGES)) loadLexicon(language, { overlayPath: env.BPMN_NAMING });
+}
+
+/** Every node of a model with its pool's name (`null` outside a collaboration), in document order. Never throws. */
+function nodesWithPool(lc) {
+  const out = [];
+  if (!isPlainObject(lc)) return out;
+  const walk = (nodes, pool) => {
+    if (!Array.isArray(nodes)) return;
+    for (const node of nodes) {
+      if (!isPlainObject(node)) continue;
+      out.push({ node, pool });
+      walk(node.nodes, pool);
+    }
+  };
+  if (Array.isArray(lc.pools)) {
+    for (const p of lc.pools) if (isPlainObject(p)) walk(p.nodes, String(p.name || p.id));
+  } else {
+    walk(lc.nodes, null);
+  }
+  return out;
+}
+
+/**
+ * Decides the marker of every event of a model in a supported language, once, for the rules and
+ * both writers. `lc` is changed in place — `runPipeline` passes its private copy.
+ *
+ * First every `_marker` key is removed from every node, so a key a caller supplied decides nothing.
+ * Then, when the model's language has a strategy, every event without a `marker` gets `_marker`:
+ * the marker its name implies in that language, or `null`. Without a strategy nothing is written.
+ *
+ * @returns {{ inferred: Marked[], changed: Marked[] }} `Marked` is `{ id, name, type, marker,
+ *   legacy, pool }` (`marker` what was written, `legacy` what the inference without a language reads
+ *   from the name, `pool` the pool's name in a collaboration, else `null`). `inferred`: the events
+ *   that got a marker; `changed`: the events whose `legacy` is a marker and not the one written.
+ *   Both in document order.
+ */
+export function resolveEventMarkers(lc) {
+  const all = nodesWithPool(lc);
+  for (const { node } of all) delete node._marker;
+  const strategy = namingFor(modelLanguage(lc));
+  const inferred = [];
+  const changed = [];
+  if (strategy === null) return { inferred, changed };
+  for (const { node, pool } of all) {
+    if (!isEvent(node.type) || node.marker) continue;
+    const name = typeof node.name === 'string' ? node.name : '';
+    const marker = strategy.eventMarker(name, node.type);
+    node._marker = marker;
+    const legacy = inferEventMarker(name);
+    const entry = { id: node.id, name, type: node.type, marker, legacy, pool };
+    if (marker !== null) inferred.push(entry);
+    if (legacy !== null && legacy !== marker) changed.push(entry);
+  }
+  return { inferred, changed };
+}
+
+/**
+ * The hints of the naming layer for a model in a supported language, from the lists of
+ * `resolveEventMarkers`: H10 per event whose marker was inferred from its name, then H11 per event
+ * whose name gave a marker before a language was declared and now gives none or another one (such
+ * an event gets H11 only). In a collaboration the message starts with `[<pool name>] `.
+ */
+export function namingHints(lc, { inferred = [], changed = [] } = {}) {
+  const tag = languageTag(lc);
+  const lead = (e) => `${e.pool === null ? '' : `[${e.pool}] `}Event "${e.name}" (${e.id})`;
+  const isChanged = new Set(changed);
+  return [
+    ...inferred.filter((e) => !isChanged.has(e)).map((e) => ({
+      code: 'H10',
+      message: `${lead(e)}: marker "${e.marker}" inferred from its name (language "${tag}").`,
+      elements: [String(e.id)],
+    })),
+    ...changed.map((e) => ({
+      code: 'H11',
+      message: `${lead(e)}: its name gave marker "${e.legacy}" before a language was declared; under language "${tag}" it gives ${e.marker === null ? 'no marker' : `"${e.marker}"`}. Set "marker" explicitly.`,
+      elements: [String(e.id)],
+    })),
+  ];
 }

@@ -10,7 +10,7 @@ import { esc, rn } from '../shared/utils.js';
 import { edgeLabelBox, edgeLabelTextStyle, edgeLabelLayout, textAnnotationTextStyle } from './coordinates.js';
 
 import {
-  renderEventMarker, inferEventMarker, renderTaskIcon, renderTaskMarkers, renderGatewaySymbol,
+  renderEventMarker, resolvedMarkerOf, renderTaskIcon, renderTaskMarkers, renderGatewaySymbol,
   renderDataObjectShape, renderDataStoreShape, renderTextAnnotationShape,
 } from './icons.js';
 
@@ -473,7 +473,7 @@ function renderEvent(node, c, tx, ty, label, parent = null) {
   }
 
   // Icon, element-relative
-  const marker = node.marker || inferEventMarker(node.name || '');
+  const marker = resolvedMarkerOf(node);
   if (marker && (marker !== 'terminate' || isEnd)) {
     o.push(`<g transform="translate(${x},${y})">${renderEventMarker(marker, w, h, isThrow, node.color)}</g>`);
   }
