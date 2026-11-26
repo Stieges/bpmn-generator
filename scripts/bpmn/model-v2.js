@@ -297,14 +297,15 @@ function inheritKeys(proc, resolved, laneBy, performerOf, prefix) {
     }
   }
 
-  // step 7: boundary events go with their host
+  // step 7: boundary events go with their host. Without a host that has a key the fallback stays:
+  // migrateModel calls formLanes without validateLogicCore, so the host may be missing.
   for (const n of flowNodes) {
     if (!isBoundaryEvent(n)) continue;
     const host = key.get(n.attachedTo);
     if (host !== undefined) key.set(n.id, host);
     else {
       key.set(n.id, UNASSIGNED);
-      hints.push({ code: 'H08', message: `${prefix}No neighbour with a lane: ${nodeLabel(n)} is in lane "${placeholderName(UNASSIGNED)}".`, elements: [n.id] });
+      hints.push({ code: 'H08', message: `${prefix}Boundary event ${nodeLabel(n)} has no host with a lane: lane "${placeholderName(UNASSIGNED)}".`, elements: [n.id] });
     }
   }
   return { key, hints, inherited };
@@ -345,6 +346,15 @@ export function formLanes(lc, resolved, { lanes = 'role' } = {}) {
 
     // artefacts: the lane of the node an association connects them to, else the first lane
     const flowLane = new Map(top.filter((n) => key.has(n.id)).map((n) => [n.id, n.lane]));
+    // a node inside a subprocess counts as its top-level subprocess
+    const collectNested = (sp, id) => {
+      for (const c of sp.nodes ?? []) {
+        if (!isPlainObject(c)) continue;
+        if (c.id !== undefined) flowLane.set(c.id, flowLane.get(id));
+        collectNested(c, id);
+      }
+    };
+    for (const n of top) if (isPlainObject(n) && flowLane.has(n.id)) collectNested(n, n.id);
     for (const n of top) {
       if (!isPlainObject(n) || isFlowNode(n)) continue;
       let laneId;
