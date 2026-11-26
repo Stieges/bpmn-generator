@@ -7,8 +7,10 @@
  */
 
 import { BpmnModdle } from 'bpmn-moddle';
-import { OMG_NODE_FIELD_SCOPE, SUPPORTED_NODE_TYPES, MARKER_BY_EVENT_DEFINITION } from './types.js';
+import { OMG_NODE_FIELD_SCOPE, SUPPORTED_NODE_TYPES, MARKER_BY_EVENT_DEFINITION, isEvent } from './types.js';
 import { DERIVED_JOIN_FLOW } from './derivations.js';
+import { EXTENSION_NS } from '../shared/utils.js';
+import { MARKER_NONE } from './naming/markers.js';
 
 const moddle = new BpmnModdle();
 
@@ -29,6 +31,23 @@ export const EVENT_SUBPROCESS_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field ===
 export const INSTANTIATE_TYPES = OMG_NODE_FIELD_SCOPE.find(f => f.field === 'instantiate').allowed;
 
 const EVENT_DEF_MAP = Object.fromEntries(MARKER_BY_EVENT_DEFINITION);
+
+/** The prefixes `attrs` binds to `EXTENSION_NS` (`xmlns:<prefix>`), any prefix. */
+export function extensionPrefixes(attrs) {
+  return Object.keys(attrs ?? {})
+    .filter((name) => name.startsWith('xmlns:') && attrs[name] === EXTENSION_NS)
+    .map((name) => name.slice('xmlns:'.length));
+}
+
+/**
+ * The name of the attribute that marks an event as plain on purpose (`<prefix>:marker="none"`, a
+ * prefix of `prefixes` or one the element binds itself), or `null`. The writer puts it only on an
+ * event with `marker: "none"`; the importers read it only on an event without an event definition.
+ */
+export function markerNoneAttribute(attrs, prefixes) {
+  const all = [...prefixes, ...extensionPrefixes(attrs)];
+  return all.map((p) => `${p}:marker`).find((name) => attrs?.[name] === MARKER_NONE) ?? null;
+}
 
 /**
  * One sequence flow as a Logic-Core edge — at process level and inside a container alike, so a
@@ -214,7 +233,8 @@ function moddleToLogicCore(definitions) {
   }
 
   // Convert each process
-  const pools = processes.map(proc => convertProcess(proc, partMap, expandedIds));
+  const prefixes = extensionPrefixes(definitions.$attrs);
+  const pools = processes.map(proc => convertProcess(proc, partMap, expandedIds, prefixes));
 
   // Collapsed pools
   const collapsedPools = collapsedParts.map(p => ({
@@ -314,7 +334,7 @@ function moddleToLogicCore(definitions) {
   return { id: 'Process_1', name: 'Empty', nodes: [], edges: [], lanes: [] };
 }
 
-function convertProcess(proc, partMap, expandedIds = new Set()) {
+function convertProcess(proc, partMap, expandedIds = new Set(), prefixes = []) {
   const processId = proc.id;
   const processName = proc.name || findPartNameForProcess(processId, partMap) || processId;
   const documentation = proc.documentation?.[0]?.text || undefined;
@@ -377,6 +397,10 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
     // Event markers + details
     const markerInfo = detectEventMarkerModdle(el);
     if (markerInfo.marker) node.marker = markerInfo.marker;
+    // `bg:marker="none"`: a plain event on purpose. An event definition wins over the attribute
+    // (a foreign tool may have given the event a trigger and kept the attribute).
+    const noneAttr = isEvent(type) && !(el.eventDefinitions?.length) ? markerNoneAttribute(el.$attrs, prefixes) : null;
+    if (noneAttr) node.marker = MARKER_NONE;
     if (markerInfo.linkName) node.linkName = markerInfo.linkName;
     if (markerInfo.conditionExpression) node.conditionExpression = markerInfo.conditionExpression;
     if (markerInfo.timerExpression) node.timerExpression = markerInfo.timerExpression;
@@ -503,9 +527,11 @@ function convertProcess(proc, partMap, expandedIds = new Set()) {
     }
 
     // Preserve unknown extension attributes for round-trip (Phase B)
-    if (el.$attrs && Object.keys(el.$attrs).length > 0) {
+    // The `bg:marker` attribute read above is the marker, not an unknown attribute.
+    const foreignAttrs = Object.fromEntries(Object.entries(el.$attrs ?? {}).filter(([name]) => name !== noneAttr));
+    if (Object.keys(foreignAttrs).length > 0) {
       if (!node.extensions) node.extensions = {};
-      node.extensions.$attrs = { ...el.$attrs };
+      node.extensions.$attrs = foreignAttrs;
     }
 
     return node;

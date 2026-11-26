@@ -110,6 +110,24 @@ if (status.mismatch) {
       }
     });
 
+    test('an event with marker "none" (bg:marker on the event) validates', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'bpmn-xsd-none-'));
+      try {
+        const lc = { id: 'P', name: 'P', nodes: [
+          { id: 's', type: 'startEvent', name: 'Frist abgelaufen', marker: 'none' },
+          { id: 'th', type: 'intermediateThrowEvent', name: 'Eskalation erfasst', marker: 'none' },
+          { id: 'e', type: 'endEvent', name: 'Fehler aufgetreten', marker: 'none' }],
+          edges: [{ source: 's', target: 'th' }, { source: 'th', target: 'e' }] };
+        const { bpmnXml } = await runPipeline(lc);
+        expect(bpmnXml.match(/bg:marker="none"/g)).toHaveLength(3);
+        const file = join(dir, 'none.bpmn');
+        writeFileSync(file, bpmnXml);
+        expect(validateBatch([file])).toEqual([]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     test('generated and committed BPMN XML validates against BPMN20.xsd', async () => {
       const out = mkdtempSync(join(tmpdir(), 'bpmn-xsd-'));
       try {

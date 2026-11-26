@@ -336,6 +336,7 @@ const schemaJson = JSON.parse(readFileSync(join(__dirname, '..', '..', 'referenc
 const svgSrc = readFileSync(join(__dirname, 'svg.js'), 'utf8') + readFileSync(join(__dirname, 'icons.js'), 'utf8');
 const read = (p) => readFileSync(join(__dirname, '..', '..', p), 'utf8');
 
+const plainMarker = (v, m) => v.markers.find((x) => x.name === m)?.plain === true;
 // One probe per place a new type must reach. Order = the order a failure lists them in.
 const PROBES = (v) => ({
   nodeType: {
@@ -353,8 +354,9 @@ const PROBES = (v) => ({
   },
   marker: {
     'input-schema.json EventMarker': (m) => schemaJson.$defs.EventMarker.enum.includes(m),
-    'event definition': (m) => T.EVENT_DEFINITION_BY_MARKER.has(m),
-    'marker icon (icons.js / svg.js)': (m) => m === 'terminate' || renderEventMarker(m, 36, 36, false) !== '',
+    // A plain marker (`none`) has neither: the event is written and drawn without a definition.
+    'event definition': (m) => plainMarker(v, m) || T.EVENT_DEFINITION_BY_MARKER.has(m),
+    'marker icon (icons.js / svg.js)': (m) => m === 'terminate' || plainMarker(v, m) || renderEventMarker(m, 36, 36, false) !== '',
   },
 });
 
@@ -423,7 +425,7 @@ describe('round trip keeps the type', () => {
       }
     });
   }
-  for (const m of VOCABULARY.markerNames(['supported']).filter(m => !['terminate', 'cancel', 'link', 'compensation'].includes(m))) {
+  for (const m of VOCABULARY.markerNames(['supported']).filter(m => !['terminate', 'cancel', 'link', 'compensation', 'none'].includes(m))) {
     test(`marker ${m} survives both importers`, async () => {
       const r = await runPipeline(one({ id: 'n', type: 'intermediateCatchEvent', marker: m, name: 'N' }));
       for (const reader of [bpmnToLogicCore, bpmnToLogicCoreLegacy]) {
@@ -436,6 +438,7 @@ describe('round trip keeps the type', () => {
     terminate: () => one({ id: 'n', type: 'endEvent', marker: 'terminate', name: 'N' }),
     cancel: () => one({ id: 'n', type: 'endEvent', marker: 'cancel', name: 'N' }),
     compensation: () => one({ id: 'n', type: 'intermediateThrowEvent', marker: 'compensation', name: 'N' }),
+    none: () => one({ id: 'n', type: 'intermediateThrowEvent', marker: 'none', name: 'N' }),
   };
   for (const [m, mk] of Object.entries(markerCases)) {
     test(`marker ${m} survives both importers on its legal host`, async () => {
