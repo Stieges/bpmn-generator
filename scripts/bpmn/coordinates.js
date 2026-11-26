@@ -6,7 +6,7 @@
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, LABEL_DISTANCE, EXTERNAL_LABEL_H, POOL_GAP, MESSAGE_FLOW_FAN, ARTIFACT_GAP } from './constants.js';
 import { CFG } from '../shared/utils.js';
-import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds } from './topology.js';
+import { identifyHappyPathNodes, resolveLaneId, assignEdgeIds, flattenLanes, hasNestedLanes } from './topology.js';
 import { clipStraight } from '../shared/geometry.js';
 import { layoutText, lineWidth } from '../shared/text-layout.js';
 
@@ -146,9 +146,25 @@ function buildCoordinateMap(elkResult, lc) {
     if (lanes.length === 0) continue;
     const procNodes = proc.nodes || [];
 
+    // Flat lanes: every lane is a band, kept in laneCoords from the start. Nested lanes (some lane
+    // has `children`): the bands are the leaf lanes in depth-first order, and a parent lane that
+    // holds nodes of its own contributes an implicit first band under its own id, ahead of its
+    // children. Those bands are measured and stacked in `bandCoords`; laneCoords is filled from
+    // them below, once they are stacked — a parent's rectangle is the union of its bands.
+    const nested = hasNestedLanes(proc);
+    const bandCoords = nested ? {} : laneCoords;
+    let bandLanes = lanes;
+    if (nested) {
+      const withOwnNodes = new Set(procNodes.filter(n => coords[n.id]).map(n => laneOfNode(n, proc)));
+      const bandsOf = (ls) => ls.flatMap(l => (l.children?.length
+        ? [...(withOwnNodes.has(l.id) ? [l] : []), ...bandsOf(l.children)]
+        : [l]));
+      bandLanes = bandsOf(lanes);
+    }
+
     // Group nodes by lane
     const laneNodeGroups = {};
-    for (const lane of lanes) laneNodeGroups[lane.id] = [];
+    for (const lane of bandLanes) laneNodeGroups[lane.id] = [];
     for (const n of procNodes) {
       const laneId = laneOfNode(n, proc);
       if (laneId && laneNodeGroups[laneId] && coords[n.id]) {
@@ -162,17 +178,17 @@ function buildCoordinateMap(elkResult, lc) {
     const poolW = poolC ? poolC.w : Math.max(...Object.values(coords).map(c => c.x + c.w)) + LANE_PADDING;
 
     // Compute lane bounds from node positions
-    for (const lane of lanes) {
+    for (const lane of bandLanes) {
       const nodeCoords = laneNodeGroups[lane.id];
       if (nodeCoords.length === 0) {
         // Empty lane — give it minimum height
-        laneCoords[lane.id] = { x: poolX + LANE_HEADER_W, y: 0, w: poolW - LANE_HEADER_W, h: 60 };
+        bandCoords[lane.id] = { x: poolX + LANE_HEADER_W, y: 0, w: poolW - LANE_HEADER_W, h: 60 };
         continue;
       }
       const minY = Math.min(...nodeCoords.map(c => c.y)) - LANE_PADDING;
       const maxY = Math.max(...nodeCoords.map(c => c.y + c.h)) + LANE_PADDING + EXTERNAL_LABEL_H;
 
-      laneCoords[lane.id] = {
+      bandCoords[lane.id] = {
         x: poolX + LANE_HEADER_W,
         y: minY,
         w: poolW - LANE_HEADER_W,
@@ -190,12 +206,12 @@ function buildCoordinateMap(elkResult, lc) {
     //        `proc.lanes` by flow), each node moves with its band, and only the
     //        edges whose two ends moved differently lose their ELK route — §5.2
     //        re-routes exactly those.
-    const laneOrder = lanes.map(l => l.id).filter(id => laneCoords[id]);
+    const laneOrder = bandLanes.map(l => l.id).filter(id => bandCoords[id]);
     const laneDelta = {};
-    let cursorY = Math.min(...laneOrder.map(id => laneCoords[id].y));
+    let cursorY = Math.min(...laneOrder.map(id => bandCoords[id].y));
 
     for (const laneId of laneOrder) {
-      const band = laneCoords[laneId];
+      const band = bandCoords[laneId];
       const delta = cursorY - band.y;
       laneDelta[laneId] = delta;
       if (delta !== 0) {
@@ -230,7 +246,23 @@ function buildCoordinateMap(elkResult, lc) {
       }
     }
 
-    // Equalize all lane widths
+    // Nested lanes: every lane of the tree gets its rectangle from the stacked bands — a leaf lane
+    // its band, a parent the union of its own implicit band and its children. The implicit band
+    // has no laneCoords entry of its own: it is the part of the parent above its first child.
+    if (nested) {
+      const place = (ls) => {
+        for (const l of ls) {
+          if (!l.children?.length) { laneCoords[l.id] = bandCoords[l.id]; continue; }
+          place(l.children);
+          const parts = [bandCoords[l.id], ...l.children.map(ch => laneCoords[ch.id])].filter(Boolean);
+          const y = Math.min(...parts.map(b => b.y));
+          laneCoords[l.id] = { x: parts[0].x, y, w: parts[0].w, h: Math.max(...parts.map(b => b.y + b.h)) - y };
+        }
+      };
+      place(lanes);
+    }
+
+    // Equalize all lane widths (top-level lanes; child lanes are inset from them below)
     const allLcs = lanes.map(l => laneCoords[l.id]).filter(Boolean);
     if (allLcs.length > 0) {
       const maxW = Math.max(...allLcs.map(l => l.w));
@@ -250,6 +282,7 @@ function buildCoordinateMap(elkResult, lc) {
         pc.h = Math.max(...allLcs.map(l => l.y + l.h)) - pc.y;
       }
     }
+    if (nested) insetChildLanes(lanes, laneCoords);
   }
 
   // §5.0b  Equalize pool widths across entire collaboration (BPMN convention)
@@ -264,6 +297,10 @@ function buildCoordinateMap(elkResult, lc) {
     // Also extend lanes to match pool width
     for (const lc_ of Object.values(laneCoords)) {
       lc_.w = maxPoolW - LANE_HEADER_W;
+    }
+    // That width is a top-level lane's: child lanes take their inset per level again.
+    for (const proc of allProcesses) {
+      if (hasNestedLanes(proc)) insetChildLanes(proc.lanes, laneCoords);
     }
   }
 
@@ -289,7 +326,7 @@ function buildCoordinateMap(elkResult, lc) {
       if (!delta) return;
       poolCoords[entry.id].y += delta;
       if (!entry.proc) return;   // black box has no content
-      for (const lane of (entry.proc.lanes || [])) {
+      for (const lane of flattenLanes(entry.proc.lanes)) {
         if (laneCoords[lane.id]) laneCoords[lane.id].y += delta;
       }
       for (const n of flattenProcessNodes(entry.proc.nodes)) {
@@ -315,7 +352,7 @@ function buildCoordinateMap(elkResult, lc) {
       if (happyIds.size === 0) continue;
       const lanes = proc.lanes || [];
       if (lanes.length > 0) {
-        for (const lane of lanes) {
+        for (const lane of flattenLanes(lanes)) {
           const laneHappyNodes = (proc.nodes || [])
             .filter(n => n.lane === lane.id && happyIds.has(n.id))
             .map(n => n.id)
@@ -907,12 +944,37 @@ function boxCrossesLines(box, lines) {
 }
 
 /**
+ * Child lanes sit one header strip inside their parent, level by level: `x = parent.x +
+ * LANE_HEADER_W`, `w = parent.w - LANE_HEADER_W`. Called after every step that sets the x or the
+ * width of the top-level lanes (§5.0, §5.0b). In place.
+ */
+function insetChildLanes(lanes, laneCoords) {
+  for (const lane of lanes || []) {
+    const parent = laneCoords[lane.id];
+    if (!parent) continue;
+    for (const child of lane.children || []) {
+      const cc = laneCoords[child.id];
+      if (cc) { cc.x = parent.x + LANE_HEADER_W; cc.w = parent.w - LANE_HEADER_W; }
+    }
+    insetChildLanes(lane.children, laneCoords);
+  }
+}
+
+/**
  * Inner lane separators of every participant: the top edge of each top-level band below the
- * first, spanning that band. Nested lanes have no band (§5.0a) and give no line (#75).
+ * first, spanning that band. With nested lanes: the top edge of every lane of the tree that does
+ * not start at the top of the lane stack, spanning that lane — a child lane's line is shorter than
+ * its parent's by the header strip.
  */
 function innerLaneLines(coordMap, process) {
   const out = [];
   for (const pool of (process.pools ?? [process])) {
+    if (hasNestedLanes(pool)) {
+      const all = flattenLanes(pool.lanes).map(l => coordMap.laneCoords?.[l.id]).filter(Boolean);
+      const top = Math.min(...all.map(b => b.y));
+      for (const band of all) if (band.y > top) out.push({ y: band.y, x0: band.x, x1: band.x + band.w });
+      continue;
+    }
     const bands = (pool.lanes ?? []).map(l => coordMap.laneCoords?.[l.id]).filter(Boolean).sort((a, b) => a.y - b.y);
     for (const band of bands.slice(1)) out.push({ y: band.y, x0: band.x, x1: band.x + band.w });
   }
@@ -1504,11 +1566,12 @@ function findNodeInAllProcesses(nodeId, processes) {
  * through the gateway next to its host). "Above" is decided once, here, in the
  * order the bands will have after §5.0a: a target in another lane of the same
  * process is above when its lane comes first in `proc.lanes` (the order §5.0a
- * stacks); in the same lane, or in a process without lanes, when its whole ELK
- * box lies above the host's top. Same band, to the side or below: bottom, as
- * before. So is every case the lane order cannot decide — host or target in a
- * nested child lane or without a lane in a process that has lanes — because
- * ELK's positions there predate the restacking. An event without an outgoing
+ * stacks; with nested lanes the lane tree depth-first, a parent's own nodes
+ * ahead of its child lanes); in the same lane, or in a process without lanes,
+ * when its whole ELK box lies above the host's top. Same band, to the side or
+ * below: bottom, as before. So is every case the lane order cannot decide —
+ * host or target without a lane in a process that has lanes — because ELK's
+ * positions there predate the restacking. An event without an outgoing
  * flow stays at the bottom. Several events
  * on one host are spread evenly across their side, each side on its own.
  *
@@ -1544,11 +1607,12 @@ function placeBoundaryEvents(coords, allProcesses) {
     const tgt = coords[tgtId];
     if (!tgt) return 'bottom';
     const proc = procOf[ev.id];
-    const order = (proc.lanes || []).map(l => l.id);
+    const order = flattenLanes(proc.lanes).map(l => l.id);
     if (order.length) {
       // A process with lanes: §5.0a will restack the bands, so ELK's y says nothing across bands.
-      // Both lanes must be top-level bands; anything else (a nested child lane, a subprocess child
-      // without a lane) keeps the bottom edge rather than guess from pre-restack positions.
+      // Both must be in a band (the lane tree depth-first is the band order); anything else (a
+      // subprocess child without a lane) keeps the bottom edge rather than guess from pre-restack
+      // positions.
       const hi = order.indexOf(laneOfNode(nodeById[ev.attachedTo], proc));
       const ti = order.indexOf(laneOfNode(nodeById[tgtId], proc));
       if (hi < 0 || ti < 0) return 'bottom';
@@ -2113,15 +2177,18 @@ function participantBoxes(coordMap, lc) {
 
 /**
  * Header strips of every participant as boxes: an expanded pool's header (left of its lanes, or of
- * its body when it has none), each top-level lane's header inside its band, and a black-box
- * participant whole — its name sits in its middle. The same strips svg.js draws.
+ * its body when it has none), each lane's header inside its band (child lanes included), and a
+ * black-box participant whole — its name sits in its middle. The same strips svg.js draws.
  */
 function participantHeaders(coordMap, lc) {
   const out = [];
   for (const p of participantBoxes(coordMap, lc)) {
     if (!p.proc) { out.push({ x: p.x, y: p.y, w: p.w, h: p.h }); continue; }
     out.push({ x: p.x, y: p.y, w: p.head, h: p.h });
-    for (const b of p.bands) out.push({ x: b.x, y: b.y, w: p.head, h: b.h });
+    const bands = hasNestedLanes(p.proc)
+      ? flattenLanes(p.proc.lanes).map(l => coordMap.laneCoords?.[l.id]).filter(Boolean)
+      : p.bands;
+    for (const b of bands) out.push({ x: b.x, y: b.y, w: p.head, h: b.h });
   }
   return out;
 }
@@ -2295,12 +2362,11 @@ function shiftParticipantsBelow(coordMap, lc, boxes, index, delta) {
   const { coords, laneCoords, poolCoords, edgeCoords, edgeLabels, nodeLabels } = coordMap;
   const down = (b) => (b ? { ...b, y: b.y + delta } : b);
   const downPts = (pts) => (pts ? pts.map(p => ({ ...p, y: p.y + delta })) : pts);
-  const laneIds = (lanes) => (lanes || []).flatMap(l => [l.id, ...laneIds(l.childLanes)]);
   const moved = new Set();
   for (const p of boxes.slice(index + 1)) {
     if (poolCoords[p.id]) poolCoords[p.id] = down(poolCoords[p.id]);
     if (!p.proc) continue;
-    for (const id of laneIds(p.proc.lanes)) if (laneCoords[id]) laneCoords[id] = down(laneCoords[id]);
+    for (const { id } of flattenLanes(p.proc.lanes)) if (laneCoords[id]) laneCoords[id] = down(laneCoords[id]);
     for (const n of flattenProcessNodes(p.proc.nodes)) {
       moved.add(n.id);
       if (coords[n.id]) coords[n.id] = down(coords[n.id]);

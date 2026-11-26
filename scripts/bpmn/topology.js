@@ -168,12 +168,81 @@ export function sortNodesTopologically(proc) {
   proc.nodes = sorted.map(id => nodeMap[id]).filter(Boolean);
 }
 
+/** Every lane of a lane tree, depth-first: a parent before its `children`. */
+export function flattenLanes(lanes) {
+  return (lanes || []).flatMap(l => [l, ...flattenLanes(l.children)]);
+}
+
+/** Does some lane of the process have child lanes? The gate of every nested-lane rule. */
+export function hasNestedLanes(proc) {
+  return (proc?.lanes || []).some(l => l.children?.length > 0);
+}
+
+/** Levels of the lane tree: 0 without lanes, 1 for flat lanes, 2 for lanes with child lanes, … */
+export function laneNestingDepth(proc) {
+  const depth = (lanes) => ((lanes || []).length ? 1 + Math.max(...lanes.map(l => depth(l.children))) : 0);
+  return depth(proc?.lanes);
+}
+
 /**
- * Reorder lanes based on process flow position.
+ * The bands of a process as `{ id, x, y, w, h }`, depth-first: the `laneCoords` rectangle of every
+ * leaf lane, and for a parent lane that holds nodes of its own the implicit first band — the part
+ * of its rectangle above its topmost child, as wide as its children — under the parent's id. A
+ * parent's own rectangle encloses its children and is no band. Lanes without a rectangle are left
+ * out. For flat lanes: one band per lane.
+ */
+export function leafLaneBands(proc, laneCoords = {}) {
+  const out = [];
+  const walk = (lanes) => {
+    for (const l of lanes || []) {
+      const own = laneCoords[l.id];
+      if (!l.children?.length) {
+        if (own) out.push({ id: l.id, ...own });
+        continue;
+      }
+      const kids = l.children.map(c => laneCoords[c.id]).filter(Boolean);
+      if (own && kids.length) {
+        const top = Math.min(...kids.map(k => k.y));
+        if (top > own.y) out.push({ id: l.id, x: kids[0].x, y: own.y, w: kids[0].w, h: top - own.y });
+      }
+      walk(l.children);
+    }
+  };
+  walk(proc?.lanes);
+  return out;
+}
+
+/**
+ * Reorder lanes based on process flow position. With nested lanes a parent's score and start count
+ * are taken over the nodes of all its descendants, and every sibling set is sorted on its own.
  */
 export function orderLanesByFlow(proc) {
   const lanes = proc.lanes || [];
   const nodes = proc.nodes || [];
+  if (hasNestedLanes(proc)) {
+    const nodeIndex = {};
+    nodes.forEach((n, i) => { nodeIndex[n.id] = i; });
+    const measure = (lane) => {
+      const ids = new Set(flattenLanes([lane]).map(l => l.id));
+      const own = nodes.filter(n => ids.has(n.lane));
+      return {
+        score: own.length ? own.reduce((s, n) => s + (nodeIndex[n.id] || 0), 0) / own.length : 9999,
+        starts: own.filter(n => n.type === 'startEvent').length,
+      };
+    };
+    const sortSiblings = (siblings) => {
+      const m = new Map(siblings.map(l => [l, measure(l)]));
+      const sorted = [...siblings].sort((a, b) => {
+        if (m.get(a).starts > 0 && m.get(b).starts === 0) return -1;
+        if (m.get(b).starts > 0 && m.get(a).starts === 0) return 1;
+        return m.get(a).score - m.get(b).score;
+      });
+      for (const l of sorted) if (l.children?.length) l.children = sortSiblings(l.children);
+      return sorted;
+    };
+    proc.lanes = sortSiblings(lanes);
+    return;
+  }
   if (lanes.length <= 1) return;
 
   const nodeIndex = {};
@@ -443,7 +512,7 @@ export function normalizeLaneAssignments(proc) {
   if (lanes.length === 0 || nodes.length === 0) return;
 
   const nodeIdToLane = {};
-  for (const lane of lanes) {
+  for (const lane of flattenLanes(lanes)) {
     if (!lane.nodeIds) continue;
     for (const nodeId of lane.nodeIds) {
       nodeIdToLane[nodeId] = lane.id;

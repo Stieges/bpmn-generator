@@ -11,6 +11,7 @@
  */
 
 import { CFG } from '../shared/utils.js';
+import { flattenLanes, hasNestedLanes } from './topology.js';
 import { flattenProcessNodes, flattenProcessEdges, edgeLabelBox, labelHitsRoute, boxCrossesLines, innerLaneLines } from './coordinates.js';
 
 /** The two refinement passes, in the order of their config switches. */
@@ -186,7 +187,9 @@ const LANE_COMPACT_PADDING = 20;
  * upward to the band above, so the stack tiles without a strip (bpmn.io draws one as
  * an extra empty band).
  *
- * Only top-level lanes are handled: nested `childLanes` are neither compacted nor tiled (#75).
+ * A process with nested lanes (some lane has `children`) is left as laid out: its bands already
+ * tile (coordinates.js §5.0a) and are not compacted. It still moves as a whole when a
+ * participant above it shrinks.
  *
  * Idempotent: running twice produces the same result as running once.
  */
@@ -249,7 +252,7 @@ export function compactLanes(coordMap, process, opts = {}) {
       opc.y -= delta;
       const otherPool = poolById.get(id);
       if (!otherPool) continue; // collapsed / black-box participant: box only
-      for (const lane of (otherPool.lanes || [])) {
+      for (const lane of flattenLanes(otherPool.lanes)) {
         if (coordMap.laneCoords[lane.id]) coordMap.laneCoords[lane.id].y -= delta;
       }
       for (const n of flattenProcessNodes(otherPool.nodes)) {
@@ -266,6 +269,7 @@ export function compactLanes(coordMap, process, opts = {}) {
   for (const pool of pools) {
     const pc = coordMap.poolCoords[pool.id] ?? coordMap.poolCoords['_singlePool'];
     if (!pc) continue;
+    if (hasNestedLanes(pool)) continue;
     const lanes = (pool.lanes ?? []).map(l => l.id).filter(id => coordMap.laneCoords[id]);
     lanes.sort((a, b) => coordMap.laneCoords[a].y - coordMap.laneCoords[b].y);
 

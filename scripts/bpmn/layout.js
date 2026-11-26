@@ -9,7 +9,7 @@ import { artifactSize } from './coordinates.js';
 import { CFG } from '../shared/utils.js';
 import { boundText } from '../shared/safe-text.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
-import { preprocessLogicCore, assignEdgeIds } from './topology.js';
+import { preprocessLogicCore, assignEdgeIds, laneNestingDepth } from './topology.js';
 
 /**
  * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
@@ -167,7 +167,8 @@ function buildLanedProcessElk(proc, wrappingOpts = {}) {
       // external label and the lane name — buildElkNode reserves height for
       // external labels but no width, so a 36 px event carries a 90 px label
       // that overhangs it by 27 px on each side and nothing accounts for it.
-      'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + 2 * LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
+      // Nested lanes: one more lane strip per level of the lane tree (flat lanes: depth 1).
+      'elk.padding': `[top=${LANE_PADDING},left=${LANE_PADDING + (1 + laneNestingDepth(proc)) * LANE_HEADER_W},bottom=${LANE_PADDING},right=${LANE_PADDING}]`,
       ...wrappingOpts,  // merge last so it wins on conflicts
     },
     children: flatChildren,
