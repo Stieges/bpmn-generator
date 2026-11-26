@@ -24,7 +24,7 @@ import { reviewerAgent } from './agents/reviewer.js';
 import { layoutAgent } from './agents/layout.js';
 import { complianceAgent } from './agents/compliance.js';
 import { validateLogicCoreSchema, formatSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
-import { ViewRejectedError } from './shared/view.js';
+import { ViewRejectedError, loadView } from './shared/view.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
 import { isMainModule } from './shared/entry-point.js';
 
@@ -82,6 +82,12 @@ async function gatedModelerCall(state, phase) {
 export async function orchestrate(input, options = {}) {
   const maxReviewIterations = options.maxReviewIterations ?? 3;
   const maxLayoutIterations = options.maxLayoutIterations ?? 2;
+
+  // A view given as a path or an object is loaded once, here; every later step gets the loaded view.
+  // An explicit option still wins over what the view sets (the pipeline resolves that, as before).
+  if (options.view != null) options = { ...options, view: loadView(options.view) };
+  // A text input is answered by the Modeler with a 1.x model: a lanes view is refused before the LLM call.
+  if (typeof input === 'string' && options.llmProvider) assertViewFitsModel({}, options.view);
 
   const state = {
     userText: typeof input === 'string' ? input : null,

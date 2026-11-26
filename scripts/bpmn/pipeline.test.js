@@ -4398,6 +4398,20 @@ describe('CLI format 2.0 and --catalog', () => {
     const res = await run([resolve('../tests/fixtures/simple-approval.json'), '<out>']);
     expect(res.status).toBe(0);
     expect(res.xml).toBe(fs.readFileSync(resolve('../tests/fixtures/simple-approval.expected.bpmn'), 'utf8'));
+    const out = res.stdout.match(/BPMN 2\.0 XML → (.*)\.bpmn\n/)[1];
+    expect(res.stdout.split(out).join('<out>')).toBe([
+      '✓ Logic-Core validated (structural soundness OK)',
+      '✓ BPMN 2.0 XML → <out>.bpmn',
+      '✓ SVG preview → <out>.svg',
+      '',
+      '📊 Summary:',
+      '  Processes:     1',
+      '  Nodes:         6',
+      '  Edges:         6',
+      '  Lanes:         1',
+      '  Files:         <out>.bpmn, <out>.svg',
+      '',
+    ].join('\n'));
   }, 30_000);
 });
 

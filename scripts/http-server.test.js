@@ -596,6 +596,29 @@ describe('LLM provider failures are not reflected to the client', () => {
   }
 });
 
+describe('POST /api/v1/orchestrate — a lanes view on a 1.x model', () => {
+  const VIEW_ERROR = 'view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes';
+  const view = { view: 'rollen', version: '1.0', lanes: 'role' };
+  beforeEach(() => _resetRateLimit());
+
+  test('userText with a lanes view: the 1.x view_error, and no request reaches the LLM', async () => {
+    process.env.OPENAI_API_KEY = 'env-key';
+    const outbound = [];
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith(baseUrl)) return realFetch(url, init);
+      outbound.push(String(url));
+      return { ok: false, status: 500, text: async () => 'no' };
+    };
+    const res = await realFetch(`${baseUrl}/api/v1/orchestrate`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userText: 'An approval process', view, correlationId: 'l49' }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ correlationId: 'l49', status: 'view_error', error: VIEW_ERROR });
+    expect(outbound).toEqual([]);
+  });
+});
+
 describe('a JSON body that is not an object', () => {
   beforeEach(() => _resetRateLimit());
   test.each(['null', '[]', '[1,2]', '7', '"text"', 'true'])('%s is a 400 at once, never a hanging connection', async (raw) => {

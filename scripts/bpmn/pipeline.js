@@ -28,7 +28,7 @@ import { fileURLToPath } from 'url';
 // Module imports
 import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
-import { validateModelSchema, LAYOUT_SWITCHES, modelFormat, assertViewFitsModel } from './schema-gate.js';
+import { validateModelSchema, LAYOUT_SWITCHES, modelFormat, assertViewFitsModel, formatV2RefusalMessage, FORMAT_V2_VERSION } from './schema-gate.js';
 import { loadCatalog, CatalogRejectedError } from '../shared/catalog.js';
 import { resolveFields, formLanes } from './model-v2.js';
 import { resolveRuleProfile } from './rules.js';
@@ -622,7 +622,10 @@ async function generateDiagramSet(logicCore, opts = {}) {
   // Format 2.0 (design 9): drill-down does not read it yet; refused before any work, as a blocked
   // parent result like runPipeline's, so every caller reports it as a pipeline error.
   if (modelFormat(logicCore) === '2') {
-    const refusal = [coded('F04', 'drill-down is not available for format 2.0 models yet')];
+    // An unsupported 2.x version is named (F02), as on every entry point that refuses 2.x; "2.0" keeps F04.
+    const refusal = [logicCore.$schemaVersion === FORMAT_V2_VERSION
+      ? coded('F04', 'drill-down is not available for format 2.0 models yet')
+      : coded('F02', formatV2RefusalMessage(logicCore))];
     return {
       parent: blockedResult(refusal, undefined, errorFindings(refusal)),
       subProcesses: {},

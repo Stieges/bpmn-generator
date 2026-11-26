@@ -156,11 +156,34 @@ describe('runPipeline — the catalog option', () => {
   });
 });
 
+describe('runPipeline — the catalog option, not an object', () => {
+  test.each([[5], [[]]])('catalog %j throws the uncoded catalogue TypeError', async (catalog) => {
+    const err = await runPipeline(copy(MODEL), { catalog }).catch((e) => e);
+    expect(err).toBeInstanceOf(TypeError);
+    expect(err.message).toBe('catalog must be a catalogue object; read a file with loadCatalog');
+  });
+});
+
+describe('the CLI finds the catalogue of a model given by a relative path', () => {
+  test('cwd elsewhere: the catalogue named by the model is found next to the model', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'v2-rel-'));
+    try {
+      writeFileSync(join(dir, 'bpmn-catalog.json'), JSON.stringify(CATALOG));
+      writeFileSync(join(dir, 'm.json'), JSON.stringify({ ...copy(MODEL), catalog: 'bpmn-catalog.json' }));
+      const out = execFileSync(process.execPath, [resolve(here, 'pipeline.js'), 'm.json', 'out', '--strict'], { cwd: dir, stdio: 'pipe' });
+      expect(out.toString()).not.toContain('✗');
+      expect(readFileSync(join(dir, 'out.bpmn'), 'utf8')).toContain('modelVersion="2.0"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('a 1.x model under a view with lanes is a view error (design 6)', () => {
   test('runPipeline rejects with ViewRejectedError', async () => {
-    const p = runPipeline(simpleApproval(), { view: loadNamedView('rollen') });
-    await expect(p).rejects.toBeInstanceOf(ViewRejectedError);
-    await expect(runPipeline(simpleApproval(), { view: loadNamedView('rollen') })).rejects.toThrow(LANES_ON_1X);
+    const err = await runPipeline(simpleApproval(), { view: loadNamedView('rollen') }).catch((e) => e);
+    expect(err).toBeInstanceOf(ViewRejectedError);
+    expect(err.message).toBe(LANES_ON_1X);
   });
 
   test('the CLI exits 1 and prints the message', () => {
