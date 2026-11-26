@@ -29,7 +29,7 @@
         "catalog": {
           "type": "string",
           "minLength": 1,
-          "description": "Path of the actor catalogue file, relative to this file (design 5.3). Not together with `actors`."
+          "description": "Path of the actor catalogue file, relative to this file (design 5.3)."
         },
         "actors": {
           "type": "array",
@@ -37,7 +37,7 @@
           "items": {
             "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/Actor"
           },
-          "description": "Inline actor catalogue (design 5.2). Not together with `catalog`."
+          "description": "Inline actor catalogue (design 5.2). Beside a catalogue it replaces entries with the same id and appends new ids."
         },
         "scheme": {
           "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/SchemeRef",
@@ -87,16 +87,6 @@
         "scheme": [
           "actors"
         ]
-      },
-      "if": {
-        "required": [
-          "actors"
-        ]
-      },
-      "then": {
-        "properties": {
-          "catalog": false
-        }
       }
     },
     "Collaboration": {
@@ -114,7 +104,7 @@
         "catalog": {
           "type": "string",
           "minLength": 1,
-          "description": "Path of the actor catalogue file, relative to this file (design 5.3). Not together with `actors`."
+          "description": "Path of the actor catalogue file, relative to this file (design 5.3)."
         },
         "actors": {
           "type": "array",
@@ -122,7 +112,7 @@
           "items": {
             "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/Actor"
           },
-          "description": "Inline actor catalogue (design 5.2). Not together with `catalog`."
+          "description": "Inline actor catalogue (design 5.2). Beside a catalogue it replaces entries with the same id and appends new ids."
         },
         "scheme": {
           "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/SchemeRef",
@@ -169,16 +159,6 @@
         "scheme": [
           "actors"
         ]
-      },
-      "if": {
-        "required": [
-          "actors"
-        ]
-      },
-      "then": {
-        "properties": {
-          "catalog": false
-        }
       }
     },
     "Pool": {

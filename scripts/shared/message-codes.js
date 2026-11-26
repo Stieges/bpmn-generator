@@ -24,7 +24,7 @@ export const MESSAGE_CODES = Object.freeze({
   C10: entry('catalogue', 'a lane id collides with another id of the model'),
   C11: entry('catalogue', 'the catalogue cannot be read: missing, not a regular file, too large, not JSON, or an empty path'),
   C12: entry('catalogue', 'the catalogue content is refused: bounds or catalogue schema, also model-carried actors'),
-  C13: entry('catalogue', 'the catalogue source is wrong for a 2.x model: a path without an object, a catalogue besides model-carried actors, or a catalog field on stdin'),
+  C13: entry('catalogue', 'the catalogue source is wrong for a 2.x model: a path without an object, the process file changing the scheme of a catalogue, or a catalog field on stdin'),
   F01: entry('format', 'a format 2.0 schema violation (one per schema error)'),
   F02: entry('format', 'a $schemaVersion of the 2 line other than "2.0"'),
   F03: entry('format', 'format 2.0 is not accepted at this entry point'),
@@ -37,6 +37,7 @@ export const MESSAGE_CODES = Object.freeze({
   H05: entry('hint', 'a lane name is longer than the lane name limit'),
   H06: entry('hint', 'a process has no assignments, so no lanes'),
   H08: entry('hint', 'a node has no neighbour with a lane (or a boundary event no host with a lane) and is placed in the unassigned lane'),
+  H09: entry('hint', 'a catalogue entry is replaced by an actor of the process file'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 

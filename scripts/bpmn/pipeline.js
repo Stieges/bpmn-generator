@@ -212,6 +212,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
   const v2 = modelFormat(logicCore) === '2';
   let source = logicCore;
   let resolved = null;
+  let resolveHints = [];
   if (v2) {
     if (opts.mode === 'optimize' || opts.mode === 'soll') {
       const modeErrors = [coded('F04', `mode "${opts.mode}" is not available for format 2.0 models yet`)];
@@ -220,6 +221,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
     const fields = resolveFields(logicCore, { catalog: opts.catalog ?? undefined, viewName: opts.viewName ?? 'default' });
     if (fields.errors.length) return blockedResult(fields.errors, undefined, errorFindings(fields.errors));
     ({ lc: source, resolved } = fields);
+    resolveHints = fields.hints;
   } else {
     if (opts.catalog != null) throw new TypeError('catalog applies to format 2.0 models only');
     assertViewFitsModel(logicCore, { view: opts.viewName, lanes: opts.lanes });
@@ -263,7 +265,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
       return blockedResult(formed.errors, { warnings, advisories, metrics }, [...errorFindings(formed.errors), ...ruleFindings]);
     }
     lc = formed.lc;
-    laneHints = formed.hints;
+    laneHints = [...resolveHints, ...formed.hints];
   }
 
   // Derivations AFTER validation: the rules (and the schema gate before runPipeline) judge the

@@ -144,6 +144,42 @@ describe('runPipeline — format 2.0 early returns', () => {
   });
 });
 
+describe('runPipeline — the process file replaces catalogue entries', () => {
+  const REGRESS = { id: 'regress', name: 'Regress (lokal)', kind: 'role', unit: 'abt_finanzen' };
+
+  test('H09 comes first in validation.hints; regr moves into Finanzen in the unit view', async () => {
+    const model = { ...copy(MODEL), actors: [REGRESS] };
+    delete model.nodes.find((n) => n.id === 'pruefen').assignments;
+    const result = await run({ view: loadNamedView('explicit-joins') }, model);
+    expect(result.validation.errors).toEqual([]);
+    expect(result.validation.hints.map((h) => h.code)).toEqual(['H09', 'H02', 'H01']);
+    const unit = await run({ view: loadNamedView('einheiten') }, { ...copy(MODEL), actors: [REGRESS] });
+    expect(laneMembers(unit.bpmnXml)[L('abt_finanzen')]).toEqual(['end', 'regr', 'zahlen']);
+    expect(unit.validation.hints).toEqual([expect.objectContaining({ code: 'H09' })]);
+  });
+
+  test('the caller\'s model and catalogue are not changed', async () => {
+    const model = { ...copy(MODEL), actors: [REGRESS] };
+    const catalog = copy(CATALOG);
+    await runPipeline(model, { catalog });
+    expect(model).toEqual({ ...MODEL, actors: [REGRESS] });
+    expect(catalog).toEqual(CATALOG);
+  });
+
+  test('the CLI with the catalog field and actors in one file works', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'v2-repl-'));
+    try {
+      writeFileSync(join(dir, 'bpmn-catalog.json'), JSON.stringify(CATALOG));
+      writeFileSync(join(dir, 'm.json'), JSON.stringify({ ...copy(MODEL), catalog: 'bpmn-catalog.json', actors: [REGRESS] }));
+      const out = execFileSync(process.execPath, [resolve(here, 'pipeline.js'), 'm.json', 'out', '--strict'], { cwd: dir, stdio: 'pipe' });
+      expect(out.toString()).toContain('[H09] Catalogue entry "regress" is replaced by the process file.');
+      expect(readFileSync(join(dir, 'out.bpmn'), 'utf8')).toContain('modelVersion="2.0"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('runPipeline — the catalog option', () => {
   test('a string is refused: the library takes only a catalogue object', async () => {
     await expect(runPipeline(copy(MODEL), { catalog: '../bpmn-catalog.json' }))
@@ -255,7 +291,7 @@ describe('response contract', () => {
       return undefined;
     };
     const re = new RegExp(find(api));
-    for (const code of ['H01', 'H02', 'H06', 'H08']) expect(re.test(code)).toBe(true);
+    for (const code of ['H01', 'H02', 'H06', 'H08', 'H09']) expect(re.test(code)).toBe(true);
     expect(re.test('H10')).toBe(false);
   });
 });

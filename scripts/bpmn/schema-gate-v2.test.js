@@ -126,7 +126,6 @@ describe('validateModelSchema', () => {
     ['dataStoreReference node', () => { const m = m56(); m.nodes.push({ id: 'ds', type: 'dataStoreReference' }); return m; }, '/nodes/6/type'],
     ['pool id "Pool 1"', () => { const m = collab(); m.pools[0].id = 'Pool 1'; return m; }, '/pools/0/id'],
     ['process id missing', () => { const m = m56(); delete m.id; return m; }, '(root)'],
-    ['catalog plus actors', () => ({ ...m56(), actors: [{ id: 'a', name: 'A' }] }), '/catalog'],
     ['scheme without actors', () => ({ ...m56(), scheme: 'demi' }), '(root)'],
     ['assignments on a textAnnotation', () => { const m = m56(); m.nodes.push({ id: 'ta', type: 'textAnnotation', assignments: [] }); return m; }, '/nodes/6/assignments'],
     ['assignments on a group', () => { const m = m56(); m.nodes.push({ id: 'gr', type: 'group', assignments: [] }); return m; }, '/nodes/6/assignments'],
@@ -147,7 +146,11 @@ describe('validateModelSchema', () => {
     m.nodes.push({ id: 'ta', type: 'textAnnotation', assignments: [] });
     const [e] = errorsOf(m);
     expect(e).toMatchObject({ path: '/nodes/6/assignments', message: 'is not allowed here', code: 'F01' });
-    expect(errorsOf({ ...m56(), actors: [{ id: 'a', name: 'A' }] })[0].message).toBe('is not allowed here');
+  });
+
+  test('catalog beside actors is valid; scheme still needs actors', () => {
+    expect(validateModelSchema({ ...m56(), actors: [{ id: 'a', name: 'A' }] }, BOTH).valid).toBe(true);
+    expect(errorsOf({ ...m56(), scheme: 'demi' })[0].path).toBe('(root)');
   });
 
   test('scheme with actors, an inline scheme and no catalog is valid', () => {

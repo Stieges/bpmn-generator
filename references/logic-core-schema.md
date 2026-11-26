@@ -488,7 +488,7 @@ the 2 line (`"2"`, `"2.1"`, `"2.7"`) is refused with one error that names the va
 
 **What 2.0 is not (yet):** no systems or data nodes, no `partOf` between units, no positions or
 persons, no matrices (RACI), no migration tool. Within this release the catalogue can only be
-passed; replacing entries of a catalogue in the process file is not supported.
+passed; with a catalogue, the model's `actors` replace entries of it by id (hint H09 each) or add new ones, and a `scheme` there is C13.
 
 **The catalogue (three ways to pass it).**
 
