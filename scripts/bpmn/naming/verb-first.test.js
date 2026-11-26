@@ -143,6 +143,14 @@ describe('messageName', () => {
   ])('passes %s', (n) => expect(s.messageName(n)).toBeNull());
   test.each(['Send invoice', 'Order received', 'Case closed'])('flags %s', (n) =>
     expect(flagged(s.messageName, n)).toBe(true));
+
+  describe('a message noun at the end', () => {
+    test.each(['Deploy request', 'Sell order', 'Cancel notice', 'Renew offer', 'Approve request'])(
+      'exempts %s from the verb-first branch', (n) => expect(s.messageName(n)).toBeNull());
+    test.each(['Send invoice', 'Submit application', 'Transmit report', 'Notify customer', 'Deploy requested', 'Approve invoice received'])(
+      'not when the verb sends the message, the last word is no message noun or a participle: flags %s', (n) =>
+        expect(flagged(s.messageName, n)).toBe(true));
+  });
 });
 
 describe('isQuestion', () => {

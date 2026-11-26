@@ -125,6 +125,16 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300
+        },
+        "messageNouns": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "sendVerbs": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
         }
       }
     },
@@ -435,6 +445,22 @@
       "items": {
         "$ref": "#/$defs/Word"
       }
+    },
+    "messageNouns": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
+    },
+    "sendVerbs": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/Word"
+      }
     }
   },
   "allOf": [
@@ -579,6 +605,14 @@
               "items": {
                 "$ref": "#/$defs/Word"
               }
+            },
+            "messageNouns": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
             }
           }
         },
@@ -651,6 +685,14 @@
               }
             },
             "nounStarters": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/$defs/Word"
+              }
+            },
+            "messageNouns": {
               "type": "array",
               "uniqueItems": true,
               "maxItems": 2000,

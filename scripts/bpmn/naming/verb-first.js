@@ -34,6 +34,8 @@ export function verbFirst(lexicon) {
   const { verbs, nounVerbHomographs, stateWords, verbPrefixes, verbPhrases, infinitiveSuffixes, participles } = lexicon;
   const nonVerbStarters = lexicon.nonVerbStarters ?? new Set();
   const nounStarters = lexicon.nounStarters ?? new Set();
+  const messageNouns = lexicon.messageNouns ?? new Set();
+  const sendVerbs = lexicon.sendVerbs ?? new Set();
 
   const isVerb = (x) => verbs.has(x);
 
@@ -170,7 +172,9 @@ export function verbFirst(lexicon) {
     if (wordCount < 2 || tokens.length === 0) return ok;
     const t0 = tokens[0].folded;
     const last = tokens[tokens.length - 1].folded;
-    if (isVerb(t0) && !nounVerbHomographs.has(t0)) {
+    // Deploy request, Sell order: a compound that ends in a message noun, unless the verb sends it (Send invoice).
+    const compound = messageNouns.has(last) && !sendVerbs.has(t0);
+    if (isVerb(t0) && !nounVerbHomographs.has(t0) && !compound) {
       return flag('A message names its content, e.g. "Invoice", not an instruction.');
     }
     if (isParticiple(last)) return flag('A message names its content, not a state; avoid a participle at the end.');

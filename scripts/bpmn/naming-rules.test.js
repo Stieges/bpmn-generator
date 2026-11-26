@@ -252,6 +252,8 @@ describe('M05 with a declared language', () => {
     expect(r.errors).toContain(f[0].message);
     expect(m05(flowModel('Merge request'), strict())).toEqual([]);
     expect(m05(flowModel('Follow-up'), strict())).toEqual([]);
+    expect(m05(flowModel('Deploy request'), strict())).toEqual([]);
+    expect(m05(flowModel('Sell order'), strict())).toEqual([]);
   });
 
   test('a profile override M05: OFF silences it', () => {
