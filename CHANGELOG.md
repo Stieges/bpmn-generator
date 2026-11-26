@@ -63,6 +63,8 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   (a body `catalog` object) read 2.0 now; a path is never read, `/import` is unchanged, and `validate`
   does not report C10, which depends on the view. `orchestrate` skips the Modeler's refine and amend
   steps for a 2.0 model (history `skipped: 'format 2.0'`); `optimize` and `soll` are F04, and so is drill-down (library and MCP; HTTP has no drill-down parameter).
+  `node orchestrator.js --input` reads a 2.0 model's catalogue as `node bpmn/pipeline.js` does: `--catalog <path>`,
+  else the model's `catalog` field relative to the model file; with a 1.x model the flag is refused.
   Redesign and the scenario pipeline still refuse 2.0 (F03). Responses for 1.x models are unchanged.
   Rules: `references/logic-core-schema.md`, section Format 2.0.
 - **Message codes for format 2.x.** The messages of the 2.0-specific path (catalogue, format, lane formation, import

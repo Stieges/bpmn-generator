@@ -70,6 +70,12 @@ node bpmn/pipeline.js my-process.json my-process --strict --view=einheiten   # t
 node bpmn/pipeline.js my-process.json my-process --strict --view=organigramm # nested unit lanes
 ```
 
+The orchestrator CLI (`orchestrator.js --input <model.json>`, run from a repository checkout; it is not
+part of the skill bundle) reads a 2.0 model's catalogue the same way: `--catalog <path>` or
+`--catalog=<path>` (relative to the working directory) wins over the model's `"catalog"` field
+(relative to the model file); with a 1.x model or `--text` the flag is refused. See the README,
+section Multi-Agent Orchestration.
+
 A 2.0 model's hints (H02–H06, H08, H09) are listed in `validation.hints` and never fail `--strict`. The messages of the 2.0-specific path (catalogue, format, lane formation) lead with their code, for example `✗ [C11] …` or `[F04] …` (exit 1, no stack trace). Rule messages (S, M, P, WF) keep their text unprefixed; their rule id is the `code` in `validation.findings`, a field of the library result that the CLI does not print. `--view=aligned-ports` docks message flows to or from a participant level with their other end. 1.x output is unchanged. The codes are in [`api-reference.md`](api-reference.md#message-codes). `node bpmn/import.js` prints `[N01] …` on stderr for a diagram generated from a 2.0 model. The
 full rule for lanes and the entry points that accept 2.0 are in
 [`logic-core-schema.md`](logic-core-schema.md#format-20-catalogue-and-lane-views).

@@ -22,14 +22,14 @@
  */
 
 import { readFileSync, writeFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 // Module imports
 import { loadConfig, CFG } from '../shared/utils.js';
 import { validateLogicCore } from './validate.js';
 import { validateModelSchema, LAYOUT_SWITCHES, modelFormat, assertViewFitsModel, formatV2RefusalMessage, FORMAT_V2_VERSION } from './schema-gate.js';
-import { loadCatalog, CatalogRejectedError } from '../shared/catalog.js';
+import { loadCliCatalog, CatalogRejectedError } from '../shared/catalog.js';
 import { resolveFields, formLanes } from './model-v2.js';
 import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
@@ -821,23 +821,12 @@ async function main() {
   // over the model's "catalog" field (relative to the model file, which standard input has not).
   let catalog;
   if (isV2) {
-    let catalogPath = null;
-    if (catalogArg !== null) catalogPath = resolve(catalogArg);
-    else if (typeof parsedInput.catalog === 'string') {
-      if (inputArg === '-') {
-        console.error(`✗ ${coded('C13', `the model names catalogue "${parsedInput.catalog}" but is read from standard input; pass --catalog <path>`)}`);
-        process.exit(1);
-      }
-      catalogPath = resolve(dirname(resolve(inputArg)), parsedInput.catalog);
-    }
-    if (catalogPath !== null) {
-      try {
-        catalog = loadCatalog(catalogPath);
-      } catch (e) {
-        if (!(e instanceof CatalogRejectedError)) throw e;
-        console.error(`✗ ${e.message}`);
-        process.exit(1);
-      }
+    try {
+      catalog = loadCliCatalog(parsedInput, { catalogArg, inputPath: inputArg });
+    } catch (e) {
+      if (!(e instanceof CatalogRejectedError)) throw e;
+      console.error(`✗ ${e.message}`);
+      process.exit(1);
     }
   }
 
