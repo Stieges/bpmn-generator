@@ -6,7 +6,7 @@
  */
 import { describe, test, expect } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -168,9 +168,11 @@ describe('the CLI finds the catalogue of a model given by a relative path', () =
   test('cwd elsewhere: the catalogue named by the model is found next to the model', () => {
     const dir = mkdtempSync(join(tmpdir(), 'v2-rel-'));
     try {
-      writeFileSync(join(dir, 'bpmn-catalog.json'), JSON.stringify(CATALOG));
-      writeFileSync(join(dir, 'm.json'), JSON.stringify({ ...copy(MODEL), catalog: 'bpmn-catalog.json' }));
-      const out = execFileSync(process.execPath, [resolve(here, 'pipeline.js'), 'm.json', 'out', '--strict'], { cwd: dir, stdio: 'pipe' });
+      mkdirSync(join(dir, 'sub'));
+      writeFileSync(join(dir, 'sub', 'bpmn-catalog.json'), JSON.stringify(CATALOG));
+      writeFileSync(join(dir, 'sub', 'm.json'), JSON.stringify({ ...copy(MODEL), catalog: 'bpmn-catalog.json' }));
+      // cwd is the parent: a cwd-relative lookup of bpmn-catalog.json would miss it, only the model's folder has it.
+      const out = execFileSync(process.execPath, [resolve(here, 'pipeline.js'), 'sub/m.json', 'out', '--strict'], { cwd: dir, stdio: 'pipe' });
       expect(out.toString()).not.toContain('✗');
       expect(readFileSync(join(dir, 'out.bpmn'), 'utf8')).toContain('modelVersion="2.0"');
     } finally {

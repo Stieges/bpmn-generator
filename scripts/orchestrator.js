@@ -85,9 +85,11 @@ export async function orchestrate(input, options = {}) {
 
   // A view given as a path or an object is loaded once, here; every later step gets the loaded view.
   // An explicit option still wins over what the view sets (the pipeline resolves that, as before).
-  if (options.view != null) options = { ...options, view: loadView(options.view) };
-  // A text input is answered by the Modeler with a 1.x model: a lanes view is refused before the LLM call.
-  if (typeof input === 'string' && options.llmProvider) assertViewFitsModel({}, options.view);
+  // Before the Modeler call a text input is loaded here (a lanes view is refused before the LLM call, as the
+  // Modeler answers with a 1.x model); every other input is loaded after the 1.x gates, so their errors stay as they were.
+  const textWithLlm = typeof input === 'string' && Boolean(options.llmProvider);
+  if (textWithLlm && options.view != null) options = { ...options, view: loadView(options.view) };
+  if (textWithLlm) assertViewFitsModel({}, options.view);
 
   const state = {
     userText: typeof input === 'string' ? input : null,
@@ -129,6 +131,8 @@ export async function orchestrate(input, options = {}) {
     throw new Error(`Logic-Core failed schema validation:\n${formatSchemaErrors(schemaCheck.errors)}`);
   }
   // A lanes view on a 1.x model is the caller's view error: refused before the reviewer runs.
+  if (!textWithLlm && options.view != null) options = { ...options, view: loadView(options.view) };
+  state.options = options;
   assertViewFitsModel(state.logicCore, options.view);
 
   // Phase 2: Review loop

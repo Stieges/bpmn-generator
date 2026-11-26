@@ -804,3 +804,18 @@ describe('orchestrate — the view is loaded once and checked before any agent',
     expect(reviewer).not.toHaveBeenCalled();
   });
 });
+
+describe('orchestrate — a bad view does not change the 1.x gate errors (as at base 45451f1)', () => {
+  const rollen = () => JSON.parse(readFileSync(resolve(__dirname, '../views/rollen-view.json'), 'utf8'));
+
+  test('schema-invalid 1.x Logic-Core + lanes view: the schema message, not the view error', async () => {
+    const err = await orchestrate({ nodes: 'nope' }, { view: rollen() }).catch((e) => e);
+    expect(err.name).not.toBe('ViewRejectedError');
+    expect(err.message).toMatch(/^Logic-Core failed schema validation:\n/);
+  });
+
+  test('no input + bad view path: the "No logicCore" message, not a view error', async () => {
+    const err = await orchestrate(null, { view: '/no/such/view.json' }).catch((e) => e);
+    expect(err.message).toBe('No logicCore — provide text + llmProvider, or a logicCore object');
+  });
+});
