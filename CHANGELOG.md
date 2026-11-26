@@ -103,9 +103,11 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   the first word (`Step 3`), a label prefix (`SAP: …`), two words ending in a participle (`Invoice
   checked`), an auxiliary second (`Invoice is checked`), a first word that is an article, pronoun,
   preposition, frequent or placeholder noun (`nonVerbStarters`, `nounStarters`: `The invoice`, `Path
-  A`) or a gerund (`Checking invoice`). A name whose first word is merely unlisted passes, and the
+  A`), a gerund (`Checking invoice`), a noun that is also a verb before a state word (`Request
+  pending`), or, after a first word known as no verb (`Certificate`), a participle, state, verb or
+  action noun at the end (`Certificate check`). A name whose first word is merely unlisted passes, and the
   model gets one hint `H14` naming up to ten such words; the verb list is read only to recognise a
-  word as a verb, so a shorter list gives more hints, never more findings. The lists grew to 450
+  word as a verb, so a shorter list gives more hints, never more findings. The lists grew to 452
   verbs and 52 verb phrases (`back up`, `shut down`, `log in`, `step up`, …), a hyphenated first word ending in a verb counts as
   one (`Quality-check`), and `-ate` counts as a verb ending from six letters (less 30 nouns and
   adjectives such as `certificate`, `template`). On 539 correct and 115 wrong English task names
