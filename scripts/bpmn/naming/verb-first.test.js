@@ -85,7 +85,8 @@ describe('taskName', () => {
       'Write off bad debt', 'Wind down operations', 'Stress-test portfolio', 'X-ray chest', 'Double-check figures',
       'Calibrate sensor', 'Duplicate invoice', 'Delegate task', 'Mark invoice as paid', 'Set status to closed',
       'Quality-check part', 'Risk-assess loan', 'Fast-track claim', 'E-sign contract', 'Ensure contract is signed',
-      'Handle X', 'Confirm A',
+      'Handle X', 'Confirm A', 'Design to-be process', 'Model to-be process', 'Step up KYC checks', 'Team up with partner',
+      'Phase out legacy system', 'Billing-check unit', 'Booking-confirm slot',
     ])('passes %s without a hint', (n) => {
       expect(s.taskName(n)).toBeNull();
       expect(s.unlistedFirstWord(n)).toBeNull();
@@ -100,6 +101,7 @@ describe('taskName', () => {
       ['Groom change request', 'Groom'],
       ['Apostille document approval', 'Apostille'],
       ['Hot-desk staff', 'Hot-desk'],
+      ['Task engineer', 'Task'],
     ])('passes %s; its first word %s is unlisted', (n, word) => {
       expect(s.taskName(n)).toBeNull();
       expect(s.unlistedFirstWord(n)).toBe(word);

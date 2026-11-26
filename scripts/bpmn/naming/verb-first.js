@@ -138,13 +138,17 @@ export function verbFirst(lexicon) {
     if (from === tokens.length) return flag(STARTS_WITH_VERB);
     const first = tokens[from];
     const last = tokens[tokens.length - 1].folded;
-    // The rules up to the verb test do not read the verb list, and after it only a listed word can
-    // flag: a shorter verb list therefore never adds a finding (en-sample.test.js proves it).
+    // The rules up to the verb test do not read the verb list. After it the list is read only to
+    // recognise a word as a verb, and a recognised verb can only end a test: a shorter verb list
+    // therefore never adds a finding (en-sample.test.js proves it over both samples).
     if (!tokens.slice(from + 1).some(hasLetter)) return flag(STARTS_WITH_VERB); // Step 3
     if (first.raw.endsWith(':')) return flag(STARTS_WITH_VERB); // SAP: Review invoice
     if (tokens.length - from === 2 && isParticiple(last)) return flag(STARTS_WITH_VERB); // Invoice checked
     const second = tokens[from + 1]?.folded;
-    if (auxiliaries.has(second) || (second === 'to' && auxiliaries.has(tokens[from + 2]?.folded))) {
+    // `to` and the auxiliary as words of their own: "to-be" in "Design to-be process" is a noun.
+    const third = tokens[from + 2];
+    if (auxiliaries.has(second)
+      || (second === 'to' && third && auxiliaries.has(third.folded) && third.word !== tokens[from + 1].word)) {
       return flag(STARTS_WITH_VERB); // Invoice is checked, Invoice to be checked
     }
     const k = lead(tokens, from);
@@ -159,7 +163,7 @@ export function verbFirst(lexicon) {
     // A whole first word only: in Quality-check the first part is no verb but the word may be one.
     const whole = wordParts(tokens, from) === 1;
     if (whole && (nonVerbStarters.has(first.folded) || nounStarters.has(first.folded))) return flag(STARTS_WITH_VERB);
-    if (isGerund(first.folded)) return flag(STARTS_WITH_VERB); // Checking invoice
+    if (whole && isGerund(first.folded)) return flag(STARTS_WITH_VERB); // Checking invoice, not Billing-check
     // The end of a name counts only after a first word known not to be a verb (certificate): an
     // object such as "request" or "document" is often a verb too, and a verb that is merely
     // unlisted must give the hint, never a finding.

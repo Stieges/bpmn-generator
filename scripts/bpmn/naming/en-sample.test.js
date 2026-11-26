@@ -88,8 +88,12 @@ describe('the held-out names', () => {
 
 describe('a shorter verb list gives more hints, never more findings', () => {
   // For every name of both samples and every word of it on the verb list: the judge without that
-  // verb flags the name only if the judge with it does.
-  const names = [...sample.correct, ...sample.wrong, ...sample.heldOut.correct, ...sample.heldOut.wrong];
+  // verb flags the name only if the judge with it does. Synthetic hyphen groups (a gerund or a
+  // starter word joined to a verb) and to-be shapes are added, the shapes a verb test reads.
+  const VERBS = ['check', 'confirm', 'review', 'approve', 'track', 'sign'];
+  const synthetic = ['Billing', 'Booking', 'Shipping', 'Customer', 'The', 'Phase'].flatMap((w) => VERBS.map((v) => `${w}-${v} unit`));
+  const names = [...sample.correct, ...sample.wrong, ...sample.heldOut.correct, ...sample.heldOut.wrong, ...synthetic,
+    'Design to-be process', 'Step up KYC checks', 'Team up with partner', 'Phase out legacy system'];
   test('over every sample name and each of its listed words', () => {
     const added = [];
     let checked = 0;
@@ -105,7 +109,30 @@ describe('a shorter verb list gives more hints, never more findings', () => {
       }
     }
     expect(added).toEqual([]);
-    expect(checked).toBe(749);
+    expect(checked).toBeGreaterThan(749);
+  });
+
+  test('over every sample name and each verb phrase that opens it', () => {
+    const added = [];
+    let checked = 0;
+    for (const name of names) {
+      const before = s.taskName(name) !== null;
+      const folded = labelTokens(name).tokens.map((t) => t.folded);
+      lexicon.verbPhrases.forEach((phrase, i) => {
+        if (!phrase.every((w, j) => folded[j] === w)) return;
+        const verbPhrases = lexicon.verbPhrases.filter((_, j) => j !== i);
+        if (verbFirst({ ...lexicon, verbPhrases }).taskName(name) !== null && !before) added.push(`${name} without "${phrase.join(' ')}"`);
+        checked++;
+      });
+    }
+    expect(added).toEqual([]);
+    expect(checked).toBeGreaterThan(40);
+  });
+
+  test('no verb phrase starts with a word of the starter lists', () => {
+    for (const phrase of lexicon.verbPhrases) {
+      expect([phrase[0], lexicon.nounStarters.has(phrase[0]) || lexicon.nonVerbStarters.has(phrase[0])]).toEqual([phrase[0], false]);
+    }
   });
 
   test('a correct name whose first word is removed from the list gets the hint instead', () => {

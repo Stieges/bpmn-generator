@@ -83,10 +83,10 @@ describe('English', () => {
   test('verb phrases: the 8 of the contributor, three more and the common two-word verbs', () => {
     expect(PHRASES_8).toHaveLength(8);
     const phrases = raw().verbPhrases;
-    expect(phrases).toHaveLength(50);
+    expect(phrases).toHaveLength(52);
     for (const p of [...PHRASES_8, 'carry out', 'look up', 'e mail']) expect(phrases).toContain(p);
     for (const p of TWO_WORD_VERBS) expect(phrases).toContain(p);
-    expect(en.verbPhrases).toHaveLength(50);
+    expect(en.verbPhrases).toHaveLength(52);
   });
 
   test('homographs: 244, a subset of verbs, with the named members', () => {
@@ -126,7 +126,7 @@ describe('English', () => {
   test('the word lists that make a task name fail hold no verb', () => {
     const data = raw();
     expect(data.nonVerbStarters).toHaveLength(86);
-    expect(data.nounStarters).toHaveLength(52);
+    expect(data.nounStarters).toHaveLength(48);
     expect(data.auxiliaries).toHaveLength(13);
     for (const w of data.auxiliaries) expect([w, en.verbs.has(w)]).toEqual([w, false]);
     for (const w of ['invoice', 'stock', 'claim', 'address']) expect(en.nounStarters.has(w)).toBe(false);
