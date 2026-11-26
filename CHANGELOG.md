@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Views.** A view is a small named JSON file under `views/`, outside the model, that decides how
   a model is processed: its rule profile, layout switches and derivations. The model is not
-  changed. Five views ship (`aligned-ports`, `default`, `einheiten`, `explicit-joins`, `rollen`); `default` derives nothing. Choose one with
+  changed. Six views ship (`aligned-ports`, `default`, `einheiten`, `explicit-joins`, `organigramm`, `rollen`); `default` derives nothing. Choose one with
   `--view=<name|path>` (CLI), `view` (a name on MCP `generate_bpmn`, `validate_bpmn` and
   `orchestrate_bpmn`; an inline object on HTTP `/api/v1/generate`, `/api/v1/validate` and
   `/api/v1/orchestrate`) or `runPipeline(lc, { view })`, which takes a path or an object. An
@@ -39,19 +39,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `bg:view`, `bg:catalog` with a SHA-256 fingerprint of the catalogue). The importers read such a diagram, report
   that it was generated from a 2.0 model and return a 1.x model. A lanes view on a 1.x model is a view error.
   The rules are in `references/logic-core-schema.md`, section Format 2.0.
-  - Known limitations: the CLI generate path, `runPipeline`, `validateModel`, `orchestrate`, MCP `generate_bpmn`/`validate_bpmn`/`orchestrate_bpmn` and HTTP `/generate`, `/validate`, `/orchestrate` accept 2.0 (MCP and HTTP with the catalogue as an embedded `catalog` object, never a path)
-    (the orchestrator skips the Modeler's refine and amend steps for it, history `skipped: 'format 2.0'`;
-    compliance gains `findings`); the scenario pipeline refuses it. On the CLI `--optimize`, `--mode=soll`, `--dot` and `--drill-down` refuse it;
-    `--doc` works. 2.0 output has no `bpmn:performer`. The nested-lane DI03 form found in the first slice (a
-    gateway in the first of two child lanes, `scripts/bpmn/nested-lanes.test.js`) is recorded, not fixed.
+  - Known limitations: redesign and the scenario pipeline refuse 2.0 (F03). On the CLI `--optimize`,
+    `--mode=soll`, `--dot` and `--drill-down` refuse it; `--doc` works. 2.0 output has no
+    `bpmn:performer`. The other entry points are listed under the second slice below.
 
 Default output is unchanged: a call without a view, or with `default`, produces the same bytes as
 before. Every `validation` result gains the key `hints`, an empty array without a view.
 
+- **Format 2.0: organigram, replacement and every generate surface (second slice).** A unit (and an
+  actor without `kind`) may carry `partOf`, the parent unit; roles do not (a role's unit is `unit`). A
+  cycle is error C07, once per cycle. An actor without `kind` that another actor names as `unit` or
+  `partOf` counts as a unit, so a unit view keys such a performer on itself; one with a `partOf` of its
+  own nests under its parent. The view's `lanes` also takes the object `{ "by": "unit", "level"?, "nested"? }`
+  (the view schema stays `1.0`): `level` (1–16) counts from the top, 1 being a unit without `partOf`, and
+  a unit shallower than the level keeps its own lane; `nested` draws every unit of a chain as child lanes
+  along the organigram, a unit with sub-units and steps of its own holding them in the child lane
+  `L.<process>.<unit>._own`, placeholders as top-level lanes after the tree. The shipped view
+  `organigramm` is `{ "by": "unit", "nested": true }`. A process file's `actors` beside a catalogue replace
+  the entry of the same id in place and add new ids, hint H09 per replaced entry; a `scheme` beside a
+  catalogue is C13; the `bg:catalog` fingerprint is over the effective catalogue. The entry points: the
+  library functions `validateModel` and `orchestrate`, MCP `generate_bpmn`, `validate_bpmn` and
+  `orchestrate_bpmn` (an embedded `catalog` object) and HTTP `/generate`, `/validate` and `/orchestrate`
+  (a body `catalog` object) read 2.0 now; a path is never read, `/import` is unchanged, and `validate`
+  does not report C10, which depends on the view. `orchestrate` skips the Modeler's refine and amend
+  steps for a 2.0 model (history `skipped: 'format 2.0'`); `optimize`, `soll` and drill-down are F04.
+  Redesign and the scenario pipeline still refuse 2.0 (F03). Responses for 1.x models are unchanged.
+  Rules: `references/logic-core-schema.md`, section Format 2.0.
 - **Message codes for format 2.x.** The messages of the 2.0-specific path (catalogue, format, lane formation, import
   notice) carry a code from one registry (`scripts/shared/message-codes.js`): a string leads with `[<code>] `, an object
-  has `code`. Rule messages keep their text; their rule id is only the `code` in `validation.findings`. New codes: C11–C13
-  (catalogue unreadable, refused, wrong source), F01–F05 (format, entry points, options, `decisions`), N01 (import
+  has `code`. Rule messages keep their text; their rule id is only the `code` in `validation.findings`. New codes: C07 (units nest in a cycle), C11–C13
+  (catalogue unreadable, refused, wrong source), H09 (see the organigram entry), F01–F05 (format, entry points, options, `decisions`), N01 (import
   notice). `validation.findings` (`{ code, severity, message }`) appears on 2.x runs only; import `notices` are
   `[{ code, message }]` and MCP `import_bpmn` sends them as a JSON second block; HTTP error bodies gain `code`,
   `CatalogRejectedError` `messageCode`. Responses for 1.x models are unchanged on every surface. Table: `references/api-reference.md`, "Message codes".

@@ -59,12 +59,15 @@ apply with these limits: `--optimize`, `--mode=optimize`, `--mode=soll`, `--dot`
 are refused for a 2.0 model; `--doc` works. The catalogue comes from `--catalog`, else from the
 model's `"catalog"` field (relative to the model file; on standard input only `--catalog` works).
 The lanes come from the view: `--view=rollen` gives lanes per performer, `--view=einheiten` lanes per
-unit of the performer, and without a lanes view a 2.0 model gets role lanes. A lanes view on a 1.x
-model is an error.
+unit of the performer, `--view=organigramm` lanes per unit nested along the organigram (`partOf`), and
+without a lanes view a 2.0 model gets role lanes. A lanes view on a 1.x model is an error. The model's
+own `actors` beside a catalogue (`--catalog` or the `catalog` field) replace entries of it by id or
+add new ids (hint H09 per replaced entry); a `scheme` there is C13. A unit cycle in `partOf` is C07.
 
 ```bash
 node bpmn/pipeline.js my-process.json my-process --strict --view=rollen --catalog my-catalog.json
 node bpmn/pipeline.js my-process.json my-process --strict --view=einheiten   # the model names its catalogue in "catalog"
+node bpmn/pipeline.js my-process.json my-process --strict --view=organigramm # nested unit lanes
 ```
 
 A 2.0 model's hints (H02–H06, H08, H09) are listed in `validation.hints` and never fail `--strict`. The messages of the 2.0-specific path (catalogue, format, lane formation) lead with their code, for example `✗ [C11] …` or `[F04] …` (exit 1, no stack trace). Rule messages (S, M, P, WF) keep their text unprefixed; their rule id is the `code` in `validation.findings`, a field of the library result that the CLI does not print. `--view=aligned-ports` docks message flows to or from a participant level with their other end. 1.x output is unchanged. The codes are in [`api-reference.md`](api-reference.md#message-codes). `node bpmn/import.js` prints `[N01] …` on stderr for a diagram generated from a 2.0 model. The

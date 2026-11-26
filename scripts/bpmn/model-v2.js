@@ -422,7 +422,7 @@ function allLanes(laneList, out = []) {
 }
 
 /**
- * The lanes of the nested unit view for the keys of one process (question 4 of the plan): a lane
+ * The lanes of the nested unit view for the keys of one process: a lane
  * for every unit of each key's chain, children in catalogue order. A key unit with child lanes
  * holds its own steps in the extra first child `L.<process>.<unit>._own`, named like the unit, so
  * no parent lane holds a node itself; the placeholders are top-level lanes after the tree. A key

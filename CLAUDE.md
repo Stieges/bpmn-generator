@@ -646,14 +646,29 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    catalogue `{ "actors": [ { "id", "name", "kind"?, "unit"? } ] }` (`references/catalog-schema.json`),
    which the model names in `"catalog": "<path>"` (relative to the model file), or which the call
    passes: CLI `--catalog <path>` (relative to the working directory, wins over the field), library
-   `runPipeline(model, { catalog })` with an object. A model may carry `actors` itself instead.
+   `runPipeline(model, { catalog })` with an object. A model may carry `actors` itself; beside a
+   catalogue they replace entries by id or add new ids (H09 per replacement; `scheme` there is C13).
    The rules are in `references/logic-core-schema.md`, section Format 2.0.
 2. Choose the lanes by view: `--view=rollen` (per performer) or `--view=einheiten` (per unit of the
-   performer); without a lanes view a 2.0 model gets role lanes. `--optimize`, `--dot` and
-   `--drill-down` are refused for 2.0; `--doc` works.
+   performer), `--view=organigramm` (per unit, nested along `partOf`); without a lanes view a 2.0
+   model gets role lanes. `--optimize`, `--dot` and `--drill-down` are refused for 2.0; `--doc` works.
 3. Verify: `cd scripts && node bpmn/pipeline.js ../tests/fixtures-v2/schaden.json /tmp/s --view=rollen --strict`
    exits 0 and `/tmp/s.bpmn` has three lanes; `npm test -- --testPathPatterns=model-v2` covers the rule.
-   Other entry points (MCP, HTTP, orchestrator, scenarios) refuse 2.0 with one message.
+   MCP and HTTP read 2.0 with the catalogue as an embedded `catalog` object (never a path), the
+   orchestrator skips the Modeler's refine and amend for it; redesign and scenarios refuse 2.0
+   (F03, `FORMAT_V2_NOT_ACCEPTED`).
+
+### Model an organigram (format 2.0)
+
+1. Give units a `partOf` (the parent unit) in the catalogue; roles name their unit with `unit`, a
+   role has no `partOf`. A cycle is C07. An actor without `kind` that another actor names as `unit`
+   or `partOf` counts as a unit.
+2. Choose `--view=organigramm` (nested lanes along the tree; a unit with sub-units and steps of its
+   own gets the child lane `L.<process>.<unit>._own`; placeholders follow the tree) or write a view
+   with `"lanes": { "by": "unit", "level": 2 }` (level counts from the top, shallower units keep
+   their lane; add `"nested": true` to nest).
+3. Verify: `cd scripts && node bpmn/pipeline.js ../tests/fixtures-v2/organigramm.json /tmp/o --view=organigramm --strict`
+   exits 0; the rules are in `references/logic-core-schema.md`, section Format 2.0.
 
 ### Choose or write a view
 
