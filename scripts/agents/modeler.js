@@ -8,6 +8,7 @@
  */
 
 import { extractPromptSection } from './prompt-sections.js';
+import { languageTag, modelLanguage, namingFor, languageName } from '../bpmn/naming/index.js';
 
 let _promptSections = null;
 
@@ -21,13 +22,25 @@ function loadPromptSections() {
   return _promptSections;
 }
 
+// One last line that keeps the declared language of a model. A NamingDataError of a broken
+// BPMN_NAMING file is not caught here: it is the same defect the rules report.
+function languageLine(logicCore) {
+  const tag = languageTag(logicCore);
+  if (tag === null) return '';
+  const strategy = namingFor(modelLanguage(logicCore));
+  const line = strategy
+    ? `The labels of this model are in ${languageName(modelLanguage(logicCore))} (language "${tag}"): name tasks like "${strategy.examples.task}" and keep the "language" field unchanged.`
+    : `The labels of this model are in the language "${tag}": keep them in that language and keep the "language" field unchanged.`;
+  return `\n${line}`;
+}
+
 function detectMode(state) {
   if (state.layoutFeedback?.length > 0) return 'amend';
   if (state.reviewIssues?.length > 0 && state.logicCore) return 'refine';
   return 'extract';
 }
 
-function buildPrompt(state) {
+export function buildPrompt(state) {
   const sections = loadPromptSections();
   const mode = detectMode(state);
 
@@ -44,7 +57,7 @@ function buildPrompt(state) {
     const systemPrompt = sections.refinement
       .replace('{{ISSUES}}', issueText)
       .replace('{{CURRENT_JSON}}', JSON.stringify(state.logicCore, null, 2));
-    return { systemPrompt, userPrompt: 'Fix the issues listed above.', mode };
+    return { systemPrompt: systemPrompt + languageLine(state.logicCore), userPrompt: 'Fix the issues listed above.', mode };
   }
 
   // amend
@@ -54,7 +67,7 @@ function buildPrompt(state) {
   const systemPrompt = sections.amendment
     .replace('{{CURRENT_JSON}}', JSON.stringify(state.logicCore, null, 2))
     .replace('{{CHANGE_DESCRIPTION}}', feedbackText);
-  return { systemPrompt, userPrompt: 'Apply the layout improvements above.', mode };
+  return { systemPrompt: systemPrompt + languageLine(state.logicCore), userPrompt: 'Apply the layout improvements above.', mode };
 }
 
 function extractJson(text) {
@@ -95,6 +108,12 @@ export async function modelerAgent(state) {
   });
 
   const logicCore = extractJson(raw);
+  // The Modeler keeps the declared language of the model; a language it changed is judged downstream.
+  if (mode !== 'extract') {
+    const tag = languageTag(state.logicCore);
+    if (tag !== null && logicCore && typeof logicCore === 'object' && !Array.isArray(logicCore)
+      && !Object.hasOwn(logicCore, 'language')) logicCore.language = tag;
+  }
 
   return { logicCore, mode };
 }
