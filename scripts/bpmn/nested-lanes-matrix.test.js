@@ -368,5 +368,5 @@ describe('every fixture, every hash mode: no lane without a band, no node outsid
       if (!r.coordMap) continue; // blocked on purpose (deadlock-process)
       expect([`${name} × ${mode}`, laneFindings(r, lc)]).toEqual([`${name} × ${mode}`, KNOWN[`${name} × ${mode}`] ?? CLEAN]);
     }
-  });
+  }, 60000); // slowest fixture (example-rechnungspruefung, 4 pipelines) ~3.4 s alone; the default 5 s timed out under the full parallel run; ~17x headroom
 });
