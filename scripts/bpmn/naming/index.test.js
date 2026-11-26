@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync, execFileSync } from 'node:child_process';
 import {
-  LANGUAGE_TAG, languageTag, modelLanguage, namingFor, checkNamingOverlay, NAMING_LANGUAGES, NamingDataError,
+  LANGUAGE_TAG, languageTag, modelLanguage, namingFor, checkNamingOverlay, NAMING_LANGUAGES, NamingDataError, namingDataErrorOf,
 } from './index.js';
 
 const readSchema = (name) => JSON.parse(readFileSync(new URL(`../../../references/${name}`, import.meta.url), 'utf8'));
@@ -93,6 +93,22 @@ describe('the registry', () => {
   test('re-exports NAMING_LANGUAGES and NamingDataError', () => {
     expect(Object.keys(NAMING_LANGUAGES)).toEqual(['de', 'en']);
     expect(new NamingDataError('x').code).toBe('NAMING_DATA');
+  });
+
+  test('namingDataErrorOf finds a NamingDataError through the cause chain', () => {
+    const direct = new NamingDataError('naming data "/x.json" is not valid JSON');
+    const once = new Error('Reviewer agent failed (iteration 0): …', { cause: direct });
+    const twice = new Error('outer', { cause: once });
+    expect(namingDataErrorOf(direct)).toBe(direct);
+    expect(namingDataErrorOf(once)).toBe(direct);
+    expect(namingDataErrorOf(twice)).toBe(direct);
+    expect(namingDataErrorOf(new Error('other', { cause: new TypeError('x') }))).toBeNull();
+    expect(namingDataErrorOf(null)).toBeNull();
+    expect(namingDataErrorOf(undefined)).toBeNull();
+    const a = new Error('a');
+    const b = new Error('b', { cause: a });
+    a.cause = b; // a cycle without a NamingDataError: bounded, returns null
+    expect(namingDataErrorOf(a)).toBeNull();
   });
 
   test('BPMN_NAMING is read at call time: add makes a name pass, remove makes it fail', () => {

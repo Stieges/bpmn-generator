@@ -31,7 +31,7 @@ import { validateModelSchema, v2RequestErrors, catalogOptionFor, validateLayoutO
 import { VISUAL_REFINEMENT_OPTION_SCHEMA } from './bpmn/visual-refinement.js';
 import { bpmnToLogicCore, readModelMarker, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './bpmn/import.js';
 import { orchestrate } from './orchestrator.js';
-import { checkNamingOverlay, NamingDataError } from './bpmn/naming/index.js';
+import { checkNamingOverlay, NamingDataError, namingDataErrorOf } from './bpmn/naming/index.js';
 
 const PROFILE_PARAM = {
   type: 'string',
@@ -210,8 +210,9 @@ async function handleToolCall(request) {
   try {
     return await dispatchToolCall(request);
   } catch (err) {
-    if (err instanceof NamingDataError) {
-      console.error(`Naming data failure: ${err.message}`);
+    const namingFailure = namingDataErrorOf(err); // through `cause`: the orchestrator wraps agent errors
+    if (namingFailure) {
+      console.error(`Naming data failure: ${namingFailure.message}`);
       throw new Error('naming data unavailable');
     }
     throw err;

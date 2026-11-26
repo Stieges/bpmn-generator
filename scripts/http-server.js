@@ -32,7 +32,7 @@ import { chatAgent } from './agents/chat.js';
 import { createLlmProvider, LlmProviderError } from './agents/llm-provider.js';
 import { deliver } from './delivery.js';
 import { auditLog } from './audit.js';
-import { checkNamingOverlay, NamingDataError } from './bpmn/naming/index.js';
+import { checkNamingOverlay, NamingDataError, namingDataErrorOf } from './bpmn/naming/index.js';
 import { validateModelSchema, v2RequestErrors, catalogOptionFor, validateLayoutOptions, layoutOptionsOf, boundSchemaErrors, assertViewFitsModel } from './bpmn/schema-gate.js';
 import { checkUrlShape, resolveOutboundUrl, pinnedRequest, _setResolver } from './shared/outbound-url.js';
 import { isMainModule } from './shared/entry-point.js';
@@ -630,9 +630,11 @@ const server = createServer(async (req, res) => {
       return json(res, 400, { correlationId, status: 'view_error', error: err.message, ...(err.messageCode ? { code: err.messageCode } : {}) });
     }
     // An unusable BPMN_NAMING file is the operator's fault and its message names a server path:
-    // log it here, keep the path out of the audit record and the response.
-    if (err instanceof NamingDataError) {
-      console.error(`Naming data failure (correlationId ${correlationId}): ${err.message}`);
+    // log it here, keep the path out of the audit record and the response. Found through `cause`:
+    // the orchestrator wraps agent errors.
+    const namingFailure = namingDataErrorOf(err);
+    if (namingFailure) {
+      console.error(`Naming data failure (correlationId ${correlationId}): ${namingFailure.message}`);
       auditLog({ event: 'naming_data_error', correlationId });
       return json(res, 500, { correlationId, status: 'internal_error', error: 'naming data unavailable' });
     }
