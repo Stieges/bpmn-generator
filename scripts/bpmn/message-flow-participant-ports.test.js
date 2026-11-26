@@ -12,12 +12,17 @@
  * not beside the middle of the whole line, which lies inside a pool.
  */
 import { describe, test, expect } from '@jest/globals';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { routeMessageFlows, edgeLabelBox, participantBoxes, unclearMessageFlowLabels } from './coordinates.js';
 import { runPipeline } from './pipeline.js';
 import { CFG } from '../shared/utils.js';
+import { loadNamedView, assertView, ViewRejectedError } from '../shared/view.js';
+import { handleToolCall } from '../mcp-bpmn-server.js';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures');
 const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'));
@@ -191,5 +196,79 @@ describe('alignParticipantPorts on hand-built geometry', () => {
     expect(routes[1]).toEqual(routes[0]);
     expect(routes[1][0].x).toBe(800);
     expect(routes[1].at(-1).x).toBe(700);
+  });
+});
+
+// ─── The view `aligned-ports` ────────────────────────────────────────────────
+// The switch is reachable from a view file: explicit option, then the view, then config.json (false).
+describe('the view aligned-ports', () => {
+  const sha = (x) => createHash('sha256').update(x).digest('hex');
+  const view = () => loadNamedView('aligned-ports');
+  const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const straight = (cm) => {
+    for (const [key, task] of [['mf_ack', 't_ack'], ['mf_inv', 't_invoice']]) {
+      const pts = cm.edgeCoords[key];
+      expect(pts).toHaveLength(2);
+      expect(pts[0].x).toBeCloseTo(centreX(cm.coords[task]), 6);
+      expect(pts[1].x).toBeCloseTo(pts[0].x, 6);
+    }
+    const pts = cm.edgeCoords.mf_in;
+    expect(pts).toHaveLength(2);
+    expect(pts[1].x).toBeCloseTo(centreX(cm.coords.start), 6);
+    expect(pts[0].x).toBeCloseTo(pts[1].x, 6);
+  };
+
+  test('the shipped file switches the key on and nothing else', () => {
+    expect(view()).toEqual({ view: 'aligned-ports', version: '1.0',
+      description: 'Message flows to or from a participant dock level with their other end.',
+      layout: { alignParticipantPorts: true } });
+  });
+
+  test('with the view the flows are straight, as with the option', async () => {
+    straight((await runPipeline(load(FIXTURE), { view: view() })).coordMap);
+  });
+
+  test('without a view the output hashes to the committed entry', async () => {
+    const snap = JSON.parse(readFileSync(join(fixturesDir, '..', 'bench', 'default-output-hashes.json'), 'utf8'));
+    // The snapshot is taken with every opt-in layout switch explicitly off (bench/output-hashes.mjs).
+    const r = await runPipeline(load(FIXTURE), { bendRule: false, nodeLabelsAvoidFlows: false, foreignShapeRepair: false,
+      messageFlowLabelRepair: false, alignParticipantPorts: false });
+    expect({ xml: sha(r.bpmnXml), svg: sha(r.svg) }).toEqual(snap[`${FIXTURE} × default`]);
+  });
+
+  test('an explicit alignParticipantPorts: false beats the view', async () => {
+    const off = await runPipeline(load(FIXTURE));
+    const r = await runPipeline(load(FIXTURE), { view: view(), alignParticipantPorts: false });
+    expect(r.bpmnXml).toBe(off.bpmnXml);
+    expect(r.coordMap.edgeCoords.mf_ack).toHaveLength(4);
+  });
+
+  test('a format 2.0 model (no lanes, no assignments) docks the same way', async () => {
+    const model = { ...load(FIXTURE), $schemaVersion: '2.0' };
+    const r = await runPipeline(model, { view: view() });
+    straight(r.coordMap);
+  });
+
+  test('CLI --view=aligned-ports writes the aligned routes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aligned-ports-'));
+    try {
+      const out = join(dir, 'out');
+      const res = spawnSync(process.execPath, ['bpmn/pipeline.js', join(fixturesDir, FIXTURE), out, '--view=aligned-ports'],
+        { encoding: 'utf8', cwd: scriptsDir });
+      expect(res.status).toBe(0);
+      const lib = await runPipeline(load(FIXTURE), { view: view() });
+      expect(readFileSync(`${out}.bpmn`, 'utf8')).toBe(lib.bpmnXml);
+      expect(lib.bpmnXml).not.toBe((await runPipeline(load(FIXTURE))).bpmnXml);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }, 60000);
+
+  test('MCP generate_bpmn with view "aligned-ports" (1.x) gives the aligned routes', async () => {
+    const lib = await runPipeline(load(FIXTURE), { view: view() });
+    const r = JSON.parse((await handleToolCall({ params: { name: 'generate_bpmn', arguments: { logicCore: load(FIXTURE), view: 'aligned-ports' } } })).content[0].text);
+    expect(r.bpmnXml).toBe(lib.bpmnXml);
+  });
+
+  test('assertView refuses a non-boolean alignParticipantPorts', () => {
+    expect(() => assertView({ view: 'x', version: '1.0', layout: { alignParticipantPorts: 'yes' } })).toThrow(ViewRejectedError);
   });
 });
