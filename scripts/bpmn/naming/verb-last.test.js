@@ -193,57 +193,125 @@ describe('compoundExceptions: words that begin with a marker keyword and name no
 });
 
 describe('a duration keyword at the end of a compound gives a timer only with an expiry word', () => {
-  // [label, marker on a boundary event]
+  // The rule applies where a plain event is valid and a timer is legal: a start event outside an event subprocess.
+  const PLAIN = 'startEvent';
+  const ESP = { type: 'subProcess', isEventSubProcess: true };
+  // Every row: a duration keyword only at the end of a compound, plus an expiry word (timer) or none (null).
   const table = [
-    ['Wartezeit abgelaufen', 'timer'],
     ['Lieferzeit überschritten', 'timer'],
-    ['Bearbeitungsfrist verstrichen', 'timer'],
     ['Lieferzeit erreicht', 'timer'],
     ['Reaktionszeit vorbei', 'timer'],
-    ['Wartezeit um', 'timer'],
+    ['Lieferzeit um', 'timer'],
     ['Haltezeit endet', 'timer'],
     ['Kundenwartezeit überschritten', 'timer'],
     ['Lieferzeit überfällig', 'timer'],
-    ['Zahlungsfrist erfasst', 'timer'],
-    ['Zeitablauf', 'timer'],
+    ['Lieferzeit läuft ab', 'timer'],
+    ['Lieferzeit-Überschreitung', 'timer'],
+    ['Lieferzeit-Ablauf', 'timer'],
+    ['Ablauf Lieferzeit', 'timer'],
+    ['Lieferzeit zu Ende', 'timer'],
+    ['Ende der Lieferzeit', 'timer'],
+    ['Garantiezeit ausgelaufen', 'timer'],
+    ['Garantiezeit ausläuft', 'timer'],
+    ['Reaktionszeit verpasst', 'timer'],
+    ['Lieferzeit überzogen', 'timer'],
+    ['Lieferzeiten überschritten', 'timer'],
     ['Arbeitszeit erfasst', null],
     ['Lieferzeit bestätigt', null],
     ['Öffnungszeit geändert', null],
     ['Arbeitszeit um 8 Uhr erfasst', null],
+    ['Lieferzeit ab Lager bestätigt', null],
     ['Kundenwartezeit erfasst', null],
     ['Bearbeitungszeit gemessen', null],
     ['Reaktionszeit dokumentiert', null],
     ['Durchlaufzeit berechnet', null],
     ['Rüstzeit gebucht', null],
     ['Zykluszeit protokolliert', null],
-    ['Arbeitszeitfehler erkannt', 'error'],
-    ['Lieferzeitnachricht eingegangen', 'message'],
+    ['Arbeitszeit beendet', null],
+    ['Öffnungszeiten veröffentlicht', null],
+    ['Karenzzeit', null],
   ];
-  test.each(table)('"%s" gives %s', (label, marker) => {
-    expect(inferMarker(de, label, 'boundaryEvent')).toBe(marker);
-    expect(s.eventMarker(label, 'boundaryEvent')).toBe(marker);
+  test.each(table)('plain start event: "%s" gives %s', (label, marker) => {
+    expect(inferMarker(de, label, PLAIN)).toBe(marker);
+    expect(s.eventMarker(label, PLAIN)).toBe(marker);
   });
   test('the table has at least ten labels of each outcome', () => {
     expect(table.filter(([, m]) => m === 'timer').length).toBeGreaterThanOrEqual(10);
     expect(table.filter(([, m]) => m === null).length).toBeGreaterThanOrEqual(10);
   });
-  test('a whole word, a leading match and a deadline keyword at the end keep their timer without an expiry word', () => {
-    for (const label of ['Zeit erfasst', 'Wartezeit erfasst', 'Zeitüberschreitung erfasst', 'Zahlungsfrist erfasst', 'Projektdeadline erfasst', 'Eieruhrtimer gestellt']) {
-      expect([label, inferMarker(de, label, 'boundaryEvent')]).toEqual([label, 'timer']);
-    }
+  test.each([
+    // whole word, leading match or deadline keyword at the end: the rule does not apply
+    ['Wartezeit abgelaufen', 'timer'],
+    ['Wartezeit erfasst', 'timer'],
+    ['Zeit erfasst', 'timer'],
+    ['Zeitablauf', 'timer'],
+    ['Zeitüberschreitung erfasst', 'timer'],
+    ['Bearbeitungsfrist verstrichen', 'timer'],
+    ['Zahlungsfrist erfasst', 'timer'],
+    ['Projektdeadline erfasst', 'timer'],
+    ['Eieruhrtimer gestellt', 'timer'],
+  ])('outside the rule: "%s" gives %s', (label, marker) => {
+    expect(inferMarker(de, label, PLAIN)).toBe(marker);
+    expect(inferMarker(de, label, 'boundaryEvent')).toBe(marker);
   });
-  test('"um" counts only as the last token; the other expiry words anywhere', () => {
-    expect(inferMarker(de, 'Lieferzeit um', 'boundaryEvent')).toBe('timer');
-    expect(inferMarker(de, 'Lieferzeit um Tag verschoben', 'boundaryEvent')).toBeNull();
-    expect(inferMarker(de, 'Lieferzeit überschritten um 2 Tage', 'boundaryEvent')).toBe('timer');
+  test('no timer on a plain event: the next marker decides', () => {
+    expect(inferMarker(de, 'Lieferzeitnachricht eingegangen', PLAIN)).toBe('message');
+    expect(inferMarker(de, 'Arbeitszeitfehler erkannt', 'endEvent')).toBe('error');
   });
-  test('without durationKeywords the end match counts as before; without expiryWords it never does', () => {
-    expect(inferMarker({ ...de, durationKeywords: undefined }, 'Arbeitszeit erfasst', 'boundaryEvent')).toBe('timer');
-    expect(inferMarker({ ...de, expiryWords: [] }, 'Lieferzeit überschritten', 'boundaryEvent')).toBeNull();
+  describe('an event that needs a trigger keeps the duration-end timer without an expiry word', () => {
+    const durationOnly = ['Karenzzeit', 'Lieferzeit 5 Tage', 'Bearbeitungszeit 2 Std.', 'Liegezeit 24h', 'Ende der Lieferzeit'];
+    test.each(durationOnly)('"%s" is a timer on a boundary and an intermediate catch event', (label) => {
+      expect(inferMarker(de, label, 'boundaryEvent')).toBe('timer');
+      expect(inferMarker(de, label, 'intermediateCatchEvent')).toBe('timer');
+      expect(s.eventMarker(label, 'boundaryEvent')).toBe('timer');
+    });
+    test('the start event of an event subprocess needs a trigger; a plain start event does not', () => {
+      expect(inferMarker(de, 'Karenzzeit', 'startEvent', ESP)).toBe('timer');
+      expect(s.eventMarker('Karenzzeit', 'startEvent', ESP)).toBe('timer');
+      expect(inferMarker(de, 'Karenzzeit', 'startEvent', { type: 'subProcess' })).toBeNull();
+      expect(inferMarker(de, 'Karenzzeit', 'startEvent')).toBeNull();
+    });
+    test('"Arbeitszeit erfasst" gives none on a plain start and an end event, a timer on a boundary event', () => {
+      expect(inferMarker(de, 'Arbeitszeit erfasst', 'startEvent')).toBeNull();
+      expect(inferMarker(de, 'Arbeitszeit erfasst', 'endEvent')).toBeNull();
+      expect(inferMarker(de, 'Arbeitszeit erfasst', 'boundaryEvent')).toBe('timer');
+      expect(inferMarker(de, 'Ruhezeit beendet', 'boundaryEvent')).toBe('timer');
+    });
+  });
+  test('two-letter expiry words (um, ab) count only as the last token; the other expiry words anywhere', () => {
+    expect(inferMarker(de, 'Lieferzeit um', PLAIN)).toBe('timer');
+    expect(inferMarker(de, 'Lieferzeit um Tag verschoben', PLAIN)).toBeNull();
+    expect(inferMarker(de, 'Lieferzeit läuft ab', PLAIN)).toBe('timer');
+    expect(inferMarker(de, 'Lieferzeit ab Lager bestätigt', PLAIN)).toBeNull();
+    expect(inferMarker(de, 'Lieferzeit überschritten um 2 Tage', PLAIN)).toBe('timer');
+  });
+  test('a whole-word "Zeiten" is a timer like "Zeit"', () => {
+    expect(inferMarker(de, 'Zeiten erfasst', PLAIN)).toBe('timer');
+  });
+  test('without durationKeywords the end match counts as before; without expiryWords it never does on a plain event', () => {
+    expect(inferMarker({ ...de, durationKeywords: undefined }, 'Arbeitszeit erfasst', PLAIN)).toBe('timer');
+    expect(inferMarker({ ...de, expiryWords: [] }, 'Lieferzeit überschritten', PLAIN)).toBeNull();
+    expect(inferMarker({ ...de, expiryWords: [] }, 'Lieferzeit überschritten', 'boundaryEvent')).toBe('timer');
   });
   test('the inferred timer still has to be legal on the event type', () => {
     expect(inferMarker(de, 'Lieferzeit überschritten', 'endEvent')).toBeNull();
-    expect(inferMarker(de, 'Lieferzeit überschritten', 'startEvent')).toBe('timer');
+    expect(inferMarker(de, 'Lieferzeit überschritten', 'intermediateThrowEvent')).toBeNull();
+  });
+});
+
+describe('compoundExceptions for measuring and setting a time or a deadline', () => {
+  test.each([
+    'Wartezeitermittlung abgeschlossen', 'Wartezeitberechnung abgeschlossen', 'Wartezeiterfassung gestartet',
+    'Zeitermittlung abgeschlossen', 'Zeitberechnung erfolgt', 'Zeitschätzung abgegeben', 'Zeitnachweis eingereicht', 'Zeitbedarf ermittelt',
+    'Fristverlängerung genehmigt', 'Fristsetzung erfolgt', 'Fristenkontrolle durchgeführt', 'Fristberechnung abgeschlossen', 'Fristenkalender aktualisiert',
+  ])('"%s" gets no marker', (label) => {
+    expect(inferMarker(de, label, 'boundaryEvent')).toBeNull();
+    expect(inferMarker(de, label, 'startEvent')).toBeNull();
+  });
+  test('timer words with the same start are no exceptions', () => {
+    for (const label of ['Zeitpunkt erreicht', 'Zeitfenster geöffnet', 'Fristablauf', 'Fristende erreicht', 'Fristüberschreitung erkannt', 'Wartezeitende erreicht']) {
+      expect([label, inferMarker(de, label, 'boundaryEvent')]).toEqual([label, 'timer']);
+    }
   });
 });
 

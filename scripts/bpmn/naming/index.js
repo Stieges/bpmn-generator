@@ -166,7 +166,7 @@ export function resolveEventMarkers(lc) {
   for (const { node, pool, parent } of all) {
     if (!isEvent(node.type) || node.marker) continue;
     const name = typeof node.name === 'string' ? node.name : '';
-    const marker = strategy.eventMarker(name, node.type);
+    const marker = strategy.eventMarker(name, node.type, parent);
     node._marker = marker;
     const legacy = inferEventMarker(name);
     const entry = { id: node.id, name, type: node.type, marker, legacy, pool };

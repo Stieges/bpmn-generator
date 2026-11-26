@@ -376,6 +376,15 @@ describe('Review Focus 5: XML, SVG and rules agree under a declared language', (
     expect(hintsOf(again, 'H10')).toEqual([]);
   }, PIPELINE_TIMEOUT);
 
+  test('inline de model: a boundary event "Karenzzeit" needs a trigger and is written as a timer', async () => {
+    const model = inlineGerman();
+    findNode(model, 'b_frist').name = 'Karenzzeit';
+    const result = await runPipeline(model);
+    expect(result.validation.errors).toEqual([]);
+    expect(xmlElement(result.bpmnXml, 'b_frist')).toContain('timerEventDefinition');
+    expect(hintsOf(result, 'H10').map((h) => h.elements[0])).toContain('b_frist');
+  }, PIPELINE_TIMEOUT);
+
   test('the result carries no _marker and the caller\'s model is never mutated', async () => {
     for (const model of [inlineGerman(), withLanguage(fixture('example-schadenmeldung'), 'de')]) {
       const before = structuredClone(model);
