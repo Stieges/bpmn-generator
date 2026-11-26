@@ -142,8 +142,9 @@ Behaviours worth knowing:
   start event (a start event inside an ordinary sub-process still gets an inferred marker). Every
   inferred marker is reported as hint `H10`; a name that gave a marker before the language was
   declared and now gives none or another one is `H11`. Either way, set `marker` to the symbol you
-  want, or to `"none"` for a plain event (start, end and intermediate throw events only; a
-  boundary or intermediate catch event needs a trigger, and S15 reports `"none"` there).
+  want, or to `"none"` for a plain event (end and intermediate throw events, and start events
+  outside an event subprocess; a boundary or intermediate catch event and the start event of an
+  event subprocess need a trigger, and S15 reports `"none"` there).
   `"none"` also stops the inference without a declared language.
 - A valid tag without word lists (`fr`) skips M01, M05 and M06 (hint `H12`); labels that look like
   another supported language than the declared one give hint `H13` (and then no `H14`).
