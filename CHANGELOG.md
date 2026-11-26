@@ -39,8 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `bg:view`, `bg:catalog` with a SHA-256 fingerprint of the catalogue). The importers read such a diagram, report
   that it was generated from a 2.0 model and return a 1.x model. A lanes view on a 1.x model is a view error.
   The rules are in `references/logic-core-schema.md`, section Format 2.0.
-  - Known limitations: only the CLI generate path and `runPipeline` accept 2.0; MCP, HTTP, the orchestrator and
-    the scenario pipeline refuse it. On the CLI `--optimize`, `--mode=soll`, `--dot` and `--drill-down` refuse it;
+  - Known limitations: only the CLI generate path, `runPipeline`, `validateModel` and `orchestrate` accept 2.0
+    (the orchestrator skips the Modeler's refine and amend steps for it, history `skipped: 'format 2.0'`;
+    compliance gains `findings`); MCP, HTTP and the scenario pipeline refuse it. On the CLI `--optimize`, `--mode=soll`, `--dot` and `--drill-down` refuse it;
     `--doc` works. 2.0 output has no `bpmn:performer`. The nested-lane DI03 form found in the first slice (a
     gateway in the first of two child lanes, `scripts/bpmn/nested-lanes.test.js`) is recorded, not fixed.
 

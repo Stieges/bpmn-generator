@@ -220,8 +220,15 @@ describe('surfaces that have not opted in reject a 2.0 model with the one error'
     expect(set.subProcesses).toEqual({});
   });
 
-  test('orchestrate() rejects with the message', async () => {
-    await expect(orchestrate(m56())).rejects.toThrow(FORMAT_V2_NOT_ACCEPTED);
+  test('the message names the entry points that read 2.0', () => {
+    expect(FORMAT_V2_NOT_ACCEPTED).toBe('format 2.0 is not accepted here yet — generate, validate and orchestrate read it on the CLI, in the library, over MCP and over HTTP');
+  });
+
+  test('orchestrate() reads it: a catalogue path without an object is the C13 verdict, not the refusal', async () => {
+    const result = await orchestrate(m56());
+    expect(result.compliance.isCompliant).toBe(false);
+    expect(result.compliance.errors).toEqual([expect.stringMatching(/^\[C13\] the model names catalogue/)]);
+    expect(result.bpmnXml).toBeNull();
   });
 
   describe('CLIs', () => {

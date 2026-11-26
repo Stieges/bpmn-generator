@@ -65,7 +65,7 @@ export function assertViewFitsModel(model, view) {
   }
 }
 
-export const FORMAT_V2_NOT_ACCEPTED = 'format 2.0 is not accepted here yet — only the CLI generate path (node bpmn/pipeline.js) and runPipeline read it';
+export const FORMAT_V2_NOT_ACCEPTED = 'format 2.0 is not accepted here yet — generate, validate and orchestrate read it on the CLI, in the library, over MCP and over HTTP';
 
 /** Why a model that is not format 2.0 is refused where only 2.0 is read; no code (1.x responses stay as they were). */
 function notFormatV2Message(input) {
