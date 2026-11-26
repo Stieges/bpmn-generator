@@ -133,7 +133,10 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   else `H14` naming the first words of English task names that are not on the verb list.
   Under `de` a keyword also matches in a compound (`Fristablauf`, `Fehlermeldung`); the data list
   `compoundExceptions` names words that only begin like a keyword (`Zeitschrift`, `Zeitung`,
-  `Zeitarbeit`, `Signalwirkung`) and give no marker, in any inflected or longer form.
+  `Zeitarbeit`, `Signalwirkung`) and give no marker, in any inflected or longer form. A timer
+  keyword that names a duration (`durationKeywords`: `zeit`, `wartezeit`) at the end of a compound
+  gives a timer only when the label also has a word of `expiryWords` (`Lieferzeit überschritten`,
+  `Wartezeit um`); `Arbeitszeit erfasst` and `Lieferzeit bestätigt` get no marker and no `H10`.
 - **`marker: "none"`.** A new value of `marker` (input schemas 1.3 and 2.0, ontology 1.3): a
   plain event on purpose. It stops the marker inference from the name, with and without a declared
   `language` (no H10, no H11 for that event), and the event is drawn and written without an event
@@ -143,7 +146,7 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   an event subprocess. A model without `"none"` gives the same output as before, except that the
   schema error for an invalid `marker` value now lists `none` among the allowed values.
 - **`BPMN_NAMING` overlay.** The environment variable names a JSON file that adds words to, and
-  removes words from, eleven flat word lists of a shipped language
+  removes words from, twelve flat word lists of a shipped language
   (`{ "languages": { "en": { "add": { "verbs": ["invoice"] }, "remove": { … } } } }`, add first,
   then remove), so a correct label that a rule flags is fixed by data. The file is read once per
   process (the servers at start, the CLI and the library on first use) and a change needs a restart;
