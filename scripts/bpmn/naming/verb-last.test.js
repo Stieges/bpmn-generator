@@ -128,23 +128,57 @@ describe('Review Focus 4: robustness and linear time', () => {
     // scaling test below is the real guard against super-linear time.
     expect(Date.now() - t).toBeLessThan(10000);
   });
-  test('time scales sub-quadratically: 4n costs less than 16 times n', () => {
-    const make = (k) => 'Antrag ' + 'prüfen '.repeat(k);
-    const cost = (k) => {
-      const h = make(k);
-      const t = performance.now();
-      for (const fn of ['taskName', 'eventName', 'isQuestion']) s[fn](h);
-      s.eventMarker(h, 'startEvent');
-      return Math.max(performance.now() - t, 1);
-    };
-    const ratio = () => cost(40000) / cost(10000);
-    // One retry: a load spike in one measurement must not fail a sound implementation.
-    expect(Math.min(ratio(), ratio())).toBeLessThan(16);
+  describe('time scales sub-quadratically: 16n costs less than 64 times n', () => {
+    // Quadratic growth would give about 256; linear about 16. Each timing repeats the calls, so the
+    // base run is well above timer resolution, and the better of two ratios is used.
+    const shapes = [
+      ['Antrag pruefen', (k) => 'Antrag ' + 'prüfen '.repeat(k), 1500],
+      ['zu repeated', (k) => 'aus' + 'zu'.repeat(k) + 'zahlen', 3000],
+      ['ge repeated', (k) => 'ge'.repeat(k) + 't', 3000],
+      ['hyphen chain', (k) => 'Antrag' + '-prüfen'.repeat(k), 1500],
+    ];
+    test.each(shapes)('%s', (_n, make, base) => {
+      const cost = (k) => {
+        const h = make(k);
+        const t = performance.now();
+        for (let r = 0; r < 3; r++) {
+          for (const fn of ['taskName', 'eventName', 'isQuestion']) s[fn](h);
+          s.eventMarker(h, 'startEvent');
+        }
+        return Math.max(performance.now() - t, 0.5);
+      };
+      cost(base); // warm-up
+      const ratio = () => cost(base * 16) / cost(base);
+      expect(Math.min(ratio(), ratio())).toBeLessThan(64);
+    });
   });
   test('non-string input never throws', () => {
     for (const v of [undefined, null, 1, {}, [], Symbol.iterator]) {
       for (const f of ['taskName', 'containerName', 'eventName', 'messageName', 'isQuestion']) expect(() => s[f](v)).not.toThrow();
       expect(() => s.eventMarker(v, 'startEvent')).not.toThrow();
     }
+  });
+});
+
+describe('split keeps consuming characters that fold to nothing after a prefix', () => {
+  const MARK = '\u0308';
+  test('a stray combining mark after the prefix does not change the verdict', () => {
+    // At 11b43c7 the rest starts after the mark: "entgegen" + "zuzahlen" is a state ("zu" + infinitive).
+    expect(s.taskName('Antrag entgegen' + MARK + 'zuzahlen')).toEqual({ reason: STATE_REASON });
+    expect(s.taskName('Antrag entgegen' + MARK + 'zuzahlen')).toEqual(s.taskName('Antrag entgegenzuzahlen'));
+    // A shorter prefix with a mark behind it.
+    expect(s.taskName('Rechnung an' + MARK + 'zuzahlen')).toEqual(s.taskName('Rechnung anzuzahlen'));
+  });
+  test('for every separable prefix and every verb that starts with it, a mark behind the prefix changes nothing', () => {
+    let checked = 0;
+    for (const p of de.separablePrefixes) {
+      for (const v of de.verbs) {
+        if (!v.startsWith(p) || v.length - p.length < 3 || /[^a-z]/.test(v)) continue;
+        const rest = v.slice(p.length);
+        expect(s.taskName('Antrag ' + p + MARK + rest)).toEqual(s.taskName('Antrag ' + p + rest));
+        if (++checked >= 400) return;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });

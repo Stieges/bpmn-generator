@@ -146,18 +146,27 @@ describe('Review Focus 4: robustness and linear time', () => {
     // scaling test below is the real guard against super-linear time.
     expect(Date.now() - t).toBeLessThan(10000);
   });
-  test('time scales sub-quadratically: 4n costs less than 16 times n', () => {
-    const make = (k) => 'Check ' + 'order '.repeat(k);
-    const cost = (k) => {
-      const h = make(k);
-      const t = performance.now();
-      for (const fn of ['taskName', 'eventName', 'isQuestion']) s[fn](h);
-      s.eventMarker(h, 'startEvent');
-      return Math.max(performance.now() - t, 1);
-    };
-    const ratio = () => cost(40000) / cost(10000);
-    // One retry: a load spike in one measurement must not fail a sound implementation.
-    expect(Math.min(ratio(), ratio())).toBeLessThan(16);
+  describe('time scales sub-quadratically: 16n costs less than 64 times n', () => {
+    // Quadratic growth would give about 256; linear about 16. Each timing repeats the calls, so the
+    // base run is well above timer resolution, and the better of two ratios is used.
+    const shapes = [
+      ['Check order', (k) => 'Check ' + 'order '.repeat(k), 1500],
+      ['hyphen chain', (k) => 'Check' + '-order'.repeat(k), 1500],
+    ];
+    test.each(shapes)('%s', (_n, make, base) => {
+      const cost = (k) => {
+        const h = make(k);
+        const t = performance.now();
+        for (let r = 0; r < 3; r++) {
+          for (const fn of ['taskName', 'eventName', 'isQuestion']) s[fn](h);
+          s.eventMarker(h, 'startEvent');
+        }
+        return Math.max(performance.now() - t, 0.5);
+      };
+      cost(base); // warm-up
+      const ratio = () => cost(base * 16) / cost(base);
+      expect(Math.min(ratio(), ratio())).toBeLessThan(64);
+    });
   });
   test('non-string input never throws', () => {
     for (const v of [undefined, null, 1, {}, [], Symbol.iterator]) {
