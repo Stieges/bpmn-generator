@@ -133,9 +133,14 @@ Behaviours worth knowing:
 - German compounds count for the event markers: `Fristablauf` suggests a timer and `Fehlermeldung`
   an error because the name starts with the keyword. Words that only begin like a keyword are
   listed in `compoundExceptions` and give no marker (`Zeitschrift gelesen`, `Zeitung`, `Zeitarbeit`,
-  `Signalwirkung`). A word the list misses, and a keyword at the end of a word (`Arbeitszeit`), is
-  fixed by setting `marker` on the event yourself: to the symbol you want, or to `"none"` for a
-  plain event.
+  `Signalwirkung`). A keyword that names a duration (`zeit`, `wartezeit`: list `durationKeywords`)
+  at the end of a compound gives a timer only when the name also says the time ran out, with a
+  word of `expiryWords` (`Lieferzeit überschritten`, `Wartezeit abgelaufen`; `um` only as the last
+  word: `Wartezeit um`); `Arbeitszeit erfasst` and `Lieferzeit bestätigt` get no marker and no
+  `H10`. A deadline keyword at the end (`Bearbeitungsfrist`) and a whole or leading keyword
+  (`Wartezeit`, `Zeitablauf`) still give a timer on their own. A word the lists miss is fixed by
+  setting `marker` on the event yourself: to the symbol you want, or to `"none"` for a plain event;
+  an explicit `marker`, `"none"` included, always wins over the inference.
 - The marker of an event without `marker` is inferred from its name only where BPMN allows it:
   `Deadline missed` is a timer on a boundary event and nothing on an end event; `Error raised` is
   an error on an end event and nothing on a start event. Error and escalation are never inferred on a
