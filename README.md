@@ -294,7 +294,8 @@ and the naming rules judge its labels by that language's convention: German is v
 prüfen`), English verb-first (`Review application`). It applies to M01 (tasks, sub-process and
 call-activity names, at every level), M02 (gateway questions), M05 (message-flow names) and M06
 (event names), and it selects the keywords that infer an event's marker from its name (hints
-`H10`, `H11`). The XML carries it as `bg:language` on `bpmn:definitions` and the importers read it
+`H10`, `H11`). To keep an event plain whatever its name says, set `marker: "none"` (start, end and
+intermediate throw events; with or without `language`). The XML carries it as `bg:language` on `bpmn:definitions` and the importers read it
 back. Without the field nothing changes: M01 is the legacy `Objekt+Verb` heuristic and M05 and M06
 stay silent. A valid tag with no word lists here (`fr`) skips M01, M05 and M06 and gives hint `H12`;
 labels that look like another supported language give `H13`.

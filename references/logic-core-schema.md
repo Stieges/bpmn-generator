@@ -125,7 +125,7 @@ directly on a model with `language` write the legacy markers.
 | `name`            | Yes      | Human label (Objekt+Verb for tasks, question for XOR GWs)|
 | `lane`            | No       | Reference to LaneObject.id                               |
 | `has_join`        | No       | `true` if gateway merges (joins) split paths             |
-| `marker`          | No       | Event marker: message, timer, error, signal, etc.        |
+| `marker`          | No       | Event marker: message, timer, error, signal, etc.; `none` for a plain event |
 | `loopType`        | No       | `"standard"` for loop marker on task                     |
 | `multiInstance`   | No       | `"parallel"` or `"sequential"` for MI markers            |
 | `attachedTo`      | No       | Node ID this boundary event is attached to               |
@@ -204,8 +204,16 @@ Set `marker` on event nodes to specify the trigger type:
 | `terminate`      | Filled circle ●  | Terminate all process paths          |
 | `multiple`       | Pentagon ⬠       | Multiple triggers (any one fires)    |
 | `parallelMultiple` | Plus +         | Multiple triggers (all must fire)    |
+| `none`           | (no icon)        | A plain event on purpose             |
 
 If `marker` is not set, the pipeline infers it from the event name (e.g. "Frist abgelaufen" → timer).
+`marker: "none"` stops that: the event is drawn and written as a plain event, without an event
+definition, whatever its name says (with or without a declared `language`). It is valid on a start,
+end and intermediate throw event; on a boundary or intermediate catch event, which need a trigger,
+rule S15 reports it. In the XML the event carries `bg:marker="none"` (namespace
+`http://bpmn-generator/schema/1.0`, declared on `bpmn:definitions`), and both importers read it back
+as `marker: "none"`; an event definition on the same event wins over the attribute. A model without
+`"none"` writes no such attribute.
 
 Which markers the generator draws per event type:
 
@@ -214,8 +222,11 @@ Which markers the generator draws per event type:
 | Start               | none, message, timer, signal, conditional, error, escalation, compensation |
 | End                 | none, message, signal, error, escalation, compensation, cancel, terminate, multiple |
 | Intermediate catch  | message, timer, signal, conditional, link, error, escalation, compensation, cancel |
-| Intermediate throw  | message, signal, link, escalation, compensation |
+| Intermediate throw  | none, message, signal, link, escalation, compensation |
 | Boundary            | timer, error, message, signal, escalation, compensation, cancel, conditional |
+
+`none` in this table is a plain event: no `marker` and no marker inferred from the name, or
+`marker: "none"`.
 
 ### Referencing a definition: `messageRef`, `signalRef`, `errorRef`, `escalationRef`
 
