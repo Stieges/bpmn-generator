@@ -312,9 +312,9 @@ shipped language:
 { "languages": { "en": { "add": { "verbs": ["invoice"] } } } }
 ```
 
-Ten flat lists can be extended: `verbs`, `verbPhrases`, `nounVerbHomographs`, `stateWords`,
-`nounStarters`, `messageNouns`, `stateMarkers`, `participleHomographs`, `geInfinitives` and
-`adjectiveStoplist` (each language uses the lists it has). Words are added first, then removed. Each shipped data file
+Eleven flat lists can be extended: `verbs`, `verbPhrases`, `nounVerbHomographs`, `stateWords`,
+`nounStarters`, `messageNouns`, `stateMarkers`, `participleHomographs`, `geInfinitives`,
+`adjectiveStoplist` and `compoundExceptions` (each language uses the lists it has). Words are added first, then removed. Each shipped data file
 (`references/naming/<language>.json`) says why its lists exist in the optional top-level `purpose`
 and `listNotes` (one sentence per list); they are documentation only, no rule reads them, and the
 overlay format has no such fields. The conventions per language are in
