@@ -12,7 +12,7 @@ export const LANGUAGE_TAG = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 import { loadLexicon, NAMING_LANGUAGES, NamingDataError } from './lexicon.js';
 import { verbFirst } from './verb-first.js';
 import { verbLast } from './verb-last.js';
-import { isEvent } from '../types.js';
+import { isEvent, TASK_TYPES } from '../types.js';
 // A cycle with ../icons.js (it imports `namingFor`): both sides use the other's binding inside
 // functions only, never while the module is evaluated.
 import { inferEventMarker } from '../icons.js';
@@ -166,16 +166,61 @@ export function resolveEventMarkers(lc) {
 }
 
 /**
- * The hints of the naming layer for a model in a supported language, from the lists of
- * `resolveEventMarkers`: H10 per event whose marker was inferred from its name, then H11 per event
- * whose name gave a marker before a language was declared and now gives none or another one (such
- * an event gets H11 only). In a collaboration the message starts with `[<pool name>] `.
+ * H13 of a model in a supported language: the task names (all levels, all pools) mostly fail the
+ * declared convention and mostly pass that of another registered language. Else `null`.
+ */
+function mismatchHint(lc, declared, declaredStrategy) {
+  const names = nodesWithPool(lc)
+    .filter(({ node }) => TASK_TYPES.has(node.type) && typeof node.name === 'string' && node.name !== '')
+    .map(({ node }) => node.name);
+  const n = names.length;
+  if (n < 3) return null;
+  const f = names.filter((name) => declaredStrategy.taskName(name)).length;
+  if (f * 100 < n * 60) return null;
+  let other = null;
+  let pass = -1;
+  for (const code of Object.keys(NAMING_LANGUAGES)) {
+    if (code === declared) continue;
+    const strategy = namingFor(code);
+    const p = names.filter((name) => !strategy.taskName(name)).length;
+    if (p > pass) { pass = p; other = code; }
+  }
+  if (other === null || pass * 100 < n * 80) return null;
+  return {
+    code: 'H13',
+    message: `The task names look like "${other}" but the model declares "${declared}": ${f} of ${n} fail the ${languageName(declared)} convention, ${pass} pass the ${languageName(other)} one.`,
+    elements: [],
+  };
+}
+
+/**
+ * The hints of the naming layer for a model with a valid `language`, in this order: H12 when the
+ * language has no strategy (the rules M01, M05 and M06 are skipped), else H13 when the task names
+ * look like another registered language; then, from the lists of `resolveEventMarkers`, H10 per
+ * event whose marker was inferred from its name, then H11 per event whose name gave a marker before
+ * a language was declared and now gives none or another one (such an event gets H11 only). In a
+ * collaboration the H10/H11 message starts with `[<pool name>] `. Without a valid `language`: `[]`.
  */
 export function namingHints(lc, { inferred = [], changed = [] } = {}) {
   const tag = languageTag(lc);
+  if (tag === null) return [];
+  const language = modelLanguage(lc);
+  const strategy = namingFor(language);
   const lead = (e) => `${e.pool === null ? '' : `[${e.pool}] `}Event "${e.name}" (${e.id})`;
   const isChanged = new Set(changed);
+  const first = [];
+  if (strategy === null) {
+    first.push({
+      code: 'H12',
+      message: `Language "${tag}" has no naming conventions here; the naming rules M01, M05 and M06 are skipped (supported: ${Object.keys(NAMING_LANGUAGES).join(', ')}).`,
+      elements: [],
+    });
+  } else {
+    const mismatch = mismatchHint(lc, language, strategy);
+    if (mismatch) first.push(mismatch);
+  }
   return [
+    ...first,
     ...inferred.filter((e) => !isChanged.has(e)).map((e) => ({
       code: 'H10',
       message: `${lead(e)}: marker "${e.marker}" inferred from its name (language "${tag}").`,

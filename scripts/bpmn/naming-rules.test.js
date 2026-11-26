@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { runRules, loadRuleProfile, profileForMode } from './rules.js';
 import { namingFor, namingMessage } from './naming/index.js';
 import { resolveFields } from './model-v2.js';
-import { generateDiagramSet } from './pipeline.js';
+import { generateDiagramSet, runPipeline } from './pipeline.js';
+import { loadNamedView } from '../shared/view.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..', '..');
@@ -505,6 +506,106 @@ describe('the servers with a broken BPMN_NAMING, end to end', () => {
     } finally {
       console.error = realError;
       delete process.env.BPMN_NAMING;
+    }
+  }, 60_000);
+});
+
+describe('hints for an unsupported language and for labels in another language than declared', () => {
+  const ALL = readdirSync(FIXTURES).filter((f) => Object.hasOwn(LANGUAGES, f));
+  const hintsOf = (result, ...codes) => result.validation.hints.filter((h) => codes.includes(h.code));
+  const run = (model, opts) => runPipeline(model, opts);
+  const H13 = (declared, other, f, n, p) => ({
+    code: 'H13',
+    message: `The task names look like "${other}" but the model declares "${declared}": ${f} of ${n} fail the ${declared === 'de' ? 'German' : 'English'} convention, ${p} pass the ${other === 'de' ? 'German' : 'English'} one.`,
+    elements: [],
+  });
+
+  test('realistic-collaboration declared de: one H13 naming en (15 of 15 fail, 15 pass)', async () => {
+    const result = await run({ ...fixture('realistic-collaboration.json'), language: 'de' });
+    expect(hintsOf(result, 'H12', 'H13')).toEqual([H13('de', 'en', 15, 15, 15)]);
+  }, 60_000);
+
+  test('simple-approval declared de (3 tasks): H13', async () => {
+    const result = await run({ ...fixture('simple-approval.json'), language: 'de' });
+    expect(hintsOf(result, 'H13')).toEqual([H13('de', 'en', 3, 3, 3)]);
+  }, 60_000);
+
+  test('wide-pipeline declared en (25 fail both): no H13', async () => {
+    const result = await run({ ...fixture('wide-pipeline.json'), language: 'en' });
+    expect(hintsOf(result, 'H12', 'H13')).toEqual([]);
+  }, 60_000);
+
+  test('every fixture with its true language gets no H12 and no H13', async () => {
+    for (const file of ALL) {
+      const result = await run({ ...fixture(file), language: LANGUAGES[file] });
+      expect({ file, hints: hintsOf(result, 'H12', 'H13') }).toEqual({ file, hints: [] });
+    }
+  }, 240_000);
+
+  test('fr: exactly one H12, first of the hints, and no M01, M05 or M06 finding', async () => {
+    const result = await run({ ...fixture('simple-approval.json'), language: 'fr' });
+    expect(result.validation.hints).toEqual([{
+      code: 'H12',
+      message: 'Language "fr" has no naming conventions here; the naming rules M01, M05 and M06 are skipped (supported: de, en).',
+      elements: [],
+    }]);
+    const all = [...result.validation.warnings, ...result.validation.errors, ...result.validation.infos, ...result.validation.advisories];
+    expect(all.filter((m) => /Objekt\+Verb|convention|M0[156]/.test(m))).toEqual([]);
+    const tagged = await run({ ...fixture('simple-approval.json'), language: 'fr-CA' });
+    expect(tagged.validation.hints.map((h) => h.message)).toEqual([expect.stringContaining('Language "fr-CA" has')]);
+  }, 60_000);
+
+  test('H12 or H13 come before H10 and H11', async () => {
+    const model = { ...fixture('simple-approval.json'), language: 'de' };
+    const result = await run(model);
+    const codes = result.validation.hints.map((h) => h.code);
+    expect(codes.indexOf('H13')).toBe(0);
+  }, 60_000);
+
+  const INVALID = [undefined, 'German', 'DE', 5, null, 'de" x="1'];
+  test.each(INVALID.map((v) => [String(v), v]))('language %s: validation.hints is [] for all 28 fixtures; explicit-joins gives H01 only', async (_label, value) => {
+    expect(ALL).toHaveLength(28);
+    const view = loadNamedView('explicit-joins');
+    for (const file of ALL) {
+      const model = fixture(file);
+      if (value !== undefined) model.language = value;
+      const plain = await run(structuredClone(model));
+      expect({ file, hints: plain.validation.hints }).toEqual({ file, hints: [] });
+      const joined = await run(structuredClone(model), { view });
+      expect({ file, codes: [...new Set(joined.validation.hints.map((h) => h.code))].filter((c) => c !== 'H01') }).toEqual({ file, codes: [] });
+    }
+  }, 600_000);
+
+  test('--strict exits 0 for a fr model whose only output is H12', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'naming-h12-'));
+    try {
+      const input = join(dir, 'fr.json');
+      writeFileSync(input, JSON.stringify({ ...fixture('simple-approval.json'), language: 'fr' }));
+      const r = spawnSync(process.execPath, ['bpmn/pipeline.js', input, join(dir, 'out'), '--strict'], { cwd: SCRIPTS, encoding: 'utf8', timeout: 60_000, killSignal: 'SIGKILL' });
+      expect(r.error).toBeUndefined();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('ℹ [H12] Language "fr" has no naming conventions here');
+      expect(r.stderr).not.toContain('--strict');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  test('/api/v1/validate of a fr model returns the pinned key set, without hints (the validate path has no hint channel)', async () => {
+    const { server, _resetRateLimit } = await import('../http-server.js');
+    await new Promise((r) => server.listen(0, r));
+    try {
+      _resetRateLimit();
+      const res = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/validate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logicCore: { ...fixture('simple-approval.json'), language: 'fr' } }),
+      });
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(Object.keys(json)).toEqual(['correlationId', 'status', 'validation']);
+      expect(Object.keys(json.validation)).toEqual(['errors', 'warnings', 'infos', 'advisories', 'metrics']);
+      expect(JSON.stringify(json)).not.toContain('H12');
+    } finally {
+      await new Promise((r) => server.close(r));
     }
   }, 60_000);
 });
