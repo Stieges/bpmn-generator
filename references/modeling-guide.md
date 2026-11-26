@@ -110,6 +110,11 @@ Behaviours worth knowing:
 - A single word that is a nominalised infinitive is a bare verb as a sub-process name and is
   flagged (`Verpacken`, `Prüfen`, `Validate`); a one-word noun that equals an infinitive is not
   (`Schreiben`, `Zahlen`).
+- Under `en`, a one-word sub-process or call-activity name that is a listed verb is flagged as a
+  bare verb even when it is also a common noun (`Review`, `Audit`, `Support`, `Order`); two words
+  (`Order handling`, `Fraud review`) pass.
+- The English verb list is closed (296 verbs): a correct task name whose first verb is not listed is
+  flagged (`Diagnose fault`, `Back up data`). The remedy is the `BPMN_NAMING` overlay.
 - German compounds count for the event markers: `Zeitschrift gelesen` suggests a timer because the
   name starts with `Zeit`. Set `marker` on such an event yourself.
 - The marker of an event without `marker` is inferred from its name only where BPMN allows it:

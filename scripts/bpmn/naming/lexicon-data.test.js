@@ -93,7 +93,7 @@ describe('English', () => {
     expect(en.participles.irregular.size).toBe(47);
     for (const w of en.participles.irregular) expect(en.verbs.has(w)).toBe(false);
     const exceptions = raw().participles.exceptions;
-    expect(exceptions).toHaveLength(13);
+    expect(exceptions).toHaveLength(14);
     for (const w of exceptions) expect(w.endsWith('ed')).toBe(true);
   });
 

@@ -109,11 +109,12 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 - **`BPMN_NAMING` overlay.** The environment variable names a JSON file that adds words to, and
   removes words from, eight flat word lists of a shipped language
   (`{ "languages": { "en": { "add": { "verbs": ["invoice"] }, "remove": { … } } } }`, add first,
-  then remove), so a correct label that a rule flags is fixed by data. The file is read when a
-  naming strategy is first used; any failure is a `NamingDataError` naming the path and the
-  reason. The HTTP and MCP servers check it at start and refuse to start with a broken file; at
-  request time (also inside `orchestrate`) a failure is a `500` `naming data unavailable` (MCP: a
-  tool error with that text) and the path goes only to the server log.
+  then remove), so a correct label that a rule flags is fixed by data. The file is read once per
+  process (the servers at start, the CLI and the library on first use) and a change needs a restart;
+  any failure is a `NamingDataError` naming the path and the reason. The HTTP and MCP servers check
+  it at start and refuse to start with a broken file; the `500` `naming data unavailable` (also
+  inside `orchestrate`; MCP: a tool error with that text) is only a safeguard for a process that did
+  not run that check (an embedding library caller), and the path goes only to the server log.
 
 ### Fixed
 
