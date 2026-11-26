@@ -47,7 +47,8 @@ export function catalogErrors(catalog) {
   const bound = exceedsBounds(catalog, CATALOG_LIMITS);
   if (bound) return [coded('C12', `"/" is ${bound}`)];
   if (validateSchema(catalog)) return [];
-  const errors = (validateSchema.errors ?? []).map((e) => coded('C12', describeSchemaError(e)));
+  // An `if` error only says that a `then` or `else` failed; that one is the readable entry.
+  const errors = (validateSchema.errors ?? []).filter((e) => e.keyword !== 'if').map((e) => coded('C12', describeSchemaError(e)));
   if (errors.length > CATALOG_LIMITS.messages) {
     const more = errors.length - CATALOG_LIMITS.messages;
     return [...errors.slice(0, CATALOG_LIMITS.messages), coded('C12', `… and ${more} more`)];
@@ -97,7 +98,7 @@ const SCHEME_PATHS = Object.freeze({ demi: demiSchemePath });
 
 /**
  * The scheme object for a catalogue's `scheme` field: absent means DEMI, a shipped name its file,
- * an object itself, any other name `null` (the caller reports it).
+ * an object itself, anything else (an unknown name, a number, an array, `null`) `null` (the caller reports it).
  */
 export function resolveScheme(ref) {
   if (ref === undefined) ref = 'demi';
@@ -105,6 +106,7 @@ export function resolveScheme(ref) {
     if (!Object.hasOwn(SCHEME_PATHS, ref)) return null;
     return JSON.parse(readFileSync(SCHEME_PATHS[ref](), 'utf8'));
   }
+  if (ref === null || typeof ref !== 'object' || Array.isArray(ref)) return null;
   return ref;
 }
 

@@ -88,11 +88,15 @@
           "actors"
         ]
       },
-      "not": {
+      "if": {
         "required": [
-          "catalog",
           "actors"
         ]
+      },
+      "then": {
+        "properties": {
+          "catalog": false
+        }
       }
     },
     "Collaboration": {
@@ -166,11 +170,15 @@
           "actors"
         ]
       },
-      "not": {
+      "if": {
         "required": [
-          "catalog",
           "actors"
         ]
+      },
+      "then": {
+        "properties": {
+          "catalog": false
+        }
       }
     },
     "Pool": {
@@ -460,8 +468,7 @@
             ],
             "properties": {
               "type": {
-                "type": "string",
-                "pattern": "^[A-Za-z][A-Za-z0-9]{0,7}$"
+                "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/SchemeKey"
               },
               "actor": {
                 "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/ActorId"
@@ -472,9 +479,9 @@
         }
       },
       "additionalProperties": false,
-      "not": {
+      "if": {
         "required": [
-          "assignments"
+          "type"
         ],
         "properties": {
           "type": {
@@ -483,6 +490,11 @@
               "group"
             ]
           }
+        }
+      },
+      "then": {
+        "properties": {
+          "assignments": false
         }
       }
     },

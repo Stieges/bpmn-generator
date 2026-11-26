@@ -40,10 +40,21 @@ describe('catalogErrors', () => {
     expect(catalogErrors({ actors: [{ id: 'a', name: 'A', unit: 'u' }, { id: 'b', name: 'B', kind: 'role', unit: 'u' }] })).toEqual([]);
   });
 
-  test('a non-object and a too-deep catalogue are refused by the bounds', () => {
-    expect(catalogErrors(null)[0]).toMatch(/^\[C12\] "\/" /);
+  test('null is refused by the schema, a too-deep catalogue by the bounds', () => {
+    expect(catalogErrors(null)).toEqual(['[C12] "/" must be object']);
     const deep = { actors: [{ id: 'a', name: 'A', extra: { x: { y: { z: 1 } } } }] };
     expect(catalogErrors(deep)[0]).toMatch(/^\[C12\] "\/" is nested deeper than 5 levels/);
+  });
+
+  test('a unit with a unit gives exactly one entry, readable', () => {
+    expect(catalogErrors({ actors: [{ id: 'a', name: 'A', kind: 'unit', unit: 'b' }] })).toEqual(['[C12] "/actors/0/unit" is not allowed here']);
+  });
+
+  test('a bad scheme name gives one entry; a bad embedded type key is named by the shared key rule', () => {
+    expect(catalogErrors({ actors: [], scheme: 'Bad Name' })).toHaveLength(1);
+    const bad = catalogErrors({ actors: [], scheme: { scheme: 'x', types: [{ key: '1', label: 'L' }] } });
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toContain('/scheme/types/0/key');
   });
 
   test('an embedded scheme is checked, an unknown top-level key is refused', () => {
@@ -70,6 +81,10 @@ describe('schemes', () => {
     expect(resolveScheme('raci')).toBeNull();
     const own = { scheme: 'x', types: [{ key: 'A', label: 'A' }] };
     expect(resolveScheme(own)).toBe(own);
+  });
+
+  test('anything but undefined, a string or a plain object resolves to null', () => {
+    for (const ref of [null, 5, true, [], [{ key: 'A' }]]) expect(resolveScheme(ref)).toBeNull();
   });
 
   test('the demi file passes $defs/Scheme of the catalogue schema', () => {
@@ -117,6 +132,7 @@ describe('loadCatalog', () => {
     expect(() => loadCatalog(p)).toThrow(CatalogRejectedError);
     expect(() => loadCatalog(p)).toThrow(/position|line \d+, column \d+/);
     expect(() => loadCatalog(p)).toThrow(/at line/);
+    expect(() => loadCatalog(p)).not.toThrow(/actors|\{/);
   });
 
   test('a 2 MiB file is refused', () => {

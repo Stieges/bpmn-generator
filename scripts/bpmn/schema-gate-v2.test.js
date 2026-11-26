@@ -125,9 +125,12 @@ describe('validateModelSchema', () => {
     ['dataStoreReference node', () => { const m = m56(); m.nodes.push({ id: 'ds', type: 'dataStoreReference' }); return m; }, '/nodes/6/type'],
     ['pool id "Pool 1"', () => { const m = collab(); m.pools[0].id = 'Pool 1'; return m; }, '/pools/0/id'],
     ['process id missing', () => { const m = m56(); delete m.id; return m; }, '(root)'],
-    ['catalog plus actors', () => ({ ...m56(), actors: [{ id: 'a', name: 'A' }] }), '(root)'],
+    ['catalog plus actors', () => ({ ...m56(), actors: [{ id: 'a', name: 'A' }] }), '/catalog'],
     ['scheme without actors', () => ({ ...m56(), scheme: 'demi' }), '(root)'],
-    ['assignments on a textAnnotation', () => { const m = m56(); m.nodes.push({ id: 'ta', type: 'textAnnotation', assignments: [] }); return m; }, '/nodes/6'],
+    ['assignments on a textAnnotation', () => { const m = m56(); m.nodes.push({ id: 'ta', type: 'textAnnotation', assignments: [] }); return m; }, '/nodes/6/assignments'],
+    ['assignments on a group', () => { const m = m56(); m.nodes.push({ id: 'gr', type: 'group', assignments: [] }); return m; }, '/nodes/6/assignments'],
+    ['lanes on a pool', () => { const m = collab(); m.pools[0].lanes = [{ id: 'L1' }]; return m; }, '/pools/0'],
+    ['a pool without id', () => { const m = collab(); delete m.pools[0].id; return m; }, '/pools/0'],
     ['assignment without actor', () => withNode({ assignments: [{ type: 'D' }] }), '/nodes/2/assignments/0'],
     ['assignment type not a scheme key', () => withNode({ assignments: [{ type: '9', actor: 'a' }] }), '/nodes/2/assignments/0/type'],
     ['assignment actor not an actor id', () => withNode({ assignments: [{ type: 'D', actor: '1x' }] }), '/nodes/2/assignments/0/actor'],
@@ -136,6 +139,14 @@ describe('validateModelSchema', () => {
     const errors = errorsOf(make());
     expect(errors).toHaveLength(1);
     expect(errors[0].path).toBe(path);
+  });
+
+  test('a false schema reads "is not allowed here" and its `if` error is dropped', () => {
+    const m = m56();
+    m.nodes.push({ id: 'ta', type: 'textAnnotation', assignments: [] });
+    const [e] = errorsOf(m);
+    expect(e).toMatchObject({ path: '/nodes/6/assignments', message: 'is not allowed here', code: 'F01' });
+    expect(errorsOf({ ...m56(), actors: [{ id: 'a', name: 'A' }] })[0].message).toBe('is not allowed here');
   });
 
   test('scheme with actors, an inline scheme and no catalog is valid', () => {
