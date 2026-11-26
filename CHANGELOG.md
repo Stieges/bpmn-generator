@@ -99,18 +99,20 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   that `Hand off case`, `Pre-approve loan` and `E-mail customer` pass the verb-first convention.
   Contributed by Jérôme Fenal (@jfenal) in #151.
 - **English M01 flags only on evidence.** No word list holds every English verb, so under `en` a
-  task name is flagged only when its form is shown to be wrong: one word, a placeholder (`Step 3`,
-  `Path A`), a label prefix (`SAP: …`), a first word that is an article, pronoun, preposition or a
-  frequent noun (`nonVerbStarters`, `nounStarters`), a gerund (`Checking invoice`), or a first word
-  that is no verb before a participle, state word, verb or action noun at the end (`Invoice checked`,
-  `Invoice check`, `Invoice approval`). A name whose first word is merely unlisted passes, and the
-  model gets one hint `H14` naming up to ten such words. The lists grew to 429 verbs and 50 verb
-  phrases (`back up`, `shut down`, `log in`, …), and `-ate` counts as a verb ending from six letters
-  (less 30 nouns and adjectives such as `certificate`, `template`). On a sample of 539 correct and
-  115 wrong English task names (`tests/fixtures/naming/en-task-names.json`) no correct name is a
-  finding and 105 wrong ones are. Under `en`, M05 no longer flags a message flow that ends in a
-  message noun (`Deploy request`, `Sell order`) for starting with a verb, unless the verb sends the
-  message (`Send invoice`).
+  task name is flagged only when its form is shown to be wrong: one word, nothing with a letter after
+  the first word (`Step 3`), a label prefix (`SAP: …`), two words ending in a participle (`Invoice
+  checked`), an auxiliary second (`Invoice is checked`), a first word that is an article, pronoun,
+  preposition, frequent or placeholder noun (`nonVerbStarters`, `nounStarters`: `The invoice`, `Path
+  A`) or a gerund (`Checking invoice`). A name whose first word is merely unlisted passes, and the
+  model gets one hint `H14` naming up to ten such words; no rule reads the verb list to find a fault,
+  so a shorter list gives more hints, never more findings. The lists grew to 450 verbs and 50 verb
+  phrases (`back up`, `shut down`, `log in`, …), a hyphenated first word ending in a verb counts as
+  one (`Quality-check`), and `-ate` counts as a verb ending from six letters (less 30 nouns and
+  adjectives such as `certificate`, `template`). On 539 correct and 115 wrong English task names
+  (`tests/fixtures/naming/en-task-names.json`) no correct name is a finding and 98 wrong ones are; on
+  143 correct and 55 wrong names written later (`heldOut`) none and 48. Under `en`, M05 no longer
+  flags a message flow that ends in a message noun (`Deploy request`, `Sell order`) for starting
+  with a verb, unless the verb sends or decides on the message (`Send invoice`, `Approve order`).
 - **Event markers by language.** Under a supported `language` the marker of an event without
   `marker` is inferred from its name by that language's keywords (message, timer, error, signal,
   escalation, conditional), only where the marker is legal on the event type; the rules and both
