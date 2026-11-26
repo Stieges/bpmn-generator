@@ -522,6 +522,14 @@ every surface.
   `{ "by": "unit", "level": k }` the lane is the unit at depth `k` of that unit's `partOf` chain
   (1 = a unit without `partOf`); a unit shallower than `k` keeps its own lane. Without `level` each
   performer stays in its own unit.
+- `{ "by": "unit", "nested": true }` (shipped as `views/organigramm-view.json`): the unit lanes nest
+  along the organigram. Each unit a step is keyed on gets a lane for every unit of its `partOf` chain,
+  as child lanes (`childLaneSet`), siblings in catalogue order; the layout may stack them along the
+  flow. A unit that has steps of its own and child lanes holds those steps in an extra first child
+  lane `L.<process-id>.<unit-id>._own`, named like the unit, so a parent lane holds no step itself.
+  With `level` as well, the steps are mapped to depth `k` first, so the deepest lane is the unit at
+  depth `k`. The placeholders are top-level lanes after the tree. Every lane of the tree, parent and
+  own lane included, carries `bg:derived` with the unit's id as `actor`.
 
 **The inheritance rule.** Only top-level flow nodes of each modelled process take a lane (children of
 subprocesses get none, and only sequence flows count), and a node with a performer takes the lane of that

@@ -413,13 +413,71 @@ export function normalizeLanesOption(lanes) {
   throw new TypeError(`unknown lanes option ${JSON.stringify(lanes)}`);
 }
 
+const isPlaceholder = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN;
+
+/** Every lane of a lane tree, depth-first in declaration order. */
+function allLanes(laneList, out = []) {
+  for (const l of laneList) { out.push(l); if (l.children) allLanes(l.children, out); }
+  return out;
+}
+
+/**
+ * The lanes of the nested unit view for the keys of one process (question 4 of the plan): a lane
+ * for every unit of each key's chain, children in catalogue order. A key unit with child lanes
+ * holds its own steps in the extra first child `L.<process>.<unit>._own`, named like the unit, so
+ * no parent lane holds a node itself; the placeholders are top-level lanes after the tree. A key
+ * that is no unit (a kind-less actor naming itself) follows its own chain, as the level does;
+ * without `partOf` that is a top-level lane without children.
+ * @returns {{ laneList: object[], laneOf: Map<string, object> }} `laneOf`: key → its leaf lane
+ */
+function laneTree(processId, keys, resolved) {
+  const lane = (id, name, key) => ({ id, name, _derived: 'lane', _laneBy: 'unit', _laneActor: key });
+  const byRank = (a, b) => keyRank(resolved, a) - keyRank(resolved, b);
+  const units = keys.filter((k) => !isPlaceholder(k));
+  const isKey = new Set(units);
+  const roots = new Set();
+  const childrenOf = new Map();
+  for (const k of units) {
+    const chain = resolved.unitChain(k);
+    roots.add(chain[0]);
+    for (let i = 1; i < chain.length; i++) {
+      if (!childrenOf.has(chain[i - 1])) childrenOf.set(chain[i - 1], new Set());
+      childrenOf.get(chain[i - 1]).add(chain[i]);
+    }
+  }
+  const laneOf = new Map();
+  const build = (u) => {
+    const l = lane(laneIdFor(processId, u), resolved.byId.get(u).name, u);
+    const kids = [...(childrenOf.get(u) ?? [])].sort(byRank);
+    if (kids.length === 0) {
+      laneOf.set(u, l);
+      return l;
+    }
+    l.children = [];
+    if (isKey.has(u)) {
+      const own = lane(`${l.id}._own`, l.name, u);
+      l.children.push(own);
+      laneOf.set(u, own);
+    }
+    l.children.push(...kids.map(build));
+    return l;
+  };
+  const laneList = [...roots].sort(byRank).map(build);
+  for (const k of keys.filter(isPlaceholder)) {
+    const l = lane(laneIdFor(processId, k), placeholderName(k), k);
+    laneList.push(l);
+    laneOf.set(k, l);
+  }
+  return { laneList, laneOf };
+}
+
 /**
  * Forms the lanes of the chosen view (`role`, `unit`, `none` or the object form, see
  * `normalizeLanesOption`) from the assignments of an intermediate form made by `resolveFields`.
  * Neither argument is changed. A C10 collision stops the run: `{ lc: null, hints: [], errors }`.
  */
 export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
-  const { by: lanes, level } = normalizeLanesOption(lanesOption);
+  const { by: lanes, level, nested } = normalizeLanesOption(lanesOption);
   const out = clone(lc);
   if (lanes === 'none') return { lc: out, hints: [], errors: [] };
 
@@ -437,15 +495,21 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
     }
     const { key, hints: found, inherited } = inheritKeys(proc, resolved, lanes, level, performerOf, proc.prefix);
 
-    // step 8: one lane per key used, in declaration order
+    // step 8: one lane per key used, in declaration order; nested, the tree along the organigram
     const keys = [...new Set(key.values())].sort((a, b) => keyRank(resolved, a) - keyRank(resolved, b));
-    const laneList = keys.map((k) => ({
-      id: laneIdFor(proc.id, k),
-      name: k === UNASSIGNED || k === UNIT_UNKNOWN ? placeholderName(k) : resolved.byId.get(k).name,
-      _derived: 'lane', _laneBy: lanes, _laneActor: k,
-    }));
-    const laneOf = new Map(laneList.map((l) => [l._laneActor, l]));
+    let laneList;
+    let laneOf;
+    if (nested) ({ laneList, laneOf } = laneTree(proc.id, keys, resolved));
+    else {
+      laneList = keys.map((k) => ({
+        id: laneIdFor(proc.id, k),
+        name: isPlaceholder(k) ? placeholderName(k) : resolved.byId.get(k).name,
+        _derived: 'lane', _laneBy: lanes, _laneActor: k,
+      }));
+      laneOf = new Map(laneList.map((l) => [l._laneActor, l]));
+    }
     for (const n of top) if (key.has(n.id)) n.lane = laneOf.get(key.get(n.id)).id;
+    const firstLeaf = allLanes(laneList).find((l) => !l.children);
 
     // artefacts: the lane of the node an association connects them to, else the first lane
     const flowLane = new Map(top.filter((n) => key.has(n.id)).map((n) => [n.id, n.lane]));
@@ -465,7 +529,7 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
         const other = a.source === n.id ? a.target : a.target === n.id ? a.source : undefined;
         if (other !== undefined && flowLane.has(other)) { laneId = flowLane.get(other); break; }
       }
-      n.lane = laneId ?? laneList[0].id;
+      n.lane = laneId ?? firstLeaf.id;
     }
 
     for (const n of inherited) {
@@ -488,14 +552,15 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
     for (const v of [id, `${id}_di`, `${id}_do`]) if (!taken.has(v)) taken.set(v, id);
   }
   for (const { proc, laneList } of formed) {
-    for (const l of laneList) {
+    for (const l of allLanes(laneList)) {
       const hit = [l.id, `${l.id}_di`].find((v) => taken.has(v));
       if (hit !== undefined) {
         errors.push(`[C10] lane id "${q(l.id)}" (actor "${q(l._laneActor)}") collides with "${q(taken.get(hit))}"; rename the catalogue id`);
       }
       for (const v of [l.id, `${l.id}_di`]) if (!taken.has(v)) taken.set(v, l.id);
     }
-    for (const l of laneList) {
+    // an own lane bears its parent's name: the parent's H05 covers it
+    for (const l of allLanes(laneList).filter((x) => !x.id.endsWith('._own'))) {
       if (l.name.length > LANE_NAME_LIMIT) {
         hints.push({
           code: 'H05',
@@ -512,8 +577,9 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
 
 /**
  * Check P (design 7.3): in every process with lanes each top-level flow node is in exactly one
- * lane of that process, no artefact is listed in a lane, no lane id repeats. A violation is a
- * bug of formLanes, never a finding about the model.
+ * leaf lane of that process (never in a parent lane of a nested tree), no artefact is listed in a
+ * lane, no lane id repeats anywhere in the tree. A violation is a bug of formLanes, never a
+ * finding about the model.
  */
 export function checkProjection(lc) {
   const fail = (what) => { throw new Error(`formLanes internal error: ${what}`); };
@@ -521,20 +587,23 @@ export function checkProjection(lc) {
   for (const proc of processesOf(lc)) {
     const laneList = proc.container.lanes;
     if (!Array.isArray(laneList) || laneList.length === 0) continue;
-    const own = new Set();
-    for (const l of laneList) {
+    const every = allLanes(laneList);
+    const leaves = new Set();
+    const parents = new Set();
+    for (const l of every) {
       if (seen.has(l.id)) fail(`lane id "${l.id}" occurs twice`);
       seen.add(l.id);
-      own.add(l.id);
+      (l.children?.length ? parents : leaves).add(l.id);
     }
     for (const n of proc.container.nodes) {
       if (!isPlainObject(n)) continue;
-      const listedIn = laneList.filter((l) => Array.isArray(l.nodeIds) && l.nodeIds.includes(n.id)).map((l) => l.id);
+      const listedIn = every.filter((l) => Array.isArray(l.nodeIds) && l.nodeIds.includes(n.id)).map((l) => l.id);
       if (!isFlowNode(n)) {
         if (listedIn.length) fail(`artefact "${n.id}" is listed in lane "${listedIn[0]}"`);
         continue;
       }
-      if (typeof n.lane !== 'string' || !own.has(n.lane)) fail(`flow node "${n.id}" is in no lane of process "${proc.id}"`);
+      if (typeof n.lane === 'string' && parents.has(n.lane)) fail(`flow node "${n.id}" is in parent lane "${n.lane}"`);
+      if (typeof n.lane !== 'string' || !leaves.has(n.lane)) fail(`flow node "${n.id}" is in no lane of process "${proc.id}"`);
       if (listedIn.some((id) => id !== n.lane)) fail(`flow node "${n.id}" is in more than one lane`);
     }
   }

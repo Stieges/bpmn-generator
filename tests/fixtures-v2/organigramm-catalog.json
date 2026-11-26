@@ -1,0 +1,7 @@
+{ "scheme": "demi",
+  "actors": [ { "id": "bereich_leistung", "name": "Leistung", "kind": "unit" },
+              { "id": "abt_schaden", "name": "Schadenabteilung", "kind": "unit", "partOf": "bereich_leistung" },
+              { "id": "abt_finanzen", "name": "Finanzen", "kind": "unit" },
+              { "id": "sb_schaden", "name": "Sachbearbeitung Schaden", "kind": "role", "unit": "abt_schaden" },
+              { "id": "regress", "name": "Regressspezialist", "kind": "role", "unit": "bereich_leistung" },
+              { "id": "zahlung", "name": "Zahlungsverkehr", "kind": "role", "unit": "abt_finanzen" } ] }

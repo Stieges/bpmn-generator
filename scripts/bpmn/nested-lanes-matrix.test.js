@@ -17,6 +17,10 @@ import { resolveLaneId } from './topology.js';
 import { collinearRun } from './bend-rule.js';
 import { LANE_HEADER_W } from './constants.js';
 import { FIXTURES, MODES, OFF } from '../bench/output-hashes.mjs';
+import { FIXTURES_V2_DIR } from '../bench/v2-output-hashes.mjs';
+import { resolveFields, formLanes } from './model-v2.js';
+import { loadCatalog } from '../shared/catalog.js';
+import { loadNamedView } from '../shared/view.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = resolve(__dirname, '../../tests/fixtures');
@@ -140,6 +144,18 @@ const ROWS = [
 ];
 const P1 = () => model([A, F('F1')], place({ A: 's t1 t2 g t4 e', F: 't3' }));
 const F0 = () => JSON.parse(readFileSync(FIXTURE, 'utf8'));
+/**
+ * The format 2.0 case v2-organigramm: organigramm.json in the view organigramm, `{ model,
+ * catalog, view }` for runPipeline and the formed intermediate form `lc` the oracle reads.
+ */
+function V2ORG() {
+  const model = JSON.parse(readFileSync(join(FIXTURES_V2_DIR, 'organigramm.json'), 'utf8'));
+  const catalog = loadCatalog(join(FIXTURES_V2_DIR, model.catalog));
+  const view = loadNamedView('organigramm');
+  const fields = resolveFields(JSON.parse(JSON.stringify(model)), { catalog, viewName: 'organigramm' });
+  const { lc } = formLanes(fields.lc, fields.resolved, { lanes: view.lanes });
+  return { model, catalog, view, lc };
+}
 
 describe('nested lanes of 1.x models', () => {
   test.each(ROWS)('%s, %s: every lane has a band and a shape, every node lies in its band', async (_id, _what, lanes, spec) => {
@@ -186,6 +202,16 @@ describe('nested lanes of 1.x models', () => {
     const r = await runPipeline(lc);
     expect(diCodes(r)).toEqual({});
     expect(laneFindings(r, lc)).toEqual(CLEAN);
+  });
+
+  test('v2-organigramm, the nested golden: every lane has a band and a shape, every node lies in its band', async () => {
+    const { model, catalog, view, lc } = V2ORG();
+    expect(lc.lanes.some((l) => l.children?.length)).toBe(true);
+    const r = await runPipeline(model, { catalog, view });
+    expect(diCodes(r)).toEqual({});
+    expect(laneFindings(r, lc)).toEqual(CLEAN);
+    expect(sharedThroughLegs(r, lc)).toEqual([]);
+    walkLanes(lc.lanes, (l) => expect([l.id, laneShapeCount(r.bpmnXml, l.id)]).toEqual([l.id, 1]));
   });
 
   // The bend rule may trade overlap with one flow for more with another. With the tall, uncompacted
@@ -256,6 +282,10 @@ describe('nested lanes of 1.x models', () => {
         writeFileSync(file, (await runPipeline(lc)).bpmnXml);
         files.push(file);
       }
+      const v2 = V2ORG();
+      const v2File = join(dir, 'v2-organigramm.bpmn');
+      writeFileSync(v2File, (await runPipeline(v2.model, { catalog: v2.catalog, view: v2.view })).bpmnXml);
+      files.push(v2File);
       // Throws with xmllint's message when a file fails to validate.
       execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), ...files], { encoding: 'utf8', stdio: 'pipe' });
     } finally {
