@@ -7,7 +7,7 @@ import { PROFILE_LIMITS } from './rule-profile.js';
 import { viewsDirFor, viewsDirPath } from './resource-paths.js';
 
 describe('shipped views', () => {
-  test.each(['aligned-ports', 'default', 'einheiten', 'explicit-joins', 'rollen'])('%s loads by name and passes the gate', (name) => {
+  test.each(['aligned-ports', 'default', 'einheiten', 'explicit-joins', 'organigramm', 'rollen'])('%s loads by name and passes the gate', (name) => {
     const view = loadNamedView(name);
     expect(view.view).toBe(name);
     expect(() => assertView(view)).not.toThrow();
@@ -36,6 +36,28 @@ describe('shipped views', () => {
 
   test('a lanes value off the enum is refused', () => {
     expect(() => assertView({ view: 'x', version: '1.0', lanes: 'system' })).toThrow(ViewRejectedError);
+  });
+
+  test('organigramm nests the unit lanes along partOf', () => {
+    expect(loadNamedView('organigramm').lanes).toEqual({ by: 'unit', nested: true });
+  });
+
+  test('both forms of lanes pass the gate', () => {
+    for (const lanes of ['role', 'unit', 'none', { by: 'unit' }, { by: 'unit', level: 2 }, { by: 'unit', level: 16, nested: true }, { by: 'unit', nested: false }]) {
+      expect(() => assertView({ view: 'x', version: '1.0', lanes })).not.toThrow();
+    }
+  });
+
+  test.each([
+    [{ by: 'role', nested: true }],
+    [{ by: 'unit', level: 0 }],
+    [{ by: 'unit', level: 17 }],
+    [{ by: 'unit', level: 1.5 }],
+    [{ by: 'unit', nested: 'yes' }],
+    [{ by: 'unit', depth: 2 }],
+    [{ level: 2 }],
+  ])('the lanes object %j is a view error', (lanes) => {
+    expect(() => assertView({ view: 'x', version: '1.0', lanes })).toThrow(ViewRejectedError);
   });
 
   test('limits equal the profile limits', () => {
