@@ -28,7 +28,7 @@ import { complianceAgent } from './agents/compliance.js';
 import { validateLogicCoreSchema, validateModelSchema, formatSchemaErrors, assertViewFitsModel, modelFormat } from './bpmn/schema-gate.js';
 import { ViewRejectedError, loadView } from './shared/view.js';
 import { ProfileRejectedError } from './shared/rule-profile.js';
-import { namingDataErrorOf } from './bpmn/naming/index.js';
+import { namingDataErrorOf, publicNamingMessage } from './bpmn/naming/index.js';
 import { isMainModule } from './shared/entry-point.js';
 import { withCode } from './shared/message-codes.js';
 
@@ -80,10 +80,10 @@ async function gatedModelerCall(state, phase) {
  * detail goes to stderr. Any other error keeps its message.
  */
 function resultText(err) {
-  const naming = namingDataErrorOf(err);
-  if (!naming) return err.message;
-  console.error(`Naming data failure: ${naming.message}`);
-  return naming.publicMessage;
+  const text = publicNamingMessage(err);
+  if (text === null) return err.message;
+  console.error(`Naming data failure: ${namingDataErrorOf(err).message}`);
+  return text;
 }
 
 /**
