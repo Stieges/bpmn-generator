@@ -264,11 +264,13 @@ describe('profile messages are bounded and cannot forge log lines', () => {
 
 describe('reading a profile file never reads something that is not a small regular file', () => {
   // Run in a child process: a regression here blocks the thread (a FIFO waits for a writer,
-  // /dev/zero never ends), which no in-process timeout can interrupt.
+  // /dev/zero never ends), which no in-process timeout can interrupt. The spawn timeout only has
+  // to tell a block that never ends from a slow start: 10 s was hit by a child that was still
+  // booting under a full parallel run (ETIMEDOUT), so it allows 60 s like the bench-sized tests.
   const probe = (path) => spawnSync(process.execPath, ['--input-type=module', '-e',
     `import { loadRuleProfile } from ${JSON.stringify(join(__dirname, 'rule-profile.js'))};
      try { loadRuleProfile(${JSON.stringify(path)}); console.log('LOADED'); } catch (e) { console.log(e.name + ': ' + e.message); }`],
-  { timeout: 10000, encoding: 'utf8' });
+  { timeout: 60000, encoding: 'utf8' });
 
   const hasMkfifo = spawnSync('mkfifo', ['--version']).error?.code !== 'ENOENT' && process.platform !== 'win32';
   (hasMkfifo ? test : test.skip)('a FIFO is refused without waiting for a writer', () => {
