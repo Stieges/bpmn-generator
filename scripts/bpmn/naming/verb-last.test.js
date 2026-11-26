@@ -144,7 +144,17 @@ describe('compoundExceptions: words that begin with a marker keyword and name no
     ['Signalfarbe', ['Signalfarbe', 'Signalfarben'], ['Signalempfang'], 'signal'],
     ['Nachrichtendienst', ['Nachrichtendienst', 'Nachrichtendienste', 'Nachrichtendienstgesetz'], ['Nachrichteneingang'], 'message'],
     ['Nachrichtensprecher', ['Nachrichtensprecher', 'Nachrichtensprecherin'], ['Nachrichteneingang'], 'message'],
-    ['Mailänder', ['Mailänder', 'Mailänderin', 'Mailaender'], ['Mailversand'], 'message'],
+    ['Zeiterfassung', ['Zeiterfassung', 'Zeiterfassungssystem', 'Zeitaufwand', 'Zeitplan', 'Zeitplanung', 'Zeitstempel', 'Zeitreihe', 'Zeitreihen'], ['Zeitablauf'], 'timer'],
+    ['Zeitraum', ['Zeitraum', 'Zeiträume', 'Zeitlohn', 'Zeitkarte', 'Zeitkarten', 'Zeitgleich', 'Zeitgleiche'], ['Zeitablauf'], 'timer'],
+    ['Zeitbuchung', ['Zeitbuchung', 'Zeitbuchungen', 'Zeitgutschrift', 'Zeitwirtschaft', 'Zeitmanagement', 'Zeitverschiebung', 'Zeitsparend', 'Zeitnah', 'Zeitnahe'], ['Zeitablauf'], 'timer'],
+    ['Fristgerecht', ['Fristgerecht', 'Fristgerechte', 'Fristgemäß', 'Fristgemäße'], ['Fristablauf'], 'timer'],
+    ['Timeranzeige', ['Timeranzeige', 'Timeranzeigen'], ['Timerablauf'], 'timer'],
+    ['Mailadresse', ['Mailadresse', 'Mailadressen', 'Mailserver', 'Mailing', 'Mailings'], ['Mailversand'], 'message'],
+    ['Nachrichtenagentur', ['Nachrichtenagentur', 'Nachrichtenagenturen'], ['Nachrichteneingang'], 'message'],
+    ['Fehlerbehebung', ['Fehlerbehebung', 'Fehlerquote', 'Fehlerquoten', 'Fehlerseite', 'Fehlerprotokoll', 'Fehlerprotokolle'], ['Fehlerfall'], 'error'],
+    ['Störungsfrei', ['Störungsfrei', 'Störungsfreie', 'Störungsbeseitigung'], ['Störungsmeldung'], 'error'],
+    ['Signalverarbeitung', ['Signalverarbeitung', 'Signalverarbeitungen'], ['Signalempfang'], 'signal'],
+    ['Bedingungslos', ['Bedingungslos', 'Bedingungslose', 'Bedingungsloses'], ['Bedingungseintritt'], 'conditional'],
   ];
   test.each(families.flatMap(([f, words]) => words.map((w) => [f, w])))('%s: "%s geändert" gets no marker', (_f, w) => {
     expect(inferMarker(de, `${w} geändert`, 'boundaryEvent')).toBeNull();
@@ -160,10 +170,21 @@ describe('compoundExceptions: words that begin with a marker keyword and name no
   test('the match is on the folded token (ß/ss, ae/oe/ue) and an exception does not catch a different word', () => {
     expect(inferMarker(de, 'Zeitschriften geändert', 'boundaryEvent')).toBeNull();
     expect(inferMarker(de, 'Zeitvertraege beendet', 'boundaryEvent')).toBeNull();
-    expect(inferMarker(de, 'Mailaender erfasst', 'boundaryEvent')).toBeNull();
+    expect(inferMarker(de, 'Zeitraeume erfasst', 'boundaryEvent')).toBeNull();
     // prefix collision: "Zeitkontrolle" is not "Zeitkonto"+x, "Zeitungleichheit" is the one known collision
     expect(inferMarker(de, 'Zeitkontrolle abgelaufen', 'boundaryEvent')).toBe('timer');
     expect(inferMarker(de, 'Zeitungültigkeit abgelaufen', 'boundaryEvent')).toBeNull();
+    // accepted collisions: the exception wins over a true compound that happens to share its start
+    expect(inferMarker(de, 'Fehlerfreigabe erteilt', 'boundaryEvent')).toBeNull();
+    // "Mailänder" is not an exception: "Mailänderung" (a change of mail) is a message compound
+    expect(inferMarker(de, 'Mailänderung erfasst', 'boundaryEvent')).toBe('message');
+  });
+  test('words that stay event-like are no exceptions and keep their marker', () => {
+    for (const [w, m] of [['Zeitpunkt', 'timer'], ['Zeitfenster', 'timer'], ['Zeitlimit', 'timer'], ['Zeitverzug', 'timer'],
+      ['Zeitgeber', 'timer'], ['Zeitdruck', 'timer'], ['Fehlermeldung', 'error'], ['Fehlerhaft', 'error'],
+      ['Eskalationsstufe', 'escalation'], ['Bedingungsprüfung', 'conditional'], ['Signalisierung', 'signal']]) {
+      expect([w, inferMarker(de, `${w} erfasst`, 'boundaryEvent')]).toEqual([w, m]);
+    }
   });
   test('without the switch or without the list nothing changes', () => {
     expect(inferMarker({ ...de, compoundExceptions: [] }, 'Zeitschriften geändert', 'boundaryEvent')).toBe('timer');
