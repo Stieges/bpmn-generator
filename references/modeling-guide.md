@@ -94,6 +94,8 @@ older `Objekt+Verb` heuristic and M05 and M06 report nothing. A word list decide
 a correct label the lists do not know is flagged, and the remedy is `BPMN_NAMING` (see the README,
 "Naming languages"), not a rewording. Under `en`, `Invoice customer` is flagged because `invoice` is
 no verb in the list; `{ "languages": { "en": { "add": { "verbs": ["invoice"] } } } }` fixes it.
+To see why a list exists and what it changes, read the `purpose` and `listNotes` at the top of
+`references/naming/<language>.json`; they are documentation only, and the overlay has no such fields.
 
 | Element | Rule | `de` (verb last) | `en` (verb first) |
 |---|---|---|---|

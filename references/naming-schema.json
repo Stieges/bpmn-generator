@@ -27,6 +27,97 @@
         "verb-first"
       ]
     },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1500
+    },
+    "listNotes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verbs": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "verbPhrases": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "verbPrefixes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "nounVerbHomographs": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "participles": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "stateWords": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "stateMarkers": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "infinitiveSuffixes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "participleHomographs": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "inseparablePrefixes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "separablePrefixes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "geInfinitives": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "adjectiveStoplist": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "conjunctions": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "eventMarkers": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "questionMarks": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      }
+    },
     "verbs": {
       "type": "array",
       "uniqueItems": true,

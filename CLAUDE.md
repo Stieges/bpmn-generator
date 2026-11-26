@@ -712,7 +712,9 @@ A language is one data file plus the registration of its path; the judges are sh
 
 1. Write `references/naming/<tag>.json` (primary subtag, two or three lower-case letters) against
    `references/naming-schema.json`: `wordOrder` `verb-first` or `verb-last` picks `verbFirst` or
-   `verbLast`, then the word lists, `eventMarkers`, `examples` and `sources`. Word lists are sorted
+   `verbLast`, then the word lists, `eventMarkers`, `examples` and `sources`; also the optional
+   `purpose` and `listNotes` (why each list exists; documentation only, read by no rule; the
+   overlay has neither; every claim must hold against the judge code). Word lists are sorted
    ascending by `foldWord`, ties by the raw string (`lexicon-data.test.js` fences it).
 2. `scripts/shared/resource-paths.js`: a `naming<Tag>Path()` function through `resolveWithFallback`
    (source path and packaged path).

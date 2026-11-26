@@ -1,6 +1,18 @@
 {
   "language": "en",
   "wordOrder": "verb-first",
+  "purpose": "English has no capital letters that mark nouns, so the verb list decides task names (M01) directly: the first word after any numbering must be a listed verb, a listed prefix plus a listed verb (reorder, pre approve), a verb phrase such as hand off, or a word with an infinitive suffix such as -ize, -ise or -ify, and an object must follow. Events (M06) and messages (M05) are flagged when they start with a listed verb, so the homograph list keeps nouns such as Order or Request from counting as an instruction; an event whose last word is a participle or a state word is not flagged. A container is flagged when it is one listed verb or ends in a participle. A shorter verb list makes M01 flag task names whose verb is missing; a shorter homograph list makes M05 and M06 flag names that start with a noun. Extend or trim any flat list with a BPMN_NAMING overlay.",
+  "listNotes": {
+    "questionMarks": "M02 reads it: a gateway name counts as a question when it contains one of these strings.",
+    "verbs": "M01 requires the first word of a task name to be listed; M06 and M05 flag an event or message that starts with a listed word outside nounVerbHomographs; M01 flags a container that is one listed word. Shortening it makes M01 flag more task names.",
+    "verbPhrases": "Multi-word verbs (hand off, look up) that may open a task name; at least one more word must follow.",
+    "verbPrefixes": "Prefixes (re, pre, co) that may come before a listed verb, joined (reorder) or as a word of their own (pre approve); a joined prefix needs at least three more letters.",
+    "infinitiveSuffixes": "A first word with one of these endings and the minimum length (optimize, centralise, simplify) counts as a task verb without a list entry.",
+    "nounVerbHomographs": "Listed verbs that are also nouns (order, request): M06 and M05 do not flag an event or message that starts with one, so \"Request for details\" passes. Shortening it makes them flag such names.",
+    "participles": "The -ed ending plus irregular forms (sent, written), less the exceptions (need, feed): M01 flags a container and M05 a message whose last word is a participle; M06 does not flag an event that starts with a verb but ends in one.",
+    "stateWords": "State words (open, ready, complete): M06 does not flag an event that starts with a verb when its last word is one. Shortening it makes M06 flag such events.",
+    "eventMarkers": "Read by the marker inference for events (message, timer, error, signal, escalation, conditional), not by M01, M05 or M06; a keyword matches a whole word only."
+  },
   "questionMarks": [
     "?"
   ],
