@@ -190,7 +190,8 @@ export function verbFirst(lexicon) {
     if (tokens.length === 0) return ok;
     const last = tokens[tokens.length - 1].folded;
     if (isParticiple(last)) return flag('A container names a topic, not a state; avoid a participle at the end.');
-    if (wordCount === 1 && tokens.length === 1 && isVerb(tokens[0].folded)) {
+    // A one-word noun-verb homograph (Review, Order, Support) is a noun here; only a pure verb reads as a task.
+    if (wordCount === 1 && tokens.length === 1 && isVerb(tokens[0].folded) && !nounVerbHomographs.has(tokens[0].folded)) {
       return flag('A container names a topic, not an instruction; a bare verb reads as a task.');
     }
     return ok;

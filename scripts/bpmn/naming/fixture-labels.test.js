@@ -66,8 +66,7 @@ describe('English fixture labels', () => {
         'wrapping-back-edge': steps,
       },
       container: {
-        'subprocess-child-fidelity': ['Archive'],
-        'subprocess-collapsed-children': ['Validate', 'Archive'],
+        'subprocess-collapsed-children': ['Validate'],
       },
       event: {},
       message: { 'loop-with-join': ['Order received'], 'realistic-collaboration': ['Case closed'] },

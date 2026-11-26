@@ -68,12 +68,12 @@ describe('English', () => {
     expect(loadLexicon('en')).toBe(en);
   });
 
-  test('verbs: exactly 450 and every sourced literal is in', () => {
+  test('verbs: exactly 452 and every sourced literal is in', () => {
     expect(BUILT_IN_39).toHaveLength(39);
     expect(CORPUS_109).toHaveLength(109);
     expect(NAMED_22).toHaveLength(22);
     expect(RULING_44).toHaveLength(44);
-    expect(en.verbs.size).toBe(450);
+    expect(en.verbs.size).toBe(452);
     for (const v of ['diagnose', 'screen', 'underwrite', 'disburse', 'patch', 'provision', 'decommission']) expect(en.verbs.has(v)).toBe(true);
     for (const v of [...BUILT_IN_39, ...CORPUS_109, ...NAMED_22, ...RULING_44]) expect(en.verbs.has(v)).toBe(true);
     expect(en.verbs.has('invoice')).toBe(false);
@@ -89,8 +89,8 @@ describe('English', () => {
     expect(en.verbPhrases).toHaveLength(52);
   });
 
-  test('homographs: 244, a subset of verbs, with the named members', () => {
-    expect(en.nounVerbHomographs.size).toBe(244);
+  test('homographs: 246, a subset of verbs, with the named members', () => {
+    expect(en.nounVerbHomographs.size).toBe(246);
     for (const w of en.nounVerbHomographs) expect(en.verbs.has(w)).toBe(true);
     for (const w of ['start', 'order', 'request', 'register', 'archive', 'report', 'lead', 'build', 'pay', 'merge', 'read', 'close', 'follow']) {
       expect(en.nounVerbHomographs.has(w)).toBe(true);
