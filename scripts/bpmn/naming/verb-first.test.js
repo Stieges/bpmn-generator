@@ -139,11 +139,11 @@ describe('containerName', () => {
     'Exchange', 'Return', 'Dispatch', 'Purchase', 'Request', 'Release', 'Change', 'Control', 'Design', 'Research',
     'Survey', 'Trade', 'Archive'];
   test.each(HOMOGRAPHS)('passes the one-word noun %s', (n) => expect(s.containerName(n)).toBeNull());
-  test.each(['Validate', 'Order received', 'Order shipped', 'Archived'])('flags %s', (n) =>
+  test.each(['Validate', 'Order received', 'Order shipped', 'Archived', 'Step 2', 'Part 2', 'Phase 1', 'Phase 1.1', 'Teil 2', '2. Step 3'])('flags %s', (n) =>
     expect(flagged(s.containerName, n)).toBe(true));
   test('an unlisted one-word container passes', () => {
-    // Not a verb, no state form: unchanged. A bare noun or a placeholder is no container finding (pinned, not new).
-    for (const n of ['Groom', 'Onboarding', 'Data', 'Zebra', 'Step 2']) expect(s.containerName(n)).toBeNull();
+    // Not a verb, no state form, no placeholder shape: a bare noun is no finding. `Step 2a` has a letter after the first word, like for a task.
+    for (const n of ['Groom', 'Onboarding', 'Data', 'Costs', 'Zebra', 'Step 2a', '1. Onboarding', 'Phase-out']) expect(s.containerName(n)).toBeNull();
   });
 });
 

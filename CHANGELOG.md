@@ -118,7 +118,7 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   (`Validate`; `Review`, `Audit`, `Support`, `Order`, `Archive` pass; `control` and `research`
   joined the verb and homograph lists), under `de` a lower-case infinitive (`prüfen`); a
   capitalised infinitive is a nominalised verb and passes (`Verpacken`, `Versenden`,
-  `Kommissionieren`, `Bezahlen`). A state form (`Antrag geprüft`, `Order shipped`) stays flagged.
+  `Kommissionieren`, `Bezahlen`). A state form (`Antrag geprüft`, `Order shipped`) stays flagged, and so does a placeholder (`Step 3`, `Teil 2`: a word followed only by numbers, the list-free test M01 uses for tasks).
 - **Event markers by language.** Under a supported `language` the marker of an event without
   `marker` is inferred from its name by that language's keywords (message, timer, error, signal,
   escalation, conditional), only where the marker is legal on the event type; the rules and both
