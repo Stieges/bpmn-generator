@@ -265,6 +265,7 @@ describe('png — renderer', () => {
     expect(err.code).toBe('PNG_UNAVAILABLE');
     expect(err.message).toContain('@resvg/resvg-wasm');
     expect(err.message).toContain('npm install');
+    expect(err.message).not.toContain('scripts/');
   });
 
   test('loadPngRenderer reports a missing font', async () => {
