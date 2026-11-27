@@ -338,18 +338,36 @@ describe('migrateModel — activities without lane, lane-less processes, data no
     }
   });
 
-  test('a role that becomes no assignment is MG02 (refused; dropped with dropUnsupported)', () => {
+  test('a role on a node that gets no assignment is stripped with MG05, not refused', () => {
     const m = copy(fixture('realistic-collaboration.json'));
     const pool = m.pools.find((p) => p.id === 'Process_Applicant');
     const task = pool.nodes.find((n) => n.type.endsWith('Task') || n.type === 'task');
     task.role = 'Antragsteller';
+    const laned = m.pools.find((p) => p.id === 'Process_Intake');
+    const gateway = laned.nodes.find((n) => n.type.endsWith('Gateway') || n.type.endsWith('Event'));
+    gateway.role = 'Empfang';
     const r = migrateModel(m);
-    expect(r.report.status).toBe('refused');
-    expect(entriesOf(r, 'MG02').map((e) => e.elements)).toEqual([[task.id]]);
-    const dropped = migrateModel(m, { dropUnsupported: true });
-    expectTranslatedAndValid(dropped);
-    expect(nodeOf(dropped.model, task.id).role).toBeUndefined();
-    expect(dropped.supplement.actors.some((a) => a.name === 'Antragsteller')).toBe(false);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG02')).toEqual([]);
+    const mg05 = entriesOf(r, 'MG05');
+    // document order: Process_Applicant comes before Process_Intake
+    expect(m.pools.findIndex((p) => p === pool)).toBeLessThan(m.pools.findIndex((p) => p === laned));
+    expect(mg05.map((e) => e.elements)).toEqual([[task.id], [gateway.id]]);
+    expect(mg05.find((e) => e.elements[0] === task.id).message)
+      .toBe(`[MG05] role "Antragsteller" on ${task.type} "${task.id}" is dropped: format 2.0 gives this node no assignment.`);
+    expect(nodeOf(r.model, task.id).role).toBeUndefined();
+    expect(nodeOf(r.model, gateway.id).role).toBeUndefined();
+    expect(r.supplement.actors.some((a) => a.name === 'Antragsteller' || a.name === 'Empfang')).toBe(false);
+  });
+
+  test('a role on a subprocess child is stripped with MG05', () => {
+    const m = copy(fixture('expanded-subprocess.json'));
+    const sub = processesOf(m).flatMap((p) => p.nodes).find((n) => Array.isArray(n.nodes) && n.nodes.length);
+    sub.nodes[0].role = 'Kind';
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG05').map((e) => e.elements)).toEqual([[sub.nodes[0].id]]);
+    expect(keysIn(r.model).has('role')).toBe(false);
   });
 
   test('data nodes and their associations: MG02 each; dropped with dropUnsupported', async () => {
@@ -375,6 +393,116 @@ describe('migrateModel — activities without lane, lane-less processes, data no
     expectTranslatedAndValid(r);
     expect(JSON.stringify(r.model)).not.toMatch(/data(Object|Store)Reference/);
     expect(entriesOf(r, 'MG02').map((e) => e.elements[0]).sort()).toEqual(['c_data', 'g_data']);
+  });
+});
+
+describe('migrateModel — fix round 1', () => {
+  const base = () => ({
+    id: 'Process_R', name: 'R',
+    lanes: [{ id: 'la', name: 'Clerk' }, { id: 'lb', name: 'Office' }],
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'la' },
+      { id: 't1', type: 'userTask', name: 'Check form', lane: 'la', role: 'Clerk' },
+      { id: 't2', type: 'userTask', name: 'File form', lane: 'la' },
+      { id: 'e', type: 'endEvent', name: 'End', lane: 'la' }],
+    edges: [{ source: 's', target: 't1' }, { source: 't1', target: 't2' }, { source: 't2', target: 'e' }],
+  });
+
+  test('a role equal to its lane actor\'s name: the lane actor performs, no role actor, no MG03', async () => {
+    const r = migrateModel(base());
+    expectTranslatedAndValid(r);
+    expect(r.supplement.actors).toEqual([{ id: 'la', name: 'Clerk' }, { id: 'lb', name: 'Office' }]);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'la' }]);
+    expect(entriesOf(r, 'MG03')).toEqual([]);
+    await generate(r);
+  });
+
+  test('a role equal to the lane id of a lane without name counts as equal', () => {
+    const m = base();
+    delete m.lanes[0].name;
+    m.nodes[1].role = 'la';
+    const r = migrateModel(m);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'la' }]);
+    expect(r.supplement.actors.map((a) => a.id)).toEqual(['la', 'lb']);
+  });
+
+  test('the role actor exists only for the nodes that use it; its unit over those nodes', () => {
+    const m = base();
+    m.nodes.splice(3, 0, { id: 't3', type: 'userTask', name: 'Sign form', lane: 'lb', role: 'Clerk' });
+    m.edges = [{ source: 's', target: 't1' }, { source: 't1', target: 't2' }, { source: 't2', target: 't3' }, { source: 't3', target: 'e' }];
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'la' }]);
+    expect(nodeOf(r.model, 't3').assignments).toEqual([{ type: 'D', actor: 'role_Clerk' }]);
+    expect(r.supplement.actors.find((a) => a.id === 'role_Clerk')).toEqual({ id: 'role_Clerk', name: 'Clerk', unit: 'lb' });
+    expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([['t3', 'lb', 'role_Clerk']]);
+  });
+
+  test('an activity with role but no lane: the role actor performs, MG05 [nodeId, actorId]', () => {
+    const m = base();
+    delete m.nodes[1].lane;
+    m.nodes[1].role = 'Auditor';
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'role_Auditor' }]);
+    expect(entriesOf(r, 'MG05')).toEqual([{
+      code: 'MG05',
+      message: '[MG05] node "t1" has no lane in a process with lanes; its role "Auditor" makes actor "role_Auditor" its performer.',
+      elements: ['t1', 'role_Auditor'],
+    }]);
+    expect(entriesOf(r, 'MG03')).toEqual([]);
+    // no lane among its activities: no unit
+    expect(r.supplement.actors.find((a) => a.id === 'role_Auditor')).toEqual({ id: 'role_Auditor', name: 'Auditor' });
+  });
+
+  test('an activity with neither lane nor role: MG05 [nodeId], no assignment', () => {
+    const m = base();
+    delete m.nodes[2].lane;
+    const r = migrateModel(m);
+    expect(entriesOf(r, 'MG05')).toEqual([{
+      code: 'MG05', message: '[MG05] node "t2" has no lane in a process with lanes; it gets no assignment.', elements: ['t2'],
+    }]);
+  });
+
+  test.each([[null], [undefined]])('options %p are treated as {}', (opts) => {
+    expect(() => migrateModel(base(), opts)).not.toThrow();
+    expectTranslatedAndValid(migrateModel(base(), opts));
+  });
+
+  test('MG06 tells an invalid lane id from a colliding one', () => {
+    const m = {
+      pools: [
+        { id: 'P1', lanes: [{ id: 'L', name: 'Eins' }, { id: 'a.b', name: 'Punkt' }],
+          nodes: [{ id: 't1', type: 'task', name: 'Eins tun', lane: 'L' }, { id: 't2', type: 'task', name: 'Zwei tun', lane: 'a.b' }],
+          edges: [{ source: 't1', target: 't2' }] },
+        { id: 'P2', lanes: [{ id: 'L', name: 'Zwei' }],
+          nodes: [{ id: 't3', type: 'task', name: 'Drei tun', lane: 'L' }], edges: [] }],
+    };
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG06').map((e) => e.message)).toEqual([
+      '[MG06] lane id "a.b" is no actor id; the actor is "a_b".',
+      '[MG06] lane id "L" collides with another actor id; the actor is "L_2".',
+    ]);
+    const withCatalog = migrateModel(base(), { catalog: { actors: [{ id: 'la', name: 'Andere' }] } });
+    expect(entriesOf(withCatalog, 'MG06').map((e) => e.message)).toEqual([
+      '[MG06] lane id "la" collides with another actor id; the actor is "la_2".',
+    ]);
+  });
+
+  test('the no-unit sentence names the original lanes', () => {
+    const m = {
+      id: 'Process_U',
+      lanes: [{ id: '1x', name: 'Eins' }, { id: 'lb', name: 'Zwei' }],
+      nodes: [
+        { id: 't1', type: 'task', name: 'Eins tun', lane: '1x', role: 'Prüfer' },
+        { id: 't2', type: 'task', name: 'Zwei tun', lane: 'lb', role: 'Prüfer' }],
+      edges: [{ source: 't1', target: 't2' }],
+    };
+    const r = migrateModel(m);
+    expect(entriesOf(r, 'MG03')[0].message).toBe(
+      '[MG03] node "t1": role "Prüfer" performs it as actor "role_Pr_fer", not lane "1x". Actor "role_Pr_fer" has no unit: its activities sit in lanes "1x", "lb".',
+    );
   });
 });
 

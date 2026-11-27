@@ -4,9 +4,10 @@
  *
  * Every lane of every modelled process becomes an actor without `kind` (a child lane gets its parent
  * lane's actor as `unit`); every distinct `role` becomes a kind-less actor `role_<slug>` that performs
- * its activities. Each top-level activity of a process with lanes gets one assignment of the scheme's
- * performs type to its lane's actor (or its role's); events, gateways, boundary events and subprocess
- * children get none. `lanes`, `lane` and `role` are stripped; `system`, data nodes and the
+ * its activities (a role equal to the name of its lane's actor is that actor). Each top-level activity
+ * of a process with lanes gets one assignment of the scheme's performs type to its lane's actor (or
+ * its role's); events, gateways, boundary events and subprocess children get none, and a role on
+ * them is dropped (MG05). `lanes`, `lane` and `role` are stripped; `system`, data nodes and the
  * associations touching them are fields 2.0 cannot hold yet (MG02): refused by default, dropped and
  * listed with `dropUnsupported`. Everything else is kept as given.
  *
@@ -121,13 +122,13 @@ function schemeOf(catalog) {
 
 /**
  * The MG02 entries of the input, in document order: per process its nodes depth-first (`system`,
- * a data node, a `role` that becomes no assignment), then the flows and associations touching a data node.
+ * a data node), then the flows and associations touching a data node.
  */
 function unsupportedFields(processes, lc, dropUnsupported) {
   const entries = [];
   const dataIds = new Set();
   const tail = dropUnsupported ? '; dropped.' : '.';
-  const visit = (proc, nodes, top) => {
+  const visit = (nodes) => {
     for (const node of nodes || []) {
       if (node.system !== undefined) {
         entries.push(entry('MG02', `node "${q(node.id)}": field "system" ("${q(node.system)}") has no place in format 2.0 yet${tail}`, [node.id]));
@@ -136,14 +137,10 @@ function unsupportedFields(processes, lc, dropUnsupported) {
         dataIds.add(node.id);
         entries.push(entry('MG02', `node "${q(node.id)}": ${node.type} has no place in format 2.0 yet${tail}`, [node.id]));
       }
-      if (node.role !== undefined && !(top && takesAssignment(proc, node))) {
-        const where = !top ? 'a subprocess child' : !hasLanes(proc) ? 'a node of a process without lanes' : 'not an activity';
-        entries.push(entry('MG02', `node "${q(node.id)}": role "${q(node.role)}" becomes no assignment here (${where})${tail}`, [node.id]));
-      }
-      visit(proc, node.nodes, false);
+      visit(node.nodes);
     }
   };
-  for (const proc of processes) visit(proc, proc.nodes, true);
+  for (const proc of processes) visit(proc.nodes);
   const touching = (kind, list) => {
     for (const c of list || []) {
       const node = dataIds.has(c.source) ? c.source : dataIds.has(c.target) ? c.target : null;
@@ -196,7 +193,8 @@ function strip(processes, m, dataIds) {
  *   report: { status: 'translated'|'refused', entries: { code, message, elements }[],
  *   summary: { processes, lanes, actors, activities, assigned } } }}
  */
-export function migrateModel(lc, { catalog = null, dropUnsupported = false } = {}) {
+export function migrateModel(lc, options = {}) {
+  const { catalog = null, dropUnsupported = false } = options ?? {};
   // (1) the gate: a 1.x model only
   if (modelFormat(lc) === '2') {
     return refuse(`it is already format 2.x ($schemaVersion "${q(lc.$schemaVersion)}"); there is nothing to translate`);
@@ -245,38 +243,48 @@ export function migrateModel(lc, { catalog = null, dropUnsupported = false } = {
   const actors = [];
   const created = []; // [actor, 'Lane' | 'Role', source name]
   const laneActor = processes.map(() => new Map()); // per process: lane id → actor id
+  const actorName = new Map(); // lane actor id → its name
   allLanes.forEach((lanes, p) => {
     for (const { lane, parent } of lanes) {
       let id = lane.id;
       if (!keeps.has(lane)) {
-        id = uniqueId(ACTOR_ID.test(lane.id) ? lane.id : laneSlug(lane.id), taken);
-        entries.push(entry('MG06', `lane id "${q(lane.id)}" is no actor id; the actor is "${id}".`, [lane.id, id]));
+        const valid = ACTOR_ID.test(lane.id);
+        id = uniqueId(valid ? lane.id : laneSlug(lane.id), taken);
+        const why = valid ? 'collides with another actor id' : 'is no actor id';
+        entries.push(entry('MG06', `lane id "${q(lane.id)}" ${why}; the actor is "${id}".`, [lane.id, id]));
       }
       if (!laneActor[p].has(lane.id)) laneActor[p].set(lane.id, id);
       const actor = { id, name: lane.name || lane.id };
+      actorName.set(id, actor.name);
       if (parent) actor.unit = laneActor[p].get(parent.id);
       actors.push(actor);
       created.push([actor, 'Lane', actor.name]);
     }
   });
 
-  // (5) one actor per distinct role of the activities that take an assignment, in document order
-  const roles = new Map(); // role → { actor, lanes: [lane id | null] }
+  // (5) one actor per distinct role of the activities that take an assignment, in document order.
+  // A role equal to the name of its lane's actor is that actor: such a node creates no role actor.
+  const laneOf = (proc, p, node) => {
+    const laneId = resolveLaneId(proc, node);
+    return laneActor[p].has(laneId) ? { laneId, actor: laneActor[p].get(laneId) } : null;
+  };
+  const usesRoleActor = (lane, node) => !lane || actorName.get(lane.actor) !== node.role;
+  const roles = new Map(); // role → { actor, sites: [{ laneId, actor } | null] }
   processes.forEach((proc, p) => {
     for (const node of proc.nodes || []) {
       if (node.role === undefined || !takesAssignment(proc, node)) continue;
-      const laneId = resolveLaneId(proc, node);
-      const lane = laneActor[p].has(laneId) ? laneId : null;
+      const lane = laneOf(proc, p, node);
+      if (!usesRoleActor(lane, node)) continue;
       if (!roles.has(node.role)) {
         const actor = { id: uniqueId(roleBase(node.role), taken), name: node.role };
-        roles.set(node.role, { actor, lanes: [] });
+        roles.set(node.role, { actor, sites: [] });
       }
-      roles.get(node.role).lanes.push(lane === null ? null : laneActor[p].get(lane));
+      roles.get(node.role).sites.push(lane);
     }
   });
-  for (const { actor, lanes } of roles.values()) {
-    const distinct = new Set(lanes);
-    if (distinct.size === 1 && !distinct.has(null)) actor.unit = lanes[0];
+  for (const { actor, sites } of roles.values()) {
+    const distinct = new Set(sites.map((s) => s?.actor ?? null));
+    if (distinct.size === 1 && !distinct.has(null)) actor.unit = sites[0].actor;
     actors.push(actor);
     created.push([actor, 'Role', actor.name]);
   }
@@ -284,29 +292,42 @@ export function migrateModel(lc, { catalog = null, dropUnsupported = false } = {
     entries.push(entry('H07', `${kind} "${q(name)}" became actor "${actor.id}" without kind; check its kind.`, [actor.id]));
   }
 
-  // (6) assignments
+  // (6) assignments, in document order; a role on a node that gets no assignment is dropped (MG05)
   let assigned = 0;
+  const droppedRoles = (nodes) => {
+    for (const node of nodes || []) {
+      if (node.role !== undefined) {
+        entries.push(entry('MG05', `role "${q(node.role)}" on ${q(node.type)} "${q(node.id)}" is dropped: format 2.0 gives this node no assignment.`, [node.id]));
+      }
+      droppedRoles(node.nodes);
+    }
+  };
   processes.forEach((proc, p) => {
     for (const node of proc.nodes || []) {
-      if (!takesAssignment(proc, node)) continue;
-      const laneId = resolveLaneId(proc, node);
-      const ofLane = laneActor[p].get(laneId);
-      const role = node.role !== undefined ? roles.get(node.role) : null;
-      const performer = role ? role.actor.id : ofLane;
+      if (!takesAssignment(proc, node)) {
+        droppedRoles([node]);
+        continue;
+      }
+      droppedRoles(node.nodes);
+      const lane = laneOf(proc, p, node);
+      const role = node.role !== undefined && usesRoleActor(lane, node) ? roles.get(node.role) : null;
+      const performer = role ? role.actor.id : lane?.actor;
       if (performer === undefined) {
         entries.push(entry('MG05', `node "${q(node.id)}" has no lane in a process with lanes; it gets no assignment.`, [node.id]));
         continue;
       }
       node.assignments = [{ type: performs, actor: performer }];
       assigned++;
-      if (role && ofLane !== undefined) {
-        let text = `node "${q(node.id)}": role "${q(node.role)}" performs it as actor "${performer}", not lane "${q(laneId)}".`;
+      if (role && !lane) {
+        entries.push(entry('MG05', `node "${q(node.id)}" has no lane in a process with lanes; its role "${q(node.role)}" makes actor "${performer}" its performer.`, [node.id, performer]));
+      } else if (role) {
+        let text = `node "${q(node.id)}": role "${q(node.role)}" performs it as actor "${performer}", not lane "${q(lane.laneId)}".`;
         if (role.actor.unit === undefined) {
-          const sites = [...new Set(role.lanes)];
-          const named = sites.filter((s) => s !== null).map((s) => `"${q(s)}"`).join(', ');
-          text += ` Actor "${performer}" has no unit: its activities sit in ${sites.includes(null) ? `lanes ${named} and outside any lane` : `lanes ${named}`}.`;
+          const laneIds = [...new Set(role.sites.filter(Boolean).map((s) => s.laneId))].map((id) => `"${q(id)}"`).join(', ');
+          const where = role.sites.includes(null) ? `lanes ${laneIds} and outside any lane` : `lanes ${laneIds}`;
+          text += ` Actor "${performer}" has no unit: its activities sit in ${where}.`;
         }
-        entries.push(entry('MG03', text, [node.id, laneId, performer]));
+        entries.push(entry('MG03', text, [node.id, lane.laneId, performer]));
       }
     }
   });
