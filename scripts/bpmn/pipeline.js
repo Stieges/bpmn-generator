@@ -127,18 +127,23 @@ function derivationHints(derived, lc) {
   }));
 }
 
+/** H15 names at most this many flows in its message, like H14; `elements` keeps them all. */
+const H15_MAX_FLOWS = 10;
+
 /**
  * H15 for the DI05 findings no order of the participants avoids (di-check.js
  * classifyUnavoidableDi05), `elements` the flows: the CLI's --strict does not count those findings.
  */
 function unavoidableCrossingHint({ flows, hubs, cycle }) {
   const quote = (ids) => ids.map((id) => `"${id}"`).join(', ');
+  const named = quote(flows.slice(0, H15_MAX_FLOWS))
+    + (flows.length > H15_MAX_FLOWS ? ` and ${flows.length - H15_MAX_FLOWS} more` : '');
   const why = hubs.length === 1 ? `"${hubs[0].id}" exchanges messages with ${hubs[0].partners} participants`
     : hubs.length ? `${quote(hubs.map((h) => h.id))} each exchange messages with more than two participants`
     : `${quote(cycle)} exchange messages in a cycle`;
   return {
     code: 'H15',
-    message: `No order of the participants avoids every crossing: stacked in one column a participant has at most two neighbours, and ${why}. DI05 on ${quote(flows)} is reported but does not fail --strict. Accept the crossing, or reduce the message partners (for example, merge black-box participants that play the same part).`,
+    message: `No order of the participants avoids every crossing: stacked in one column a participant has at most two neighbours, and ${why}. DI05 on ${named} is reported but does not fail --strict. Accept the crossing, or reduce the message partners (for example, merge black-box participants that play the same part).`,
     elements: [...flows],
   };
 }

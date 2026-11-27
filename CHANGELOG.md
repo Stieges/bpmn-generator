@@ -167,13 +167,14 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   one column, so a participant with three or more message partners (or partners that exchange
   messages in a cycle) always has a message flow crossing an uninvolved participant, and `--strict`
   wrote nothing; the only way out was removing a participant from the model. When no order of the
-  participants avoids every crossing and the layout chose an order with the fewest crossings (an
-  exact search up to 16 participants), each remaining DI05 keeps its code and gains the clause
-  `No order of the participants avoids every crossing.`, hint `H15` names the flows and explains
-  what to do (accept the crossing or reduce the message partners), and the CLI's `--strict` does
-  not count those findings. A crossing that another order avoids still fails `--strict`, as does
-  every DI05 with `poolOrder: "declared"` that the automatic order would avoid. Format 1.x
-  responses are unchanged. The geometry is unchanged.
+  participants avoids every crossing (an exact search up to 16 participants), each DI05 of the
+  drawn order keeps its code and gains the clause `No order of the participants avoids every
+  crossing.`, hint `H15` names the flows (at most 10 in its message, then `and <n> more`) and
+  explains what to do (accept the crossing or reduce the message partners), and the CLI's
+  `--strict` does not count those findings; this holds for `poolOrder: "declared"` too, even where
+  another order would cross less. Above `diagnostics.di05GroupThreshold` the grouped DI05 line says
+  so. A DI05 in a model that some order draws without any crossing still fails `--strict`. Format
+  1.x responses are unchanged. The geometry is unchanged.
 - **Nested lanes of 1.x models are drawn.** A lane with `children` was written to the XML
   but not laid out: its child lanes had no shape, their steps were drawn in the band of another
   lane or outside the pool, and the parent stayed an empty strip. Each child lane is now its own

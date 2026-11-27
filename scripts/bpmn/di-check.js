@@ -460,12 +460,14 @@ function minimumCrossings(n, weight) {
  * and the partners form no cycle (each group of partners is then a chain that fits a column).
  *
  * The findings are marked when (1) the layout is that column and the order read from it explains
- * every DI05 exactly, (2) no crossing-free order exists, and (3) the order the layout chose has
- * the fewest crossings any order has (an exact search, up to UNAVOIDABLE_DI05_MAX_PARTICIPANTS
- * participants). The orders searched are all orders of all participants — what `poolOrder: "auto"`
- * can produce; `"declared"` produces some of them, so a crossing it leaves that another order
- * avoids is not marked. Any other case returns null and changes nothing: a crossing-free order the
- * layout missed is a layout defect, not an unavoidable crossing.
+ * every DI05 exactly, and (2) no order of all participants is crossing-free (an exact search, up
+ * to UNAVOIDABLE_DI05_MAX_PARTICIPANTS participants; above it the answer is unknown). Then every
+ * DI05 of the chosen order is marked, also where another order would have fewer crossings (for
+ * example under `poolOrder: "declared"`): the model cannot be drawn without one. Any other case
+ * returns null and changes nothing: a crossing-free order the layout missed is a layout defect,
+ * not an unavoidable crossing. A participant's nodes are its top-level nodes, as DI05 maps them,
+ * so the crossings counted are DI05's; a flow to or from a node inside a subprocess has no
+ * participant there and the answer is unknown.
  *
  * @returns {{ flows: string[], hubs: Array<{ id: string, partners: number }>, cycle: string[]|null }|null}
  *   the marked flows (in issue order), the participants with more than two partners, or, without
@@ -487,18 +489,21 @@ function classifyUnavoidableDi05(coordMap, lc, issues, opts = {}) {
   participants.sort((a, b) => a.y - b.y);
   const position = new Map(participants.map((p, i) => [p.id, i]));
 
+  // DI05's mapping, exactly: a pool's top-level nodes, then each participant itself.
   const ownerOf = {};
-  for (const proc of (lc.pools || [])) for (const node of flattenNodes(proc.nodes)) ownerOf[node.id] = proc.id;
+  for (const proc of (lc.pools || [])) for (const node of (proc.nodes || [])) ownerOf[node.id] = proc.id;
   for (const p of participants) ownerOf[p.id] ??= p.id;
 
   const reported = new Map(di05.map((i) => [i.elements[0], new Set(i.elements.slice(1))]));
   const explained = new Set();
   const weight = participants.map(() => new Array(n).fill(0));
-  let crossings = 0;
   for (const mf of (lc.messageFlows || [])) {
     const id = mf.id || `mf_${mf.source}_${mf.target}`;
     const pts = (coordMap.edgeCoords || {})[id];
-    if (!pts || pts.length < 2) continue; // DI05 skips an unrouted flow too
+    // DI05 skips an unrouted flow too, so it has no finding to explain. Leaving it out of `weight`
+    // is sound: one flow fewer can only lower the fewest crossings, so a positive minimum without
+    // it is a positive minimum with it, and the marked findings are all explained by routed flows.
+    if (!pts || pts.length < 2) continue;
     const a = position.get(ownerOf[mf.source]);
     const b = position.get(ownerOf[mf.target]);
     if (a === undefined || b === undefined) return null;
@@ -509,9 +514,9 @@ function classifyUnavoidableDi05(coordMap, lc, issues, opts = {}) {
     if (a === b) continue;
     weight[a][b]++;
     weight[b][a]++;
-    crossings += between.length;
   }
   if ([...reported.keys()].some((id) => !explained.has(id))) return null;
+  if (minimumCrossings(n, weight) === 0) return null;
 
   const partners = weight.map((row) => row.filter((w) => w > 0).length);
   const hubs = participants.map((p, i) => ({ id: p.id, partners: partners[i] })).filter((h) => h.partners > 2);
@@ -529,10 +534,9 @@ function classifyUnavoidableDi05(coordMap, lc, issues, opts = {}) {
     const pairsIn = new Map();
     for (const [i] of pairs) pairsIn.set(find(i), (pairsIn.get(find(i)) || 0) + 1);
     const closed = [...members].find(([r, m]) => m.length > 2 && (pairsIn.get(r) || 0) >= m.length);
-    if (!closed) return null;
+    if (!closed) return null; // unreachable: chains alone fit a column, the minimum would be 0
     cycle = closed[1].map((i) => participants[i].id);
   }
-  if (crossings !== minimumCrossings(n, weight)) return null;
 
   for (const issue of di05) issue.message += UNAVOIDABLE_DI05_CLAUSE;
   return { flows: di05.map((i) => i.elements[0]), hubs, cycle };
@@ -563,7 +567,8 @@ function groupDi05BySource(issues, lc) {
  * Human-readable lines for the WARNING-severity diagnostics. Up to `groupThreshold` DI05 findings
  * print one line each, as always; above it they collapse to one line per source participant with
  * a histogram of bands crossed per flow and the worst flows named — at 28 lines the flat list
- * stopped carrying signal (#43). Every other code prints one line per finding.
+ * stopped carrying signal (#43); when some of them carry UNAVOIDABLE_DI05_CLAUSE the first line
+ * says so, and how many when not all. Every other code prints one line per finding.
  */
 function formatDiWarnings(issues, lc, { groupThreshold = 5 } = {}) {
   const warnings = issues.filter(i => i.severity !== 'ERROR');
@@ -571,7 +576,12 @@ function formatDiWarnings(issues, lc, { groupThreshold = 5 } = {}) {
   const grouped = di05.length > groupThreshold;
   const lines = warnings.filter(i => !(grouped && i.code === 'DI05')).map(i => `${i.code} ${i.message}`);
   if (!grouped) return lines;
-  lines.push(`DI05 ${di05.length} message flows cross uninvolved participants — by source participant:`);
+  // The grouped line prints no message, so the clause of a marked DI05 would be lost: say it here.
+  const marked = di05.filter(i => i.message.endsWith(UNAVOIDABLE_DI05_CLAUSE)).length;
+  const why = !marked ? ''
+    : marked === di05.length ? ' (no order of the participants avoids them; see H15)'
+    : ` (no order of the participants avoids ${marked} of them; see H15)`;
+  lines.push(`DI05 ${di05.length} message flows cross uninvolved participants${why} — by source participant:`);
   for (const g of groupDi05BySource(di05, lc)) {
     const hist = {};
     for (const f of g.flows) hist[f.crossed.length] = (hist[f.crossed.length] || 0) + 1;
