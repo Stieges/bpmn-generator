@@ -311,9 +311,35 @@ describe('migrate over every 1.x fixture', () => {
     };
     const without = await laneNameOf(noRoles);
     for (const id of ['pruefen', 'freigeben']) expect(without(id)).toEqual({ laneId: 'L.Process_Antrag.lane_fach', name: 'Fachabteilung' });
+    // under rollen the child lanes stay lanes of their own (the parent lane without nodes forms none)
+    const r = migrateModel(noRoles, { dropUnsupported: true });
+    const underRollen = await runPipeline(copy(r.model), { catalog: copy(r.catalog), view: rollen });
+    expect(underRollen.validation.errors).toEqual([]);
+    const rollenLanes = lanesOfXml(underRollen.bpmnXml);
+    expect(rollenLanes.nodeLane.get('pruefen')).toEqual({ laneId: 'L.Process_Antrag.lane_pruefung', name: 'Prüfung' });
+    expect(rollenLanes.nodeLane.get('freigeben')).toEqual({ laneId: 'L.Process_Antrag.lane_freigabe', name: 'Freigabe' });
+    expect([...rollenLanes.lanes.values()].map((l) => l.name).sort()).toEqual(['Freigabe', 'Kundenservice', 'Prüfung']);
     const withRoles = await laneNameOf(input);
     expect(withRoles('pruefen')).toEqual({ laneId: 'L.Process_Antrag.lane_pruefung', name: 'Prüfung' });
     expect(withRoles('freigeben')).toEqual({ laneId: 'L.Process_Antrag.lane_freigabe', name: 'Freigabe' });
+  });
+
+  test('a collaboration: lane-less pools get no assignments and one H06 each, every message flow survives (plan Review Focus 4)', () => {
+    const { input, drop, original, migrated } = runs.get('realistic-collaboration.json');
+    const laneless = input.pools.filter((p) => !hasLanes(p)).map((p) => p.id);
+    expect(laneless.length).toBeGreaterThan(0);
+    for (const pool of drop.model.pools.filter((p) => laneless.includes(p.id))) {
+      expect({ pool: pool.id, assigned: pool.nodes.filter((n) => n.assignments !== undefined).map((n) => n.id) }).toEqual({ pool: pool.id, assigned: [] });
+    }
+    const h06 = migrated.validation.hints.filter((h) => h.code === 'H06').map((h) => h.elements[0]);
+    expect(h06.sort()).toEqual([...laneless].sort());
+    const flows = input.messageFlows.map(({ id, source, target }) => ({ id, source, target }));
+    expect(flows.length).toBeGreaterThan(0);
+    expect(drop.model.messageFlows.map(({ id, source, target }) => ({ id, source, target }))).toEqual(flows);
+    // in the XML as in the 1.x original's (a collapsed pool is referenced by its participant id there)
+    const inXml = (xml) => [...xml.matchAll(/<bpmn:messageFlow id="([^"]+)"[^>]*sourceRef="([^"]+)" targetRef="([^"]+)"/g)].map(([, id, source, target]) => ({ id, source, target }));
+    expect(inXml(migrated.bpmnXml).map((f) => f.id)).toEqual(flows.map((f) => f.id));
+    expect(inXml(migrated.bpmnXml)).toEqual(inXml(original.bpmnXml));
   });
 
   test('(i) the summary', () => {
