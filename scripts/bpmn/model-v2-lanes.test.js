@@ -13,6 +13,7 @@ import { loadNamedView, assertView, ViewRejectedError } from '../shared/view.js'
 import { readFileSync } from 'node:fs';
 import { LANE_NAME_LIMIT } from './rules.js';
 import { TASK_TYPES } from './types.js';
+import { CFG } from '../shared/utils.js';
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 
@@ -820,6 +821,37 @@ describe('formLanes — the automatic lane (lanes.automatic "lane")', () => {
     const out = form(CASE_B, { lanes: { ...LANE, automaticName: name } });
     expect(out.lc.lanes.find((l) => l._laneActor === AUTOMATIC).name).toBe(name);
     expect(codes(out.hints)).toEqual(['H19']);
+  });
+
+  test('a text annotation associated with the moved task follows it', () => {
+    const model = proc(
+      [node('S', 'startEvent'), node('X', 'serviceTask'), node('T', 'userTask', 'A'), node('E', 'endEvent'),
+        { id: 'N', type: 'textAnnotation', name: 'Hinweis' }],
+      [['S', 'X'], ['X', 'T'], ['T', 'E']],
+      { associations: [{ id: 'as1', source: 'N', target: 'X' }] },
+    );
+    expect(form(model).lc.nodes.find((n) => n.id === 'N').lane).toBe('L.P.A');
+    const on = form(model, { lanes: LANE });
+    expect(on.errors).toEqual([]);
+    expect(on.lc.nodes.find((n) => n.id === 'N').lane).toBe('L.P._automatic');
+  });
+
+  test('a configured automatic name over the limit gets H05 like the other placeholders', () => {
+    const saved = CFG.laneFormation.automaticName;
+    const long = 'x'.repeat(LANE_NAME_LIMIT + 1);
+    CFG.laneFormation.automaticName = long;
+    try {
+      const out = form(CASE_B, { lanes: LANE });
+      expect(out.hints.filter((h) => h.code === 'H05')).toEqual([{
+        code: 'H05',
+        message: `Lane name "${long}" is longer than 25 characters; shorten the catalogue name.`,
+        elements: ['L.P._automatic', AUTOMATIC],
+      }]);
+      expect(codes(form(CASE_B, { lanes: { ...LANE, automaticName: '(maschinell)' } }).hints)).toEqual(['H19']);
+    } finally {
+      CFG.laneFormation.automaticName = saved;
+    }
+    expect(CFG.laneFormation.automaticName).toBe('(automatisch)');
   });
 
   test('(a10) a process whose only activity is a performer-less automatic task: no lanes, H06, also with the switch', () => {
