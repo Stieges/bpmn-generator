@@ -506,8 +506,8 @@ export function normalizeLanesOption(lanes) {
     && (lanes.nested === undefined || typeof lanes.nested === 'boolean')
     && (lanes.automatic === undefined || lanes.automatic === 'neighbour' || lanes.automatic === 'lane')
     && (lanes.automaticName === undefined
-      || (lanes.automatic === 'lane' && typeof lanes.automaticName === 'string' && lanes.automaticName.length >= 1
-        && lanes.automaticName.length <= LANE_NAME_LIMIT && /\S/.test(lanes.automaticName)))) {
+      || (lanes.automatic === 'lane' && typeof lanes.automaticName === 'string' && [...lanes.automaticName].length >= 1
+        && [...lanes.automaticName].length <= LANE_NAME_LIMIT && /\S/.test(lanes.automaticName)))) {
     return { by: lanes.by, level: lanes.level ?? null, nested: lanes.nested ?? false, automatic: lanes.automatic ?? 'neighbour', automaticName: lanes.automaticName ?? null };
   }
   throw new TypeError(`unknown lanes option ${JSON.stringify(lanes)}`);

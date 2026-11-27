@@ -460,47 +460,50 @@ describe('formLanes — further behaviour', () => {
 
 describe('normalizeLanesOption', () => {
   const D = { automatic: 'neighbour', automaticName: null };
-  test.each([
-    [undefined, { by: 'role', level: null, nested: false, ...D }],
-    ['role', { by: 'role', level: null, nested: false, ...D }],
-    ['unit', { by: 'unit', level: null, nested: false, ...D }],
-    ['none', { by: 'none', level: null, nested: false, ...D }],
-    [{ by: 'unit' }, { by: 'unit', level: null, nested: false, ...D }],
+  const P = { level: null, nested: false };
+  // value -> normalised form; shared by the normaliser rows and the agreement with the view gate
+  const ACCEPTED = [
+    [undefined, { by: 'role', ...P, ...D }],
+    ['role', { by: 'role', ...P, ...D }],
+    ['unit', { by: 'unit', ...P, ...D }],
+    ['none', { by: 'none', ...P, ...D }],
+    [{ by: 'unit' }, { by: 'unit', ...P, ...D }],
     [{ by: 'unit', level: 2 }, { by: 'unit', level: 2, nested: false, ...D }],
     [{ by: 'unit', nested: true }, { by: 'unit', level: null, nested: true, ...D }],
-    ['system', { by: 'system', level: null, nested: false, ...D }],
-    [{ by: 'role' }, { by: 'role', level: null, nested: false, ...D }],
-    [{ by: 'role', automatic: 'lane' }, { by: 'role', level: null, nested: false, automatic: 'lane', automaticName: null }],
-    [{ by: 'role', automatic: 'neighbour' }, { by: 'role', level: null, nested: false, ...D }],
+    ['system', { by: 'system', ...P, ...D }],
+    [{ by: 'role' }, { by: 'role', ...P, ...D }],
+    [{ by: 'role', automatic: 'lane' }, { by: 'role', ...P, automatic: 'lane', automaticName: null }],
+    [{ by: 'role', automatic: 'neighbour' }, { by: 'role', ...P, ...D }],
     [{ by: 'unit', nested: true, automatic: 'lane', automaticName: '(maschinell)' }, { by: 'unit', level: null, nested: true, automatic: 'lane', automaticName: '(maschinell)' }],
     [{ by: 'unit', level: 1, automatic: 'lane' }, { by: 'unit', level: 1, nested: false, automatic: 'lane', automaticName: null }],
-  ])('%j', (value, expected) => {
-    expect(normalizeLanesOption(value)).toEqual(expected);
-  });
-
+    [{ by: 'role', automatic: 'lane', automaticName: '\u{1F600}'.repeat(20) }, { by: 'role', ...P, automatic: 'lane', automaticName: '\u{1F600}'.repeat(20) }],
+  ];
   const REFUSED = [
     null, 3, { by: 'system' }, { by: 'unit', level: 0 }, { by: 'unit', level: 17 }, { by: 'unit', nested: 1 }, { by: 'unit', x: 1 }, ['unit'],
     { by: 'system', automatic: 'lane' }, { by: 'none', automatic: 'lane' }, { automatic: 'lane' }, { by: 'role', level: 1 }, { by: 'role', nested: true },
     { by: 'role', automatic: 'yes' }, { by: 'role', automatic: true }, { by: 'role', automaticName: 'X' },
     { by: 'role', automatic: 'neighbour', automaticName: 'X' }, { by: 'role', automatic: 'lane', automaticName: '' },
     { by: 'role', automatic: 'lane', automaticName: '   ' }, { by: 'role', automatic: 'lane', automaticName: 'x'.repeat(26) },
+    { by: 'role', automatic: 'lane', automaticName: '\u{1F600}'.repeat(26) },
     { by: 'role', automatic: 'lane', automaticName: 7 }, { by: 'role', automatic: 'system' },
   ];
+
+  test.each(ACCEPTED)('%j', (value, expected) => {
+    expect(normalizeLanesOption(value)).toEqual(expected);
+  });
+
   test.each(REFUSED.map((v) => [v]))('%j throws', (value) => {
     expect(() => normalizeLanesOption(value)).toThrow(TypeError);
     expect(() => normalizeLanesOption(value)).toThrow(/^unknown lanes option /);
   });
 
   test('the view gate and the normaliser agree', () => {
-    const accepted = ['role', 'unit', 'system', 'none', { by: 'unit' }, { by: 'unit', level: 2 }, { by: 'unit', nested: true },
-      { by: 'role' }, { by: 'role', automatic: 'lane' }, { by: 'role', automatic: 'neighbour' },
-      { by: 'unit', nested: true, automatic: 'lane', automaticName: '(maschinell)' }, { by: 'unit', level: 1, automatic: 'lane' }];
-    const refused = REFUSED.filter((v) => v !== null && v !== 3 && !Array.isArray(v));
-    for (const lanes of accepted) {
+    const viewable = (v) => typeof v === 'string' || (v !== null && typeof v === 'object' && !Array.isArray(v));
+    for (const [lanes] of ACCEPTED.filter(([v]) => viewable(v))) {
       expect(() => normalizeLanesOption(lanes)).not.toThrow();
       expect(() => assertView({ view: 'x', version: '1.0', lanes })).not.toThrow();
     }
-    for (const lanes of refused) {
+    for (const lanes of REFUSED.filter(viewable)) {
       expect(() => normalizeLanesOption(lanes)).toThrow(TypeError);
       expect(() => assertView({ view: 'x', version: '1.0', lanes })).toThrow(ViewRejectedError);
     }
