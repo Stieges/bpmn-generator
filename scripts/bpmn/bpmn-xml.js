@@ -527,8 +527,12 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
       $body: String(node.decisionRef),
     }));
   }
+  // A format 2.1 task names its system by catalogue id: the intermediate form keeps the id in
+  // `_systemRef` and the name in `system`, written as `<bg:system ref="<id>"><name></bg:system>`.
+  // A 1.x node never has `_systemRef`, so its element stays as it was.
   if (node.system && fieldAllowedOn(node, 'system')) {
     extensionValues.push(moddle.createAny(`${EXTENSION_PREFIX}:system`, EXTENSION_NS, {
+      ...(node._systemRef ? { ref: node._systemRef } : {}),
       $body: node.system,
     }));
   }

@@ -1,6 +1,7 @@
 /**
- * The actor catalogue — the list of roles and units a 2.0 model points at, and the responsibility
- * scheme (DEMI by default) that names the assignment types.
+ * The actor catalogue — the list of roles and units a 2.x model points at, the systems its tasks
+ * use (format 2.1; one id space with the actors), and the responsibility scheme (DEMI by default)
+ * that names the assignment types.
  *
  * A catalogue is client input, so it has the standing of a view: bounded, then schema-gated
  * (references/catalog-schema.json, `additionalProperties: false` at every level). The file
@@ -137,7 +138,12 @@ export function canonicalJson(value) {
   return JSON.stringify(value);
 }
 
-/** `sha256:<hex>` over the UTF-8 bytes of the canonical JSON of `{ actors, scheme }` (scheme as a resolved object). */
-export function catalogFingerprint(actors, scheme) {
-  return `sha256:${createHash('sha256').update(canonicalJson({ actors, scheme }), 'utf8').digest('hex')}`;
+/**
+ * `sha256:<hex>` over the UTF-8 bytes of the canonical JSON of `{ actors, scheme }` (scheme as a
+ * resolved object), or of `{ actors, scheme, systems }` when `systems` is a non-empty list: a
+ * catalogue without systems (absent or empty) keeps the fingerprint it had before systems existed.
+ */
+export function catalogFingerprint(actors, scheme, systems = undefined) {
+  const hashed = Array.isArray(systems) && systems.length > 0 ? { actors, scheme, systems } : { actors, scheme };
+  return `sha256:${createHash('sha256').update(canonicalJson(hashed), 'utf8').digest('hex')}`;
 }

@@ -391,3 +391,145 @@ describe('resolveFields and language', () => {
     expect(lc.language).toBe('de');
   });
 });
+
+describe('resolveFields — systems (format 2.1)', () => {
+  const SYSTEMS = [{ id: 'sys_akte', name: 'Schadenakte' }];
+  const CATALOG_S = { ...CATALOG, systems: SYSTEMS };
+  const NO_CATALOG_C14 = '[C14] the model names systems but no catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file, the catalog option of runPipeline or the `catalog` object of an MCP or HTTP request';
+  const NO_CATALOG_C01 = '[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file, the catalog option of runPipeline or the `catalog` object of an MCP or HTTP request';
+  const deepFreeze = (v) => { if (v && typeof v === 'object') { Object.values(v).forEach(deepFreeze); Object.freeze(v); } return v; };
+  /** The 5.6 model as "2.1"; `edit` changes nodes by id. */
+  const model21 = (edit = {}, extra = {}) => {
+    const m = { ...copy(MODEL), $schemaVersion: '2.1', ...extra };
+    for (const n of m.nodes) if (edit[n.id]) Object.assign(n, edit[n.id]);
+    return m;
+  };
+  const bare = (m) => { const { catalog: _drop, ...rest } = m; return rest; };
+
+  test('a task names a catalogue system: the intermediate form carries its name and a private ref', () => {
+    const model = deepFreeze(model21({ pruefen: { system: 'sys_akte' } }));
+    const catalog = deepFreeze(copy(CATALOG_S));
+    const { lc, resolved, errors, hints } = resolveFields(model, { catalog });
+    expect(errors).toEqual([]);
+    expect(hints).toEqual([]);
+    const pruefen = lc.nodes.find((n) => n.id === 'pruefen');
+    expect(pruefen.system).toBe('Schadenakte');
+    expect(pruefen._systemRef).toBe('sys_akte');
+    expect(lc).not.toHaveProperty('systems');
+    expect(lc._modelInfo.version).toBe('2.1');
+    expect(resolved.systems).toEqual(SYSTEMS);
+    expect(resolved.systemById.get('sys_akte')).toEqual(SYSTEMS[0]);
+    expect(resolved.systemOrder.get('sys_akte')).toBe(0);
+    expect(resolved.fingerprint).toBe(catalogFingerprint(resolved.actors, resolveScheme('demi'), SYSTEMS));
+    expect(resolved.fingerprint).not.toBe(PINNED);
+    expect(lc.nodes.find((n) => n.id === 'regr')).not.toHaveProperty('_systemRef');
+  });
+
+  test('a "2.1" model without systems keeps the pinned fingerprint; an empty systems list too', () => {
+    expect(resolveFields(model21(), { catalog: copy(CATALOG) }).resolved.fingerprint).toBe(PINNED);
+    const { resolved, lc } = resolveFields(model21(), { catalog: { ...copy(CATALOG), systems: [] } });
+    expect(resolved.fingerprint).toBe(PINNED);
+    expect(resolved.systems).toEqual([]);
+    expect(lc._modelInfo.catalogFingerprint).toBe(PINNED);
+  });
+
+  test('C03: a system id twice in the catalogue, twice in the process file, and an id both actor and system', () => {
+    expect(run(model21(), { ...CATALOG, systems: [...SYSTEMS, { id: 'sys_akte', name: 'Zweite' }] }).errors)
+      .toEqual(['[C03] system id "sys_akte" occurs 2 times in the catalogue']);
+    expect(run(model21({}, { systems: [...SYSTEMS, ...SYSTEMS] }), CATALOG).errors)
+      .toEqual(['[C03] system id "sys_akte" occurs 2 times in the systems of the process file']);
+    expect(run(model21(), { ...CATALOG, systems: [{ id: 'regress', name: 'Regress-System' }] }).errors)
+      .toEqual(['[C03] id "regress" is both an actor and a system in the catalogue']);
+    // the shared id space spans the effective lists: a model system meets a catalogue actor
+    expect(run(model21({}, { systems: [{ id: 'zahlung', name: 'Zahlungssystem' }] }), CATALOG).errors)
+      .toEqual(['[C03] id "zahlung" is both an actor and a system in the catalogue']);
+  });
+
+  test('C01: an assignment, a unit or a partOf naming a system says so', () => {
+    expect(run(model21({ pruefen: { assignments: [{ type: 'D', actor: 'sys_akte' }] } }), CATALOG_S).errors)
+      .toEqual(['[C01] node "pruefen": actor "sys_akte" is a system, not an actor']);
+    const catalog = { ...CATALOG_S, actors: [...CATALOG.actors, { id: 'r', name: 'R', kind: 'role', unit: 'sys_akte' }, { id: 'u', name: 'U', kind: 'unit', partOf: 'sys_akte' }] };
+    expect(run(model21(), catalog).errors).toEqual([
+      '[C01] actor "r": unit "sys_akte" is a system, not a unit',
+      '[C01] actor "u": partOf "sys_akte" is a system, not a unit',
+    ]);
+  });
+
+  test('C14: an unknown system, an actor named as system', () => {
+    expect(run(model21({ pruefen: { system: 'sys_crm' } }), CATALOG_S).errors)
+      .toEqual(['[C14] node "pruefen": system "sys_crm" is not in the catalogue']);
+    expect(run(model21({ pruefen: { system: 'regress' } }), CATALOG_S).errors)
+      .toEqual(['[C14] node "pruefen": "regress" is an actor, not a system']);
+  });
+
+  test('C14 inside a subprocess and a pool', () => {
+    const sub = { id: 'sp', type: 'subProcess', name: 'sp', isExpanded: true, nodes: [{ id: 'inner', type: 'serviceTask', name: 'inner', system: 'ghost' }], edges: [] };
+    expect(run({ ...withNodes([sub]), $schemaVersion: '2.1' }, CATALOG_S).errors).toEqual(['[C14] node "inner": system "ghost" is not in the catalogue']);
+    const pooled = { $schemaVersion: '2.1', pools: [{ id: 'P1', name: 'P', nodes: [{ id: 't', type: 'userTask', name: 't', system: 'ghost' }], edges: [] }] };
+    expect(run(pooled, CATALOG_S).errors).toEqual(['[C14] node "t": system "ghost" is not in the catalogue']);
+  });
+
+  test('C15: a system on a gateway or on a subprocess', () => {
+    expect(run(model21({ gw: { system: 'sys_akte' } }), CATALOG_S).errors)
+      .toEqual(['[C15] node "gw": a system belongs on a task, not on exclusiveGateway']);
+    const sub = { id: 'sp', type: 'subProcess', name: 'sp', isExpanded: true, system: 'sys_akte',
+      nodes: [{ id: 'inner', type: 'userTask', name: 'inner', system: 'sys_akte' }], edges: [] };
+    expect(run({ ...withNodes([sub]), $schemaVersion: '2.1' }, CATALOG_S).errors)
+      .toEqual(['[C15] node "sp": a system belongs on a task, not on subProcess']);
+    expect(run(model21({ start: { system: 'sys_akte' } }), CATALOG_S).errors)
+      .toEqual(['[C15] node "start": a system belongs on a task, not on startEvent']);
+  });
+
+  test('the process file replaces a catalogue system in place: H09 after the actors\' H09; a new id is appended', () => {
+    const own = [{ id: 'neu', name: 'Neues System' }, { id: 'sys_akte', name: 'Akte (lokal)' }];
+    const actors = [{ id: 'regress', name: 'Regress (lokal)', kind: 'role', unit: 'abt_finanzen' }];
+    const catalog = deepFreeze({ ...copy(CATALOG), systems: [...SYSTEMS, { id: 'sys_zwei', name: 'Zwei' }] });
+    const model = deepFreeze(model21({ pruefen: { system: 'sys_akte' } }, { systems: own, actors }));
+    const { lc, resolved, errors, hints } = resolveFields(model, { catalog });
+    expect(errors).toEqual([]);
+    expect(resolved.systems.map((s) => s.id)).toEqual(['sys_akte', 'sys_zwei', 'neu']);
+    expect(resolved.systemOrder.get('neu')).toBe(2);
+    expect(lc.nodes.find((n) => n.id === 'pruefen').system).toBe('Akte (lokal)');
+    expect(hints).toEqual([
+      { code: 'H09', message: 'Catalogue entry "regress" is replaced by the process file.', elements: ['regress'] },
+      { code: 'H09', message: 'Catalogue entry "sys_akte" is replaced by the process file.', elements: ['sys_akte'] },
+    ]);
+  });
+
+  test('systems only in the model and no catalogue: resolves', () => {
+    const model = bare(model21({ pruefen: { system: 'sys_akte', assignments: undefined } }, { systems: SYSTEMS }));
+    for (const n of model.nodes) delete n.assignments;
+    const { lc, resolved, errors } = resolveFields(model);
+    expect(errors).toEqual([]);
+    expect(resolved.actors).toEqual([]);
+    expect(lc.nodes.find((n) => n.id === 'pruefen')).toMatchObject({ system: 'Schadenakte', _systemRef: 'sys_akte' });
+    expect(resolved.fingerprint).toBe(catalogFingerprint([], resolveScheme(), SYSTEMS));
+  });
+
+  test('systems in the model, no actors, no catalogue, but assignments: the one leading C01', () => {
+    expect(resolveFields(bare(model21({}, { systems: SYSTEMS }))).errors).toEqual([NO_CATALOG_C01]);
+  });
+
+  test('a system with no catalogue source at all: one leading C14', () => {
+    const model = bare(model21({ pruefen: { system: 'sys_akte' }, zahlen: { system: 'sys_zwei' } }));
+    for (const n of model.nodes) delete n.assignments;
+    expect(resolveFields(model).errors).toEqual([NO_CATALOG_C14]);
+    const both = bare(model21({ pruefen: { system: 'sys_akte' } }));
+    expect(resolveFields(both).errors).toEqual([NO_CATALOG_C01, NO_CATALOG_C14]);
+  });
+
+  test('a model with actors but no systems: per-node C14 lines (a catalogue was given)', () => {
+    const model = { ...bare(model21({ pruefen: { system: 'sys_akte' } })), ...copy(CATALOG) };
+    expect(resolveFields(model).errors).toEqual(['[C14] node "pruefen": system "sys_akte" is not in the catalogue']);
+  });
+
+  test('a "2.0" model with system is F06 through resolveFields', () => {
+    const model = { ...model21({ pruefen: { system: 'sys_akte' } }), $schemaVersion: '2.0' };
+    expect(run(model, CATALOG_S).errors).toEqual(['[F06] /nodes/2/system "system" needs format 2.1; set "$schemaVersion" to "2.1"']);
+  });
+
+  test('malformed model systems beside a catalogue are refused before the C rules', () => {
+    const model = model21({}, { systems: [{ id: 'x', name: 'x'.repeat(201) }] });
+    expect(run(model, CATALOG_S).errors.every((e) => /^\[F01\] /.test(e))).toBe(true);
+  });
+});

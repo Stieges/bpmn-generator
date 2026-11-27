@@ -579,7 +579,7 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 |------|--------|---------|
 | C01 | catalogue | a reference to an actor or unit that the catalogue does not have, or assignments without a catalogue |
 | C02 | catalogue | an actor's unit or `partOf` is a role, not a unit |
-| C03 | catalogue | an actor id occurs more than once in the catalogue |
+| C03 | catalogue | an id occurs more than once in the catalogue (actors and systems share one id space): `actor id "<id>" occurs <n> times in the catalogue` (or `in the actors of the process file`), `system id "<id>" occurs <n> times in the catalogue` (or `in the systems of the process file`), `id "<id>" is both an actor and a system in the catalogue` (effective lists) |
 | C04 | catalogue | an assignment type outside the scheme, or more than one performer on a node |
 | C05 | catalogue | an assignment type not allowed on this kind of node |
 | C06 | catalogue | the responsibility scheme is unknown or malformed |
@@ -588,11 +588,14 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 | C11 | catalogue | the catalogue cannot be read: missing, not a regular file, too large, not JSON, or an empty path |
 | C12 | catalogue | the catalogue content is refused: the bounds, or the catalogue schema (a model-carried `actors` list shares the catalogue's Actor schema, so its schema failures surface as F01 at the format gate; only the bounds reach C12) |
 | C13 | catalogue | the catalogue source is wrong for a 2.x model: a path without an object, the process file changing the scheme of a catalogue, or a catalog field on stdin |
+| C14 | catalogue | a system reference that names no system of the catalogue: `node "<id>": system "<ref>" is not in the catalogue`, `node "<id>": "<ref>" is an actor, not a system`; with no catalogue source at all (no catalogue passed, no `actors` or `systems` in the model) one leading `the model names systems but no catalogue was given; …` instead of a line per node. An assignment, `unit` or `partOf` that names a system is C01 ending `is a system, not an actor` (`not a unit`) |
+| C15 | catalogue | a step field on a node that cannot carry it: `node "<id>": a system belongs on a task, not on <type>` (the task classes: `task`, `userTask`, `manualTask`, `serviceTask`, `scriptTask`, `businessRuleTask`, `sendTask`, `receiveTask`) |
 | F01 | format | a format 2.0 schema violation (one per schema error) |
-| F02 | format | a `$schemaVersion` of the 2 line other than "2.0" |
+| F02 | format | a `$schemaVersion` of the 2 line other than "2.0" and "2.1" (`$schemaVersion "<v>" is not supported; only "2.0" and "2.1" are supported`, `params` `{ supported: ["2.0", "2.1"] }`) |
 | F03 | format | format 2.0 is not accepted at this entry point |
 | F04 | format | an option or mode that is not available for format 2.0 |
 | F05 | format | a `decisions` option that fails the Decision-Core schema |
+| F06 | format | a field of a later 2.x version in a model that declares an earlier one: `system` or `systems` in a "2.0" model, one entry per use after the schema errors (`"system" needs format 2.1; set "$schemaVersion" to "2.1"` at `/nodes/<i>/system`, at any depth and in each pool; `"systems" needs …` at `/systems`; `params` `{ field, version: "2.1" }`) |
 | H01 | hint | a join gateway was derived in front of a node that more than one flow enters |
 | H02 | hint | a node has no performer and is placed in the unassigned lane |
 | H03 | hint | an automatic step has no performer and is placed in its neighbour's lane |
@@ -601,7 +604,7 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 | H06 | hint | a process has no assignments, so no lanes |
 | H07 | hint | `migrate`: a lane or a role became an actor without kind (`Lane "<name>" became actor "<id>" without kind; check its kind.`, for a role `Role "<name>" became actor "<id>" without kind; check its kind.`; `elements` is `[actorId]`); one per created actor, in the report of `migrate` only, never in `validation.hints` |
 | H08 | hint | a node has no neighbour with a lane, or a boundary event no host with a lane (`Boundary event "<name>" (<id>) has no host with a lane: lane "(nicht zugeordnet)".`, reached only without prior validation), and is placed in the unassigned lane |
-| H09 | hint | a catalogue entry is replaced by an actor of the process file (`Catalogue entry "<id>" is replaced by the process file.`, `elements` is `[id]`); one hint per replaced entry, in the order of the process file's `actors` |
+| H09 | hint | a catalogue entry (actor or system) is replaced by an entry of the process file (`Catalogue entry "<id>" is replaced by the process file.`, `elements` is `[id]`); one hint per replaced entry, in the order of the process file's `actors`, then of its `systems` |
 | H10 | hint | the marker of an event was inferred from its name, under the declared language (`Event "<name>" (<id>): marker "<marker>" inferred from its name (language "<tag>"). To change it, set "marker" to the symbol you want, or to "none" for a plain event.`, `elements` is `[id]`; the clause `, or to "none" for a plain event` only on an end or intermediate throw event and a start event outside an event subprocess); only for a model with a supported `language`; an event with `marker` (also `"none"`) gets no H10 or H11 |
 | H11 | hint | the name of an event gave a marker before a language was declared and gives none or another one under it (`Event "<name>" (<id>): its name gave marker "<marker>" before a language was declared; under language "<tag>" it gives no marker. Set "marker" to the symbol you want, or to "none" for a plain event.`, `elements` is `[id]`; the `"none"` clause as in H10); an event with H11 gets no H10 |
 | H12 | hint | the declared `language` is a valid tag without naming conventions here (`Language "<tag>" has no naming conventions here; the naming rules M01, M05 and M06 are skipped (supported: de, en).`, `elements` is `[]`); M01, M05 and M06 skip the model; never together with H13 |

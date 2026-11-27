@@ -242,7 +242,7 @@ describe('a 1.x model under a view with lanes is a view error (design 6)', () =>
 
 describe('$schemaVersion: only "2.0" is format 2.0', () => {
   const versioned = (v) => ({ ...copy(MODEL), $schemaVersion: v });
-  const refusal = (v) => `[F02] /$schemaVersion $schemaVersion "${v}" is not supported; only "2.0" is supported`;
+  const refusal = (v) => `[F02] /$schemaVersion $schemaVersion "${v}" is not supported; only "2.0" and "2.1" are supported`;
 
   test('"2.0" is accepted by runPipeline and stamped 2.0', async () => {
     const result = await run({}, versioned('2.0'));
@@ -250,7 +250,22 @@ describe('$schemaVersion: only "2.0" is format 2.0', () => {
     expect(result.bpmnXml).toContain('modelVersion="2.0"');
   });
 
-  test.each(['2.7', '2.1', '2'])('runPipeline refuses "%s" with one error naming it', async (v) => {
+  test('"2.1" without systems generates; its XML differs from the "2.0" one only in bg:modelVersion', async () => {
+    const two = await run({}, versioned('2.0'));
+    const twoOne = await run({}, versioned('2.1'));
+    expect(twoOne.validation.errors).toEqual([]);
+    expect(twoOne.bpmnXml).toContain('modelVersion="2.1"');
+    expect(twoOne.bpmnXml.replace('modelVersion="2.1"', 'modelVersion="2.0"')).toBe(two.bpmnXml);
+    expect(twoOne.svg).toBe(two.svg);
+  });
+
+  test('generateDiagramSet refuses a "2.1" model with F04, not F02', async () => {
+    const set = await generateDiagramSet(versioned('2.1'), { catalog: copy(CATALOG) });
+    expect(set.parent.bpmnXml).toBeNull();
+    expect(set.parent.validation.errors).toEqual(['[F04] drill-down is not available for format 2.0 models yet']);
+  });
+
+  test.each(['2.7', '2'])('runPipeline refuses "%s" with one error naming it', async (v) => {
     const result = await run({}, versioned(v));
     expect(result.bpmnXml).toBeNull();
     expect(result.validation.errors).toEqual([refusal(v)]);
@@ -273,7 +288,7 @@ describe('$schemaVersion: only "2.0" is format 2.0', () => {
       for (const v of ['2.7', '2']) {
         const r = generate(v);
         expect(r.status).toBe(1);
-        expect(r.stderr).toContain(`$schemaVersion "${v}" is not supported; only "2.0" is supported`);
+        expect(r.stderr).toContain(`$schemaVersion "${v}" is not supported; only "2.0" and "2.1" are supported`);
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });

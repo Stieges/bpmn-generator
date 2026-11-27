@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { bpmnXsdStatus, xsdDir } from '../../.github/scripts/fetch-bpmn-xsd.mjs';
 import { runPipeline } from './pipeline.js';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
+import { validateLogicCoreSchema } from './schema-gate.js';
 
 const PINNED = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
 const ASSIGNMENT = '<bg:assignment type="D" actor="sb_schaden" />';
@@ -262,4 +263,60 @@ describe('bg:language on bpmn:definitions', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ─── format 2.1: the system of a task ──────────────────────────────────────────────────────────
+describe('format 2.1: <bg:system ref> in the task\'s extensionElements', () => {
+  const CATALOG_S = {
+    scheme: 'demi',
+    actors: [{ id: 'sb_schaden', name: 'Sachbearbeitung Schaden', kind: 'role' }],
+    systems: [{ id: 'sys_akte', name: 'Schadenakte' }],
+  };
+  const MODEL_S = {
+    $schemaVersion: '2.1', id: 'Process_Schaden', name: 'Schaden regulieren',
+    nodes: [
+      { id: 'start', type: 'startEvent', name: 'Schaden gemeldet', assignments: D },
+      { id: 'pruefen', type: 'userTask', name: 'Schaden prüfen', system: 'sys_akte', assignments: D },
+      { id: 'end', type: 'endEvent', name: 'Schaden geprüft' },
+    ],
+    edges: [{ source: 'start', target: 'pruefen' }, { source: 'pruefen', target: 'end' }],
+  };
+  const SYSTEM = '<bg:system ref="sys_akte">Schadenakte</bg:system>';
+  const generateS = async () => {
+    const r = await runPipeline(copy(MODEL_S), { catalog: copy(CATALOG_S) });
+    expect(r.validation.errors).toEqual([]);
+    return r;
+  };
+
+  test('the system sits before the assignment; nowhere else', async () => {
+    const { bpmnXml, validation } = await generateS();
+    expect(validation.xmlWarnings).toEqual([]);
+    const ext = extensionOf(element(bpmnXml, 'userTask', 'pruefen'));
+    expect(ext).toContain(SYSTEM);
+    expect(ext.indexOf(SYSTEM)).toBeLessThan(ext.indexOf(ASSIGNMENT));
+    expect(count(bpmnXml, /<bg:system\b/g)).toBe(1);
+    expect(definitionsTag(bpmnXml)).toContain('bg:modelVersion="2.1"');
+  });
+
+  test.each([
+    ['bpmnToLogicCore', (xml) => bpmnToLogicCore(xml)],
+    ['bpmnToLogicCoreLegacy', async (xml) => bpmnToLogicCoreLegacy(xml)],
+  ])('%s reads it back as system: "Schadenakte", no ref; the result passes the 1.x gate', async (_name, read) => {
+    const lc = await read((await generateS()).bpmnXml);
+    const pruefen = lc.nodes.find((n) => n.id === 'pruefen');
+    expect(pruefen.system).toBe('Schadenakte');
+    expect(JSON.stringify(lc)).not.toContain('sys_akte');
+    expect(validateLogicCoreSchema(lc)).toEqual({ valid: true, errors: [] });
+  });
+
+  (xsd.available ? test : test.skip)('2.1 output validates against BPMN20.xsd', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'model-v2-xml-sys-'));
+    try {
+      const file = join(dir, 'system.bpmn');
+      writeFileSync(file, (await generateS()).bpmnXml);
+      execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), file], { encoding: 'utf8', stdio: 'pipe' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
