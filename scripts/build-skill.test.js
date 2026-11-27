@@ -124,17 +124,16 @@ describe('build-skill — the bundle is closed under its own imports', () => {
     expect(relativeImports(src).sort()).toEqual(['../b.js', './a.js', './c.js', './d.js']);
   });
 
-  const fakeRepo = (entrySrc, extra = {}, withAssets = true) => {
+  // The asset stubs keep the asset check out of the way of the tests below.
+  const fakeRepo = (entrySrc, extra = {}) => {
     const root = mkdtempSync(path.join(tmpdir(), 'skill-'));
     mkdirSync(path.join(root, 'scripts', 'agents'), { recursive: true });
     mkdirSync(path.join(root, 'references'));
     writeFileSync(path.join(root, 'SKILL.md'), 'Run `node entry.js in out`.');
     writeFileSync(path.join(root, 'scripts', 'entry.js'), entrySrc);
     for (const [rel, src] of Object.entries(extra)) writeFileSync(path.join(root, 'scripts', rel), src);
-    if (withAssets) {
-      mkdirSync(path.join(root, 'scripts', 'fonts'));
-      for (const a of SKILL_ASSET_FILES) writeFileSync(path.join(root, 'scripts', a), 'asset');
-    }
+    mkdirSync(path.join(root, 'scripts', 'fonts'));
+    for (const a of SKILL_ASSET_FILES) writeFileSync(path.join(root, 'scripts', a), 'asset');
     return root;
   };
 
