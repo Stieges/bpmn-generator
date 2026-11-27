@@ -117,6 +117,8 @@ named exactly like an actor of that catalogue is that actor (`MG07`); the model 
 the new actors and `"catalog"` names the given file, relative to the model; the given catalogue's
 scheme applies and the supplement is written for reference. `--drop-unsupported` drops what 2.0
 cannot hold yet (`system`, data nodes and their flows) and lists it (`MG02`) instead of refusing.
+After you merge the supplement into your catalogue, remove the model's own `actors`; otherwise each
+of them gives H09.
 
 The default base is `<input basename without .json>.v2` in the working directory, never beside the
 input. A base is used as given (`out/m` writes `out/m.json`); its directory is created when it is
@@ -132,7 +134,8 @@ missing. The base is not stripped of a `.json` ending.
   (`✗ [C11] …` / `✗ [C12] …`), an output that cannot be written, or an existing output file.
 - Overwrite rule: an existing output file stops the run with `✗ <file> exists; pass --force to
   overwrite`, one line per file. Every file the run would write is checked before any is written
-  (for a refusal that is only the report). `--force` overwrites, but never the input file or the given catalogue (exit 1, `✗ <file> is the given catalogue; choose another output base`).
+  (for a refusal that is only the report). A refused run writes the report, so running again on the
+  same base (for example with `--drop-unsupported`) needs `--force` or another base. `--force` overwrites, but never the input file or the given catalogue (exit 1, `✗ <file> is the given catalogue; choose another output base`).
 
 ```bash
 node bpmn/migrate.js my-process.json out/my-process
