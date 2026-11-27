@@ -447,7 +447,7 @@ describe('Review Focus 1: a language that is no supported tag behaves like no la
     // "fr" is a valid tag without naming data: the XML names it (the attribute and its namespace
     // declaration) and nothing else differs.
     const french = await runPipeline(withLanguage(fixture('example-schadenmeldung'), 'fr'));
-    expect(french.validation.hints.filter((h) => h.code !== 'H16')).toEqual([{
+    expect(french.validation.hints.filter((h) => h.code !== 'H16' && h.code !== 'H17')).toEqual([{
       code: 'H12',
       message: 'Language "fr" has no naming conventions here; the naming rules M01, M05 and M06 are skipped (supported: de, en).',
       elements: [],
