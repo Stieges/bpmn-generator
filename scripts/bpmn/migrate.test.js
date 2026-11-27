@@ -543,15 +543,18 @@ describe('migrateModel — fix round 1', () => {
         { id: 'P1', lanes: [{ id: 'L', name: 'Eins' }, { id: 'a.b', name: 'Punkt' }],
           nodes: [{ id: 't1', type: 'task', name: 'Eins tun', lane: 'L' }, { id: 't2', type: 'task', name: 'Zwei tun', lane: 'a.b' }],
           edges: [{ source: 't1', target: 't2' }] },
-        { id: 'P2', lanes: [{ id: 'L', name: 'Zwei' }],
-          nodes: [{ id: 't3', type: 'task', name: 'Drei tun', lane: 'L' }], edges: [] }],
+        { id: 'P2', lanes: [{ id: 'L2', name: 'Zwei' }],
+          nodes: [{ id: 't3', type: 'task', name: 'Drei tun', lane: 'L2' }], edges: [] }],
     };
     const r = migrateModel(m);
     expectTranslatedAndValid(r);
     expect(entriesOf(r, 'MG06').map((e) => e.message)).toEqual([
       '[MG06] lane id "a.b" is no actor id; the actor is "a_b".',
-      '[MG06] lane id "L" collides with another actor id; the actor is "L_2".',
     ]);
+    // the same lane id in two pools is a duplicate document id (fix round 1 of Task 2): refused
+    m.pools[1].lanes[0].id = 'L';
+    m.pools[1].nodes[0].lane = 'L';
+    expect(codes(migrateModel(m))).toEqual(['MG01']);
     const withCatalog = migrateModel(base(), { catalog: { actors: [{ id: 'la', name: 'Andere' }] } });
     expect(entriesOf(withCatalog, 'MG06').map((e) => e.message)).toEqual([
       '[MG06] lane id "la" collides with another actor id; the actor is "la_2".',
@@ -739,6 +742,86 @@ describe('migrateModel — the report compares the lanes (Task 2)', () => {
       message: '[MG01] input refused: the translation fails the catalogue check: [C02] actor "x": unit "r" is a role, not a unit',
       elements: [],
     }]);
+  });
+
+  test.each([
+    ['two pools with the same id', () => {
+      const m = { pools: [
+        { id: 'P', lanes: [{ id: 'A' }], nodes: [{ id: 't1', type: 'task', name: 'Eins tun', lane: 'A' }], edges: [] },
+        { id: 'P', lanes: [{ id: 'B' }], nodes: [{ id: 't2', type: 'task', name: 'Zwei tun', lane: 'B' }], edges: [] }] };
+      return [m, 'P'];
+    }],
+    ['two top-level nodes with the same id in one process', () => [proc([
+      { id: 't', type: 'task', name: 'Eins tun', lane: 'A' },
+      { id: 't', type: 'task', name: 'Zwei tun', lane: 'B' }], []), 't']],
+    ['the same node id in two processes', () => {
+      const m = { pools: [
+        { id: 'P1', lanes: [{ id: 'A' }], nodes: [{ id: 't', type: 'task', name: 'Eins tun', lane: 'A' }], edges: [] },
+        { id: 'P2', lanes: [{ id: 'B' }], nodes: [{ id: 't', type: 'task', name: 'Zwei tun', lane: 'B' }], edges: [] }] };
+      return [m, 't'];
+    }],
+    ['a subprocess child with the id of a top-level node', () => [proc([
+      { id: 't', type: 'task', name: 'Eins tun', lane: 'A' },
+      { id: 'sp', type: 'subProcess', name: 'Antrag bearbeiten', lane: 'A', nodes: [{ id: 't', type: 'task', name: 'Kind tun' }], edges: [] }],
+    [{ source: 't', target: 'sp' }]), 't']],
+    ['a lane with the id of a node', () => [proc([{ id: 'B', type: 'task', name: 'Eins tun', lane: 'A' }], []), 'B']],
+    ['a sequence flow with the id of a node', () => [proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't', type: 'task', name: 'Eins tun', lane: 'A' }], [{ id: 's', source: 's', target: 't' }]), 's']],
+  ])('a duplicate id is refused with MG01 before the comparison: %s', (_, make) => {
+    const [m, id] = make();
+    let r;
+    expect(() => { r = migrateModel(m); }).not.toThrow();
+    expect(r.model).toBeNull();
+    expect(r.report.entries).toEqual([{
+      code: 'MG01',
+      message: `[MG01] input refused: the id "${id}" occurs 2 times; an id names one element of the document`,
+      elements: [id],
+    }]);
+  });
+
+  test('several duplicate ids are named in one MG01', () => {
+    const m = proc([
+      { id: 't', type: 'task', name: 'Eins tun', lane: 'A' }, { id: 't', type: 'task', name: 'Zwei tun', lane: 'A' },
+      { id: 'u', type: 'task', name: 'Drei tun', lane: 'A' }, { id: 'u', type: 'task', name: 'Vier tun', lane: 'A' },
+      { id: 'u', type: 'task', name: 'Fünf tun', lane: 'A' }], []);
+    const r = migrateModel(m);
+    expect(r.report.entries).toEqual([{
+      code: 'MG01',
+      message: '[MG01] input refused: the ids "t" (2 times), "u" (3 times) occur more than once; an id names one element of the document',
+      elements: ['t', 'u'],
+    }]);
+  });
+
+  test.each([
+    ['lanes A and A_di in one process', () => ({ ...proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't1', type: 'task', name: 'Eins tun', lane: 'A' },
+      { id: 't2', type: 'task', name: 'Zwei tun', lane: 'A_di' }], flow('s', 't1', 't2')), lanes: [{ id: 'A' }, { id: 'A_di' }] }),
+    'lane id "L.Process_C.A_di" (actor "A_di") collides with "L.Process_C.A"'],
+    ['a sequence-flow id equal to a lane id under rollen', () => proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't1', type: 'task', name: 'Eins tun', lane: 'A' }], [{ id: 'L.Process_C.A', source: 's', target: 't1' }]),
+    'lane id "L.Process_C.A" (actor "A") collides with "L.Process_C.A"'],
+  ])('a C10 collision under rollen is refused with MG01 naming the ids: %s', (_, make, collision) => {
+    const m = make();
+    const r = migrateModel(m);
+    expect(r.model).toBeNull();
+    expect(r.report.entries).toEqual([{
+      code: 'MG01',
+      message: `[MG01] input refused: the translation's lanes under the view rollen collide: ${collision}; rename the lane or flow id in the 1.x model`,
+      elements: [],
+    }]);
+    // a late refusal reports what it read
+    expect(r.report.summary).toMatchObject({ processes: 1, lanes: m.lanes.length, activities: m.nodes.filter((n) => n.type === 'task').length, actors: 0, assigned: 0 });
+  });
+
+  test('a late refusal (final self-check) reports what it read', () => {
+    const m = proc([{ id: 't', type: 'task', name: 'Eins tun', lane: 'A' }], []);
+    m.lanes[0].name = 'x'.repeat(300);
+    const r = migrateModel(m);
+    expect(codes(r)).toEqual(['MG01']);
+    expect(r.report.summary).toMatchObject({ processes: 1, lanes: 2, activities: 1 });
   });
 
   test('a refusal carries the same summary shape', () => {
