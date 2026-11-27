@@ -23,7 +23,7 @@ quick start in section 6 is run, command by command, by `scripts/bpmn/roles-and-
 | A system as an outside party you exchange data with | a collapsed pool + message flows | [3](#3-systems-as-collapsed-pools) |
 | What happens inside the system as well | an expanded pool of its own + message flows | [4](#4-systems-as-expanded-pools) |
 | The facts only, without changing the picture | `role` / `system` on the activity | [5](#5-the-role-and-system-fields) |
-| Lanes formed from a catalogue of actors (format 2.0) | `assignments` + a lanes view | [6](#6-format-20-quick-start) |
+| Lanes formed from a catalogue of actors and systems (format 2.x) | `assignments`, `system` + a lanes view | [6](#6-format-21-quick-start) |
 
 ## 1. Responsibility lanes
 
@@ -61,7 +61,9 @@ Some tools (Signavio among them) draw automated steps in a lane of their own, on
 the picture shows at a glance where people work and where a system does. You get the same picture
 by declaring a lane for each system and putting its `serviceTask`s there. Formally a lane is still a
 partition of *responsibility*, so this is a reading convention — say so in the process
-documentation if the diagram leaves your team.
+documentation if the diagram leaves your team. In a format 2.x model these lanes are not drawn in
+the model: record the `system` of each task and let the view `systeme` form them
+([section 6](#6-format-21-quick-start)).
 
 ```json
 {
@@ -215,18 +217,21 @@ the XML and reported by rule S15.
 }
 ```
 
-**Planned:** dedicated views that draw a model by these fields — lanes per role, lanes per system,
-systems as pools — without changing the model. Until they exist, use sections 1–4. For format 2.0 models the lanes views `rollen`, `einheiten` and `organigramm` exist already, see [section 6](#6-format-20-quick-start).
+**Planned:** a dedicated view that draws systems as pools, without changing the model. Until it
+exists, use sections 3 and 4. For format 2.x models the lanes views `rollen`, `einheiten`,
+`organigramm` and, per system of the task, `systeme` exist already, see
+[section 6](#6-format-21-quick-start).
 
-## 6. Format 2.0 quick start
+## 6. Format 2.1 quick start
 
-In format 2.0 the model has no lanes. Each step names who performs it (`assignments`, type `D`), the
-actors come from a **catalogue**, and a **view** decides which lanes are drawn. The same model gives
-role lanes or unit lanes without an edit. The full rules are in
+In format 2.x the model has no lanes. Each step names who performs it (`assignments`, type `D`) and,
+on a task, which system it uses (`system`, format 2.1); the actors and the systems come from a
+**catalogue**, and a **view** decides which lanes are drawn. The same model gives role lanes, unit
+lanes or system lanes without an edit. The full rules are in
 [`references/logic-core-schema.md`](../references/logic-core-schema.md#format-20-catalogue-and-lane-views).
 
-A minimal catalogue: one unit, two roles in it, and one role whose unit is not recorded. Save it as
-`catalog.json`.
+A minimal catalogue: one unit, two roles in it, one role whose unit is not recorded, and two systems.
+Actors and systems share one id space. Save it as `catalog.json`.
 
 <!-- quickstart: catalog.json -->
 ```jsonc
@@ -236,17 +241,22 @@ A minimal catalogue: one unit, two roles in it, and one role whose unit is not r
     { "id": "r_handler", "name": "Claims handler", "kind": "role", "unit": "u_claims" },
     { "id": "r_lead", "name": "Team lead", "kind": "role", "unit": "u_claims" },
     { "id": "r_finance", "name": "Accountant", "kind": "role" }
+  ],
+  "systems": [
+    { "id": "s_portal", "name": "Claims portal" },
+    { "id": "s_payments", "name": "Payment system" }
   ]
 }
 ```
 
-A minimal 2.0 model, `quickstart.json`. English names declare `"language": "en"`. The last activity has
-no performer on purpose.
+A minimal 2.1 model, `quickstart.json` (`"2.1"` because it uses `system`; a model without systems stays
+`"2.0"`). English names declare `"language": "en"`. The last activity has no performer on purpose,
+and only two tasks name a system.
 
 <!-- quickstart: quickstart.json -->
 ```jsonc
 {
-  "$schemaVersion": "2.0",
+  "$schemaVersion": "2.1",
   "language": "en",
   "pools": [
     {
@@ -254,9 +264,9 @@ no performer on purpose.
       "name": "Claim handling",
       "nodes": [
         { "id": "start", "type": "startEvent", "name": "Claim received", "assignments": [{ "type": "D", "actor": "r_handler" }] },
-        { "id": "check", "type": "userTask", "name": "Check claim", "assignments": [{ "type": "D", "actor": "r_handler" }] },
+        { "id": "check", "type": "userTask", "name": "Check claim", "system": "s_portal", "assignments": [{ "type": "D", "actor": "r_handler" }] },
         { "id": "approve", "type": "userTask", "name": "Approve payout", "assignments": [{ "type": "D", "actor": "r_lead" }] },
-        { "id": "pay", "type": "userTask", "name": "Pay claim", "assignments": [{ "type": "D", "actor": "r_finance" }] },
+        { "id": "pay", "type": "userTask", "name": "Pay claim", "system": "s_payments", "assignments": [{ "type": "D", "actor": "r_finance" }] },
         { "id": "archive", "type": "userTask", "name": "Archive file" },
         { "id": "end", "type": "endEvent", "name": "Claim settled" }
       ],
@@ -280,21 +290,30 @@ writes a `.bpmn` and an `.svg`; `--strict` passes, the hints below are informati
 node bpmn/pipeline.js ../quickstart.json ../quickstart-rollen --strict --view=rollen --catalog ../catalog.json
 node bpmn/pipeline.js ../quickstart.json ../quickstart-einheiten --strict --view=einheiten --catalog ../catalog.json
 node bpmn/pipeline.js ../quickstart.json ../quickstart-organigramm --strict --view=organigramm --catalog ../catalog.json
+node bpmn/pipeline.js ../quickstart.json ../quickstart-systeme --strict --view=systeme --catalog ../catalog.json
 ```
 
 - `rollen`: one lane per performer (here Claims handler, Team lead, Accountant).
 - `einheiten`: one lane per unit of the performer (here Claims department).
 - `organigramm`: one lane per unit, nested along the organigram (`partOf`); with this flat catalogue it
   looks like `einheiten`.
+- `systeme`: one lane per system of the task (here Claims portal, Payment system). Only a task with a
+  `system` takes a lane of its own; events and gateways follow their neighbours, and the performers play
+  no part. A model without any `system` gets no lanes in this view (hint H06).
 
-Two **placeholder lanes** appear when the model or the catalogue is incomplete. Both are hints, never
+A `"2.0"` model that uses `system` or `systems` is refused with one error F06 per use; change the
+version to `"2.1"`. A `system` must name a system of the catalogue (C14) and sits on a task (C15).
+
+Three **placeholder lanes** appear when the model or the catalogue is incomplete. All are hints, never
 errors:
 
 | Lane | Meaning | Hint |
 |---|---|---|
 | `(nicht zugeordnet)` | An activity has no performer, or a node could take no lane from its neighbours | H02, H08 |
 | `(Einheit nicht erhoben)` | The performer's unit is not in the catalogue; only in the unit views | H04 |
+| `(System nicht erhoben)` | A task has no system; only in the view `systeme` | H20 |
 
-The names are set in `scripts/config.json` under `laneFormation` (`unassignedName`, `unitUnknownName`).
-In the example, `Archive file` lands in `(nicht zugeordnet)` and, in the unit views, `Pay claim` in
-`(Einheit nicht erhoben)`.
+The names are set in `scripts/config.json` under `laneFormation` (`unassignedName`, `unitUnknownName`,
+`systemUnknownName`). In the example, `Archive file` lands in `(nicht zugeordnet)` and, in the unit
+views, `Pay claim` in `(Einheit nicht erhoben)`; in the view `systeme`, `Approve payout` and `Archive file`
+land in `(System nicht erhoben)`.

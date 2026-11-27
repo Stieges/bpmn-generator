@@ -344,7 +344,7 @@ The format: `view` (the name), `version` (`"1.0"`), and the optional `descriptio
 `visualRefinement`, `poolOrder`, `elkWrapping`) and `derivations` (`joinGateways`). Unknown keys are
 rejected at every level.
 
-Six views ship. `aligned-ports` sets `layout.alignParticipantPorts` (a message flow to or from a participant docks level with its other end; the default stays `false`), and `rollen`, `einheiten` and `organigramm` (units nested along `partOf`) form the lanes of a format 2.0 model. `default` derives nothing, and its output is byte-identical to a call without a
+Seven views ship. `aligned-ports` sets `layout.alignParticipantPorts` (a message flow to or from a participant docks level with its other end; the default stays `false`), and `rollen`, `einheiten`, `organigramm` (units nested along `partOf`) and `systeme` (one lane per system of the task, format 2.1) form the lanes of a format 2.x model. `default` derives nothing, and its output is byte-identical to a call without a
 view. `explicit-joins` switches on the join-gateway derivation and names no rule profile. Like the
 `rules/` profiles, the `views/` files are part of a repository checkout and live outside the npm
 package: in an npm install, view names are refused and view files are read by path.
@@ -397,7 +397,9 @@ id) that point into an actor catalogue. The catalogue is passed with `--catalog 
 model's `"catalog"` field, or passed as an object to `runPipeline(model, { catalog })`. The view decides the lanes:
 [`views/rollen-view.json`](views/rollen-view.json) gives one lane per performer, [`views/einheiten-view.json`](views/einheiten-view.json)
 one lane per unit of the performer, [`views/organigramm-view.json`](views/organigramm-view.json) unit lanes nested along
-the organigram (`partOf` on units); without a lanes view a 2.0 model gets role lanes. A model's own `actors` beside a
+the organigram (`partOf` on units), [`views/systeme-view.json`](views/systeme-view.json) one lane per system of the task
+(`systems` in the catalogue and `system` on a task, format `"2.1"`; a task without system goes to `(System nicht erhoben)`);
+without a lanes view a 2.0 model gets role lanes. A model's own `actors` beside a
 catalogue replace entries by id or add new ones (hint H09). The CLI generate path, `runPipeline`, `validateModel`,
 `orchestrate`, MCP `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn` and HTTP `/generate`, `/validate` and
 `/orchestrate` accept 2.0; MCP and HTTP take the catalogue as an embedded `catalog` object, never a path. Redesign
@@ -410,9 +412,9 @@ The messages of the 2.0-specific path (catalogue, format, lane formation, import
 `code` in `validation.findings`. Responses for 1.x models are unchanged. The table is in
 [`references/api-reference.md`](references/api-reference.md#message-codes).
 
-### Translating a 1.x model to format 2.0
+### Translating a 1.x model to format 2.x
 
-A lanes view (`rollen`, `einheiten`) on a 1.x model is a view error, because a 1.x model carries its own
+A lanes view (`rollen`, `einheiten`, `organigramm`, `systeme`) on a 1.x model is a view error, because a 1.x model carries its own
 lanes. To use the views on one, translate it first:
 
 ```bash
@@ -422,9 +424,10 @@ node bpmn/pipeline.js out/my-process.json out/my-process --view=rollen
 ```
 
 Each lane becomes an actor without `kind`, each activity of a process with lanes gets the assignment of
-its lane (or role), and the report lists what to check (hint H07, codes MG01-MG07). Data objects, data
-stores and `system` have no place in 2.0 yet: the translator refuses them (MG02) unless you pass
-`--drop-unsupported`. Of the 28 1.x test fixtures, 19 translate as they are and all 28 with the flag.
+its lane (or role), each `system` on a task becomes a system of the catalogue (the model is then format `"2.1"`), and the report lists what to
+check (hint H07, codes MG01-MG08). Data objects and data stores have no place in format 2.x yet, nor has a `system` off a
+task: the translator refuses them (MG02) unless you pass `--drop-unsupported`. Of the 28 1.x test fixtures, 20 translate as they
+are and all 28 with the flag.
 Under `einheiten` a migrated top-level lane has no unit, so its nodes land in "(Einheit nicht erhoben)"
 until you add units to the catalogue. `migrate` is a CLI and library function only, with no MCP tool or
 HTTP endpoint. Mapping: [`references/logic-core-schema.md`](references/logic-core-schema.md#translating-1x-models);

@@ -492,15 +492,19 @@ How each connection is drawn:
 
 ## Format 2.0 (catalogue and lane views)
 
-Format 2.0 is a second input format next to 1.x. A model says `"$schemaVersion": "2.0"` and is
-validated by [`input-schema-v2.json`](input-schema-v2.json). A model without the field, or with
-`1.x`, is a 1.x model and is unchanged. Exactly the string `"2.0"` is format 2.0: any other value of
-the 2 line (`"2"`, `"2.1"`, `"2.7"`) is refused with one error that names the value and says that only
-`"2.0"` is supported. The generated XML carries `bg:modelVersion="2.0"`.
+Format 2.0 is a second input format next to 1.x. A model says `"$schemaVersion": "2.0"`, or `"2.1"`
+when it uses systems, and is validated by [`input-schema-v2.json`](input-schema-v2.json). A model
+without the field, or with `1.x`, is a 1.x model and is unchanged. Exactly the strings `"2.0"` and
+`"2.1"` are format 2.x: any other value of the 2 line (`"2"`, `"2.2"`, `"2.7"`) is refused with one
+error (F02) that names the value and says that only `"2.0"` and `"2.1"` are supported. Version 2.1
+adds the catalogue list `systems` and the field `system` on a task and nothing else; a `"2.0"` model
+that uses either gets one error F06 per use (`"system" needs format 2.1; set "$schemaVersion" to
+"2.1"`), and a `"2.1"` model without systems is the same model as its `"2.0"` twin. The generated XML
+carries `bg:modelVersion` with the declared version. In messages, "format 2.0" means the 2 line.
 
 **What 2.0 is:**
 
-- The model has no `lanes`, `lane`, `role`, `system` or `children`. Lanes are formed from the
+- The model has no `lanes`, `lane`, `role` or `children`. Lanes are formed from the
   model's assignments by a view (see the rule below), so the same model gives role lanes or unit
   lanes without an edit.
 - An activity, event or gateway may carry `assignments`: `[ { "type": "D", "actor": "sb_schaden" } ]`.
@@ -510,6 +514,14 @@ the 2 line (`"2"`, `"2.1"`, `"2.7"`) is refused with one error that names the va
   with `kind` `role` or `unit` (omitted: not recorded), `unit` naming the unit a role works in and
   `partOf` naming the parent unit of a unit (the organigram). The schema is
   [`catalog-schema.json`](catalog-schema.json).
+- Systems (2.1) come from the same catalogue: `{ "systems": [ { "id", "name" } ] }`, beside `actors`
+  (a catalogue of systems only writes `"actors": []`). A task names the system it uses by id:
+  `"system": "s_portal"`, one per task, on a `task`, `userTask`, `manualTask`, `serviceTask`,
+  `scriptTask`, `businessRuleTask`, `sendTask` or `receiveTask`. Actors and systems share one id space
+  (a clash is C03, an assignment naming a system is C01 with the text `is a system, not an actor`, a
+  `unit` or `partOf` naming one `is a system, not a unit`); a `system` naming an unknown id, an actor
+  or no catalogue at all is C14, a `system` on any other node is C15. A model's own `systems` beside a
+  catalogue replace entries of the same id and add new ones, like `actors` (H09 per replacement).
 - Every process needs an `id` matching `^[A-Za-z_][A-Za-z0-9_-]*$`; it is part of the lane ids.
 
 **The organigram.** `partOf` names the parent unit and is allowed on units (`kind: "unit"`) and on
@@ -520,8 +532,8 @@ as a unit: an actor with `kind: "unit"`, and an actor without `kind` that anothe
 unit. The organigram only matters to a view whose `lanes` is the object form (see "Lanes by
 view").
 
-**What 2.0 is not (yet):** no systems or data nodes, no positions or persons, no matrices (RACI),
-no migration tool.
+**What 2.0 is not (yet):** no data nodes (they arrive in a later 2.x version), no systems as pools,
+no positions or persons, no matrices (RACI).
 
 **The catalogue (three ways to pass it).**
 
@@ -532,11 +544,11 @@ no migration tool.
 3. Library: `runPipeline(model, { catalog })` with a catalogue object. A string is a `TypeError`;
    read a file with `loadCatalog` (`scripts/shared/catalog.js`) first.
 
-A model may carry `actors` (and `scheme`) itself, without a catalogue. Beside a catalogue (the file's
-`catalog` field, `--catalog`, or the `catalog` option) its `actors` **replace** the entry of the same
-id as a whole, in place, and an actor with a new id is appended after the catalogue's actors in the
-model's order; hint H09 names each replaced entry (`elements` is `[id]`): one id then means different
-things in two processes. Rules C01–C07 judge the effective catalogue, so replacing a unit by a role
+A model may carry `actors` (and `systems`, `scheme`) itself, without a catalogue. Beside a catalogue (the file's
+`catalog` field, `--catalog`, or the `catalog` option) its `actors` and `systems` **replace** the entry of the same
+id as a whole, in place, and an entry with a new id is appended after the catalogue's entries of its
+list in the model's order; hint H09 names each replaced entry (`elements` is `[id]`): one id then means different
+things in two processes. Rules C01–C07 and C14 judge the effective catalogue, so replacing a unit by a role
 (or the reverse) that other actors reference is C02. A `scheme` beside a catalogue is error C13; the
 process file cannot change the scheme. The fingerprint `bg:catalog` is over the effective catalogue.
 `--catalog` with a 1.x model is an error.
@@ -548,10 +560,12 @@ performs), `E` Ergebnisverantwortung, `M` Mitarbeit, `I` Information. The labels
 external source; the design chose them deliberately, so treat them as this project's wording and
 not as a quotation of a standard.
 
-**Lanes by view.** The view's `lanes` (`role`, `unit`, `none`, or the object form
-`{ "by": "unit", "level"?: 1–16, "nested"?: boolean }`) forms the lanes. Shipped:
-`views/rollen-view.json` (`role`), `views/einheiten-view.json` (`unit`) and
-`views/organigramm-view.json` (`{ "by": "unit", "nested": true }`). Without `lanes` a 2.0
+**Lanes by view.** The view's `lanes` (`role`, `unit`, `system`, `none`, or the object form
+`{ "by": "unit", "level"?: 1–16, "nested"?: boolean }`; `{ "by": "system" }` is refused, use the
+string) forms the lanes. Shipped:
+`views/rollen-view.json` (`role`), `views/einheiten-view.json` (`unit`),
+`views/organigramm-view.json` (`{ "by": "unit", "nested": true }`) and `views/systeme-view.json`
+(`system`). Without `lanes` a 2.0
 model gets role lanes; `none` gives no lanes. A `lanes` view on a 1.x model is a view error on
 every surface.
 
@@ -564,6 +578,13 @@ every surface.
   `{ "by": "unit", "level": k }` the lane is the unit at depth `k` of that unit's `partOf` chain
   (1 = a unit without `partOf`, counted from the top; `k` is 1–16); a unit shallower than `k` keeps its own lane. Without `level` each
   performer stays in its own unit.
+- `system`: the lane is the system of the step, in the order of the flow. Only a task with a `system`
+  keys a lane; assignments play no part. An
+  activity without a recorded system goes to the placeholder `(System nicht erhoben)` with hint H20
+  (a task without `system`, an automatic task and a subprocess alike: no H02, H03 or H04 in this view). An event or gateway takes the
+  lane of its neighbours by the inheritance rule below, a boundary event the lane of its host; what
+  has no neighbour lane goes to `(System nicht erhoben)` (H08). A process in which no task has a
+  system gets no lanes (H06). The view needs a format 2.x model, as the other lanes views.
 - `{ "by": "unit", "nested": true }` (shipped as `views/organigramm-view.json`): the unit lanes nest
   along the organigram. Each unit a step is keyed on gets a lane for every unit of its `partOf` chain,
   as child lanes (`childLaneSet`), siblings in catalogue order; the layout may stack them along the
@@ -607,23 +628,28 @@ then applies and the node takes the lane of its successors if they have one; a s
 gateway there already takes its lane from its successors; without any neighbour lane it lands in `(nicht zugeordnet)`
 with H08.
 
-A process without any performer gets no lanes (hint H06). The placeholders are ids
-`L.<process-id>._unassigned` and `L.<process-id>._unitUnknown` with the names `(nicht zugeordnet)`
-and `(Einheit nicht erhoben)`; ordinary lane ids are `L.<process-id>.<actor-id>`. A collision of a
+A process without any performer gets no lanes (hint H06; in the system view: a process without any
+system). The placeholders are ids
+`L.<process-id>._unassigned`, `L.<process-id>._unitUnknown` and `L.<process-id>._systemUnknown` with the names `(nicht zugeordnet)`,
+`(Einheit nicht erhoben)` and `(System nicht erhoben)`; ordinary lane ids are `L.<process-id>.<actor-id>`. A collision of a
 lane id, or of its `<lane-id>_di`, with another id of the document is error C10, never a rename.
 
 **Hints.** Hints go to `validation.hints` and never fail `--strict`. H02 (activity without
 performer), H03 (automatic step placed with its neighbour), H04 (unit not recorded), H05 (lane name
-over 25 characters), H06 (process without performer), H09 (a catalogue entry replaced by the process file) and H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation)
+over 25 characters), H06 (process without performer; in the system view, without a system), H09 (a catalogue entry, actor or system, replaced by the process file), H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation; in the system view it places the node in `(System nicht erhoben)`) and H20 (an activity without a recorded system, system view only)
 come from the lane formation; H01 is the view's join-gateway derivation.
 
 **Output of a 2.0 model (XML).** The assignments and the origin are kept in the XML so that the
 diagram can be read back:
 
 - `<bg:assignment type="D" actor="sb_schaden"/>` in the `extensionElements` of the node;
+- `<bg:system ref="s_portal">Claims portal</bg:system>` in the `extensionElements` of a task with a
+  `system`: the catalogue id in `ref`, the system's name as text (a 1.x model writes the same element
+  without `ref`);
 - `<bg:derived by="role" actor="sb_schaden">lane</bg:derived>` in the `extensionElements` of a
-  formed lane (`by` is `role` or `unit`);
-- on `bpmn:definitions`: `bg:modelVersion="2.0"`, `bg:view="<name>"`, `bg:catalog="sha256:<64 hex>"`
+  formed lane (`by` is `role`, `unit` or `system`; the lane of a system carries `system="s_portal"`
+  instead of `actor`);
+- on `bpmn:definitions`: `bg:modelVersion="2.0"` (`"2.1"` for a model declared as 2.1), `bg:view="<name>"`, `bg:catalog="sha256:<64 hex>"`
   and `exporter="bpmn-generator"`; there is no `exporterVersion`.
 
 **`language` (2.0).** A 2.0 model may carry the same top-level `language` as a 1.x model (the same
@@ -632,9 +658,10 @@ attributes as `bg:language="<tag>"` on `bpmn:definitions`. Importing such a diag
 with the same `language`.
 
 The fingerprint is SHA-256 (hex, prefixed `sha256:`) over the UTF-8 bytes of the canonical JSON of
-`{ "actors": …, "scheme": … }`, with the scheme resolved to its object, keys sorted at every level,
-arrays in their order, and no whitespace. A 2.0 output has no `bpmn:performer`, `bpmn:resource` or
-`bg:system`.
+`{ "actors": …, "scheme": …, "systems"?: … }`, with the scheme resolved to its object, keys sorted at
+every level, arrays in their order, and no whitespace; `systems` is part of it only when the effective
+list is not empty, so a catalogue without systems keeps its fingerprint. A 2.x output has no
+`bpmn:performer` or `bpmn:resource`, and a `bg:system` only where a task names a system.
 
 **Which entry points read 2.0.** The CLI generate path (`node bpmn/pipeline.js`), the library
 functions `runPipeline`, `validateModel` (`bpmn/validate.js`: the catalogue errors, else the rule
@@ -654,8 +681,8 @@ as `[N01] …`, MCP as a second text block holding the JSON `{"notices":[…]}`,
 `notices: [{ code, message }]`); the result is a 1.x model.
 
 **Message codes.** The messages of the 2.0-specific path (catalogue, format, lane formation, import notice) carry a code
-from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C07, C10–C13, F01–F04; the redesign and
-scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06, H08 and H09,
+from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C07, C10–C15, F01–F04, F06; the redesign and
+scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06, H08, H09 and H20,
 `validation.findings`, notices), a thrown `CatalogRejectedError` has `messageCode`. Rule messages (S, M, P, WF) keep their text and get their id only in `validation.findings`. C12
 covers the catalogue's bounds and schema; a model-carried `actors` list shares the catalogue's Actor
 schema, so its schema failures surface as F01 at the format gate and only its bounds reach C12. The
@@ -664,9 +691,9 @@ table and the list of messages that stay uncoded are in
 
 ## Translating 1.x models
 
-`node bpmn/migrate.js <input.json> [output-base]` translates a 1.x model into a format 2.0 model, so
-that the lane views (`rollen`, `einheiten`) can be applied to it. It writes `<base>.json` (the 2.0
-model), `<base>.catalog.json` (the actors it created, to merge into your catalogue) and
+`node bpmn/migrate.js <input.json> [output-base]` translates a 1.x model into a format 2.x model, so
+that the lane views (`rollen`, `einheiten`, `systeme`) can be applied to it. It writes `<base>.json` (the 2.0
+model), `<base>.catalog.json` (the actors and systems it created, to merge into your catalogue) and
 `<base>.migrate-report.json`; flags, exit codes and the overwrite rule are in
 [`cli.md`](cli.md#migrate-1x-to-20). The library function is `migrateModel(lc, { catalog,
 dropUnsupported })` in `scripts/bpmn/migrate.js`. No byte-identity is promised across the
@@ -692,26 +719,31 @@ translator: the 2.0 model is a new document, the 1.x file stays as it is.
 - A 1.x `role` on a node that gets no assignment (an event, a gateway, a boundary event, a subprocess
   child, or any node of a process without lanes) is dropped and reported (MG05). The performer the
   1.x writer put into the XML for that role is therefore not in the 2.0 diagram.
-- `language` and every event `marker` are kept; `$schemaVersion` becomes `"2.0"`.
+- A `system` text on a task becomes a system of the catalogue (MG08, once per distinct text, in
+  document order): id `sys_<slug>`, the name the text, and the task's `system` is that id. Given a
+  catalogue, a text equal to a system's name is that system (MG07). A lane id that is also a system id
+  of the given catalogue is renamed (MG06). A `system` on a node that is no task is MG02.
+- `language` and every event `marker` are kept; `$schemaVersion` becomes `"2.0"`, or `"2.1"` when the
+  model creates or reuses a system.
 
-**Refused.** `system`, data objects and data stores and the flows and associations touching them
-have no place in format 2.0 yet; they are refused (MG02) unless `--drop-unsupported` drops and lists
-them. A duplicate id anywhere in the document (so also the same lane id in two pools), a 2.0 input or
+**Refused.** A `system` off a task, data objects and data stores and the flows and associations
+touching them have no place in format 2.x yet; they are refused (MG02) unless `--drop-unsupported`
+drops and lists them. A duplicate id anywhere in the document (so also the same lane id in two pools), a 2.0 input or
 a schema failure is refused as MG01. A refused input writes the report only.
 
 **With `--catalog`.** A lane or role whose name equals an actor's name in that catalogue, exactly, is
 that actor (MG07). The 2.0 model names that catalogue and carries the new actors itself; the supplement
-lists the same new actors for merging. `migrate` never writes the given catalogue. After you merge the
-supplement into your catalogue, remove the model's own `actors`; otherwise each of them gives H09.
+lists the same new actors (and systems) for merging. `migrate` never writes the given catalogue. After you merge the
+supplement into your catalogue, remove the model's own `actors` and `systems`; otherwise each of them gives H09.
 
 **Views afterwards.** Under `rollen` the lanes are those of the 1.x model (plus the effects of MG03
 and MG04). Under `einheiten` a migrated top-level lane's actor has no `unit`, so its nodes land in the
 placeholder lane "(Einheit nicht erhoben)"; child lanes appear under their parent's actor. That is
 expected: add units to the catalogue to get unit lanes.
 
-**Measured on the 28 1.x fixtures** (`tests/bench/migrate-fixtures.json`): `translated 19 of 28
-(67.9 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0`. The 9 refusals are all MG02 (8
-for data nodes, 1 for `system`). Under `rollen` the lane names and the placement of the nodes equal
+**Measured on the 28 1.x fixtures** (`tests/bench/migrate-fixtures.json`): `translated 20 of 28
+(71.4 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0`. The 8 refusals are all MG02
+for data nodes. Under `rollen` the lane names and the placement of the nodes equal
 the 1.x model for 20 of 28; the other 8 differ only by events or gateways that moved (each with MG04) or
 by role lanes (MG03). The errors of the rules are identical to the 1.x run for all 28.
 
