@@ -17,7 +17,14 @@
  * so a newer API would pass CI and still break users on early 20.x releases.
  */
 
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
+
+// The dirname property of import.meta would do, but it only exists from Node 20.11.
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Frozen preview settings, in diagram units (1 unit = 1 SVG user unit) unless named `Px`.
@@ -253,4 +260,279 @@ export function pngSize(png) {
   if (png.length < 8 + 8 + 13 || png.readUInt32BE(8) !== 13 || png.subarray(12, 16).toString('latin1') !== 'IHDR')
     throw new Error('pngSize: missing or short IHDR chunk');
   return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Renderer: @resvg/resvg-wasm (optional dependency) with the bundled Arimo font.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The bundled font. Arimo is metric-compatible with Arial, the family the diagram SVG names, so
+ * label widths match the layout's text measurement. Written with string literals only: the docs
+ * gate's package-integrity check reads this call to confirm that the file ships in the package.
+ * The same relative path holds in the checkout, the npm package and the skill bundle.
+ */
+const FONT_PATH = join(__dirname, '..', 'fonts', 'Arimo-Regular.ttf');
+
+const RENDERER_PACKAGE = '@resvg/resvg-wasm';
+
+/** The renderer or its font is not usable; `--png` cannot run at all. */
+export class PngUnavailableError extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = 'PngUnavailableError';
+    this.code = 'PNG_UNAVAILABLE';
+  }
+}
+
+/** Rendering or encoding one SVG failed; `cause` holds the original error. */
+export class PngRenderError extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = 'PngRenderError';
+  }
+}
+
+/**
+ * Family names from a TrueType font's `name` table — also the check that the bytes are a
+ * TrueType font at all.
+ *
+ * resvg draws nothing, and reports nothing, for text whose family it cannot resolve, so the
+ * generic families must be mapped to the name the font itself declares, not a name assumed here.
+ * Typographic family (name ID 16) is preferred over the legacy family (ID 1), as fontdb does;
+ * Windows-platform records (3, UTF-16BE; US English first) over Macintosh Roman ones (1, 0).
+ *
+ * @param {Uint8Array} bytes
+ * @returns {string|null} the family name, or null when the bytes are not a TrueType font with one
+ */
+function trueTypeFamily(bytes) {
+  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (buf.length < 12) return null;
+  const tag = buf.readUInt32BE(0);
+  if (tag !== 0x00010000 && tag !== 0x74727565 /* 'true' */) return null;
+  const numTables = buf.readUInt16BE(4);
+  if (12 + numTables * 16 > buf.length) return null;
+  let name = null;
+  for (let i = 0; i < numTables; i++) {
+    const rec = 12 + i * 16;
+    if (buf.toString('latin1', rec, rec + 4) === 'name') {
+      name = { offset: buf.readUInt32BE(rec + 8), length: buf.readUInt32BE(rec + 12) };
+      break;
+    }
+  }
+  if (!name || name.offset + 6 > buf.length || name.offset + name.length > buf.length) return null;
+  const base = name.offset;
+  const count = buf.readUInt16BE(base + 2);
+  const strings = base + buf.readUInt16BE(base + 4);
+  if (base + 6 + count * 12 > buf.length) return null;
+  let best = null;
+  for (let i = 0; i < count; i++) {
+    const r = base + 6 + i * 12;
+    const platform = buf.readUInt16BE(r);
+    const encoding = buf.readUInt16BE(r + 2);
+    const language = buf.readUInt16BE(r + 4);
+    const nameId = buf.readUInt16BE(r + 6);
+    const length = buf.readUInt16BE(r + 8);
+    const start = strings + buf.readUInt16BE(r + 10);
+    if ((nameId !== 1 && nameId !== 16) || start + length > buf.length) continue;
+    let text;
+    let rank;
+    if (platform === 3 && (encoding === 1 || encoding === 10) && length % 2 === 0) {
+      text = Buffer.from(buf.subarray(start, start + length)).swap16().toString('utf16le');
+      rank = language === 0x0409 ? 0 : 1;
+    } else if (platform === 1 && encoding === 0) {
+      text = buf.toString('latin1', start, start + length);
+      rank = 2;
+    } else {
+      continue;
+    }
+    text = text.trim();
+    if (!text) continue;
+    const score = (nameId === 16 ? 0 : 10) + rank;
+    if (!best || score < best.score) best = { score, text };
+  }
+  return best ? best.text : null;
+}
+
+/** Read the font file and its family name, or throw PngUnavailableError naming the path. */
+function loadFont(fontPath) {
+  let bytes;
+  try {
+    bytes = readFileSync(fontPath);
+  } catch (err) {
+    throw new PngUnavailableError(`--png cannot read the bundled font ${fontPath}: ${err.code ?? err.message}`, { cause: err });
+  }
+  if (bytes.length === 0) throw new PngUnavailableError(`--png found an empty font file at ${fontPath}`);
+  const family = trueTypeFamily(bytes);
+  if (!family) throw new PngUnavailableError(`--png found no TrueType font with a family name at ${fontPath}`);
+  return { bytes: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), family };
+}
+
+// initWasm may run only once per loaded package (a second call throws "Already initialized").
+// One start promise per package object, so concurrent loads wait for the same start instead of
+// one of them rendering before the wasm is ready.
+const wasmStarts = new WeakMap();
+
+function startWasm(resvg) {
+  let start = wasmStarts.get(resvg);
+  if (!start) {
+    const wasmPath = createRequire(import.meta.url).resolve(`${RENDERER_PACKAGE}/index_bg.wasm`);
+    start = Promise.resolve()
+      .then(() => resvg.initWasm(readFileSync(wasmPath)))
+      .catch((err) => {
+        // Started elsewhere in this process (another module that uses the same package): fine.
+        if (/already initiali[sz]ed/i.test(String(err?.message))) return;
+        wasmStarts.delete(resvg);
+        throw err;
+      });
+    wasmStarts.set(resvg, start);
+  }
+  return start;
+}
+
+/** Pixels with luma (ITU-R BT.601) below 128 in a tightly packed RGBA image. */
+function countDarkPixels(rgba) {
+  let n = 0;
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2] < 128) n++;
+  }
+  return n;
+}
+
+// The family the diagram SVG really names on its root. Checking with "Arimo" would only prove
+// that the font loads, not that "Arial, sans-serif" resolves to it — and an unresolved family
+// draws no text at all, silently.
+const TEXT_CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="24" font-family="Arial, sans-serif">'
+  + '<rect width="60" height="24" fill="#fff"/><text x="4" y="17" font-size="12">Hg</text></svg>';
+
+// "Hg" at 12 units and scale 2 covers well over a hundred dark pixels; 20 leaves room for any
+// antialiasing difference and still fails a render that drew no glyph.
+const TEXT_CHECK_MIN_DARK = 20;
+
+/**
+ * @typedef {{ renderRgba(svg: string, scale: number): { rgba: Uint8Array, width: number, height: number } }} PngRenderer
+ */
+
+function makeRenderer(Resvg, font) {
+  const fontOptions = {
+    fontBuffers: [font.bytes],
+    // The wasm build cannot see system fonts at all; the bundled font is the only one, and every
+    // generic family resolves to it, so output is the same on every machine.
+    defaultFontFamily: font.family,
+    sansSerifFamily: font.family,
+    serifFamily: font.family,
+    monospaceFamily: font.family,
+  };
+  return {
+    renderRgba(svg, scale) {
+      let resvg = null;
+      let image = null;
+      try {
+        resvg = new Resvg(svg, {
+          fitTo: { mode: 'zoom', value: scale },
+          background: PNG_PREVIEW.background,
+          font: fontOptions,
+        });
+        image = resvg.render();
+        // Every read of `pixels` copies the whole image out of wasm memory: read it once.
+        const rgba = image.pixels;
+        return { rgba, width: image.width, height: image.height };
+      } catch (err) {
+        throw new PngRenderError(`the renderer failed: ${err?.message ?? String(err)}`, { cause: err });
+      } finally {
+        // wasm memory is not garbage-collected; a drill-down renders many diagrams in one process.
+        image?.free();
+        resvg?.free();
+      }
+    },
+  };
+}
+
+async function createRenderer(importModule, fontPath) {
+  let resvg;
+  try {
+    const mod = await importModule(RENDERER_PACKAGE);
+    // The package is CommonJS: from ESM its exports arrive on `default`.
+    resvg = mod?.default ?? mod;
+    if (typeof resvg?.initWasm !== 'function' || typeof resvg?.Resvg !== 'function')
+      throw new Error(`${RENDERER_PACKAGE} exports neither initWasm nor Resvg`);
+  } catch (err) {
+    throw new PngUnavailableError(
+      '--png needs the optional dependency @resvg/resvg-wasm 2.6.2, which is not installed: run `npm install` in scripts/ (it is skipped by --omit=optional)',
+      { cause: err });
+  }
+  const font = loadFont(fontPath);
+  try {
+    await startWasm(resvg);
+  } catch (err) {
+    throw new PngUnavailableError(`--png could not start the renderer: ${err?.message ?? String(err)}`, { cause: err });
+  }
+  const renderer = makeRenderer(resvg.Resvg, font);
+  let dark;
+  try {
+    dark = countDarkPixels(renderer.renderRgba(TEXT_CHECK_SVG, 2).rgba);
+  } catch (err) {
+    throw new PngUnavailableError(`--png could not render a test image: ${err.message}`, { cause: err });
+  }
+  if (dark < TEXT_CHECK_MIN_DARK) throw new PngUnavailableError('the bundled font did not render text');
+  return renderer;
+}
+
+let defaultRenderer = null;
+
+/**
+ * Load the renderer: import the optional package, start its wasm, load the bundled font and
+ * check once that text really renders.
+ *
+ * The call with default arguments is memoised: every later call returns the same promise. A
+ * rejected load is NOT kept: the next call tries again. A long-lived process (an MCP or HTTP
+ * server) may get the dependency installed after a failed attempt, and a retry costs only a
+ * failed import; a wasm start that did succeed is kept per package and not repeated.
+ *
+ * @param {{ importModule?: (specifier: string) => Promise<any>, fontPath?: string }} [opts]
+ * @returns {Promise<PngRenderer>}
+ * @throws {PngUnavailableError}
+ */
+export function loadPngRenderer({ importModule, fontPath } = {}) {
+  const isDefault = importModule === undefined && fontPath === undefined;
+  if (isDefault && defaultRenderer) return defaultRenderer;
+  const load = createRenderer(importModule ?? ((s) => import(s)), fontPath ?? FONT_PATH);
+  if (!isDefault) return load;
+  defaultRenderer = load;
+  load.catch(() => { if (defaultRenderer === load) defaultRenderer = null; });
+  return load;
+}
+
+/**
+ * Render an SVG once and encode the whole image plus, for a large diagram, its parts — all in
+ * memory, nothing is written.
+ *
+ * The scale is PNG_PREVIEW.scale, capped so that no side exceeds maxSidePx; an SVG without a root
+ * size renders at `opts.scale`. Parts are pixel crops of that one render, planned on the RENDERED
+ * size (the SVG size is rounded to 0.1 units, so the pixel size can differ by one from W·scale),
+ * with part size and overlap converted from diagram units at the same effective scale.
+ *
+ * @param {string} svg
+ * @param {PngRenderer} renderer
+ * @param {typeof PNG_PREVIEW} [opts]
+ * @returns {{ png: Buffer, width: number, height: number, scale: number,
+ *             parts: Array<{ png: Buffer, x: number, y: number, w: number, h: number }> }}
+ * @throws {PngRenderError}
+ */
+export function renderPreview(svg, renderer, opts = PNG_PREVIEW) {
+  try {
+    const size = svgSize(svg);
+    const scale = size ? previewScale(size.width, size.height, opts) : opts.scale;
+    const { rgba, width, height } = renderer.renderRgba(svg, scale);
+    const png = encodePng(rgba, width, height);
+    const rects = planParts(width, height, {
+      partPx: Math.round(opts.partUnits * scale),
+      overlapPx: Math.round(opts.overlapUnits * scale),
+    });
+    const parts = rects.map((r) => ({ png: encodePng(cropRgba(rgba, width, r), r.w, r.h), ...r }));
+    return { png, width, height, scale, parts };
+  } catch (err) {
+    if (err instanceof PngRenderError) throw err;
+    throw new PngRenderError(`the renderer failed: ${err?.message ?? String(err)}`, { cause: err });
+  }
 }
