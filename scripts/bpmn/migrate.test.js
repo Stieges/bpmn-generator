@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { migrateModel, compareLanes } from './migrate.js';
 import { validateModelSchema } from './schema-gate.js';
 import { runPipeline } from './pipeline.js';
+import { resolveFields } from './model-v2.js';
 import { loadNamedView } from '../shared/view.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -837,5 +838,160 @@ describe('migrateModel — the report compares the lanes (Task 2)', () => {
     expect(() => compareLanes([{ ...site, newKey: 'A', mg03: true }])).toThrow(/^migrate internal error: /);
     expect(compareLanes([{ ...site, mg03: true }])).toEqual({ laneMatches: 0, entries: [] });
     expect(compareLanes([{ ...site, newKey: 'A' }])).toEqual({ laneMatches: 1, entries: [] });
+  });
+});
+
+describe('migrateModel — against an existing catalogue (Task 3)', () => {
+  const rollen = () => loadNamedView('rollen');
+  const hintCodes = (out) => (out.validation.hints ?? []).map((h) => h.code);
+  const small = () => ({
+    id: 'P',
+    lanes: [{ id: 'A', name: 'Sachbearbeitung' }, { id: 'B', name: 'Leitung', children: [{ id: 'B1', name: 'Team' }] }],
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't1', type: 'userTask', name: 'Antrag prüfen', lane: 'A' },
+      { id: 't2', type: 'userTask', name: 'Antrag freigeben', lane: 'B1' },
+      { id: 'e', type: 'endEvent', name: 'Ende', lane: 'B' },
+    ],
+    edges: [{ source: 's', target: 't1' }, { source: 't1', target: 't2' }, { source: 't2', target: 'e' }],
+    language: 'de',
+  });
+
+  test('example-schadenmeldung: the lane named like a catalogue actor maps to it, the others are new', async () => {
+    const given = { actors: [{ id: 'reg', name: 'Schadenregulierung', kind: 'unit' }] };
+    const before = copy(given);
+    const input = fixture('example-schadenmeldung.json');
+    const r = migrateModel(input, { catalog: given });
+    expect(given).toEqual(before);
+    expectTranslatedAndValid(r);
+    const mg07 = entriesOf(r, 'MG07');
+    expect(mg07).toHaveLength(1);
+    expect(mg07[0].elements).toEqual(['sr', 'reg']);
+    expect(mg07[0].message).toMatch(/^\[MG07\] /);
+    expect(entriesOf(r, 'H07').map((e) => e.elements)).toEqual([['sv'], ['gu']]);
+    expect(r.supplement.actors.map((a) => a.id)).toEqual(['sv', 'gu']);
+    expect(r.model.actors).toEqual(r.supplement.actors);
+    expect(r.catalog.actors.map((a) => a.id)).toEqual(['reg', 'sv', 'gu']);
+    expect(r.report.summary.lanes).toBe(3);
+    expect(r.report.summary.actors).toBe(2);
+    const performers = processesOf(r.model).flatMap((p) => p.nodes).flatMap((n) => (n.assignments ?? []).map((a) => a.actor));
+    expect(performers).toContain('reg');
+    expect(performers).not.toContain('sr');
+    // the documented call: the given catalogue, since the model carries the new actors
+    expect(resolveFields(copy(r.model), { catalog: copy(given) }).errors).toEqual([]);
+    const out = await runPipeline(copy(r.model), { catalog: copy(given), view: rollen() });
+    expect(out.validation.errors).toEqual([]);
+    expect(hintCodes(out)).not.toContain('H09');
+    expect(out.bpmnXml).toContain('<bpmn:lane ');
+  });
+
+  test('passing result.catalog (the merged view for the author) together with the model gives H09 per new actor', async () => {
+    const given = { actors: [{ id: 'reg', name: 'Schadenregulierung', kind: 'unit' }] };
+    const r = migrateModel(fixture('example-schadenmeldung.json'), { catalog: given });
+    const out = await runPipeline(copy(r.model), { catalog: copy(r.catalog), view: rollen() });
+    expect(out.validation.errors).toEqual([]);
+    expect(hintCodes(out).filter((c) => c === 'H09')).toHaveLength(r.model.actors.length);
+  });
+
+  test('an embedded scheme with performs key R gives assignments of type R, also to a matched actor', () => {
+    const scheme = { scheme: 'rasci', types: [{ key: 'R', label: 'Responsible', performs: true }, { key: 'I', label: 'Informed' }] };
+    const given = { scheme, actors: [{ id: 'sb', name: 'Sachbearbeitung', kind: 'unit' }] };
+    const r = migrateModel(small(), { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'R', actor: 'sb' }]);
+    expect(nodeOf(r.model, 't2').assignments).toEqual([{ type: 'R', actor: 'B1' }]);
+    expect(r.catalog.scheme).toEqual(scheme);
+  });
+
+  test('without a catalogue the supplement equals the effective catalogue and no MG07 exists', () => {
+    const r = migrateModel(small());
+    expect(r.catalog).toEqual(r.supplement);
+    expect(entriesOf(r, 'MG07')).toEqual([]);
+  });
+
+  test('a child lane of a lane that maps to a unit actor gets that actor as unit', () => {
+    const given = { actors: [{ id: 'lt', name: 'Leitung', kind: 'unit' }] };
+    const r = migrateModel(small(), { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(r.supplement.actors).toEqual([{ id: 'A', name: 'Sachbearbeitung' }, { id: 'B1', name: 'Team', unit: 'lt' }]);
+    expect(resolveFields(copy(r.model), { catalog: copy(given) }).errors).toEqual([]);
+  });
+
+  test('a child lane of a lane that maps to a role actor gets no unit, and its H07 says why', async () => {
+    const given = { actors: [{ id: 'lt', name: 'Leitung', kind: 'role' }] };
+    const r = migrateModel(small(), { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(r.supplement.actors.find((a) => a.id === 'B1')).toEqual({ id: 'B1', name: 'Team' });
+    const h07 = entriesOf(r, 'H07').find((e) => e.elements[0] === 'B1');
+    expect(h07.message).toBe('[H07] Lane "Team" became actor "B1" without kind; check its kind. It has no unit: its parent lane "B" is the role actor "lt", and a unit must not be a role.');
+    const out = await runPipeline(copy(r.model), { catalog: copy(given), view: rollen() });
+    expect(out.validation.errors).toEqual([]);
+  });
+
+  test('a matched actor is left as the catalogue has it (partOf); the catalogue is not touched', () => {
+    const given = { actors: [{ id: 'top', name: 'Bereich', kind: 'unit' }, { id: 'tm', name: 'Team', kind: 'unit', partOf: 'top' }] };
+    const before = copy(given);
+    const r = migrateModel(small(), { catalog: given });
+    expect(given).toEqual(before);
+    expect(r.supplement.actors.map((a) => a.id)).toEqual(['A', 'B']);
+    expect(entriesOf(r, 'MG07').map((e) => e.elements)).toEqual([['B1', 'tm']]);
+    expect(nodeOf(r.model, 't2').assignments[0].actor).toBe('tm');
+  });
+
+  test('several catalogue actors of one name: the first in catalogue order, and the MG07 text says so', () => {
+    const given = { actors: [{ id: 'x1', name: 'Leitung', kind: 'unit' }, { id: 'x2', name: 'Leitung', kind: 'role' }] };
+    const r = migrateModel(small(), { catalog: given });
+    expectTranslatedAndValid(r);
+    const [e] = entriesOf(r, 'MG07');
+    expect(e.elements).toEqual(['B', 'x1']);
+    expect(e.message).toBe('[MG07] Lane "B" maps by its name "Leitung" to the existing actor "x1". The catalogue holds 2 actors of that name ("x1", "x2"); the first is taken.');
+    expect(r.supplement.actors.find((a) => a.id === 'B1').unit).toBe('x1');
+  });
+
+  test('the name must match exactly: case and spaces count', () => {
+    const given = { actors: [{ id: 'lt', name: 'leitung', kind: 'unit' }, { id: 'lt2', name: 'Leitung ', kind: 'unit' }] };
+    const r = migrateModel(small(), { catalog: given });
+    expect(entriesOf(r, 'MG07')).toEqual([]);
+    expect(r.supplement.actors).toHaveLength(3);
+  });
+
+  test('a role named like a lane that maps to the catalogue is that actor; no second MG07', () => {
+    const input = small();
+    input.nodes.find((n) => n.id === 't1').role = 'Leitung';
+    const given = { actors: [{ id: 'lt', name: 'Leitung', kind: 'unit' }] };
+    const r = migrateModel(input, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(r.supplement.actors.some((a) => a.id.startsWith('role_'))).toBe(false);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'lt' }]);
+    expect(entriesOf(r, 'MG07').map((e) => e.elements)).toEqual([['B', 'lt']]);
+    expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([['t1', 'A', 'lt']]);
+  });
+
+  test('a role named like a catalogue actor (no lane of that name) is that actor, one MG07 per role, none for the role actor', () => {
+    const input = small();
+    input.nodes.find((n) => n.id === 't1').role = 'Gutachter';
+    input.nodes.find((n) => n.id === 't2').role = 'Gutachter';
+    const given = { actors: [{ id: 'gut', name: 'Gutachter', kind: 'role' }] };
+    const r = migrateModel(input, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(r.supplement.actors.map((a) => a.id)).toEqual(['A', 'B', 'B1']);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'gut' }]);
+    expect(nodeOf(r.model, 't2').assignments).toEqual([{ type: 'D', actor: 'gut' }]);
+    expect(entriesOf(r, 'MG07').map((e) => e.elements)).toEqual([['Gutachter', 'gut']]);
+    expect(entriesOf(r, 'MG07')[0].message).toBe('[MG07] Role "Gutachter" maps by its name to the existing actor "gut".');
+    expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([['t1', 'A', 'gut'], ['t2', 'B1', 'gut']]);
+    expect(entriesOf(r, 'H07').map((e) => e.elements[0])).toEqual(['A', 'B', 'B1']);
+  });
+
+  test('a role actor stays unit-less when its lane is a matched role actor; a new role actor avoids catalogue ids', () => {
+    const input = small();
+    input.nodes.find((n) => n.id === 't1').role = 'Prüfer';
+    const given = { actors: [{ id: 'role_Pr_fer', name: 'Anderer', kind: 'unit' }, { id: 'sb', name: 'Sachbearbeitung', kind: 'role' }] };
+    const r = migrateModel(input, { catalog: given });
+    expectTranslatedAndValid(r);
+    const role = r.supplement.actors.find((a) => a.name === 'Prüfer');
+    expect(role).toEqual({ id: 'role_Pr_fer_2', name: 'Prüfer' });
+    expect(entriesOf(r, 'H07').find((e) => e.elements[0] === 'role_Pr_fer_2').message).toBe('[H07] Role "Prüfer" became actor "role_Pr_fer_2" without kind; check its kind. It has no unit: its lane "A" is the role actor "sb", and a unit must not be a role.');
+    expect(resolveFields(copy(r.model), { catalog: copy(given) }).errors).toEqual([]);
   });
 });
