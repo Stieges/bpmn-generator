@@ -140,8 +140,14 @@ describe('png — pure helpers', () => {
   });
 
   test('planParts: wide-pipeline at the cap gives four parts in one row', () => {
-    const parts = planParts(8192, 382, { partPx: 2657, overlapPx: 266 });
+    // 4932 × 230 units at the capped scale 8192/4932; part and overlap sizes follow from it.
+    const s = previewScale(4932, 230);
+    const partPx = Math.round(PNG_PREVIEW.partUnits * s);
+    const overlapPx = Math.round(PNG_PREVIEW.overlapUnits * s);
+    expect([partPx, overlapPx]).toEqual([2658, 266]);
+    const parts = planParts(8192, 382, { partPx, overlapPx });
     expect(parts).toHaveLength(4);
+    expect(parts.every((p) => p.w <= partPx)).toBe(true);
     expect(parts.every((p) => p.y === 0 && p.h === 382)).toBe(true);
     expect(parts[0].x).toBe(0);
     expect(parts[3].x + parts[3].w).toBe(8192);
