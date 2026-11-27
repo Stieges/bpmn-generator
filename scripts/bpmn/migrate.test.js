@@ -7,7 +7,7 @@ import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrateModel } from './migrate.js';
+import { migrateModel, compareLanes } from './migrate.js';
 import { validateModelSchema } from './schema-gate.js';
 import { runPipeline } from './pipeline.js';
 import { loadNamedView } from '../shared/view.js';
@@ -58,7 +58,9 @@ describe('migrateModel — simple-approval.json', () => {
       start1: undefined, task1: [{ type: 'D', actor: 'lane1' }], gw1: undefined,
       task2: [{ type: 'D', actor: 'lane1' }], task3: [{ type: 'D', actor: 'lane1' }], end1: undefined,
     });
-    expect(result.report.summary).toEqual({ processes: 1, lanes: 1, actors: 1, activities: 3, assigned: 3 });
+    expect(result.report.summary).toEqual({
+      processes: 1, lanes: 1, actors: 1, activities: 3, assigned: 3, laneMatches: 6, deviations: { MG03: 0, MG04: 0, MG05: 0 },
+    });
   });
 
   test('no lane, lanes or role left; $schemaVersion "2.0"; no catalogue path or actors in the model', () => {
@@ -147,8 +149,16 @@ describe('migrateModel — nested-lanes-role-system.json', () => {
     ]);
     expect(entriesOf(r, 'H07')).toHaveLength(7);
     expect(entriesOf(r, 'H07')[4].message).toBe('[H07] Role "Sachbearbeitung" became actor "role_Sachbearbeitung" without kind; check its kind.');
-    expect(codes(r)).toEqual(['MG02', 'MG02', ...Array(7).fill('H07'), 'MG03', 'MG03', 'MG03']);
-    expect(r.report.summary).toEqual({ processes: 1, lanes: 4, actors: 7, activities: 3, assigned: 3 });
+    // under rollen the events and the gateway follow the role actors, not lane_service
+    expect(entriesOf(r, 'MG04').map((e) => e.elements)).toEqual([
+      ['start', 'lane_service', 'role_Sachbearbeitung'],
+      ['gw', 'lane_service', 'role_Sachbearbeitung'],
+      ['end', 'lane_service', 'role_Pr_fer'],
+    ]);
+    expect(codes(r)).toEqual(['MG02', 'MG02', ...Array(7).fill('H07'), 'MG03', 'MG03', 'MG03', 'MG04', 'MG04', 'MG04']);
+    expect(r.report.summary).toEqual({
+      processes: 1, lanes: 4, actors: 7, activities: 3, assigned: 3, laneMatches: 0, deviations: { MG03: 3, MG04: 3, MG05: 0 },
+    });
     await generate(r);
   });
 });
@@ -288,7 +298,7 @@ describe('migrateModel — refusals (Review Focus 3)', () => {
     const r = migrateModel(v2);
     expect(r).toEqual({
       model: null, supplement: null, catalog: null,
-      report: { status: 'refused', entries: [expect.objectContaining({ code: 'MG01' })], summary: { processes: 0, lanes: 0, actors: 0, activities: 0, assigned: 0 } },
+      report: { status: 'refused', entries: [expect.objectContaining({ code: 'MG01' })], summary: { processes: 0, lanes: 0, actors: 0, activities: 0, assigned: 0, laneMatches: 0, deviations: { MG03: 0, MG04: 0, MG05: 0 } } },
     });
     expect(r.report.entries[0].message).toMatch(/^\[MG01\] input refused: .*2\.0/);
   });
@@ -581,5 +591,168 @@ describe('migrateModel — the catalogue option', () => {
     const r = migrateModel(fixture('simple-approval.json'), { catalog: { actors: 'x' } });
     expect(codes(r)).toEqual(['MG01']);
     expect(r.report.entries[0].message).toMatch(/^\[MG01\] input refused: the catalogue/);
+  });
+});
+
+describe('migrateModel — the report compares the lanes (Task 2)', () => {
+  const lanes = [{ id: 'A', name: 'Antrag' }, { id: 'B', name: 'Buchhaltung' }];
+  const proc = (nodes, edges) => ({ id: 'Process_C', name: 'C', lanes: copy(lanes), nodes, edges });
+  const flow = (...ids) => ids.slice(1).map((t, i) => ({ source: ids[i], target: t }));
+
+  test('design 7.2 case (b2), every node in lane A: G, End 1 and End 2 inherit A, no MG04', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 'g', type: 'exclusiveGateway', name: 'Antrag vollständig?', lane: 'A' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'A' },
+      { id: 'e1', type: 'endEvent', name: 'Antrag geprüft', lane: 'A' },
+      { id: 'e2', type: 'endEvent', name: 'Antrag abgelehnt', lane: 'A' },
+    ], [...flow('s', 'g', 't', 'e1'), { source: 'g', target: 'e2' }]);
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG04')).toEqual([]);
+    expect(r.report.summary.laneMatches).toBe(5);
+    expect(r.report.summary.deviations).toEqual({ MG03: 0, MG04: 0, MG05: 0 });
+  });
+
+  test('an end event in lane B behind a task in lane A: MG04 [end, B, A]', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'A' },
+      { id: 'end', type: 'endEvent', name: 'Antrag geprüft', lane: 'B' },
+    ], flow('s', 't', 'end'));
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG04')).toEqual([{
+      code: 'MG04',
+      message: '[MG04] endEvent "end" sat in lane "B"; the inheritance rule places it in lane "A".',
+      elements: ['end', 'B', 'A'],
+    }]);
+    expect(r.report.summary.laneMatches).toBe(2);
+    expect(r.report.summary.deviations).toEqual({ MG03: 0, MG04: 1, MG05: 0 });
+  });
+
+  test('simple-approval.json: no deviation, every top-level flow node matches', () => {
+    const input = fixture('simple-approval.json');
+    const r = migrateModel(input);
+    expect(r.report.summary.deviations).toEqual({ MG03: 0, MG04: 0, MG05: 0 });
+    expect(r.report.summary.laneMatches).toBe(input.pools[0].nodes.length);
+  });
+
+  test('an event that inherits a role actor names that actor as its new lane', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'A', role: 'Prüfer' },
+      { id: 'e', type: 'endEvent', name: 'Antrag geprüft', lane: 'A' },
+    ], flow('s', 't', 'e'));
+    const r = migrateModel(m);
+    expect(entriesOf(r, 'MG04').map((x) => x.elements)).toEqual([['s', 'A', 'role_Pr_fer'], ['e', 'A', 'role_Pr_fer']]);
+    expect(entriesOf(r, 'MG04')[0].message).toBe('[MG04] startEvent "s" sat in lane "A"; the inheritance rule places it with actor "role_Pr_fer", which is no lane of its 1.x process.');
+    expect(r.report.summary).toMatchObject({ laneMatches: 0, deviations: { MG03: 1, MG04: 2, MG05: 0 } });
+    // MG03 before MG04
+    expect(codes(r).slice(-3)).toEqual(['MG03', 'MG04', 'MG04']);
+  });
+
+  test('an event that inherits the placeholder names it', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't0', type: 'userTask', name: 'Antrag lesen' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'A' },
+      { id: 'e', type: 'endEvent', name: 'Antrag geprüft', lane: 'A' },
+    ], flow('s', 't0', 't', 'e'));
+    const r = migrateModel(m);
+    expect(entriesOf(r, 'MG04')).toEqual([{
+      code: 'MG04',
+      message: '[MG04] startEvent "s" sat in lane "A"; the inheritance rule places it in the placeholder lane "_unassigned".',
+      elements: ['s', 'A', '_unassigned'],
+    }]);
+    // t0 (MG05) has no original lane: neither compared nor counted
+    expect(r.report.summary).toMatchObject({ laneMatches: 2, deviations: { MG03: 0, MG04: 1, MG05: 1 } });
+    expect(codes(r).slice(-2)).toEqual(['MG05', 'MG04']);
+  });
+
+  test('a process with lanes but no performer gets no lanes: MG04 [nodeId, originalLaneId] per laned event', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen' },
+      { id: 'e', type: 'endEvent', name: 'Antrag geprüft', lane: 'B' },
+    ], flow('s', 't', 'e'));
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG04')).toEqual([
+      { code: 'MG04', message: '[MG04] startEvent "s" sat in lane "A"; format 2.0 gives its process no lanes (no activity has a performer).', elements: ['s', 'A'] },
+      { code: 'MG04', message: '[MG04] endEvent "e" sat in lane "B"; format 2.0 gives its process no lanes (no activity has a performer).', elements: ['e', 'B'] },
+    ]);
+    expect(r.report.summary).toMatchObject({ laneMatches: 0, deviations: { MG03: 0, MG04: 2, MG05: 1 } });
+  });
+
+  test('an event with a dropped role is still compared: MG05 for the role, MG04 for the lane', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'A' },
+      { id: 'end', type: 'endEvent', name: 'Antrag geprüft', lane: 'B', role: 'Buchhaltung' },
+    ], flow('s', 't', 'end'));
+    const r = migrateModel(m);
+    expect(entriesOf(r, 'MG05').map((x) => x.elements)).toEqual([['end']]);
+    expect(entriesOf(r, 'MG04').map((x) => x.elements)).toEqual([['end', 'B', 'A']]);
+    expect(r.report.summary).toMatchObject({ laneMatches: 2, deviations: { MG03: 0, MG04: 1, MG05: 1 } });
+  });
+
+  test('boundary events, subprocess children and lane-less processes are not compared', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 'sp', type: 'subProcess', name: 'Antrag bearbeiten', lane: 'A',
+        nodes: [{ id: 'cs', type: 'startEvent', name: 'Bearbeitung begonnen', lane: 'B' }, { id: 'ce', type: 'endEvent', name: 'Bearbeitung beendet', lane: 'B' }],
+        edges: [{ source: 'cs', target: 'ce' }] },
+      { id: 'b', type: 'boundaryEvent', name: 'Frist abgelaufen', attachedTo: 'sp', marker: 'timer', lane: 'B' },
+      { id: 'e', type: 'endEvent', name: 'Antrag geprüft', lane: 'A' },
+    ], flow('s', 'sp', 'e'));
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    // b sits in B but follows its host; cs and ce sit in B inside sp: none of them is compared
+    expect(entriesOf(r, 'MG04')).toEqual([]);
+    expect(r.report.summary.laneMatches).toBe(3);
+    const collab = migrateModel(fixture('realistic-collaboration.json'));
+    const laned = fixture('realistic-collaboration.json').pools.filter((p) => p.lanes?.length);
+    const flowNodes = laned.flatMap((p) => p.nodes).filter((n) => !['boundaryEvent', 'dataObjectReference', 'dataStoreReference', 'textAnnotation', 'group'].includes(n.type));
+    expect(collab.report.summary.laneMatches + collab.report.summary.deviations.MG04 + collab.report.summary.deviations.MG03).toBe(flowNodes.length);
+  });
+
+  test('a node reached only from a boundary event inherits no lane (design 7.2: boundary events last): MG04', () => {
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Start', lane: 'A' },
+      { id: 't', type: 'userTask', name: 'Antrag prüfen', lane: 'A' },
+      { id: 'b', type: 'boundaryEvent', name: 'Frist abgelaufen', attachedTo: 't', marker: 'timer', lane: 'A' },
+      { id: 'e', type: 'endEvent', name: 'Antrag geprüft', lane: 'A' },
+      { id: 'e2', type: 'endEvent', name: 'Antrag verfallen', lane: 'A' },
+    ], [...flow('s', 't', 'e'), { source: 'b', target: 'e2' }]);
+    const r = migrateModel(m);
+    expect(entriesOf(r, 'MG04').map((x) => x.elements)).toEqual([['e2', 'A', '_unassigned']]);
+    expect(r.report.summary.laneMatches).toBe(3);
+  });
+
+  test('a given catalogue that fails the catalogue check of the comparison is refused with MG01', () => {
+    const catalog = { actors: [{ id: 'r', name: 'R', kind: 'role' }, { id: 'x', name: 'X', unit: 'r' }] };
+    const r = migrateModel(fixture('simple-approval.json'), { catalog });
+    expect(r.model).toBeNull();
+    expect(r.report.entries).toEqual([{
+      code: 'MG01',
+      message: '[MG01] input refused: the translation fails the catalogue check: [C02] actor "x": unit "r" is a role, not a unit',
+      elements: [],
+    }]);
+  });
+
+  test('a refusal carries the same summary shape', () => {
+    const r = migrateModel(fixture('nested-lanes-role-system.json'));
+    expect(r.report.status).toBe('refused');
+    expect(r.report.summary).toMatchObject({ laneMatches: 0, deviations: { MG03: 0, MG04: 0, MG05: 0 } });
+  });
+
+  test('an activity placed off its lane without MG03 is a bug of migrate: it throws "migrate internal error"', () => {
+    const laneOfActor = new Map([['A', 'A'], ['B', 'B']]);
+    const site = { nodeId: 't', type: 'userTask', originalLaneId: 'A', originalActor: 'A', newKey: 'B', mg03: false, laneOfActor };
+    expect(() => compareLanes([site])).toThrow(/^migrate internal error: /);
+    expect(() => compareLanes([{ ...site, newKey: 'A', mg03: true }])).toThrow(/^migrate internal error: /);
+    expect(compareLanes([{ ...site, mg03: true }])).toEqual({ laneMatches: 0, entries: [] });
+    expect(compareLanes([{ ...site, newKey: 'A' }])).toEqual({ laneMatches: 1, entries: [] });
   });
 });
