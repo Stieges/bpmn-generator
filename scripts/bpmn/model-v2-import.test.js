@@ -18,15 +18,15 @@ import { loadNamedView, ViewRejectedError } from '../shared/view.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
-const GOLDEN_MODEL = { organigramm: 'organigramm', systeme: 'schaden-systeme' };
-const golden = (view) => resolve(root, `tests/fixtures-v2/${GOLDEN_MODEL[view] ?? 'schaden'}.${view}.expected.bpmn`);
+const GOLDEN_MODEL = { organigramm: 'organigramm', systeme: 'bestellung-systeme' };
+const golden = (view) => resolve(root, `tests/fixtures-v2/${GOLDEN_MODEL[view] ?? 'bestellung'}.${view}.expected.bpmn`);
 const read = (path) => readFileSync(path, 'utf8');
-const CATALOG = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
-const CATALOG_ORG = 'sha256:0261e68c2a37cc3d7a5eef8a2ca8d10314ec949abcb0af30514e1fe04b126842';
-const CATALOG_SYS = 'sha256:ca38a972cb2661579c6d2ded39f4625c3a3bab332d58c9ef9c7eb5f56be6fc43';
+const CATALOG = 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273';
+const CATALOG_ORG = 'sha256:19836e2ecd105136b1682f33b53a4ebd32a8a5039625fc09dde25578ae38c00b';
+const CATALOG_SYS = 'sha256:c5ac5f1c62842fdd693bb58878cffa81b217335d2c9f16500b8ce7d3fb3a5cdb';
 const LANE_IDS = {
-  rollen: ['L.Process_Schaden.sb_schaden', 'L.Process_Schaden.regress', 'L.Process_Schaden.zahlung'],
-  einheiten: ['L.Process_Schaden.abt_schaden', 'L.Process_Schaden.abt_finanzen'],
+  rollen: ['L.Process_Bestellung.sb_einkauf', 'L.Process_Bestellung.leitung', 'L.Process_Bestellung.zahlung'],
+  einheiten: ['L.Process_Bestellung.abt_einkauf', 'L.Process_Bestellung.abt_buchhaltung'],
 };
 const READERS = { bpmnToLogicCore, bpmnToLogicCoreLegacy };
 
@@ -85,7 +85,7 @@ for (const view of ['rollen', 'einheiten']) {
 
 // The system golden: system lanes import as ordinary lanes, the system of a task as its 1.x `system` text.
 describe('the systeme golden', () => {
-  const LANES = ['L.Process_Schaden.sys_schaden', 'L.Process_Schaden.sys_regress'];
+  const LANES = ['L.Process_Bestellung.sys_ordersystem', 'L.Process_Bestellung.sys_lieferportal'];
   for (const [name, reader] of Object.entries(READERS)) {
     test(`${name} gives a 1.x model that passes the 1.x gate, with the system texts`, async () => {
       const lc = await reader(read(golden('systeme')));
@@ -94,7 +94,7 @@ describe('the systeme golden', () => {
       expect(lc.lanes.map((l) => l.id)).toEqual(LANES);
       expect(lc.nodes.some((n) => 'role' in n || 'assignments' in n)).toBe(false);
       expect(Object.fromEntries(lc.nodes.filter((n) => n.system).map((n) => [n.id, n.system])))
-        .toEqual({ pruefen: 'Schadensystem', regr: 'Regressportal', zahlen: 'Schadensystem' });
+        .toEqual({ pruefen: 'Bestellsystem', rueck: 'Lieferportal', zahlen: 'Bestellsystem' });
       expect(JSON.stringify(lc)).not.toMatch(/bg:|modelVersion|sha256|assignment|derived/);
       expect(keysOf(lc).filter((k) => k.startsWith('_') || k.startsWith('$'))).toEqual([]);
     });
@@ -118,16 +118,16 @@ describe('the systeme golden', () => {
 
 // The nested golden: the lane tree imports as 1.x nested lanes, every node in a leaf lane.
 describe('the organigramm golden', () => {
-  const P = 'L.Process_Schaden';
+  const P = 'L.Process_Bestellung';
   const TREE = [
-    // the flow ordering stacks Schadenabteilung (with the start event) above the own lane
-    { id: `${P}.bereich_leistung`, name: 'Leistung', children: [
-      { id: `${P}.abt_schaden`, name: 'Schadenabteilung' },
-      { id: `${P}.bereich_leistung._own`, name: 'Leistung' },
+    // the flow ordering stacks Einkauf (with the start event) above the own lane
+    { id: `${P}.bereich_beschaffung`, name: 'Beschaffung', children: [
+      { id: `${P}.abt_einkauf`, name: 'Einkauf' },
+      { id: `${P}.bereich_beschaffung._own`, name: 'Beschaffung' },
     ] },
-    { id: `${P}.abt_finanzen`, name: 'Finanzen' },
+    { id: `${P}.abt_buchhaltung`, name: 'Buchhaltung' },
   ];
-  const LEAF = { start: 'abt_schaden', pruefen: 'abt_schaden', gw: 'abt_schaden', regr: 'bereich_leistung._own', zahlen: 'abt_finanzen', end: 'abt_finanzen' };
+  const LEAF = { start: 'abt_einkauf', pruefen: 'abt_einkauf', gw: 'abt_einkauf', rueck: 'bereich_beschaffung._own', zahlen: 'abt_buchhaltung', end: 'abt_buchhaltung' };
 
   for (const [name, reader] of Object.entries(READERS)) {
     test(`${name} gives a 1.x model with the nested lanes that passes the 1.x gate`, async () => {
@@ -156,7 +156,7 @@ describe('the organigramm golden', () => {
     const { status, stdout, stderr } = spawnSync(process.execPath, [resolve(here, 'import.js'), golden('organigramm')], { encoding: 'utf8' });
     expect(status).toBe(0);
     expect(stderr).toContain(`[N01] ${MODEL_V2_IMPORT_NOTICE}`);
-    expect(stdout).toContain('"L.Process_Schaden.bereich_leistung._own"');
+    expect(stdout).toContain('"L.Process_Bestellung.bereich_beschaffung._own"');
   });
 });
 
@@ -204,7 +204,7 @@ describe('an edited 2.0 diagram (Review Focus 1)', () => {
       const lc = await reader(changed);
       expect(validateLogicCoreSchema(lc).valid).toBe(true);
       const { bpmnXml } = await runPipeline(lc);
-      expect(bpmnXml).toContain('id="L.Process_Schaden.regress"');
+      expect(bpmnXml).toContain('id="L.Process_Bestellung.leitung"');
     }
   });
 
@@ -224,7 +224,7 @@ describe('CLI node bpmn/import.js', () => {
     expect(status).toBe(0);
     expect(stderr).toContain(`[N01] ${MODEL_V2_IMPORT_NOTICE}`);
     expect(stdout).not.toContain(MODEL_V2_IMPORT_NOTICE);
-    expect(stdout).toContain('"L.Process_Schaden.regress"');
+    expect(stdout).toContain('"L.Process_Bestellung.leitung"');
   });
 
   test('prints no notice for 1.x output', () => {

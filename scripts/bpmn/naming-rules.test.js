@@ -26,7 +26,8 @@ const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const fixture = (file) => readJson(join(FIXTURES, file));
 const LANGUAGES = readJson(join(FIXTURES, 'rules-characterization', 'fixture-languages.json'));
 const SNAPSHOT_PATH = join(FIXTURES, 'rules-characterization', 'naming-languages.snapshot.json');
-const V2_MODELS = ['fixtures-v2/schaden.json', 'fixtures-v2/organigramm.json'];
+// Model path -> snapshot key. The snapshot file is frozen, so the order model's key keeps its earlier file name.
+const V2_MODELS = { 'fixtures-v2/bestellung.json': 'fixtures-v2/schaden.json', 'fixtures-v2/organigramm.json': 'fixtures-v2/organigramm.json' };
 
 const messagesOf = (result, code) => result.findings.filter((f) => f.code === code).map((f) => f.message);
 const withFindings = (lc, profile = null) => runRules(lc, profile, undefined, { withFindings: true });
@@ -109,7 +110,7 @@ describe('the pinned snapshot', () => {
   beforeAll(() => { snapshot = readJson(SNAPSHOT_PATH); });
 
   test('has one entry per top-level fixture and per format 2.0 model, M06 still empty', () => {
-    expect(Object.keys(snapshot).sort()).toEqual([...Object.keys(LANGUAGES), ...V2_MODELS].sort());
+    expect(Object.keys(snapshot).sort()).toEqual([...Object.keys(LANGUAGES), ...Object.values(V2_MODELS)].sort());
     for (const entry of Object.values(snapshot)) {
       expect(Object.keys(entry)).toEqual(['language', 'M01', 'M05', 'M06']);
       expect(entry.M06).toEqual([]);
@@ -130,9 +131,9 @@ describe('the pinned snapshot', () => {
     });
   }
 
-  for (const path of V2_MODELS) {
+  for (const [path, key] of Object.entries(V2_MODELS)) {
     test(`${path} (format 2.0, "de"): the messages equal the snapshot`, () => {
-      expect(measure(v2Form(path))).toEqual(snapshot[path]);
+      expect(measure(v2Form(path))).toEqual(snapshot[key]);
     });
   }
 });

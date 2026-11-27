@@ -1,11 +1,11 @@
-{ "$schemaVersion": "2.0", "catalog": "organigramm-catalog.json", "id": "Process_Schaden", "name": "Schaden regulieren",
+{ "$schemaVersion": "2.0", "catalog": "organigramm-catalog.json", "id": "Process_Bestellung", "name": "Bestellung abwickeln",
   "nodes": [
-    { "id": "start", "type": "startEvent", "name": "Schaden gemeldet" }, { "id": "gw", "type": "exclusiveGateway", "name": "Regress möglich?" },
-    { "id": "pruefen", "type": "userTask", "name": "Schaden prüfen", "assignments": [ { "type": "D", "actor": "sb_schaden" } ] },
-    { "id": "regr", "type": "userTask", "name": "Regress prüfen",
-      "assignments": [ { "type": "D", "actor": "regress" }, { "type": "I", "actor": "sb_schaden" } ] },
+    { "id": "start", "type": "startEvent", "name": "Bestellung eingegangen" }, { "id": "gw", "type": "exclusiveGateway", "name": "Rückfrage nötig?" },
+    { "id": "pruefen", "type": "userTask", "name": "Auftrag prüfen", "assignments": [ { "type": "D", "actor": "sb_einkauf" } ] },
+    { "id": "rueck", "type": "userTask", "name": "Lieferant klären",
+      "assignments": [ { "type": "D", "actor": "leitung" }, { "type": "I", "actor": "sb_einkauf" } ] },
     { "id": "zahlen", "type": "userTask", "name": "Zahlung anweisen", "assignments": [ { "type": "D", "actor": "zahlung" } ] },
-    { "id": "end", "type": "endEvent", "name": "Schaden reguliert" } ],
+    { "id": "end", "type": "endEvent", "name": "Auftrag erledigt" } ],
   "edges": [ { "source": "start", "target": "pruefen" }, { "source": "pruefen", "target": "gw" },
-             { "source": "gw", "target": "regr", "label": "ja" }, { "source": "gw", "target": "zahlen", "label": "nein" },
-             { "source": "regr", "target": "zahlen" }, { "source": "zahlen", "target": "end" } ] }
+             { "source": "gw", "target": "rueck", "label": "ja" }, { "source": "gw", "target": "zahlen", "label": "nein" },
+             { "source": "rueck", "target": "zahlen" }, { "source": "zahlen", "target": "end" } ] }

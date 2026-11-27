@@ -4307,8 +4307,8 @@ describe('CLI --view', () => {
 });
 
 describe('CLI format 2.0 and --catalog', () => {
-  const V2 = resolve('../tests/fixtures-v2/schaden.json');
-  const CAT = resolve('../tests/fixtures-v2/schaden-catalog.json');
+  const V2 = resolve('../tests/fixtures-v2/bestellung.json');
+  const CAT = resolve('../tests/fixtures-v2/bestellung-catalog.json');
   const mod = async () => ({
     fs: await import('node:fs'), os: await import('node:os'), path: await import('node:path'),
     cp: await import('node:child_process'),
@@ -4373,7 +4373,7 @@ describe('CLI format 2.0 and --catalog', () => {
   test('stdin with a "catalog" field and no --catalog fails with the message', async () => {
     const res = await run(['-', '<out>', '--view=rollen'], { input: (await import('node:fs')).readFileSync(V2, 'utf8') });
     expect(res.status).toBe(1);
-    expect(res.stderr).toContain('✗ [C13] the model names catalogue "schaden-catalog.json" but is read from standard input; pass --catalog <path>');
+    expect(res.stderr).toContain('✗ [C13] the model names catalogue "bestellung-catalog.json" but is read from standard input; pass --catalog <path>');
     expect(res.xml).toBeNull();
   });
 
@@ -4387,11 +4387,11 @@ describe('CLI format 2.0 and --catalog', () => {
 
   test('--catalog <path> (a space) wins over the model\'s own field', async () => {
     const other = await tempFile('other.json', JSON.stringify({ scheme: 'demi', actors: [
-      { id: 'sb_schaden', name: 'Andere Rolle', kind: 'role' }, { id: 'regress', name: 'Regress', kind: 'role' }, { id: 'zahlung', name: 'Zahlung', kind: 'role' }] }));
+      { id: 'sb_einkauf', name: 'Andere Rolle', kind: 'role' }, { id: 'leitung', name: 'Leitung', kind: 'role' }, { id: 'zahlung', name: 'Zahlung', kind: 'role' }] }));
     const res = await run([V2, '<out>', '--view=rollen', '--catalog', other]);
     expect(res.status).toBe(0);
     expect(res.xml).toContain('Andere Rolle');
-    expect(res.xml).not.toContain('Sachbearbeitung Schaden');
+    expect(res.xml).not.toContain('Sachbearbeitung Einkauf');
   }, 30_000);
 
   test('a catalogue with a byte order mark loads', async () => {

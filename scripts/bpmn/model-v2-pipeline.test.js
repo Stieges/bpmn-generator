@@ -24,31 +24,31 @@ const LANES_ON_1X = 'view "rollen" forms lanes from assignments; this model (for
 const CATALOG = {
   scheme: 'demi',
   actors: [
-    { id: 'abt_schaden', name: 'Schadenabteilung', kind: 'unit' },
-    { id: 'abt_finanzen', name: 'Finanzen', kind: 'unit' },
-    { id: 'sb_schaden', name: 'Sachbearbeitung Schaden', kind: 'role', unit: 'abt_schaden' },
-    { id: 'regress', name: 'Regressspezialist', kind: 'role', unit: 'abt_schaden' },
-    { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_finanzen' },
+    { id: 'abt_einkauf', name: 'Einkauf', kind: 'unit' },
+    { id: 'abt_buchhaltung', name: 'Buchhaltung', kind: 'unit' },
+    { id: 'sb_einkauf', name: 'Sachbearbeitung Einkauf', kind: 'role', unit: 'abt_einkauf' },
+    { id: 'leitung', name: 'Abteilungsleitung', kind: 'role', unit: 'abt_einkauf' },
+    { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_buchhaltung' },
   ],
 };
 const MODEL = {
-  $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Schaden', name: 'Schaden regulieren',
+  $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Bestellung', name: 'Bestellung abwickeln',
   nodes: [
-    { id: 'start', type: 'startEvent', name: 'Schaden gemeldet' },
-    { id: 'gw', type: 'exclusiveGateway', name: 'Regress möglich?' },
-    { id: 'pruefen', type: 'userTask', name: 'Schaden prüfen', assignments: [{ type: 'D', actor: 'sb_schaden' }] },
-    { id: 'regr', type: 'userTask', name: 'Regress prüfen',
-      assignments: [{ type: 'D', actor: 'regress' }, { type: 'I', actor: 'sb_schaden' }] },
+    { id: 'start', type: 'startEvent', name: 'Bestellung eingegangen' },
+    { id: 'gw', type: 'exclusiveGateway', name: 'Rückfrage nötig?' },
+    { id: 'pruefen', type: 'userTask', name: 'Auftrag prüfen', assignments: [{ type: 'D', actor: 'sb_einkauf' }] },
+    { id: 'rueck', type: 'userTask', name: 'Lieferant klären',
+      assignments: [{ type: 'D', actor: 'leitung' }, { type: 'I', actor: 'sb_einkauf' }] },
     { id: 'zahlen', type: 'userTask', name: 'Zahlung anweisen', assignments: [{ type: 'D', actor: 'zahlung' }] },
-    { id: 'end', type: 'endEvent', name: 'Schaden reguliert' },
+    { id: 'end', type: 'endEvent', name: 'Auftrag erledigt' },
   ],
   edges: [
     { source: 'start', target: 'pruefen' }, { source: 'pruefen', target: 'gw' },
-    { source: 'gw', target: 'regr', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
-    { source: 'regr', target: 'zahlen' }, { source: 'zahlen', target: 'end' },
+    { source: 'gw', target: 'rueck', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
+    { source: 'rueck', target: 'zahlen' }, { source: 'zahlen', target: 'end' },
   ],
 };
-const L = (actor) => `L.Process_Schaden.${actor}`;
+const L = (actor) => `L.Process_Bestellung.${actor}`;
 
 /** Lane id → its flowNodeRef ids, read from the XML. */
 function laneMembers(xml) {
@@ -63,13 +63,13 @@ const run = (opts = {}, model = MODEL) => runPipeline(copy(model), { catalog: co
 
 describe('runPipeline — format 2.0, the two views of design 5.6', () => {
   const ROLLEN = {
-    [L('sb_schaden')]: ['gw', 'pruefen', 'start'],
-    [L('regress')]: ['regr'],
+    [L('sb_einkauf')]: ['gw', 'pruefen', 'start'],
+    [L('leitung')]: ['rueck'],
     [L('zahlung')]: ['end', 'zahlen'],
   };
   const EINHEITEN = {
-    [L('abt_schaden')]: ['gw', 'pruefen', 'regr', 'start'],
-    [L('abt_finanzen')]: ['end', 'zahlen'],
+    [L('abt_einkauf')]: ['gw', 'pruefen', 'rueck', 'start'],
+    [L('abt_buchhaltung')]: ['end', 'zahlen'],
   };
 
   test.each([['rollen', ROLLEN], ['einheiten', EINHEITEN]])('view %s forms the lanes of design 5.6', async (name, expected) => {
@@ -102,7 +102,7 @@ describe('runPipeline — format 2.0, the two views of design 5.6', () => {
 
   test('validation.hints: the lane hints first, then H01', async () => {
     const model = copy(MODEL);
-    delete model.nodes.find((n) => n.id === 'regr').assignments;
+    delete model.nodes.find((n) => n.id === 'rueck').assignments;
     const result = await run({ view: loadNamedView('explicit-joins') }, model);
     expect(result.validation.errors).toEqual([]);
     expect(result.validation.hints.map((h) => h.code)).toEqual(['H02', 'H01']);
@@ -146,24 +146,24 @@ describe('runPipeline — format 2.0 early returns', () => {
 });
 
 describe('runPipeline — the process file replaces catalogue entries', () => {
-  const REGRESS = { id: 'regress', name: 'Regress (lokal)', kind: 'role', unit: 'abt_finanzen' };
+  const LEITUNG = { id: 'leitung', name: 'Leitung (lokal)', kind: 'role', unit: 'abt_buchhaltung' };
 
-  test('H09 comes first in validation.hints; regr moves into Finanzen in the unit view', async () => {
-    const model = { ...copy(MODEL), actors: [REGRESS] };
+  test('H09 comes first in validation.hints; rueck moves into Buchhaltung in the unit view', async () => {
+    const model = { ...copy(MODEL), actors: [LEITUNG] };
     delete model.nodes.find((n) => n.id === 'pruefen').assignments;
     const result = await run({ view: loadNamedView('explicit-joins') }, model);
     expect(result.validation.errors).toEqual([]);
     expect(result.validation.hints.map((h) => h.code)).toEqual(['H09', 'H02', 'H01']);
-    const unit = await run({ view: loadNamedView('einheiten') }, { ...copy(MODEL), actors: [REGRESS] });
-    expect(laneMembers(unit.bpmnXml)[L('abt_finanzen')]).toEqual(['end', 'regr', 'zahlen']);
+    const unit = await run({ view: loadNamedView('einheiten') }, { ...copy(MODEL), actors: [LEITUNG] });
+    expect(laneMembers(unit.bpmnXml)[L('abt_buchhaltung')]).toEqual(['end', 'rueck', 'zahlen']);
     expect(unit.validation.hints).toEqual([expect.objectContaining({ code: 'H09' })]);
   });
 
   test('the caller\'s model and catalogue are not changed', async () => {
-    const model = { ...copy(MODEL), actors: [REGRESS] };
+    const model = { ...copy(MODEL), actors: [LEITUNG] };
     const catalog = copy(CATALOG);
     await runPipeline(model, { catalog });
-    expect(model).toEqual({ ...MODEL, actors: [REGRESS] });
+    expect(model).toEqual({ ...MODEL, actors: [LEITUNG] });
     expect(catalog).toEqual(CATALOG);
   });
 
@@ -171,9 +171,9 @@ describe('runPipeline — the process file replaces catalogue entries', () => {
     const dir = mkdtempSync(join(tmpdir(), 'v2-repl-'));
     try {
       writeFileSync(join(dir, 'bpmn-catalog.json'), JSON.stringify(CATALOG));
-      writeFileSync(join(dir, 'm.json'), JSON.stringify({ ...copy(MODEL), catalog: 'bpmn-catalog.json', actors: [REGRESS] }));
+      writeFileSync(join(dir, 'm.json'), JSON.stringify({ ...copy(MODEL), catalog: 'bpmn-catalog.json', actors: [LEITUNG] }));
       const out = execFileSync(process.execPath, [resolve(here, 'pipeline.js'), 'm.json', 'out', '--strict'], { cwd: dir, stdio: 'pipe' });
-      expect(out.toString()).toContain('[H09] Catalogue entry "regress" is replaced by the process file.');
+      expect(out.toString()).toContain('[H09] Catalogue entry "leitung" is replaced by the process file.');
       expect(readFileSync(join(dir, 'out.bpmn'), 'utf8')).toContain('modelVersion="2.0"');
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -317,11 +317,11 @@ describe('generateDiagramSet refuses format 2.0 (design 9: drill-down does not r
   // A 2.0 model with an expanded subprocess whose child carries an assignment.
   const WITH_SUB = () => {
     const m = copy(MODEL);
-    m.nodes.splice(2, 1, { id: 'pruefen', type: 'subProcess', name: 'Schaden prüfen', isExpanded: true,
-      assignments: [{ type: 'D', actor: 'sb_schaden' }],
+    m.nodes.splice(2, 1, { id: 'pruefen', type: 'subProcess', name: 'Auftrag prüfen', isExpanded: true,
+      assignments: [{ type: 'D', actor: 'sb_einkauf' }],
       nodes: [
         { id: 's_start', type: 'startEvent', name: 'Prüfung begonnen' },
-        { id: 's_task', type: 'userTask', name: 'Unterlagen sichten', assignments: [{ type: 'D', actor: 'regress' }] },
+        { id: 's_task', type: 'userTask', name: 'Unterlagen sichten', assignments: [{ type: 'D', actor: 'leitung' }] },
         { id: 's_end', type: 'endEvent', name: 'Prüfung beendet' },
       ],
       edges: [{ source: 's_start', target: 's_task' }, { source: 's_task', target: 's_end' }] });
@@ -348,8 +348,8 @@ describe('validateModel — one judgement for both formats', () => {
     m.nodes.splice(1, 1, { id: 'gw', type: 'inclusiveGateway', name: 'Welche Prüfungen?' },
       { id: 'gj', type: 'inclusiveGateway', name: '', has_join: true });
     m.edges = [
-      { source: 'start', target: 'gw' }, { source: 'gw', target: 'pruefen' }, { source: 'gw', target: 'regr' },
-      { source: 'pruefen', target: 'gj' }, { source: 'regr', target: 'gj' }, { source: 'gj', target: 'zahlen' },
+      { source: 'start', target: 'gw' }, { source: 'gw', target: 'pruefen' }, { source: 'gw', target: 'rueck' },
+      { source: 'pruefen', target: 'gj' }, { source: 'rueck', target: 'gj' }, { source: 'gj', target: 'zahlen' },
       { source: 'zahlen', target: 'end' },
     ];
     return m;

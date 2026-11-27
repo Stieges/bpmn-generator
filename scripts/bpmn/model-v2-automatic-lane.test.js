@@ -97,8 +97,8 @@ describe('the reproduction: lane tables in three views, switch off and on', () =
 
 describe('with the switch on or off, nothing else changes', () => {
   const CASES = [
-    ['schaden.json', 'schaden-catalog.json'], ['organigramm.json', 'organigramm-catalog.json'],
-    ['message-hub.json', 'message-hub-catalog.json'], ['schaden-systeme.json', 'schaden-systeme-catalog.json'],
+    ['bestellung.json', 'bestellung-catalog.json'], ['organigramm.json', 'organigramm-catalog.json'],
+    ['message-hub.json', 'message-hub-catalog.json'], ['bestellung-systeme.json', 'bestellung-systeme-catalog.json'],
   ];
   const ON = (lanes) => (typeof lanes === 'string' ? { by: lanes, automatic: 'lane' } : { ...lanes, automatic: 'lane' });
   for (const [file, cat] of CASES) {

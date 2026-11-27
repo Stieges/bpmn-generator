@@ -34,19 +34,19 @@ describe('layoutText cuts', () => {
   test('a word that fits, a word with a break point and a blank-separated line cut nothing', () => {
     expect(layoutText('Antrag prüfen', STYLE).cuts).toEqual([]);
     expect(layoutText('Kosten-Nutzen-Analyse durchführen', STYLE).cuts).toEqual([]);
-    expect(layoutText('Pauschal' + SHY + 'einwilligung prüfen', STYLE).cuts).toEqual([]);
+    expect(layoutText('Auftrags' + SHY + 'bestätigung prüfen', STYLE).cuts).toEqual([]);
   });
 
   test('a word cut over several lines is named once, whole; every cut word is named', () => {
-    const r = layoutText('Pauschaleinwilligungsprüfung und Schweigepflichtentbindung', STYLE);
-    expect(r.cuts).toEqual(['Pauschaleinwilligungsprüfung', 'Schweigepflichtentbindung']);
-    expect(r.lines.join('|').replace(/\|/g, '')).toBe('Pauschaleinwilligungsprüfung undSchweigepflichtentbindung');
+    const r = layoutText('Auftragsbestätigungsprüfung und Zahlungsfreigabeverfahren', STYLE);
+    expect(r.cuts).toEqual(['Auftragsbestätigungsprüfung', 'Zahlungsfreigabeverfahren']);
+    expect(r.lines.join('|').replace(/\|/g, '')).toBe('Auftragsbestätigungsprüfung undZahlungsfreigabeverfahren');
   });
 
   test('the lines are the cut ones', () => {
-    const { cuts, lines } = layoutText('Schweigepflichtentbindung anfordern', STYLE);
-    expect(cuts).toEqual(['Schweigepflichtentbindung']);
-    expect(lines).toEqual(['Schweigepflichte', 'ntbindung', 'anfordern']);
+    const { cuts, lines } = layoutText('Zahlungsfreigabeverfahren anfordern', STYLE);
+    expect(cuts).toEqual(['Zahlungsfreigabeverfahren']);
+    expect(lines).toEqual(['Zahlungsfreigabe', 'verfahren', 'anfordern']);
   });
 });
 
@@ -54,18 +54,18 @@ describe('H16 from runPipeline', () => {
   let r;
   beforeAll(async () => {
     r = await runPipeline(model([
-      task('a', 'Pauschaleinwilligung prüfen'),
-      task('b', 'Schweigepflichtentbindung anfordern'),
-      task('c', 'Pauschaleinwilligungsprüfung Schweigepflichtentbindung'),
+      task('a', 'Auftragsbestätigung prüfen'),
+      task('b', 'Zahlungsfreigabeverfahren anfordern'),
+      task('c', 'Auftragsbestätigungsprüfung Zahlungsfreigabeverfahren'),
       task('d', 'Kosten prüfen'),
     ]));
   }, 60000);
 
   test('one hint per label, naming the element and every cut word, in drawing order', () => {
     expect(h16(r).map((h) => [h.elements, h.message])).toEqual([
-      [['a'], 'The text of "a" is broken inside the word "Pauschaleinwilligung": it is wider than the line and has no place to break. Put a soft hyphen (U+00AD) in the name where the word may break, or shorten the word.'],
-      [['b'], 'The text of "b" is broken inside the word "Schweigepflichtentbindung": it is wider than the line and has no place to break. Put a soft hyphen (U+00AD) in the name where the word may break, or shorten the word.'],
-      [['c'], 'The text of "c" is broken inside the words "Pauschaleinwilligungsprüfung", "Schweigepflichtentbindung": they are wider than the line and have no place to break. Put a soft hyphen (U+00AD) in the name where the word may break, or shorten the word.'],
+      [['a'], 'The text of "a" is broken inside the word "Auftragsbestätigung": it is wider than the line and has no place to break. Put a soft hyphen (U+00AD) in the name where the word may break, or shorten the word.'],
+      [['b'], 'The text of "b" is broken inside the word "Zahlungsfreigabeverfahren": it is wider than the line and has no place to break. Put a soft hyphen (U+00AD) in the name where the word may break, or shorten the word.'],
+      [['c'], 'The text of "c" is broken inside the words "Auftragsbestätigungsprüfung", "Zahlungsfreigabeverfahren": they are wider than the line and have no place to break. Put a soft hyphen (U+00AD) in the name where the word may break, or shorten the word.'],
     ]);
   });
 
@@ -88,20 +88,20 @@ describe('H16 from runPipeline', () => {
 
 describe('H16 covers the labels the SVG wraps', () => {
   test('events, gateways, flow labels, annotations, lanes and pools', async () => {
-    const LONG = 'Schweigepflichtentbindung';
+    const LONG = 'Zahlungsfreigabeverfahren';
     const m = {
       id: 'Process_all', name: 'Prozess',
       lanes: [{ id: 'L1', name: 'Sachbearbeitung' }],
       nodes: [
         { id: 's', type: 'startEvent', name: LONG, lane: 'L1' },
-        { id: 'g', type: 'exclusiveGateway', name: 'Pauschaleinwilligungsprüfung?', lane: 'L1' },
+        { id: 'g', type: 'exclusiveGateway', name: 'Auftragsbestätigungsprüfung?', lane: 'L1' },
         task('t', 'Antrag prüfen'),
         { id: 'z', type: 'endEvent', name: 'Fall abgeschlossen', lane: 'L1' },
-        { id: 'n', type: 'textAnnotation', name: 'Pauschaleinwilligungsprüfung ' + 'x'.repeat(0) + 'Schweigepflichtentbindungserklärung', lane: 'L1' },
+        { id: 'n', type: 'textAnnotation', name: 'Auftragsbestätigungsprüfung ' + 'x'.repeat(0) + 'Zahlungsfreigabeverfahrensanweisung', lane: 'L1' },
       ],
       edges: [
         { id: 'f1', source: 's', target: 'g' },
-        { id: 'f2', source: 'g', target: 't', label: 'Pauschaleinwilligung' },
+        { id: 'f2', source: 'g', target: 't', label: 'Auftragsbestätigung' },
         { id: 'f3', source: 'g', target: 'z', label: 'Nein' },
         { id: 'f4', source: 't', target: 'z' },
       ],
@@ -110,9 +110,9 @@ describe('H16 covers the labels the SVG wraps', () => {
     const r = await runPipeline(m);
     const byEl = Object.fromEntries(h16(r).map((h) => [h.elements[0], h.message]));
     expect(Object.keys(byEl).sort()).toEqual(['f2', 'g', 'n', 's']);
-    expect(byEl.s).toMatch(/^The label of "s" is broken inside the word "Schweigepflichtentbindung"/);
-    expect(byEl.g).toMatch(/^The label of "g" is broken inside the word "Pauschaleinwilligungsprüfung\?"/);
-    expect(byEl.f2).toMatch(/^The label of the flow "f2" is broken inside the word "Pauschaleinwilligung"/);
+    expect(byEl.s).toMatch(/^The label of "s" is broken inside the word "Zahlungsfreigabeverfahren"/);
+    expect(byEl.g).toMatch(/^The label of "g" is broken inside the word "Auftragsbestätigungsprüfung\?"/);
+    expect(byEl.f2).toMatch(/^The label of the flow "f2" is broken inside the word "Auftragsbestätigung"/);
     expect(byEl.n).toMatch(/^The text of "n" is broken inside the words? /);
   }, 60000);
 
@@ -129,9 +129,9 @@ describe('H16 covers the labels the SVG wraps', () => {
 describe('a soft hyphen (U+00AD) in a name', () => {
   let r;
   const names = {
-    brk: 'Pauschal' + SHY + 'einwilligung prüfen',          // breaks at the soft hyphen
+    brk: 'Auftrags' + SHY + 'bestätigung prüfen',           // breaks at the soft hyphen
     keep: 'Kurz' + SHY + 'name',                             // no break at all
-    far: 'Schweigepflicht' + SHY + 'entbindung anfordern',  // first part wider than the line
+    far: 'Zahlungsfreigabe' + SHY + 'verfahren anfordern',  // first part wider than the line
   };
   beforeAll(async () => {
     r = await runPipeline(model(Object.entries(names).map(([id, n]) => task(id, n))));
@@ -147,7 +147,7 @@ describe('a soft hyphen (U+00AD) in a name', () => {
   });
 
   test('where the break falls at it, the SVG line ends with a visible hyphen and the next line starts clean', () => {
-    expect(svgLines(r.svg, 'brk')).toEqual(['Pauschal-', 'einwilligung', 'prüfen']);
+    expect(svgLines(r.svg, 'brk')).toEqual(['Auftrags-', 'bestätigung', 'prüfen']);
     expect(h16(r).map((h) => h.elements[0])).not.toContain('brk');
   });
 
@@ -158,8 +158,8 @@ describe('a soft hyphen (U+00AD) in a name', () => {
   });
 
   test('a first part wider than the line falls back to the hard cut; the next line keeps an invisible soft hyphen; H16 names the part', () => {
-    expect(svgLines(r.svg, 'far')).toEqual(['Schweigepflich', 't' + SHY + 'entbindung', 'anfordern']);
+    expect(svgLines(r.svg, 'far')).toEqual(['Zahlungsfreiga', 'be' + SHY + 'verfahren', 'anfordern']);
     const hint = h16(r).find((h) => h.elements[0] === 'far');
-    expect(hint.message).toContain('the word "Schweigepflicht":');
+    expect(hint.message).toContain('the word "Zahlungsfreigabe":');
   });
 });

@@ -121,7 +121,7 @@ async function buildRealResponses() {
     callbackStatus: 'not_requested',
   };
 
-  // A generate of a format 2.0 model: schaden.json, its catalogue and the view rollen (embedded, as over HTTP).
+  // A generate of a format 2.0 model: bestellung.json, its catalogue and the view rollen (embedded, as over HTTP).
   const v2Dir = join(REPO_ROOT, 'tests', 'fixtures-v2');
   const readJson = (path) => {
     try {
@@ -130,8 +130,8 @@ async function buildRealResponses() {
       throw new ToolingError(`could not read fixture ${path}: ${err.message}`);
     }
   };
-  const gen2 = await pipelineMod.runPipeline(readJson(join(v2Dir, 'schaden.json')), {
-    catalog: readJson(join(v2Dir, 'schaden-catalog.json')),
+  const gen2 = await pipelineMod.runPipeline(readJson(join(v2Dir, 'bestellung.json')), {
+    catalog: readJson(join(v2Dir, 'bestellung-catalog.json')),
     view: readJson(join(REPO_ROOT, 'views', 'rollen-view.json')),
   });
   const generateV2Response = {
@@ -151,7 +151,7 @@ async function buildRealResponses() {
   const importResponse = { correlationId: 'docs-gate', status: 'success', logicCore };
 
   // A diagram generated from a format 2.0 model: the response carries `notices`.
-  const goldenPath = join(REPO_ROOT, 'tests', 'fixtures-v2', 'schaden.rollen.expected.bpmn');
+  const goldenPath = join(REPO_ROOT, 'tests', 'fixtures-v2', 'bestellung.rollen.expected.bpmn');
   let goldenXml;
   try {
     goldenXml = readFileSync(goldenPath, 'utf8');

@@ -33,18 +33,18 @@ never after people — a model with "Ms Miller" in it is out of date the day she
 
 ```json
 {
-  "id": "Process_Claim",
-  "name": "Claim handling",
+  "id": "Process_Order",
+  "name": "Order handling",
   "lanes": [
-    { "id": "lane_handler", "name": "Claims handler" },
+    { "id": "lane_worker", "name": "Case worker" },
     { "id": "lane_lead", "name": "Team lead" }
   ],
   "nodes": [
-    { "id": "start", "type": "startEvent", "name": "Claim received", "lane": "lane_handler" },
-    { "id": "check", "type": "userTask", "name": "Check claim", "lane": "lane_handler" },
-    { "id": "approve", "type": "userTask", "name": "Approve payout", "lane": "lane_lead" },
-    { "id": "notify", "type": "userTask", "name": "Notify customer", "lane": "lane_handler" },
-    { "id": "end", "type": "endEvent", "name": "Claim settled", "lane": "lane_handler" }
+    { "id": "start", "type": "startEvent", "name": "Order received", "lane": "lane_worker" },
+    { "id": "check", "type": "userTask", "name": "Check order", "lane": "lane_worker" },
+    { "id": "approve", "type": "userTask", "name": "Approve order", "lane": "lane_lead" },
+    { "id": "notify", "type": "userTask", "name": "Notify customer", "lane": "lane_worker" },
+    { "id": "end", "type": "endEvent", "name": "Order completed", "lane": "lane_worker" }
   ],
   "edges": [
     { "id": "f1", "source": "start", "target": "check" },
@@ -200,13 +200,13 @@ the XML and reported by rule S15.
 ```json
 {
   "id": "Process_Tagged",
-  "name": "Claim handling",
+  "name": "Order handling",
   "nodes": [
-    { "id": "start", "type": "startEvent", "name": "Claim received" },
-    { "id": "check", "type": "userTask", "name": "Check claim", "role": "Claims handler", "system": "Claims portal" },
-    { "id": "book", "type": "serviceTask", "name": "Record payout", "role": "Accounting", "system": "SAP" },
-    { "id": "notify", "type": "userTask", "name": "Notify customer", "role": "Claims handler" },
-    { "id": "end", "type": "endEvent", "name": "Claim settled" }
+    { "id": "start", "type": "startEvent", "name": "Order received" },
+    { "id": "check", "type": "userTask", "name": "Check order", "role": "Case worker", "system": "Order system" },
+    { "id": "book", "type": "serviceTask", "name": "Record payment", "role": "Accounting", "system": "SAP" },
+    { "id": "notify", "type": "userTask", "name": "Notify customer", "role": "Case worker" },
+    { "id": "end", "type": "endEvent", "name": "Order completed" }
   ],
   "edges": [
     { "id": "f1", "source": "start", "target": "check" },
@@ -237,13 +237,13 @@ Actors and systems share one id space. Save it as `catalog.json`.
 ```jsonc
 {
   "actors": [
-    { "id": "u_claims", "name": "Claims department", "kind": "unit" },
-    { "id": "r_handler", "name": "Claims handler", "kind": "role", "unit": "u_claims" },
-    { "id": "r_lead", "name": "Team lead", "kind": "role", "unit": "u_claims" },
+    { "id": "u_purchasing", "name": "Purchasing", "kind": "unit" },
+    { "id": "r_worker", "name": "Case worker", "kind": "role", "unit": "u_purchasing" },
+    { "id": "r_lead", "name": "Team lead", "kind": "role", "unit": "u_purchasing" },
     { "id": "r_finance", "name": "Accountant", "kind": "role" }
   ],
   "systems": [
-    { "id": "s_portal", "name": "Claims portal" },
+    { "id": "s_orders", "name": "Order system" },
     { "id": "s_payments", "name": "Payment system" }
   ]
 }
@@ -260,15 +260,15 @@ and only two tasks name a system.
   "language": "en",
   "pools": [
     {
-      "id": "Process_Claim",
-      "name": "Claim handling",
+      "id": "Process_Order",
+      "name": "Order handling",
       "nodes": [
-        { "id": "start", "type": "startEvent", "name": "Claim received", "assignments": [{ "type": "D", "actor": "r_handler" }] },
-        { "id": "check", "type": "userTask", "name": "Check claim", "system": "s_portal", "assignments": [{ "type": "D", "actor": "r_handler" }] },
-        { "id": "approve", "type": "userTask", "name": "Approve payout", "assignments": [{ "type": "D", "actor": "r_lead" }] },
-        { "id": "pay", "type": "userTask", "name": "Pay claim", "system": "s_payments", "assignments": [{ "type": "D", "actor": "r_finance" }] },
-        { "id": "archive", "type": "userTask", "name": "Archive file" },
-        { "id": "end", "type": "endEvent", "name": "Claim settled" }
+        { "id": "start", "type": "startEvent", "name": "Order received", "assignments": [{ "type": "D", "actor": "r_worker" }] },
+        { "id": "check", "type": "userTask", "name": "Check order", "system": "s_orders", "assignments": [{ "type": "D", "actor": "r_worker" }] },
+        { "id": "approve", "type": "userTask", "name": "Approve order", "assignments": [{ "type": "D", "actor": "r_lead" }] },
+        { "id": "pay", "type": "userTask", "name": "Pay invoice", "system": "s_payments", "assignments": [{ "type": "D", "actor": "r_finance" }] },
+        { "id": "archive", "type": "userTask", "name": "Archive order" },
+        { "id": "end", "type": "endEvent", "name": "Order completed" }
       ],
       "edges": [
         { "id": "f1", "source": "start", "target": "check" },
@@ -293,11 +293,11 @@ node bpmn/pipeline.js ../quickstart.json ../quickstart-organigramm --strict --vi
 node bpmn/pipeline.js ../quickstart.json ../quickstart-systeme --strict --view=systeme --catalog ../catalog.json
 ```
 
-- `rollen`: one lane per performer (here Claims handler, Team lead, Accountant).
-- `einheiten`: one lane per unit of the performer (here Claims department).
+- `rollen`: one lane per performer (here Case worker, Team lead, Accountant).
+- `einheiten`: one lane per unit of the performer (here Purchasing).
 - `organigramm`: one lane per unit, nested along the organigram (`partOf`); with this flat catalogue it
   looks like `einheiten`.
-- `systeme`: one lane per system of the task (here Claims portal, Payment system). Only a task with a
+- `systeme`: one lane per system of the task (here Order system, Payment system). Only a task with a
   `system` takes a lane of its own; events and gateways follow their neighbours, and the performers play
   no part. A model without any `system` gets no lanes in this view (hint H06).
 
@@ -315,8 +315,8 @@ view asks for it. All are hints, never errors:
 | `(automatisch)` | An automatic task (service, script, business rule, send, receive) has no performer; only with the view option `"automatic": "lane"` | H19 |
 
 The names are set in `scripts/config.json` under `laneFormation` (`unassignedName`, `unitUnknownName`,
-`systemUnknownName`, `automaticName`). In the example, `Archive file` lands in `(nicht zugeordnet)` and, in the unit
-views, `Pay claim` in `(Einheit nicht erhoben)`; in the view `systeme`, `Approve payout` and `Archive file`
+`systemUnknownName`, `automaticName`). In the example, `Archive order` lands in `(nicht zugeordnet)` and, in the unit
+views, `Pay invoice` in `(Einheit nicht erhoben)`; in the view `systeme`, `Approve order` and `Archive order`
 land in `(System nicht erhoben)`.
 
 By default an automatic task without a performer sits in its neighbour's lane (hint H03). A view file of

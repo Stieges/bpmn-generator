@@ -224,13 +224,13 @@ describe('H18 on the fixtures', () => {
     expect(codes.slice(codes.indexOf('H18'))).toEqual(['H18', 'H18', 'H18', 'H18', 'H18']);
   }, 30_000);
 
-  test('the format 2.0 goldens: in schaden × einheiten the "ja" flow runs through the label "nein"; the others get none', async () => {
-    expect(h18(await generateV2('schaden.json', 'einheiten'))).toEqual([{
+  test('the format 2.0 goldens: in bestellung × einheiten the "ja" flow runs through the label "nein"; the others get none', async () => {
+    expect(h18(await generateV2('bestellung.json', 'einheiten'))).toEqual([{
       code: 'H18',
-      message: 'The sequence flow "flow_gw_regr" crosses the label of the sequence flow "flow_gw_zahlen": the line runs through the text. Move the label or the flow in a modeler, or shorten the name.',
-      elements: ['flow_gw_regr', 'flow_gw_zahlen'],
+      message: 'The sequence flow "flow_gw_rueck" crosses the label of the sequence flow "flow_gw_zahlen": the line runs through the text. Move the label or the flow in a modeler, or shorten the name.',
+      elements: ['flow_gw_rueck', 'flow_gw_zahlen'],
     }]);
-    expect(h18(await generateV2('schaden.json', 'rollen'))).toEqual([]);
+    expect(h18(await generateV2('bestellung.json', 'rollen'))).toEqual([]);
     expect(h18(await generateV2('organigramm.json', 'organigramm'))).toEqual([]);
   }, 60_000);
 
@@ -240,10 +240,10 @@ describe('H18 on the fixtures', () => {
 });
 
 describe('the hints H15 to H18 together', () => {
-  // schaden.json in a pool, three black-box partners with one message flow each (no participant order
+  // bestellung.json in a pool, three black-box partners with one message flow each (no participant order
   // avoids a DI05), a receive task nobody sends to, and a word longer than a line.
   const combo = () => {
-    const base = JSON.parse(readFileSync(join(FIXTURES_V2, 'schaden.json'), 'utf8'));
+    const base = JSON.parse(readFileSync(join(FIXTURES_V2, 'bestellung.json'), 'utf8'));
     const nodes = structuredClone(base.nodes);
     nodes.find((n) => n.id === 'zahlen').name = 'Zahlungsfreigabeanweisungsbearbeitungsvorgang anweisen';
     nodes.splice(nodes.length - 1, 0, {
@@ -252,16 +252,16 @@ describe('the hints H15 to H18 together', () => {
     const edges = base.edges.filter((e) => !(e.source === 'zahlen' && e.target === 'end'));
     edges.push({ source: 'zahlen', target: 'rt' }, { id: 'f_rt', source: 'rt', target: 'end' });
     return {
-      $schemaVersion: '2.0', catalog: 'schaden-catalog.json',
+      $schemaVersion: '2.0', catalog: 'bestellung-catalog.json',
       pools: [{ id: base.id, name: base.name, nodes, edges }],
       collapsedPools: [{ id: 'P_A', name: 'Kunde' }, { id: 'P_B', name: 'Werkstatt' }, { id: 'P_C', name: 'Bank' }],
       messageFlows: [
-        { id: 'm1', source: 'pruefen', target: 'P_A' }, { id: 'm2', source: 'regr', target: 'P_B' },
+        { id: 'm1', source: 'pruefen', target: 'P_A' }, { id: 'm2', source: 'rueck', target: 'P_B' },
         { id: 'm3', source: 'zahlen', target: 'P_C' },
       ],
     };
   };
-  const catalog = () => JSON.parse(readFileSync(join(FIXTURES_V2, 'schaden-catalog.json'), 'utf8'));
+  const catalog = () => JSON.parse(readFileSync(join(FIXTURES_V2, 'bestellung-catalog.json'), 'utf8'));
 
   test('they come in the order H15, H16, H17, H18 in validation.hints', async () => {
     const r = await runPipeline(combo(), { catalog: catalog(), view: resolve(here, '../../views/einheiten-view.json') });
@@ -273,7 +273,7 @@ describe('the hints H15 to H18 together', () => {
     const dir = mkdtempSync(join(tmpdir(), 'h15-18-'));
     try {
       writeFileSync(join(dir, 'combo.json'), JSON.stringify(combo()));
-      writeFileSync(join(dir, 'schaden-catalog.json'), JSON.stringify(catalog()));
+      writeFileSync(join(dir, 'bestellung-catalog.json'), JSON.stringify(catalog()));
       const out = join(dir, 'combo');
       const res = spawnSync(process.execPath, [PIPELINE, join(dir, 'combo.json'), out, '--strict', '--view=einheiten'], { encoding: 'utf8' });
       expect(res.status).toBe(0);

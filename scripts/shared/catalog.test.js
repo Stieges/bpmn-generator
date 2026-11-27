@@ -12,11 +12,11 @@ import { catalogSchemaPath, demiSchemePath } from './resource-paths.js';
 
 // Design 5.6.
 const actors56 = [
-  { id: 'abt_schaden', name: 'Schadenabteilung', kind: 'unit' },
-  { id: 'abt_finanzen', name: 'Finanzen', kind: 'unit' },
-  { id: 'sb_schaden', name: 'Sachbearbeitung Schaden', kind: 'role', unit: 'abt_schaden' },
-  { id: 'regress', name: 'Regressspezialist', kind: 'role', unit: 'abt_schaden' },
-  { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_finanzen' },
+  { id: 'abt_einkauf', name: 'Einkauf', kind: 'unit' },
+  { id: 'abt_buchhaltung', name: 'Buchhaltung', kind: 'unit' },
+  { id: 'sb_einkauf', name: 'Sachbearbeitung Einkauf', kind: 'role', unit: 'abt_einkauf' },
+  { id: 'leitung', name: 'Abteilungsleitung', kind: 'role', unit: 'abt_einkauf' },
+  { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_buchhaltung' },
 ];
 const catalog56 = { scheme: 'demi', actors: actors56 };
 
@@ -119,11 +119,11 @@ describe('canonicalJson and fingerprint', () => {
 
   test('the pinned fingerprint of design 5.6 with demi', () => {
     expect(catalogFingerprint(actors56, resolveScheme('demi')))
-      .toBe('sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4');
+      .toBe('sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273');
   });
 
   test('systems absent, undefined or empty keep the pinned fingerprint; one system changes it', () => {
-    const pinned = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
+    const pinned = 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273';
     const demi = resolveScheme('demi');
     expect(catalogFingerprint(actors56, demi, [])).toBe(pinned);
     expect(catalogFingerprint(actors56, demi, undefined)).toBe(pinned);

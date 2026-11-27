@@ -23,10 +23,10 @@ const snippets = Object.fromEntries(
 );
 const commands = (snippets.cli || '').split('\n').map((l) => l.trim()).filter(Boolean);
 const LANES = {
-  rollen: ['Claims handler', 'Team lead', 'Accountant', '(nicht zugeordnet)'],
-  einheiten: ['Claims department', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
-  organigramm: ['Claims department', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
-  systeme: ['Claims portal', 'Payment system', '(System nicht erhoben)'],
+  rollen: ['Case worker', 'Team lead', 'Accountant', '(nicht zugeordnet)'],
+  einheiten: ['Purchasing', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
+  organigramm: ['Purchasing', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
+  systeme: ['Order system', 'Payment system', '(System nicht erhoben)'],
 };
 
 describe('docs/roles-and-systems.md — the format 2.1 quick start runs', () => {

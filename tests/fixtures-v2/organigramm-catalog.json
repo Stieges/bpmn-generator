@@ -1,7 +1,7 @@
 { "scheme": "demi",
-  "actors": [ { "id": "bereich_leistung", "name": "Leistung", "kind": "unit" },
-              { "id": "abt_schaden", "name": "Schadenabteilung", "kind": "unit", "partOf": "bereich_leistung" },
-              { "id": "abt_finanzen", "name": "Finanzen", "kind": "unit" },
-              { "id": "sb_schaden", "name": "Sachbearbeitung Schaden", "kind": "role", "unit": "abt_schaden" },
-              { "id": "regress", "name": "Regressspezialist", "kind": "role", "unit": "bereich_leistung" },
-              { "id": "zahlung", "name": "Zahlungsverkehr", "kind": "role", "unit": "abt_finanzen" } ] }
+  "actors": [ { "id": "bereich_beschaffung", "name": "Beschaffung", "kind": "unit" },
+              { "id": "abt_einkauf", "name": "Einkauf", "kind": "unit", "partOf": "bereich_beschaffung" },
+              { "id": "abt_buchhaltung", "name": "Buchhaltung", "kind": "unit" },
+              { "id": "sb_einkauf", "name": "Sachbearbeitung Einkauf", "kind": "role", "unit": "abt_einkauf" },
+              { "id": "leitung", "name": "Abteilungsleitung", "kind": "role", "unit": "bereich_beschaffung" },
+              { "id": "zahlung", "name": "Zahlungsverkehr", "kind": "role", "unit": "abt_buchhaltung" } ] }

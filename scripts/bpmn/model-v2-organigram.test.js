@@ -22,8 +22,8 @@ const copy = (v) => JSON.parse(JSON.stringify(v));
 
 /** The organigram test catalogue: plain JSON, shared with the nested view and its golden. */
 const ORG = JSON.parse(readFileSync(resolvePath(root, 'tests/fixtures-v2/organigramm-catalog.json'), 'utf8'));
-/** The model of design 5.6 (steps start, pruefen, gw, regr, zahlen, end). */
-const SCHADEN = JSON.parse(readFileSync(resolvePath(root, 'tests/fixtures-v2/schaden.json'), 'utf8'));
+/** The model of design 5.6 (steps start, pruefen, gw, rueck, zahlen, end). */
+const BESTELLUNG = JSON.parse(readFileSync(resolvePath(root, 'tests/fixtures-v2/bestellung.json'), 'utf8'));
 
 function form(model, catalog, lanes) {
   const r = resolveFields(copy(model), { catalog: copy(catalog) });
@@ -43,37 +43,37 @@ function members(container) {
 const lanesOf = (out) => out.lc.lanes.map((l) => [l.id, l.name]);
 
 describe('unit view — organigram level on the catalogue org', () => {
-  test('level 1: Leistung {start, pruefen, gw, regr}, Finanzen {zahlen, end}', () => {
-    const out = form(SCHADEN, ORG, { by: 'unit', level: 1 });
+  test('level 1: Beschaffung {start, pruefen, gw, rueck}, Buchhaltung {zahlen, end}', () => {
+    const out = form(BESTELLUNG, ORG, { by: 'unit', level: 1 });
     expect(out.errors).toEqual([]);
     expect(out.hints).toEqual([]);
-    expect(lanesOf(out)).toEqual([['L.Process_Schaden.bereich_leistung', 'Leistung'], ['L.Process_Schaden.abt_finanzen', 'Finanzen']]);
-    expect(members(out.lc)).toEqual({ bereich_leistung: ['start', 'gw', 'pruefen', 'regr'], abt_finanzen: ['zahlen', 'end'] });
+    expect(lanesOf(out)).toEqual([['L.Process_Bestellung.bereich_beschaffung', 'Beschaffung'], ['L.Process_Bestellung.abt_buchhaltung', 'Buchhaltung']]);
+    expect(members(out.lc)).toEqual({ bereich_beschaffung: ['start', 'gw', 'pruefen', 'rueck'], abt_buchhaltung: ['zahlen', 'end'] });
     expect(out.lc.lanes.every((l) => l._laneBy === 'unit' && l._derived === 'lane')).toBe(true);
   });
 
-  test('level 2: Leistung {regr} keeps its lane, Schadenabteilung {start, pruefen, gw}, Finanzen {zahlen, end}', () => {
-    const out = form(SCHADEN, ORG, { by: 'unit', level: 2 });
+  test('level 2: Beschaffung {rueck} keeps its lane, Einkauf {start, pruefen, gw}, Buchhaltung {zahlen, end}', () => {
+    const out = form(BESTELLUNG, ORG, { by: 'unit', level: 2 });
     expect(out.errors).toEqual([]);
     expect(out.hints).toEqual([]);
     expect(lanesOf(out)).toEqual([
-      ['L.Process_Schaden.bereich_leistung', 'Leistung'],
-      ['L.Process_Schaden.abt_schaden', 'Schadenabteilung'],
-      ['L.Process_Schaden.abt_finanzen', 'Finanzen'],
+      ['L.Process_Bestellung.bereich_beschaffung', 'Beschaffung'],
+      ['L.Process_Bestellung.abt_einkauf', 'Einkauf'],
+      ['L.Process_Bestellung.abt_buchhaltung', 'Buchhaltung'],
     ]);
-    expect(members(out.lc)).toEqual({ abt_schaden: ['start', 'gw', 'pruefen'], bereich_leistung: ['regr'], abt_finanzen: ['zahlen', 'end'] });
+    expect(members(out.lc)).toEqual({ abt_einkauf: ['start', 'gw', 'pruefen'], bereich_beschaffung: ['rueck'], abt_buchhaltung: ['zahlen', 'end'] });
   });
 
   test('no level: each performer keys on its own unit, here the same as level 2', () => {
-    const level2 = form(SCHADEN, ORG, { by: 'unit', level: 2 });
+    const level2 = form(BESTELLUNG, ORG, { by: 'unit', level: 2 });
     for (const lanes of ['unit', { by: 'unit' }]) {
-      const out = form(SCHADEN, ORG, lanes);
+      const out = form(BESTELLUNG, ORG, lanes);
       expect(out).toEqual(level2);
     }
   });
 
   test('a level deeper than every chain keeps each unit in its own lane', () => {
-    expect(form(SCHADEN, ORG, { by: 'unit', level: 16 })).toEqual(form(SCHADEN, ORG, 'unit'));
+    expect(form(BESTELLUNG, ORG, { by: 'unit', level: 16 })).toEqual(form(BESTELLUNG, ORG, 'unit'));
   });
 });
 
@@ -203,26 +203,26 @@ const byLane = (container) => {
   for (const n of container.nodes) if (n.lane !== undefined) (out[n.lane] ??= []).push(n.id);
   return out;
 };
-const P = 'L.Process_Schaden';
+const P = 'L.Process_Bestellung';
 
 describe('unit view nested along the organigram', () => {
   const NESTED = { by: 'unit', nested: true };
 
-  test('Leistung { Leistung (own) {regr}, Schadenabteilung {start, pruefen, gw} }, Finanzen {zahlen, end}', () => {
-    const out = form(SCHADEN, ORG, NESTED);
+  test('Beschaffung { Beschaffung (own) {rueck}, Einkauf {start, pruefen, gw} }, Buchhaltung {zahlen, end}', () => {
+    const out = form(BESTELLUNG, ORG, NESTED);
     expect(out.errors).toEqual([]);
     expect(out.hints).toEqual([]);
     expect(tree(out.lc.lanes)).toEqual([
-      [`${P}.bereich_leistung`, 'Leistung', 'bereich_leistung', [
-        [`${P}.bereich_leistung._own`, 'Leistung', 'bereich_leistung'],
-        [`${P}.abt_schaden`, 'Schadenabteilung', 'abt_schaden'],
+      [`${P}.bereich_beschaffung`, 'Beschaffung', 'bereich_beschaffung', [
+        [`${P}.bereich_beschaffung._own`, 'Beschaffung', 'bereich_beschaffung'],
+        [`${P}.abt_einkauf`, 'Einkauf', 'abt_einkauf'],
       ]],
-      [`${P}.abt_finanzen`, 'Finanzen', 'abt_finanzen'],
+      [`${P}.abt_buchhaltung`, 'Buchhaltung', 'abt_buchhaltung'],
     ]);
     expect(byLane(out.lc)).toEqual({
-      [`${P}.abt_schaden`]: ['start', 'gw', 'pruefen'],
-      [`${P}.bereich_leistung._own`]: ['regr'],
-      [`${P}.abt_finanzen`]: ['zahlen', 'end'],
+      [`${P}.abt_einkauf`]: ['start', 'gw', 'pruefen'],
+      [`${P}.bereich_beschaffung._own`]: ['rueck'],
+      [`${P}.abt_buchhaltung`]: ['zahlen', 'end'],
     });
     walk(out.lc.lanes, (l) => {
       expect(Object.keys(l).filter((k) => k !== 'children').sort()).toEqual(['_derived', '_laneActor', '_laneBy', 'id', 'name']);
@@ -234,7 +234,7 @@ describe('unit view nested along the organigram', () => {
     const task = (id, type, actor) => ({ id, type, name: id, ...(actor ? { assignments: [{ type: 'D', actor }] } : {}) });
     const model = {
       $schemaVersion: '2.0', id: 'P',
-      nodes: [{ id: 'S', type: 'startEvent' }, task('T1', 'userTask', 'sb_schaden'), task('X', 'serviceTask'),
+      nodes: [{ id: 'S', type: 'startEvent' }, task('T1', 'userTask', 'sb_einkauf'), task('X', 'serviceTask'),
         task('T2', 'userTask', 'zahlung'), { id: 'E', type: 'endEvent' }],
       edges: [['S', 'T1'], ['T1', 'X'], ['X', 'T2'], ['T2', 'E']].map(([source, target]) => ({ source, target })),
     };
@@ -242,21 +242,21 @@ describe('unit view nested along the organigram', () => {
     expect(out.errors).toEqual([]);
     expect(out.hints.map((h) => [h.code, h.elements])).toEqual([['H19', ['X', 'L.P._automatic']]]);
     expect(tree(out.lc.lanes)).toEqual([
-      ['L.P.bereich_leistung', 'Leistung', 'bereich_leistung', [['L.P.abt_schaden', 'Schadenabteilung', 'abt_schaden']]],
-      ['L.P.abt_finanzen', 'Finanzen', 'abt_finanzen'],
+      ['L.P.bereich_beschaffung', 'Beschaffung', 'bereich_beschaffung', [['L.P.abt_einkauf', 'Einkauf', 'abt_einkauf']]],
+      ['L.P.abt_buchhaltung', 'Buchhaltung', 'abt_buchhaltung'],
       ['L.P._automatic', '(automatisch)', '_automatic'],
     ]);
     expect(out.lc.lanes.at(-1)._laneBy).toBe('unit');
-    expect(byLane(out.lc)).toEqual({ 'L.P.abt_schaden': ['S', 'T1'], 'L.P._automatic': ['X'], 'L.P.abt_finanzen': ['T2', 'E'] });
+    expect(byLane(out.lc)).toEqual({ 'L.P.abt_einkauf': ['S', 'T1'], 'L.P._automatic': ['X'], 'L.P.abt_buchhaltung': ['T2', 'E'] });
   });
 
   test('the shipped view organigramm is this view', () => {
-    expect(form(SCHADEN, ORG, loadNamedView('organigramm').lanes)).toEqual(form(SCHADEN, ORG, NESTED));
+    expect(form(BESTELLUNG, ORG, loadNamedView('organigramm').lanes)).toEqual(form(BESTELLUNG, ORG, NESTED));
   });
 
   test('level 2 changes nothing here; level 1 cuts the tree to the flat level-1 lanes', () => {
-    expect(form(SCHADEN, ORG, { ...NESTED, level: 2 })).toEqual(form(SCHADEN, ORG, NESTED));
-    expect(form(SCHADEN, ORG, { ...NESTED, level: 1 })).toEqual(form(SCHADEN, ORG, { by: 'unit', level: 1 }));
+    expect(form(BESTELLUNG, ORG, { ...NESTED, level: 2 })).toEqual(form(BESTELLUNG, ORG, NESTED));
+    expect(form(BESTELLUNG, ORG, { ...NESTED, level: 1 })).toEqual(form(BESTELLUNG, ORG, { by: 'unit', level: 1 }));
   });
 
   test('a unit with no step of its own has no own lane; a deep chain nests one lane per level', () => {
@@ -327,8 +327,8 @@ describe('unit view nested along the organigram', () => {
     const task = (id, actor) => ({ id, type: 'userTask', name: id, ...(actor ? { assignments: [{ type: 'D', actor }] } : {}) });
     const MODEL = {
       $schemaVersion: '2.0', id: 'P',
-      nodes: [{ id: 'S', type: 'startEvent' }, task('T1', 'sb_schaden'), task('T2', 'r_ohne'), task('T3', 'k_ohne'),
-        task('T4'), task('T5', 'regress'), task('T6', 'zahlung'), { id: 'E', type: 'endEvent' }],
+      nodes: [{ id: 'S', type: 'startEvent' }, task('T1', 'sb_einkauf'), task('T2', 'r_ohne'), task('T3', 'k_ohne'),
+        task('T4'), task('T5', 'leitung'), task('T6', 'zahlung'), { id: 'E', type: 'endEvent' }],
       edges: [['S', 'T1'], ['T1', 'T2'], ['T2', 'T3'], ['T3', 'T4'], ['T4', 'T5'], ['T5', 'T6'], ['T6', 'E']]
         .map(([source, target]) => ({ source, target })),
     };
@@ -343,16 +343,16 @@ describe('unit view nested along the organigram', () => {
       expect(out.errors).toEqual([]);
       expect(out.hints.map((h) => [h.code, h.elements])).toEqual(HINTS);
       expect(tree(out.lc.lanes)).toEqual([
-        ['L.P.bereich_leistung', 'Leistung', 'bereich_leistung', [
-          ['L.P.bereich_leistung._own', 'Leistung', 'bereich_leistung'],
-          ['L.P.abt_schaden', 'Schadenabteilung', 'abt_schaden'],
+        ['L.P.bereich_beschaffung', 'Beschaffung', 'bereich_beschaffung', [
+          ['L.P.bereich_beschaffung._own', 'Beschaffung', 'bereich_beschaffung'],
+          ['L.P.abt_einkauf', 'Einkauf', 'abt_einkauf'],
         ]],
-        ['L.P.abt_finanzen', 'Finanzen', 'abt_finanzen'],
+        ['L.P.abt_buchhaltung', 'Buchhaltung', 'abt_buchhaltung'],
         ...PLACEHOLDERS,
       ]);
       expect(byLane(out.lc)).toEqual({
-        'L.P.abt_schaden': ['S', 'T1'], 'L.P._unitUnknown': ['T2', 'T3'], 'L.P._unassigned': ['T4'],
-        'L.P.bereich_leistung._own': ['T5'], 'L.P.abt_finanzen': ['T6', 'E'],
+        'L.P.abt_einkauf': ['S', 'T1'], 'L.P._unitUnknown': ['T2', 'T3'], 'L.P._unassigned': ['T4'],
+        'L.P.bereich_beschaffung._own': ['T5'], 'L.P.abt_buchhaltung': ['T6', 'E'],
       });
       expect(out.hints.find((h) => h.code === 'H04').message).toBe('Unit of performer "Rolle ohne Einheit" not recorded: "T2" (T2) is in lane "(Einheit nicht erhoben)".');
     });
@@ -361,12 +361,12 @@ describe('unit view nested along the organigram', () => {
       const out = form(MODEL, catalog, { ...NESTED, level: 1 });
       expect(out.hints.map((h) => [h.code, h.elements])).toEqual(HINTS);
       expect(tree(out.lc.lanes)).toEqual([
-        ['L.P.bereich_leistung', 'Leistung', 'bereich_leistung'],
-        ['L.P.abt_finanzen', 'Finanzen', 'abt_finanzen'],
+        ['L.P.bereich_beschaffung', 'Beschaffung', 'bereich_beschaffung'],
+        ['L.P.abt_buchhaltung', 'Buchhaltung', 'abt_buchhaltung'],
         ...PLACEHOLDERS,
       ]);
       expect(byLane(out.lc)).toEqual({
-        'L.P.bereich_leistung': ['S', 'T1', 'T5'], 'L.P._unitUnknown': ['T2', 'T3'], 'L.P._unassigned': ['T4'], 'L.P.abt_finanzen': ['T6', 'E'],
+        'L.P.bereich_beschaffung': ['S', 'T1', 'T5'], 'L.P._unitUnknown': ['T2', 'T3'], 'L.P._unassigned': ['T4'], 'L.P.abt_buchhaltung': ['T6', 'E'],
       });
     });
   });
@@ -376,7 +376,7 @@ describe('unit view nested along the organigram', () => {
     const task = (id, actor) => ({ id, type: 'userTask', name: id, assignments: [{ type: 'D', actor }] });
     const MODEL = {
       $schemaVersion: '2.0', id: 'P',
-      nodes: [task('T1', 'sb_schaden'), task('T2', 'x')],
+      nodes: [task('T1', 'sb_einkauf'), task('T2', 'x')],
       edges: [{ source: 'T1', target: 'T2' }],
     };
     const r = resolveFields(copy(MODEL), { catalog: copy(catalog) });
@@ -384,64 +384,64 @@ describe('unit view nested along the organigram', () => {
     const out = formLanes(r.lc, r.resolved, { lanes: NESTED });
     expect(out.hints).toEqual([]);
     expect(tree(out.lc.lanes)).toEqual([
-      ['L.P.bereich_leistung', 'Leistung', 'bereich_leistung', [['L.P.abt_schaden', 'Schadenabteilung', 'abt_schaden']]],
+      ['L.P.bereich_beschaffung', 'Beschaffung', 'bereich_beschaffung', [['L.P.abt_einkauf', 'Einkauf', 'abt_einkauf']]],
       ['L.P.x', 'Selbst', 'x'],
     ]);
-    expect(byLane(out.lc)).toEqual({ 'L.P.abt_schaden': ['T1'], 'L.P.x': ['T2'] });
+    expect(byLane(out.lc)).toEqual({ 'L.P.abt_einkauf': ['T1'], 'L.P.x': ['T2'] });
 
     // With partOf as well it nests under its parent, as the level climbs through its chain.
-    const withParent = { actors: [...ORG.actors, { id: 'x', name: 'Selbst', unit: 'x', partOf: 'bereich_leistung' }] };
+    const withParent = { actors: [...ORG.actors, { id: 'x', name: 'Selbst', unit: 'x', partOf: 'bereich_beschaffung' }] };
     const nested = form(MODEL, withParent, NESTED);
     expect(tree(nested.lc.lanes)).toEqual([
-      ['L.P.bereich_leistung', 'Leistung', 'bereich_leistung', [['L.P.abt_schaden', 'Schadenabteilung', 'abt_schaden'], ['L.P.x', 'Selbst', 'x']]],
+      ['L.P.bereich_beschaffung', 'Beschaffung', 'bereich_beschaffung', [['L.P.abt_einkauf', 'Einkauf', 'abt_einkauf'], ['L.P.x', 'Selbst', 'x']]],
     ]);
-    expect(byLane(form(MODEL, withParent, { by: 'unit', level: 1 }).lc)).toEqual({ 'L.P.bereich_leistung': ['T1', 'T2'] });
+    expect(byLane(form(MODEL, withParent, { by: 'unit', level: 1 }).lc)).toEqual({ 'L.P.bereich_beschaffung': ['T1', 'T2'] });
   });
 
   test('an annotation without association goes to the first leaf lane', () => {
-    const model = copy(SCHADEN);
+    const model = copy(BESTELLUNG);
     model.nodes.push({ id: 'N', type: 'textAnnotation', name: 'Frei' });
     const out = form(model, ORG, NESTED);
-    expect(out.lc.nodes.find((n) => n.id === 'N').lane).toBe(`${P}.bereich_leistung._own`);
+    expect(out.lc.nodes.find((n) => n.id === 'N').lane).toBe(`${P}.bereich_beschaffung._own`);
   });
 
   test('H05 once for a long unit name, not again for its own lane', () => {
-    const long = 'Leistungsbereich Schaden und Regress';
-    const catalog = { ...ORG, actors: ORG.actors.map((a) => (a.id === 'bereich_leistung' ? { ...a, name: long } : a)) };
-    const out = form(SCHADEN, catalog, NESTED);
+    const long = 'Beschaffungsbereich Einkauf und Lager';
+    const catalog = { ...ORG, actors: ORG.actors.map((a) => (a.id === 'bereich_beschaffung' ? { ...a, name: long } : a)) };
+    const out = form(BESTELLUNG, catalog, NESTED);
     expect(out.lc.lanes[0].children[0].name).toBe(long);
-    expect(out.hints.map((h) => [h.code, h.elements])).toEqual([['H05', [`${P}.bereich_leistung`, 'bereich_leistung']]]);
+    expect(out.hints.map((h) => [h.code, h.elements])).toEqual([['H05', [`${P}.bereich_beschaffung`, 'bereich_beschaffung']]]);
   });
 
   test('C10 covers every lane of the tree, the own lane and its _di included', () => {
-    for (const id of [`${P}.bereich_leistung`, `${P}.bereich_leistung._own`, `${P}.bereich_leistung._own_di`]) {
-      const model = copy(SCHADEN);
+    for (const id of [`${P}.bereich_beschaffung`, `${P}.bereich_beschaffung._own`, `${P}.bereich_beschaffung._own_di`]) {
+      const model = copy(BESTELLUNG);
       model.edges[5].id = id;
       const out = form(model, ORG, NESTED);
       expect(out.lc).toBeNull();
       expect(out.errors).toHaveLength(1);
-      expect(out.errors[0]).toMatch(/^\[C10\] lane id "L\.Process_Schaden\.bereich_leistung(\._own)?" \(actor "bereich_leistung"\) collides with /);
+      expect(out.errors[0]).toMatch(/^\[C10\] lane id "L\.Process_Bestellung\.bereich_beschaffung(\._own)?" \(actor "bereich_beschaffung"\) collides with /);
     }
   });
 
-  test('no actor can take the id of an own lane: the catalogue id pattern refuses "bereich_leistung._own"', () => {
-    const errors = catalogErrors({ actors: [{ id: 'bereich_leistung._own', name: 'Leistung', kind: 'unit' }] });
+  test('no actor can take the id of an own lane: the catalogue id pattern refuses "bereich_beschaffung._own"', () => {
+    const errors = catalogErrors({ actors: [{ id: 'bereich_beschaffung._own', name: 'Beschaffung', kind: 'unit' }] });
     expect(errors.length).toBeGreaterThan(0);
     expect(errors.join(' ')).toMatch(/C12.*\/actors\/0\/id/);
   });
 
   test('checkProjection: a node in a parent lane, a node in no lane of the tree, a lane id twice', () => {
-    const out = form(SCHADEN, ORG, NESTED);
+    const out = form(BESTELLUNG, ORG, NESTED);
     expect(() => checkProjection(out.lc)).not.toThrow();
     const inParent = copy(out.lc);
-    inParent.nodes.find((n) => n.id === 'regr').lane = `${P}.bereich_leistung`;
-    expect(() => checkProjection(inParent)).toThrow(/^formLanes internal error: flow node "regr" is in parent lane/);
+    inParent.nodes.find((n) => n.id === 'rueck').lane = `${P}.bereich_beschaffung`;
+    expect(() => checkProjection(inParent)).toThrow(/^formLanes internal error: flow node "rueck" is in parent lane/);
     const nowhere = copy(out.lc);
-    nowhere.nodes.find((n) => n.id === 'regr').lane = `${P}.gone`;
-    expect(() => checkProjection(nowhere)).toThrow(/^formLanes internal error: flow node "regr" is in no lane/);
+    nowhere.nodes.find((n) => n.id === 'rueck').lane = `${P}.gone`;
+    expect(() => checkProjection(nowhere)).toThrow(/^formLanes internal error: flow node "rueck" is in no lane/);
     const twice = copy(out.lc);
     twice.lanes[0].children.push({ ...twice.lanes[1] });
-    expect(() => checkProjection(twice)).toThrow(/^formLanes internal error: lane id "L\.Process_Schaden\.abt_finanzen" occurs twice/);
+    expect(() => checkProjection(twice)).toThrow(/^formLanes internal error: lane id "L\.Process_Bestellung\.abt_buchhaltung" occurs twice/);
     const listed = copy(out.lc);
     listed.lanes[0].children[0].nodeIds = ['start'];
     expect(() => checkProjection(listed)).toThrow(/^formLanes internal error: flow node "start" is in more than one lane/);

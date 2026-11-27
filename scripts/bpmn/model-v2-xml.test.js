@@ -15,12 +15,12 @@ import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
 import { loadNamedView } from '../shared/view.js';
 
-const PINNED = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
-const ASSIGNMENT = '<bg:assignment type="D" actor="sb_schaden" />';
-const LANE_MARKER = '<bg:derived by="role" actor="sb_schaden">lane</bg:derived>';
+const PINNED = 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273';
+const ASSIGNMENT = '<bg:assignment type="D" actor="sb_einkauf" />';
+const LANE_MARKER = '<bg:derived by="role" actor="sb_einkauf">lane</bg:derived>';
 const LANE = 'L.P._sb';
 const MODEL_INFO = { version: '2.0', view: 'rollen', catalogFingerprint: PINNED };
-const D = [{ type: 'D', actor: 'sb_schaden' }];
+const D = [{ type: 'D', actor: 'sb_einkauf' }];
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const count = (xml, re) => (xml.match(re) || []).length;
@@ -28,16 +28,16 @@ const count = (xml, re) => (xml.match(re) || []).length;
 /** The intermediate form: lanes formed by role, every node with one D assignment. */
 function formed() {
   return {
-    id: 'P', name: 'Schaden regulieren',
+    id: 'P', name: 'Bestellung abwickeln',
     _modelInfo: { ...MODEL_INFO },
-    lanes: [{ id: LANE, name: 'Sachbearbeitung Schaden', _derived: 'lane', _laneBy: 'role', _laneActor: 'sb_schaden' }],
+    lanes: [{ id: LANE, name: 'Sachbearbeitung Einkauf', _derived: 'lane', _laneBy: 'role', _laneActor: 'sb_einkauf' }],
     nodes: [
-      { id: 's', type: 'startEvent', name: 'Schaden gemeldet', lane: LANE, _assignments: D },
-      { id: 't', type: 'userTask', name: 'Schaden prüfen', lane: LANE, _assignments: D },
+      { id: 's', type: 'startEvent', name: 'Bestellung eingegangen', lane: LANE, _assignments: D },
+      { id: 't', type: 'userTask', name: 'Auftrag prüfen', lane: LANE, _assignments: D },
       { id: 'b', type: 'boundaryEvent', marker: 'timer', attachedTo: 't', cancelActivity: false,
         name: '3 Tage vergangen', lane: LANE, _assignments: D },
       { id: 'eb', type: 'endEvent', name: 'Erinnert', lane: LANE },
-      { id: 'gw', type: 'exclusiveGateway', name: 'Schaden gedeckt?', lane: LANE, _assignments: D },
+      { id: 'gw', type: 'exclusiveGateway', name: 'Auftrag freigegeben?', lane: LANE, _assignments: D },
       {
         id: 'sp', type: 'subProcess', name: 'Zahlung abwickeln', isExpanded: true, lane: LANE,
         nodes: [
@@ -50,8 +50,8 @@ function formed() {
           { id: 'c_f2', source: 'c_t', target: 'c_e' },
         ],
       },
-      { id: 'e1', type: 'endEvent', name: 'Schaden reguliert', lane: LANE },
-      { id: 'e2', type: 'endEvent', name: 'Schaden abgelehnt', lane: LANE },
+      { id: 'e1', type: 'endEvent', name: 'Auftrag erledigt', lane: LANE },
+      { id: 'e2', type: 'endEvent', name: 'Auftrag abgelehnt', lane: LANE },
     ],
     edges: [
       { id: 'f1', source: 's', target: 't' },
@@ -99,7 +99,7 @@ describe('2.0 XML places (design 11 a)', () => {
     const { bpmnXml } = await generate(formed());
     const lane = element(bpmnXml, 'lane', LANE.replace(/\./g, '\\.'));
     const body = lane.replace(/^<bpmn:lane[^>]*>\s*/, '');
-    expect(body).toMatch(/^<bpmn:extensionElements>\s*<bg:derived by="role" actor="sb_schaden">lane<\/bg:derived>\s*<\/bpmn:extensionElements>\s*<bpmn:flowNodeRef>/);
+    expect(body).toMatch(/^<bpmn:extensionElements>\s*<bg:derived by="role" actor="sb_einkauf">lane<\/bg:derived>\s*<\/bpmn:extensionElements>\s*<bpmn:flowNodeRef>/);
     expect(lane.indexOf(LANE_MARKER)).toBeLessThan(lane.indexOf('<bpmn:flowNodeRef>'));
   });
 
@@ -117,11 +117,11 @@ describe('2.0 XML places (design 11 a)', () => {
 
   test('xmlns:bg is declared once with no assignment and no lane', async () => {
     const bare = {
-      id: 'P', name: 'Schaden melden', _modelInfo: { ...MODEL_INFO, view: 'default' },
+      id: 'P', name: 'Bestellung aufgeben', _modelInfo: { ...MODEL_INFO, view: 'default' },
       nodes: [
-        { id: 's', type: 'startEvent', name: 'Schaden eingetreten' },
-        { id: 't', type: 'userTask', name: 'Schaden melden' },
-        { id: 'e', type: 'endEvent', name: 'Schaden gemeldet' },
+        { id: 's', type: 'startEvent', name: 'Bedarf entstanden' },
+        { id: 't', type: 'userTask', name: 'Bestellung aufgeben' },
+        { id: 'e', type: 'endEvent', name: 'Bestellung eingegangen' },
       ],
       edges: [{ id: 'f1', source: 's', target: 't' }, { id: 'f2', source: 't', target: 'e' }],
     };
@@ -141,15 +141,15 @@ describe('2.0 XML places (design 11 a)', () => {
   test('a collaboration: assignments and lane markers of both pools are written', async () => {
     const pool = (id, nodePrefix) => ({
       id, name: `Pool ${id}`,
-      lanes: [{ id: `L.${id}`, name: 'Sachbearbeitung Schaden', _derived: 'lane', _laneBy: 'role', _laneActor: 'sb_schaden' }],
+      lanes: [{ id: `L.${id}`, name: 'Sachbearbeitung Einkauf', _derived: 'lane', _laneBy: 'role', _laneActor: 'sb_einkauf' }],
       nodes: [
-        { id: `${nodePrefix}s`, type: 'startEvent', name: 'Schaden gemeldet', lane: `L.${id}`, _assignments: D },
-        { id: `${nodePrefix}t`, type: 'userTask', name: 'Schaden prüfen', lane: `L.${id}`, _assignments: D },
-        { id: `${nodePrefix}e`, type: 'endEvent', name: 'Schaden geprüft', lane: `L.${id}` },
+        { id: `${nodePrefix}s`, type: 'startEvent', name: 'Bestellung eingegangen', lane: `L.${id}`, _assignments: D },
+        { id: `${nodePrefix}t`, type: 'userTask', name: 'Auftrag prüfen', lane: `L.${id}`, _assignments: D },
+        { id: `${nodePrefix}e`, type: 'endEvent', name: 'Auftrag geprüft', lane: `L.${id}` },
       ],
       edges: [{ id: `${nodePrefix}f1`, source: `${nodePrefix}s`, target: `${nodePrefix}t` }, { id: `${nodePrefix}f2`, source: `${nodePrefix}t`, target: `${nodePrefix}e` }],
     });
-    const model = { id: 'C', name: 'Schaden', _modelInfo: { ...MODEL_INFO }, pools: [pool('PA', 'a'), pool('PB', 'b')],
+    const model = { id: 'C', name: 'Bestellung', _modelInfo: { ...MODEL_INFO }, pools: [pool('PA', 'a'), pool('PB', 'b')],
       messageFlows: [{ id: 'm1', source: 'at', target: 'bs' }] };
     const { bpmnXml, validation } = await generate(model);
     expect(validation.xmlWarnings).toEqual([]);
@@ -224,8 +224,8 @@ describe('bg:language on bpmn:definitions', () => {
   });
 
   test('a 2.0 model carries modelVersion, view, catalog and language', async () => {
-    const model = { ...fixture('tests/fixtures-v2/schaden.json'), language: 'de' };
-    const r = await runPipeline(model, { catalog: fixture('tests/fixtures-v2/schaden-catalog.json') });
+    const model = { ...fixture('tests/fixtures-v2/bestellung.json'), language: 'de' };
+    const r = await runPipeline(model, { catalog: fixture('tests/fixtures-v2/bestellung-catalog.json') });
     expect(r.validation.errors).toEqual([]);
     const defs = definitionsTag(r.bpmnXml);
     expect(defs).toMatch(/bg:modelVersion="2\.0" bg:view="default" bg:catalog="sha256:[0-9a-f]{64}" bg:language="de"/);
@@ -270,19 +270,19 @@ describe('bg:language on bpmn:definitions', () => {
 describe('format 2.1: <bg:system ref> in the task\'s extensionElements', () => {
   const CATALOG_S = {
     scheme: 'demi',
-    actors: [{ id: 'sb_schaden', name: 'Sachbearbeitung Schaden', kind: 'role' }],
-    systems: [{ id: 'sys_akte', name: 'Schadenakte' }],
+    actors: [{ id: 'sb_einkauf', name: 'Sachbearbeitung Einkauf', kind: 'role' }],
+    systems: [{ id: 'sys_akte', name: 'Bestellakte' }],
   };
   const MODEL_S = {
-    $schemaVersion: '2.1', id: 'Process_Schaden', name: 'Schaden regulieren',
+    $schemaVersion: '2.1', id: 'Process_Bestellung', name: 'Bestellung abwickeln',
     nodes: [
-      { id: 'start', type: 'startEvent', name: 'Schaden gemeldet', assignments: D },
-      { id: 'pruefen', type: 'userTask', name: 'Schaden prüfen', system: 'sys_akte', assignments: D },
-      { id: 'end', type: 'endEvent', name: 'Schaden geprüft' },
+      { id: 'start', type: 'startEvent', name: 'Bestellung eingegangen', assignments: D },
+      { id: 'pruefen', type: 'userTask', name: 'Auftrag prüfen', system: 'sys_akte', assignments: D },
+      { id: 'end', type: 'endEvent', name: 'Auftrag geprüft' },
     ],
     edges: [{ source: 'start', target: 'pruefen' }, { source: 'pruefen', target: 'end' }],
   };
-  const SYSTEM = '<bg:system ref="sys_akte">Schadenakte</bg:system>';
+  const SYSTEM = '<bg:system ref="sys_akte">Bestellakte</bg:system>';
   const generateS = async () => {
     const r = await runPipeline(copy(MODEL_S), { catalog: copy(CATALOG_S) });
     expect(r.validation.errors).toEqual([]);
@@ -302,10 +302,10 @@ describe('format 2.1: <bg:system ref> in the task\'s extensionElements', () => {
   test.each([
     ['bpmnToLogicCore', (xml) => bpmnToLogicCore(xml)],
     ['bpmnToLogicCoreLegacy', async (xml) => bpmnToLogicCoreLegacy(xml)],
-  ])('%s reads it back as system: "Schadenakte", no ref; the result passes the 1.x gate', async (_name, read) => {
+  ])('%s reads it back as system: "Bestellakte", no ref; the result passes the 1.x gate', async (_name, read) => {
     const lc = await read((await generateS()).bpmnXml);
     const pruefen = lc.nodes.find((n) => n.id === 'pruefen');
-    expect(pruefen.system).toBe('Schadenakte');
+    expect(pruefen.system).toBe('Bestellakte');
     expect(JSON.stringify(lc)).not.toContain('sys_akte');
     expect(validateLogicCoreSchema(lc)).toEqual({ valid: true, errors: [] });
   });
@@ -319,13 +319,13 @@ describe('format 2.1: <bg:system ref> in the task\'s extensionElements', () => {
   test('view systeme: a system lane carries by="system" system="…"; view rollen keeps actor="…"', async () => {
     const { bpmnXml, validation } = await generateView('systeme');
     expect(validation.xmlWarnings).toEqual([]);
-    const lane = element(bpmnXml, 'lane', 'L\\.Process_Schaden\\.sys_akte');
+    const lane = element(bpmnXml, 'lane', 'L\\.Process_Bestellung\\.sys_akte');
     expect(extensionOf(lane)).toContain('<bg:derived by="system" system="sys_akte">lane</bg:derived>');
     expect(lane).not.toContain('actor=');
-    expect(bpmnXml).toContain('name="Schadenakte"');
+    expect(bpmnXml).toContain('name="Bestellakte"');
     expect(count(bpmnXml, /<bg:derived\b/g)).toBe(1);
     const roles = (await generateView('rollen')).bpmnXml;
-    expect(extensionOf(element(roles, 'lane', 'L\\.Process_Schaden\\.sb_schaden'))).toContain(LANE_MARKER);
+    expect(extensionOf(element(roles, 'lane', 'L\\.Process_Bestellung\\.sb_einkauf'))).toContain(LANE_MARKER);
     expect(roles).not.toContain('by="system"');
   });
 

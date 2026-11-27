@@ -1,85 +1,85 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bg="http://bpmn-generator/schema/1.0" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-generator" bg:modelVersion="2.0" bg:view="einheiten" bg:catalog="sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bg="http://bpmn-generator/schema/1.0" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-generator" bg:modelVersion="2.0" bg:view="einheiten" bg:catalog="sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273">
   <bpmn:collaboration id="Collaboration_1">
-    <bpmn:participant id="Participant_Process_Schaden" name="Schaden regulieren" processRef="Process_Schaden" />
+    <bpmn:participant id="Participant_Process_Bestellung" name="Bestellung abwickeln" processRef="Process_Bestellung" />
   </bpmn:collaboration>
-  <bpmn:process id="Process_Schaden" isExecutable="false">
-    <bpmn:laneSet id="LaneSet_Process_Schaden">
-      <bpmn:lane id="L.Process_Schaden.abt_schaden" name="Schadenabteilung">
+  <bpmn:process id="Process_Bestellung" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Bestellung">
+      <bpmn:lane id="L.Process_Bestellung.abt_einkauf" name="Einkauf">
         <bpmn:extensionElements>
-          <bg:derived by="unit" actor="abt_schaden">lane</bg:derived>
+          <bg:derived by="unit" actor="abt_einkauf">lane</bg:derived>
         </bpmn:extensionElements>
         <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>pruefen</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>gw</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>regr</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>rueck</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="L.Process_Schaden.abt_finanzen" name="Finanzen">
+      <bpmn:lane id="L.Process_Bestellung.abt_buchhaltung" name="Buchhaltung">
         <bpmn:extensionElements>
-          <bg:derived by="unit" actor="abt_finanzen">lane</bg:derived>
+          <bg:derived by="unit" actor="abt_buchhaltung">lane</bg:derived>
         </bpmn:extensionElements>
         <bpmn:flowNodeRef>zahlen</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>end</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="start" name="Schaden gemeldet">
+    <bpmn:startEvent id="start" name="Bestellung eingegangen">
       <bpmn:outgoing>flow_start_pruefen</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:userTask id="pruefen" name="Schaden prüfen">
+    <bpmn:userTask id="pruefen" name="Auftrag prüfen">
       <bpmn:extensionElements>
-        <bg:assignment type="D" actor="sb_schaden" />
+        <bg:assignment type="D" actor="sb_einkauf" />
       </bpmn:extensionElements>
       <bpmn:incoming>flow_start_pruefen</bpmn:incoming>
       <bpmn:outgoing>flow_pruefen_gw</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:exclusiveGateway id="gw" name="Regress möglich?" gatewayDirection="Diverging" default="flow_gw_zahlen">
+    <bpmn:exclusiveGateway id="gw" name="Rückfrage nötig?" gatewayDirection="Diverging" default="flow_gw_zahlen">
       <bpmn:incoming>flow_pruefen_gw</bpmn:incoming>
-      <bpmn:outgoing>flow_gw_regr</bpmn:outgoing>
+      <bpmn:outgoing>flow_gw_rueck</bpmn:outgoing>
       <bpmn:outgoing>flow_gw_zahlen</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:userTask id="regr" name="Regress prüfen">
+    <bpmn:userTask id="rueck" name="Lieferant klären">
       <bpmn:extensionElements>
-        <bg:assignment type="D" actor="regress" />
-        <bg:assignment type="I" actor="sb_schaden" />
+        <bg:assignment type="D" actor="leitung" />
+        <bg:assignment type="I" actor="sb_einkauf" />
       </bpmn:extensionElements>
-      <bpmn:incoming>flow_gw_regr</bpmn:incoming>
-      <bpmn:outgoing>flow_regr_zahlen</bpmn:outgoing>
+      <bpmn:incoming>flow_gw_rueck</bpmn:incoming>
+      <bpmn:outgoing>flow_rueck_zahlen</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:userTask id="zahlen" name="Zahlung anweisen">
       <bpmn:extensionElements>
         <bg:assignment type="D" actor="zahlung" />
       </bpmn:extensionElements>
       <bpmn:incoming>flow_gw_zahlen</bpmn:incoming>
-      <bpmn:incoming>flow_regr_zahlen</bpmn:incoming>
+      <bpmn:incoming>flow_rueck_zahlen</bpmn:incoming>
       <bpmn:outgoing>flow_zahlen_end</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:endEvent id="end" name="Schaden reguliert">
+    <bpmn:endEvent id="end" name="Auftrag erledigt">
       <bpmn:incoming>flow_zahlen_end</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="flow_start_pruefen" sourceRef="start" targetRef="pruefen" />
     <bpmn:sequenceFlow id="flow_pruefen_gw" sourceRef="pruefen" targetRef="gw" />
-    <bpmn:sequenceFlow id="flow_gw_regr" name="ja" sourceRef="gw" targetRef="regr">
+    <bpmn:sequenceFlow id="flow_gw_rueck" name="ja" sourceRef="gw" targetRef="rueck">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">ja</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="flow_gw_zahlen" name="nein" sourceRef="gw" targetRef="zahlen" />
-    <bpmn:sequenceFlow id="flow_regr_zahlen" sourceRef="regr" targetRef="zahlen" />
+    <bpmn:sequenceFlow id="flow_rueck_zahlen" sourceRef="rueck" targetRef="zahlen" />
     <bpmn:sequenceFlow id="flow_zahlen_end" sourceRef="zahlen" targetRef="end" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
-      <bpmndi:BPMNShape id="Participant_Process_Schaden_di" bpmnElement="Participant_Process_Schaden" isHorizontal="true">
+      <bpmndi:BPMNShape id="Participant_Process_Bestellung_di" bpmnElement="Participant_Process_Bestellung" isHorizontal="true">
         <dc:Bounds x="0" y="40" width="1082" height="293" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="L.Process_Schaden.abt_schaden_di" bpmnElement="L.Process_Schaden.abt_schaden" isHorizontal="true">
+      <bpmndi:BPMNShape id="L.Process_Bestellung.abt_einkauf_di" bpmnElement="L.Process_Bestellung.abt_einkauf" isHorizontal="true">
         <dc:Bounds x="30" y="40" width="1052" height="133" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="L.Process_Schaden.abt_finanzen_di" bpmnElement="L.Process_Schaden.abt_finanzen" isHorizontal="true">
+      <bpmndi:BPMNShape id="L.Process_Bestellung.abt_buchhaltung_di" bpmnElement="L.Process_Bestellung.abt_buchhaltung" isHorizontal="true">
         <dc:Bounds x="30" y="173" width="1052" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="start_di" bpmnElement="start">
         <dc:Bounds x="120" y="94.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="115.4" y="140.5" width="45.2" height="27" />
+          <dc:Bounds x="106.2" y="140.5" width="63.6" height="27" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
@@ -88,10 +88,10 @@
       <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true">
         <dc:Bounds x="416" y="87.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="397" y="147.5" width="88" height="14" />
+          <dc:Bounds x="399.4" y="147.5" width="83.1" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="regr_di" bpmnElement="regr">
+      <bpmndi:BPMNShape id="rueck_di" bpmnElement="rueck">
         <dc:Bounds x="626" y="60" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="zahlen_di" bpmnElement="zahlen">
@@ -100,7 +100,7 @@
       <bpmndi:BPMNShape id="end_di" bpmnElement="end">
         <dc:Bounds x="986" y="254.5" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="960.9" y="300.5" width="86.2" height="14" />
+          <dc:Bounds x="966.7" y="300.5" width="74.6" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="flow_start_pruefen_di" bpmnElement="flow_start_pruefen">
@@ -111,7 +111,7 @@
         <di:waypoint x="336" y="113" />
         <di:waypoint x="416.5" y="113" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_gw_regr_di" bpmnElement="flow_gw_regr">
+      <bpmndi:BPMNEdge id="flow_gw_rueck_di" bpmnElement="flow_gw_rueck">
         <di:waypoint x="453.5" y="100" />
         <di:waypoint x="626" y="100" />
         <bpmndi:BPMNLabel>
@@ -127,7 +127,7 @@
           <dc:Bounds x="520.6" y="94.5" width="20.8" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_regr_zahlen_di" bpmnElement="flow_regr_zahlen">
+      <bpmndi:BPMNEdge id="flow_rueck_zahlen_di" bpmnElement="flow_rueck_zahlen">
         <di:waypoint x="726" y="100" />
         <di:waypoint x="856" y="100" />
         <di:waypoint x="856" y="233" />
