@@ -57,7 +57,7 @@ export const MESSAGE_CODES = Object.freeze({
   MG03: entry('migrate', 'an activity\'s role differs from its lane: the role\'s actor (a role actor, or the lane actor of the same process the role names) performs it; also says when that role actor gets no unit because its activities sit in several lanes'),
   MG04: entry('migrate', 'an event or gateway lands in another lane under the inheritance rule (view rollen) than in the 1.x model'),
   MG05: entry('migrate', 'an activity without a lane in a process with lanes (no assignment, or its role\'s actor as performer), or a role dropped from a node that gets no assignment'),
-  MG06: entry('migrate', 'an id was renamed to fit format 2.0 (no actor id, or a collision with another actor id), or a process without id was given one'),
+  MG06: entry('migrate', 'an id was renamed to fit format 2.0 (no actor id, or a collision with another actor id or a system id of the catalogue), or a process without id was given one'),
   MG07: entry('migrate', 'a lane, role or system was mapped by its exact name to an actor or system of the given catalogue (the first one when several share the name)'),
   MG08: entry('migrate', 'a system text became a system of the catalogue supplement (once per distinct name)'),
   N01: entry('notice', 'a format 2.0 import notice'),

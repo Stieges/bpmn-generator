@@ -27,8 +27,7 @@ import { runPipeline } from './pipeline.js';
 import { modelFormat, validateModelSchema } from './schema-gate.js';
 import { resolveLaneId } from './topology.js';
 import { resolveFields, formLanes } from './model-v2.js';
-import { isActivity, isBoundaryEvent, FLOW_NODE_TYPES } from './types.js';
-import { TASK_TYPES } from './types.js';
+import { isActivity, isBoundaryEvent, FLOW_NODE_TYPES, TASK_TYPES } from './types.js';
 import { loadNamedView } from '../shared/view.js';
 
 const here = dirname(fileURLToPath(import.meta.url));

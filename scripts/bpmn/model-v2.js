@@ -86,8 +86,9 @@ function partOfCycles(parentOf, order) {
 }
 
 /**
- * The entries of `base` with each one `own` has the same id of replaced in place, then the entries
- * of `own` whose id `base` lacks; `replaced` lists the ids of `own` found in `base` (model order).
+ * Merges `own` into `base`: an entry of `base` whose id `own` also has is replaced in place by the
+ * entry of `own`, and the entries of `own` with a new id are appended; `replaced` lists the ids of
+ * `own` found in `base` (model order).
  */
 function mergeEntries(base, own) {
   const byId = new Map();

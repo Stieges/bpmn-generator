@@ -170,7 +170,7 @@ export function main(argv = process.argv.slice(2)) {
     process.exit(1);
   }
   if (modelFormat(lc) === '2') {
-    // "2.0" is not accepted here (F03, German text as before); any other 2.x value names itself (F02).
+    // A "2.0" or "2.1" model is not accepted here (F03, German text as before); any other 2.x value names itself (F02).
     const code = validateModelSchema(lc).errors[0].code;
     console.error(code === 'F03' ? '✗ [F03] Format 2.0 wird hier noch nicht angenommen.' : `✗ [${code}] ${formatV2RefusalMessage(lc)}`);
     process.exit(1);
