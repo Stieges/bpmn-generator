@@ -180,8 +180,8 @@ describe('migrate CLI: the given catalogue is never overwritten', () => {
 });
 
 describe('migrate CLI: refusal', () => {
-  test('nested-lanes-role-system exits 2, writes only the report and says why on stderr', () => {
-    const r = migrate([fixturePath('nested-lanes-role-system.json'), 'n'], tmp);
+  test('example-onboarding exits 2, writes only the report and says why on stderr', () => {
+    const r = migrate([fixturePath('example-onboarding.json'), 'n'], tmp);
     expect(r.status).toBe(2);
     expect(readdirSync(tmp)).toEqual(['n.migrate-report.json']);
     const report = readJson(join(tmp, 'n.migrate-report.json'));
@@ -189,12 +189,12 @@ describe('migrate CLI: refusal', () => {
     expect(r.out).toBe('');
     const lines = r.err.trimEnd().split('\n');
     expect(lines.slice(0, report.entries.length)).toEqual(report.entries.map((e) => `✗ ${e.message}`));
-    expect(lines[lines.length - 1]).toBe(`✗ ${fixturePath('nested-lanes-role-system.json')} not translated; the reasons are in n.migrate-report.json`);
+    expect(lines[lines.length - 1]).toBe(`✗ ${fixturePath('example-onboarding.json')} not translated; the reasons are in n.migrate-report.json`);
     expect(report.entries.every((e) => e.code === 'MG02')).toBe(true);
   });
 
   test('--drop-unsupported translates the same input', () => {
-    const r = migrate([fixturePath('nested-lanes-role-system.json'), 'n', '--drop-unsupported'], tmp);
+    const r = migrate([fixturePath('example-onboarding.json'), 'n', '--drop-unsupported'], tmp);
     expect(r.status).toBe(0);
     expect(readdirSync(tmp).sort()).toEqual(['n.catalog.json', 'n.json', 'n.migrate-report.json']);
   });
@@ -202,7 +202,7 @@ describe('migrate CLI: refusal', () => {
   test('a refusal leaves an earlier model and catalogue of the same base alone', () => {
     writeFileSync(join(tmp, 'n.json'), 'old model');
     writeFileSync(join(tmp, 'n.catalog.json'), 'old catalogue');
-    const r = migrate([fixturePath('nested-lanes-role-system.json'), 'n'], tmp);
+    const r = migrate([fixturePath('example-onboarding.json'), 'n'], tmp);
     expect(r.status).toBe(2);
     expect(readFileSync(join(tmp, 'n.json'), 'utf8')).toBe('old model');
     expect(readFileSync(join(tmp, 'n.catalog.json'), 'utf8')).toBe('old catalogue');
@@ -210,12 +210,25 @@ describe('migrate CLI: refusal', () => {
 
   test('a refusal with an existing report needs --force, and the report is the only file touched', () => {
     writeFileSync(join(tmp, 'n.migrate-report.json'), 'old report');
-    const args = [fixturePath('nested-lanes-role-system.json'), 'n'];
+    const args = [fixturePath('example-onboarding.json'), 'n'];
     const r = migrate(args, tmp);
     expect(r.status).toBe(1);
     expect(r.err).toBe('✗ n.migrate-report.json exists; pass --force to overwrite\n');
     expect(migrate([...args, '--force'], tmp).status).toBe(2);
     expect(readJson(join(tmp, 'n.migrate-report.json')).status).toBe('refused');
+  });
+
+  test('nested-lanes-role-system translates (its systems go into the catalogue) and passes the system view under --strict', () => {
+    const r = migrate([fixturePath('nested-lanes-role-system.json'), 'n'], tmp);
+    expect(r.err).toBe('');
+    expect(r.status).toBe(0);
+    expect(readdirSync(tmp).sort()).toEqual(['n.catalog.json', 'n.json', 'n.migrate-report.json']);
+    expect(readJson(join(tmp, 'n.json')).$schemaVersion).toBe('2.1');
+    expect(readJson(join(tmp, 'n.catalog.json')).systems).toEqual([{ id: 'sys_CRM', name: 'CRM' }, { id: 'sys_Workflow-System', name: 'Workflow-System' }]);
+    const p = run(PIPELINE, ['n.json', join(tmp, 'out'), '--view=systeme', '--strict'], tmp);
+    expect(p.err).toBe('');
+    expect(p.status).toBe(0);
+    expect(existsSync(join(tmp, 'out.bpmn'))).toBe(true);
   });
 
   test('a 2.0 input and an input failing the 1.x schema are MG01 refusals (exit 2)', () => {
@@ -296,6 +309,14 @@ describe('migrate CLI: usage and I/O errors', () => {
     const r = migrate(args, tmp);
     expect(r.status).toBe(1);
     expect(r.err).toMatch(/Usage: node migrate\.js <input\.json>/);
+    expect(readdirSync(tmp)).toEqual([]);
+  });
+
+  test.each([[['--help']], [['-h']], [['x.json', '--help']], [['x.json', 'a', '-h', '--nope']]])('%p prints the usage on stdout and exits 0, reading and writing nothing', (args) => {
+    const r = migrate(args, tmp);
+    expect(r.status).toBe(0);
+    expect(r.out).toBe('Usage: node migrate.js <input.json> [output-base] [--catalog <path>] [--drop-unsupported] [--force]\n');
+    expect(r.err).toBe('');
     expect(readdirSync(tmp)).toEqual([]);
   });
 

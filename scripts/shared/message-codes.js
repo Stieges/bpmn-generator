@@ -53,12 +53,13 @@ export const MESSAGE_CODES = Object.freeze({
   H18: entry('hint', 'a flow crosses a label, an edge label sits nearer to a foreign shape than to its own flow, or two labels overlap or nearly touch'),
   H20: entry('hint', 'a task or other activity has no recorded system and is placed in the system-not-recorded lane (system view)'),
   MG01: entry('migrate', 'migrate refuses the input: not a valid 1.x model (a format 2.x model included), an id that occurs more than once in the document, a process or pool id outside the 2.0 pattern, a malformed catalogue, or a translation that fails the final self-check (the format 2.0 gate, the catalogue schema, or the catalogue check and lane formation of the lane comparison)'),
-  MG02: entry('migrate', 'a field format 2.0 cannot hold yet (system, a data object or data store reference, a flow or association touching one); refused, or dropped and listed with dropUnsupported'),
+  MG02: entry('migrate', 'a field format 2.x cannot hold yet (a data object or data store reference, a flow or association touching one, a system off a task); refused, or dropped and listed with dropUnsupported'),
   MG03: entry('migrate', 'an activity\'s role differs from its lane: the role\'s actor (a role actor, or the lane actor of the same process the role names) performs it; also says when that role actor gets no unit because its activities sit in several lanes'),
   MG04: entry('migrate', 'an event or gateway lands in another lane under the inheritance rule (view rollen) than in the 1.x model'),
   MG05: entry('migrate', 'an activity without a lane in a process with lanes (no assignment, or its role\'s actor as performer), or a role dropped from a node that gets no assignment'),
   MG06: entry('migrate', 'an id was renamed to fit format 2.0 (no actor id, or a collision with another actor id), or a process without id was given one'),
-  MG07: entry('migrate', 'a lane or role was mapped by its exact name to an actor of the given catalogue (the first one when several share the name)'),
+  MG07: entry('migrate', 'a lane, role or system was mapped by its exact name to an actor or system of the given catalogue (the first one when several share the name)'),
+  MG08: entry('migrate', 'a system text became a system of the catalogue supplement (once per distinct name)'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 

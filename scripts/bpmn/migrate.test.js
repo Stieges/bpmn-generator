@@ -110,15 +110,21 @@ describe('migrateModel — simple-approval.json', () => {
 describe('migrateModel — nested-lanes-role-system.json', () => {
   const input = fixture('nested-lanes-role-system.json');
 
-  test('without dropUnsupported it is refused with one MG02 per system field', () => {
+  test('translated without the flag: each system text becomes a system of the catalogue, the model is "2.1"', () => {
     const r = migrateModel(input);
-    expect(r.report.status).toBe('refused');
-    expect(r.model).toBeNull();
-    expect(r.supplement).toBeNull();
-    expect(r.catalog).toBeNull();
-    expect(codes(r)).toEqual(['MG02', 'MG02']);
-    expect(r.report.entries.map((e) => e.elements)).toEqual([['erfassen'], ['freigeben']]);
-    for (const e of r.report.entries) expect(e.message).toMatch(/^\[MG02\] .*"system"/);
+    expectTranslatedAndValid(r);
+    expect(r.model.$schemaVersion).toBe('2.1');
+    expect(r.supplement.systems).toEqual([{ id: 'sys_CRM', name: 'CRM' }, { id: 'sys_Workflow-System', name: 'Workflow-System' }]);
+    expect(r.catalog.systems).toEqual(r.supplement.systems);
+    expect(r.model.systems).toBeUndefined();
+    expect(nodeOf(r.model, 'erfassen').system).toBe('sys_CRM');
+    expect(nodeOf(r.model, 'freigeben').system).toBe('sys_Workflow-System');
+    expect(nodeOf(r.model, 'pruefen').system).toBeUndefined();
+    expect(entriesOf(r, 'MG08')).toEqual([
+      { code: 'MG08', message: '[MG08] System "CRM" became system "sys_CRM" of the catalogue.', elements: ['sys_CRM'] },
+      { code: 'MG08', message: '[MG08] System "Workflow-System" became system "sys_Workflow-System" of the catalogue.', elements: ['sys_Workflow-System'] },
+    ]);
+    expect(entriesOf(r, 'MG02')).toEqual([]);
   });
 
   test('with dropUnsupported: child lanes carry their parent as unit, three role actors, MG03 per role node', async () => {
@@ -126,7 +132,6 @@ describe('migrateModel — nested-lanes-role-system.json', () => {
     const r = migrateModel(input, { dropUnsupported: true });
     expect(input).toEqual(before);
     expectTranslatedAndValid(r);
-    expect(keysIn(r.model).has('system')).toBe(false);
     expect(r.supplement.actors).toEqual([
       { id: 'lane_service', name: 'Kundenservice' },
       { id: 'lane_fach', name: 'Fachabteilung' },
@@ -142,7 +147,6 @@ describe('migrateModel — nested-lanes-role-system.json', () => {
       pruefen: [{ type: 'D', actor: 'role_Pr_fer' }],
       freigeben: [{ type: 'D', actor: 'role_Teamleitung' }],
     });
-    expect(entriesOf(r, 'MG02').map((e) => e.elements)).toEqual([['erfassen'], ['freigeben']]);
     expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([
       ['erfassen', 'lane_service', 'role_Sachbearbeitung'],
       ['pruefen', 'lane_pruefung', 'role_Pr_fer'],
@@ -156,11 +160,146 @@ describe('migrateModel — nested-lanes-role-system.json', () => {
       ['gw', 'lane_service', 'role_Sachbearbeitung'],
       ['end', 'lane_service', 'role_Pr_fer'],
     ]);
-    expect(codes(r)).toEqual(['MG02', 'MG02', ...Array(7).fill('H07'), 'MG03', 'MG03', 'MG03', 'MG04', 'MG04', 'MG04']);
+    expect(codes(r)).toEqual(['MG08', 'MG08', ...Array(7).fill('H07'), 'MG03', 'MG03', 'MG03', 'MG04', 'MG04', 'MG04']);
     expect(r.report.summary).toEqual({
       processes: 1, lanes: 4, actors: 7, activities: 3, assigned: 3, laneMatches: 0, deviations: { MG03: 3, MG04: 3, MG05: 0 },
     });
     await generate(r);
+  });
+});
+
+describe('migrateModel — a 1.x system (slice 4a)', () => {
+  const base = () => ({
+    id: 'Process_S', name: 'S', language: 'de',
+    lanes: [{ id: 'la', name: 'Sachbearbeitung' }],
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Antrag eingegangen', lane: 'la' },
+      { id: 't1', type: 'userTask', name: 'Antrag erfassen', lane: 'la', system: 'CRM' },
+      { id: 'g', type: 'exclusiveGateway', name: 'Antrag vollständig?', lane: 'la' },
+      { id: 't2', type: 'serviceTask', name: 'Antrag buchen', lane: 'la', system: 'CRM' },
+      { id: 't3', type: 'userTask', name: 'Antrag freigeben', lane: 'la', system: 'Workflow-System' },
+      { id: 'e', type: 'endEvent', name: 'Antrag entschieden', lane: 'la' }],
+    edges: [{ source: 's', target: 't1' }, { source: 't1', target: 'g' }, { source: 'g', target: 't2', label: 'ja' },
+      { source: 'g', target: 't3', label: 'nein' }, { source: 't2', target: 'e' }, { source: 't3', target: 'e' }],
+  });
+
+  test('a 1.x model without system stays "2.0" with a supplement of actors only', () => {
+    const r = migrateModel(fixture('simple-approval.json'));
+    expect(r.model.$schemaVersion).toBe('2.0');
+    expect(Object.keys(r.supplement)).toEqual(['actors']);
+    expect(Object.keys(r.catalog)).toEqual(['actors']);
+    expect(entriesOf(r, 'MG08')).toEqual([]);
+  });
+
+  test('two tasks with the same text give one entry; the text is compared exactly', () => {
+    const m = base();
+    m.nodes.find((n) => n.id === 't3').system = 'crm';
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(r.supplement.systems).toEqual([{ id: 'sys_CRM', name: 'CRM' }, { id: 'sys_crm', name: 'crm' }]);
+    expect(['t1', 't2', 't3'].map((id) => nodeOf(r.model, id).system)).toEqual(['sys_CRM', 'sys_CRM', 'sys_crm']);
+    expect(entriesOf(r, 'MG08').map((e) => e.elements)).toEqual([['sys_CRM'], ['sys_crm']]);
+  });
+
+  test('a system on a subprocess child task is carried; the slug rule, an empty slug and a taken id', () => {
+    const m = base();
+    m.nodes.find((n) => n.id === 't3').system = 'Ä Ö';
+    m.nodes.splice(4, 0, { id: 'sp', type: 'subProcess', name: 'Antrag bearbeiten', lane: 'la',
+      nodes: [{ id: 'c', type: 'task', name: 'Antrag lesen', system: 'Post-Eingang (alt)' }], edges: [] });
+    m.edges.push({ source: 't3', target: 'sp' });
+    const given = { actors: [], systems: [{ id: 'sys_CRM', name: 'Anderes' }] };
+    const r = migrateModel(m, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(r.model.systems).toEqual([
+      { id: 'sys_CRM_2', name: 'CRM' }, { id: 'sys_Post-Eingang_alt', name: 'Post-Eingang (alt)' }, { id: 'sys', name: 'Ä Ö' },
+    ]);
+    expect(nodeOf(r.model, 'sp').nodes[0].system).toBe('sys_Post-Eingang_alt');
+    expect(nodeOf(r.model, 't3').system).toBe('sys');
+    expect(r.catalog.systems.map((s) => s.id)).toEqual(['sys_CRM', 'sys_CRM_2', 'sys_Post-Eingang_alt', 'sys']);
+  });
+
+  test('new system ids come after the role actors, so no actor id moves', () => {
+    const m = base();
+    m.lanes[0].id = 'sys_CRM';
+    for (const n of m.nodes) n.lane = 'sys_CRM';
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(r.supplement.actors.map((a) => a.id)).toEqual(['sys_CRM']);
+    expect(r.supplement.systems.map((s) => s.id)).toEqual(['sys_CRM_2', 'sys_Workflow-System']);
+  });
+
+  test('a lane id equal to a system id of the given catalogue is renamed (shared id space), MG06 says so', () => {
+    const m = base();
+    m.lanes[0].id = 'crm';
+    for (const n of m.nodes) n.lane = 'crm';
+    const r = migrateModel(m, { catalog: { actors: [], systems: [{ id: 'crm', name: 'Altsystem' }] } });
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG06').map((e) => e.message)).toEqual(['[MG06] lane id "crm" collides with a system id of the catalogue; the actor is "crm_2".']);
+  });
+
+  test('with --catalog a system named like a given system is that system (MG07); the model carries only the new one', async () => {
+    const given = { actors: [], systems: [{ id: 'crm', name: 'CRM' }] };
+    const before = copy(given);
+    const input = fixture('nested-lanes-role-system.json');
+    const r = migrateModel(input, { catalog: given });
+    expect(given).toEqual(before);
+    expectTranslatedAndValid(r);
+    expect(r.model.$schemaVersion).toBe('2.1');
+    expect(nodeOf(r.model, 'erfassen').system).toBe('crm');
+    expect(nodeOf(r.model, 'freigeben').system).toBe('sys_Workflow-System');
+    expect(r.model.systems).toEqual([{ id: 'sys_Workflow-System', name: 'Workflow-System' }]);
+    expect(r.supplement.systems).toEqual(r.model.systems);
+    expect(r.catalog.systems).toEqual([{ id: 'crm', name: 'CRM' }, { id: 'sys_Workflow-System', name: 'Workflow-System' }]);
+    expect(entriesOf(r, 'MG07')).toEqual([
+      { code: 'MG07', message: '[MG07] System "CRM" maps by its name to the existing system "crm".', elements: ['CRM', 'crm'] },
+    ]);
+    expect(entriesOf(r, 'MG08').map((e) => e.elements)).toEqual([['sys_Workflow-System']]);
+    const out = await runPipeline(copy(r.model), { catalog: copy(given), view: loadNamedView('systeme') });
+    expect(out.validation.errors).toEqual([]);
+    expect(out.bpmnXml).toContain('<bg:system ref="crm">CRM</bg:system>');
+  });
+
+  test('only reused systems: "2.1", no systems in the model or supplement; several of that name: the first', () => {
+    const m = base();
+    m.nodes.find((n) => n.id === 't3').system = 'CRM';
+    const given = { actors: [], systems: [{ id: 'c1', name: 'CRM' }, { id: 'c2', name: 'CRM' }] };
+    const r = migrateModel(m, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(r.model.$schemaVersion).toBe('2.1');
+    expect(r.model.systems).toBeUndefined();
+    expect(Object.keys(r.supplement)).toEqual(['actors']);
+    expect(r.catalog.systems).toEqual(given.systems);
+    expect(entriesOf(r, 'MG07').map((e) => e.message)).toEqual([
+      '[MG07] System "CRM" maps by its name to the existing system "c1". The catalogue holds 2 systems of that name ("c1", "c2"); the first is taken.',
+    ]);
+    expect(['t1', 't2', 't3'].map((id) => nodeOf(r.model, id).system)).toEqual(['c1', 'c1', 'c1']);
+  });
+
+  test('a system on a gateway is MG02: refused, or dropped with dropUnsupported', () => {
+    const m = base();
+    m.nodes.find((n) => n.id === 'g').system = 'CRM';
+    const r = migrateModel(m);
+    expect(r.report.status).toBe('refused');
+    expect(r.report.entries).toEqual([{
+      code: 'MG02',
+      message: '[MG02] node "g": field "system" ("CRM") on exclusiveGateway has no place in format 2.x: a system belongs on a task.',
+      elements: ['g'],
+    }]);
+    const d = migrateModel(m, { dropUnsupported: true });
+    expectTranslatedAndValid(d);
+    expect(entriesOf(d, 'MG02').map((e) => e.message)).toEqual([
+      '[MG02] node "g": field "system" ("CRM") on exclusiveGateway has no place in format 2.x: a system belongs on a task; dropped.',
+    ]);
+    expect(nodeOf(d.model, 'g').system).toBeUndefined();
+    expect(nodeOf(d.model, 't1').system).toBe('sys_CRM');
+  });
+
+  test('neither argument is changed (deep freeze)', () => {
+    const freeze = (v) => { if (v && typeof v === 'object') { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
+    const m = freeze(base());
+    const given = freeze({ actors: [], systems: [{ id: 'crm', name: 'CRM' }] });
+    expect(() => migrateModel(m, { catalog: given })).not.toThrow();
+    expectTranslatedAndValid(migrateModel(m, { catalog: given }));
   });
 });
 
@@ -826,7 +965,7 @@ describe('migrateModel — the report compares the lanes (Task 2)', () => {
   });
 
   test('a refusal carries the same summary shape', () => {
-    const r = migrateModel(fixture('nested-lanes-role-system.json'));
+    const r = migrateModel(fixture('example-onboarding.json'));
     expect(r.report.status).toBe('refused');
     expect(r.report.summary).toMatchObject({ laneMatches: 0, deviations: { MG03: 0, MG04: 0, MG05: 0 } });
   });
