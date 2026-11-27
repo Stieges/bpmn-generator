@@ -395,7 +395,7 @@ describe('orchestrate — a lanes view on a 1.x model', () => {
     let err;
     try { await orchestrate(loadFixture('simple-approval.json'), { view: loadNamedView('rollen') }); } catch (e) { err = e; }
     expect(err?.name).toBe('ViewRejectedError');
-    expect(err.message).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+    expect(err.message).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
   });
 });
 
@@ -800,7 +800,7 @@ describe('orchestrate — the view is loaded once and checked before any agent',
     const { ViewRejectedError } = await import('./shared/view.js');
     const err = await orchestrateMocked(loadFixture('simple-approval.json'), { view: makeView() }).catch((e) => e);
     expect(err).toBeInstanceOf(ViewRejectedError);
-    expect(err.message).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+    expect(err.message).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
     expect(reviewer).not.toHaveBeenCalled();
   });
 });

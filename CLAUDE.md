@@ -692,6 +692,22 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    orchestrator skips the Modeler's refine and amend for it; redesign and scenarios refuse 2.0
    (F03, `FORMAT_V2_NOT_ACCEPTED`).
 
+### Translate a 1.x model
+
+1. `cd scripts && node bpmn/migrate.js <model.json> [<base>] [--catalog <path>] [--drop-unsupported]` writes
+   `<base>.json` (format 2.0), `<base>.catalog.json` (the new actors) and `<base>.migrate-report.json`; the
+   default base is `<input basename>.v2` in the working directory. Exit 2 means refused (MG01 or MG02, the
+   report only is written); `--force` overwrites existing output but never the input or the given catalogue.
+   Flags and exit codes: `references/cli.md`, section migrate; mapping: `references/logic-core-schema.md`.
+2. Read the report: H07 (check each new actor's kind), MG03 (role differs from lane), MG04 (an event or
+   gateway moved by the inheritance rule), MG05, MG06, MG07. Data nodes and `system` are MG02: refused
+   unless `--drop-unsupported`.
+3. Verify: `node bpmn/pipeline.js <base>.json <out> --view=rollen --strict` (declare `language` in the
+   1.x input first if its names are not German); `npm test -- --testPathPatterns=migrate` covers the translator
+   and the 28 1.x fixtures (`tests/bench/migrate-fixtures.json`). Under `einheiten` a migrated top-level
+   lane's actor has no `unit`: its nodes land in "(Einheit nicht erhoben)" (expected). The lanes view on
+   a 1.x model is a view error that names `node bpmn/migrate.js`.
+
 ### Model an organigram (format 2.0)
 
 1. Give units a `partOf` (the parent unit) in the catalogue; roles name their unit with `unit`, a

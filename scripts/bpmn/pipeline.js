@@ -209,7 +209,7 @@ function errorFindings(errors, code = null) {
  *   from gateway directions on sees the derived one. An invalid view rejects with ViewRejectedError.
  *   A view's `lanes` (`role`, `unit`, `none`) forms the lanes of a format 2.0 model from its
  *   assignments (absent: `role`); on a 1.x model, which carries its own lanes, such a view rejects
- *   with ViewRejectedError
+ *   with ViewRejectedError, whose text names the translator `node bpmn/migrate.js`
  * @param {object} [opts.catalog] - the actor catalogue `{ actors, scheme? }` of a format 2.0 model, as an
  *   object (shared/catalog.js loadCatalog reads a file); a string throws a TypeError, and so does a
  *   catalogue with a 1.x model. A 2.0 model first passes resolveFields (format schema, catalogue,

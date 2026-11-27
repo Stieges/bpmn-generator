@@ -177,7 +177,7 @@ describe('an edited 2.0 diagram (Review Focus 1)', () => {
     const lc = await bpmnToLogicCore(xml);
     await expect(runPipeline(lc, { view: loadNamedView('rollen') })).rejects.toThrow(ViewRejectedError);
     await expect(runPipeline(lc, { view: loadNamedView('rollen') }))
-      .rejects.toThrow('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+      .rejects.toThrow('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
   });
 });
 

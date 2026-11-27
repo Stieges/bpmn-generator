@@ -63,7 +63,7 @@ export const FORMAT_V2_VERSION = '2.0';
  */
 export function assertViewFitsModel(model, view) {
   if (view?.lanes !== undefined && modelFormat(model) === '1') {
-    throw new ViewRejectedError(`view ${quoteForMessage(view.view)} forms lanes from assignments; this model (format 1.x) carries its own lanes`);
+    throw new ViewRejectedError(`view ${quoteForMessage(view.view)} forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js`);
   }
 }
 
