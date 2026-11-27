@@ -49,6 +49,7 @@ import { loadView, loadNamedView, isViewName, ViewRejectedError, resolveViewOpti
 import { applyDerivations } from './derivations.js';
 import { languageTag, resolveEventMarkers, namingHints } from './naming/index.js';
 import { messageCatcherHints } from './message-catcher-hint.js';
+import { labelHints } from './label-check.js';
 import { coded, codeOf } from '../shared/message-codes.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
@@ -539,6 +540,9 @@ async function runPipeline(logicCore, callerOpts = {}) {
   hints.push(...cutLabels.map(labelCutHint));
   // H17, after H16: one per message catcher without an incoming message flow (more than one participant).
   hints.push(...messageCatcherHints(lc));
+  // H18, after H17, last: a label crossed, misplaced or crowded, read from the boxes and routes the
+  // XML and SVG above were written from (label-check.js; any format; nothing moves).
+  hints.push(...labelHints(lc, coordMap));
 
   return {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
