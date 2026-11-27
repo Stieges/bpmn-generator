@@ -939,6 +939,12 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 
 ## Known Limitations
 
+- `--wrap` (`layout.elkWrapping: 'auto'`, threshold 20 nodes) with lanes is accepted but the result is a
+  staircase: the laned pool is one flat ELK graph, so the wrapped rows are not aligned to lane bands, and the
+  lane bands are rebuilt afterwards from the y spans of their nodes. Each band grows to span several
+  rows and the rows shift against each other. A 26-node chain over three lanes measures 4752 x 550 px without
+  `--wrap` and 4032 x 2360 px with it, the three bands 120/160/160 px against 844/703/703 px. Nothing
+  warns; leave `--wrap` off for a model with lanes (a format 2.x model included, its lanes come from the view).
 - DMN views: the DRD SVG clips requirement edges at a shape's bounding box (as the DMNDI does), so
   an edge to a knowledge source or BKM ends at the box, not the wavy/clipped outline; decision tables
   are drawn rule-as-row only (`preferredOrientation` is carried in the XML, not honoured by the

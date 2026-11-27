@@ -190,6 +190,14 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   `bpmn-generator-pipeline.json` (the loop-back `fu6` through the label of `gw_ok`, and four more),
   five example models and the format 2.0 golden `schaden × einheiten` (the `ja` flow through the
   label `nein`) gain the hint; the output files are unchanged.
+- **Documentation: format 2.0 quick start, long names, `--wrap` with lanes.** `docs/roles-and-systems.md`
+  gains section 6, a minimal catalogue, a minimal 2.0 model, one command per shipped lanes view
+  (`rollen`, `einheiten`, `organigramm`) and the meaning of the placeholder lanes `(nicht zugeordnet)`
+  and `(Einheit nicht erhoben)`; its commands are run with `--strict` by
+  `scripts/bpmn/roles-and-systems-quickstart.test.js`. `references/modeling-guide.md` tells how to set
+  a soft hyphen in a long compound (hint `H16`) and that English names declare `"language": "en"`.
+  Known limitation, now documented where `--wrap` is: with lanes it is accepted, but the result is a
+  staircase (the rows shift and the lane bands grow tall); leave it off for a laned model.
 
 ### Fixed
 

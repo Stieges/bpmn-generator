@@ -10,6 +10,7 @@ an IT system, or which BPMN construct fits a situation. The short version lives 
 - [Pools, lanes, roles and systems](#pools-lanes-roles-and-systems)
 - [Which construct when](#which-construct-when)
 - [Naming conventions per language](#naming-conventions-per-language)
+- [Long compound names](#long-compound-names)
 
 ## How to advise
 
@@ -89,6 +90,7 @@ diagram for a business reader than for an integration team.
 ## Naming conventions per language
 
 Set the top-level `language` of the model (`"de"`, `"en"`, `"en-GB"`) to the language of its labels.
+English names need `"language": "en"`: without it M01 is the older `Objekt+Verb` heuristic, which judges them by the German convention.
 The naming rules then judge them by that language's convention; without the field M01 is the
 older `Objekt+Verb` heuristic and M05 and M06 report nothing. A word list decides, not a grammar:
 a correct label the lists do not know is flagged, and the remedy is `BPMN_NAMING` (see the README,
@@ -163,3 +165,11 @@ Behaviours worth knowing:
   `"none"` also stops the inference without a declared language.
 - A valid tag without word lists (`fr`) skips M01, M05 and M06 (hint `H12`); labels that look like
   another supported language than the declared one give hint `H13` (and then no `H14`).
+
+## Long compound names
+
+A label breaks at a blank, at a hyphen or at a soft hyphen (U+00AD). A word wider than its line has
+none of these and is cut where the line ends, in the SVG and in bpmn.io alike; hint `H16` then names
+the label and the word. For a long compound (German `Unterlagenanforderung`) put a soft hyphen into
+the name where the word may break: `"Unterlagen\u00ADanforderung pr\u00FCfen"` in JSON. It is invisible
+while the word fits and shows as a hyphen where the word breaks. Shortening the word helps as well.
