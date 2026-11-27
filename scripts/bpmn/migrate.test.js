@@ -426,16 +426,74 @@ describe('migrateModel — fix round 1', () => {
     expect(r.supplement.actors.map((a) => a.id)).toEqual(['la', 'lb']);
   });
 
-  test('the role actor exists only for the nodes that use it; its unit over those nodes', () => {
+  test('a role named like a lane of its process is that lane actor in another lane too: MG03, no role actor', async () => {
     const m = base();
     m.nodes.splice(3, 0, { id: 't3', type: 'userTask', name: 'Sign form', lane: 'lb', role: 'Clerk' });
     m.edges = [{ source: 's', target: 't1' }, { source: 't1', target: 't2' }, { source: 't2', target: 't3' }, { source: 't3', target: 'e' }];
     const r = migrateModel(m);
     expectTranslatedAndValid(r);
     expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'la' }]);
-    expect(nodeOf(r.model, 't3').assignments).toEqual([{ type: 'D', actor: 'role_Clerk' }]);
+    expect(nodeOf(r.model, 't3').assignments).toEqual([{ type: 'D', actor: 'la' }]);
+    expect(r.supplement.actors).toEqual([{ id: 'la', name: 'Clerk' }, { id: 'lb', name: 'Office' }]);
+    expect(entriesOf(r, 'MG03')).toEqual([{
+      code: 'MG03', message: '[MG03] node "t3": role "Clerk" performs it as actor "la", not lane "lb".', elements: ['t3', 'lb', 'la'],
+    }]);
+    // under rollen no second lane named "Clerk"
+    const out = await generate(r);
+    expect(out.bpmnXml.match(/<bpmn:lane [^>]*name="Clerk"/g)).toHaveLength(1);
+  });
+
+  test('a role named like a lane of its process on a node without lane: that lane actor performs, MG05 [nodeId, actorId]', () => {
+    const m = base();
+    m.nodes.splice(3, 0, { id: 't3', type: 'userTask', name: 'Sign form', role: 'Office' });
+    m.edges = [{ source: 's', target: 't1' }, { source: 't1', target: 't2' }, { source: 't2', target: 't3' }, { source: 't3', target: 'e' }];
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(nodeOf(r.model, 't3').assignments).toEqual([{ type: 'D', actor: 'lb' }]);
+    expect(entriesOf(r, 'MG05')).toEqual([{
+      code: 'MG05',
+      message: '[MG05] node "t3" has no lane in a process with lanes; its role "Office" makes actor "lb" its performer.',
+      elements: ['t3', 'lb'],
+    }]);
+    expect(r.supplement.actors.map((a) => a.id)).toEqual(['la', 'lb']);
+  });
+
+  test('a role named like a lane of another process only is a role actor', () => {
+    const m = {
+      pools: [
+        { id: 'P1', lanes: [{ id: 'la', name: 'Clerk' }],
+          nodes: [{ id: 't1', type: 'task', name: 'Eins tun', lane: 'la' }], edges: [] },
+        { id: 'P2', lanes: [{ id: 'lb', name: 'Office' }],
+          nodes: [{ id: 't2', type: 'task', name: 'Zwei tun', lane: 'lb', role: 'Clerk' }], edges: [] }],
+    };
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(nodeOf(r.model, 't2').assignments).toEqual([{ type: 'D', actor: 'role_Clerk' }]);
     expect(r.supplement.actors.find((a) => a.id === 'role_Clerk')).toEqual({ id: 'role_Clerk', name: 'Clerk', unit: 'lb' });
-    expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([['t3', 'lb', 'role_Clerk']]);
+    expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([['t2', 'lb', 'role_Clerk']]);
+  });
+
+  test('a role on a boundary event is stripped with MG05', () => {
+    const m = base();
+    m.nodes.push({ id: 'b', type: 'boundaryEvent', name: 'Frist abgelaufen', attachedTo: 't2', marker: 'timer', lane: 'la', role: 'Clerk' },
+      { id: 'e2', type: 'endEvent', name: 'Abgebrochen', lane: 'la' });
+    m.edges.push({ source: 'b', target: 'e2' });
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG05')).toEqual([{
+      code: 'MG05', message: '[MG05] role "Clerk" on boundaryEvent "b" is dropped: format 2.0 gives this node no assignment.', elements: ['b'],
+    }]);
+    expect(nodeOf(r.model, 'b').role).toBeUndefined();
+    expect(nodeOf(r.model, 'b').assignments).toBeUndefined();
+  });
+
+  test('a role on a data node dropped under MG02 gives no MG05', () => {
+    const m = base();
+    m.nodes.push({ id: 'd', type: 'dataObjectReference', name: 'Formular', lane: 'la', role: 'Clerk' });
+    const r = migrateModel(m, { dropUnsupported: true });
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG02').map((e) => e.elements)).toEqual([['d']]);
+    expect(entriesOf(r, 'MG05')).toEqual([]);
   });
 
   test('an activity with role but no lane: the role actor performs, MG05 [nodeId, actorId]', () => {

@@ -50,7 +50,7 @@ export const MESSAGE_CODES = Object.freeze({
   H18: entry('hint', 'a flow crosses a label, an edge label sits nearer to a foreign shape than to its own flow, or two labels overlap or nearly touch'),
   MG01: entry('migrate', 'migrate refuses the input: not a valid 1.x model (a format 2.x model included), a process or pool id outside the 2.0 pattern, a malformed catalogue, or a translation that fails the final self-check (the format 2.0 gate or the catalogue schema)'),
   MG02: entry('migrate', 'a field format 2.0 cannot hold yet (system, a data object or data store reference, a flow or association touching one); refused, or dropped and listed with dropUnsupported'),
-  MG03: entry('migrate', 'an activity\'s role differs from its lane: the role actor performs it; also says when that role actor gets no unit because its activities sit in several lanes'),
+  MG03: entry('migrate', 'an activity\'s role differs from its lane: the role\'s actor (a role actor, or the lane actor of the same process the role names) performs it; also says when that role actor gets no unit because its activities sit in several lanes'),
   MG04: entry('migrate', 'an event or gateway lands in another lane under the inheritance rule than in the 1.x model'),
   MG05: entry('migrate', 'an activity without a lane in a process with lanes (no assignment, or its role\'s actor as performer), or a role dropped from a node that gets no assignment'),
   MG06: entry('migrate', 'an id was renamed to fit format 2.0 (no actor id, or a collision with another actor id), or a process without id was given one'),
