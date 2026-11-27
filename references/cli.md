@@ -132,7 +132,7 @@ missing. The base is not stripped of a `.json` ending.
   (`✗ [C11] …` / `✗ [C12] …`), an output that cannot be written, or an existing output file.
 - Overwrite rule: an existing output file stops the run with `✗ <file> exists; pass --force to
   overwrite`, one line per file. Every file the run would write is checked before any is written
-  (for a refusal that is only the report). `--force` overwrites, but never the input file itself.
+  (for a refusal that is only the report). `--force` overwrites, but never the input file or the given catalogue (exit 1, `✗ <file> is the given catalogue; choose another output base`).
 
 ```bash
 node bpmn/migrate.js my-process.json out/my-process
