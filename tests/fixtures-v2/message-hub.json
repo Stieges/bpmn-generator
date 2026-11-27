@@ -1,0 +1,153 @@
+{
+  "$schemaVersion": "2.0",
+  "language": "en",
+  "catalog": "message-hub-catalog.json",
+  "pools": [
+    {
+      "id": "Pool_Desk",
+      "name": "Service desk",
+      "nodes": [
+        {
+          "id": "s",
+          "type": "startEvent",
+          "name": "Case received",
+          "assignments": [
+            {
+              "type": "D",
+              "actor": "clerk"
+            }
+          ]
+        },
+        {
+          "id": "a",
+          "type": "sendTask",
+          "name": "Inform customer",
+          "assignments": [
+            {
+              "type": "D",
+              "actor": "clerk"
+            }
+          ]
+        },
+        {
+          "id": "b",
+          "type": "sendTask",
+          "name": "Request report",
+          "assignments": [
+            {
+              "type": "D",
+              "actor": "clerk"
+            }
+          ]
+        },
+        {
+          "id": "c",
+          "type": "intermediateCatchEvent",
+          "marker": "message",
+          "name": "Report received",
+          "assignments": [
+            {
+              "type": "D",
+              "actor": "reviewer"
+            }
+          ]
+        },
+        {
+          "id": "d",
+          "type": "userTask",
+          "name": "Review report",
+          "assignments": [
+            {
+              "type": "D",
+              "actor": "reviewer"
+            }
+          ]
+        },
+        {
+          "id": "e",
+          "type": "sendTask",
+          "name": "Notify carrier",
+          "assignments": [
+            {
+              "type": "D",
+              "actor": "reviewer"
+            }
+          ]
+        },
+        {
+          "id": "z",
+          "type": "endEvent",
+          "name": "Case closed",
+          "assignments": [
+            {
+              "type": "D",
+              "actor": "reviewer"
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "source": "s",
+          "target": "a"
+        },
+        {
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "source": "e",
+          "target": "z"
+        }
+      ]
+    }
+  ],
+  "collapsedPools": [
+    {
+      "id": "P_Customer",
+      "name": "Customer"
+    },
+    {
+      "id": "P_Supplier",
+      "name": "Supplier"
+    },
+    {
+      "id": "P_Carrier",
+      "name": "Carrier"
+    }
+  ],
+  "messageFlows": [
+    {
+      "id": "m1",
+      "source": "a",
+      "target": "P_Customer"
+    },
+    {
+      "id": "m2",
+      "source": "b",
+      "target": "P_Supplier"
+    },
+    {
+      "id": "m3",
+      "source": "P_Supplier",
+      "target": "c"
+    },
+    {
+      "id": "m4",
+      "source": "e",
+      "target": "P_Carrier"
+    }
+  ]
+}
