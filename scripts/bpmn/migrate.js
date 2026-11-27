@@ -646,10 +646,12 @@ function main(argv = process.argv.slice(2)) {
   }
 
   const inputReal = realpathSync(resolve(args.input));
+  const catalogReal = args.catalogArg === null ? null : realpathSync(resolve(args.catalogArg));
   const problems = [];
   for (const [file] of writes) {
     const abs = resolve(file);
     if (existsSync(abs) && realpathSync(abs) === inputReal) problems.push(`✗ ${file} is the input file; choose another output base`);
+    else if (existsSync(abs) && realpathSync(abs) === catalogReal) problems.push(`✗ ${file} is the given catalogue; choose another output base`);
     else if (existsSync(abs) && !args.force) problems.push(`✗ ${file} exists; pass --force to overwrite`);
   }
   if (problems.length) fail(problems.join('\n'));

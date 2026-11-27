@@ -128,6 +128,18 @@ describe('migrate CLI: overwrite rule', () => {
   });
 });
 
+describe('migrate CLI: the given catalogue is never overwritten', () => {
+  test.each([['catalog', 'g.catalog.json'], ['model', 'g.json'], ['report', 'g.migrate-report.json']])('--catalog naming the %s file of the base, even with --force', (_n, file) => {
+    const given = JSON.stringify({ actors: [{ id: 'dl', name: 'Default Lane', kind: 'role' }] });
+    writeFileSync(join(tmp, file), given);
+    const r = migrate([fixturePath('simple-approval.json'), 'g', '--catalog', file, '--force'], tmp);
+    expect(r.status).toBe(1);
+    expect(r.err).toBe(`✗ ${file} is the given catalogue; choose another output base\n`);
+    expect(readFileSync(join(tmp, file), 'utf8')).toBe(given);
+    expect(readdirSync(tmp)).toEqual([file]);
+  });
+});
+
 describe('migrate CLI: refusal', () => {
   test('nested-lanes-role-system exits 2, writes only the report and says why on stderr', () => {
     const r = migrate([fixturePath('nested-lanes-role-system.json'), 'n'], tmp);
