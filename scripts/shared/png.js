@@ -139,7 +139,7 @@ export function planParts(widthPx, heightPx, { partPx, overlapPx }) {
  */
 export function cropRgba(rgba, width, { x, y, w, h }) {
   const height = rgba.length / (width * 4);
-  if (!Number.isInteger(height) || x < 0 || y < 0 || w < 1 || h < 1 || x + w > width || y + h > height)
+  if (!Number.isInteger(height) || ![x, y, w, h].every(Number.isInteger) || x < 0 || y < 0 || w < 1 || h < 1 || x + w > width || y + h > height)
     throw new RangeError(`cropRgba: rectangle ${w} × ${h} at (${x}, ${y}) is outside the ${width} × ${height} image`);
   const out = new Uint8Array(w * h * 4);
   const rowBytes = w * 4;
