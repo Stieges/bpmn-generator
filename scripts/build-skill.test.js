@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import {
   hasSegment, includeScriptFile, includeReferenceFile,
-  collectIncludes, skillEntryPoints, relativeImports, reachableModules, NOT_SKILL_CLIS,
+  collectIncludes, SKILL_ASSET_FILES, skillEntryPoints, relativeImports, reachableModules, NOT_SKILL_CLIS,
 } from './build-skill.mjs';
 
 // The skill bundle's exclusions must hold on Windows too: a substring test for '/node_modules/'
@@ -124,13 +124,17 @@ describe('build-skill — the bundle is closed under its own imports', () => {
     expect(relativeImports(src).sort()).toEqual(['../b.js', './a.js', './c.js', './d.js']);
   });
 
-  const fakeRepo = (entrySrc, extra = {}) => {
+  const fakeRepo = (entrySrc, extra = {}, withAssets = true) => {
     const root = mkdtempSync(path.join(tmpdir(), 'skill-'));
     mkdirSync(path.join(root, 'scripts', 'agents'), { recursive: true });
     mkdirSync(path.join(root, 'references'));
     writeFileSync(path.join(root, 'SKILL.md'), 'Run `node entry.js in out`.');
     writeFileSync(path.join(root, 'scripts', 'entry.js'), entrySrc);
     for (const [rel, src] of Object.entries(extra)) writeFileSync(path.join(root, 'scripts', rel), src);
+    if (withAssets) {
+      mkdirSync(path.join(root, 'scripts', 'fonts'));
+      for (const a of SKILL_ASSET_FILES) writeFileSync(path.join(root, 'scripts', a), 'asset');
+    }
     return root;
   };
 
@@ -160,5 +164,30 @@ describe('build-skill — the naming data and modules ship', () => {
       'references/naming-schema.json', 'references/naming/de.json', 'references/naming/en.json',
       ...['index', 'lexicon', 'tokens', 'verb-first', 'verb-last', 'markers'].map(m => `scripts/bpmn/naming/${m}.js`),
     ]) expect(files).toContain(f);
+  });
+});
+
+describe('build-skill — the PNG font ships', () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+  test('collectIncludes lists the font and its licence', () => {
+    const files = collectIncludes(repoRoot);
+    expect(files).toContain('scripts/fonts/Arimo-Regular.ttf');
+    expect(files).toContain('scripts/fonts/OFL.txt');
+  });
+
+  test('no bundled path contains a zip wildcard character', () => {
+    // Info-ZIP `zip` expands [ ] * ? itself, so such a name would silently match other files.
+    for (const f of collectIncludes(repoRoot)) expect(f).toMatch(/^[^[\]*?]+$/);
+  });
+
+  test('a missing asset aborts the build', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'skill-'));
+    mkdirSync(path.join(root, 'scripts'));
+    mkdirSync(path.join(root, 'references'));
+    writeFileSync(path.join(root, 'SKILL.md'), 'Run `node entry.js in out`.');
+    writeFileSync(path.join(root, 'scripts', 'entry.js'), 'export const e = 1;\n');
+    expect(() => collectIncludes(root)).toThrow(
+      'build-skill: fonts/Arimo-Regular.ttf is listed in SKILL_ASSET_FILES but does not exist');
   });
 });

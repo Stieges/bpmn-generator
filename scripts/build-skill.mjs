@@ -104,6 +104,11 @@ export function reachableModules(scriptsDir, entries) {
   return [...seen].map(a => toPosix(relative(scriptsDir, a))).sort();
 }
 
+// Files the bundle ships that no import reaches, relative to scripts/. A font is read at run
+// time by path (`--png`), so it is never in the static import closure and has to be listed
+// explicitly. The licence travels with the font: the bundle carries no notice files of its own.
+export const SKILL_ASSET_FILES = ['fonts/Arimo-Regular.ttf', 'fonts/OFL.txt'];
+
 /** The bundle's file list, relative to the repo root, POSIX separators. */
 export function collectIncludes(root = repoRoot) {
   const scriptsDir = join(root, 'scripts');
@@ -119,9 +124,14 @@ export function collectIncludes(root = repoRoot) {
     throw new Error(`build-skill: the skill's entry points (${entries.join(', ')}) reach modules ` +
       `the bundle excludes: ${refused.join(', ')}`);
   }
+  for (const asset of SKILL_ASSET_FILES) {
+    if (!existsSync(join(scriptsDir, asset))) {
+      throw new Error(`build-skill: ${asset} is listed in SKILL_ASSET_FILES but does not exist`);
+    }
+  }
   return [
     'SKILL.md',
-    ...[...modules, 'config.json', 'package.json'].map(rel => `scripts/${rel}`),
+    ...[...modules, 'config.json', 'package.json', ...SKILL_ASSET_FILES].map(rel => `scripts/${rel}`),
     ...references.map(f => toPosix(relative(root, f))),
   ];
 }
