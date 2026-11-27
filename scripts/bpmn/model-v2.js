@@ -383,7 +383,8 @@ function keyRank(resolved, key, laneBy) {
  * With `automatic === 'lane'` (never in the system view) the rounds run exactly as without it;
  * only after them every automatic activity still without a performer key takes `AUTOMATIC`
  * instead of its inherited key or the fallback (no H08 for it), and is listed in `moved` (H19,
- * written once the lanes exist). Boundary events on it follow in step 7. Every other node keeps
+ * written once the lanes exist). Boundary events on it follow in step 7, and `formLanes` puts a
+ * text annotation (artefact) associated with it into the automatic lane too. Every other node keeps
  * the key it has without the switch: the placeholder is never passed on by inheritance.
  */
 function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix, automatic = 'neighbour') {
@@ -594,7 +595,8 @@ function laneTree(processId, keys, resolved, automaticName = null) {
  * or in the system view from the systems of its tasks (`_systemRef`). With `automatic: 'lane'`
  * (role and unit view) every automatic task without performer is in the lane
  * `L.<process>._automatic`, named `automaticName` or `laneFormation.automaticName`, with one H19
- * each where H03 would be; without it such a task goes with its neighbour (H03).
+ * each where H03 would be; its boundary events and the artefacts associated with it follow it.
+ * Without it such a task goes with its neighbour (H03).
  * Neither argument is changed. A C10 collision stops the run: `{ lc: null, hints: [], errors }`.
  */
 export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
@@ -698,9 +700,10 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
       }
       for (const v of [l.id, `${l.id}_di`]) if (!taken.has(v)) taken.set(v, l.id);
     }
-    // an own lane bears its parent's name: the parent's H05 covers it; the automatic lane's name is
-    // capped at LANE_NAME_LIMIT code points by the view gate, so it never gets one
-    for (const l of allLanes(laneList).filter((x) => !x.id.endsWith('._own') && x._laneActor !== AUTOMATIC)) {
+    // an own lane bears its parent's name: the parent's H05 covers it; a view's automaticName is
+    // capped at LANE_NAME_LIMIT code points by the view gate, so it gets none (a configured name does)
+    const fromView = (x) => x._laneActor === AUTOMATIC && automaticName !== null;
+    for (const l of allLanes(laneList).filter((x) => !x.id.endsWith('._own') && !fromView(x))) {
       if (l.name.length > LANE_NAME_LIMIT) {
         hints.push({
           code: 'H05',
