@@ -9,6 +9,7 @@ commands in `SKILL.md`. Every command below is meant to be **run**, from the `sc
 - [BPMN pipeline](#bpmn-pipeline)
 - [Format 2.0](#format-20)
 - [BPMN import](#bpmn-import)
+- [migrate: 1.x to 2.0](#migrate-1x-to-20)
 - [DMN, scenarios, redesign](#dmn-scenarios-redesign)
 - [Exit codes and outputs](#exit-codes-and-outputs)
 
@@ -94,6 +95,54 @@ node bpmn/import.js <input.bpmn | -> [output.json]
 
 Details and caveats: `references/round-trip.md`.
 
+## migrate: 1.x to 2.0
+
+```bash
+node bpmn/migrate.js <input.json> [output-base] [--catalog <path>] [--drop-unsupported] [--force]
+```
+
+Translates a 1.x model into a format 2.0 model. Lanes become actors without `kind`, each activity
+of a process with lanes gets the assignment of its lane (or role), and the report lists every place
+you should check. It writes three files:
+
+| File | Content |
+|------|---------|
+| `<base>.json` | the 2.0 model; its `"catalog"` field names the catalogue, relative to the model file |
+| `<base>.catalog.json` | the supplement `{ "actors": [...] }`, never a `scheme` |
+| `<base>.migrate-report.json` | the report (`status`, `entries`, `summary`), 2-space JSON |
+
+Without `--catalog` the model names the supplement as its catalogue, and the demi scheme applies.
+With `--catalog <path>` (or `--catalog=<path>`, relative to the working directory) a lane or role
+named exactly like an actor of that catalogue is that actor (`MG07`); the model then carries only
+the new actors and `"catalog"` names the given file, relative to the model; the given catalogue's
+scheme applies and the supplement is written for reference. `--drop-unsupported` drops what 2.0
+cannot hold yet (`system`, data nodes and their flows) and lists it (`MG02`) instead of refusing.
+
+The default base is `<input basename without .json>.v2` in the working directory, never beside the
+input. A base is used as given (`out/m` writes `out/m.json`); its directory is created when it is
+missing. The base is not stripped of a `.json` ending.
+
+- stdout on success: `✓ <input> → <base>.json: <n> actors, <n> assignments, <n> report entries`.
+- Exit 0: translated. Exit 2: refused (an `MG01` or `MG02` entry; a 2.0 input or one that fails the
+  1.x schema is `MG01`); only `<base>.migrate-report.json` is written. Each report message is
+  printed on stderr as `✗ <message>`, then `✗ <input> not translated; the reasons are in <report>`.
+  An earlier `<base>.json` or `<base>.catalog.json` is left in place, not deleted.
+- Exit 1: usage error (no input, unknown flag, more than one base, `--catalog` without a value;
+  a `Usage:` line), an input that cannot be read or is not JSON, a catalogue that is refused
+  (`✗ [C11] …` / `✗ [C12] …`), an output that cannot be written, or an existing output file.
+- Overwrite rule: an existing output file stops the run with `✗ <file> exists; pass --force to
+  overwrite`, one line per file. Every file the run would write is checked before any is written
+  (for a refusal that is only the report). `--force` overwrites, but never the input file itself.
+
+```bash
+node bpmn/migrate.js my-process.json out/my-process
+node bpmn/pipeline.js out/my-process.json out/my-process --view=rollen --strict
+```
+
+`--strict` judges the translated model like any other: a model without `language` is checked
+against the German naming rules, so declare `language` in the 1.x input (it is passed through) if
+its names are not German.
+
 ## DMN, scenarios, redesign
 
 ```bash
@@ -114,6 +163,7 @@ Details: `references/dmn.md` (the first three) and `references/redesign-toolbox.
 | Command | Writes | Exit ≠ 0 when |
 |---------|--------|---------------|
 | `bpmn/pipeline.js` | `.bpmn`, `.svg` (+ `.md`, `.dot` on request) | schema gate fails, an ERROR finding, or any warning under `--strict`; a `--decisions` file that cannot be read or fails the Decision-Core schema |
+| `bpmn/migrate.js` | `<base>.json`, `<base>.catalog.json`, `<base>.migrate-report.json` (a refusal: the report only) | exit 2 when the input is refused; exit 1 on a usage or I/O error, a refused catalogue, or an existing output without `--force` |
 | `bpmn/import.js` | Logic-Core JSON | the input is not parseable BPMN |
 | `dmn/pipeline.js` | `.dmn`, `.svg` (+ `.md`, `.tables.svg`, `.tables.html` with `--doc`) | schema gate fails, an ERROR finding, or any warning under `--strict` |
 | `dmn/import.js` | Decision-Core JSON | not XML / not DMN, or a lossy import under `--strict` |

@@ -119,7 +119,8 @@ scripts/bpmn/ — Translator (opt-in; not invoked by runPipeline)
                                ../shared/message-codes.js, ../shared/safe-text.js (migrateModel: a 1.x model → format 2.0 model,
                                catalogue supplement and report; lanes become kind-less actors (the actor of a given catalogue with
                                the same name when there is one, MG07), H07 and MG01–MG07; the report compares each node's lane
-                               under rollen with its original lane)
+                               under rollen with its original lane; CLI entry: writes <base>.json, <base>.catalog.json and
+                               <base>.migrate-report.json, see references/cli.md)
 
 scripts/shared/ — format-independent core (used by both bpmn/ and dmn/)
   utils.js                   (reads ../config.json)
