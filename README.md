@@ -130,7 +130,7 @@ npm test
 | `--optimize` | Enable the opt-in Optimization Advisory layer |
 | `--refine` | Switch every visual-refinement pass on (lane compaction and label repair already are by default) |
 | `--no-refine` | Switch every visual-refinement pass off (mutually exclusive with `--refine`) |
-| `--wrap` | Wrap long chains (> 20 nodes) into rows with ELK; independent of `--refine` |
+| `--wrap` | Wrap long chains (> 20 nodes) into rows with ELK; independent of `--refine`. With lanes it is accepted, but the result is a staircase: leave it off for a laned model (see Known Limitations in CLAUDE.md) |
 | `--drill-down` | Emit the parent diagram plus one diagram per expanded subprocess |
 | `--no-bend-rule` / `--bend-rule` | Switch the bend rule off / force it on (on by default) |
 | `--no-label-avoidance` / `--label-avoidance` | Switch off / force on moving event and gateway labels off flows (on by default) |
@@ -298,7 +298,7 @@ call-activity names, at every level), M02 (gateway questions), M05 (message-flow
 intermediate throw events, start events outside an event subprocess; with or without `language`); the XML writes it as `bg:marker="none"` on the event. The XML carries the language as `bg:language` on `bpmn:definitions` and the importers read it
 back. Without the field nothing changes: M01 is the legacy `Objekt+Verb` heuristic and M05 and M06
 stay silent. A valid tag with no word lists here (`fr`) skips M01, M05 and M06 and gives hint `H12`;
-labels that look like another supported language give `H13`.
+labels that look like another supported language give `H13`. A model with English names should declare `"language": "en"`; without it M01 judges them by the German `Objekt+Verb` heuristic.
 
 No word list holds every English verb, so under `en` M01 flags a task name only on evidence of a
 wrong form (`Check`, `Step 3`, `Checking invoice`, `Invoice checked`, `Invoice is checked`, `The
@@ -491,7 +491,7 @@ Post-layout coordinate transforms that polish BPMN diagrams without changing sem
 - **`edgeLabelCollisionRepair`** — edge label collision repair via bbox-nudge; it only moves labels, never a route.
 - **Bend rule and node labels that avoid flows** are layout switches, not refinement passes, and are on by default (`layout.bendRule`, `layout.nodeLabelsAvoidFlows` in `scripts/config.json`): fewer bends, flows entering activities and events in flow direction, event and gateway labels moved off flows. Switch off per call with CLI `--no-bend-rule` / `--no-label-avoidance` (`--bend-rule` / `--label-avoidance` force a pass on; each pair is mutually exclusive), the booleans `bendRule` / `nodeLabelsAvoidFlows` on `POST /api/v1/generate`, `POST /api/v1/orchestrate` and the MCP tools `generate_bpmn` and `orchestrate_bpmn` (schema `$defs/LayoutSwitchOption` in [`references/api-schema.json`](references/api-schema.json); anything but a boolean is a `schema_error`), or `runPipeline(lc, { bendRule: false, nodeLabelsAvoidFlows: false })`. Project-wide, see the next paragraph.
 - **Repair of flows through a foreign shape** is a layout switch too, on by default (`layout.foreignShapeRepair`): a sequence flow that runs through a task, event or gateway that is neither its source nor its target is re-routed, trading at most one crossing per shape. Switch off per call with CLI `--no-foreign-shape-repair` (`--foreign-shape-repair` forces it on), the boolean `foreignShapeRepair` on the same HTTP endpoints and MCP tools, or `runPipeline(lc, { foreignShapeRepair: false })`.
-- **ELK wrapping** is not a refinement pass but its own layout-level switch (opt-in): row wrapping of wide pipelines (> 20 nodes) via `layout.elkWrapping` (`off`/`auto`/`always`), `--wrap` or `runPipeline(lc, { elkWrapping: 'auto' })`; if ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so.
+- **ELK wrapping** is not a refinement pass but its own layout-level switch (opt-in): row wrapping of wide pipelines (> 20 nodes) via `layout.elkWrapping` (`off`/`auto`/`always`), `--wrap` or `runPipeline(lc, { elkWrapping: 'auto' })`; if ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so. With lanes (or a format 2.x model, whose lanes the view forms) it is accepted but gives a staircase, see Known Limitations in CLAUDE.md.
 
 **Configure (defaults shown, `scripts/config.json`):**
 

@@ -38,7 +38,7 @@ node bpmn/pipeline.js <input.json | -> [output-basename] [flags]
 | `--import-dot` | the input is a `.dot` file written by `--dot`; converts it back to Logic-Core |
 | `--drill-down` | writes the parent diagram plus one `<output>_<subprocessId>.bpmn/.svg` per subprocess (bypasses the DI/NC gates) |
 | `--refine` / `--no-refine` | turns all visual-refinement passes on / off (lane compaction, dynamic lane header, label collision repair) |
-| `--wrap` | wraps long chains (more than 20 nodes) into rows |
+| `--wrap` | wraps long chains (more than 20 nodes) into rows. With lanes it is accepted, but the rows shift like a staircase and the lane bands grow tall: one laned pool is one flat ELK graph and the bands are rebuilt from the nodes' y spans. Leave `--wrap` off for a model with lanes |
 | `--bend-rule`, `--label-avoidance`, `--foreign-shape-repair` (and `--no-…`) | toggle individual layout repair passes; the defaults come from `config.json` |
 | `--view=<name\|path>` or `--view <name\|path>` | the view for this call: a name is read from `views/`, any other value is a file. A flag given on the command line still wins over the view. See `README.md#views` |
 | `--catalog <path>` or `--catalog=<path>` | the actor catalogue of a format 2.0 model, relative to the working directory. It wins over the model's own `"catalog"` field. Refused with a 1.x model. See [Format 2.0](#format-20) |

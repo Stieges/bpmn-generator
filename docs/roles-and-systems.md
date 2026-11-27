@@ -5,7 +5,7 @@ system** is involved. This page shows how to get the common pictures for both **
 lanes and pools the generator already draws, and what the new `role` and `system` fields on an
 activity are for.
 
-Every JSON block on this page is a complete Logic-Core document. Save one as `example.json` and run
+Every `json` block on this page (sections 1 to 5) is a complete Logic-Core document. Save one as `example.json` and run
 
 ```bash
 cd scripts
@@ -13,7 +13,8 @@ node bpmn/pipeline.js ../example.json /tmp/example     # writes /tmp/example.bpm
 ```
 
 Each of them is run through the pipeline by `scripts/bpmn/roles-and-systems-guide.test.js`, which
-checks that it produces valid BPMN with no layout error — so the examples cannot silently rot.
+checks that it produces valid BPMN with no layout error — so the examples cannot silently rot. The
+quick start in section 6 is run, command by command, by `scripts/bpmn/roles-and-systems-quickstart.test.js`.
 
 | You want to see | Model it as | Section |
 |---|---|---|
@@ -22,6 +23,7 @@ checks that it produces valid BPMN with no layout error — so the examples cann
 | A system as an outside party you exchange data with | a collapsed pool + message flows | [3](#3-systems-as-collapsed-pools) |
 | What happens inside the system as well | an expanded pool of its own + message flows | [4](#4-systems-as-expanded-pools) |
 | The facts only, without changing the picture | `role` / `system` on the activity | [5](#5-the-role-and-system-fields) |
+| Lanes formed from a catalogue of actors (format 2.0) | `assignments` + a lanes view | [6](#6-format-20-quick-start) |
 
 ## 1. Responsibility lanes
 
@@ -215,3 +217,85 @@ the XML and reported by rule S15.
 
 **Planned:** dedicated views that draw a model by these fields — lanes per role, lanes per system,
 systems as pools — without changing the model. Until they exist, use sections 1–4.
+
+## 6. Format 2.0 quick start
+
+In format 2.0 the model has no lanes. Each step names who performs it (`assignments`, type `D`), the
+actors come from a **catalogue**, and a **view** decides which lanes are drawn. The same model gives
+role lanes or unit lanes without an edit. The full rules are in
+[`references/logic-core-schema.md`](../references/logic-core-schema.md#format-20-catalogue-and-lane-views).
+
+A minimal catalogue: one unit, two roles in it, and one role whose unit is not recorded. Save it as
+`catalog.json`.
+
+<!-- quickstart: catalog.json -->
+```jsonc
+{
+  "actors": [
+    { "id": "u_claims", "name": "Claims department", "kind": "unit" },
+    { "id": "r_handler", "name": "Claims handler", "kind": "role", "unit": "u_claims" },
+    { "id": "r_lead", "name": "Team lead", "kind": "role", "unit": "u_claims" },
+    { "id": "r_finance", "name": "Accountant", "kind": "role" }
+  ]
+}
+```
+
+A minimal 2.0 model, `quickstart.json`. English names declare `"language": "en"`. The last activity has
+no performer on purpose.
+
+<!-- quickstart: quickstart.json -->
+```jsonc
+{
+  "$schemaVersion": "2.0",
+  "language": "en",
+  "pools": [
+    {
+      "id": "Process_Claim",
+      "name": "Claim handling",
+      "nodes": [
+        { "id": "start", "type": "startEvent", "name": "Claim received", "assignments": [{ "type": "D", "actor": "r_handler" }] },
+        { "id": "check", "type": "userTask", "name": "Check claim", "assignments": [{ "type": "D", "actor": "r_handler" }] },
+        { "id": "approve", "type": "userTask", "name": "Approve payout", "assignments": [{ "type": "D", "actor": "r_lead" }] },
+        { "id": "pay", "type": "userTask", "name": "Pay claim", "assignments": [{ "type": "D", "actor": "r_finance" }] },
+        { "id": "archive", "type": "userTask", "name": "Archive file" },
+        { "id": "end", "type": "endEvent", "name": "Claim settled" }
+      ],
+      "edges": [
+        { "id": "f1", "source": "start", "target": "check" },
+        { "id": "f2", "source": "check", "target": "approve" },
+        { "id": "f3", "source": "approve", "target": "pay" },
+        { "id": "f4", "source": "pay", "target": "archive" },
+        { "id": "f5", "source": "archive", "target": "end" }
+      ]
+    }
+  ]
+}
+```
+
+One command per shipped lanes view, run from `scripts/` with both files saved one directory up. Each
+writes a `.bpmn` and an `.svg`; `--strict` passes, the hints below are information only.
+
+<!-- quickstart: cli -->
+```bash
+node bpmn/pipeline.js ../quickstart.json ../quickstart-rollen --strict --view=rollen --catalog ../catalog.json
+node bpmn/pipeline.js ../quickstart.json ../quickstart-einheiten --strict --view=einheiten --catalog ../catalog.json
+node bpmn/pipeline.js ../quickstart.json ../quickstart-organigramm --strict --view=organigramm --catalog ../catalog.json
+```
+
+- `rollen`: one lane per performer (here Claims handler, Team lead, Accountant).
+- `einheiten`: one lane per unit of the performer (here Claims department).
+- `organigramm`: one lane per unit, nested along the organigram (`partOf`); with this flat catalogue it
+  looks like `einheiten`.
+
+Two **placeholder lanes** appear when the model or the catalogue is incomplete. Both are hints, never
+errors:
+
+| Lane | Meaning | Hint |
+|---|---|---|
+| `(nicht zugeordnet)` | An activity has no performer, or a node could take no lane from its neighbours | H02, H08 |
+| `(Einheit nicht erhoben)` | The performer's unit is not in the catalogue; only in the unit views | H04 |
+
+The names are set in `scripts/config.json` under `laneFormation` (`unassignedName`, `unitUnknownName`).
+In the example, `Archive file` lands in `(nicht zugeordnet)` and, in the unit views, `Pay claim` in
+`(Einheit nicht erhoben)`.
+
