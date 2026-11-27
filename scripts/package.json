@@ -37,6 +37,7 @@
     "THIRD_PARTY_NOTICES.md",
     "agents/",
     "references/",
+    "fonts/",
     "!**/*.test.js"
   ],
   "exports": {
@@ -72,5 +73,8 @@
     "@istanbuljs/load-nyc-config": {
       "js-yaml": "^4.1.1"
     }
+  },
+  "optionalDependencies": {
+    "@resvg/resvg-wasm": "2.6.2"
   }
 }

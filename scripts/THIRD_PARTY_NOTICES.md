@@ -95,3 +95,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
+
+## Arimo (Regular)
+
+Licence: SIL Open Font License 1.1 (OFL-1.1). Copyright 2026 The Arimo Project Authors.
+
+Source: https://github.com/googlefonts/Arimo, commit `22e482e2ce0ebb2e6f88ba49d029d60f558d5d67`
+(`fonts/ttf/Arimo-Regular.ttf` and `OFL.txt`, both from that commit).
+
+Shipped unmodified as `fonts/Arimo-Regular.ttf` (478,712 bytes), used by the optional PNG preview
+to render SVG text. SHA-256: `41b22bc8f0b51f932825d37bc55b5eb6ba67dfe599a626e4aff2b43b624f9f8c`.
+
+The licence text ships as `fonts/OFL.txt`. It declares no Reserved Font Name.
