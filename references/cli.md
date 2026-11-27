@@ -178,7 +178,7 @@ Details: `references/dmn.md` (the first three) and `references/redesign-toolbox.
 
 | Command | Writes | Exit ≠ 0 when |
 |---------|--------|---------------|
-| `bpmn/pipeline.js` | `.bpmn`, `.svg` (+ `.md`, `.dot`, `.png` and `.part-<i>-of-<n>.png` on request) | schema gate fails, an ERROR finding, or any warning under `--strict`; a `--decisions` file that cannot be read or fails the Decision-Core schema; with `--png`: the renderer is not installed (exit 1, no files written) or the render fails (exit 1; the `.bpmn`/`.svg` and any `.md`/`.dot` are written and valid) |
+| `bpmn/pipeline.js` | `.bpmn`, `.svg` (+ `.md`, `.dot`, `.png` and `.part-<i>-of-<n>.png` on request) | schema gate fails, an ERROR finding, or any warning under `--strict`; a `--decisions` file that cannot be read or fails the Decision-Core schema; with `--png`: the renderer or its font is unavailable (exit 1, no files written) or the render fails (exit 1; the `.bpmn`/`.svg` and any `.md`/`.dot` are written, and valid outside `--drill-down`) |
 | `bpmn/migrate.js` | `<base>.json`, `<base>.catalog.json`, `<base>.migrate-report.json` (a refusal: the report only) | exit 2 when the input is refused; exit 1 on a usage or I/O error, a refused catalogue, or an existing output without `--force` |
 | `bpmn/import.js` | Logic-Core JSON | the input is not parseable BPMN |
 | `dmn/pipeline.js` | `.dmn`, `.svg` (+ `.md`, `.tables.svg`, `.tables.html` with `--doc`) | schema gate fails, an ERROR finding, or any warning under `--strict` |

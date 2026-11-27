@@ -133,6 +133,8 @@ describe('pipeline CLI --png', () => {
   });
 
   test('--png with --doc and --dot: the PNG step comes last', () => {
+    // What this observes: a failed render leaves the documentation and the DOT export in place,
+    // which is the point of running the PNG step last.
     const d = dir('failing-doc-dot');
     const r = run([fixture('simple-approval.json'), join(d, 'out'), '--png', '--doc', '--dot'], { hook: FAILING_RESVG });
     expect(r.status).toBe(1);

@@ -341,6 +341,8 @@ describe('png — renderer', () => {
   });
 
   test('a render error is a PngRenderError and the next render still works', async () => {
+    // The failing renderer is a fake: no input found here makes the real wasm trap. The test covers
+    // the wrapping and that the shared renderer stays usable for the next call.
     const svg = await fixtureSvg('simple-approval.json');
     const failing = { renderRgba() { throw new WebAssembly.RuntimeError('unreachable'); } };
     const err = (() => { try { renderPreview(svg, failing); } catch (e) { return e; } return null; })();
