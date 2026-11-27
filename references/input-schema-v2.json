@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bpmn-generator.local/logic-core-v2.schema.json",
   "title": "BPMN Logic-Core 2.0",
-  "description": "Input format 2.0 of the BPMN Generator: no lanes, role or system; steps carry assignments to catalogue actors (design 5.1 to 5.5).",
+  "description": "Input format 2.0 of the BPMN Generator: no lanes or role; steps carry assignments to catalogue actors, tasks (2.1) a system of the catalogue (design 5.1 to 5.5).",
   "oneOf": [
     {
       "$ref": "#/$defs/SingleProcess"
@@ -23,8 +23,11 @@
       "properties": {
         "$schemaVersion": {
           "type": "string",
-          "const": "2.0",
-          "description": "Format version. Required; exactly the string \"2.0\" is format 2.0, any other value is refused."
+          "enum": [
+            "2.0",
+            "2.1"
+          ],
+          "description": "Format version. Required; \"2.0\", or \"2.1\" for a model that uses systems (`systems`, `system`); any other value is refused."
         },
         "language": {
           "type": "string",
@@ -43,6 +46,14 @@
             "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/Actor"
           },
           "description": "Inline actor catalogue (design 5.2). Beside a catalogue it replaces entries with the same id and appends new ids."
+        },
+        "systems": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": {
+            "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/System"
+          },
+          "description": "Inline system catalogue (format 2.1). Beside a catalogue it replaces entries with the same id and appends new ids."
         },
         "scheme": {
           "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/SchemeRef",
@@ -103,8 +114,11 @@
       "properties": {
         "$schemaVersion": {
           "type": "string",
-          "const": "2.0",
-          "description": "Format version. Required; exactly the string \"2.0\" is format 2.0, any other value is refused."
+          "enum": [
+            "2.0",
+            "2.1"
+          ],
+          "description": "Format version. Required; \"2.0\", or \"2.1\" for a model that uses systems (`systems`, `system`); any other value is refused."
         },
         "language": {
           "type": "string",
@@ -123,6 +137,14 @@
             "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/Actor"
           },
           "description": "Inline actor catalogue (design 5.2). Beside a catalogue it replaces entries with the same id and appends new ids."
+        },
+        "systems": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": {
+            "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/System"
+          },
+          "description": "Inline system catalogue (format 2.1). Beside a catalogue it replaces entries with the same id and appends new ids."
         },
         "scheme": {
           "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/SchemeRef",
@@ -446,6 +468,10 @@
           "type": "object",
           "description": "Preserved extension attributes from round-trip (e.g. camunda:, zeebe:)",
           "additionalProperties": true
+        },
+        "system": {
+          "$ref": "https://bpmn-generator.local/catalog.schema.json#/$defs/ActorId",
+          "description": "Format 2.1, on a task: the id of the catalogue system the task uses; one per task."
         },
         "assignments": {
           "type": "array",

@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {
   CATALOG_LIMITS, CatalogRejectedError, catalogErrors, loadCatalog, SHIPPED_SCHEMES,
@@ -22,6 +23,16 @@ const catalog56 = { scheme: 'demi', actors: actors56 };
 describe('catalogErrors', () => {
   test('the design 5.6 catalogue is valid', () => {
     expect(catalogErrors(catalog56)).toEqual([]);
+  });
+
+  test('a catalogue with systems is valid; a malformed system entry is C12', () => {
+    expect(catalogErrors({ actors: [], systems: [{ id: 'sys_a', name: 'A' }] })).toEqual([]);
+    expect(catalogErrors({ ...catalog56, systems: [] })).toEqual([]);
+    for (const [entry, path] of [[{ id: 'sys_a' }, '/systems/0'], [{ id: 'sys_a', name: 'A', kind: 'role' }, '/systems/0'], [{ id: '1x', name: 'A' }, '/systems/0/id'], [{ id: 'sys_a', name: '' }, '/systems/0/name']]) {
+      const errors = catalogErrors({ actors: [], systems: [entry] });
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors.every((e) => e.startsWith(`[C12] ${path}`) || e.startsWith(`[C12] "${path}"`))).toBe(true);
+    }
   });
 
   test.each([
@@ -109,6 +120,16 @@ describe('canonicalJson and fingerprint', () => {
   test('the pinned fingerprint of design 5.6 with demi', () => {
     expect(catalogFingerprint(actors56, resolveScheme('demi')))
       .toBe('sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4');
+  });
+
+  test('systems absent, undefined or empty keep the pinned fingerprint; one system changes it', () => {
+    const pinned = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
+    const demi = resolveScheme('demi');
+    expect(catalogFingerprint(actors56, demi, [])).toBe(pinned);
+    expect(catalogFingerprint(actors56, demi, undefined)).toBe(pinned);
+    const withSystem = catalogFingerprint(actors56, demi, [{ id: 'sys_a', name: 'A' }]);
+    expect(withSystem).not.toBe(pinned);
+    expect(withSystem).toBe(`sha256:${createHash('sha256').update(canonicalJson({ actors: actors56, scheme: demi, systems: [{ id: 'sys_a', name: 'A' }] }), 'utf8').digest('hex')}`);
   });
 
   test('permuting the keys of each actor changes nothing; order of actors does', () => {

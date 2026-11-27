@@ -46,14 +46,17 @@ const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArr
 
 /**
  * The format of a model: '2' iff a plain object whose `$schemaVersion` is the string "2" or starts
- * `2.`, else '1'. Only the exact string "2.0" passes the 2.0 gate; any other value of the 2 line
- * ("2", "2.1", "2.7") is classified 2 so it gets the one clear version message, not a 1.x error.
+ * `2.`, else '1'. Only the exact strings of FORMAT_V2_VERSIONS ("2.0", "2.1") pass the 2.x gate; any
+ * other value of the 2 line ("2", "2.7") is classified 2 so it gets the one clear version message, not a 1.x error.
  */
 export function modelFormat(input) {
   return isPlainObject(input) && typeof input.$schemaVersion === 'string' && /^2(\.|$)/.test(input.$schemaVersion) ? '2' : '1';
 }
 
 export const FORMAT_V2_VERSION = '2.0';
+
+/** The accepted values of `$schemaVersion` on the 2 line: "2.1" adds systems (`systems`, a task's `system`). */
+export const FORMAT_V2_VERSIONS = Object.freeze(['2.0', '2.1']);
 
 /**
  * Design 6: a view with `lanes` forms the lanes of a format 2.0 model from its assignments; a 1.x
@@ -75,18 +78,46 @@ function notFormatV2Message(input) {
   return `this is not a format 2.0 model ($schemaVersion ${v})`;
 }
 
-/** The error of a model on the 2 line whose `$schemaVersion` is not exactly "2.0", else null. */
+/** The error of a model on the 2 line whose `$schemaVersion` is not one of FORMAT_V2_VERSIONS, else null. */
 function unsupportedVersionError(input) {
-  if (modelFormat(input) !== '2' || input.$schemaVersion === FORMAT_V2_VERSION) return null;
+  if (modelFormat(input) !== '2' || FORMAT_V2_VERSIONS.includes(input.$schemaVersion)) return null;
   return {
     path: '/$schemaVersion',
-    message: `$schemaVersion ${quoteForMessage(input.$schemaVersion)} is not supported; only "${FORMAT_V2_VERSION}" is supported`,
-    params: { allowedValue: FORMAT_V2_VERSION },
+    message: `$schemaVersion ${quoteForMessage(input.$schemaVersion)} is not supported; only ${FORMAT_V2_VERSIONS.map((v) => `"${v}"`).join(' and ')} are supported`,
+    // not `allowedValues`: formatSchemaErrors would append the list once more
+    params: { supported: [...FORMAT_V2_VERSIONS] },
     code: 'F02',
   };
 }
 
-/** Why an entry point that does not read 2.x refuses this 2.x model: the version message, or the fixed text for "2.0". */
+/** The F06 entry of a format 2.1 field used in a "2.0" model. */
+const laterFieldError = (path, field) => ({
+  path, message: `"${field}" needs format 2.1; set "$schemaVersion" to "2.1"`, params: { field, version: '2.1' }, code: 'F06',
+});
+
+/**
+ * F06: one entry per use of a format 2.1 field in a model that declares "2.0" — the root `systems`
+ * first, then every node with the key `system`, depth-first in document order (top-level `nodes`,
+ * then each pool's). Shape-tolerant: the walk also runs when the schema check failed.
+ */
+function laterFieldErrors(input) {
+  if (!isPlainObject(input) || input.$schemaVersion !== FORMAT_V2_VERSION) return [];
+  const errors = [];
+  if (Object.hasOwn(input, 'systems')) errors.push(laterFieldError('/systems', 'systems'));
+  const walk = (nodes, base) => {
+    if (!Array.isArray(nodes)) return;
+    nodes.forEach((node, i) => {
+      if (!isPlainObject(node)) return;
+      if (Object.hasOwn(node, 'system')) errors.push(laterFieldError(`${base}/${i}/system`, 'system'));
+      walk(node.nodes, `${base}/${i}/nodes`);
+    });
+  };
+  walk(input.nodes, '/nodes');
+  if (Array.isArray(input.pools)) input.pools.forEach((pool, i) => { if (isPlainObject(pool)) walk(pool.nodes, `/pools/${i}/nodes`); });
+  return errors;
+}
+
+/** Why an entry point that does not read 2.x refuses this 2.x model: the version message, or the fixed text for "2.0" and "2.1". */
 export function formatV2RefusalMessage(input) {
   return unsupportedVersionError(input)?.message ?? FORMAT_V2_NOT_ACCEPTED;
 }
@@ -98,7 +129,8 @@ export function formatV2RefusalMessage(input) {
  */
 export function validateModelSchema(input, { accept = ['1'] } = {}) {
   const format = modelFormat(input);
-  // An unsupported 2.x value ("2", "2.7") names its value everywhere, whichever formats the caller reads.
+  // An unsupported 2.x value ("2", "2.7") names its value everywhere, whichever formats the caller reads;
+  // "2.0" and "2.1" pass on to the accept check.
   const unsupported = unsupportedVersionError(input);
   if (unsupported) return { valid: false, format, errors: [unsupported] };
   if (!accept.includes(format)) {
@@ -110,14 +142,20 @@ export function validateModelSchema(input, { accept = ['1'] } = {}) {
   }
   const code = format === '2' ? 'F01' : undefined;
   const [check, branches] = format === '2' ? [validateV2, validateBranchV2] : [validate, validateBranch];
-  if (check(input)) return { valid: true, format, errors: [] };
+  // F06 after the schema errors, on both outcomes of the schema check.
+  const later = format === '2' ? laterFieldErrors(input) : [];
+  const verdict = (errors) => {
+    const all = [...errors, ...later];
+    return { valid: all.length === 0, format, errors: all };
+  };
+  if (check(input)) return verdict([]);
   const all = check.errors;
   if (isPlainObject(input)) {
     const branch = branches[Array.isArray(input.pools) || 'pools' in input ? 'Collaboration' : 'SingleProcess'];
     // A branch the input passes cannot explain the failure (it would then match both): keep all.
-    if (branch && !branch(input)) return { valid: false, format, errors: asGateErrors(branch.errors, code) };
+    if (branch && !branch(input)) return verdict(asGateErrors(branch.errors, code));
   }
-  return { valid: false, format, errors: asGateErrors(all, code) };
+  return verdict(asGateErrors(all, code));
 }
 
 const stripCode = (text) => text.replace(/^\[[A-Z]{1,2}\d{2}\] /, '');

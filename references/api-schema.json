@@ -238,7 +238,7 @@
         },
         "findings": {
           "type": "array",
-          "description": "format 2.x runs only: every message of `errors` and `warnings` once more with its code and severity, errors first, then warnings; `message` is the very string in the list it mirrors. Codes: C01-C06, C10, C12, C13, F01, F02, F04 (the `[code] ` prefix of the message), F05 (a `decisions` option failing the Decision-Core schema; the message carries no prefix), the rule ids S/M/P/WF (rule messages carry no prefix). Layout notes in `infos` and `xmlWarnings` get no finding. Absent on format 1.x runs.",
+          "description": "format 2.x runs only: every message of `errors` and `warnings` once more with its code and severity, errors first, then warnings; `message` is the very string in the list it mirrors. Codes: C01-C06, C10, C12-C15, F01, F02, F04, F06 (the `[code] ` prefix of the message), F05 (a `decisions` option failing the Decision-Core schema; the message carries no prefix), the rule ids S/M/P/WF (rule messages carry no prefix). Layout notes in `infos` and `xmlWarnings` get no finding. Absent on format 1.x runs.",
           "items": {
             "type": "object",
             "required": ["code", "severity", "message"],
@@ -306,7 +306,7 @@
         "isCompliant": { "type": "boolean" },
         "findings": {
           "type": "array",
-          "description": "format 2.0 models only (absent on 1.x): the verdict of scripts/bpmn/validate.js validateModel as objects, every severity — the catalogue errors (C01-C07, C12, C13, F01) alone, else the rule findings (S/M/P/WF ids, WF_OR included).",
+          "description": "format 2.0 models only (absent on 1.x): the verdict of scripts/bpmn/validate.js validateModel as objects, every severity — the catalogue errors (C01-C07, C12-C15, F01, F06) alone, else the rule findings (S/M/P/WF ids, WF_OR included).",
           "items": { "$ref": "#/$defs/Validation/properties/findings/items" }
         }
       },

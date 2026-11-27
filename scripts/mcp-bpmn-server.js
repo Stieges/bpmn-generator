@@ -80,7 +80,7 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON (nodes, edges, pools etc.)' },
-        catalog: { type: 'object', description: 'Actor catalogue { actors, scheme? } of a format 2.0 model; embedded, paths are never read' },
+        catalog: { type: 'object', description: 'Catalogue { actors, systems?, scheme? } of a format 2.x model; embedded, paths are never read' },
         drillDown: { type: 'boolean', description: 'Generate per-subprocess diagrams (optional, default false)' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default, faithful IST) or 'optimize' (Soll — adds redesign advisories)" },
         ruleProfile: PROFILE_PARAM,
@@ -106,7 +106,7 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to validate' },
-        catalog: { type: 'object', description: 'Actor catalogue { actors, scheme? } of a format 2.0 model; embedded, paths are never read' },
+        catalog: { type: 'object', description: 'Catalogue { actors, systems?, scheme? } of a format 2.x model; embedded, paths are never read' },
         mode: { type: 'string', enum: ['document', 'optimize'], description: "'document' (default) or 'optimize' (adds redesign advisories)" },
         ruleProfile: PROFILE_PARAM,
         view: VIEW_PARAM
@@ -132,7 +132,7 @@ const TOOLS = [
       required: ['logicCore'],
       properties: {
         logicCore: { type: 'object', description: 'Logic-Core JSON to orchestrate' },
-        catalog: { type: 'object', description: 'Actor catalogue { actors, scheme? } of a format 2.0 model; embedded, paths are never read' },
+        catalog: { type: 'object', description: 'Catalogue { actors, systems?, scheme? } of a format 2.x model; embedded, paths are never read' },
         ruleProfile: PROFILE_PARAM,
         view: VIEW_PARAM,
         visualRefinement: VISUAL_REFINEMENT_PARAM,
