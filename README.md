@@ -399,7 +399,7 @@ model's `"catalog"` field, or passed as an object to `runPipeline(model, { catal
 one lane per unit of the performer, [`views/organigramm-view.json`](views/organigramm-view.json) unit lanes nested along
 the organigram (`partOf` on units), [`views/systeme-view.json`](views/systeme-view.json) one lane per system of the task
 (`systems` in the catalogue and `system` on a task, format `"2.1"`; a task without system goes to `(System nicht erhoben)`);
-without a lanes view a 2.0 model gets role lanes. A model's own `actors` beside a
+without a lanes view a 2.0 model gets role lanes. A view of your own can also put automatic steps without performer into a lane `(automatisch)` (`"automatic": "lane"`, see `references/logic-core-schema.md`). A model's own `actors` beside a
 catalogue replace entries by id or add new ones (hint H09). The CLI generate path, `runPipeline`, `validateModel`,
 `orchestrate`, MCP `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn` and HTTP `/generate`, `/validate` and
 `/orchestrate` accept 2.0; MCP and HTTP take the catalogue as an embedded `catalog` object, never a path. Redesign
