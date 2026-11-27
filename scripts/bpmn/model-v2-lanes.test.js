@@ -5,8 +5,12 @@
  */
 import { describe, test, expect } from '@jest/globals';
 import {
-  resolveFields, formLanes, normalizeLanesOption, laneIdFor, checkProjection, UNASSIGNED, UNIT_UNKNOWN, AUTOMATIC_ACTIVITY_TYPES,
+  resolveFields, formLanes, normalizeLanesOption, laneIdFor, checkProjection, UNASSIGNED, UNIT_UNKNOWN, SYSTEM_UNKNOWN,
+  AUTOMATIC_ACTIVITY_TYPES,
 } from './model-v2.js';
+import { runPipeline } from './pipeline.js';
+import { loadNamedView, ViewRejectedError } from '../shared/view.js';
+import { readFileSync } from 'node:fs';
 import { LANE_NAME_LIMIT } from './rules.js';
 import { TASK_TYPES } from './types.js';
 
@@ -463,18 +467,182 @@ describe('normalizeLanesOption', () => {
     [{ by: 'unit' }, { by: 'unit', level: null, nested: false }],
     [{ by: 'unit', level: 2 }, { by: 'unit', level: 2, nested: false }],
     [{ by: 'unit', nested: true }, { by: 'unit', level: null, nested: true }],
+    ['system', { by: 'system', level: null, nested: false }],
   ])('%j', (value, expected) => {
     expect(normalizeLanesOption(value)).toEqual(expected);
   });
 
-  test.each([['system'], [null], [3], [{ by: 'role' }], [{ by: 'unit', level: 0 }], [{ by: 'unit', level: 17 }], [{ by: 'unit', nested: 1 }], [{ by: 'unit', x: 1 }], [['unit']]])('%j throws', (value) => {
+  test.each([[null], [3], [{ by: 'role' }], [{ by: 'system' }], [{ by: 'unit', level: 0 }], [{ by: 'unit', level: 17 }], [{ by: 'unit', nested: 1 }], [{ by: 'unit', x: 1 }], [['unit']]])('%j throws', (value) => {
     expect(() => normalizeLanesOption(value)).toThrow(TypeError);
     expect(() => normalizeLanesOption(value)).toThrow(/^unknown lanes option /);
   });
 
   test('formLanes with an unknown lanes value throws and accepts the object form', () => {
     const model = proc([{ id: 's', type: 'startEvent' }], []);
-    expect(() => form(model, { lanes: 'system' })).toThrow(TypeError);
+    expect(() => form(model, { lanes: 'systems' })).toThrow(TypeError);
     expect(() => form(model, { lanes: { by: 'unit', level: 2, nested: true } })).not.toThrow();
+  });
+});
+
+// ─── the system view (lanes: 'system'): the step's system as key of design 7.2 ──────────────────
+// Systems A, B declared in this order; P is the placeholder "(System nicht erhoben)".
+const SYS = {
+  actors: [{ id: 'R', name: 'Rolle R', kind: 'role' }],
+  systems: [{ id: 'A', name: 'System A' }, { id: 'B', name: 'System B' }],
+};
+const sysNode = (id, type, system, extra = {}) => ({ id, type, name: id, ...(system ? { system } : {}), ...extra });
+const sysProc = (nodes, pairs, extra = {}) => ({ ...proc(nodes, pairs, extra), $schemaVersion: '2.1' });
+const formSys = (model, catalog = SYS) => form(model, { catalog, lanes: 'system' });
+const h20 = (id, prefix = '') => ({
+  code: 'H20', message: `${prefix}No system recorded for "${id}" (${id}): lane "(System nicht erhoben)".`, elements: [id],
+});
+
+describe('formLanes — the system view', () => {
+  test('(s1) gateways and events inherit; a task without system goes to the placeholder (H20)', () => {
+    const out = formSys(sysProc(
+      [sysNode('S', 'startEvent'), sysNode('T1', 'userTask', 'A'), sysNode('G', 'exclusiveGateway'), sysNode('T2', 'userTask', 'B'),
+        sysNode('T3', 'userTask'), sysNode('E', 'endEvent')],
+      [['S', 'T1'], ['T1', 'G'], ['G', 'T2'], ['G', 'T3'], ['T3', 'E']],
+    ));
+    expect(out.errors).toEqual([]);
+    expect(members(out.lc)).toEqual({ A: ['S', 'T1', 'G'], B: ['T2'], [SYSTEM_UNKNOWN]: ['T3', 'E'] });
+    expect(out.lc.lanes).toEqual([
+      lane('P', 'A', 'System A', 'system'), lane('P', 'B', 'System B', 'system'),
+      lane('P', SYSTEM_UNKNOWN, '(System nicht erhoben)', 'system'),
+    ]);
+    expect(out.hints).toEqual([h20('T3')]);
+  });
+
+  test('(s2) an automatic task without system takes the placeholder, not its neighbour (no H03)', () => {
+    const out = formSys(sysProc(
+      [sysNode('S', 'startEvent'), sysNode('X', 'serviceTask'), sysNode('T', 'userTask', 'A'), sysNode('E', 'endEvent')],
+      [['S', 'X'], ['X', 'T'], ['T', 'E']],
+    ));
+    expect(members(out.lc)).toEqual({ [SYSTEM_UNKNOWN]: ['S', 'X'], A: ['T', 'E'] });
+    expect(out.hints).toEqual([h20('X')]);
+  });
+
+  test('(s3) an expanded subprocess without system is in the placeholder; its child forms no lane', () => {
+    const out = formSys(sysProc(
+      [sysNode('T', 'userTask', 'A'),
+        sysNode('SP', 'subProcess', undefined, { isExpanded: true, nodes: [sysNode('c1', 'userTask', 'B')], edges: [] })],
+      [['T', 'SP']],
+    ));
+    expect(out.errors).toEqual([]);
+    expect(members(out.lc)).toEqual({ A: ['T'], [SYSTEM_UNKNOWN]: ['SP'] });
+    expect(out.lc.lanes.map((l) => l.id)).toEqual(['L.P.A', 'L.P._systemUnknown']);
+    expect(out.lc.nodes.find((n) => n.id === 'SP').nodes[0]).not.toHaveProperty('lane');
+    expect(out.hints).toEqual([h20('SP')]);
+  });
+
+  test('(s4) a boundary event follows its host', () => {
+    const out = formSys(sysProc(
+      [sysNode('T1', 'userTask', 'A'), sysNode('BE', 'boundaryEvent', undefined, { attachedTo: 'T1' }), sysNode('T2', 'userTask', 'B')],
+      [['BE', 'T2']],
+    ));
+    expect(members(out.lc)).toEqual({ A: ['T1', 'BE'], B: ['T2'] });
+    expect(out.hints).toEqual([]);
+  });
+
+  test('(s5) no task with a system: no lanes, one H06, no H02; assignments play no part', () => {
+    const out = formSys(sysProc(
+      [node('S', 'startEvent', 'R'), node('T', 'userTask', 'R'), node('X', 'serviceTask'), node('E', 'endEvent')],
+      [['S', 'T'], ['T', 'X'], ['X', 'E']],
+    ));
+    expect(out.errors).toEqual([]);
+    expect(out.lc).not.toHaveProperty('lanes');
+    expect(out.lc.nodes.every((n) => n.lane === undefined)).toBe(true);
+    expect(out.hints).toEqual([{ code: 'H06', message: 'No systems in process "P": no lanes.', elements: ['P'] }]);
+  });
+
+  test('assignments decide nothing: a task with a performer and no system is in the placeholder', () => {
+    const out = formSys(sysProc(
+      [node('T1', 'userTask', 'R', { system: 'A' }), node('T2', 'userTask', 'R')],
+      [['T1', 'T2']],
+    ));
+    expect(members(out.lc)).toEqual({ A: ['T1'], [SYSTEM_UNKNOWN]: ['T2'] });
+    expect(codes(out.hints)).toEqual(['H20']);
+  });
+
+  test('(s6) two pools using A, a pool without systems has H06 only for it', () => {
+    const pool = (id, system) => ({
+      id,
+      nodes: [sysNode(`${id}_s`, 'startEvent'), sysNode(`${id}_t`, 'userTask', system), sysNode(`${id}_e`, 'endEvent')],
+      edges: flows([[`${id}_s`, `${id}_t`], [`${id}_t`, `${id}_e`]]),
+    });
+    const out = formSys({ $schemaVersion: '2.1', pools: [pool('p1', 'A'), pool('p2', 'A'), pool('p3')] });
+    expect(out.errors).toEqual([]);
+    const [p1, p2, p3] = out.lc.pools;
+    expect(p1.lanes.map((l) => l.id)).toEqual(['L.p1.A']);
+    expect(p2.lanes.map((l) => l.id)).toEqual(['L.p2.A']);
+    expect(members(p2)).toEqual({ A: ['p2_s', 'p2_t', 'p2_e'] });
+    expect(p3).not.toHaveProperty('lanes');
+    expect(out.hints).toEqual([{ code: 'H06', message: '[p3] No systems in process "p3": no lanes.', elements: ['p3'] }]);
+  });
+
+  test('(s7) C10: systems x and x_di used in one process', () => {
+    const catalog = { actors: [], systems: [{ id: 'x', name: 'X' }, { id: 'x_di', name: 'X DI' }] };
+    const out = formSys(sysProc([sysNode('T1', 'userTask', 'x'), sysNode('T2', 'userTask', 'x_di')], [['T1', 'T2']]), catalog);
+    expect(out.lc).toBeNull();
+    expect(out.errors).toEqual(['[C10] lane id "L.P.x_di" (system "x_di") collides with "L.P.x"; rename the catalogue id']);
+  });
+
+  test('ties go to the system declared first; the placeholder ranks after every system', () => {
+    const pairs = [['T1', 'E'], ['T2', 'E'], ['U', 'E2'], ['T2', 'E2']];
+    for (const p of [pairs, [...pairs].reverse()]) {
+      const out = formSys(sysProc(
+        [sysNode('T2', 'userTask', 'B'), sysNode('U', 'userTask'), sysNode('T1', 'userTask', 'A'), sysNode('E', 'endEvent'), sysNode('E2', 'endEvent')],
+        p,
+      ));
+      expect(members(out.lc)).toEqual({ B: ['T2', 'E2'], [SYSTEM_UNKNOWN]: ['U'], A: ['T1', 'E'] });
+      expect(out.lc.lanes.map((l) => l._laneActor)).toEqual(['A', 'B', SYSTEM_UNKNOWN]);
+    }
+  });
+
+  test('H08 names the system placeholder; H05 for a long system name', () => {
+    const catalog = { actors: [], systems: [{ id: 'A', name: 'Ein System mit sehr langem Namen' }] };
+    const out = formSys(sysProc(
+      [sysNode('T', 'userTask', 'A'), sysNode('I', 'intermediateThrowEvent'),
+        sysNode('BE', 'boundaryEvent', undefined, { attachedTo: 'nirgends' })],
+      [['T', 'BE']],
+    ), catalog);
+    expect(out.errors).toEqual([]);
+    expect(out.hints).toEqual([
+      { code: 'H08', message: 'No neighbour with a lane: "I" (I) is in lane "(System nicht erhoben)".', elements: ['I'] },
+      { code: 'H08', message: 'Boundary event "BE" (BE) has no host with a lane: lane "(System nicht erhoben)".', elements: ['BE'] },
+      { code: 'H05', message: 'Lane name "Ein System mit sehr langem Namen" is longer than 25 characters; shorten the catalogue name.', elements: ['L.P.A', 'A'] },
+    ]);
+    expect(members(out.lc)).toEqual({ A: ['T'], [SYSTEM_UNKNOWN]: ['I', 'BE'] });
+  });
+
+  test('the role view of the same model ignores systems; the arguments are unchanged', () => {
+    const model = sysProc([node('T1', 'userTask', 'R', { system: 'A' }), node('T2', 'userTask', 'R', { system: 'B' })], [['T1', 'T2']]);
+    expect(form(model, { catalog: SYS }).lc.lanes.map((l) => l.id)).toEqual(['L.P.R']);
+    const { lc, resolved } = resolve(model, SYS);
+    const snap = () => [JSON.stringify(lc), JSON.stringify(resolved.systems), JSON.stringify([...resolved.systemById]),
+      JSON.stringify([...resolved.systemOrder])];
+    const before = snap();
+    const out = formLanes(lc, resolved, { lanes: 'system' });
+    expect(out.lc).not.toBe(lc);
+    expect(snap()).toEqual(before);
+  });
+
+  test('exports: the system placeholder', () => {
+    expect(SYSTEM_UNKNOWN).toBe('_systemUnknown');
+    expect(laneIdFor('P', SYSTEM_UNKNOWN)).toBe('L.P._systemUnknown');
+  });
+
+  test('(s8) runPipeline with view systeme: a "2.0" model gets H06 per process and no lanes; a 1.x model the view error', async () => {
+    const r = await runPipeline(copy(MODEL_56), { catalog: { ...copy(CATALOG_56), systems: [{ id: 'sys_akte', name: 'Schadenakte' }] }, view: loadNamedView('systeme') });
+    expect(r.validation.errors).toEqual([]);
+    expect(r.validation.hints.filter((h) => h.code !== 'H18')).toEqual([
+      { code: 'H06', message: 'No systems in process "Schaden regulieren": no lanes.', elements: ['Process_Schaden'] },
+    ]);
+    expect(r.bpmnXml).not.toMatch(/<bpmn:lane\b/);
+    expect(r.bpmnXml).toContain('bg:view="systeme"');
+    const oneX = JSON.parse(readFileSync(new URL('../../tests/fixtures/simple-approval.json', import.meta.url), 'utf8'));
+    const err = await runPipeline(oneX, { view: loadNamedView('systeme') }).catch((e) => e);
+    expect(err).toBeInstanceOf(ViewRejectedError);
+    expect(err.message).toBe('view "systeme" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
   });
 });

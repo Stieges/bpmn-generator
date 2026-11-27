@@ -7,7 +7,7 @@ import { PROFILE_LIMITS } from './rule-profile.js';
 import { viewsDirFor, viewsDirPath } from './resource-paths.js';
 
 describe('shipped views', () => {
-  test.each(['aligned-ports', 'default', 'einheiten', 'explicit-joins', 'organigramm', 'rollen'])('%s loads by name and passes the gate', (name) => {
+  test.each(['aligned-ports', 'default', 'einheiten', 'explicit-joins', 'organigramm', 'rollen', 'systeme'])('%s loads by name and passes the gate', (name) => {
     const view = loadNamedView(name);
     expect(view.view).toBe(name);
     expect(() => assertView(view)).not.toThrow();
@@ -35,7 +35,13 @@ describe('shipped views', () => {
   });
 
   test('a lanes value off the enum is refused', () => {
-    expect(() => assertView({ view: 'x', version: '1.0', lanes: 'system' })).toThrow(ViewRejectedError);
+    expect(() => assertView({ view: 'x', version: '1.0', lanes: 'process' })).toThrow(ViewRejectedError);
+  });
+
+  test('systeme forms lanes per system of the task', () => {
+    expect(loadNamedView('systeme').lanes).toBe('system');
+    expect(() => assertView({ view: 'x', version: '1.0', lanes: 'system' })).not.toThrow();
+    expect(() => assertView({ view: 'x', version: '1.0', lanes: { by: 'system' } })).toThrow(ViewRejectedError);
   });
 
   test('organigramm nests the unit lanes along partOf', () => {

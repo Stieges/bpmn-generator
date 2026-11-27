@@ -13,6 +13,7 @@ import { bpmnXsdStatus, xsdDir } from '../../.github/scripts/fetch-bpmn-xsd.mjs'
 import { runPipeline } from './pipeline.js';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy } from './import.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
+import { loadNamedView } from '../shared/view.js';
 
 const PINNED = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
 const ASSIGNMENT = '<bg:assignment type="D" actor="sb_schaden" />';
@@ -309,12 +310,33 @@ describe('format 2.1: <bg:system ref> in the task\'s extensionElements', () => {
     expect(validateLogicCoreSchema(lc)).toEqual({ valid: true, errors: [] });
   });
 
+  const generateView = async (name) => {
+    const r = await runPipeline(copy(MODEL_S), { catalog: copy(CATALOG_S), view: loadNamedView(name) });
+    expect(r.validation.errors).toEqual([]);
+    return r;
+  };
+
+  test('view systeme: a system lane carries by="system" system="…"; view rollen keeps actor="…"', async () => {
+    const { bpmnXml, validation } = await generateView('systeme');
+    expect(validation.xmlWarnings).toEqual([]);
+    const lane = element(bpmnXml, 'lane', 'L\\.Process_Schaden\\.sys_akte');
+    expect(extensionOf(lane)).toContain('<bg:derived by="system" system="sys_akte">lane</bg:derived>');
+    expect(lane).not.toContain('actor=');
+    expect(bpmnXml).toContain('name="Schadenakte"');
+    expect(count(bpmnXml, /<bg:derived\b/g)).toBe(1);
+    const roles = (await generateView('rollen')).bpmnXml;
+    expect(extensionOf(element(roles, 'lane', 'L\\.Process_Schaden\\.sb_schaden'))).toContain(LANE_MARKER);
+    expect(roles).not.toContain('by="system"');
+  });
+
   (xsd.available ? test : test.skip)('2.1 output validates against BPMN20.xsd', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'model-v2-xml-sys-'));
     try {
       const file = join(dir, 'system.bpmn');
       writeFileSync(file, (await generateS()).bpmnXml);
-      execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), file], { encoding: 'utf8', stdio: 'pipe' });
+      const lanes = join(dir, 'system-lanes.bpmn');
+      writeFileSync(lanes, (await generateView('systeme')).bpmnXml);
+      execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), file, lanes], { encoding: 'utf8', stdio: 'pipe' });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

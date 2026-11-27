@@ -1,0 +1,6 @@
+{
+  "view": "systeme",
+  "version": "1.0",
+  "description": "Lanes per system of the task. Format 2.x models only; a task without system goes to \"(System nicht erhoben)\".",
+  "lanes": "system"
+}

@@ -758,10 +758,12 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
 function buildLane(lane, nodes, flowNodeMap) {
   const laneEl = create('bpmn:Lane', { id: lane.id, name: lane.name || lane.id });
   // A lane formed from the assignments (design 11 a) says so, and by what and for whom: the marker
-  // tells it from a drawn lane. moddle writes extensionElements ahead of flowNodeRef, as the XSD wants.
+  // tells it from a drawn lane; a lane of the system view names its system (`system="…"`), every
+  // other formed lane its actor. moddle writes extensionElements ahead of flowNodeRef, as the XSD wants.
   if (lane._derived === 'lane') {
+    const keyAttr = lane._laneBy === 'system' ? 'system' : 'actor';
     laneEl.extensionElements = create('bpmn:ExtensionElements', { values: [
-      moddle.createAny(`${EXTENSION_PREFIX}:derived`, EXTENSION_NS, { by: lane._laneBy, actor: lane._laneActor, $body: 'lane' }),
+      moddle.createAny(`${EXTENSION_PREFIX}:derived`, EXTENSION_NS, { by: lane._laneBy, [keyAttr]: lane._laneActor, $body: 'lane' }),
     ] });
   }
   // Lane#flowNodeRef is typed FlowNode. Artifacts are not FlowNodes at all, and
