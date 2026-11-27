@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import { runPipeline } from './pipeline.js';
 import {
-  checkDiagramIntegrity, classifyUnavoidableDi05, minimumCrossings,
+  checkDiagramIntegrity, classifyUnavoidableDi05, minimumCrossings, formatDiWarnings,
   UNAVOIDABLE_DI05_MAX_PARTICIPANTS, UNAVOIDABLE_DI05_CLAUSE,
 } from './di-check.js';
 
@@ -26,6 +26,17 @@ const hubCatalog = () => JSON.parse(readFileSync(join(V2, 'message-hub-catalog.j
 
 const H15 = 'No order of the participants avoids every crossing: stacked in one column a participant has at most two neighbours, and "Pool_Desk" exchanges messages with 3 participants. DI05 on "m4" is reported but does not fail --strict. Accept the crossing, or reduce the message partners (for example, merge black-box participants that play the same part).';
 const DI05_M4 = 'Message flow "m4" crosses 1 uninvolved participant(s): P_Supplier. No order of the participants avoids every crossing.';
+
+// message-hub with ten more black-box partners of Pool_Desk: 14 participants, 11 DI05 in the best order.
+function bigHub() {
+  const lc = hub();
+  const senders = ['a', 'b', 'e'];
+  for (let i = 1; i <= 10; i++) {
+    lc.collapsedPools.push({ id: `P_Partner${i}`, name: `Partner ${i}` });
+    lc.messageFlows.push({ id: `mx${i}`, source: senders[i % 3], target: `P_Partner${i}` });
+  }
+  return lc;
+}
 
 // Every order, the brute-force answer minimumCrossings must give.
 function bruteForce(n, weight) {
@@ -127,10 +138,31 @@ describe('classifyUnavoidableDi05', () => {
     expect(issues.map((i) => i.message)).toEqual(before);
   });
 
-  test('an order with more crossings than the best one is not marked', () => {
+  test('an order with more crossings than the best one: every DI05 is marked, no order avoids them all', () => {
     const { lc, coordMap, issues } = column(['A', 'B', 'C', 'D'], [['A', 'B'], ['A', 'C'], ['A', 'D']]);
     expect(issues.map((i) => i.elements)).toEqual([['f2', 'B'], ['f3', 'B', 'C']]);
+    expect(classifyUnavoidableDi05(coordMap, lc, issues)).toEqual({ flows: ['f2', 'f3'], hubs: [{ id: 'A', partners: 3 }], cycle: null });
+    expect(issues.every((i) => i.message.endsWith(UNAVOIDABLE_DI05_CLAUSE))).toBe(true);
+  });
+
+  test('a flow from a node inside a subprocess: DI05 gives it no participant, so neither does the search', () => {
+    const order = ['B', 'A', 'C', 'D'];
+    const poolCoords = {};
+    order.forEach((id, i) => { poolCoords[id] = { x: 0, y: i * 100, w: 800, h: 60 }; });
+    const lc = {
+      pools: [{ id: 'A', nodes: [{ id: 'sp', type: 'subProcess', nodes: [{ id: 'inner', type: 'task' }] }], edges: [] }],
+      collapsedPools: ['B', 'C', 'D'].map((id) => ({ id, name: id })),
+      messageFlows: [{ id: 'f1', source: 'inner', target: 'B' }, { id: 'f2', source: 'A', target: 'C' }, { id: 'f3', source: 'A', target: 'D' }],
+    };
+    const mid = (id) => poolCoords[id].y + 30;
+    const edgeCoords = { f1: [{ x: 400, y: mid('A') }, { x: 400, y: mid('B') }], f2: [{ x: 400, y: mid('A') }, { x: 400, y: mid('C') }], f3: [{ x: 400, y: mid('A') }, { x: 400, y: mid('D') }] };
+    const coordMap = { coords: {}, poolCoords, laneCoords: {}, edgeCoords };
+    const { issues } = checkDiagramIntegrity(coordMap, lc);
+    expect(issues.filter((i) => i.code === 'DI05').map((i) => i.elements)).toEqual([['f3', 'C']]);
     expect(classifyUnavoidableDi05(coordMap, lc, issues)).toBeNull();
+    // The same flow from the participant itself is mapped, and the crossing is marked.
+    lc.messageFlows[0].source = 'A';
+    expect(classifyUnavoidableDi05(coordMap, lc, issues)?.flows).toEqual(['f3']);
   });
 
   test('participants that are not one full-width column: not marked', () => {
@@ -145,6 +177,12 @@ describe('classifyUnavoidableDi05', () => {
     expect(classifyUnavoidableDi05(coordMap, lc, issues)).toBeNull();
   });
 
+  test('an unrouted flow is left out, as DI05 leaves it out: without A–B the chain C, A, D fits, nothing is marked', () => {
+    const { lc, coordMap, issues } = column(['B', 'A', 'C', 'D'], [['A', 'B'], ['A', 'C'], ['A', 'D']]);
+    delete coordMap.edgeCoords.f1;
+    expect(classifyUnavoidableDi05(coordMap, lc, issues)).toBeNull();
+  });
+
   test('above the bound the answer is unknown: not marked', () => {
     const ids = Array.from({ length: UNAVOIDABLE_DI05_MAX_PARTICIPANTS + 1 }, (_, i) => `P${String(i).padStart(2, '0')}`);
     // P01 talks to P00, P02 and P03: one crossing in the best order, as with four participants.
@@ -153,6 +191,26 @@ describe('classifyUnavoidableDi05', () => {
     expect(classifyUnavoidableDi05(coordMap, lc, issues)).toBeNull();
     const smaller = column(ids.slice(0, UNAVOIDABLE_DI05_MAX_PARTICIPANTS), [['P01', 'P00'], ['P01', 'P02'], ['P01', 'P03']]);
     expect(classifyUnavoidableDi05(smaller.coordMap, smaller.lc, smaller.issues)?.flows).toEqual(['f3']);
+  });
+});
+
+describe('formatDiWarnings with more DI05 than the group threshold', () => {
+  const di05 = (flow, marked) => ({ code: 'DI05', severity: 'WARNING', message: `Message flow "${flow}" crosses 1 uninvolved participant(s): C.${marked ? UNAVOIDABLE_DI05_CLAUSE : ''}`, elements: [flow, 'C'] });
+  const lc = { pools: [], collapsedPools: [{ id: 'A' }], messageFlows: [1, 2, 3].map((k) => ({ id: `f${k}`, source: 'A', target: 'B' })) };
+  const head = (issues) => formatDiWarnings(issues, lc, { groupThreshold: 2 })[0];
+
+  test('none marked: the grouped line is as before', () => {
+    expect(head([di05('f1'), di05('f2'), di05('f3')])).toBe('DI05 3 message flows cross uninvolved participants — by source participant:');
+  });
+
+  test('all marked: the grouped line says no order avoids them', () => {
+    expect(head([di05('f1', true), di05('f2', true), di05('f3', true)]))
+      .toBe('DI05 3 message flows cross uninvolved participants (no order of the participants avoids them; see H15) — by source participant:');
+  });
+
+  test('some marked: the grouped line says how many', () => {
+    expect(head([di05('f1', true), di05('f2'), di05('f3', true)]))
+      .toBe('DI05 3 message flows cross uninvolved participants (no order of the participants avoids 2 of them; see H15) — by source participant:');
   });
 });
 
@@ -190,17 +248,45 @@ describe('runPipeline and the CLI', () => {
     }
   });
 
-  test('CLI --strict with poolOrder declared: the crossings another order avoids still fail it', () => {
+  test('CLI --strict with poolOrder declared: no order avoids every crossing, so all 3 DI05 are marked and the files are written', () => {
     const dir = mkdtempSync(join(tmpdir(), 'di05-hub-'));
     try {
       const view = join(dir, 'declared-view.json');
       writeFileSync(view, JSON.stringify({ view: 'declared', version: '1.0', lanes: 'role', layout: { poolOrder: 'declared' } }));
       const out = join(dir, 'hub');
       const res = spawnSync(process.execPath, [PIPELINE, join(V2, 'message-hub.json'), out, '--strict', `--view=${view}`], { encoding: 'utf8' });
-      expect(res.stdout).not.toContain('[H15]');
-      expect(res.stderr).toContain('✗ --strict: 3 diagram diagnostic(s). No files written.');
-      expect(res.status).toBe(1);
-      expect(existsSync(`${out}.bpmn`)).toBe(false);
+      expect(res.stdout).toContain('DI05 on "m2", "m3", "m4" is reported but does not fail --strict.');
+      for (const line of [
+        'DI05 Message flow "m2" crosses 1 uninvolved participant(s): P_Customer. No order of the participants avoids every crossing.',
+        'DI05 Message flow "m3" crosses 1 uninvolved participant(s): P_Customer. No order of the participants avoids every crossing.',
+        'DI05 Message flow "m4" crosses 2 uninvolved participant(s): P_Customer, P_Supplier. No order of the participants avoids every crossing.',
+      ]) expect(res.stderr).toContain(`  · ${line}\n`);
+      expect(res.stderr).not.toContain('--strict');
+      expect(res.status).toBe(0);
+      expect(existsSync(`${out}.bpmn`)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('H15 names at most 10 flows, elements all of them; the grouped CLI line keeps the reason', async () => {
+    const r = await runPipeline(bigHub(), { catalog: hubCatalog(), view: resolve(here, '../../views/rollen-view.json') });
+    const di05 = r.diagnostics.issues.filter((i) => i.code === 'DI05');
+    expect(di05).toHaveLength(11);
+    const h15 = r.validation.hints.at(-1);
+    expect(h15.code).toBe('H15');
+    expect(h15.elements).toEqual(di05.map((i) => i.elements[0]));
+    expect(h15.message).toContain(`DI05 on ${h15.elements.slice(0, 10).map((id) => `"${id}"`).join(', ')} and 1 more is reported`);
+
+    const dir = mkdtempSync(join(tmpdir(), 'di05-hub-'));
+    try {
+      const input = join(dir, 'big-hub.json');
+      writeFileSync(input, JSON.stringify({ ...bigHub(), catalog: join(V2, 'message-hub-catalog.json') }));
+      const out = join(dir, 'big-hub');
+      const res = spawnSync(process.execPath, [PIPELINE, input, out, '--strict', '--view=rollen'], { encoding: 'utf8' });
+      expect(res.stderr).toContain('  · DI05 11 message flows cross uninvolved participants (no order of the participants avoids them; see H15) — by source participant:\n');
+      expect(res.status).toBe(0);
+      expect(existsSync(`${out}.bpmn`)).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
