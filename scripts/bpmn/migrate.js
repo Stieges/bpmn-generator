@@ -4,12 +4,12 @@
  *
  * Every lane of every modelled process becomes an actor without `kind` (a child lane gets its parent
  * lane's actor as `unit`); every distinct `role` becomes a kind-less actor `role_<slug>` that performs
- * its activities (a role equal to the name of its lane's actor is that actor). Each top-level activity
- * of a process with lanes gets one assignment of the scheme's performs type to its lane's actor (or
- * its role's); events, gateways, boundary events and subprocess children get none, and a role on
- * them is dropped (MG05). `lanes`, `lane` and `role` are stripped; `system`, data nodes and the
- * associations touching them are fields 2.0 cannot hold yet (MG02): refused by default, dropped and
- * listed with `dropUnsupported`. Everything else is kept as given.
+ * its activities (a role equal to the name of a lane actor of the same process is that lane actor).
+ * Each top-level activity of a process with lanes gets one assignment of the scheme's performs type
+ * to its lane's actor (or its role's); events, gateways, boundary events and subprocess children get
+ * none, and a role on them is dropped (MG05). `lanes`, `lane` and `role` are stripped; `system`, data
+ * nodes and the flows and associations touching them are fields 2.0 cannot hold yet (MG02): refused
+ * by default, dropped and listed with `dropUnsupported`. Everything else is kept as given.
  *
  * `migrateModel` is pure: neither argument is changed, and it never throws on its input; a refused
  * input gives `model: null` and the reason in the report.
@@ -244,6 +244,7 @@ export function migrateModel(lc, options = {}) {
   const created = []; // [actor, 'Lane' | 'Role', source name]
   const laneActor = processes.map(() => new Map()); // per process: lane id → actor id
   const actorName = new Map(); // lane actor id → its name
+  const laneByName = processes.map(() => new Map()); // per process: lane actor name → the first such actor id
   allLanes.forEach((lanes, p) => {
     for (const { lane, parent } of lanes) {
       let id = lane.id;
@@ -256,6 +257,7 @@ export function migrateModel(lc, options = {}) {
       if (!laneActor[p].has(lane.id)) laneActor[p].set(lane.id, id);
       const actor = { id, name: lane.name || lane.id };
       actorName.set(id, actor.name);
+      if (!laneByName[p].has(actor.name)) laneByName[p].set(actor.name, id);
       if (parent) actor.unit = laneActor[p].get(parent.id);
       actors.push(actor);
       created.push([actor, 'Lane', actor.name]);
@@ -263,18 +265,19 @@ export function migrateModel(lc, options = {}) {
   });
 
   // (5) one actor per distinct role of the activities that take an assignment, in document order.
-  // A role equal to the name of its lane's actor is that actor: such a node creates no role actor.
+  // A role equal to the name of a lane actor of the same process is that lane actor (its own lane's
+  // first, else the first in document order): such a node creates no role actor.
   const laneOf = (proc, p, node) => {
     const laneId = resolveLaneId(proc, node);
     return laneActor[p].has(laneId) ? { laneId, actor: laneActor[p].get(laneId) } : null;
   };
-  const usesRoleActor = (lane, node) => !lane || actorName.get(lane.actor) !== node.role;
+  const namesake = (p, lane, role) => (lane && actorName.get(lane.actor) === role ? lane.actor : laneByName[p].get(role));
   const roles = new Map(); // role → { actor, sites: [{ laneId, actor } | null] }
   processes.forEach((proc, p) => {
     for (const node of proc.nodes || []) {
       if (node.role === undefined || !takesAssignment(proc, node)) continue;
       const lane = laneOf(proc, p, node);
-      if (!usesRoleActor(lane, node)) continue;
+      if (namesake(p, lane, node.role) !== undefined) continue;
       if (!roles.has(node.role)) {
         const actor = { id: uniqueId(roleBase(node.role), taken), name: node.role };
         roles.set(node.role, { actor, sites: [] });
@@ -296,6 +299,7 @@ export function migrateModel(lc, options = {}) {
   let assigned = 0;
   const droppedRoles = (nodes) => {
     for (const node of nodes || []) {
+      if (unsupported.dataIds.has(node.id)) continue; // dropped under MG02 already
       if (node.role !== undefined) {
         entries.push(entry('MG05', `role "${q(node.role)}" on ${q(node.type)} "${q(node.id)}" is dropped: format 2.0 gives this node no assignment.`, [node.id]));
       }
@@ -310,19 +314,21 @@ export function migrateModel(lc, options = {}) {
       }
       droppedRoles(node.nodes);
       const lane = laneOf(proc, p, node);
-      const role = node.role !== undefined && usesRoleActor(lane, node) ? roles.get(node.role) : null;
-      const performer = role ? role.actor.id : lane?.actor;
+      const byRole = node.role !== undefined;
+      const named = byRole ? namesake(p, lane, node.role) : undefined;
+      const role = byRole && named === undefined ? roles.get(node.role) : null;
+      const performer = named ?? (role ? role.actor.id : lane?.actor);
       if (performer === undefined) {
         entries.push(entry('MG05', `node "${q(node.id)}" has no lane in a process with lanes; it gets no assignment.`, [node.id]));
         continue;
       }
       node.assignments = [{ type: performs, actor: performer }];
       assigned++;
-      if (role && !lane) {
+      if (byRole && !lane) {
         entries.push(entry('MG05', `node "${q(node.id)}" has no lane in a process with lanes; its role "${q(node.role)}" makes actor "${performer}" its performer.`, [node.id, performer]));
-      } else if (role) {
+      } else if (byRole && performer !== lane.actor) {
         let text = `node "${q(node.id)}": role "${q(node.role)}" performs it as actor "${performer}", not lane "${q(lane.laneId)}".`;
-        if (role.actor.unit === undefined) {
+        if (role && role.actor.unit === undefined) {
           const laneIds = [...new Set(role.sites.filter(Boolean).map((s) => s.laneId))].map((id) => `"${q(id)}"`).join(', ');
           const where = role.sites.includes(null) ? `lanes ${laneIds} and outside any lane` : `lanes ${laneIds}`;
           text += ` Actor "${performer}" has no unit: its activities sit in ${where}.`;
