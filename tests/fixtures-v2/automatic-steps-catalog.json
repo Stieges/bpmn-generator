@@ -1,0 +1,5 @@
+{ "scheme": "demi",
+  "actors": [ { "id": "dept_case", "name": "Order desk", "kind": "unit" },
+              { "id": "mgmt", "name": "Team management", "kind": "unit" },
+              { "id": "clerk", "name": "Case worker", "kind": "role", "unit": "dept_case" },
+              { "id": "teamlead", "name": "Team lead", "kind": "role", "unit": "mgmt" } ] }

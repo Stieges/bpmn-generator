@@ -1,0 +1,15 @@
+{ "$schemaVersion": "2.0", "catalog": "automatic-steps-catalog.json", "language": "en", "id": "Process_Order", "name": "Handle order",
+  "nodes": [
+    { "id": "start", "type": "startEvent", "name": "Order received" },
+    { "id": "register", "type": "serviceTask", "name": "Register order" },
+    { "id": "check", "type": "userTask", "name": "Check order", "assignments": [ { "type": "D", "actor": "clerk" } ] },
+    { "id": "approve", "type": "userTask", "name": "Approve order", "assignments": [ { "type": "D", "actor": "teamlead" } ] },
+    { "id": "send", "type": "sendTask", "name": "Send confirmation" },
+    { "id": "file", "type": "userTask", "name": "File order", "assignments": [ { "type": "D", "actor": "clerk" } ] },
+    { "id": "end", "type": "endEvent", "name": "Order handled" }
+  ],
+  "edges": [
+    { "source": "start", "target": "register" }, { "source": "register", "target": "check" },
+    { "source": "check", "target": "approve" }, { "source": "approve", "target": "send" },
+    { "source": "send", "target": "file" }, { "source": "file", "target": "end" }
+  ] }
