@@ -46,7 +46,7 @@ The BPMN Generator runs in four deployment shapes with different trust boundarie
 
 ## Dependencies and supply chain
 
-The runtime dependency surface is deliberately small — `elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`. Adding to it requires prior discussion (see `CLAUDE.md`); every one of the five was a deliberate choice. Supported Node is `>=20` (declared in `scripts/package.json`); CI tests 20 and 22.
+The runtime dependency surface is deliberately small — `elkjs`, `bpmn-moddle`, `dmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`. Adding to it requires prior discussion (see `CLAUDE.md`); every one of the six was a deliberate choice. One optional dependency, `@resvg/resvg-wasm` (exact pin, loaded only for `--png`, skipped by `npm install --omit=optional`), renders the PNG preview. It is acceptable because it is a single package with no dependencies of its own and no install scripts, it runs as wasm without native code, and its tarball carries an npm registry signature but no provenance attestation, so it stays pinned and reviewed on every bump. Supported Node is `>=20` (declared in `scripts/package.json`); CI tests 20 and 22.
 
 ### The gate
 
