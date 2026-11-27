@@ -107,6 +107,7 @@ describe('pipeline CLI --png', () => {
     expect(r.err).toContain(HIDE_MARKER);
     expect(r.err).toContain('@resvg/resvg-wasm');
     expect(r.err).toContain('npm install');
+    expect(r.err).not.toContain('in scripts/');
     expect(r.err).toContain('No files written');
     expect(readdirSync(d)).toEqual([]);
   });

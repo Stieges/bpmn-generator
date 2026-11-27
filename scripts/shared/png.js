@@ -460,7 +460,7 @@ async function createRenderer(importModule, fontPath) {
       throw new Error(`${RENDERER_PACKAGE} exports neither initWasm nor Resvg`);
   } catch (err) {
     throw new PngUnavailableError(
-      '--png needs the optional dependency @resvg/resvg-wasm 2.6.2, which is not installed: run `npm install` in scripts/ (it is skipped by --omit=optional)',
+      '--png needs the optional dependency @resvg/resvg-wasm 2.6.2, which is not installed: install it next to the other dependencies of this package (`npm install` without --omit=optional)',
       { cause: err });
   }
   const font = loadFont(fontPath);
