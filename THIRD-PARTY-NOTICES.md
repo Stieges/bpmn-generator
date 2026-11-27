@@ -55,6 +55,22 @@ ElkJS is used as an unmodified library. No modifications have been made to its s
 - **Repository:** https://github.com/ajv-validator/ajv-formats
 - **Usage:** Format keyword support for the schema gate
 
+### @resvg/resvg-wasm — SVG renderer (optional)
+
+- **Version:** 2.6.2
+- **License:** Mozilla Public License 2.0 (MPL-2.0)
+- **Repository:** https://github.com/yisibl/resvg-js
+- **Usage:** SVG to PNG for the `--png` preview; an optional dependency, loaded only with `--png`
+
+@resvg/resvg-wasm is used as an unmodified npm dependency and is not redistributed with this project.
+
+### Arimo — Regular (font)
+
+- **License:** SIL Open Font License 1.1 (OFL-1.1)
+- **Copyright:** Copyright 2026 The Arimo Project Authors
+- **Repository:** https://github.com/googlefonts/Arimo
+- **Usage:** text in the PNG preview, metric-compatible with Arial; shipped unmodified as `scripts/fonts/Arimo-Regular.ttf` with its licence in `scripts/fonts/OFL.txt`
+
 ## Dev Dependencies
 
 Dev dependencies are not distributed — they are listed for completeness and license review.
@@ -93,6 +109,8 @@ Dev dependencies are not distributed — they are listed for completeness and li
 | @modelcontextprotocol/sdk | MIT | Yes | Permissive |
 | ajv | MIT | Yes | Permissive |
 | ajv-formats | MIT | Yes | Permissive |
+| @resvg/resvg-wasm | MPL-2.0 | Yes | Optional, unmodified, not redistributed |
+| Arimo (font) | OFL-1.1 | Yes | Shipped as `scripts/fonts/`; the OFL allows bundling with software |
 | jest | MIT | Yes | Dev-only, not distributed |
 | @jest/globals | MIT | Yes | Dev-only, not distributed |
 | bpmn-auto-layout | MIT | Yes | Dev-only, not distributed |

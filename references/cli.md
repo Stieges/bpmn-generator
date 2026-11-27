@@ -23,6 +23,8 @@ npm install --omit=dev    # runtime dependencies only: elkjs, bpmn-moddle, dmn-m
 
 In a repository checkout, a plain `npm install` also installs the test tooling.
 
+`--png` needs the optional dependency `@resvg/resvg-wasm`. `npm install` and `npm ci` install it by default; `--omit=optional` skips it, and it is loaded only when `--png` is given. Without it, render the SVG yourself: `resvg --use-font-file Arimo-Regular.ttf --skip-system-fonts in.svg out.png` (the font is `scripts/fonts/Arimo-Regular.ttf`).
+
 ## BPMN pipeline
 
 ```bash
@@ -37,6 +39,7 @@ node bpmn/pipeline.js <input.json | -> [output-basename] [flags]
 | `--decisions <a.json,b.dmn>` | Decision-Core JSON or `.dmn` files (routed by content); every `businessRuleTask` with a `decisionRef` gets its decision table in its documentation, as a marked section replaced on every run (`references/dmn.md`). Also `--decisions=<files>` |
 | `--dot` | also writes `<output>.dot` (Graphviz) |
 | `--import-dot` | the input is a `.dot` file written by `--dot`; converts it back to Logic-Core |
+| `--png` | also writes `<output>.png`, the whole diagram at scale 2 (each side capped at 8192 px; the scale shrinks to fit and the console prints `at scale <s>`). A render larger than one part also gets `<output>.part-<i>-of-<n>.png`: crops of that same render, 1600 diagram units with 160 overlap, numbered from 1, read left to right then top to bottom. Stale `<output>.part-*-of-*.png` of earlier runs are removed first; a failed preview leaves no PNG of that base. With `--drill-down`, one PNG per written diagram (`<output>.png`, `<output>_<subprocessId>.png`). Text uses the bundled Arimo font. Refused with `--import-dot`. `--strict` is unchanged: a run it stops writes no PNG, and `--png` adds no warning. Prints `✓ PNG preview → <output>.png (+<n> parts)`. Needs the optional renderer (see Setup) |
 | `--drill-down` | writes the parent diagram plus one `<output>_<subprocessId>.bpmn/.svg` per subprocess (bypasses the DI/NC gates) |
 | `--refine` / `--no-refine` | turns all visual-refinement passes on / off (lane compaction, dynamic lane header, label collision repair) |
 | `--wrap` | wraps long chains (more than 20 nodes) into rows. With lanes it is accepted, but the rows shift like a staircase and the lane bands grow tall: one laned pool is one flat ELK graph and the bands are rebuilt from the nodes' y spans. Leave `--wrap` off for a model with lanes |
@@ -175,7 +178,7 @@ Details: `references/dmn.md` (the first three) and `references/redesign-toolbox.
 
 | Command | Writes | Exit ≠ 0 when |
 |---------|--------|---------------|
-| `bpmn/pipeline.js` | `.bpmn`, `.svg` (+ `.md`, `.dot` on request) | schema gate fails, an ERROR finding, or any warning under `--strict`; a `--decisions` file that cannot be read or fails the Decision-Core schema |
+| `bpmn/pipeline.js` | `.bpmn`, `.svg` (+ `.md`, `.dot`, `.png` and `.part-<i>-of-<n>.png` on request) | schema gate fails, an ERROR finding, or any warning under `--strict`; a `--decisions` file that cannot be read or fails the Decision-Core schema; with `--png`: the renderer is not installed (exit 1, no files written) or the render fails (exit 1; the `.bpmn`/`.svg` and any `.md`/`.dot` are written and valid) |
 | `bpmn/migrate.js` | `<base>.json`, `<base>.catalog.json`, `<base>.migrate-report.json` (a refusal: the report only) | exit 2 when the input is refused; exit 1 on a usage or I/O error, a refused catalogue, or an existing output without `--force` |
 | `bpmn/import.js` | Logic-Core JSON | the input is not parseable BPMN |
 | `dmn/pipeline.js` | `.dmn`, `.svg` (+ `.md`, `.tables.svg`, `.tables.html` with `--doc`) | schema gate fails, an ERROR finding, or any warning under `--strict` |

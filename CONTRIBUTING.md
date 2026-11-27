@@ -33,7 +33,7 @@ See [README.md](README.md) for the full module architecture and dependency graph
 
 - **ES Modules** — `import`/`export`, no `require()`
 - **Pure functions** — no global state except `CFG` (loaded from config.json)
-- **Minimal dependencies** — 5 at runtime (`elkjs`, `bpmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`); adding one needs prior discussion, see [SECURITY.md](SECURITY.md#dependencies-and-supply-chain)
+- **Minimal dependencies** — 6 at runtime (`elkjs`, `bpmn-moddle`, `dmn-moddle`, `@modelcontextprotocol/sdk`, `ajv`, `ajv-formats`) plus one optional renderer for `--png`, `@resvg/resvg-wasm` (one package, no dependencies, no install scripts, wasm; npm shows a registry signature but no provenance attestation); adding one needs prior discussion, see [SECURITY.md](SECURITY.md#dependencies-and-supply-chain)
 - **Config over code** — visual constants live in `scripts/config.json`
 - **XML escaping** — always use `esc()` from `utils.js`
 - **IDs** — must match `^[a-zA-Z_][a-zA-Z0-9_-]*$`

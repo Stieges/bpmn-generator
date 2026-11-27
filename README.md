@@ -126,6 +126,7 @@ npm test
 | `--dot` | Also write a Graphviz DOT export |
 | `--import-dot` | Treat the input as DOT and write Logic-Core JSON |
 | `--doc` | Also write a Markdown documentation companion |
+| `--png` | Also write `<output>.png` (scale 2, sides capped at 8192 px) and, for a large diagram, `<output>.part-<i>-of-<n>.png` parts. Needs the optional `@resvg/resvg-wasm`; see `references/cli.md` |
 | `--strict` | Write nothing on any unresolved warning (rule engine, diagram integrity, serialization). A DI05 that hint `H15` names (format 2.x: no participant order avoids it) is printed but not counted. |
 | `--optimize` | Enable the opt-in Optimization Advisory layer |
 | `--refine` | Switch every visual-refinement pass on (lane compaction and label repair already are by default) |
@@ -201,7 +202,8 @@ scripts/
 │                 (a Business Rule Task's decision table in its documentation)
 ├── shared/       Format-independent core: utils.js (config), ontology.js, rule-profile.js,
 │                 rule-catalog.js, resource-paths.js, geometry.js, text-layout.js, outbound-url.js (SSRF guard),
-│                 safe-text.js, entry-point.js, version.js
+│                 safe-text.js, entry-point.js, png.js, version.js
+├── fonts/        Arimo-Regular.ttf + OFL.txt (the PNG preview's font)
 ├── agents/       Multi-agent orchestration: modeler.js, reviewer.js, layout.js, compliance.js,
 │                 chat.js, prompt-sections.js, llm-provider.js
 ├── robustness/   Synthetic-data + benchmarking subsystem (see its README.md)
@@ -211,7 +213,7 @@ scripts/
 ├── audit.js, delivery.js     Audit log, webhook delivery + dead letter
 ├── evaluate-slm.js, prepare-training-data.js   SLM evaluation and training-data prep
 ├── config.json               Externalized constants (shapes, colors, gaps, switches)
-└── package.json              Runtime deps: elkjs, bpmn-moddle, dmn-moddle, @modelcontextprotocol/sdk, ajv, ajv-formats
+└── package.json              Runtime deps: elkjs, bpmn-moddle, dmn-moddle, @modelcontextprotocol/sdk, ajv, ajv-formats (+ optional @resvg/resvg-wasm, only for --png)
 ```
 
 Run `cd scripts && npm test` for the current test count (Jest, ES Modules) — it changes often enough
@@ -784,6 +786,8 @@ See `references/omg-compliance.md` for a detailed mapping of OMG BPMN 2.0.2 spec
 | [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk) | MIT | MCP server integration |
 | [ajv](https://github.com/ajv-validator/ajv) | MIT | JSON Schema strict gate for untrusted input |
 | [ajv-formats](https://github.com/ajv-validator/ajv-formats) | MIT | Format validators for the schema gate |
+| [@resvg/resvg-wasm](https://github.com/yisibl/resvg-js) | MPL-2.0 | SVG to PNG for `--png` (optional dependency) |
+| [Arimo](https://github.com/googlefonts/Arimo) | OFL-1.1 | Bundled font for the PNG preview (`scripts/fonts/`) |
 
 See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full license details and [SECURITY.md](SECURITY.md) for the dependency policy.
 

@@ -132,6 +132,7 @@ Run from `scripts/`:
 ```bash
 node bpmn/pipeline.js process.json out --strict      # Logic-Core → out.bpmn + out.svg
 node bpmn/pipeline.js process.json out --optimize    # same, plus optimisation advisories
+node bpmn/pipeline.js process.json out --strict --png   # plus out.png (and out.part-<i>-of-<n>.png) for reviewers that cannot render SVG
 node bpmn/import.js existing.bpmn extracted.json     # BPMN XML → Logic-Core (round trip)
 node dmn/pipeline.js decision.json out --strict      # Decision-Core → out.dmn + out.svg (DRD)
 node dmn/pipeline.js decision.json out --doc         # plus out.md, out.tables.svg, out.tables.html
