@@ -567,16 +567,16 @@ describe('hints for an unsupported language and for labels in another language t
   }, 60_000);
 
   const INVALID = [undefined, 'German', 'DE', 5, null, 'de" x="1'];
-  test.each(INVALID.map((v) => [String(v), v]))('language %s: validation.hints is [] for all 28 fixtures; explicit-joins gives H01 only (H16, a label cut inside a word, is ignored)', async (_label, value) => {
+  test.each(INVALID.map((v) => [String(v), v]))('language %s: validation.hints is [] for all 28 fixtures; explicit-joins gives H01 only (H16, a label cut inside a word, and H17, a message catcher without a message flow, are ignored)', async (_label, value) => {
     expect(ALL).toHaveLength(28);
     const view = loadNamedView('explicit-joins');
     for (const file of ALL) {
       const model = fixture(file);
       if (value !== undefined) model.language = value;
       const plain = await run(structuredClone(model));
-      expect({ file, hints: plain.validation.hints.filter((h) => h.code !== 'H16') }).toEqual({ file, hints: [] });
+      expect({ file, hints: plain.validation.hints.filter((h) => h.code !== 'H16' && h.code !== 'H17') }).toEqual({ file, hints: [] });
       const joined = await run(structuredClone(model), { view });
-      expect({ file, codes: [...new Set(joined.validation.hints.map((h) => h.code))].filter((c) => c !== 'H01' && c !== 'H16') }).toEqual({ file, codes: [] });
+      expect({ file, codes: [...new Set(joined.validation.hints.map((h) => h.code))].filter((c) => c !== 'H01' && c !== 'H16' && c !== 'H17') }).toEqual({ file, codes: [] });
     }
   }, 600_000);
 

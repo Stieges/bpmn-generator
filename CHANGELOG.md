@@ -165,9 +165,17 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   reproduces bpmn.io's and is unchanged). One hint per label (task and subprocess text, event,
   gateway, data object and group labels, sequence and message flow labels, text annotations,
   participant, collapsed pool and lane names) names the element and every such word, and says that
-  a soft hyphen (U+00AD) in the name sets where the word may break. Any format; last in
+  a soft hyphen (U+00AD) in the name sets where the word may break. Any format; after H15 in
   `validation.hints`; never fails `--strict`. `layoutText` returns the words as `cuts`. Models
   whose labels were already cut gain the hint; the output files are unchanged.
+- **Hint `H17`: a message catcher no message flow arrives at.** In a model with more than one
+  participant (an expanded or a black-box pool), a message start event, intermediate message catch
+  event, message boundary event or receive task that no message flow targets by its own id gets one
+  hint naming it. The marker is the one the XML writer writes, so the hint matches the
+  `messageEventDefinition`; an event subprocess start and a catcher inside a subprocess count; a
+  flow that ends at the enclosing subprocess or pool does not. A single-participant model gets none.
+  Any format; after H16, last in `validation.hints`; generate path only; never fails `--strict`.
+  Models that already lacked the flow gain the hint; the output files are unchanged.
 
 ### Fixed
 
