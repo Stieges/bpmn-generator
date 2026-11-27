@@ -284,10 +284,10 @@ describe('round trip through both importers', () => {
 
 describe('format 2.0', () => {
   const CATALOG = { scheme: 'demi', actors: [{ id: 'sb', name: 'Sachbearbeitung', kind: 'role' }] };
-  const MODEL = { $schemaVersion: '2.0', catalog: '../c.json', id: 'P', name: 'Schaden regulieren', language: 'de',
+  const MODEL = { $schemaVersion: '2.0', catalog: '../c.json', id: 'P', name: 'Bestellung abwickeln', language: 'de',
     nodes: [
       { id: 's', type: 'startEvent', name: 'Frist abgelaufen', marker: 'none' },
-      { id: 't', type: 'userTask', name: 'Schaden prüfen', assignments: [{ type: 'D', actor: 'sb' }] },
+      { id: 't', type: 'userTask', name: 'Auftrag prüfen', assignments: [{ type: 'D', actor: 'sb' }] },
       { id: 'e', type: 'endEvent', name: 'Fehler aufgetreten', marker: 'none' }],
     edges: [{ source: 's', target: 't' }, { source: 't', target: 'e' }] };
   test('a 2.0 model with "none" writes plain events with bg:marker and no naming hint', async () => {

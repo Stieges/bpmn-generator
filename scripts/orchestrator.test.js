@@ -837,31 +837,31 @@ describe('orchestrate — a bad view does not change the 1.x gate errors (as at 
 describe('orchestrate — a format 2.0 model', () => {
   const v2Dir = resolve(__dirname, '../tests/fixtures-v2');
   const readV2 = (name) => JSON.parse(readFileSync(resolve(v2Dir, name), 'utf8'));
-  const schaden = () => readV2('schaden.json');
-  const catalog = () => readV2('schaden-catalog.json');
-  // The C01 model: the performer of "Schaden prüfen" is not in the catalogue.
+  const bestellung = () => readV2('bestellung.json');
+  const catalog = () => readV2('bestellung-catalog.json');
+  // The C01 model: the performer of "Auftrag prüfen" is not in the catalogue.
   const withUnknownActor = () => {
-    const m = schaden();
+    const m = bestellung();
     m.nodes.find((n) => n.id === 'pruefen').assignments = [{ type: 'D', actor: 'niemand' }];
     return m;
   };
   const C01 = '[C01] node "pruefen": actor "niemand" is not in the catalogue';
 
-  test('schaden with its catalogue and view rollen: the rollen golden, compliant, the 2.0 model returned', async () => {
+  test('bestellung with its catalogue and view rollen: the rollen golden, compliant, the 2.0 model returned', async () => {
     const { loadNamedView } = await import('./shared/view.js');
-    const input = schaden();
+    const input = bestellung();
     const result = await orchestrate(input, { catalog: catalog(), view: loadNamedView('rollen') });
-    expect(result.bpmnXml).toBe(readFileSync(resolve(v2Dir, 'schaden.rollen.expected.bpmn'), 'utf8'));
+    expect(result.bpmnXml).toBe(readFileSync(resolve(v2Dir, 'bestellung.rollen.expected.bpmn'), 'utf8'));
     expect(result.compliance.isCompliant).toBe(true);
     expect(result.compliance.findings).toEqual(expect.any(Array));
-    expect(result.logicCore).toEqual(schaden());
+    expect(result.logicCore).toEqual(bestellung());
     expect(result.logicCore).toBe(input);
   });
 
   test('without a view: the role lanes', async () => {
-    const result = await orchestrate(schaden(), { catalog: catalog() });
-    for (const actor of ['sb_schaden', 'regress', 'zahlung']) {
-      expect(result.bpmnXml).toContain(`<bpmn:lane id="L.Process_Schaden.${actor}"`);
+    const result = await orchestrate(bestellung(), { catalog: catalog() });
+    for (const actor of ['sb_einkauf', 'leitung', 'zahlung']) {
+      expect(result.bpmnXml).toContain(`<bpmn:lane id="L.Process_Bestellung.${actor}"`);
     }
     expect(result.compliance.isCompliant).toBe(true);
   });
@@ -894,23 +894,23 @@ describe('orchestrate — a format 2.0 model', () => {
       prompts.push(system);
       return JSON.stringify({ feedback: [{ issue: 'Too long', suggestion: 'Split it', requiresLogicCoreChange: true }] });
     });
-    const result = await orchestrate(schaden(), { catalog: catalog(), llmProvider, enableLayoutReview: true });
+    const result = await orchestrate(bestellung(), { catalog: catalog(), llmProvider, enableLayoutReview: true });
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toMatch(/^You are a BPMN diagram layout reviewer/);
     expect(result.history.filter((h) => h.agent === 'modeler')).toEqual([
       { agent: 'modeler', phase: 'amend', iteration: 0, skipped: 'format 2.0', ts: expect.any(String) },
     ]);
-    expect(result.logicCore).toEqual(schaden());
+    expect(result.logicCore).toEqual(bestellung());
     expect(result.compliance.isCompliant).toBe(true);
   });
 
   test('a schema-invalid 2.0 model: the F01 gate errors', async () => {
-    const err = await orchestrate({ ...schaden(), nodes: 'nope' }, { catalog: catalog() }).catch((e) => e);
+    const err = await orchestrate({ ...bestellung(), nodes: 'nope' }, { catalog: catalog() }).catch((e) => e);
     expect(err.message).toMatch(/^Logic-Core failed schema validation:\n\[F01\] /);
   });
 
   test('the catalog option as runPipeline takes it: an object, for 2.0 models only', async () => {
-    await expect(orchestrate(schaden(), { catalog: 'schaden-catalog.json' }))
+    await expect(orchestrate(bestellung(), { catalog: 'bestellung-catalog.json' }))
       .rejects.toThrow(new TypeError('catalog must be a catalogue object; read a file with loadCatalog'));
     await expect(orchestrate(loadFixture('simple-approval.json'), { catalog: catalog() }))
       .rejects.toThrow(new TypeError('catalog applies to format 2.0 models only'));
@@ -923,8 +923,8 @@ describe('orchestrate — mode optimize or soll on a format 2.0 model', () => {
     const reviewer = jest.fn(async () => ({ isValid: true, reviewIssues: [], done: true }));
     jest.unstable_mockModule('./agents/reviewer.js', () => ({ reviewerAgent: reviewer }));
     const { orchestrate: orchestrateMocked } = await import('./orchestrator.js');
-    const model = JSON.parse(readFileSync(resolve(__dirname, '../tests/fixtures-v2/schaden.json'), 'utf8'));
-    const catalog = JSON.parse(readFileSync(resolve(__dirname, '../tests/fixtures-v2/schaden-catalog.json'), 'utf8'));
+    const model = JSON.parse(readFileSync(resolve(__dirname, '../tests/fixtures-v2/bestellung.json'), 'utf8'));
+    const catalog = JSON.parse(readFileSync(resolve(__dirname, '../tests/fixtures-v2/bestellung-catalog.json'), 'utf8'));
     const err = await orchestrateMocked(model, { catalog, mode }).catch((e) => e);
     expect(err).toBeInstanceOf(Error);
     expect(err.message).toBe(`[F04] mode "${mode}" is not available for format 2.0 models yet`);
@@ -934,7 +934,7 @@ describe('orchestrate — mode optimize or soll on a format 2.0 model', () => {
 });
 
 describe('orchestrator CLI — the catalogue of a format 2.0 model', () => {
-  const V2 = resolve(__dirname, '../tests/fixtures-v2/schaden.json');
+  const V2 = resolve(__dirname, '../tests/fixtures-v2/bestellung.json');
   const V1 = resolve(fixturesDir, 'simple-approval.json');
   const run = async (args) => {
     const { mkdtempSync, rmSync, existsSync } = await import('node:fs');
@@ -957,7 +957,7 @@ describe('orchestrator CLI — the catalogue of a format 2.0 model', () => {
     writeFileSync(file, content);
     return file;
   };
-  const ROLE_LANES = ['sb_schaden', 'regress', 'zahlung'].map((id) => `id="L.Process_Schaden.${id}"`);
+  const ROLE_LANES = ['sb_einkauf', 'leitung', 'zahlung'].map((id) => `id="L.Process_Bestellung.${id}"`);
 
   test('the model\'s "catalog" field is read relative to the model file: COMPLIANT, role lanes', async () => {
     const res = await run(['--input', V2]);
@@ -970,13 +970,13 @@ describe('orchestrator CLI — the catalogue of a format 2.0 model', () => {
 
   test.each([['--catalog=<path>'], ['--catalog <path>']])('%s wins over the model\'s own field', async (form) => {
     const other = await tempFile('other.json', JSON.stringify({ scheme: 'demi', actors: [
-      { id: 'sb_schaden', name: 'Andere Rolle', kind: 'role' }, { id: 'regress', name: 'Regress', kind: 'role' }, { id: 'zahlung', name: 'Zahlung', kind: 'role' }] }));
+      { id: 'sb_einkauf', name: 'Andere Rolle', kind: 'role' }, { id: 'leitung', name: 'Leitung', kind: 'role' }, { id: 'zahlung', name: 'Zahlung', kind: 'role' }] }));
     const flag = form === '--catalog=<path>' ? [`--catalog=${other}`] : ['--catalog', other];
     const res = await run(['--input', V2, ...flag]);
     expect(res.status).toBe(0);
     expect(res.stdout).toContain('— COMPLIANT');
     expect(res.xml).toContain('Andere Rolle');
-    expect(res.xml).not.toContain('Sachbearbeitung Schaden');
+    expect(res.xml).not.toContain('Sachbearbeitung Einkauf');
   }, 60_000);
 
   test('a catalogue that is not valid JSON: one [C11] line, exit 1, no stack trace', async () => {

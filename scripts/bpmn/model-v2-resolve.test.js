@@ -6,29 +6,29 @@ import { catalogFingerprint, resolveScheme } from '../shared/catalog.js';
 const CATALOG = {
   scheme: 'demi',
   actors: [
-    { id: 'abt_schaden', name: 'Schadenabteilung', kind: 'unit' },
-    { id: 'abt_finanzen', name: 'Finanzen', kind: 'unit' },
-    { id: 'sb_schaden', name: 'Sachbearbeitung Schaden', kind: 'role', unit: 'abt_schaden' },
-    { id: 'regress', name: 'Regressspezialist', kind: 'role', unit: 'abt_schaden' },
-    { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_finanzen' },
+    { id: 'abt_einkauf', name: 'Einkauf', kind: 'unit' },
+    { id: 'abt_buchhaltung', name: 'Buchhaltung', kind: 'unit' },
+    { id: 'sb_einkauf', name: 'Sachbearbeitung Einkauf', kind: 'role', unit: 'abt_einkauf' },
+    { id: 'leitung', name: 'Abteilungsleitung', kind: 'role', unit: 'abt_einkauf' },
+    { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_buchhaltung' },
   ],
 };
-const PINNED = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
+const PINNED = 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273';
 
 const MODEL = {
-  $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Schaden', name: 'Schaden regulieren',
+  $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Bestellung', name: 'Bestellung abwickeln',
   nodes: [
-    { id: 'start', type: 'startEvent', name: 'Schaden gemeldet' },
-    { id: 'gw', type: 'exclusiveGateway', name: 'Regress möglich?' },
-    { id: 'pruefen', type: 'userTask', name: 'Schaden prüfen', assignments: [{ type: 'D', actor: 'sb_schaden' }] },
-    { id: 'regr', type: 'userTask', name: 'Regress prüfen', assignments: [{ type: 'D', actor: 'regress' }, { type: 'I', actor: 'sb_schaden' }] },
+    { id: 'start', type: 'startEvent', name: 'Bestellung eingegangen' },
+    { id: 'gw', type: 'exclusiveGateway', name: 'Rückfrage nötig?' },
+    { id: 'pruefen', type: 'userTask', name: 'Auftrag prüfen', assignments: [{ type: 'D', actor: 'sb_einkauf' }] },
+    { id: 'rueck', type: 'userTask', name: 'Lieferant klären', assignments: [{ type: 'D', actor: 'leitung' }, { type: 'I', actor: 'sb_einkauf' }] },
     { id: 'zahlen', type: 'userTask', name: 'Zahlung anweisen', assignments: [{ type: 'D', actor: 'zahlung' }] },
-    { id: 'end', type: 'endEvent', name: 'Schaden reguliert' },
+    { id: 'end', type: 'endEvent', name: 'Auftrag erledigt' },
   ],
   edges: [
     { source: 'start', target: 'pruefen' }, { source: 'pruefen', target: 'gw' },
-    { source: 'gw', target: 'regr', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
-    { source: 'regr', target: 'zahlen' }, { source: 'zahlen', target: 'end' },
+    { source: 'gw', target: 'rueck', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
+    { source: 'rueck', target: 'zahlen' }, { source: 'zahlen', target: 'end' },
   ],
 };
 
@@ -47,11 +47,11 @@ describe('resolveFields', () => {
     expect(resolved.performsType).toBe('D');
     expect(resolved.fingerprint).toBe(PINNED);
     expect(resolved.order.get('zahlung')).toBe(4);
-    expect(resolved.byId.get('regress').name).toBe('Regressspezialist');
+    expect(resolved.byId.get('leitung').name).toBe('Abteilungsleitung');
     expect(lc._modelInfo).toEqual({ version: '2.0', view: 'default', catalogFingerprint: PINNED });
-    const regr = lc.nodes.find((n) => n.id === 'regr');
-    expect(regr._assignments).toEqual([{ type: 'D', actor: 'regress' }, { type: 'I', actor: 'sb_schaden' }]);
-    expect(regr).not.toHaveProperty('assignments');
+    const rueck = lc.nodes.find((n) => n.id === 'rueck');
+    expect(rueck._assignments).toEqual([{ type: 'D', actor: 'leitung' }, { type: 'I', actor: 'sb_einkauf' }]);
+    expect(rueck).not.toHaveProperty('assignments');
     for (const key of ['actors', 'scheme', 'catalog', '$schemaVersion']) expect(lc).not.toHaveProperty(key);
     expect([JSON.stringify(model), JSON.stringify(catalog)]).toEqual(snapshots);
   });
@@ -143,8 +143,8 @@ describe('resolveFields', () => {
   });
 
   test('C03 duplicate id', () => {
-    const catalog = { actors: [...CATALOG.actors, { id: 'regress', name: 'Zweiter' }] };
-    expect(run(copy(MODEL), catalog).errors).toEqual(['[C03] actor id "regress" occurs 2 times in the catalogue']);
+    const catalog = { actors: [...CATALOG.actors, { id: 'leitung', name: 'Zweiter' }] };
+    expect(run(copy(MODEL), catalog).errors).toEqual(['[C03] actor id "leitung" occurs 2 times in the catalogue']);
   });
 
   test('C01 unknown actor, also inside a subprocess and a pool', () => {
@@ -218,14 +218,14 @@ describe('resolveFields', () => {
   });
 
   test('C04 unknown type and several performers', () => {
-    expect(run(withNodes([task('t', [{ type: 'X', actor: 'regress' }])])).errors).toEqual(['[C04] node "t": type "X" is not in scheme "demi"']);
-    expect(run(withNodes([task('t', [{ type: 'D', actor: 'regress' }, { type: 'D', actor: 'zahlung' }])])).errors).toEqual(['[C04] node "t" has 2 performers; at most one']);
+    expect(run(withNodes([task('t', [{ type: 'X', actor: 'leitung' }])])).errors).toEqual(['[C04] node "t": type "X" is not in scheme "demi"']);
+    expect(run(withNodes([task('t', [{ type: 'D', actor: 'leitung' }, { type: 'D', actor: 'zahlung' }])])).errors).toEqual(['[C04] node "t" has 2 performers; at most one']);
   });
 
   test('C05 non-performer type on an event or a gateway', () => {
     const nodes = [
-      { id: 'e', type: 'startEvent', name: 'e', assignments: [{ type: 'I', actor: 'regress' }] },
-      { id: 'g', type: 'exclusiveGateway', name: 'g?', assignments: [{ type: 'E', actor: 'regress' }] },
+      { id: 'e', type: 'startEvent', name: 'e', assignments: [{ type: 'I', actor: 'leitung' }] },
+      { id: 'g', type: 'exclusiveGateway', name: 'g?', assignments: [{ type: 'E', actor: 'leitung' }] },
     ];
     expect(run(withNodes(nodes)).errors).toEqual([
       '[C05] event "e": only the performer type "D" is allowed, not "I"',
@@ -235,8 +235,8 @@ describe('resolveFields', () => {
 
   test('C04 and C05 are found inside a subprocess', () => {
     const sub = { id: 'sp', type: 'subProcess', name: 'sp', isExpanded: true, edges: [], nodes: [
-      task('inner', [{ type: 'X', actor: 'regress' }]),
-      { id: 'ie', type: 'startEvent', name: 'ie', assignments: [{ type: 'I', actor: 'regress' }] },
+      task('inner', [{ type: 'X', actor: 'leitung' }]),
+      { id: 'ie', type: 'startEvent', name: 'ie', assignments: [{ type: 'I', actor: 'leitung' }] },
     ] };
     expect(run(withNodes([sub])).errors).toEqual([
       '[C04] node "inner": type "X" is not in scheme "demi"',
@@ -246,8 +246,8 @@ describe('resolveFields', () => {
 
   test('C04 and C05 stay silent when C06 fails', () => {
     const nodes = [
-      task('t', [{ type: 'X', actor: 'regress' }, { type: 'X', actor: 'zahlung' }]),
-      { id: 'e', type: 'startEvent', name: 'e', assignments: [{ type: 'I', actor: 'regress' }] },
+      task('t', [{ type: 'X', actor: 'leitung' }, { type: 'X', actor: 'zahlung' }]),
+      { id: 'e', type: 'startEvent', name: 'e', assignments: [{ type: 'I', actor: 'leitung' }] },
     ];
     const scheme = { scheme: 'own', types: [{ key: 'A', label: 'a' }] };
     const errors = run(withNodes(nodes), { ...CATALOG, scheme }).errors;
@@ -255,10 +255,10 @@ describe('resolveFields', () => {
   });
 
   test('assignments inside a subprocess are carried at every depth', () => {
-    const sub = { id: 'sp', type: 'subProcess', name: 'sp', isExpanded: true, nodes: [task('inner', [{ type: 'D', actor: 'regress' }])], edges: [] };
+    const sub = { id: 'sp', type: 'subProcess', name: 'sp', isExpanded: true, nodes: [task('inner', [{ type: 'D', actor: 'leitung' }])], edges: [] };
     const { lc, errors } = run(withNodes([sub]));
     expect(errors).toEqual([]);
-    expect(lc.nodes[0].nodes[0]._assignments).toEqual([{ type: 'D', actor: 'regress' }]);
+    expect(lc.nodes[0].nodes[0]._assignments).toEqual([{ type: 'D', actor: 'leitung' }]);
     expect(lc.nodes[0].nodes[0]).not.toHaveProperty('assignments');
   });
 });
@@ -314,36 +314,36 @@ describe('organigram: partOf, parentOf, isUnit, unitChain', () => {
 });
 
 describe('resolveFields — the process file replaces and adds catalogue entries', () => {
-  const REGRESS = { id: 'regress', name: 'Regress (lokal)', kind: 'role', unit: 'abt_finanzen' };
+  const LEITUNG = { id: 'leitung', name: 'Leitung (lokal)', kind: 'role', unit: 'abt_buchhaltung' };
   const deepFreeze = (v) => { if (v && typeof v === 'object') { Object.values(v).forEach(deepFreeze); Object.freeze(v); } return v; };
   const withActors = (actors) => ({ ...copy(MODEL), actors });
   const resolveWith = (actors) => resolveFields(deepFreeze(withActors(actors)), { catalog: deepFreeze(copy(CATALOG)), viewName: 'einheiten' });
 
   test('an actor of the catalogue is replaced in place; one H09; fingerprint over the effective list', () => {
-    const { resolved, errors, hints } = resolveWith([REGRESS]);
+    const { resolved, errors, hints } = resolveWith([LEITUNG]);
     expect(errors).toEqual([]);
-    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_schaden', 'abt_finanzen', 'sb_schaden', 'regress', 'zahlung']);
-    expect(resolved.byId.get('regress')).toEqual(REGRESS);
-    expect(resolved.order.get('regress')).toBe(3);
+    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_einkauf', 'abt_buchhaltung', 'sb_einkauf', 'leitung', 'zahlung']);
+    expect(resolved.byId.get('leitung')).toEqual(LEITUNG);
+    expect(resolved.order.get('leitung')).toBe(3);
     expect(resolved.parentOf.size).toBe(0);
-    expect(hints).toEqual([{ code: 'H09', message: 'Catalogue entry "regress" is replaced by the process file.', elements: ['regress'] }]);
+    expect(hints).toEqual([{ code: 'H09', message: 'Catalogue entry "leitung" is replaced by the process file.', elements: ['leitung'] }]);
     expect(resolved.fingerprint).not.toBe(PINNED);
     expect(resolved.fingerprint).toBe(catalogFingerprint(resolved.actors, resolveScheme('demi')));
   });
 
   test('a new id is appended, no hint', () => {
-    const extra = { id: 'neu', name: 'Neu', kind: 'role', unit: 'abt_finanzen' };
+    const extra = { id: 'neu', name: 'Neu', kind: 'role', unit: 'abt_buchhaltung' };
     const { resolved, errors, hints } = resolveWith([extra]);
     expect(errors).toEqual([]);
     expect(hints).toEqual([]);
-    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_schaden', 'abt_finanzen', 'sb_schaden', 'regress', 'zahlung', 'neu']);
+    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_einkauf', 'abt_buchhaltung', 'sb_einkauf', 'leitung', 'zahlung', 'neu']);
     expect(resolved.order.get('neu')).toBe(5);
   });
 
   test('hints come in model order', () => {
-    const { hints, resolved } = resolveWith([{ id: 'zahlung', name: 'Z2', kind: 'role' }, { id: 'neu', name: 'N' }, REGRESS]);
-    expect(hints.map((h) => h.elements[0])).toEqual(['zahlung', 'regress']);
-    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_schaden', 'abt_finanzen', 'sb_schaden', 'regress', 'zahlung', 'neu']);
+    const { hints, resolved } = resolveWith([{ id: 'zahlung', name: 'Z2', kind: 'role' }, { id: 'neu', name: 'N' }, LEITUNG]);
+    expect(hints.map((h) => h.elements[0])).toEqual(['zahlung', 'leitung']);
+    expect(resolved.actors.map((a) => a.id)).toEqual(['abt_einkauf', 'abt_buchhaltung', 'sb_einkauf', 'leitung', 'zahlung', 'neu']);
   });
 
   test('a plain catalogue keeps its fingerprint and has no hints', () => {
@@ -353,34 +353,34 @@ describe('resolveFields — the process file replaces and adds catalogue entries
   });
 
   test('C02 is judged on the effective catalogue: the model turns a unit into a role: C02 for the actor that names it', () => {
-    const { errors, resolved } = resolveWith([{ id: 'abt_schaden', name: 'Schaden', kind: 'role' }]);
+    const { errors, resolved } = resolveWith([{ id: 'abt_einkauf', name: 'Einkauf', kind: 'role' }]);
     expect(resolved).toBeNull();
-    expect(errors).toEqual(expect.arrayContaining(['[C02] actor "sb_schaden": unit "abt_schaden" is a role, not a unit']));
+    expect(errors).toEqual(expect.arrayContaining(['[C02] actor "sb_einkauf": unit "abt_einkauf" is a role, not a unit']));
   });
 
   test('C01 on the effective list: a replaced actor names an unknown unit', () => {
-    expect(resolveWith([{ ...REGRESS, unit: 'nirgends' }]).errors).toEqual(['[C01] actor "regress": unit "nirgends" is not in the catalogue']);
+    expect(resolveWith([{ ...LEITUNG, unit: 'nirgends' }]).errors).toEqual(['[C01] actor "leitung": unit "nirgends" is not in the catalogue']);
   });
 
   test('C03 counts duplicates inside the model\'s own actors only', () => {
-    expect(resolveWith([REGRESS, REGRESS]).errors).toEqual(expect.arrayContaining([expect.stringMatching(/^\[C03\] actor id "regress" occurs 2 times/)]));
-    expect(resolveWith([REGRESS]).errors).toEqual([]);
+    expect(resolveWith([LEITUNG, LEITUNG]).errors).toEqual(expect.arrayContaining([expect.stringMatching(/^\[C03\] actor id "leitung" occurs 2 times/)]));
+    expect(resolveWith([LEITUNG]).errors).toEqual([]);
   });
 
   test('C07 on the effective list: the model closes a partOf cycle', () => {
-    const { errors } = resolveWith([{ id: 'abt_schaden', name: 'S', kind: 'unit', partOf: 'abt_finanzen' }, { id: 'abt_finanzen', name: 'F', kind: 'unit', partOf: 'abt_schaden' }]);
+    const { errors } = resolveWith([{ id: 'abt_einkauf', name: 'S', kind: 'unit', partOf: 'abt_buchhaltung' }, { id: 'abt_buchhaltung', name: 'F', kind: 'unit', partOf: 'abt_einkauf' }]);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/^\[C07\] /);
   });
 
-  test('the unit view puts regr into Finanzen after the replacement', () => {
-    const { resolved } = resolveWith([REGRESS]);
-    expect(resolved.byId.get('regress').unit).toBe('abt_finanzen');
-    expect(resolved.isUnit('abt_finanzen')).toBe(true);
+  test('the unit view puts rueck into Buchhaltung after the replacement', () => {
+    const { resolved } = resolveWith([LEITUNG]);
+    expect(resolved.byId.get('leitung').unit).toBe('abt_buchhaltung');
+    expect(resolved.isUnit('abt_buchhaltung')).toBe(true);
   });
 
   test('the caller\'s objects are not changed (frozen input passes)', () => {
-    expect(() => resolveWith([REGRESS])).not.toThrow();
+    expect(() => resolveWith([LEITUNG])).not.toThrow();
   });
 });
 
@@ -393,7 +393,7 @@ describe('resolveFields and language', () => {
 });
 
 describe('resolveFields — systems (format 2.1)', () => {
-  const SYSTEMS = [{ id: 'sys_akte', name: 'Schadenakte' }];
+  const SYSTEMS = [{ id: 'sys_akte', name: 'Bestellakte' }];
   const CATALOG_S = { ...CATALOG, systems: SYSTEMS };
   const NO_CATALOG_C14 = '[C14] the model names systems but no catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file, the catalog option of runPipeline or the `catalog` object of an MCP or HTTP request';
   const NO_CATALOG_C01 = '[C01] the model has assignments but no actor catalogue was given; pass one with --catalog=<path>, the "catalog" field of the process file, the catalog option of runPipeline or the `catalog` object of an MCP or HTTP request';
@@ -413,7 +413,7 @@ describe('resolveFields — systems (format 2.1)', () => {
     expect(errors).toEqual([]);
     expect(hints).toEqual([]);
     const pruefen = lc.nodes.find((n) => n.id === 'pruefen');
-    expect(pruefen.system).toBe('Schadenakte');
+    expect(pruefen.system).toBe('Bestellakte');
     expect(pruefen._systemRef).toBe('sys_akte');
     expect(lc).not.toHaveProperty('systems');
     expect(lc._modelInfo.version).toBe('2.1');
@@ -422,7 +422,7 @@ describe('resolveFields — systems (format 2.1)', () => {
     expect(resolved.systemOrder.get('sys_akte')).toBe(0);
     expect(resolved.fingerprint).toBe(catalogFingerprint(resolved.actors, resolveScheme('demi'), SYSTEMS));
     expect(resolved.fingerprint).not.toBe(PINNED);
-    expect(lc.nodes.find((n) => n.id === 'regr')).not.toHaveProperty('_systemRef');
+    expect(lc.nodes.find((n) => n.id === 'rueck')).not.toHaveProperty('_systemRef');
   });
 
   test('a "2.1" model without systems keeps the pinned fingerprint; an empty systems list too', () => {
@@ -438,8 +438,8 @@ describe('resolveFields — systems (format 2.1)', () => {
       .toEqual(['[C03] system id "sys_akte" occurs 2 times in the catalogue']);
     expect(run(model21({}, { systems: [...SYSTEMS, ...SYSTEMS] }), CATALOG).errors)
       .toEqual(['[C03] system id "sys_akte" occurs 2 times in the systems of the process file']);
-    expect(run(model21(), { ...CATALOG, systems: [{ id: 'regress', name: 'Regress-System' }] }).errors)
-      .toEqual(['[C03] id "regress" is both an actor and a system in the catalogue']);
+    expect(run(model21(), { ...CATALOG, systems: [{ id: 'leitung', name: 'Lieferportal' }] }).errors)
+      .toEqual(['[C03] id "leitung" is both an actor and a system in the catalogue']);
     // the shared id space spans the effective lists: a model system meets a catalogue actor
     expect(run(model21({}, { systems: [{ id: 'zahlung', name: 'Zahlungssystem' }] }), CATALOG).errors)
       .toEqual(['[C03] id "zahlung" is both an actor and a system in the catalogue']);
@@ -458,8 +458,8 @@ describe('resolveFields — systems (format 2.1)', () => {
   test('C14: an unknown system, an actor named as system', () => {
     expect(run(model21({ pruefen: { system: 'sys_crm' } }), CATALOG_S).errors)
       .toEqual(['[C14] node "pruefen": system "sys_crm" is not in the catalogue']);
-    expect(run(model21({ pruefen: { system: 'regress' } }), CATALOG_S).errors)
-      .toEqual(['[C14] node "pruefen": "regress" is an actor, not a system']);
+    expect(run(model21({ pruefen: { system: 'leitung' } }), CATALOG_S).errors)
+      .toEqual(['[C14] node "pruefen": "leitung" is an actor, not a system']);
   });
 
   test('C14 inside a subprocess and a pool', () => {
@@ -482,7 +482,7 @@ describe('resolveFields — systems (format 2.1)', () => {
 
   test('the process file replaces a catalogue system in place: H09 after the actors\' H09; a new id is appended', () => {
     const own = [{ id: 'neu', name: 'Neues System' }, { id: 'sys_akte', name: 'Akte (lokal)' }];
-    const actors = [{ id: 'regress', name: 'Regress (lokal)', kind: 'role', unit: 'abt_finanzen' }];
+    const actors = [{ id: 'leitung', name: 'Leitung (lokal)', kind: 'role', unit: 'abt_buchhaltung' }];
     const catalog = deepFreeze({ ...copy(CATALOG), systems: [...SYSTEMS, { id: 'sys_zwei', name: 'Zwei' }] });
     const model = deepFreeze(model21({ pruefen: { system: 'sys_akte' } }, { systems: own, actors }));
     const { lc, resolved, errors, hints } = resolveFields(model, { catalog });
@@ -491,7 +491,7 @@ describe('resolveFields — systems (format 2.1)', () => {
     expect(resolved.systemOrder.get('neu')).toBe(2);
     expect(lc.nodes.find((n) => n.id === 'pruefen').system).toBe('Akte (lokal)');
     expect(hints).toEqual([
-      { code: 'H09', message: 'Catalogue entry "regress" is replaced by the process file.', elements: ['regress'] },
+      { code: 'H09', message: 'Catalogue entry "leitung" is replaced by the process file.', elements: ['leitung'] },
       { code: 'H09', message: 'Catalogue entry "sys_akte" is replaced by the process file.', elements: ['sys_akte'] },
     ]);
   });
@@ -502,7 +502,7 @@ describe('resolveFields — systems (format 2.1)', () => {
     const { lc, resolved, errors } = resolveFields(model);
     expect(errors).toEqual([]);
     expect(resolved.actors).toEqual([]);
-    expect(lc.nodes.find((n) => n.id === 'pruefen')).toMatchObject({ system: 'Schadenakte', _systemRef: 'sys_akte' });
+    expect(lc.nodes.find((n) => n.id === 'pruefen')).toMatchObject({ system: 'Bestellakte', _systemRef: 'sys_akte' });
     expect(resolved.fingerprint).toBe(catalogFingerprint([], resolveScheme(), SYSTEMS));
   });
 

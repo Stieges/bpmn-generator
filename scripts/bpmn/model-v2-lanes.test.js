@@ -182,27 +182,27 @@ describe('formLanes — the cases of design 7.2', () => {
 const CATALOG_56 = {
   scheme: 'demi',
   actors: [
-    { id: 'abt_schaden', name: 'Schadenabteilung', kind: 'unit' },
-    { id: 'abt_finanzen', name: 'Finanzen', kind: 'unit' },
-    { id: 'sb_schaden', name: 'Sachbearbeitung Schaden', kind: 'role', unit: 'abt_schaden' },
-    { id: 'regress', name: 'Regressspezialist', kind: 'role', unit: 'abt_schaden' },
-    { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_finanzen' },
+    { id: 'abt_einkauf', name: 'Einkauf', kind: 'unit' },
+    { id: 'abt_buchhaltung', name: 'Buchhaltung', kind: 'unit' },
+    { id: 'sb_einkauf', name: 'Sachbearbeitung Einkauf', kind: 'role', unit: 'abt_einkauf' },
+    { id: 'leitung', name: 'Abteilungsleitung', kind: 'role', unit: 'abt_einkauf' },
+    { id: 'zahlung', name: 'Zahlungsverkehr', kind: 'role', unit: 'abt_buchhaltung' },
   ],
 };
 const MODEL_56 = {
-  $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Schaden', name: 'Schaden regulieren',
+  $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Bestellung', name: 'Bestellung abwickeln',
   nodes: [
-    { id: 'start', type: 'startEvent', name: 'Schaden gemeldet' },
-    { id: 'gw', type: 'exclusiveGateway', name: 'Regress möglich?' },
-    { id: 'pruefen', type: 'userTask', name: 'Schaden prüfen', assignments: [{ type: 'D', actor: 'sb_schaden' }] },
-    { id: 'regr', type: 'userTask', name: 'Regress prüfen', assignments: [{ type: 'D', actor: 'regress' }, { type: 'I', actor: 'sb_schaden' }] },
+    { id: 'start', type: 'startEvent', name: 'Bestellung eingegangen' },
+    { id: 'gw', type: 'exclusiveGateway', name: 'Rückfrage nötig?' },
+    { id: 'pruefen', type: 'userTask', name: 'Auftrag prüfen', assignments: [{ type: 'D', actor: 'sb_einkauf' }] },
+    { id: 'rueck', type: 'userTask', name: 'Lieferant klären', assignments: [{ type: 'D', actor: 'leitung' }, { type: 'I', actor: 'sb_einkauf' }] },
     { id: 'zahlen', type: 'userTask', name: 'Zahlung anweisen', assignments: [{ type: 'D', actor: 'zahlung' }] },
-    { id: 'end', type: 'endEvent', name: 'Schaden reguliert' },
+    { id: 'end', type: 'endEvent', name: 'Auftrag erledigt' },
   ],
   edges: [
     { source: 'start', target: 'pruefen' }, { source: 'pruefen', target: 'gw' },
-    { source: 'gw', target: 'regr', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
-    { source: 'regr', target: 'zahlen' }, { source: 'zahlen', target: 'end' },
+    { source: 'gw', target: 'rueck', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
+    { source: 'rueck', target: 'zahlen' }, { source: 'zahlen', target: 'end' },
   ],
 };
 const lane = (processId, key, name, by) => ({ id: `L.${processId}.${key}`, name, _derived: 'lane', _laneBy: by, _laneActor: key });
@@ -213,12 +213,12 @@ describe('formLanes — the example of design 5.6', () => {
     expect(out.errors).toEqual([]);
     expect(out.hints).toEqual([]);
     expect(out.lc.lanes).toEqual([
-      lane('Process_Schaden', 'sb_schaden', 'Sachbearbeitung Schaden', 'role'),
-      lane('Process_Schaden', 'regress', 'Regressspezialist', 'role'),
-      lane('Process_Schaden', 'zahlung', 'Zahlungsverkehr', 'role'),
+      lane('Process_Bestellung', 'sb_einkauf', 'Sachbearbeitung Einkauf', 'role'),
+      lane('Process_Bestellung', 'leitung', 'Abteilungsleitung', 'role'),
+      lane('Process_Bestellung', 'zahlung', 'Zahlungsverkehr', 'role'),
     ]);
-    expect(members(out.lc)).toEqual({ sb_schaden: ['start', 'gw', 'pruefen'], regress: ['regr'], zahlung: ['zahlen', 'end'] });
-    expect(out.lc.nodes.find((n) => n.id === 'pruefen').lane).toBe('L.Process_Schaden.sb_schaden');
+    expect(members(out.lc)).toEqual({ sb_einkauf: ['start', 'gw', 'pruefen'], leitung: ['rueck'], zahlung: ['zahlen', 'end'] });
+    expect(out.lc.nodes.find((n) => n.id === 'pruefen').lane).toBe('L.Process_Bestellung.sb_einkauf');
   });
 
   test('unit view', () => {
@@ -226,10 +226,10 @@ describe('formLanes — the example of design 5.6', () => {
     expect(out.errors).toEqual([]);
     expect(out.hints).toEqual([]);
     expect(out.lc.lanes).toEqual([
-      lane('Process_Schaden', 'abt_schaden', 'Schadenabteilung', 'unit'),
-      lane('Process_Schaden', 'abt_finanzen', 'Finanzen', 'unit'),
+      lane('Process_Bestellung', 'abt_einkauf', 'Einkauf', 'unit'),
+      lane('Process_Bestellung', 'abt_buchhaltung', 'Buchhaltung', 'unit'),
     ]);
-    expect(members(out.lc)).toEqual({ abt_schaden: ['start', 'gw', 'pruefen', 'regr'], abt_finanzen: ['zahlen', 'end'] });
+    expect(members(out.lc)).toEqual({ abt_einkauf: ['start', 'gw', 'pruefen', 'rueck'], abt_buchhaltung: ['zahlen', 'end'] });
   });
 });
 
@@ -255,12 +255,12 @@ describe('formLanes — pinned edge cases', () => {
   test('hint order of 5.6 with one unassigned and one automatic step', () => {
     const model = copy(MODEL_56);
     model.nodes.push({ id: 'u', type: 'userTask', name: 'Ohne Zuständigkeit' }, { id: 'x', type: 'serviceTask', name: 'Automatik' });
-    model.edges.push({ source: 'regr', target: 'u' }, { source: 'u', target: 'x' }, { source: 'x', target: 'zahlen' });
+    model.edges.push({ source: 'rueck', target: 'u' }, { source: 'u', target: 'x' }, { source: 'x', target: 'zahlen' });
     const out = form(model, { catalog: CATALOG_56 });
     expect(out.errors).toEqual([]);
     expect(out.hints).toEqual([
       { code: 'H02', message: 'No performer for "Ohne Zuständigkeit" (u): lane "(nicht zugeordnet)".', elements: ['u'] },
-      { code: 'H03', message: 'Automatic step "Automatik" (x) has no performer; it is placed with its neighbour in lane "(nicht zugeordnet)". Set lanes.automatic to "lane" for a lane of its own.', elements: ['x', 'L.Process_Schaden._unassigned'] },
+      { code: 'H03', message: 'Automatic step "Automatik" (x) has no performer; it is placed with its neighbour in lane "(nicht zugeordnet)". Set lanes.automatic to "lane" for a lane of its own.', elements: ['x', 'L.Process_Bestellung._unassigned'] },
     ]);
   });
 
@@ -385,10 +385,10 @@ describe('formLanes — further behaviour', () => {
 
   test('C10: an edge with the id of a lane', () => {
     const model = copy(MODEL_56);
-    model.edges[5].id = 'L.Process_Schaden.zahlung';
+    model.edges[5].id = 'L.Process_Bestellung.zahlung';
     const out = form(model, { catalog: CATALOG_56 });
     expect(out.errors).toEqual([
-      '[C10] lane id "L.Process_Schaden.zahlung" (actor "zahlung") collides with "L.Process_Schaden.zahlung"; rename the catalogue id',
+      '[C10] lane id "L.Process_Bestellung.zahlung" (actor "zahlung") collides with "L.Process_Bestellung.zahlung"; rename the catalogue id',
     ]);
   });
 
@@ -668,10 +668,10 @@ describe('formLanes — the system view', () => {
   });
 
   test('(s8) runPipeline with view systeme: a "2.0" model gets H06 per process and no lanes; a 1.x model the view error', async () => {
-    const r = await runPipeline(copy(MODEL_56), { catalog: { ...copy(CATALOG_56), systems: [{ id: 'sys_akte', name: 'Schadenakte' }] }, view: loadNamedView('systeme') });
+    const r = await runPipeline(copy(MODEL_56), { catalog: { ...copy(CATALOG_56), systems: [{ id: 'sys_akte', name: 'Bestellakte' }] }, view: loadNamedView('systeme') });
     expect(r.validation.errors).toEqual([]);
     expect(r.validation.hints.filter((h) => h.code !== 'H18')).toEqual([
-      { code: 'H06', message: 'No systems in process "Schaden regulieren": no lanes.', elements: ['Process_Schaden'] },
+      { code: 'H06', message: 'No systems in process "Bestellung abwickeln": no lanes.', elements: ['Process_Bestellung'] },
     ]);
     expect(r.bpmnXml).not.toMatch(/<bpmn:lane\b/);
     expect(r.bpmnXml).toContain('bg:view="systeme"');
@@ -901,7 +901,7 @@ describe('formLanes — the automatic lane (lanes.automatic "lane")', () => {
   test('(a14) the arguments are unchanged', () => {
     const model = copy(MODEL_56);
     model.nodes.push({ id: 'x', type: 'serviceTask', name: 'Automatik' });
-    model.edges.push({ source: 'regr', target: 'x' }, { source: 'x', target: 'zahlen' });
+    model.edges.push({ source: 'rueck', target: 'x' }, { source: 'x', target: 'zahlen' });
     for (const lanes of [LANE, UNIT_LANE, { by: 'unit', nested: true, automatic: 'lane', automaticName: '(maschinell)' }]) {
       const { lc, resolved } = resolve(model, CATALOG_56);
       const option = copy(lanes);

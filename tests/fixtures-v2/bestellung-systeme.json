@@ -1,0 +1,11 @@
+{ "$schemaVersion": "2.1", "catalog": "bestellung-systeme-catalog.json", "id": "Process_Bestellung", "name": "Bestellung abwickeln",
+  "nodes": [
+    { "id": "start", "type": "startEvent", "name": "Bestellung eingegangen" }, { "id": "gw", "type": "exclusiveGateway", "name": "Rückfrage nötig?" },
+    { "id": "pruefen", "type": "userTask", "name": "Auftrag prüfen", "assignments": [ { "type": "D", "actor": "sb_einkauf" } ], "system": "sys_ordersystem" },
+    { "id": "rueck", "type": "userTask", "name": "Lieferant klären",
+      "assignments": [ { "type": "D", "actor": "leitung" }, { "type": "I", "actor": "sb_einkauf" } ], "system": "sys_lieferportal" },
+    { "id": "zahlen", "type": "userTask", "name": "Zahlung anweisen", "assignments": [ { "type": "D", "actor": "zahlung" } ], "system": "sys_ordersystem" },
+    { "id": "end", "type": "endEvent", "name": "Auftrag erledigt" } ],
+  "edges": [ { "source": "start", "target": "pruefen" }, { "source": "pruefen", "target": "gw" },
+             { "source": "gw", "target": "rueck", "label": "ja" }, { "source": "gw", "target": "zahlen", "label": "nein" },
+             { "source": "rueck", "target": "zahlen" }, { "source": "zahlen", "target": "end" } ] }

@@ -1,6 +1,0 @@
-{ "scheme": "demi",
-  "actors": [ { "id": "abt_schaden", "name": "Schadenabteilung", "kind": "unit" }, { "id": "abt_finanzen", "name": "Finanzen", "kind": "unit" },
-              { "id": "sb_schaden", "name": "Sachbearbeitung Schaden", "kind": "role", "unit": "abt_schaden" },
-              { "id": "regress", "name": "Regressspezialist", "kind": "role", "unit": "abt_schaden" },
-              { "id": "zahlung", "name": "Zahlungsverkehr", "kind": "role", "unit": "abt_finanzen" } ],
-  "systems": [ { "id": "sys_schaden", "name": "Schadensystem" }, { "id": "sys_regress", "name": "Regressportal" } ] }

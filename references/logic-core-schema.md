@@ -62,8 +62,8 @@ The Logic-Core supports two modes:
       "lanes": [ ...LaneObject ]
     },
     {
-      "id": "Process_Insurer",
-      "name": "Insurance Company",
+      "id": "Process_Supplier",
+      "name": "Supplier",
       "nodes": [ ...NodeObject ],
       "edges": [ ...EdgeObject ],
       "lanes": [ ...LaneObject ]
@@ -137,7 +137,7 @@ directly on a model with `language` write the legacy markers.
 | `isAdHoc`         | No       | `true` for ad-hoc sub-processes (~ marker)               |
 | `isCompensation`  | No       | `true` for compensation tasks (◁◁ marker)                |
 | `color`           | No       | BPMN-in-Color: `{ "fill": "#ffe0b2", "stroke": "#e65100" }`. Hex colours only, `#rgb` or `#rrggbb`; named and `rgb()` values are refused by the schema gate — convert them to hex |
-| `role`            | No       | Who performs an Activity (task, subProcess, transaction, callActivity), e.g. `"Claims handler"`. Written as a `bpmn:humanPerformer` (userTask, manualTask) or `bpmn:performer` pointing at one shared `bpmn:resource` per role name. One role per activity; names compare exactly (`"SAP"` ≠ `"sap"`) |
+| `role`            | No       | Who performs an Activity (task, subProcess, transaction, callActivity), e.g. `"Case worker"`. Written as a `bpmn:humanPerformer` (userTask, manualTask) or `bpmn:performer` pointing at one shared `bpmn:resource` per role name. One role per activity; names compare exactly (`"SAP"` ≠ `"sap"`) |
 | `system`          | No       | Which IT system a task involves (any task type), e.g. `"SAP"`. Written into `extensionElements` under the generator's own namespace (`bg:system`) |
 
 `role` and `system` are data, not drawing: they change nothing in the SVG or the layout. To show
@@ -507,7 +507,7 @@ carries `bg:modelVersion` with the declared version. In messages, "format 2.0" m
 - The model has no `lanes`, `lane`, `role` or `children`. Lanes are formed from the
   model's assignments by a view (see the rule below), so the same model gives role lanes or unit
   lanes without an edit.
-- An activity, event or gateway may carry `assignments`: `[ { "type": "D", "actor": "sb_schaden" } ]`.
+- An activity, event or gateway may carry `assignments`: `[ { "type": "D", "actor": "sb_einkauf" } ]`.
   `type` is a key of the responsibility scheme, `actor` an id of the catalogue. At most one
   performer per node. Events and gateways carry only the performer type.
 - Actors come from a catalogue: `{ "actors": [ { "id", "name", "kind"?, "unit"?, "partOf"? } ] }`,
@@ -516,7 +516,7 @@ carries `bg:modelVersion` with the declared version. In messages, "format 2.0" m
   [`catalog-schema.json`](catalog-schema.json).
 - Systems (2.1) come from the same catalogue: `{ "systems": [ { "id", "name" } ] }`, beside `actors`
   (a catalogue of systems only writes `"actors": []`). A task names the system it uses by id:
-  `"system": "s_portal"`, one per task, on a `task`, `userTask`, `manualTask`, `serviceTask`,
+  `"system": "sys_ordersystem"`, one per task, on a `task`, `userTask`, `manualTask`, `serviceTask`,
   `scriptTask`, `businessRuleTask`, `sendTask` or `receiveTask`. Actors and systems share one id space
   (a clash is C03, an assignment naming a system is C01 with the text `is a system, not an actor`, a
   `unit` or `partOf` naming one `is a system, not a unit`); a `system` naming an unknown id, an actor
@@ -657,12 +657,12 @@ come from the lane formation; H01 is the view's join-gateway derivation.
 **Output of a 2.0 model (XML).** The assignments and the origin are kept in the XML so that the
 diagram can be read back:
 
-- `<bg:assignment type="D" actor="sb_schaden"/>` in the `extensionElements` of the node;
-- `<bg:system ref="s_portal">Claims portal</bg:system>` in the `extensionElements` of a task with a
+- `<bg:assignment type="D" actor="sb_einkauf"/>` in the `extensionElements` of the node;
+- `<bg:system ref="sys_ordersystem">Bestellsystem</bg:system>` in the `extensionElements` of a task with a
   `system`: the catalogue id in `ref`, the system's name as text (a 1.x model writes the same element
   without `ref`);
-- `<bg:derived by="role" actor="sb_schaden">lane</bg:derived>` in the `extensionElements` of a
-  formed lane (`by` is `role`, `unit` or `system`; the lane of a system carries `system="s_portal"`
+- `<bg:derived by="role" actor="sb_einkauf">lane</bg:derived>` in the `extensionElements` of a
+  formed lane (`by` is `role`, `unit` or `system`; the lane of a system carries `system="sys_ordersystem"`
   instead of `actor`);
 - on `bpmn:definitions`: `bg:modelVersion="2.0"` (`"2.1"` for a model declared as 2.1), `bg:view="<name>"`, `bg:catalog="sha256:<64 hex>"`
   and `exporter="bpmn-generator"`; there is no `exporterVersion`.
@@ -795,7 +795,7 @@ see the README section [Views](../README.md#views).
 ```json
 {
   "id": "Pool_Kunde",
-  "name": "Versicherungsnehmer (Kunde)"
+  "name": "Kunde (Besteller)"
 }
 ```
 
@@ -832,7 +832,7 @@ there are just more crossings, and the DI check reports them as DI05.
 {
   "id": "assoc_task_data",
   "source": "task_erfassen",
-  "target": "do_schadenakte",
+  "target": "do_bestellakte",
   "directed": true
 }
 ```
@@ -870,7 +870,7 @@ Any node or process can have a `documentation` string field:
   "id": "task_pruefen",
   "type": "userTask",
   "name": "Antrag prüfen",
-  "documentation": "Sachbearbeiter prüft den Antrag auf Vollständigkeit und Deckung"
+  "documentation": "Sachbearbeiter prüft den Antrag auf Vollständigkeit und Plausibilität"
 }
 ```
 
@@ -901,38 +901,38 @@ The following rules are enforced by the pipeline validator and reviewer:
 {
   "pools": [
     {
-      "id": "Process_Versicherer",
-      "name": "Schadenregulierung",
+      "id": "Process_Haendler",
+      "name": "Bestellabwicklung",
       "lanes": [
         { "id": "lane_sb", "name": "Sachbearbeiter" }
       ],
       "nodes": [
-        { "id": "start",       "type": "startEvent",       "name": "Schadensmeldung eingegangen", "lane": "lane_sb", "marker": "message" },
-        { "id": "task_pruef",  "type": "businessRuleTask",  "name": "Deckung prüfen", "lane": "lane_sb" },
-        { "id": "gw_gedeckt",  "type": "exclusiveGateway",  "name": "Schaden gedeckt?", "lane": "lane_sb" },
-        { "id": "task_zahlen", "type": "serviceTask",        "name": "Betrag auszahlen", "lane": "lane_sb" },
+        { "id": "start",       "type": "startEvent",       "name": "Bestellung eingegangen", "lane": "lane_sb", "marker": "message" },
+        { "id": "task_pruef",  "type": "businessRuleTask",  "name": "Lieferbarkeit prüfen", "lane": "lane_sb" },
+        { "id": "gw_lieferbar", "type": "exclusiveGateway",  "name": "Ware lieferbar?", "lane": "lane_sb" },
+        { "id": "task_liefern", "type": "serviceTask",        "name": "Lieferung auslösen", "lane": "lane_sb" },
         { "id": "task_ableh",  "type": "sendTask",           "name": "Ablehnung versenden", "lane": "lane_sb" },
-        { "id": "end_ok",      "type": "endEvent",           "name": "Reguliert", "lane": "lane_sb" },
+        { "id": "end_ok",      "type": "endEvent",           "name": "Ausgeliefert", "lane": "lane_sb" },
         { "id": "end_nein",    "type": "endEvent",           "name": "Abgelehnt", "lane": "lane_sb" }
       ],
       "edges": [
         { "id": "f1", "source": "start",      "target": "task_pruef",  "isHappyPath": true },
-        { "id": "f2", "source": "task_pruef",  "target": "gw_gedeckt", "isHappyPath": true },
-        { "id": "f3", "source": "gw_gedeckt",  "target": "task_zahlen", "label": "Ja", "isHappyPath": true },
-        { "id": "f4", "source": "gw_gedeckt",  "target": "task_ableh",  "label": "Nein", "isDefault": true },
-        { "id": "f5", "source": "task_zahlen", "target": "end_ok" },
+        { "id": "f2", "source": "task_pruef",  "target": "gw_lieferbar", "isHappyPath": true },
+        { "id": "f3", "source": "gw_lieferbar", "target": "task_liefern", "label": "Ja", "isHappyPath": true },
+        { "id": "f4", "source": "gw_lieferbar", "target": "task_ableh",  "label": "Nein", "isDefault": true },
+        { "id": "f5", "source": "task_liefern", "target": "end_ok" },
         { "id": "f6", "source": "task_ableh",  "target": "end_nein" }
       ]
     }
   ],
   "collapsedPools": [
-    { "id": "Pool_Kunde", "name": "Versicherungsnehmer" },
-    { "id": "Pool_Gutachter", "name": "Externer Gutachter" }
+    { "id": "Pool_Kunde", "name": "Kunde" },
+    { "id": "Pool_Lieferant", "name": "Externer Lieferant" }
   ],
   "messageFlows": [
-    { "id": "mf1", "source": "Pool_Kunde", "target": "start", "name": "Schadensmeldung" },
-    { "id": "mf2", "source": "task_ableh", "target": "Pool_Kunde", "name": "Ablehnungsbescheid" },
-    { "id": "mf3", "source": "task_zahlen", "target": "Pool_Kunde", "name": "Leistungsbescheid" }
+    { "id": "mf1", "source": "Pool_Kunde", "target": "start", "name": "Bestellung" },
+    { "id": "mf2", "source": "task_ableh", "target": "Pool_Kunde", "name": "Absage" },
+    { "id": "mf3", "source": "task_liefern", "target": "Pool_Kunde", "name": "Auftragsbestätigung" }
   ]
 }
 ```

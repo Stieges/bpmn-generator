@@ -690,7 +690,7 @@ Workflows that come up repeatedly in this codebase. Each lists the file(s) to op
    performer), `--view=organigramm` (per unit, nested along `partOf`), `--view=systeme` (per system of the
    task; format 2.1, `systems` in the catalogue and `system` on a task); without a lanes view a 2.0
    model gets role lanes. `--optimize`, `--dot` and `--drill-down` are refused for 2.0; `--doc` works.
-3. Verify: `cd scripts && node bpmn/pipeline.js ../tests/fixtures-v2/schaden.json /tmp/s --view=rollen --strict`
+3. Verify: `cd scripts && node bpmn/pipeline.js ../tests/fixtures-v2/bestellung.json /tmp/s --view=rollen --strict`
    exits 0 and `/tmp/s.bpmn` has three lanes; `npm test -- --testPathPatterns=model-v2` covers the rule.
    MCP and HTTP read 2.0 with the catalogue as an embedded `catalog` object (never a path), the
    orchestrator skips the Modeler's refine and amend for it; redesign and scenarios refuse 2.0

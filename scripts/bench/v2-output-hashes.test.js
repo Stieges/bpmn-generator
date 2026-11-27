@@ -1,6 +1,6 @@
 /**
- * The four golden diagrams (format 2.0: schaden × rollen, schaden × einheiten, organigramm ×
- * organigramm; format 2.1: schaden-systeme × systeme): each pair equals its golden files byte for byte and its entry in
+ * The four golden diagrams (format 2.0: bestellung × rollen, bestellung × einheiten, organigramm ×
+ * organigramm; format 2.1: bestellung-systeme × systeme): each pair equals its golden files byte for byte and its entry in
  * tests/bench/v2-output-hashes.json. See
  * v2-output-hashes.mjs; regenerate with `node bench/v2-output-hashes.mjs` only when the change is intended.
  */
@@ -14,16 +14,16 @@ import { loadCatalog } from '../shared/catalog.js';
 import { loadNamedView } from '../shared/view.js';
 import { V2_PAIRS, V2_SNAPSHOT_PATH, FIXTURES_V2_DIR, goldenBase, generateV2, computeV2Hashes } from './v2-output-hashes.mjs';
 
-/** The fingerprint of each pair's catalogue: schaden-catalog.json, organigramm-catalog.json. */
+/** The fingerprint of each pair's catalogue: bestellung-catalog.json, organigramm-catalog.json. */
 const CATALOG_HASH = {
-  'schaden.json': 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4',
-  'organigramm.json': 'sha256:0261e68c2a37cc3d7a5eef8a2ca8d10314ec949abcb0af30514e1fe04b126842',
-  'schaden-systeme.json': 'sha256:ca38a972cb2661579c6d2ded39f4625c3a3bab332d58c9ef9c7eb5f56be6fc43',
+  'bestellung.json': 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273',
+  'organigramm.json': 'sha256:19836e2ecd105136b1682f33b53a4ebd32a8a5039625fc09dde25578ae38c00b',
+  'bestellung-systeme.json': 'sha256:c5ac5f1c62842fdd693bb58878cffa81b217335d2c9f16500b8ce7d3fb3a5cdb',
 };
 
 describe('format 2.x golden diagrams', () => {
   test('exactly four pairs: the two flat views of design 9, the nested organigram view and the system view', () => {
-    expect(V2_PAIRS).toEqual([['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['schaden-systeme.json', 'systeme']]);
+    expect(V2_PAIRS).toEqual([['bestellung.json', 'rollen'], ['bestellung.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['bestellung-systeme.json', 'systeme']]);
   });
 
   // Each pair is generated once; generateV2 reads the fixture afresh on every call, so no run sees a model another run changed.
@@ -45,10 +45,10 @@ describe('format 2.x golden diagrams', () => {
     expect(r.validation.hints.filter((h) => h.code !== 'H18')).toEqual([]);
     expect(r.bpmnXml).toContain(`bg:view="${viewName}"`);
     expect(r.bpmnXml).toContain(`bg:catalog="${CATALOG_HASH[name]}"`);
-    expect(r.bpmnXml).toContain('<bg:assignment type="I" actor="sb_schaden" />');
+    expect(r.bpmnXml).toContain('<bg:assignment type="I" actor="sb_einkauf" />');
   });
 
-  const OLD_PAIRS = [['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm']];
+  const OLD_PAIRS = [['bestellung.json', 'rollen'], ['bestellung.json', 'einheiten'], ['organigramm.json', 'organigramm']];
   test.each(OLD_PAIRS)('%s × %s: no performer, resource or system in the golden', (name, viewName) => {
     const xml = golden(name, viewName, 'bpmn');
     expect(xml).not.toMatch(/<bpmn:(performer|humanPerformer|resource)\b/);
@@ -65,53 +65,53 @@ describe('format 2.x golden diagrams', () => {
     expect(await bpmnToLogicCore(golden(name, viewName, 'bpmn'))).toEqual(await bpmnToLogicCore(bpmnXml));
   }, 60000);
 
-  test('schaden-systeme × systeme: three system references, two system lanes, nothing else', () => {
-    const xml = golden('schaden-systeme.json', 'systeme', 'bpmn');
+  test('bestellung-systeme × systeme: three system references, two system lanes, nothing else', () => {
+    const xml = golden('bestellung-systeme.json', 'systeme', 'bpmn');
     expect(xml).not.toMatch(/<bpmn:(performer|humanPerformer|resource)\b/);
     expect(xml).toContain('bg:modelVersion="2.1"');
     expect(xml).toContain('bg:view="systeme"');
-    expect(xml.match(/<bg:system ref="sys_schaden">Schadensystem<\/bg:system>/g)).toHaveLength(2);
-    expect(xml.match(/<bg:system ref="sys_regress">Regressportal<\/bg:system>/g)).toHaveLength(1);
+    expect(xml.match(/<bg:system ref="sys_ordersystem">Bestellsystem<\/bg:system>/g)).toHaveLength(2);
+    expect(xml.match(/<bg:system ref="sys_lieferportal">Lieferportal<\/bg:system>/g)).toHaveLength(1);
     expect(xml.match(/<bg:system\b/g)).toHaveLength(3);
     expect(xml).not.toContain('_systemUnknown');
     expect(xml).not.toContain('nicht erhoben');
     const lane = (id) => xml.match(new RegExp(`<bpmn:lane id="${id.replace(/\./g, '\\.')}"[\\s\\S]*?</bpmn:lane>`))?.[0];
-    const sys = lane('L.Process_Schaden.sys_schaden');
-    expect(sys).toContain('name="Schadensystem"');
+    const sys = lane('L.Process_Bestellung.sys_ordersystem');
+    expect(sys).toContain('name="Bestellsystem"');
     for (const id of ['start', 'pruefen', 'gw', 'zahlen', 'end']) expect(sys).toContain(`<bpmn:flowNodeRef>${id}</bpmn:flowNodeRef>`);
-    const reg = lane('L.Process_Schaden.sys_regress');
-    expect(reg).toContain('name="Regressportal"');
+    const reg = lane('L.Process_Bestellung.sys_lieferportal');
+    expect(reg).toContain('name="Lieferportal"');
     expect(reg.match(/<bpmn:flowNodeRef>/g)).toHaveLength(1);
-    expect(reg).toContain('<bpmn:flowNodeRef>regr</bpmn:flowNodeRef>');
+    expect(reg).toContain('<bpmn:flowNodeRef>rueck</bpmn:flowNodeRef>');
     expect(xml.match(/<bpmn:lane\b/g)).toHaveLength(2);
   });
 
-  test('schaden-systeme × rollen draws the diagram of schaden × rollen; the XML differs only by the system lines, the version and the catalogue', async () => {
-    const r = await generateV2('schaden-systeme.json', 'rollen');
-    expect(r.svg).toBe(golden('schaden.json', 'rollen', 'svg'));
-    const base = golden('schaden.json', 'rollen', 'bpmn');
+  test('bestellung-systeme × rollen draws the diagram of bestellung × rollen; the XML differs only by the system lines, the version and the catalogue', async () => {
+    const r = await generateV2('bestellung-systeme.json', 'rollen');
+    expect(r.svg).toBe(golden('bestellung.json', 'rollen', 'svg'));
+    const base = golden('bestellung.json', 'rollen', 'bpmn');
     const stripped = r.bpmnXml.replace(/^[ \t]*<bg:system [^>]*>[^<]*<\/bg:system>\r?\n/gm, '')
       .replace('bg:modelVersion="2.1"', 'bg:modelVersion="2.0"')
-      .replace(/bg:catalog="[^"]*"/, `bg:catalog="${CATALOG_HASH['schaden.json']}"`);
+      .replace(/bg:catalog="[^"]*"/, `bg:catalog="${CATALOG_HASH['bestellung.json']}"`);
     expect(r.bpmnXml.match(/<bg:system\b/g)).toHaveLength(3);
     expect(stripped).toBe(base);
   }, 60000);
 
-  test('organigramm: the lanes nest along partOf, Leistung holds its own steps in the first child lane', () => {
+  test('organigramm: the lanes nest along partOf, Beschaffung holds its own steps in the first child lane', () => {
     const xml = golden('organigramm.json', 'organigramm', 'bpmn');
     // the parent lane and its own lane both carry the actor of the unit
-    expect(xml.match(/<bg:derived by="unit" actor="bereich_leistung">lane<\/bg:derived>/g)).toHaveLength(2);
+    expect(xml.match(/<bg:derived by="unit" actor="bereich_beschaffung">lane<\/bg:derived>/g)).toHaveLength(2);
     expect(xml.match(/<bpmn:childLaneSet\b/g)).toHaveLength(1);
     const lane = (id) => xml.match(new RegExp(`<bpmn:lane id="${id.replace(/\./g, '\\.')}"[\\s\\S]*?</bpmn:lane>`))?.[0];
-    const own = lane('L.Process_Schaden.bereich_leistung._own');
-    expect(own).toContain('name="Leistung"');
-    expect(own).toContain('<bpmn:flowNodeRef>regr</bpmn:flowNodeRef>');
-    for (const id of ['start', 'pruefen', 'gw']) expect(lane('L.Process_Schaden.abt_schaden')).toContain(`<bpmn:flowNodeRef>${id}</bpmn:flowNodeRef>`);
-    for (const id of ['zahlen', 'end']) expect(lane('L.Process_Schaden.abt_finanzen')).toContain(`<bpmn:flowNodeRef>${id}</bpmn:flowNodeRef>`);
+    const own = lane('L.Process_Bestellung.bereich_beschaffung._own');
+    expect(own).toContain('name="Beschaffung"');
+    expect(own).toContain('<bpmn:flowNodeRef>rueck</bpmn:flowNodeRef>');
+    for (const id of ['start', 'pruefen', 'gw']) expect(lane('L.Process_Bestellung.abt_einkauf')).toContain(`<bpmn:flowNodeRef>${id}</bpmn:flowNodeRef>`);
+    for (const id of ['zahlen', 'end']) expect(lane('L.Process_Bestellung.abt_buchhaltung')).toContain(`<bpmn:flowNodeRef>${id}</bpmn:flowNodeRef>`);
     // the parent lane lists no node of its own: every flowNodeRef in it is inside the childLaneSet
-    const parent = xml.slice(xml.indexOf('<bpmn:lane id="L.Process_Schaden.bereich_leistung"'), xml.indexOf('<bpmn:childLaneSet'));
+    const parent = xml.slice(xml.indexOf('<bpmn:lane id="L.Process_Bestellung.bereich_beschaffung"'), xml.indexOf('<bpmn:childLaneSet'));
     expect(parent).not.toContain('<bpmn:flowNodeRef>');
-    for (const id of ['L.Process_Schaden.bereich_leistung', 'L.Process_Schaden.bereich_leistung._own', 'L.Process_Schaden.abt_schaden', 'L.Process_Schaden.abt_finanzen']) {
+    for (const id of ['L.Process_Bestellung.bereich_beschaffung', 'L.Process_Bestellung.bereich_beschaffung._own', 'L.Process_Bestellung.abt_einkauf', 'L.Process_Bestellung.abt_buchhaltung']) {
       expect(xml).toContain(`bpmnElement="${id}"`);
     }
   });

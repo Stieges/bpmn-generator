@@ -785,11 +785,11 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
   const ENDPOINTS = ['/api/v1/generate', '/api/v1/validate', '/api/v1/orchestrate'];
   beforeEach(() => _resetRateLimit());
 
-  test('/generate with schaden.json, its catalogue and the inline rollen view gives the rollen golden', async () => {
-    const res = await post('/api/v1/generate', { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json'), view: rollen() });
+  test('/generate with bestellung.json, its catalogue and the inline rollen view gives the rollen golden', async () => {
+    const res = await post('/api/v1/generate', { logicCore: v2('bestellung.json'), catalog: v2('bestellung-catalog.json'), view: rollen() });
     const data = await res.json();
     expect(res.status).toBe(200);
-    expect(data.bpmnXml).toBe(golden('schaden.rollen.expected.bpmn'));
+    expect(data.bpmnXml).toBe(golden('bestellung.rollen.expected.bpmn'));
   });
 
   test('/generate puts the automatic steps into their own lane with an inline view, and refuses it in the system view', async () => {
@@ -807,7 +807,7 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
   });
 
   test('/validate returns findings', async () => {
-    const res = await post('/api/v1/validate', { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json') });
+    const res = await post('/api/v1/validate', { logicCore: v2('bestellung.json'), catalog: v2('bestellung-catalog.json') });
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.validation.errors).toEqual([]);
@@ -815,16 +815,16 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
   });
 
   test('/orchestrate with a 2.0 logicCore keeps the rollen golden', async () => {
-    const res = await post('/api/v1/orchestrate', { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json'), view: rollen() });
+    const res = await post('/api/v1/orchestrate', { logicCore: v2('bestellung.json'), catalog: v2('bestellung-catalog.json'), view: rollen() });
     const data = await res.json();
     expect(res.status).toBe(200);
-    expect(data.bpmnXml).toBe(golden('schaden.rollen.expected.bpmn'));
+    expect(data.bpmnXml).toBe(golden('bestellung.rollen.expected.bpmn'));
     expect(data.compliance.isCompliant).toBe(true);
   });
 
   test.each(ENDPOINTS)('%s: the model catalog field names an existing valid catalogue and no object is sent: one C13, no file read', async (path) => {
-    const abs = fileURLToPath(new URL('../tests/fixtures-v2/schaden-catalog.json', import.meta.url));
-    const res = await post(path, { logicCore: { ...v2('schaden.json'), catalog: abs } });
+    const abs = fileURLToPath(new URL('../tests/fixtures-v2/bestellung-catalog.json', import.meta.url));
+    const res = await post(path, { logicCore: { ...v2('bestellung.json'), catalog: abs } });
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.status).toBe('schema_error');
@@ -833,7 +833,7 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
   });
 
   test.each(ENDPOINTS)('%s: a catalog that is not an object is C13 at /catalog', async (path) => {
-    const res = await post(path, { logicCore: v2('schaden.json'), catalog: 'schaden-catalog.json' });
+    const res = await post(path, { logicCore: v2('bestellung.json'), catalog: 'bestellung-catalog.json' });
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.errors).toHaveLength(1);
@@ -842,7 +842,7 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
 
   test.each(ENDPOINTS)('%s: a catalogue over 1 MiB is C12 from the catalogue bound, not a 413', async (path) => {
     const big = { actors: [{ id: 'x', name: 'x'.repeat(1100 * 1024) }] };
-    const res = await post(path, { logicCore: v2('schaden.json'), catalog: big });
+    const res = await post(path, { logicCore: v2('bestellung.json'), catalog: big });
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.status).toBe('schema_error');
@@ -852,7 +852,7 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
   });
 
   test.each(ENDPOINTS)('%s: mode optimize on a 2.0 model is F04 at /mode', async (path) => {
-    const res = await post(path, { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json'), mode: 'optimize' });
+    const res = await post(path, { logicCore: v2('bestellung.json'), catalog: v2('bestellung-catalog.json'), mode: 'optimize' });
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.status).toBe('schema_error');
@@ -860,8 +860,8 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
     expect(data.errors[0]).toMatchObject({ path: '/mode', code: 'F04' });
   });
 
-  test.each([['2.7', 'F02']])('/generate with the schaden model as %s: one entry with code %s', async (version, code) => {
-    const res = await post('/api/v1/generate', { logicCore: { ...v2('schaden.json'), $schemaVersion: version }, catalog: v2('schaden-catalog.json') });
+  test.each([['2.7', 'F02']])('/generate with the bestellung model as %s: one entry with code %s', async (version, code) => {
+    const res = await post('/api/v1/generate', { logicCore: { ...v2('bestellung.json'), $schemaVersion: version }, catalog: v2('bestellung-catalog.json') });
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.errors).toHaveLength(1);
@@ -885,7 +885,7 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
     };
     const body = { userText: 'An approval process', correlationId: 'same' };
     const a = await post('/api/v1/orchestrate', body);
-    const withCat = await post('/api/v1/orchestrate', { ...body, catalog: v2('schaden-catalog.json') });
+    const withCat = await post('/api/v1/orchestrate', { ...body, catalog: v2('bestellung-catalog.json') });
     expect(withCat.status).not.toBe(500);
     expect(withCat.status).toBe(a.status);
     expect(noTs(await withCat.json())).toEqual(noTs(await a.json()));
@@ -1216,17 +1216,17 @@ describe('POST /api/v1/import reports a diagram generated from a format 2.0 mode
   beforeEach(() => _resetRateLimit());
 
   test('2.0 output carries notices, and the response fits ImportResponse', async () => {
-    const res = await importXml(xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn'));
+    const res = await importXml(xmlOf('tests/fixtures-v2/bestellung.rollen.expected.bpmn'));
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.notices).toEqual([{ code: 'N01', message: MODEL_V2_IMPORT_NOTICE }]);
-    expect(data.logicCore.lanes.map((l) => l.id)).toContain('L.Process_Schaden.regress');
+    expect(data.logicCore.lanes.map((l) => l.id)).toContain('L.Process_Bestellung.leitung');
     const validate = await importResponseSchema();
     expect(validate(data)).toBe(true);
   });
 
   test('an edited 2.0 golden (bg: attributes removed) has no notices key', async () => {
-    const xml = xmlOf('tests/fixtures-v2/schaden.rollen.expected.bpmn')
+    const xml = xmlOf('tests/fixtures-v2/bestellung.rollen.expected.bpmn')
       .replace(/<bpmn:definitions[^>]*>/, (tag) => tag.replace(/\s+bg:(modelVersion|view|catalog)="[^"]*"/g, ''));
     expect(xml).not.toMatch(/bg:modelVersion/);
     const res = await importXml(xml);

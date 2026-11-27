@@ -25,17 +25,17 @@ const v1 = JSON.parse(readFileSync(inputSchemaPath(), 'utf8'));
 const v2 = JSON.parse(readFileSync(inputSchemaV2Path(), 'utf8'));
 
 // Design 5.6, the 2.0 model, verbatim.
-const m56 = () => ({ $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Schaden', name: 'Schaden regulieren',
+const m56 = () => ({ $schemaVersion: '2.0', catalog: '../bpmn-catalog.json', id: 'Process_Bestellung', name: 'Bestellung abwickeln',
   nodes: [
-    { id: 'start', type: 'startEvent', name: 'Schaden gemeldet' }, { id: 'gw', type: 'exclusiveGateway', name: 'Regress möglich?' },
-    { id: 'pruefen', type: 'userTask', name: 'Schaden prüfen', assignments: [{ type: 'D', actor: 'sb_schaden' }] },
-    { id: 'regr', type: 'userTask', name: 'Regress prüfen',
-      assignments: [{ type: 'D', actor: 'regress' }, { type: 'I', actor: 'sb_schaden' }] },
+    { id: 'start', type: 'startEvent', name: 'Bestellung eingegangen' }, { id: 'gw', type: 'exclusiveGateway', name: 'Rückfrage nötig?' },
+    { id: 'pruefen', type: 'userTask', name: 'Auftrag prüfen', assignments: [{ type: 'D', actor: 'sb_einkauf' }] },
+    { id: 'rueck', type: 'userTask', name: 'Lieferant klären',
+      assignments: [{ type: 'D', actor: 'leitung' }, { type: 'I', actor: 'sb_einkauf' }] },
     { id: 'zahlen', type: 'userTask', name: 'Zahlung anweisen', assignments: [{ type: 'D', actor: 'zahlung' }] },
-    { id: 'end', type: 'endEvent', name: 'Schaden reguliert' }],
+    { id: 'end', type: 'endEvent', name: 'Auftrag erledigt' }],
   edges: [{ source: 'start', target: 'pruefen' }, { source: 'pruefen', target: 'gw' },
-    { source: 'gw', target: 'regr', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
-    { source: 'regr', target: 'zahlen' }, { source: 'zahlen', target: 'end' }] });
+    { source: 'gw', target: 'rueck', label: 'ja' }, { source: 'gw', target: 'zahlen', label: 'nein' },
+    { source: 'rueck', target: 'zahlen' }, { source: 'zahlen', target: 'end' }] });
 
 const BOTH = { accept: ['1', '2'] };
 const errorsOf = (m) => validateModelSchema(m, BOTH).errors;
@@ -177,7 +177,7 @@ describe('validateModelSchema', () => {
     test('as "2.1" the same models are valid', () => {
       const m = { ...m56(), $schemaVersion: '2.1' };
       expect(validateModelSchema(m, BOTH)).toEqual({ valid: true, format: '2', errors: [] });
-      const s = { ...m56(), $schemaVersion: '2.1', systems: [{ id: 'sys_akte', name: 'Schadenakte' }] };
+      const s = { ...m56(), $schemaVersion: '2.1', systems: [{ id: 'sys_akte', name: 'Bestellakte' }] };
       s.nodes[2].system = 'sys_akte';
       expect(validateModelSchema(s, BOTH)).toEqual({ valid: true, format: '2', errors: [] });
       const c = { ...collab(), $schemaVersion: '2.1', systems: [] };

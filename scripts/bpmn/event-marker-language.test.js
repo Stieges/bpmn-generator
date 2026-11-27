@@ -529,8 +529,8 @@ describe('the response contract', () => {
 
 describe('format 2.0 and blocked results', () => {
   test('a format 2.0 model with language de: inferred definition in the XML and an H10 hint', async () => {
-    const v2 = JSON.parse(readFileSync(join(REPO, 'tests', 'fixtures-v2', 'schaden.json'), 'utf8'));
-    const catalog = JSON.parse(readFileSync(join(REPO, 'tests', 'fixtures-v2', 'schaden-catalog.json'), 'utf8'));
+    const v2 = JSON.parse(readFileSync(join(REPO, 'tests', 'fixtures-v2', 'bestellung.json'), 'utf8'));
+    const catalog = JSON.parse(readFileSync(join(REPO, 'tests', 'fixtures-v2', 'bestellung-catalog.json'), 'utf8'));
     const model = { ...structuredClone(v2), language: 'de' };
     model.nodes.find((n) => n.id === 'start').name = 'Nachricht eingegangen';
     const result = await runPipeline(model, { catalog: structuredClone(catalog) });

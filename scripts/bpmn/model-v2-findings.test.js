@@ -18,14 +18,14 @@ const root = resolve(here, '../..');
 const readJson = (p) => JSON.parse(readFileSync(resolve(root, p), 'utf8'));
 const copy = (v) => JSON.parse(JSON.stringify(v));
 // The example of design 5.6, as committed fixture.
-const SCHADEN = readJson('tests/fixtures-v2/schaden.json');
-const CATALOG = readJson('tests/fixtures-v2/schaden-catalog.json');
+const BESTELLUNG = readJson('tests/fixtures-v2/bestellung.json');
+const CATALOG = readJson('tests/fixtures-v2/bestellung-catalog.json');
 const run = (model, opts = {}) => runPipeline(copy(model), { catalog: copy(CATALOG), ...opts });
 const VIEWS = ['rollen', 'einheiten'];
 
 describe('validation.findings on format 2.x runs', () => {
   test('an unknown actor: one C01 ERROR finding mirroring the error', async () => {
-    const model = copy(SCHADEN);
+    const model = copy(BESTELLUNG);
     model.nodes[2].assignments[0].actor = 'unbekannt';
     const { validation } = await run(model);
     expect(validation.errors).toHaveLength(1);
@@ -33,7 +33,7 @@ describe('validation.findings on format 2.x runs', () => {
   });
 
   test('the 5.6 model without its end event: S02 ERROR, then the rule warnings', async () => {
-    const model = copy(SCHADEN);
+    const model = copy(BESTELLUNG);
     model.nodes = model.nodes.filter((n) => n.id !== 'end');
     model.edges = model.edges.filter((e) => e.target !== 'end');
     const { validation } = await run(model);
@@ -45,8 +45,8 @@ describe('validation.findings on format 2.x runs', () => {
     ]);
   });
 
-  test.each(VIEWS)('schaden.json under view %s: findings mirror errors and warnings', async (name) => {
-    const { validation } = await run(SCHADEN, { view: loadNamedView(name) });
+  test.each(VIEWS)('bestellung.json under view %s: findings mirror errors and warnings', async (name) => {
+    const { validation } = await run(BESTELLUNG, { view: loadNamedView(name) });
     expect(validation.findings.filter((f) => f.severity === 'WARNING').map((f) => f.message)).toEqual(validation.warnings);
     for (const f of validation.findings) {
       expect([...validation.errors, ...validation.warnings]).toContain(f.message);
@@ -54,16 +54,16 @@ describe('validation.findings on format 2.x runs', () => {
   });
 
   test('a decisions option that fails the Decision-Core schema: every finding F05, message unchanged', async () => {
-    const { validation } = await run(SCHADEN, { decisions: [{}] });
+    const { validation } = await run(BESTELLUNG, { decisions: [{}] });
     expect(validation.errors.length).toBeGreaterThan(0);
     expect(validation.findings.map((f) => f.message)).toEqual(validation.errors);
     for (const f of validation.findings) expect(f).toEqual({ code: 'F05', severity: 'ERROR', message: f.message });
   });
 
   test('a C10 lane id collision: the C10 findings, then the kept rule warnings', async () => {
-    const model = copy(SCHADEN);
-    model.nodes.find((n) => n.id === 'gw').name = 'Regress';
-    model.edges[5].id = 'L.Process_Schaden.zahlung';
+    const model = copy(BESTELLUNG);
+    model.nodes.find((n) => n.id === 'gw').name = 'Rückfrage';
+    model.edges[5].id = 'L.Process_Bestellung.zahlung';
     const { validation } = await run(model);
     expect(validation.warnings.length).toBeGreaterThan(0);
     expect(validation.findings).toEqual([
@@ -75,8 +75,8 @@ describe('validation.findings on format 2.x runs', () => {
   test('strict profile: errors of every layer come before any warning, each in emission order', async () => {
     // The catalogue walks S, M, P, WF, so under the strict profile an S warning (S07) is emitted
     // before an M or WF error; the findings still list all errors first.
-    const model = copy(SCHADEN);
-    model.nodes.find((n) => n.id === 'gw').name = 'Regress';
+    const model = copy(BESTELLUNG);
+    model.nodes.find((n) => n.id === 'gw').name = 'Rückfrage';
     model.nodes = model.nodes.filter((n) => n.id !== 'end');
     model.edges = model.edges.filter((e) => e.target !== 'end');
     const { validation } = await run(model, { ruleProfile: resolve(root, 'rules/strict-profile.json') });
@@ -86,12 +86,12 @@ describe('validation.findings on format 2.x runs', () => {
   });
 
   test('generateDiagramSet with a 2.x model: the F04 refusal of its parent carries its finding', async () => {
-    const { parent } = await generateDiagramSet(copy(SCHADEN), { catalog: copy(CATALOG) });
+    const { parent } = await generateDiagramSet(copy(BESTELLUNG), { catalog: copy(CATALOG) });
     expect(parent.validation.findings).toEqual([{ code: 'F04', severity: 'ERROR', message: parent.validation.errors[0] }]);
   });
 
   test('a mode not available for 2.0: one F04 finding', async () => {
-    const { validation } = await run(SCHADEN, { mode: 'optimize' });
+    const { validation } = await run(BESTELLUNG, { mode: 'optimize' });
     expect(validation.findings).toEqual([{ code: 'F04', severity: 'ERROR', message: validation.errors[0] }]);
   });
 
@@ -117,7 +117,7 @@ describe('validation.findings on format 2.x runs', () => {
   });
 
   test('a GenerateResponse built from a 2.x run validates against the published contract', async () => {
-    const gen = await run(SCHADEN, { view: loadNamedView('rollen') });
+    const gen = await run(BESTELLUNG, { view: loadNamedView('rollen') });
     const hasErrors = gen.validation.errors.length > 0;
     const diBroken = gen.diagnostics ? !gen.diagnostics.ok : false;
     const response = {

@@ -1108,17 +1108,17 @@ describe('migrateModel — against an existing catalogue (Task 3)', () => {
 
   test('a role named like a catalogue actor (no lane of that name) is that actor, one MG07 per role, none for the role actor', () => {
     const input = small();
-    input.nodes.find((n) => n.id === 't1').role = 'Gutachter';
-    input.nodes.find((n) => n.id === 't2').role = 'Gutachter';
-    const given = { actors: [{ id: 'gut', name: 'Gutachter', kind: 'role' }] };
+    input.nodes.find((n) => n.id === 't1').role = 'Lieferantenbetreuer';
+    input.nodes.find((n) => n.id === 't2').role = 'Lieferantenbetreuer';
+    const given = { actors: [{ id: 'lb', name: 'Lieferantenbetreuer', kind: 'role' }] };
     const r = migrateModel(input, { catalog: given });
     expectTranslatedAndValid(r);
     expect(r.supplement.actors.map((a) => a.id)).toEqual(['A', 'B', 'B1']);
-    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'gut' }]);
-    expect(nodeOf(r.model, 't2').assignments).toEqual([{ type: 'D', actor: 'gut' }]);
-    expect(entriesOf(r, 'MG07').map((e) => e.elements)).toEqual([['Gutachter', 'gut']]);
-    expect(entriesOf(r, 'MG07')[0].message).toBe('[MG07] Role "Gutachter" maps by its name to the existing actor "gut".');
-    expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([['t1', 'A', 'gut'], ['t2', 'B1', 'gut']]);
+    expect(nodeOf(r.model, 't1').assignments).toEqual([{ type: 'D', actor: 'lb' }]);
+    expect(nodeOf(r.model, 't2').assignments).toEqual([{ type: 'D', actor: 'lb' }]);
+    expect(entriesOf(r, 'MG07').map((e) => e.elements)).toEqual([['Lieferantenbetreuer', 'lb']]);
+    expect(entriesOf(r, 'MG07')[0].message).toBe('[MG07] Role "Lieferantenbetreuer" maps by its name to the existing actor "lb".');
+    expect(entriesOf(r, 'MG03').map((e) => e.elements)).toEqual([['t1', 'A', 'lb'], ['t2', 'B1', 'lb']]);
     expect(entriesOf(r, 'H07').map((e) => e.elements[0])).toEqual(['A', 'B', 'B1']);
   });
 

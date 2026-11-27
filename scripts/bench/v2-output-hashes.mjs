@@ -2,13 +2,13 @@
 /**
  * v2-output-hashes.mjs
  *
- * The four golden diagrams, generated with default options: tests/fixtures-v2/schaden.json
+ * The four golden diagrams, generated with default options: tests/fixtures-v2/bestellung.json
  * with its catalogue, once in view `rollen` and once in view `einheiten` (design 9, slice 1), and
  * tests/fixtures-v2/organigramm.json, the same model on a catalogue whose units nest with `partOf`,
  * in view `organigramm`: the one diagram with lanes nested along the organigram, including
  * a unit's own lane. The fixtures live outside tests/fixtures/ so no folder-driven 1.x test reads
  * them; their hashes live in tests/bench/v2-output-hashes.json, apart from default-output-hashes.json.
- * The fourth pair, tests/fixtures-v2/schaden-systeme.json (format 2.1, the same process with a system
+ * The fourth pair, tests/fixtures-v2/bestellung-systeme.json (format 2.1, the same process with a system
  * on each task) in view `systeme`, earns its place because the system view is the only new lane path.
  * No more pairs than these four: the flat level view adds no layout path the two flat goldens do
  * not already draw, and is pinned by unit tests instead.
@@ -30,11 +30,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_V2_DIR = join(__dirname, '..', '..', 'tests', 'fixtures-v2');
 export const V2_SNAPSHOT_PATH = join(__dirname, '..', '..', 'tests', 'bench', 'v2-output-hashes.json');
 
-export const V2_PAIRS = [['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['schaden-systeme.json', 'systeme']];
+export const V2_PAIRS = [['bestellung.json', 'rollen'], ['bestellung.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['bestellung-systeme.json', 'systeme']];
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 
-/** Golden file basename (no extension) of a pair: `schaden.rollen`. */
+/** Golden file basename (no extension) of a pair: `bestellung.rollen`. */
 export const goldenBase = (name, viewName) => `${name.replace(/\.json$/, '')}.${viewName}`;
 
 /** One pair, generated with default options: `{ bpmnXml, svg, validation }`. */
