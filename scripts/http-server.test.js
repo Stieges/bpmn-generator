@@ -792,6 +792,20 @@ describe('format 2.0 over HTTP with an embedded catalogue', () => {
     expect(data.bpmnXml).toBe(golden('schaden.rollen.expected.bpmn'));
   });
 
+  test('/generate puts the automatic steps into their own lane with an inline view, and refuses it in the system view', async () => {
+    const body = (lanes) => ({
+      logicCore: v2('automatic-steps.json'), catalog: v2('automatic-steps-catalog.json'),
+      view: { view: 'automatik', version: '1.0', lanes },
+    });
+    const res = await post('/api/v1/generate', body({ by: 'unit', automatic: 'lane' }));
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.validation.hints.filter((h) => h.code === 'H19').map((h) => h.elements[0])).toEqual(['register', 'send']);
+    const bad = await post('/api/v1/generate', body({ by: 'system', automatic: 'lane' }));
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).status).toBe('view_error');
+  });
+
   test('/validate returns findings', async () => {
     const res = await post('/api/v1/validate', { logicCore: v2('schaden.json'), catalog: v2('schaden-catalog.json') });
     const data = await res.json();
