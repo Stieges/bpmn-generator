@@ -689,6 +689,9 @@ translator: the 2.0 model is a new document, the 1.x file stays as it is.
   (MG04); boundary events are not compared. An activity without a lane in a process with lanes gets
   no assignment (MG05; a role's actor performs it).
 - A process without lanes gets no assignments (hint H06 when you generate it).
+- A 1.x `role` on a node that gets no assignment (an event, a gateway, a boundary event, a subprocess
+  child, or any node of a process without lanes) is dropped and reported (MG05). The performer the
+  1.x writer put into the XML for that role is therefore not in the 2.0 diagram.
 - `language` and every event `marker` are kept; `$schemaVersion` becomes `"2.0"`.
 
 **Refused.** `system`, data objects and data stores and the flows and associations touching them
@@ -698,7 +701,8 @@ a schema failure is refused as MG01. A refused input writes the report only.
 
 **With `--catalog`.** A lane or role whose name equals an actor's name in that catalogue, exactly, is
 that actor (MG07). The 2.0 model names that catalogue and carries the new actors itself; the supplement
-lists the same new actors for merging. `migrate` never writes the given catalogue.
+lists the same new actors for merging. `migrate` never writes the given catalogue. After you merge the
+supplement into your catalogue, remove the model's own `actors`; otherwise each of them gives H09.
 
 **Views afterwards.** Under `rollen` the lanes are those of the 1.x model (plus the effects of MG03
 and MG04). Under `einheiten` a migrated top-level lane's actor has no `unit`, so its nodes land in the

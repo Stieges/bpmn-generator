@@ -470,7 +470,7 @@ export function migrateModel(lc, options = {}) {
     for (const node of nodes || []) {
       if (unsupported.dataIds.has(node.id)) continue; // dropped under MG02 already
       if (node.role !== undefined) {
-        entries.push(entry('MG05', `role "${q(node.role)}" on ${q(node.type)} "${q(node.id)}" is dropped: format 2.0 gives this node no assignment.`, [node.id]));
+        entries.push(entry('MG05', `role "${q(node.role)}" on ${q(node.type)} "${q(node.id)}" is dropped: migrate gives this node no assignment.`, [node.id]));
       }
       droppedRoles(node.nodes);
     }

@@ -365,7 +365,7 @@ describe('migrateModel — activities without lane, lane-less processes, data no
     expect(m.pools.findIndex((p) => p === pool)).toBeLessThan(m.pools.findIndex((p) => p === laned));
     expect(mg05.map((e) => e.elements)).toEqual([[task.id], [gateway.id]]);
     expect(mg05.find((e) => e.elements[0] === task.id).message)
-      .toBe(`[MG05] role "Antragsteller" on ${task.type} "${task.id}" is dropped: format 2.0 gives this node no assignment.`);
+      .toBe(`[MG05] role "Antragsteller" on ${task.type} "${task.id}" is dropped: migrate gives this node no assignment.`);
     expect(nodeOf(r.model, task.id).role).toBeUndefined();
     expect(nodeOf(r.model, gateway.id).role).toBeUndefined();
     expect(r.supplement.actors.some((a) => a.name === 'Antragsteller' || a.name === 'Empfang')).toBe(false);
@@ -492,7 +492,7 @@ describe('migrateModel — fix round 1', () => {
     const r = migrateModel(m);
     expectTranslatedAndValid(r);
     expect(entriesOf(r, 'MG05')).toEqual([{
-      code: 'MG05', message: '[MG05] role "Clerk" on boundaryEvent "b" is dropped: format 2.0 gives this node no assignment.', elements: ['b'],
+      code: 'MG05', message: '[MG05] role "Clerk" on boundaryEvent "b" is dropped: migrate gives this node no assignment.', elements: ['b'],
     }]);
     expect(nodeOf(r.model, 'b').role).toBeUndefined();
     expect(nodeOf(r.model, 'b').assignments).toBeUndefined();
