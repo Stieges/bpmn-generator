@@ -18,7 +18,7 @@
  * so a newer API would pass CI and still break users on early 20.x releases.
  */
 
-import { readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -550,18 +550,22 @@ const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * `<basename>.part-<i>-of-<n>.png`. A diagram that shrank from twelve parts to four, or to none,
  * would otherwise leave old parts beside the new ones, and whoever globs `<base>.part-*` would
  * read a mix of two runs. Nothing else is touched: not another base that merely starts with the
- * same name (`<base>x.part-…`), not a file with a further suffix.
+ * same name (`<base>x.part-…`), not a file with a further suffix, and not a match that has an
+ * `.svg` of the same name beside it — `out.part-1-of-2.png` next to `out.part-1-of-2.svg` is the
+ * whole-diagram preview of a diagram whose base is `out.part-1-of-2`, not a part of `out`.
  *
  * @param {string} base  output path without extension
- * @param {{ readdir?: (dir: string) => string[], unlink?: (path: string) => void }} [fs]
+ * @param {{ readdir?: (dir: string) => string[], unlink?: (path: string) => void,
+ *           exists?: (path: string) => boolean }} [fs]
  * @returns {string[]} the removed paths
  */
-export function removeStaleParts(base, { readdir = readdirSync, unlink = unlinkSync } = {}) {
+export function removeStaleParts(base, { readdir = readdirSync, unlink = unlinkSync, exists = existsSync } = {}) {
   const dir = dirname(base);
   const pattern = new RegExp(`^${escapeRegExp(basename(base))}\\.part-\\d+-of-\\d+\\.png$`);
   const removed = [];
   for (const name of readdir(dir)) {
     if (!pattern.test(name)) continue;
+    if (exists(join(dir, name.replace(/\.png$/, '.svg')))) continue;
     const path = join(dir, name);
     unlink(path);
     removed.push(path);
@@ -574,19 +578,24 @@ export function removeStaleParts(base, { readdir = readdirSync, unlink = unlinkS
  * then top→bottom), for each target.
  *
  * Per target, the order is fixed: render and encode every image in memory, then remove the stale
- * parts of that base, then write. A render that fails therefore leaves no PNG of that base at all,
- * neither a new one nor an old part. A failure on one target is reported in its result and does
- * not stop the next target (a drill-down writes many diagrams).
+ * parts of that base, then write. Nothing is written before every image of the target is encoded.
+ * When the target fails anyway — in rendering, or in writing after some of its files are already
+ * on disk — `<base>.png` and every `<base>.part-<i>-of-<n>.png` are removed, best effort: a failed
+ * target leaves no PNG of that base at all, neither an older run's image beside the new model
+ * files nor a partial new set. A failure on one target is reported in its result and does not stop
+ * the next target (a drill-down writes many diagrams).
  *
- * Never throws: every failure, rendering or writing, becomes `{ ok: false, message }`.
+ * Never throws: every failure, rendering or writing, becomes `{ ok: false, message }`; an error
+ * during the clean-up is ignored, since the result already reports the failure.
  *
  * @param {Array<{ svg: string, base: string }>} targets
  * @param {PngRenderer} renderer
- * @param {{ writeFile?: (path: string, data: Buffer) => void, removeStale?: (base: string) => string[] }} [io]
+ * @param {{ writeFile?: (path: string, data: Buffer) => void, removeStale?: (base: string) => string[],
+ *           unlink?: (path: string) => void }} [io]
  * @returns {Array<{ base: string, ok: true, files: string[], scale: number, parts: number }
  *                | { base: string, ok: false, message: string }>}
  */
-export function writePngPreviews(targets, renderer, { writeFile = writeFileSync, removeStale = removeStaleParts } = {}) {
+export function writePngPreviews(targets, renderer, { writeFile = writeFileSync, removeStale = removeStaleParts, unlink = unlinkSync } = {}) {
   return targets.map(({ svg, base }) => {
     try {
       const preview = renderPreview(svg, renderer);
@@ -599,6 +608,8 @@ export function writePngPreviews(targets, renderer, { writeFile = writeFileSync,
       for (const { path, png } of outputs) writeFile(path, png);
       return { base, ok: true, files: outputs.map((o) => o.path), scale: preview.scale, parts: n };
     } catch (err) {
+      try { unlink(`${base}.png`); } catch { /* absent, or not removable: the failure is reported */ }
+      try { removeStale(base); } catch { /* as above */ }
       return { base, ok: false, message: err?.message ?? String(err) };
     }
   });

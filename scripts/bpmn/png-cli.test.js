@@ -17,6 +17,8 @@ const scripts = resolve(here, '..');
 const fixtures = resolve(scripts, '..', 'tests/fixtures');
 const PIPELINE = join(here, 'pipeline.js');
 const HIDE_RESVG = pathToFileURL(join(fixtures, 'png', 'hide-resvg.mjs')).href;
+// Written to stderr by the hide hook whenever @resvg/resvg-wasm is requested.
+const HIDE_MARKER = '[hide-resvg] @resvg/resvg-wasm requested';
 const FAILING_RESVG = pathToFileURL(join(fixtures, 'png', 'failing-resvg.mjs')).href;
 
 const fixture = (name) => join(fixtures, name);
@@ -81,6 +83,7 @@ describe('pipeline CLI --png', () => {
     const d = dir('hidden-no-flag');
     const r = run([fixture('simple-approval.json'), join(d, 'out')], { hook: HIDE_RESVG });
     expect(r.status).toBe(0);
+    expect(r.err).not.toContain(HIDE_MARKER);
     expect(existsSync(join(d, 'out.bpmn'))).toBe(true);
     expect(existsSync(join(d, 'out.svg'))).toBe(true);
   });
@@ -100,6 +103,8 @@ describe('pipeline CLI --png', () => {
     const d = dir('hidden');
     const r = run([fixture('simple-approval.json'), join(d, 'out'), '--png'], { hook: HIDE_RESVG });
     expect(r.status).toBe(1);
+    // The hook saw the request, so the marker check in the test without --png means something.
+    expect(r.err).toContain(HIDE_MARKER);
     expect(r.err).toContain('@resvg/resvg-wasm');
     expect(r.err).toContain('npm install');
     expect(r.err).toContain('No files written');
@@ -110,6 +115,9 @@ describe('pipeline CLI --png', () => {
     const plainDir = dir('failing-plain');
     expect(run([fixture('simple-approval.json'), join(plainDir, 'out')]).status).toBe(0);
     const d = dir('failing');
+    // An earlier run's preview of the same base must not survive beside the new model files.
+    writeFileSync(join(d, 'out.png'), 'old preview');
+    writeFileSync(join(d, 'out.part-1-of-2.png'), 'old part');
     const r = run([fixture('simple-approval.json'), join(d, 'out'), '--png'], { hook: FAILING_RESVG });
     expect(r.status).toBe(1);
     expect(r.err).toContain('PNG preview failed');
@@ -117,6 +125,8 @@ describe('pipeline CLI --png', () => {
     for (const ext of ['bpmn', 'svg']) {
       expect(readFileSync(join(d, `out.${ext}`))).toEqual(readFileSync(join(plainDir, `out.${ext}`)));
     }
+    expect(existsSync(join(d, 'out.png'))).toBe(false);
+    expect(existsSync(join(d, 'out.part-1-of-2.png'))).toBe(false);
     expect(pngsIn(d)).toEqual([]);
     // process.exitCode, not process.exit: the summary still prints.
     expect(r.out).toContain('Files:');

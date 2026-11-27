@@ -369,11 +369,12 @@ describe('png — writer', () => {
     const result = removeStaleParts(join('dir', 'out'), {
       readdir: (d) => { expect(d).toBe('dir'); return files; },
       unlink: (p) => removed.push(p),
+      exists: () => false,
     });
     expect(result).toEqual([join('dir', 'out.part-1-of-9.png'), join('dir', 'out.part-12-of-12.png')]);
     expect(removed).toEqual(result);
     // The base name is matched literally, not as a pattern: "o.t" does not match "out".
-    expect(removeStaleParts('o.t', { readdir: () => ['out.part-1-of-2.png', 'o.t.part-1-of-2.png'], unlink() {} }))
+    expect(removeStaleParts('o.t', { readdir: () => ['out.part-1-of-2.png', 'o.t.part-1-of-2.png'], unlink() {}, exists: () => false }))
       .toEqual(['o.t.part-1-of-2.png']);
   });
 
@@ -406,7 +407,7 @@ describe('png — writer', () => {
     const results = writePngPreviews(
       [{ svg: svgOf(10, 5), base: 'a' }, { svg: svgOf(10, 5), base: 'b' }],
       renderer,
-      { writeFile: (p) => written.push(p), removeStale: () => [] });
+      { writeFile: (p) => written.push(p), removeStale: () => [], unlink() {} });
     expect(results[0]).toEqual({ base: 'a', ok: false, message: 'the renderer failed: unreachable' });
     expect(results[1]).toMatchObject({ base: 'b', ok: true, files: ['b.png'], parts: 0, scale: 2 });
     expect(written).toEqual(['b.png']);
@@ -414,7 +415,46 @@ describe('png — writer', () => {
     const writeFails = writePngPreviews([{ svg: svgOf(10, 5), base: 'c' }], flatRenderer(20, 10), {
       writeFile: () => { throw Object.assign(new Error("EACCES: permission denied, open 'c.png'"), { code: 'EACCES' }); },
       removeStale: () => [],
+      unlink() {},
     });
     expect(writeFails).toEqual([{ base: 'c', ok: false, message: "EACCES: permission denied, open 'c.png'" }]);
+  });
+
+  test('removeStaleParts keeps a file that is the main preview of another diagram', () => {
+    // `out.part-1-of-2.png` is a part name for base `out`, but beside `out.part-1-of-2.svg` it is
+    // the whole-diagram preview of a diagram whose base is `out.part-1-of-2`.
+    const removed = [];
+    const result = removeStaleParts(join('dir', 'out'), {
+      readdir: () => ['out.part-1-of-2.png', 'out.part-1-of-2.svg', 'out.part-2-of-2.png'],
+      unlink: (p) => removed.push(p),
+      exists: (p) => p === join('dir', 'out.part-1-of-2.svg'),
+    });
+    expect(result).toEqual([join('dir', 'out.part-2-of-2.png')]);
+    expect(removed).toEqual(result);
+  });
+
+  test('a write that fails mid-way leaves no PNG of that base', () => {
+    const calls = [];
+    const [result] = writePngPreviews([{ svg: svgOf(1700, 5), base: 'w' }], flatRenderer(3400, 10), {
+      writeFile: (p) => {
+        if (p === 'w.part-1-of-2.png') throw new Error("ENOSPC: no space left on device, write 'w.part-1-of-2.png'");
+        calls.push(`write ${p}`);
+      },
+      removeStale: (base) => { calls.push(`remove ${base}`); return []; },
+      unlink: (p) => calls.push(`unlink ${p}`),
+    });
+    expect(result).toEqual({ base: 'w', ok: false, message: "ENOSPC: no space left on device, write 'w.part-1-of-2.png'" });
+    // The new whole image was written, then the failure removed it and every part of the base.
+    expect(calls).toEqual(['remove w', 'write w.png', 'unlink w.png', 'remove w']);
+  });
+
+  test('the clean-up after a failure never throws', () => {
+    const failing = { renderRgba: () => { throw new WebAssembly.RuntimeError('unreachable'); } };
+    const results = writePngPreviews([{ svg: svgOf(10, 5), base: 'z' }], failing, {
+      writeFile() {},
+      removeStale: () => { throw new Error('EACCES'); },
+      unlink: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    });
+    expect(results).toEqual([{ base: 'z', ok: false, message: 'the renderer failed: unreachable' }]);
   });
 });
