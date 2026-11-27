@@ -42,17 +42,98 @@
       }
     },
     "lanes": {
-      "description": "Lanes formed from the assignments of a format 2.0 model: per performer (role), per unit of the performer (unit), per system of the task (system) or none; or the object form, which takes the units further: `level` counts the organigram (partOf) from the top, 1 = units without partOf, and `nested` draws sub-units as lanes inside their parent. Absent: a 1.x model keeps its own lanes, a 2.0 model gets role lanes. On a 1.x model a view with lanes is refused.",
+      "description": "Lanes formed from the assignments of a format 2.x model: per performer (role), per unit of the performer (unit), per system of the task (system) or none; or the object form { by: \"role\" | \"unit\", … }. For units, `level` counts the organigram (partOf) from the top, 1 = units without partOf, and `nested` draws sub-units as lanes inside their parent. For both, `automatic: \"lane\"` puts every automatic task without performer into a placeholder lane of its own (`automaticName`, default \"(automatisch)\"); the system view takes the string form only. Absent: a 1.x model keeps its own lanes, a 2.x model gets role lanes. On a 1.x model a view with lanes is refused.",
       "oneOf": [
-        { "enum": ["role", "unit", "system", "none"] },
+        {
+          "enum": [
+            "role",
+            "unit",
+            "system",
+            "none"
+          ]
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["by"],
+          "required": [
+            "by"
+          ],
           "properties": {
-            "by": { "const": "unit" },
-            "level": { "type": "integer", "minimum": 1, "maximum": 16 },
-            "nested": { "type": "boolean" }
+            "by": {
+              "const": "role"
+            },
+            "automatic": {
+              "enum": [
+                "neighbour",
+                "lane"
+              ],
+              "description": "Where an automatic task without performer goes: \"neighbour\" (default) with its neighbour by the inheritance rule (H03), \"lane\" into a placeholder lane of its own (H19). Not in the system view."
+            },
+            "automaticName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 25,
+              "pattern": "\\S",
+              "description": "The name of that lane in this view; default from scripts/config.json laneFormation.automaticName, \"(automatisch)\". Only with automatic \"lane\"."
+            }
+          },
+          "dependentSchemas": {
+            "automaticName": {
+              "required": [
+                "automatic"
+              ],
+              "properties": {
+                "automatic": {
+                  "const": "lane"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "by"
+          ],
+          "properties": {
+            "by": {
+              "const": "unit"
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "nested": {
+              "type": "boolean"
+            },
+            "automatic": {
+              "enum": [
+                "neighbour",
+                "lane"
+              ],
+              "description": "Where an automatic task without performer goes: \"neighbour\" (default) with its neighbour by the inheritance rule (H03), \"lane\" into a placeholder lane of its own (H19). Not in the system view."
+            },
+            "automaticName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 25,
+              "pattern": "\\S",
+              "description": "The name of that lane in this view; default from scripts/config.json laneFormation.automaticName, \"(automatisch)\". Only with automatic \"lane\"."
+            }
+          },
+          "dependentSchemas": {
+            "automaticName": {
+              "required": [
+                "automatic"
+              ],
+              "properties": {
+                "automatic": {
+                  "const": "lane"
+                }
+              }
+            }
           }
         }
       ]

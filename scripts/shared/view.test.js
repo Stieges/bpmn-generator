@@ -42,6 +42,7 @@ describe('shipped views', () => {
     expect(loadNamedView('systeme').lanes).toBe('system');
     expect(() => assertView({ view: 'x', version: '1.0', lanes: 'system' })).not.toThrow();
     expect(() => assertView({ view: 'x', version: '1.0', lanes: { by: 'system' } })).toThrow(ViewRejectedError);
+    expect(() => assertView({ view: 'x', version: '1.0', lanes: { by: 'system', automatic: 'lane' } })).toThrow(ViewRejectedError);
   });
 
   test('organigramm nests the unit lanes along partOf', () => {
@@ -50,6 +51,13 @@ describe('shipped views', () => {
 
   test('both forms of lanes pass the gate', () => {
     for (const lanes of ['role', 'unit', 'none', { by: 'unit' }, { by: 'unit', level: 2 }, { by: 'unit', level: 16, nested: true }, { by: 'unit', nested: false }]) {
+      expect(() => assertView({ view: 'x', version: '1.0', lanes })).not.toThrow();
+    }
+  });
+
+  test('the automatic switch and its name pass the gate', () => {
+    for (const lanes of [{ by: 'role' }, { by: 'role', automatic: 'lane' }, { by: 'role', automatic: 'lane', automaticName: '(maschinell)' },
+      { by: 'unit', nested: true, automatic: 'lane' }, { by: 'unit', level: 2, automatic: 'neighbour' }]) {
       expect(() => assertView({ view: 'x', version: '1.0', lanes })).not.toThrow();
     }
   });
