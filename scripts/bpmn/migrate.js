@@ -1,5 +1,5 @@
 /**
- * The translator `migrate` (design 6): a 1.x model becomes a format 2.0 model, a catalogue
+ * The translator `migrate` (design 6): a 1.x model becomes a format 2.x model, a catalogue
  * supplement and a report.
  *
  * Every lane of every modelled process becomes an actor without `kind` (a child lane gets its parent
@@ -7,10 +7,13 @@
  * its activities (a role equal to the name of a lane actor of the same process is that lane actor).
  * Each top-level activity of a process with lanes gets one assignment of the scheme's performs type
  * to its lane's actor (or its role's); events, gateways, boundary events and subprocess children get
- * none, and a role on them is dropped (MG05). `lanes`, `lane` and `role` are stripped; `system`, data
- * nodes and the flows and associations touching them are fields 2.0 cannot hold yet (MG02): refused
- * by default, dropped and listed with `dropUnsupported`. Everything else is kept as given. With a
- * catalogue, a lane or role named exactly like one of its actors is that actor (MG07, see `migrateModel`).
+ * none, and a role on them is dropped (MG05). `lanes`, `lane` and `role` are stripped. Each distinct
+ * `system` text on a task becomes a system `sys_<slug>` of the catalogue (MG08) and the task names
+ * it by id; the model is then format "2.1", else "2.0". A `system` off a task, data nodes and the
+ * flows and associations touching them are fields 2.x cannot hold yet (MG02): refused by default,
+ * dropped and listed with `dropUnsupported`. Everything else is kept as given. With a catalogue, a
+ * lane or role named exactly like one of its actors is that actor, and a system text named exactly
+ * like one of its systems is that system (MG07, see `migrateModel`).
  *
  * The report then compares the lanes (plan "Check"): the result goes through `resolveFields` and
  * `formLanes` under the view `rollen`, and every top-level flow node of a process with lanes (no
@@ -27,7 +30,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'no
 import { resolve, dirname, basename, relative, sep } from 'node:path';
 import { validateLogicCoreSchema, validateModelSchema, modelFormat, formatSchemaErrors, FORMAT_V2_VERSION } from './schema-gate.js';
 import { resolveLaneId, collectDocumentIds } from './topology.js';
-import { isActivity, isBoundaryEvent, FLOW_NODE_TYPES } from './types.js';
+import { isActivity, isBoundaryEvent, FLOW_NODE_TYPES, TASK_TYPES } from './types.js';
 import { resolveFields, formLanes, UNASSIGNED, UNIT_UNKNOWN } from './model-v2.js';
 import { resolveScheme, catalogErrors, loadCatalog, CatalogRejectedError, CATALOG_LIMITS } from '../shared/catalog.js';
 import { isMainModule } from '../shared/entry-point.js';
@@ -44,14 +47,18 @@ const PROCESS_ID = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const ACTOR_ID_MAX = 64;
 const DATA_NODE_TYPES = new Set(['dataObjectReference', 'dataStoreReference']);
 
+/** The format version of a translation that names systems (a 1.x `system` on a task); without them FORMAT_V2_VERSION. */
+const SYSTEMS_VERSION = '2.1';
+
 /** The code of every refusal of the input. */
 const REFUSED_CODE = 'MG01';
 
 /**
  * The order of the report's entry groups; within a group, document order. MG04 (the lane
- * comparison) and MG07 (a lane matched to an existing catalogue actor) have their place already.
+ * comparison), MG07 (a lane, role or system matched to an existing catalogue entry) and MG08 (a new
+ * system) have their place already.
  */
-const ENTRY_ORDER = ['MG01', 'MG02', 'MG06', 'MG07', 'H07', 'MG03', 'MG05', 'MG04'];
+const ENTRY_ORDER = ['MG01', 'MG02', 'MG06', 'MG07', 'MG08', 'H07', 'MG03', 'MG05', 'MG04'];
 
 const entry = (code, text, elements) => ({ code, message: coded(code, text), elements });
 
@@ -135,11 +142,15 @@ function laneSlug(id) {
   return /^[A-Za-z]/.test(slug) ? slug : `L_${slug}`;
 }
 
-/** The `Resource_` slug rule of bpmn-xml.js `buildResources`, under the prefix `role_`. */
-function roleBase(role) {
-  const slug = role.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
-  return slug ? `role_${slug}` : 'role';
+/** The `Resource_` slug rule of bpmn-xml.js `buildResources`, under `prefix` (`role`, `sys`); an empty slug gives the prefix alone. */
+function slugBase(text, prefix) {
+  const slug = text.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+  return slug ? `${prefix}_${slug}` : prefix;
 }
+const roleBase = (role) => slugBase(role, 'role');
+
+/** A node whose `system` format 2.x keeps: a task (the 8 task classes, any depth). */
+const carriesSystem = (node) => TASK_TYPES.has(node.type);
 
 /** Lanes of a process depth-first in document order, each with its parent lane (or null). */
 function lanesOf(proc) {
@@ -173,8 +184,8 @@ function schemeOf(catalog) {
 }
 
 /**
- * The MG02 entries of the input, in document order: per process its nodes depth-first (`system`,
- * a data node), then the flows and associations touching a data node.
+ * The MG02 entries of the input, in document order: per process its nodes depth-first (`system`
+ * off a task, a data node), then the flows and associations touching a data node.
  */
 function unsupportedFields(processes, lc, dropUnsupported) {
   const entries = [];
@@ -182,8 +193,8 @@ function unsupportedFields(processes, lc, dropUnsupported) {
   const tail = dropUnsupported ? '; dropped.' : '.';
   const visit = (nodes) => {
     for (const node of nodes || []) {
-      if (node.system !== undefined) {
-        entries.push(entry('MG02', `node "${q(node.id)}": field "system" ("${q(node.system)}") has no place in format 2.0 yet${tail}`, [node.id]));
+      if (node.system !== undefined && !carriesSystem(node)) {
+        entries.push(entry('MG02', `node "${q(node.id)}": field "system" ("${q(node.system)}") on ${q(node.type)} has no place in format 2.x: a system belongs on a task${tail}`, [node.id]));
       }
       if (DATA_NODE_TYPES.has(node.type)) {
         dataIds.add(node.id);
@@ -209,8 +220,11 @@ function unsupportedFields(processes, lc, dropUnsupported) {
   return { entries, dataIds };
 }
 
-/** Strips the 1.x-only fields in place at every depth; drops data nodes and every connection touching one. */
-function strip(processes, m, dataIds) {
+/**
+ * Strips the 1.x-only fields in place at every depth; drops data nodes and every connection touching
+ * one. A task's `system` text becomes its system id (`systemId`: text → id); any other `system` goes.
+ */
+function strip(processes, m, dataIds, systemId) {
   const touches = (c) => dataIds.has(c.source) || dataIds.has(c.target);
   const visit = (holder) => {
     if (!Array.isArray(holder.nodes)) return;
@@ -218,7 +232,8 @@ function strip(processes, m, dataIds) {
     for (const node of holder.nodes) {
       delete node.lane;
       delete node.role;
-      delete node.system;
+      if (node.system !== undefined && carriesSystem(node)) node.system = systemId.get(node.system);
+      else delete node.system;
       visit(node);
     }
     if (Array.isArray(holder.edges)) holder.edges = holder.edges.filter((e) => !touches(e));
@@ -290,9 +305,14 @@ function newLaneKeys(formed) {
 }
 
 /**
- * Translates a 1.x model into format 2.0. `catalog` (`{ actors, scheme? }`) gives the scheme whose
- * performs type the assignments use (absent: DEMI, `D`); the new actor ids avoid its ids.
- * `dropUnsupported` drops the fields 2.0 cannot hold yet instead of refusing the model.
+ * Translates a 1.x model into format 2.x. `catalog` (`{ actors, systems?, scheme? }`) gives the scheme
+ * whose performs type the assignments use (absent: DEMI, `D`); the new actor and system ids avoid its
+ * ids. `dropUnsupported` drops the fields 2.x cannot hold yet instead of refusing the model.
+ *
+ * Each distinct `system` text of a task (any depth, exact comparison, document order) becomes one
+ * system `{ id: 'sys_<slug>', name: <text> }` (MG08), or, against a catalogue, the first of its
+ * systems with that `name` (MG07 `[text, systemId]`); the task's `system` becomes the id. The model
+ * is "2.1" when at least one system was created or reused, else "2.0".
  *
  * Against a catalogue (decision 2), a lane whose name (`lane.name`, else its id) equals an actor's
  * `name` exactly is that actor (the first of that name in catalogue order, said in the MG07 text);
@@ -305,12 +325,13 @@ function newLaneKeys(formed) {
  *
  * Which catalogue the caller passes to `runPipeline(model, { catalog })` (and `resolveFields`):
  * - with `catalog` given: the given catalogue. The model carries the new actors itself (`actors`,
- *   the same as `supplement.actors`); passing `result.catalog` as well gives an H09 per new actor.
- * - without `catalog`: `result.catalog` (equal to the supplement); the model carries no actors.
+ *   the same as `supplement.actors`) and the new systems (`systems`, only when there are any);
+ *   passing `result.catalog` as well gives an H09 per new entry.
+ * - without `catalog`: `result.catalog` (equal to the supplement); the model carries no actors or systems.
  * `catalog` of the result is the merged view for the author (given catalogue with the supplement
  * appended, or the supplement alone), not the generation input when a catalogue was given.
  *
- * @returns {{ model: object|null, supplement: { actors: object[] }|null, catalog: object|null,
+ * @returns {{ model: object|null, supplement: { actors: object[], systems?: object[] }|null, catalog: object|null,
  *   report: { status: 'translated'|'refused', entries: { code, message, elements }[],
  *   summary: { processes, lanes, actors, activities, assigned, laneMatches,
  *     deviations: { MG03, MG04, MG05 } } } }} (summary: see `summaryOf`)
@@ -365,14 +386,24 @@ export function migrateModel(lc, options = {}) {
 
   // (4) one actor per lane. Lane ids that are actor ids keep their id (first come); every other lane is renamed.
   const given = Array.isArray(catalog?.actors) ? catalog.actors : [];
-  const taken = new Set(given.map((a) => a.id));
+  const givenSystems = Array.isArray(catalog?.systems) ? catalog.systems : [];
+  // actors and systems share one id space (C03): a new id avoids both lists of the given catalogue
+  const taken = new Set([...given.map((a) => a.id), ...givenSystems.map((s) => s.id)]);
+  const systemIds = new Set(givenSystems.map((s) => s.id));
   const roleKind = new Set(given.filter((a) => a.kind === 'role').map((a) => a.id));
-  const byName = new Map(); // exact actor name → the catalogue's actors of that name, in catalogue order
-  for (const a of given) byName.set(a.name, [...(byName.get(a.name) ?? []), a.id]);
+  /** exact name → the ids of that name, in catalogue order */
+  const namesOf = (list) => {
+    const out = new Map();
+    for (const x of list) out.set(x.name, [...(out.get(x.name) ?? []), x.id]);
+    return out;
+  };
+  const byName = namesOf(given);
+  const systemByName = namesOf(givenSystems);
   const existing = (name) => byName.get(name)?.[0];
-  const several = (name) => (byName.get(name).length > 1
-    ? ` The catalogue holds ${byName.get(name).length} actors of that name (${byName.get(name).map((i) => `"${q(i)}"`).join(', ')}); the first is taken.`
+  const severalOf = (map, noun) => (name) => (map.get(name).length > 1
+    ? ` The catalogue holds ${map.get(name).length} ${noun} of that name (${map.get(name).map((i) => `"${q(i)}"`).join(', ')}); the first is taken.`
     : '');
+  const several = severalOf(byName, 'actors');
   const keeps = new Set();
   for (const lanes of allLanes) {
     for (const { lane } of lanes) {
@@ -402,7 +433,7 @@ export function migrateModel(lc, options = {}) {
       if (!keeps.has(lane)) {
         const valid = ACTOR_ID.test(lane.id);
         id = uniqueId(valid ? lane.id : laneSlug(lane.id), taken);
-        const why = valid ? 'collides with another actor id' : 'is no actor id';
+        const why = !valid ? 'is no actor id' : systemIds.has(lane.id) ? 'collides with a system id of the catalogue' : 'collides with another actor id';
         entries.push(entry('MG06', `lane id "${q(lane.id)}" ${why}; the actor is "${id}".`, [lane.id, id]));
       }
       if (!laneActor[p].has(lane.id)) laneActor[p].set(lane.id, id);
@@ -464,6 +495,31 @@ export function migrateModel(lc, options = {}) {
     entries.push(entry('H07', `${kind} "${q(name)}" became actor "${actor.id}" without kind; check its kind.${note}`, [actor.id]));
   }
 
+  // (5b) one system per distinct `system` text of a task (exact comparison), in document order, at
+  // any depth; created after the role actors, so no actor id moves. A text equal to the name of a
+  // system of the given catalogue is that system (the first of that name; MG07 once per text).
+  const systems = [];
+  const systemId = new Map(); // system text → system id
+  const severalSystems = severalOf(systemByName, 'systems');
+  const collectSystems = (nodes) => {
+    for (const node of nodes || []) {
+      if (node.system !== undefined && carriesSystem(node) && !systemId.has(node.system)) {
+        const known = systemByName.get(node.system)?.[0];
+        if (known !== undefined) {
+          systemId.set(node.system, known);
+          entries.push(entry('MG07', `System "${q(node.system)}" maps by its name to the existing system "${q(known)}".${severalSystems(node.system)}`, [node.system, known]));
+        } else {
+          const id = uniqueId(slugBase(node.system, 'sys'), taken);
+          systemId.set(node.system, id);
+          systems.push({ id, name: node.system });
+          entries.push(entry('MG08', `System "${q(node.system)}" became system "${id}" of the catalogue.`, [id]));
+        }
+      }
+      collectSystems(node.nodes);
+    }
+  };
+  for (const proc of processes) collectSystems(proc.nodes);
+
   // (6) assignments, in document order; a role on a node that gets no assignment is dropped (MG05)
   let assigned = 0;
   const droppedRoles = (nodes) => {
@@ -523,14 +579,18 @@ export function migrateModel(lc, options = {}) {
   });
 
   // (7) strip the 1.x-only fields; the version first
-  strip(processes, m, unsupported.dataIds);
+  strip(processes, m, unsupported.dataIds, systemId);
   delete m.$schemaVersion;
-  const supplement = { actors };
+  const newSystems = () => (systems.length ? { systems: clone(systems) } : {});
+  const supplement = { actors, ...(systems.length ? { systems } : {}) };
   const withCatalog = catalog !== null && catalog !== undefined;
-  const model = { $schemaVersion: FORMAT_V2_VERSION, ...m, ...(withCatalog ? { actors: clone(actors) } : {}) };
-  const effective = withCatalog ? { ...clone(catalog), actors: [...clone(catalog.actors), ...clone(actors)] } : { actors: clone(actors) };
+  const version = systemId.size ? SYSTEMS_VERSION : FORMAT_V2_VERSION;
+  const model = { $schemaVersion: version, ...m, ...(withCatalog ? { actors: clone(actors), ...newSystems() } : {}) };
+  const effective = withCatalog
+    ? { ...clone(catalog), actors: [...clone(catalog.actors), ...clone(actors)], ...(systems.length ? { systems: [...clone(givenSystems), ...clone(systems)] } : {}) }
+    : { actors: clone(actors), ...newSystems() };
 
-  // (8) the result must pass the 2.0 gate and the catalogue schema (a lane name over the catalogue's bounds, an empty process)
+  // (8) the result must pass the 2.x gate and the catalogue schema (a lane or system name over the catalogue's bounds, an empty process)
   const check = validateModelSchema(model, { accept: ['2'] });
   if (!check.valid) return refuse(`the translation fails the format 2.0 schema: ${schemaReason(check.errors)}`, [], counted);
   const catalogProblems = catalogErrors(effective);
@@ -567,8 +627,12 @@ export function migrateModel(lc, options = {}) {
 
 const USAGE = 'Usage: node migrate.js <input.json> [output-base] [--catalog <path>] [--drop-unsupported] [--force]';
 
-/** The command line as `{ input, base, catalogArg, dropUnsupported, force }`, or `{ error }` (a usage error). */
+/**
+ * The command line as `{ input, base, catalogArg, dropUnsupported, force }`, `{ help: true }` when
+ * `-h` or `--help` stands anywhere in it, or `{ error }` (a usage error).
+ */
 function parseArgs(argv) {
+  if (argv.includes('-h') || argv.includes('--help')) return { help: true };
   const out = { input: undefined, base: undefined, catalogArg: null, dropUnsupported: false, force: false };
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
@@ -599,9 +663,14 @@ function fail(message, code = 1) {
  * Writes the translation: the model, the catalogue supplement and the report (a refusal: the report
  * only). Everything is checked before anything is written: an output that exists (without
  * `--force`) or is the input itself stops the run with exit 1. The output directory is created.
+ * `-h` or `--help` prints the usage line on stdout, reads and writes nothing and exits 0.
  */
 function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
+  if (args.help) {
+    process.stdout.write(`${USAGE}\n`);
+    return;
+  }
   if (args.error) fail(`✗ ${args.error}\n${USAGE}`);
 
   let text;

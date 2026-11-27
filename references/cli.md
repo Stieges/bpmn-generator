@@ -101,31 +101,39 @@ Details and caveats: `references/round-trip.md`.
 node bpmn/migrate.js <input.json> [output-base] [--catalog <path>] [--drop-unsupported] [--force]
 ```
 
-Translates a 1.x model into a format 2.0 model. Lanes become actors without `kind`, each activity
-of a process with lanes gets the assignment of its lane (or role), and the report lists every place
-you should check. It writes three files:
+Translates a 1.x model into a format 2.x model. Lanes become actors without `kind`, each activity
+of a process with lanes gets the assignment of its lane (or role), each `system` on a task becomes
+a system of the catalogue, and the report lists every place you should check. It writes three files:
 
 | File | Content |
 |------|---------|
-| `<base>.json` | the 2.0 model; its `"catalog"` field names the catalogue, relative to the model file |
-| `<base>.catalog.json` | the supplement `{ "actors": [...] }`, never a `scheme` |
+| `<base>.json` | the 2.x model; its `"catalog"` field names the catalogue, relative to the model file |
+| `<base>.catalog.json` | the supplement `{ "actors": [...], "systems"?: [...] }`, never a `scheme` |
 | `<base>.migrate-report.json` | the report (`status`, `entries`, `summary`), 2-space JSON |
 
 Without `--catalog` the model names the supplement as its catalogue, and the demi scheme applies.
 With `--catalog <path>` (or `--catalog=<path>`, relative to the working directory) a lane or role
 named exactly like an actor of that catalogue is that actor (`MG07`); the model then carries only
 the new actors and `"catalog"` names the given file, relative to the model; the given catalogue's
-scheme applies and the supplement is written for reference. `--drop-unsupported` drops what 2.0
-cannot hold yet (`system`, data nodes and their flows) and lists it (`MG02`) instead of refusing.
-After you merge the supplement into your catalogue, remove the model's own `actors`; otherwise each
-of them gives H09.
+scheme applies and the supplement is written for reference. `--drop-unsupported` drops what 2.x
+cannot hold yet (data nodes and their flows, a `system` on a node that is no task) and lists it
+(`MG02`) instead of refusing.
+
+A `system` on a task is carried: each distinct text becomes one system `sys_<slug>` of the
+supplement (`MG08`), and the task names it by id. With `--catalog`, a text named exactly like a
+system of that catalogue is that system (`MG07`), and the model carries only the new systems. A
+model that names a system is format `"2.1"`; one without stays `"2.0"`, and its supplement has no
+`systems`. After you merge the supplement into your catalogue, remove the model's own `actors` and
+`systems`; otherwise each of them gives H09.
 
 The default base is `<input basename without .json>.v2` in the working directory, never beside the
 input. A base is used as given (`out/m` writes `out/m.json`); its directory is created when it is
 missing. The base is not stripped of a `.json` ending.
 
 - stdout on success: `✓ <input> → <base>.json: <n> actors, <n> assignments, <n> report entries`.
-- Exit 0: translated. Exit 2: refused (an `MG01` or `MG02` entry; a 2.0 input or one that fails the
+- `-h` or `--help`, anywhere on the command line: the usage line on stdout, exit 0; nothing is read
+  or written.
+- Exit 0: translated. Exit 2: refused (an `MG01` or `MG02` entry; a 2.x input or one that fails the
   1.x schema is `MG01`); only `<base>.migrate-report.json` is written. Each report message is
   printed on stderr as `✗ <message>`, then `✗ <input> not translated; the reasons are in <report>`.
   An earlier `<base>.json` or `<base>.catalog.json` is left in place, not deleted.

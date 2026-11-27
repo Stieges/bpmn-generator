@@ -171,15 +171,15 @@
       }
     },
     "nested-lanes-role-system.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 3,
       "laneMatches": 0,
       "codes": {
         "H07": 7,
-        "MG02": 2,
         "MG03": 3,
-        "MG04": 3
+        "MG04": 3,
+        "MG08": 2
       }
     },
     "parallel-split-join.json": {

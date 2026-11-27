@@ -28,6 +28,7 @@ import { modelFormat, validateModelSchema } from './schema-gate.js';
 import { resolveLaneId } from './topology.js';
 import { resolveFields, formLanes } from './model-v2.js';
 import { isActivity, isBoundaryEvent, FLOW_NODE_TYPES } from './types.js';
+import { TASK_TYPES } from './types.js';
 import { loadNamedView } from '../shared/view.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,7 +39,7 @@ const UPDATE = process.env.UPDATE_MIGRATE_TABLE === '1';
 // Floor of the corpus, so it cannot shrink silently. Raise it when fixtures are added; never lower it.
 const MIN_CORPUS = 28;
 // The pinned summary line (i); it must agree with the pinned table.
-const SUMMARY = 'translated 19 of 28 (67.9 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0';
+const SUMMARY = 'translated 20 of 28 (71.4 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0';
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const processesOf = (model) => (Array.isArray(model.pools) ? model.pools : [model]);
@@ -340,6 +341,40 @@ describe('migrate over every 1.x fixture', () => {
     const inXml = (xml) => [...xml.matchAll(/<bpmn:messageFlow id="([^"]+)"[^>]*sourceRef="([^"]+)" targetRef="([^"]+)"/g)].map(([, id, source, target]) => ({ id, source, target }));
     expect(inXml(migrated.bpmnXml).map((f) => f.id)).toEqual(flows.map((f) => f.id));
     expect(inXml(migrated.bpmnXml)).toEqual(inXml(original.bpmnXml));
+  });
+
+  test('(j) every task system of the original names a catalogue system of that name, written as <bg:system ref> under rollen', () => {
+    let checked = 0;
+    const xmlText = (v) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    for (const [file, { input, drop, original, migrated }] of runs) {
+      const systems = new Map((drop.catalog.systems ?? []).map((s) => [s.id, s.name]));
+      const visit = (nodes, migratedNodes) => {
+        for (const node of nodes || []) {
+          const now = migratedNodes.find((n) => n.id === node.id);
+          if (node.system !== undefined && TASK_TYPES.has(node.type)) {
+            expect({ file, node: node.id, name: systems.get(now.system) }).toEqual({ file, node: node.id, name: node.system });
+            const element = (xml) => new RegExp(`<bpmn:${node.type} id="${node.id}"[^>]*>([\\s\\S]*?)</bpmn:${node.type}>`).exec(xml)?.[1] ?? '';
+            expect({ file, node: node.id, xml: element(migrated.bpmnXml).includes(`<bg:system ref="${now.system}">${xmlText(node.system)}</bg:system>`) })
+              .toEqual({ file, node: node.id, xml: true });
+            // the text equals the 1.x XML's
+            expect(element(original.bpmnXml)).toContain(`>${xmlText(node.system)}</bg:system>`);
+            checked++;
+          }
+          if (now) visit(node.nodes, now.nodes || []);
+        }
+      };
+      for (const proc of processesOf(input)) visit(proc.nodes, processesOf(drop.model).find((p) => p.id === proc.id || !proc.id)?.nodes || []);
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  test('(k) every fixture whose original has no system gives "2.0" and a supplement without systems', () => {
+    for (const [file, { input, plain, drop }] of runs) {
+      if (JSON.stringify(input).includes('"system"')) continue;
+      for (const r of [plain, drop].filter((x) => x.model)) {
+        expect({ file, version: r.model.$schemaVersion, keys: Object.keys(r.supplement) }).toEqual({ file, version: '2.0', keys: ['actors'] });
+      }
+    }
   });
 
   test('(i) the summary', () => {
