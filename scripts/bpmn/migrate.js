@@ -11,13 +11,19 @@
  * nodes and the flows and associations touching them are fields 2.0 cannot hold yet (MG02): refused
  * by default, dropped and listed with `dropUnsupported`. Everything else is kept as given.
  *
+ * The report then compares the lanes (plan "Check"): the result goes through `resolveFields` and
+ * `formLanes` under the view `rollen`, and every top-level flow node of a process with lanes (no
+ * boundary event, no subprocess child) that sat in a lane is compared with its new lane. An activity
+ * that lands elsewhere has an MG03 already; an event or gateway that lands elsewhere gets MG04.
+ *
  * `migrateModel` is pure: neither argument is changed, and it never throws on its input; a refused
  * input gives `model: null` and the reason in the report.
  */
 
 import { validateLogicCoreSchema, validateModelSchema, modelFormat, formatSchemaErrors, FORMAT_V2_VERSION } from './schema-gate.js';
 import { resolveLaneId, collectDocumentIds } from './topology.js';
-import { isActivity, isBoundaryEvent } from './types.js';
+import { isActivity, isBoundaryEvent, FLOW_NODE_TYPES } from './types.js';
+import { resolveFields, formLanes, UNASSIGNED, UNIT_UNKNOWN } from './model-v2.js';
 import { resolveScheme, catalogErrors, CATALOG_LIMITS } from '../shared/catalog.js';
 import { coded } from '../shared/message-codes.js';
 import { boundText } from '../shared/safe-text.js';
@@ -50,10 +56,23 @@ function orderEntries(entries) {
     .map(([e]) => e);
 }
 
-const EMPTY_SUMMARY = Object.freeze({ processes: 0, lanes: 0, actors: 0, activities: 0, assigned: 0 });
+/** The codes `summary.deviations` counts, one entry each. */
+const DEVIATION_CODES = ['MG03', 'MG04', 'MG05'];
 
-function refused(entries, summary = EMPTY_SUMMARY) {
-  return { model: null, supplement: null, catalog: null, report: { status: 'refused', entries, summary: { ...summary } } };
+/**
+ * The report's summary, the same shape for every status (a refusal counts what it read, the rest 0):
+ * `processes`, `lanes` (every lane at any depth), `actors` (created), `activities` (top-level, no
+ * boundary event), `assigned` (activities with an assignment), `laneMatches` (compared top-level flow
+ * nodes whose new lane under `rollen` is the actor of their original lane) and `deviations`
+ * (`{ MG03, MG04, MG05 }`, the number of report entries of each code).
+ */
+function summaryOf(counted = {}, entries = []) {
+  const deviations = Object.fromEntries(DEVIATION_CODES.map((c) => [c, entries.filter((e) => e.code === c).length]));
+  return { processes: 0, lanes: 0, actors: 0, activities: 0, assigned: 0, laneMatches: 0, ...counted, deviations };
+}
+
+function refused(entries, counted) {
+  return { model: null, supplement: null, catalog: null, report: { status: 'refused', entries, summary: summaryOf(counted) } };
 }
 
 function refuse(reason, elements = []) {
@@ -179,6 +198,64 @@ function strip(processes, m, dataIds) {
   if (Array.isArray(m.associations)) m.associations = m.associations.filter((a) => !touches(a));
 }
 
+const isPlaceholderKey = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN;
+
+/**
+ * The lane comparison of the report over prepared sites, one per compared top-level flow node:
+ * `{ nodeId, type, originalLaneId, originalActor, newKey, mg03, laneOfActor }`, where `newKey` is
+ * the `_laneActor` of the node's new lane (null when its process gets no lanes), `mg03` says whether
+ * the node has an MG03 entry and `laneOfActor` maps the lane actors of its process to their
+ * original lane ids. Exported for its test; `migrateModel` is its only caller.
+ *
+ * An activity's new lane is its performer, so it differs from its original lane exactly when it has
+ * an MG03; anything else is a bug of `migrateModel` (an inconsistent mapping), never a finding about
+ * the input, and throws `Error('migrate internal error: …')`. An event or gateway that differs gets
+ * MG04 `[nodeId, originalLaneId, newLaneId]`: `newLaneId` is the original lane whose actor the new
+ * lane is; for a new lane that is no lane actor of the process it is the lane's key (a role actor's
+ * id, or the placeholder `_unassigned`/`_unitUnknown`), and without any new lane the element is
+ * left out (`[nodeId, originalLaneId]`).
+ * @returns {{ laneMatches: number, entries: { code, message, elements }[] }}
+ */
+export function compareLanes(sites) {
+  let laneMatches = 0;
+  const entries = [];
+  for (const s of sites) {
+    const same = s.newKey === s.originalActor;
+    if (isActivity(s.type)) {
+      if (same === s.mg03) {
+        const what = s.mg03 ? `has an MG03 but stays in lane "${q(s.originalLaneId)}"` : `lands outside lane "${q(s.originalLaneId)}" (key "${q(s.newKey)}") without an MG03`;
+        throw new Error(`migrate internal error: activity "${q(s.nodeId)}" ${what}`);
+      }
+      if (same) laneMatches++;
+      continue;
+    }
+    if (same) { laneMatches++; continue; }
+    const head = `${q(s.type)} "${q(s.nodeId)}" sat in lane "${q(s.originalLaneId)}";`;
+    if (s.newKey === null) {
+      entries.push(entry('MG04', `${head} format 2.0 gives its process no lanes (no activity has a performer).`, [s.nodeId, s.originalLaneId]));
+    } else if (s.laneOfActor.has(s.newKey)) {
+      const laneId = s.laneOfActor.get(s.newKey);
+      entries.push(entry('MG04', `${head} the inheritance rule places it in lane "${q(laneId)}".`, [s.nodeId, s.originalLaneId, laneId]));
+    } else if (isPlaceholderKey(s.newKey)) {
+      entries.push(entry('MG04', `${head} the inheritance rule places it in the placeholder lane "${s.newKey}".`, [s.nodeId, s.originalLaneId, s.newKey]));
+    } else {
+      entries.push(entry('MG04', `${head} the inheritance rule places it with actor "${q(s.newKey)}", which is no lane of its 1.x process.`, [s.nodeId, s.originalLaneId, s.newKey]));
+    }
+  }
+  return { laneMatches, entries };
+}
+
+/** The `_laneActor` of every top-level node's new lane, per process id; a process without lanes maps to null. */
+function newLaneKeys(formed) {
+  const out = new Map();
+  for (const proc of Array.isArray(formed.pools) ? formed.pools : [formed]) {
+    if (!Array.isArray(proc.lanes) || proc.lanes.length === 0) { out.set(proc.id, null); continue; }
+    const keyOf = new Map(proc.lanes.map((l) => [l.id, l._laneActor]));
+    out.set(proc.id, new Map((proc.nodes || []).filter((n) => keyOf.has(n.lane)).map((n) => [n.id, keyOf.get(n.lane)])));
+  }
+  return out;
+}
+
 /**
  * Translates a 1.x model into format 2.0. `catalog` (`{ actors, scheme? }`) gives the scheme whose
  * performs type the assignments use (absent: DEMI, `D`); the new actor ids avoid its ids.
@@ -191,7 +268,8 @@ function strip(processes, m, dataIds) {
  *
  * @returns {{ model: object|null, supplement: { actors: object[] }|null, catalog: object|null,
  *   report: { status: 'translated'|'refused', entries: { code, message, elements }[],
- *   summary: { processes, lanes, actors, activities, assigned } } }}
+ *   summary: { processes, lanes, actors, activities, assigned, laneMatches,
+ *     deviations: { MG03, MG04, MG05 } } } }} (summary: see `summaryOf`)
  */
 export function migrateModel(lc, options = {}) {
   const { catalog = null, dropUnsupported = false } = options ?? {};
@@ -338,6 +416,21 @@ export function migrateModel(lc, options = {}) {
     }
   });
 
+  // the sites of the lane comparison, read before the lanes are stripped
+  const mg03 = new Set(entries.filter((e) => e.code === 'MG03').map((e) => e.elements[0]));
+  const sites = [];
+  processes.forEach((proc, p) => {
+    if (!hasLanes(proc)) return;
+    const laneOfActor = new Map();
+    for (const [laneId, actor] of laneActor[p]) if (!laneOfActor.has(actor)) laneOfActor.set(actor, laneId);
+    for (const node of proc.nodes || []) {
+      if (!FLOW_NODE_TYPES.has(node.type) || isBoundaryEvent(node)) continue;
+      const lane = laneOf(proc, p, node);
+      if (!lane) continue; // no original lane (MG05 for an activity): nothing to compare
+      sites.push({ procId: proc.id, nodeId: node.id, type: node.type, originalLaneId: lane.laneId, originalActor: lane.actor, mg03: mg03.has(node.id), laneOfActor });
+    }
+  });
+
   // (7) strip the 1.x-only fields; the version first
   strip(processes, m, unsupported.dataIds);
   delete m.$schemaVersion;
@@ -352,10 +445,23 @@ export function migrateModel(lc, options = {}) {
   const catalogProblems = catalogErrors(effective);
   if (catalogProblems.length) return refuse(`the translated actors fail the catalogue schema: ${catalogProblems.join('; ')}`);
 
+  // (9) the lane comparison: the result's lanes under the view rollen against the original lanes
+  const fields = resolveFields(model, { catalog: withCatalog ? catalog : supplement });
+  if (fields.errors.length) return refuse(`the translation fails the catalogue check: ${fields.errors.join('; ')}`);
+  const formed = formLanes(fields.lc, fields.resolved, { lanes: 'role' });
+  if (formed.errors.length) return refuse(`the translation's lanes under the view rollen fail: ${formed.errors.join('; ')}`);
+  const keys = newLaneKeys(formed.lc);
+  const compared = compareLanes(sites.map(({ procId, ...s }) => ({ ...s, newKey: keys.get(procId)?.get(s.nodeId) ?? null })));
+  entries.push(...compared.entries);
+
   return {
     model,
     supplement,
     catalog: effective,
-    report: { status: 'translated', entries: orderEntries(entries), summary: { ...counted, actors: actors.length, assigned } },
+    report: {
+      status: 'translated',
+      entries: orderEntries(entries),
+      summary: summaryOf({ ...counted, actors: actors.length, assigned, laneMatches: compared.laneMatches }, entries),
+    },
   };
 }
