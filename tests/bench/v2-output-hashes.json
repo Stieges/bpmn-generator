@@ -10,5 +10,9 @@
   "organigramm.json × organigramm": {
     "xml": "28f6143e921d5edde5eb84dad659a367d48e72bae376f37497ad8cd969dc387a",
     "svg": "2f3eb7cbae5046a9262c249dd7c25450261635b7f190dfe10c70831772e09b29"
+  },
+  "schaden-systeme.json × systeme": {
+    "xml": "800dda9daf23027e0aa1794da76579052aa63d1dc3c78c227d22519f5dc826b6",
+    "svg": "b395710b2522391aa74538e440e25e071ba2b40ffbc105d4cb7c5dce33268ceb"
   }
 }

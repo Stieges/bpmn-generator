@@ -2,16 +2,18 @@
 /**
  * v2-output-hashes.mjs
  *
- * The three format 2.0 golden diagrams, generated with default options: tests/fixtures-v2/schaden.json
+ * The four golden diagrams, generated with default options: tests/fixtures-v2/schaden.json
  * with its catalogue, once in view `rollen` and once in view `einheiten` (design 9, slice 1), and
  * tests/fixtures-v2/organigramm.json, the same model on a catalogue whose units nest with `partOf`,
  * in view `organigramm`: the one diagram with lanes nested along the organigram, including
  * a unit's own lane. The fixtures live outside tests/fixtures/ so no folder-driven 1.x test reads
  * them; their hashes live in tests/bench/v2-output-hashes.json, apart from default-output-hashes.json.
- * No more pairs than these three: the flat level view adds no layout path the two flat goldens do
+ * The fourth pair, tests/fixtures-v2/schaden-systeme.json (format 2.1, the same process with a system
+ * on each task) in view `systeme`, earns its place because the system view is the only new lane path.
+ * No more pairs than these four: the flat level view adds no layout path the two flat goldens do
  * not already draw, and is pinned by unit tests instead.
  *
- * Rewrite the hash file and the six golden files: `node bench/v2-output-hashes.mjs` from `scripts/`.
+ * Rewrite the hash file and the eight golden files: `node bench/v2-output-hashes.mjs` from `scripts/`.
  * Regenerate only when a change to the 2.0 output is intended, after inspecting the diff like a golden.
  * Fenced by v2-output-hashes.test.js.
  */
@@ -28,7 +30,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_V2_DIR = join(__dirname, '..', '..', 'tests', 'fixtures-v2');
 export const V2_SNAPSHOT_PATH = join(__dirname, '..', '..', 'tests', 'bench', 'v2-output-hashes.json');
 
-export const V2_PAIRS = [['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm']];
+export const V2_PAIRS = [['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['schaden-systeme.json', 'systeme']];
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 

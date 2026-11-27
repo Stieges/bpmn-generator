@@ -18,10 +18,12 @@ import { loadNamedView, ViewRejectedError } from '../shared/view.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
-const golden = (view) => resolve(root, `tests/fixtures-v2/${view === 'organigramm' ? 'organigramm' : 'schaden'}.${view}.expected.bpmn`);
+const GOLDEN_MODEL = { organigramm: 'organigramm', systeme: 'schaden-systeme' };
+const golden = (view) => resolve(root, `tests/fixtures-v2/${GOLDEN_MODEL[view] ?? 'schaden'}.${view}.expected.bpmn`);
 const read = (path) => readFileSync(path, 'utf8');
 const CATALOG = 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4';
 const CATALOG_ORG = 'sha256:0261e68c2a37cc3d7a5eef8a2ca8d10314ec949abcb0af30514e1fe04b126842';
+const CATALOG_SYS = 'sha256:ca38a972cb2661579c6d2ded39f4625c3a3bab332d58c9ef9c7eb5f56be6fc43';
 const LANE_IDS = {
   rollen: ['L.Process_Schaden.sb_schaden', 'L.Process_Schaden.regress', 'L.Process_Schaden.zahlung'],
   einheiten: ['L.Process_Schaden.abt_schaden', 'L.Process_Schaden.abt_finanzen'],
@@ -80,6 +82,39 @@ for (const view of ['rollen', 'einheiten']) {
     });
   });
 }
+
+// The system golden: system lanes import as ordinary lanes, the system of a task as its 1.x `system` text.
+describe('the systeme golden', () => {
+  const LANES = ['L.Process_Schaden.sys_schaden', 'L.Process_Schaden.sys_regress'];
+  for (const [name, reader] of Object.entries(READERS)) {
+    test(`${name} gives a 1.x model that passes the 1.x gate, with the system texts`, async () => {
+      const lc = await reader(read(golden('systeme')));
+      expect(validateLogicCoreSchema(lc)).toEqual({ valid: true, errors: [] });
+      expect(lc.$schemaVersion).toBeUndefined();
+      expect(lc.lanes.map((l) => l.id)).toEqual(LANES);
+      expect(lc.nodes.some((n) => 'role' in n || 'assignments' in n)).toBe(false);
+      expect(Object.fromEntries(lc.nodes.filter((n) => n.system).map((n) => [n.id, n.system])))
+        .toEqual({ pruefen: 'Schadensystem', regr: 'Regressportal', zahlen: 'Schadensystem' });
+      expect(JSON.stringify(lc)).not.toMatch(/bg:|modelVersion|sha256|assignment|derived/);
+      expect(keysOf(lc).filter((k) => k.startsWith('_') || k.startsWith('$'))).toEqual([]);
+    });
+  }
+
+  test('both readers give the same model', async () => {
+    const xml = read(golden('systeme'));
+    expect(await bpmnToLogicCore(xml)).toEqual(bpmnToLogicCoreLegacy(xml));
+  });
+
+  test('readModelMarker reads the origin from the root element', () => {
+    expect(readModelMarker(read(golden('systeme')))).toEqual({ modelVersion: '2.1', view: 'systeme', catalog: CATALOG_SYS });
+  });
+
+  test('the CLI prints one N01 notice on stderr', () => {
+    const { status, stderr } = spawnSync(process.execPath, [resolve(here, 'import.js'), golden('systeme')], { encoding: 'utf8' });
+    expect(status).toBe(0);
+    expect(stderr.match(/\[N01\]/g)).toHaveLength(1);
+  });
+});
 
 // The nested golden: the lane tree imports as 1.x nested lanes, every node in a leaf lane.
 describe('the organigramm golden', () => {

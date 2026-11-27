@@ -1,6 +1,6 @@
 /**
- * The three format 2.0 golden diagrams (schaden × rollen, schaden × einheiten, organigramm ×
- * organigramm): each pair equals its golden files byte for byte and its entry in
+ * The four golden diagrams (format 2.0: schaden × rollen, schaden × einheiten, organigramm ×
+ * organigramm; format 2.1: schaden-systeme × systeme): each pair equals its golden files byte for byte and its entry in
  * tests/bench/v2-output-hashes.json. See
  * v2-output-hashes.mjs; regenerate with `node bench/v2-output-hashes.mjs` only when the change is intended.
  */
@@ -18,11 +18,12 @@ import { V2_PAIRS, V2_SNAPSHOT_PATH, FIXTURES_V2_DIR, goldenBase, generateV2, co
 const CATALOG_HASH = {
   'schaden.json': 'sha256:1839c85404873913d420764884aa77ed37f54a3341df18b7e641c0f85f70c9a4',
   'organigramm.json': 'sha256:0261e68c2a37cc3d7a5eef8a2ca8d10314ec949abcb0af30514e1fe04b126842',
+  'schaden-systeme.json': 'sha256:ca38a972cb2661579c6d2ded39f4625c3a3bab332d58c9ef9c7eb5f56be6fc43',
 };
 
 describe('format 2.0 golden diagrams', () => {
-  test('exactly three pairs: the two flat views of design 9 and the nested organigram view', () => {
-    expect(V2_PAIRS).toEqual([['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm']]);
+  test('exactly four pairs: the two flat views of design 9, the nested organigram view and the system view', () => {
+    expect(V2_PAIRS).toEqual([['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['schaden-systeme.json', 'systeme']]);
   });
 
   // Each pair is generated once; generateV2 reads the fixture afresh on every call, so no run sees a model another run changed.
@@ -47,7 +48,8 @@ describe('format 2.0 golden diagrams', () => {
     expect(r.bpmnXml).toContain('<bg:assignment type="I" actor="sb_schaden" />');
   });
 
-  test.each(V2_PAIRS)('%s × %s: no performer, resource or system in the golden', (name, viewName) => {
+  const OLD_PAIRS = V2_PAIRS.slice(0, 3);
+  test.each(OLD_PAIRS)('%s × %s: no performer, resource or system in the golden', (name, viewName) => {
     const xml = golden(name, viewName, 'bpmn');
     expect(xml).not.toMatch(/<bpmn:(performer|humanPerformer|resource)\b/);
     expect(xml).not.toContain('<bg:system');
@@ -61,6 +63,38 @@ describe('format 2.0 golden diagrams', () => {
     const bare = JSON.parse(JSON.stringify(lc, (k, v) => (k.startsWith('_') ? undefined : v)));
     const { bpmnXml } = await runPipeline(bare);
     expect(await bpmnToLogicCore(golden(name, viewName, 'bpmn'))).toEqual(await bpmnToLogicCore(bpmnXml));
+  }, 60000);
+
+  test('schaden-systeme × systeme: three system references, two system lanes, nothing else', () => {
+    const xml = golden('schaden-systeme.json', 'systeme', 'bpmn');
+    expect(xml).not.toMatch(/<bpmn:(performer|humanPerformer|resource)\b/);
+    expect(xml).toContain('bg:modelVersion="2.1"');
+    expect(xml).toContain('bg:view="systeme"');
+    expect(xml.match(/<bg:system ref="sys_schaden">Schadensystem<\/bg:system>/g)).toHaveLength(2);
+    expect(xml.match(/<bg:system ref="sys_regress">Regressportal<\/bg:system>/g)).toHaveLength(1);
+    expect(xml.match(/<bg:system\b/g)).toHaveLength(3);
+    expect(xml).not.toContain('_systemUnknown');
+    expect(xml).not.toContain('nicht erhoben');
+    const lane = (id) => xml.match(new RegExp(`<bpmn:lane id="${id.replace(/\./g, '\\.')}"[\\s\\S]*?</bpmn:lane>`))?.[0];
+    const sys = lane('L.Process_Schaden.sys_schaden');
+    expect(sys).toContain('name="Schadensystem"');
+    for (const id of ['start', 'pruefen', 'gw', 'zahlen', 'end']) expect(sys).toContain(`<bpmn:flowNodeRef>${id}</bpmn:flowNodeRef>`);
+    const reg = lane('L.Process_Schaden.sys_regress');
+    expect(reg).toContain('name="Regressportal"');
+    expect(reg.match(/<bpmn:flowNodeRef>/g)).toHaveLength(1);
+    expect(reg).toContain('<bpmn:flowNodeRef>regr</bpmn:flowNodeRef>');
+    expect(xml.match(/<bpmn:lane\b/g)).toHaveLength(2);
+  });
+
+  test('schaden-systeme × rollen draws the diagram of schaden × rollen; the XML differs only by the system lines, the version and the catalogue', async () => {
+    const r = await generateV2('schaden-systeme.json', 'rollen');
+    expect(r.svg).toBe(golden('schaden.json', 'rollen', 'svg'));
+    const base = golden('schaden.json', 'rollen', 'bpmn');
+    const stripped = r.bpmnXml.replace(/^[ \t]*<bg:system [^>]*>[^<]*<\/bg:system>\r?\n/gm, '')
+      .replace('bg:modelVersion="2.1"', 'bg:modelVersion="2.0"')
+      .replace(/bg:catalog="[^"]*"/, `bg:catalog="${CATALOG_HASH['schaden.json']}"`);
+    expect(r.bpmnXml.match(/<bg:system\b/g)).toHaveLength(3);
+    expect(stripped).toBe(base);
   }, 60000);
 
   test('organigramm: the lanes nest along partOf, Leistung holds its own steps in the first child lane', () => {
