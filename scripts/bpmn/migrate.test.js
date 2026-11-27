@@ -994,4 +994,14 @@ describe('migrateModel — against an existing catalogue (Task 3)', () => {
     expect(entriesOf(r, 'H07').find((e) => e.elements[0] === 'role_Pr_fer_2').message).toBe('[H07] Role "Prüfer" became actor "role_Pr_fer_2" without kind; check its kind. It has no unit: its lane "A" is the role actor "sb", and a unit must not be a role.');
     expect(resolveFields(copy(r.model), { catalog: copy(given) }).errors).toEqual([]);
   });
+
+  test('a role names its catalogue actor in its own pool even when a lane of another pool matched the same name', () => {
+    const input = fixture('multi-pool-collaboration.json');
+    input.pools[1].nodes.find((n) => n.id === 's_review').role = 'Customer';
+    const given = { actors: [{ id: 'cust', name: 'Customer', kind: 'role' }] };
+    const r = migrateModel(input, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(nodeOf(r.model, 's_review').assignments).toEqual([{ type: 'D', actor: 'cust' }]);
+    expect(entriesOf(r, 'MG07').map((e) => e.elements)).toEqual([['c_lane', 'cust'], ['Customer', 'cust']]);
+  });
 });

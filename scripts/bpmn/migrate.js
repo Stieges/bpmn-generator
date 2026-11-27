@@ -434,7 +434,7 @@ export function migrateModel(lc, options = {}) {
       const lane = laneOf(proc, p, node);
       const named = namesake(p, lane, node.role);
       if (named !== undefined) {
-        if (named === existing(node.role) && !mapped.has(node.role) && !laneByName.some((m) => m.has(node.role))) {
+        if (named === existing(node.role) && !mapped.has(node.role) && !laneByName[p].has(node.role)) {
           mapped.add(node.role);
           entries.push(entry('MG07', `Role "${q(node.role)}" maps by its name to the existing actor "${q(named)}".${several(node.role)}`, [node.role, named]));
         }
