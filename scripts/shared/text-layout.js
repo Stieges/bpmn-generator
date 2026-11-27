@@ -71,16 +71,28 @@ function semanticShorten(line, maxLength) {
  * Text.js `layoutNext` over the whole text: its lines, broken exactly as diagram-js breaks them
  * (Arial widths instead of a DOM measurement), and the box they need, `w` × `h` px.
  *
+ * `cuts` lists every word the breaking had to cut inside — a run of characters with no blank,
+ * hyphen or soft hyphen in it that is wider than the line (the hard cut, last line of Text.js
+ * `layoutNext`'s fallback) — each once, in text order, as typed (a word cut over several lines is
+ * one entry). Nothing else about the layout depends on it.
+ *
  * @param {string} text
  * @param {{ fontSize: number, lineHeight: number, wrapWidth: number }} style
- * @returns {{ lines: string[], w: number, h: number }}
+ * @returns {{ lines: string[], w: number, h: number, cuts: string[] }}
  */
 export function layoutText(text, { fontSize, lineHeight, wrapWidth }) {
-  const pending = String(text ?? '').split(/­?\r?\n/);
+  const pending = String(text ?? '').split(/\u00AD?\r?\n/);
   const lines = [];
+  const cuts = [];
   let w = 0;
+  // The entry of `cuts` whose word goes on in the line `pending` holds next (a cut inside a word).
+  let open = null;
   while (pending.length) {
     const original = pending.shift();
+    const lead = original.trimStart().split(/[\s\-\u00AD]/)[0];
+    const cont = open;
+    open = null;
+    let cutHere = null;
     let fit = original;
     for (;;) {
       const fw = fit ? lineWidth(fit, fontSize) : 0;
@@ -88,11 +100,20 @@ export function layoutText(text, { fontSize, lineHeight, wrapWidth }) {
         if (fit.length < original.length) pending.unshift(original.slice(fit.length).trim());
         lines.push(fit.trim());
         w = Math.max(w, fw);
+        if (cutHere && fit.length < original.length) open = cutHere;
         break;
       }
       const length = Math.max(fit.length * (wrapWidth / fw), 1);
-      fit = semanticShorten(fit, length) || fit.slice(0, Math.max(Math.round(length - 1), 1));
+      const shortened = semanticShorten(fit, length);
+      if (shortened) { fit = shortened; continue; }
+      const cutAt = Math.max(Math.round(length - 1), 1);
+      const lead0 = fit.length - fit.trimStart().length;
+      if (!cutHere && cutAt > lead0 && cutAt < lead0 + fit.trimStart().split(/[\s\-\u00AD]/)[0].length) {
+        cutHere = cont ?? { word: lead };
+        if (!cont) cuts.push(cutHere);
+      }
+      fit = fit.slice(0, cutAt);
     }
   }
-  return { lines, w, h: Math.ceil(lines.length * fontSize * lineHeight) };
+  return { lines, w, h: Math.ceil(lines.length * fontSize * lineHeight), cuts: [...new Set(cuts.map(c => c.word))] };
 }

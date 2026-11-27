@@ -38,7 +38,16 @@ function laneHeaderW(poolCoords, poolKey) {
  * Public entry: fills MISSING edge ids on the caller's object (in place, idempotent, deterministic via
  * `assignEdgeIds`); `runPipeline` instead works on a copy.
  */
-function generateSvg(lc, coordMap) {
+function generateSvg(lc, coordMap, { onCut = null } = {}) {
+  cutSink = onCut;
+  try {
+    return drawSvg(lc, coordMap);
+  } finally {
+    cutSink = null;
+  }
+}
+
+function drawSvg(lc, coordMap) {
   // Public entry: complete any id-less edge so geometry, XML and SVG all key on the same id (#64).
   assignEdgeIds(lc);
   const { coords, laneCoords, poolCoords, edgeCoords, edgeLabels } = coordMap;
@@ -158,7 +167,7 @@ function generateSvg(lc, coordMap) {
       const pw = Math.max(...allLc.map(l => l.x + l.w)) - px;
       const ph = Math.max(...allLc.map(l => l.y + l.h)) - py;
 
-      drawParticipant(out, lc.name || 'Process', tx(px), ty(py), pw, ph, spLhw);
+      drawParticipant(out, lc.name || 'Process', tx(px), ty(py), pw, ph, spLhw, { id: lc.id, kind: 'pool' });
     }
   }
 
@@ -168,7 +177,7 @@ function generateSvg(lc, coordMap) {
     if (!pc) continue;
     // 'bpmn:Participant', collapsed: the band, its name centred in it (`center-middle`)
     out.push(`<rect x="${tx(pc.x)}" y="${ty(pc.y)}" width="${pc.w}" height="${pc.h}" fill="${CLR.fill}" fill-opacity="${SYM.fillOpacity}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
-    out.push(...centredText(cp.name || cp.id, tx(pc.x), ty(pc.y), pc.w, pc.h, SYM.participantLabel, CLR.label));
+    out.push(...centredText(cp.name || cp.id, tx(pc.x), ty(pc.y), pc.w, pc.h, SYM.participantLabel, CLR.label, 0, { id: cp.id, kind: 'pool' }));
   }
 
   // §7.5  Lane bodies
@@ -183,7 +192,7 @@ function generateSvg(lc, coordMap) {
     if (CLR.laneHeader !== CLR.fill) {
       out.push(`<rect x="${tx(lcc.x)}" y="${ty(lcc.y)}" width="${lhw}" height="${lcc.h}" fill="${CLR.laneHeader}" stroke="none"/>`);
     }
-    out.push(...stripLabel(lane.name || lane.id, tx(lcc.x), ty(lcc.y), lhw, lcc.h, SYM.participantLabel, CLR.label));
+    out.push(...stripLabel(lane.name || lane.id, tx(lcc.x), ty(lcc.y), lhw, lcc.h, SYM.participantLabel, CLR.label, { id: lane.id, kind: 'lane' }));
   }
 
   // §7.6  Nodes — before every connection: bpmn.io draws connections above shapes, so a message
@@ -244,7 +253,7 @@ function generateSvg(lc, coordMap) {
 
       out.push(`<path data-element-id="${esc(mfKey)}" ${connectionPath(pts.map(p => ({ x: tx(p.x), y: ty(p.y) })))} stroke="${CLR.stroke}" stroke-width="${SW.messageFlow}" fill="none" stroke-dasharray="${DASH.messageFlow}" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#msg-start)" marker-end="url(#msg-end)"/>`);
       const L = mf.name ? edgeLabels?.[mfKey] : null;
-      if (L) renderEdgeLabel(out, L, tx, ty);
+      if (L) renderEdgeLabel(out, L, tx, ty, { id: mfKey, kind: 'flow' });
     }
   }
 
@@ -277,20 +286,20 @@ function renderPoolSvg(out, proc, pc, laneCoords, poolCoords, tx, ty) {
     }
   }
 
-  drawParticipant(out, proc.name || 'Process', tx(px), ty(py), pw, ph, lhw);
+  drawParticipant(out, proc.name || 'Process', tx(px), ty(py), pw, ph, lhw, { id: proc.id, kind: 'pool' });
 }
 
 /**
  * 'bpmn:Participant', expanded: the box, the line closing its header strip, and its name rotated
  * in the strip (`renderLaneLabel`). bpmn-js fills the strip white; `color.poolHeader` can tint it.
  */
-function drawParticipant(out, name, x, y, w, h, strip) {
+function drawParticipant(out, name, x, y, w, h, strip, owner = null) {
   out.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${CLR.fill}" fill-opacity="${SYM.fillOpacity}" stroke="${CLR.stroke}" stroke-width="${SW.pool}"/>`);
   if (CLR.poolHeader !== CLR.fill) {
     out.push(`<rect x="${x}" y="${y}" width="${strip}" height="${h}" fill="${CLR.poolHeader}" stroke="none"/>`);
   }
   out.push(`<path d="M ${rn(x + strip)} ${y} L ${rn(x + strip)} ${rn(y + h)}" stroke="${CLR.stroke}" stroke-width="${SW.pool}" fill="none"/>`);
-  out.push(...stripLabel(name, x, y, strip, h, SYM.participantLabel, CLR.label));
+  out.push(...stripLabel(name, x, y, strip, h, SYM.participantLabel, CLR.label, owner));
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -298,9 +307,20 @@ function drawParticipant(out, name, x, y, w, h, strip) {
 // ─────────────────────────────────────────────────────────────────────
 
 /** The lines `text` breaks into in a box `width` wide with `padding` on each side. */
-function boxLines(text, style, width, padding = 0) {
+function boxLines(text, style, width, padding = 0, owner = null) {
   if (!text) return [];
-  return edgeLabelLayout(text, { fontSize: style.fontSize, lineHeight: style.lineHeight, wrapWidth: width - 2 * padding }).lines;
+  const layout = edgeLabelLayout(text, { fontSize: style.fontSize, lineHeight: style.lineHeight, wrapWidth: width - 2 * padding });
+  noteCuts(owner, layout);
+  return layout.lines;
+}
+
+/**
+ * `generateSvg`'s `onCut` receiver, set for the one call: gets `{ id, kind, words }` of a label
+ * and the words its layout had to cut inside (text-layout.js `cuts`) — the layout the SVG draws.
+ */
+let cutSink = null;
+function noteCuts(owner, layout) {
+  if (owner && cutSink && layout.cuts.length) cutSink({ ...owner, words: layout.cuts });
 }
 
 /**
@@ -313,8 +333,8 @@ function textLines(lines, cx, baseline, style, fill, extra = '') {
 }
 
 /** Text.js `center-middle` in a box: the block centred vertically, first baseline ¾ line below its top. */
-function centredText(text, x, y, w, h, style, fill, padding = 0) {
-  const lines = boxLines(text, style, w, padding);
+function centredText(text, x, y, w, h, style, fill, padding = 0, owner = null) {
+  const lines = boxLines(text, style, w, padding, owner);
   const lh = style.fontSize * style.lineHeight;
   return textLines(lines, x + w / 2, y + (h - lines.length * lh) / 2 + FIRST_BASELINE * lh, style, fill);
 }
@@ -323,8 +343,8 @@ function centredText(text, x, y, w, h, style, fill, padding = 0) {
  * `renderLaneLabel`: the name laid out in a box as long as the band and `strip` wide, centred, and
  * turned by 270° — one rotated `<text>` per line, each about its own baseline point.
  */
-function stripLabel(text, x, y, strip, h, style, fill) {
-  const lines = boxLines(text, style, h);
+function stripLabel(text, x, y, strip, h, style, fill, owner = null) {
+  const lines = boxLines(text, style, h, 0, owner);
   const lh = style.fontSize * style.lineHeight;
   const cy = rn(y + h / 2);
   return lines.map((line, i) => {
@@ -399,7 +419,7 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels, sourceMa
 
   // Edge label — its box comes from coordMap.edgeLabels (coordinates.js placeEdgeLabel)
   const L = edge.label ? edgeLabels?.[edge.id] : null;
-  if (L) renderEdgeLabel(out, L, tx, ty);
+  if (L) renderEdgeLabel(out, L, tx, ty, { id: edge.id, kind: 'flow' });
 }
 
 /**
@@ -408,7 +428,8 @@ function renderSequenceFlow(out, edge, pts, coords, tx, ty, edgeLabels, sourceMa
  * centred on the box, first baseline 3/4 of a line below the box top, no backdrop. Line breaks
  * and size come from coordMap (`lines`, placeEdgeLabel); nothing is measured here.
  */
-function renderEdgeLabel(out, label, tx, ty) {
+function renderEdgeLabel(out, label, tx, ty, owner = null) {
+  if (label.text) noteCuts(owner, edgeLabelLayout(label.text));
   const b = edgeLabelBox(label);
   drawLabelLines(out, b.x + b.w / 2, b.y, label.lines ?? [label.text], tx, ty);
 }
@@ -479,7 +500,7 @@ function renderEvent(node, c, tx, ty, label, parent = null) {
   }
 
   // External label — its box from coordMap.nodeLabels
-  o.push(renderNodeLabel(label, tx, ty));
+  o.push(renderNodeLabel(label, tx, ty, node));
 
   return o.join('\n');
 }
@@ -496,7 +517,7 @@ function renderGateway(node, c, tx, ty, label) {
   const symbol = renderGatewaySymbol(node.type, w, h, node, { markerVisible: true }, node.color);
   if (symbol) o.push(`<g transform="translate(${x},${y})">${symbol}</g>`);
 
-  o.push(renderNodeLabel(label, tx, ty));
+  o.push(renderNodeLabel(label, tx, ty, node));
   return o.join('\n');
 }
 
@@ -531,7 +552,7 @@ function renderActivity(node, c, tx, ty) {
   if (expanded) {
     // Title `center-top` (padding 7), regular weight, as bpmn-js's `renderEmbeddedLabel`
     const st = SYM.containerTitle;
-    const lines = boxLines(node.name || '', st, w, st.padding);
+    const lines = boxLines(node.name || '', st, w, st.padding, { id: node.id, kind: 'activity' });
     o.push(...textLines(lines, x + w / 2, y + st.padding + FIRST_BASELINE * st.fontSize * st.lineHeight, st, CLR.label));
     const markers = renderTaskMarkers(node, w, h, { collapsed: false }, node.color);
     if (markers) o.push(`<g transform="translate(${x},${y})">${markers}</g>`);
@@ -541,7 +562,7 @@ function renderActivity(node, c, tx, ty) {
 
   // Label `center-middle` (padding 7) — bpmn-js does not move it for the type icon
   const st = SYM.embeddedText;
-  o.push(...centredText(node.name || '', x, y, w, h, st, CLR.label, st.padding));
+  o.push(...centredText(node.name || '', x, y, w, h, st, CLR.label, st.padding, { id: node.id, kind: 'activity' }));
 
   const icon = renderTaskIcon(type, node, node.color) ?? '';
   const markers = renderTaskMarkers(node, w, h, { collapsed: isCollapsedContainerType(type) }, node.color);
@@ -560,11 +581,11 @@ function renderDataArtifact(node, c, tx, ty, label) {
   if (type === 'dataObjectReference') {
     // 'bpmn:DataObject' — folded page; a collection adds three bars
     o.push(`<g transform="translate(${x},${y})">${renderDataObjectShape(w, h, { collection: !!node.isCollection, fillOpacity: SYM.fillOpacity }, node.color)}</g>`);
-    o.push(renderNodeLabel(label, tx, ty));
+    o.push(renderNodeLabel(label, tx, ty, node));
   } else if (type === 'dataStoreReference') {
     // 'bpmn:DataStoreReference' — cylinder with stacked rims
     o.push(`<g transform="translate(${x},${y})">${renderDataStoreShape(w, h, { fillOpacity: SYM.fillOpacity }, node.color)}</g>`);
-    o.push(renderNodeLabel(label, tx, ty));
+    o.push(renderNodeLabel(label, tx, ty, node));
   } else if (type === 'textAnnotation') {
     // 'bpmn:TextAnnotation' — open bracket, text `left-top` with padding 7. The lines are the ones
     // coordinates.js sized the box from (artifactSize), never re-wrapped here.
@@ -572,13 +593,16 @@ function renderDataArtifact(node, c, tx, ty, label) {
     const st = textAnnotationTextStyle();
     const lh = st.fontSize * st.lineHeight;
     const lines = c.lines ?? [node.name || ''];
+    if (node.name) noteCuts({ id: node.id, kind: 'annotation' }, edgeLabelLayout(node.name, { fontSize: st.fontSize, lineHeight: st.lineHeight, wrapWidth: w - 2 * st.padding }));
     lines.forEach((line, i) => o.push(`<text x="${rn(x + st.padding)}" y="${rn(y + st.padding + lh * (FIRST_BASELINE + i))}" font-size="${st.fontSize}" fill="${CLR.label}">${esc(line)}</text>`));
   } else if (type === 'group') {
     // 'bpmn:Group' — dashed rounded frame; its name is an external label centred on the top edge
     // (bpmn-js `getExternalLabelMid` for a Group), first baseline ¾ of a line below the frame top.
     o.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${TASK_RX}" ry="${TASK_RX}" fill="none" stroke="${stroke}" stroke-width="${SW.group}" stroke-dasharray="${DASH.group}" stroke-linecap="round" stroke-linejoin="round"/>`);
     const st = SYM.externalText;
-    const lines = edgeLabelLayout(node.name || '', { ...edgeLabelTextStyle(), fontSize: st.fontSize, lineHeight: st.lineHeight }).lines.filter(Boolean);
+    const groupLayout = edgeLabelLayout(node.name || '', { ...edgeLabelTextStyle(), fontSize: st.fontSize, lineHeight: st.lineHeight });
+    noteCuts({ id: node.id, kind: 'label' }, groupLayout);
+    const lines = groupLayout.lines.filter(Boolean);
     o.push(...textLines(lines, x + w / 2, y + FIRST_BASELINE * st.fontSize * st.lineHeight, st, CLR.label));
   }
 
@@ -590,8 +614,9 @@ function renderDataArtifact(node, c, tx, ty, label) {
  * way bpmn-js draws the same BPMNLabel — the rule renderEdgeLabel follows. Nothing is positioned
  * or measured here.
  */
-function renderNodeLabel(label, tx, ty) {
+function renderNodeLabel(label, tx, ty, node = null) {
   if (!label) return '';
+  if (node?.name) noteCuts({ id: node.id, kind: 'label' }, edgeLabelLayout(node.name));
   const out = [];
   drawLabelLines(out, label.x + label.w / 2, label.y, label.lines, tx, ty);
   return out.join('');
