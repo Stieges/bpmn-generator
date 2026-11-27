@@ -23,11 +23,14 @@
  * input gives `model: null` and the reason in the report.
  */
 
+import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from 'node:fs';
+import { resolve, dirname, basename, relative, sep } from 'node:path';
 import { validateLogicCoreSchema, validateModelSchema, modelFormat, formatSchemaErrors, FORMAT_V2_VERSION } from './schema-gate.js';
 import { resolveLaneId, collectDocumentIds } from './topology.js';
 import { isActivity, isBoundaryEvent, FLOW_NODE_TYPES } from './types.js';
 import { resolveFields, formLanes, UNASSIGNED, UNIT_UNKNOWN } from './model-v2.js';
-import { resolveScheme, catalogErrors, CATALOG_LIMITS } from '../shared/catalog.js';
+import { resolveScheme, catalogErrors, loadCatalog, CatalogRejectedError, CATALOG_LIMITS } from '../shared/catalog.js';
+import { isMainModule } from '../shared/entry-point.js';
 import { coded } from '../shared/message-codes.js';
 import { boundText } from '../shared/safe-text.js';
 
@@ -557,3 +560,115 @@ export function migrateModel(lc, options = {}) {
     },
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// CLI ENTRY POINT
+// ═══════════════════════════════════════════════════════════════════════
+
+const USAGE = 'Usage: node migrate.js <input.json> [output-base] [--catalog <path>] [--drop-unsupported] [--force]';
+
+/** The command line as `{ input, base, catalogArg, dropUnsupported, force }`, or `{ error }` (a usage error). */
+function parseArgs(argv) {
+  const out = { input: undefined, base: undefined, catalogArg: null, dropUnsupported: false, force: false };
+  const positional = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--drop-unsupported') out.dropUnsupported = true;
+    else if (a === '--force') out.force = true;
+    else if (a === '--catalog') {
+      if (i + 1 >= argv.length) return { error: '--catalog requires a path' };
+      out.catalogArg = argv[++i];
+    } else if (a.startsWith('--catalog=')) out.catalogArg = a.slice('--catalog='.length);
+    else if (a.startsWith('--')) return { error: `unknown flag ${a}` };
+    else positional.push(a);
+  }
+  if (positional.length > 2) return { error: 'more than one output base' };
+  [out.input, out.base] = positional;
+  return out.input === undefined ? { error: 'no input file' } : out;
+}
+
+/** `to` relative to the directory `fromDir`, with `/` as the separator (an absolute path stays one when no relative one exists). */
+const posixRelative = (fromDir, to) => relative(fromDir, to).split(sep).join('/');
+
+function fail(message, code = 1) {
+  console.error(message);
+  process.exit(code);
+}
+
+/**
+ * Writes the translation: the model, the catalogue supplement and the report (a refusal: the report
+ * only). Everything is checked before anything is written: an output that exists (without
+ * `--force`) or is the input itself stops the run with exit 1. The output directory is created.
+ */
+function main(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv);
+  if (args.error) fail(`✗ ${args.error}\n${USAGE}`);
+
+  let text;
+  try {
+    text = readFileSync(resolve(args.input), 'utf8');
+  } catch (err) {
+    fail(`✗ ${args.input} cannot be read (${err.code ?? 'error'})`);
+  }
+  let lc;
+  try {
+    lc = JSON.parse(text.replace(/^﻿/, ''));
+  } catch (err) {
+    fail(`✗ ${args.input} is not valid JSON: ${err.message}`);
+  }
+
+  let catalog = null;
+  if (args.catalogArg !== null) {
+    try {
+      if (args.catalogArg === '') fail(`✗ ${coded('C11', '--catalog needs a path')}`);
+      catalog = loadCatalog(resolve(args.catalogArg));
+    } catch (err) {
+      if (!(err instanceof CatalogRejectedError)) throw err;
+      fail(`✗ ${err.message}`);
+    }
+  }
+
+  const result = migrateModel(lc, { catalog, dropUnsupported: args.dropUnsupported });
+  const refusedRun = result.report.status === 'refused';
+
+  const base = args.base ?? `${basename(args.input).replace(/\.json$/i, '')}.v2`;
+  const modelFile = `${base}.json`;
+  const catalogFile = `${base}.catalog.json`;
+  const reportFile = `${base}.migrate-report.json`;
+  const writes = [[reportFile, `${JSON.stringify(result.report, null, 2)}\n`]];
+  if (!refusedRun) {
+    const link = args.catalogArg !== null
+      ? posixRelative(dirname(resolve(modelFile)), resolve(args.catalogArg))
+      : basename(catalogFile);
+    const { $schemaVersion, ...rest } = result.model;
+    const model = { $schemaVersion, catalog: link, ...rest };
+    writes.unshift([modelFile, `${JSON.stringify(model, null, 2)}\n`], [catalogFile, `${JSON.stringify(result.supplement, null, 2)}\n`]);
+  }
+
+  const inputReal = realpathSync(resolve(args.input));
+  const problems = [];
+  for (const [file] of writes) {
+    const abs = resolve(file);
+    if (existsSync(abs) && realpathSync(abs) === inputReal) problems.push(`✗ ${file} is the input file; choose another output base`);
+    else if (existsSync(abs) && !args.force) problems.push(`✗ ${file} exists; pass --force to overwrite`);
+  }
+  if (problems.length) fail(problems.join('\n'));
+
+  try {
+    for (const [file, content] of writes) {
+      mkdirSync(dirname(resolve(file)), { recursive: true });
+      writeFileSync(resolve(file), content);
+    }
+  } catch (err) {
+    fail(`✗ cannot write the output: ${err.message}`);
+  }
+
+  if (refusedRun) {
+    for (const e of result.report.entries) console.error(`✗ ${e.message}`);
+    fail(`✗ ${args.input} not translated; the reasons are in ${reportFile}`, 2);
+  }
+  const { actors, assigned } = result.report.summary;
+  console.log(`✓ ${args.input} → ${modelFile}: ${actors} actors, ${assigned} assignments, ${result.report.entries.length} report entries`);
+}
+
+if (isMainModule(import.meta.url, process.argv[1])) main();
