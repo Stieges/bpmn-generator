@@ -326,6 +326,8 @@ export function resolveFields(model, options) {
 
 export const UNASSIGNED = '_unassigned';
 export const UNIT_UNKNOWN = '_unitUnknown';
+/** The placeholder key of the system view: an activity without a recorded system. */
+export const SYSTEM_UNKNOWN = '_systemUnknown';
 
 /** The automatic activities of design 7.2 step 5: without performer they inherit instead of taking the placeholder. */
 export const AUTOMATIC_ACTIVITY_TYPES = new Set(['serviceTask', 'scriptTask', 'businessRuleTask', 'sendTask', 'receiveTask']);
@@ -334,7 +336,12 @@ export function laneIdFor(processId, key) {
   return `L.${processId}.${key}`;
 }
 
-const placeholderName = (key) => (key === UNASSIGNED ? CFG.laneFormation.unassignedName : CFG.laneFormation.unitUnknownName);
+const PLACEHOLDER_NAMES = {
+  [UNASSIGNED]: () => CFG.laneFormation.unassignedName,
+  [UNIT_UNKNOWN]: () => CFG.laneFormation.unitUnknownName,
+  [SYSTEM_UNKNOWN]: () => CFG.laneFormation.systemUnknownName,
+};
+const placeholderName = (key) => PLACEHOLDER_NAMES[key]();
 
 /** The modelled processes of an intermediate form: the document itself, or each expanded pool. */
 function processesOf(lc) {
@@ -348,8 +355,12 @@ function processesOf(lc) {
 const isFlowNode = (n) => isPlainObject(n) && FLOW_NODE_TYPES.has(n.type);
 const nodeLabel = (n) => `"${n.name ?? n.id}" (${n.id})`;
 
-/** Rank of a key for ties and declaration: catalogue order, then the two placeholders. */
-function keyRank(resolved, key) {
+/**
+ * Rank of a key for ties and declaration: catalogue order, then the placeholders. In the system
+ * view (`laneBy === 'system'`) the systems in catalogue order, then the system placeholder.
+ */
+function keyRank(resolved, key, laneBy) {
+  if (laneBy === 'system') return key === SYSTEM_UNKNOWN ? resolved.systemOrder.size : resolved.systemOrder.get(key);
   if (key === UNASSIGNED) return resolved.order.size;
   if (key === UNIT_UNKNOWN) return resolved.order.size + 1;
   return resolved.order.get(key);
@@ -358,7 +369,10 @@ function keyRank(resolved, key) {
 /**
  * The inheritance rule for one process (design 7.2 steps 2–7). Returns the key of every top-level
  * flow node and the hints that do not need the lane name; `inherited` lists the automatic
- * activities that took their key in a round (H03, written once the lanes exist).
+ * activities that took their key in a round (H03, written once the lanes exist). In the system
+ * view the key of steps 2–3 is the activity's system: every activity (automatic or not, a
+ * subprocess included) has one, `SYSTEM_UNKNOWN` (H20) without a recorded system; assignments play
+ * no part, and the fallback of the later steps is `SYSTEM_UNKNOWN`.
  */
 function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
   const hints = [];
@@ -378,8 +392,19 @@ function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
 
   const key = new Map();
   const isAuto = (n) => AUTOMATIC_ACTIVITY_TYPES.has(n.type);
+  const rank = (k) => keyRank(resolved, k, laneBy);
+  const fallback = laneBy === 'system' ? SYSTEM_UNKNOWN : UNASSIGNED;
   // steps 2 and 3
   for (const n of inner) {
+    if (laneBy === 'system') {
+      if (!isActivity(n.type)) continue;
+      const k = n._systemRef ?? SYSTEM_UNKNOWN;
+      key.set(n.id, k);
+      if (k === SYSTEM_UNKNOWN) {
+        hints.push({ code: 'H20', message: `${prefix}No system recorded for ${nodeLabel(n)}: lane "${placeholderName(SYSTEM_UNKNOWN)}".`, elements: [n.id] });
+      }
+      continue;
+    }
     const p = performerOf(n);
     if (p) {
       let k = p.id;
@@ -428,7 +453,7 @@ function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
       let best;
       for (const [k, c] of counts) {
         const b = best === undefined ? undefined : counts.get(best);
-        if (best === undefined || c > b || (c === b && keyRank(resolved, k) < keyRank(resolved, best))) best = k;
+        if (best === undefined || c > b || (c === b && rank(k) < rank(best))) best = k;
       }
       if (best !== undefined) updates.push([n.id, best]);
     }
@@ -444,8 +469,8 @@ function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
     if (key.has(n.id)) {
       if (isAuto(n)) inherited.push(n);
     } else {
-      key.set(n.id, UNASSIGNED);
-      hints.push({ code: 'H08', message: `${prefix}No neighbour with a lane: ${nodeLabel(n)} is in lane "${placeholderName(UNASSIGNED)}".`, elements: [n.id] });
+      key.set(n.id, fallback);
+      hints.push({ code: 'H08', message: `${prefix}No neighbour with a lane: ${nodeLabel(n)} is in lane "${placeholderName(fallback)}".`, elements: [n.id] });
     }
   }
 
@@ -456,22 +481,22 @@ function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
     const host = key.get(n.attachedTo);
     if (host !== undefined) key.set(n.id, host);
     else {
-      key.set(n.id, UNASSIGNED);
-      hints.push({ code: 'H08', message: `${prefix}Boundary event ${nodeLabel(n)} has no host with a lane: lane "${placeholderName(UNASSIGNED)}".`, elements: [n.id] });
+      key.set(n.id, fallback);
+      hints.push({ code: 'H08', message: `${prefix}Boundary event ${nodeLabel(n)} has no host with a lane: lane "${placeholderName(fallback)}".`, elements: [n.id] });
     }
   }
   return { key, hints, inherited };
 }
 
 /**
- * The lanes option of a view in one shape: the strings `role`, `unit`, `none` or the object
- * `{ by: 'unit', level?, nested? }`; `undefined` means `role`. Anything else is an unknown option
- * and throws instead of being treated as a default.
- * @returns {{ by: 'role'|'unit'|'none', level: number|null, nested: boolean }}
+ * The lanes option of a view in one shape: the strings `role`, `unit`, `system`, `none` or the
+ * object `{ by: 'unit', level?, nested? }` (unit only); `undefined` means `role`. Anything else is
+ * an unknown option and throws instead of being treated as a default.
+ * @returns {{ by: 'role'|'unit'|'system'|'none', level: number|null, nested: boolean }}
  */
 export function normalizeLanesOption(lanes) {
   if (lanes === undefined) return { by: 'role', level: null, nested: false };
-  if (lanes === 'role' || lanes === 'unit' || lanes === 'none') return { by: lanes, level: null, nested: false };
+  if (lanes === 'role' || lanes === 'unit' || lanes === 'system' || lanes === 'none') return { by: lanes, level: null, nested: false };
   if (isPlainObject(lanes) && lanes.by === 'unit'
     && Object.keys(lanes).every((k) => k === 'by' || k === 'level' || k === 'nested')
     && (lanes.level === undefined || (Number.isInteger(lanes.level) && lanes.level >= 1 && lanes.level <= 16))
@@ -481,7 +506,7 @@ export function normalizeLanesOption(lanes) {
   throw new TypeError(`unknown lanes option ${JSON.stringify(lanes)}`);
 }
 
-const isPlaceholder = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN;
+const isPlaceholder = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN || key === SYSTEM_UNKNOWN;
 
 /** Every lane of a lane tree, depth-first in declaration order. */
 function allLanes(laneList, out = []) {
@@ -500,7 +525,7 @@ function allLanes(laneList, out = []) {
  */
 function laneTree(processId, keys, resolved) {
   const lane = (id, name, key) => ({ id, name, _derived: 'lane', _laneBy: 'unit', _laneActor: key });
-  const byRank = (a, b) => keyRank(resolved, a) - keyRank(resolved, b);
+  const byRank = (a, b) => keyRank(resolved, a, 'unit') - keyRank(resolved, b, 'unit');
   const units = keys.filter((k) => !isPlaceholder(k));
   const isKey = new Set(units);
   const roots = new Set();
@@ -540,8 +565,9 @@ function laneTree(processId, keys, resolved) {
 }
 
 /**
- * Forms the lanes of the chosen view (`role`, `unit`, `none` or the object form, see
- * `normalizeLanesOption`) from the assignments of an intermediate form made by `resolveFields`.
+ * Forms the lanes of the chosen view (`role`, `unit`, `system`, `none` or the object form, see
+ * `normalizeLanesOption`) from the assignments of an intermediate form made by `resolveFields`,
+ * or in the system view from the systems of its tasks (`_systemRef`).
  * Neither argument is changed. A C10 collision stops the run: `{ lc: null, hints: [], errors }`.
  */
 export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
@@ -557,21 +583,30 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
   const formed = [];
   for (const proc of processesOf(out)) {
     const top = proc.container.nodes;
-    if (!top.some((n) => isFlowNode(n) && !isBoundaryEvent(n) && performerOf(n))) {
+    if (lanes === 'system') {
+      if (!top.some((n) => isFlowNode(n) && !isBoundaryEvent(n) && isActivity(n.type) && n._systemRef !== undefined)) {
+        hints.push({ code: 'H06', message: `${proc.prefix}No systems in process "${proc.label}": no lanes.`, elements: [proc.id] });
+        continue;
+      }
+    } else if (!top.some((n) => isFlowNode(n) && !isBoundaryEvent(n) && performerOf(n))) {
       hints.push({ code: 'H06', message: `${proc.prefix}No assignments in process "${proc.label}": no lanes.`, elements: [proc.id] });
       continue;
     }
     const { key, hints: found, inherited } = inheritKeys(proc, resolved, lanes, level, performerOf, proc.prefix);
 
     // step 8: one lane per key used, in declaration order; nested, the tree along the organigram
-    const keys = [...new Set(key.values())].sort((a, b) => keyRank(resolved, a) - keyRank(resolved, b));
+    const keys = [...new Set(key.values())].sort((a, b) => keyRank(resolved, a, lanes) - keyRank(resolved, b, lanes));
+    const nameOf = (k) => {
+      if (isPlaceholder(k)) return placeholderName(k);
+      return (lanes === 'system' ? resolved.systemById : resolved.byId).get(k).name;
+    };
     let laneList;
     let laneOf;
     if (nested) ({ laneList, laneOf } = laneTree(proc.id, keys, resolved));
     else {
       laneList = keys.map((k) => ({
         id: laneIdFor(proc.id, k),
-        name: isPlaceholder(k) ? placeholderName(k) : resolved.byId.get(k).name,
+        name: nameOf(k),
         _derived: 'lane', _laneBy: lanes, _laneActor: k,
       }));
       laneOf = new Map(laneList.map((l) => [l._laneActor, l]));
@@ -623,7 +658,8 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
     for (const l of allLanes(laneList)) {
       const hit = [l.id, `${l.id}_di`].find((v) => taken.has(v));
       if (hit !== undefined) {
-        errors.push(`[C10] lane id "${q(l.id)}" (actor "${q(l._laneActor)}") collides with "${q(taken.get(hit))}"; rename the catalogue id`);
+        const kind = l._laneBy === 'system' ? 'system' : 'actor';
+        errors.push(`[C10] lane id "${q(l.id)}" (${kind} "${q(l._laneActor)}") collides with "${q(taken.get(hit))}"; rename the catalogue id`);
       }
       for (const v of [l.id, `${l.id}_di`]) if (!taken.has(v)) taken.set(v, l.id);
     }

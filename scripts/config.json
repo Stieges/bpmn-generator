@@ -436,9 +436,10 @@
     }
   },
   "laneFormation": {
-    "_comment": "formLanes (model-v2.js, information model design 7.1): names of the two placeholder lanes of a 2.0 model, for steps without performer and performers whose unit is not recorded",
+    "_comment": "formLanes (model-v2.js, information model design 7.1): names of the three placeholder lanes of a 2.x model, for steps without performer, performers whose unit is not recorded and (system view) activities without a recorded system",
     "unassignedName": "(nicht zugeordnet)",
-    "unitUnknownName": "(Einheit nicht erhoben)"
+    "unitUnknownName": "(Einheit nicht erhoben)",
+    "systemUnknownName": "(System nicht erhoben)"
   },
   "diagnostics": {
     "di05GroupThreshold": 5

@@ -520,10 +520,10 @@ describe('the response contract', () => {
     addFormats(ajv);
     expect(checkResponseContract([['GenerateResponse', 'generate of a de model', response]], schema, ajv)).toEqual([]);
     const hintCode = new RegExp(schema.$defs.Validation.properties.hints.items.properties.code.pattern);
-    expect(hintCode.source).toBe('^H(0[1-9]|1[0-9])$');
+    expect(hintCode.source).toBe('^H(0[1-9]|1[0-9]|20)$');
     expect(hintCode.test('H10')).toBe(true);
     expect(hintCode.test('H00')).toBe(false);
-    expect(hintCode.test('H20')).toBe(false);
+    expect(hintCode.test('H21')).toBe(false);
   }, PIPELINE_TIMEOUT);
 });
 
