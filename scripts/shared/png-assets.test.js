@@ -26,6 +26,9 @@ describe('png assets — font, licence and packaging', () => {
   test('the font licence ships beside the font', () => {
     const licence = readFileSync(join(root, 'fonts', 'OFL.txt'), 'utf8');
     expect(licence).toContain('SIL OPEN FONT LICENSE Version 1.1');
+    // A Reserved Font Name would forbid shipping a modified (e.g. subset) font under the
+    // same name; the upstream licence declares none, and the notices rely on that.
+    expect(licence).not.toMatch(/with Reserved Font Name/i);
   });
 
   test('the published package ships fonts/', () => {
