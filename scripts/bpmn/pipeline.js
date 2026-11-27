@@ -51,6 +51,10 @@ import { languageTag, resolveEventMarkers, namingHints } from './naming/index.js
 import { messageCatcherHints } from './message-catcher-hint.js';
 import { labelHints } from './label-check.js';
 import { coded, codeOf } from '../shared/message-codes.js';
+// Static on purpose: png.js imports only node: builtins at the top, so loading it costs nothing,
+// and the docs gate's package-integrity check follows static imports only, so it sees the font
+// path png.js reads. The optional renderer itself is imported lazily, only for --png.
+import { loadPngRenderer, PngUnavailableError, writePngPreviews } from '../shared/png.js';
 // The one import from outside bpmn/ (fenced in shared/rule-registers.test.js): text for the
 // documentation of a Business Rule Task, never a rule — no DMN or cross-notation rule catalog is
 // reachable from here.
@@ -806,8 +810,9 @@ async function main() {
   const refine     = flags.includes('--refine');
   const noRefine   = flags.includes('--no-refine');
   const wrap       = flags.includes('--wrap');
+  const png        = flags.includes('--png');
   if (!inputArg) {
-    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--view <name|path>] [--catalog <path>] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>]');
+    console.error('Usage: node pipeline.js <input.json | -> [output-basename] [--dot] [--import-dot] [--doc] [--strict] [--optimize] [--refine] [--no-refine] [--wrap] [--view <name|path>] [--catalog <path>] [--bend-rule] [--no-bend-rule] [--label-avoidance] [--no-label-avoidance] [--foreign-shape-repair] [--no-foreign-shape-repair] [--decisions <files>] [--png]');
     process.exit(1);
   }
   if (refine && noRefine) {
@@ -825,6 +830,39 @@ async function main() {
     if (flags.includes(on)) switchOpts[key] = true;
     else if (flags.includes(off)) switchOpts[key] = false;
   }
+
+  // --png: the renderer (optional dependency, bundled font, text check) is loaded before any input
+  // is read, so a machine that cannot render fails fast and writes nothing, like the gates below.
+  let pngRenderer = null;
+  if (png) {
+    if (importDot) {
+      console.error('✗ --png needs a diagram; --import-dot writes Logic-Core JSON only');
+      process.exit(1);
+    }
+    try {
+      pngRenderer = await loadPngRenderer();
+    } catch (e) {
+      if (!(e instanceof PngUnavailableError)) throw e;
+      console.error(`✗ ${e.message}. No files written.`);
+      process.exit(1);
+    }
+  }
+  // The PNG step comes after every text output is written, so a render failure (or a wasm abort
+  // no catch can stop) still leaves the model files, the documentation and the DOT export. A
+  // failure is reported but does not undo them: exit 1 through process.exitCode, so the rest of
+  // the output still prints.
+  const writePngs = (targets) => {
+    for (const r of writePngPreviews(targets, pngRenderer)) {
+      if (r.ok) {
+        // Floored, so a capped scale never prints as "2.00".
+        const scale = r.scale < 2 ? ` at scale ${(Math.floor(r.scale * 100) / 100).toFixed(2)}` : '';
+        console.log(`✓ PNG preview → ${r.base}.png${r.parts ? ` (+${r.parts} parts)` : ''}${scale}`);
+      } else {
+        console.error(`✗ PNG preview failed: ${r.message.replace(/\.$/, '')}. ${r.base}.bpmn and ${r.base}.svg were written and are valid.`);
+        process.exitCode = 1;
+      }
+    }
+  };
 
   // --view <name|path> (or --view=<name|path>): a value that is a view name is looked up in views/, anything else is a file.
   // Loaded before the model is read so a refused view fails fast; a rejection is the caller's
@@ -960,6 +998,7 @@ async function main() {
     }
     writeFileSync(`${outputBase}.bpmn`, diagramSet.parent.bpmnXml, 'utf8');
     writeFileSync(`${outputBase}.svg`, diagramSet.parent.svg, 'utf8');
+    const pngTargets = [{ svg: diagramSet.parent.svg, base: outputBase }];
     printHints(diagramSet.parent.validation);
     console.log(`✓ Parent diagram → ${outputBase}.bpmn, ${outputBase}.svg`);
 
@@ -967,6 +1006,7 @@ async function main() {
       if (subResult.bpmnXml) {
         writeFileSync(`${outputBase}_${subId}.bpmn`, subResult.bpmnXml, 'utf8');
         writeFileSync(`${outputBase}_${subId}.svg`, subResult.svg, 'utf8');
+        pngTargets.push({ svg: subResult.svg, base: `${outputBase}_${subId}` });
         printHints(subResult.validation);
         console.log(`✓ SubProcess ${subId} → ${outputBase}_${subId}.svg`);
       }
@@ -987,6 +1027,7 @@ async function main() {
       writeFileSync(`${outputBase}_index.html`, indexHtml, 'utf8');
       console.log(`✓ Navigation → ${outputBase}_index.html`);
     }
+    if (png) writePngs(pngTargets);
     console.log(`\n📊 Drill-Down: 1 parent + ${Object.keys(diagramSet.subProcesses).length} subprocess diagram(s)`);
     return;
   }
@@ -1149,6 +1190,8 @@ async function main() {
     writeFileSync(dotPath, logicCoreToDot(parsedInput), 'utf8');
     console.log(`✓ DOT graph → ${dotPath}`);
   }
+
+  if (png) writePngs([{ svg: result.svg, base: outputBase }]);
 
   // Summary
   const lc = parsedInput;

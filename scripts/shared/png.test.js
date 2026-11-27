@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   PNG_PREVIEW, previewScale, svgSize, planParts, cropRgba, crc32, encodePng, pngSize,
   PngUnavailableError, PngRenderError, loadPngRenderer, renderPreview,
+  removeStaleParts, writePngPreviews,
 } from './png.js';
 import { runPipeline } from '../bpmn/pipeline.js';
 
@@ -349,5 +350,71 @@ describe('png — renderer', () => {
     expect(err.message).toContain('unreachable');
     const out = renderPreview(svg, await loadPngRenderer());
     expect(pngSize(out.png)).toEqual({ width: out.width, height: out.height });
+  });
+});
+
+describe('png — writer', () => {
+  // A renderer stand-in that returns a flat image of the given size, without wasm.
+  const flatRenderer = (width, height) => ({
+    renderRgba: () => ({ rgba: new Uint8Array(width * height * 4).fill(255), width, height }),
+  });
+  const svgOf = (w, h) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"></svg>`;
+
+  test('removeStaleParts removes only the parts of this base', () => {
+    const files = [
+      'out.part-1-of-9.png', 'out.part-12-of-12.png', 'out.png', 'outx.part-1-of-2.png',
+      'out.part-1-of-9.png.bak', 'out.part-a-of-2.png', 'o.t.part-1-of-2.png', 'out.svg',
+    ];
+    const removed = [];
+    const result = removeStaleParts(join('dir', 'out'), {
+      readdir: (d) => { expect(d).toBe('dir'); return files; },
+      unlink: (p) => removed.push(p),
+    });
+    expect(result).toEqual([join('dir', 'out.part-1-of-9.png'), join('dir', 'out.part-12-of-12.png')]);
+    expect(removed).toEqual(result);
+    // The base name is matched literally, not as a pattern: "o.t" does not match "out".
+    expect(removeStaleParts('o.t', { readdir: () => ['out.part-1-of-2.png', 'o.t.part-1-of-2.png'], unlink() {} }))
+      .toEqual(['o.t.part-1-of-2.png']);
+  });
+
+  test('writePngPreviews encodes everything before it removes or writes anything', () => {
+    const calls = [];
+    const renderer = {
+      renderRgba: (svg, scale) => { calls.push('render'); return flatRenderer(3400, 10).renderRgba(svg, scale); },
+    };
+    const [result] = writePngPreviews([{ svg: svgOf(1700, 5), base: 'w' }], renderer, {
+      writeFile: (p) => calls.push(`write ${p}`),
+      removeStale: (base) => { calls.push(`remove ${base}`); return []; },
+    });
+    expect(result).toEqual({
+      base: 'w', ok: true, scale: 2, parts: 2,
+      files: ['w.png', 'w.part-1-of-2.png', 'w.part-2-of-2.png'],
+    });
+    expect(calls).toEqual(['render', 'remove w', ...result.files.map((f) => `write ${f}`)]);
+  });
+
+  test('writePngPreviews never throws and goes on after a failed target', () => {
+    const written = [];
+    const failing = { renderRgba: () => { throw new WebAssembly.RuntimeError('unreachable'); } };
+    let first = true;
+    const renderer = {
+      renderRgba: (svg, scale) => {
+        if (first) { first = false; return failing.renderRgba(); }
+        return flatRenderer(20, 10).renderRgba(svg, scale);
+      },
+    };
+    const results = writePngPreviews(
+      [{ svg: svgOf(10, 5), base: 'a' }, { svg: svgOf(10, 5), base: 'b' }],
+      renderer,
+      { writeFile: (p) => written.push(p), removeStale: () => [] });
+    expect(results[0]).toEqual({ base: 'a', ok: false, message: 'the renderer failed: unreachable' });
+    expect(results[1]).toMatchObject({ base: 'b', ok: true, files: ['b.png'], parts: 0, scale: 2 });
+    expect(written).toEqual(['b.png']);
+
+    const writeFails = writePngPreviews([{ svg: svgOf(10, 5), base: 'c' }], flatRenderer(20, 10), {
+      writeFile: () => { throw Object.assign(new Error("EACCES: permission denied, open 'c.png'"), { code: 'EACCES' }); },
+      removeStale: () => [],
+    });
+    expect(writeFails).toEqual([{ base: 'c', ok: false, message: "EACCES: permission denied, open 'c.png'" }]);
   });
 });
