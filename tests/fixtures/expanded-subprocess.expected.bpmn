@@ -94,16 +94,16 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
-        <di:waypoint x="176" y="150" />
-        <di:waypoint x="256" y="150" />
+        <di:waypoint x="176" y="149.5" />
+        <di:waypoint x="256" y="149.5" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
         <di:waypoint x="356" y="150" />
         <di:waypoint x="436" y="150" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
-        <di:waypoint x="988" y="150" />
-        <di:waypoint x="1068" y="150" />
+        <di:waypoint x="988" y="149.5" />
+        <di:waypoint x="1068" y="149.5" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
