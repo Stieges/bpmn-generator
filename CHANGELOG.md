@@ -228,6 +228,19 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   system id) and writes `"2.1"` when it created or reused a system, so 20 of the 28 1.x fixtures
   translate without `--drop-unsupported` (before: 19); a `system` off a task stays MG02. New codes: C14, C15,
   F06, H20, MG08. The quick start in `docs/roles-and-systems.md` is format 2.1 and gains the view `systeme`.
+- **PNG preview (`--png`).** `node bpmn/pipeline.js model.json out --png` also writes `out.png`, the
+  whole diagram at scale 2 with no side larger than 8192 px (a wider diagram renders at a smaller
+  scale, which the console prints). A diagram larger than one part also gets
+  `out.part-<i>-of-<n>.png`: crops of that same image, 1600 diagram units with 160 overlap, numbered
+  left→right then top→bottom; part files an earlier run left for `out` are removed. With
+  `--drill-down`, every written diagram gets its PNG. Text renders with the bundled Arimo font
+  (metric-compatible with Arial, `scripts/fonts/`), the same on every machine. The renderer is the
+  new optional dependency `@resvg/resvg-wasm` 2.6.2 (wasm, exact pin), loaded only for `--png`.
+  Without it (`npm install --omit=optional`) `--png` exits 1 with a message before anything is
+  written; a render failure after the model files are written exits 1 and says that `out.bpmn` and
+  `out.svg` are valid. `--png` with `--import-dot` is refused. `--png` adds no warning, and a run
+  that `--strict` stops writes no PNG. Without the flag, output is unchanged. Not covered yet: DMN
+  tables and the MCP server.
 
 - **Automatic steps in a lane of their own (view switch).** A view file can set
   `lanes: { "by": "role" | "unit", "automatic": "lane", "automaticName"? }` (for `unit` also `level` and

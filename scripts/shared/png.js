@@ -1,6 +1,7 @@
 /**
- * PNG preview of a rendered diagram — the pure part: scale, part geometry, crop, CRC32, encoder
- * and the SVG root size.
+ * PNG preview of a rendered diagram: the pure part (scale, part geometry, crop, CRC32, encoder
+ * and the SVG root size), the renderer (optional @resvg/resvg-wasm with the bundled font) and the
+ * writer the CLI calls.
  *
  * This module imports only `node:` builtins at the top and does nothing when it is loaded, so the
  * CLI can import it statically (the package-integrity check follows static imports only) without
@@ -17,9 +18,9 @@
  * so a newer API would pass CI and still break users on early 20.x releases.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
@@ -536,4 +537,69 @@ export function renderPreview(svg, renderer, opts = PNG_PREVIEW) {
     if (err instanceof PngRenderError) throw err;
     throw new PngRenderError(`the renderer failed: ${err?.message ?? String(err)}`, { cause: err });
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Writer: the files of `--png`.
+// ---------------------------------------------------------------------------------------------
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Delete the part files an earlier run left for `base`: files in `dirname(base)` named exactly
+ * `<basename>.part-<i>-of-<n>.png`. A diagram that shrank from twelve parts to four, or to none,
+ * would otherwise leave old parts beside the new ones, and whoever globs `<base>.part-*` would
+ * read a mix of two runs. Nothing else is touched: not another base that merely starts with the
+ * same name (`<base>x.part-…`), not a file with a further suffix.
+ *
+ * @param {string} base  output path without extension
+ * @param {{ readdir?: (dir: string) => string[], unlink?: (path: string) => void }} [fs]
+ * @returns {string[]} the removed paths
+ */
+export function removeStaleParts(base, { readdir = readdirSync, unlink = unlinkSync } = {}) {
+  const dir = dirname(base);
+  const pattern = new RegExp(`^${escapeRegExp(basename(base))}\\.part-\\d+-of-\\d+\\.png$`);
+  const removed = [];
+  for (const name of readdir(dir)) {
+    if (!pattern.test(name)) continue;
+    const path = join(dir, name);
+    unlink(path);
+    removed.push(path);
+  }
+  return removed;
+}
+
+/**
+ * Write `<base>.png`, plus `<base>.part-<i>-of-<n>.png` for a large diagram (1-based, left→right
+ * then top→bottom), for each target.
+ *
+ * Per target, the order is fixed: render and encode every image in memory, then remove the stale
+ * parts of that base, then write. A render that fails therefore leaves no PNG of that base at all,
+ * neither a new one nor an old part. A failure on one target is reported in its result and does
+ * not stop the next target (a drill-down writes many diagrams).
+ *
+ * Never throws: every failure, rendering or writing, becomes `{ ok: false, message }`.
+ *
+ * @param {Array<{ svg: string, base: string }>} targets
+ * @param {PngRenderer} renderer
+ * @param {{ writeFile?: (path: string, data: Buffer) => void, removeStale?: (base: string) => string[] }} [io]
+ * @returns {Array<{ base: string, ok: true, files: string[], scale: number, parts: number }
+ *                | { base: string, ok: false, message: string }>}
+ */
+export function writePngPreviews(targets, renderer, { writeFile = writeFileSync, removeStale = removeStaleParts } = {}) {
+  return targets.map(({ svg, base }) => {
+    try {
+      const preview = renderPreview(svg, renderer);
+      const n = preview.parts.length;
+      const outputs = [
+        { path: `${base}.png`, png: preview.png },
+        ...preview.parts.map((part, i) => ({ path: `${base}.part-${i + 1}-of-${n}.png`, png: part.png })),
+      ];
+      removeStale(base);
+      for (const { path, png } of outputs) writeFile(path, png);
+      return { base, ok: true, files: outputs.map((o) => o.path), scale: preview.scale, parts: n };
+    } catch (err) {
+      return { base, ok: false, message: err?.message ?? String(err) };
+    }
+  });
 }
