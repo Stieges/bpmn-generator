@@ -55,3 +55,10 @@ jobs:
       - name: Smoke test — generate BPMN + SVG
         working-directory: scripts
         run: node bpmn/pipeline.js ../tests/fixtures/simple-approval.json /tmp/smoke-test
+
+      - name: Smoke test — PNG preview
+        working-directory: scripts
+        run: |
+          node bpmn/pipeline.js ../tests/fixtures/wide-pipeline.json /tmp/smoke-png --png
+          test -s /tmp/smoke-png.png
+          ls /tmp/smoke-png.part-*-of-*.png
