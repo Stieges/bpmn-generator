@@ -532,11 +532,11 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // passes validation green. This pass inspects the produced geometry.
   const diagnostics = checkDiagramIntegrity(coordMap, lc, { alongOutlineMinPx: CFG.layout?.alongOutlineMinPx });
   // Format 2.x only: a DI05 no participant order avoids keeps its code and gains a clause; H15,
-  // last in `hints`, names its flows, and the CLI's --strict does not count them. A 1.x model gets
+  // after the naming hints and before H16, names its flows, and the CLI's --strict does not count them. A 1.x model gets
   // neither (its responses stay as they were), so its --strict still counts every DI05.
   const unavoidable = v2 ? classifyUnavoidableDi05(coordMap, lc, diagnostics.issues) : null;
   if (unavoidable) hints.push(unavoidableCrossingHint(unavoidable));
-  // H16, last: one per label the SVG cut inside a word, taken from the layout that drew it (any format).
+  // H16, after H15: one per label the SVG cut inside a word, taken from the layout that drew it (any format).
   hints.push(...cutLabels.map(labelCutHint));
   // H17, after H16: one per message catcher without an incoming message flow (more than one participant).
   hints.push(...messageCatcherHints(lc));
