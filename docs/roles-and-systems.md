@@ -304,8 +304,8 @@ node bpmn/pipeline.js ../quickstart.json ../quickstart-systeme --strict --view=s
 A `"2.0"` model that uses `system` or `systems` is refused with one error F06 per use; change the
 version to `"2.1"`. A `system` must name a system of the catalogue (C14) and sits on a task (C15).
 
-Four **placeholder lanes** appear when the model or the catalogue is incomplete. All are hints, never
-errors:
+Four **placeholder lanes** can appear: three when the model or the catalogue is incomplete, and one when a
+view asks for it. All are hints, never errors:
 
 | Lane | Meaning | Hint |
 |---|---|---|
@@ -333,6 +333,6 @@ your own can give these tasks a lane instead:
 
 With it, an automatic task without a performer lands in `(automatisch)` with hint H19. Only
 automatic tasks without a performer (and their boundary events) move; events and gateways keep their
-lane. `automaticName` is optional (1-25 characters) and only valid with `"automatic": "lane"`; the view
+lane. `automaticName` is optional (1-25 characters, not blank) and only valid with `"automatic": "lane"`; the view
 `systeme` does not take the switch. Known limit: you reach it with `--view <path>`, an inline view over
 HTTP or `runPipeline`; the MCP tools take a view by name only, and no shipped view sets it.

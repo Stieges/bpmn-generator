@@ -650,8 +650,8 @@ system). The placeholders are ids
 lane id, or of its `<lane-id>_di`, with another id of the document is error C10, never a rename.
 
 **Hints.** Hints go to `validation.hints` and never fail `--strict`. H02 (activity without
-performer), H03 (automatic step placed with its neighbour; its text points to the view option `lanes.automatic`), H19 (automatic step without performer placed in the lane `(automatisch)`, only with that option), H04 (unit not recorded), H05 (lane name
-over 25 characters), H06 (process without performer; in the system view, without a system), H09 (a catalogue entry, actor or system, replaced by the process file), H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation; in the system view it places the node in `(System nicht erhoben)`) and H20 (an activity without a recorded system, system view only)
+performer), H03 (automatic step placed with its neighbour; its text points to the view option `lanes.automatic`), H04 (unit not recorded), H05 (lane name
+over 25 characters), H06 (process without performer; in the system view, without a system), H09 (a catalogue entry, actor or system, replaced by the process file), H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation; in the system view it places the node in `(System nicht erhoben)`), H19 (automatic step without performer placed in the lane `(automatisch)`, only with that option) and H20 (an activity without a recorded system, system view only)
 come from the lane formation; H01 is the view's join-gateway derivation.
 
 **Output of a 2.0 model (XML).** The assignments and the origin are kept in the XML so that the
