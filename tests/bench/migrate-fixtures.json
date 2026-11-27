@@ -1,0 +1,260 @@
+{
+  "corpus": 28,
+  "excluded": {},
+  "fixtures": {
+    "all-element-classes.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 2,
+      "laneMatches": 6,
+      "codes": {
+        "H07": 1,
+        "MG02": 3
+      }
+    },
+    "artifacts-laneless-pool.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 2,
+      "laneMatches": 0,
+      "codes": {
+        "MG02": 6
+      }
+    },
+    "boundary-event-shapes.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 7,
+      "laneMatches": 0,
+      "codes": {}
+    },
+    "bpmn-generator-pipeline.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 14,
+      "laneMatches": 20,
+      "codes": {
+        "H07": 5,
+        "MG04": 2
+      }
+    },
+    "deadlock-process.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 3,
+      "laneMatches": 7,
+      "codes": {
+        "H07": 1
+      }
+    },
+    "dense-edge-labels.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 5,
+      "laneMatches": 9,
+      "codes": {
+        "H07": 1
+      }
+    },
+    "example-bestellung-versand.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 7,
+      "laneMatches": 12,
+      "codes": {
+        "H07": 3,
+        "MG02": 2,
+        "MG04": 2
+      }
+    },
+    "example-kreditantrag.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 12,
+      "laneMatches": 22,
+      "codes": {
+        "H07": 4,
+        "MG02": 2
+      }
+    },
+    "example-onboarding.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 8,
+      "laneMatches": 12,
+      "codes": {
+        "H07": 3,
+        "MG02": 2,
+        "MG04": 3
+      }
+    },
+    "example-rechnungspruefung.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 7,
+      "laneMatches": 13,
+      "codes": {
+        "H07": 4,
+        "MG02": 2,
+        "MG04": 1
+      }
+    },
+    "example-schadenmeldung.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 9,
+      "laneMatches": 15,
+      "codes": {
+        "H07": 3,
+        "MG04": 1
+      }
+    },
+    "example-urlaubsantrag.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 7,
+      "laneMatches": 10,
+      "codes": {
+        "H07": 3,
+        "MG02": 2,
+        "MG04": 3
+      }
+    },
+    "expanded-subprocess.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 2,
+      "laneMatches": 4,
+      "codes": {
+        "H07": 1
+      }
+    },
+    "long-lane-names.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 3,
+      "laneMatches": 5,
+      "codes": {
+        "H07": 3
+      }
+    },
+    "loop-with-join.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 4,
+      "laneMatches": 8,
+      "codes": {
+        "H07": 1
+      }
+    },
+    "message-flow-participant-ports.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 4,
+      "laneMatches": 0,
+      "codes": {}
+    },
+    "messageflow-to-subprocess.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 4,
+      "laneMatches": 0,
+      "codes": {}
+    },
+    "multi-pool-collaboration.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 6,
+      "laneMatches": 12,
+      "codes": {
+        "H07": 3
+      }
+    },
+    "nested-lanes-role-system.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 3,
+      "laneMatches": 0,
+      "codes": {
+        "H07": 7,
+        "MG02": 2,
+        "MG03": 3,
+        "MG04": 3
+      }
+    },
+    "parallel-split-join.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 3,
+      "laneMatches": 0,
+      "codes": {}
+    },
+    "realistic-collaboration.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 15,
+      "laneMatches": 21,
+      "codes": {
+        "H07": 6
+      }
+    },
+    "simple-approval.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 3,
+      "laneMatches": 6,
+      "codes": {
+        "H07": 1
+      }
+    },
+    "sparse-lanes.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 7,
+      "laneMatches": 10,
+      "codes": {
+        "H07": 4,
+        "MG04": 1
+      }
+    },
+    "subprocess-child-fidelity.json": {
+      "status": "refused",
+      "statusWithDrop": "translated",
+      "activities": 1,
+      "laneMatches": 0,
+      "codes": {
+        "MG02": 2
+      }
+    },
+    "subprocess-collapsed-children.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 3,
+      "laneMatches": 0,
+      "codes": {}
+    },
+    "subprocess-merge-fanout.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 5,
+      "laneMatches": 0,
+      "codes": {}
+    },
+    "wide-pipeline.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 25,
+      "laneMatches": 27,
+      "codes": {
+        "H07": 1
+      }
+    },
+    "wrapping-back-edge.json": {
+      "status": "translated",
+      "statusWithDrop": "translated",
+      "activities": 20,
+      "laneMatches": 0,
+      "codes": {}
+    }
+  }
+}
