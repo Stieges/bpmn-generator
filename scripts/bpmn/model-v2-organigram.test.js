@@ -230,6 +230,26 @@ describe('unit view nested along the organigram', () => {
     });
   });
 
+  test('automatic "lane": the automatic lane is a top-level lane after the tree', () => {
+    const task = (id, type, actor) => ({ id, type, name: id, ...(actor ? { assignments: [{ type: 'D', actor }] } : {}) });
+    const model = {
+      $schemaVersion: '2.0', id: 'P',
+      nodes: [{ id: 'S', type: 'startEvent' }, task('T1', 'userTask', 'sb_schaden'), task('X', 'serviceTask'),
+        task('T2', 'userTask', 'zahlung'), { id: 'E', type: 'endEvent' }],
+      edges: [['S', 'T1'], ['T1', 'X'], ['X', 'T2'], ['T2', 'E']].map(([source, target]) => ({ source, target })),
+    };
+    const out = form(model, ORG, { ...NESTED, automatic: 'lane' });
+    expect(out.errors).toEqual([]);
+    expect(out.hints.map((h) => [h.code, h.elements])).toEqual([['H19', ['X', 'L.P._automatic']]]);
+    expect(tree(out.lc.lanes)).toEqual([
+      ['L.P.bereich_leistung', 'Leistung', 'bereich_leistung', [['L.P.abt_schaden', 'Schadenabteilung', 'abt_schaden']]],
+      ['L.P.abt_finanzen', 'Finanzen', 'abt_finanzen'],
+      ['L.P._automatic', '(automatisch)', '_automatic'],
+    ]);
+    expect(out.lc.lanes.at(-1)._laneBy).toBe('unit');
+    expect(byLane(out.lc)).toEqual({ 'L.P.abt_schaden': ['S', 'T1'], 'L.P._automatic': ['X'], 'L.P.abt_finanzen': ['T2', 'E'] });
+  });
+
   test('the shipped view organigramm is this view', () => {
     expect(form(SCHADEN, ORG, loadNamedView('organigramm').lanes)).toEqual(form(SCHADEN, ORG, NESTED));
   });

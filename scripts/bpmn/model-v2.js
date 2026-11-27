@@ -329,6 +329,8 @@ export const UNASSIGNED = '_unassigned';
 export const UNIT_UNKNOWN = '_unitUnknown';
 /** The placeholder key of the system view: an activity without a recorded system. */
 export const SYSTEM_UNKNOWN = '_systemUnknown';
+/** The placeholder key of the view option `lanes.automatic: 'lane'`: an automatic task without performer. */
+export const AUTOMATIC = '_automatic';
 
 /** The automatic activities of design 7.2 step 5: without performer they inherit instead of taking the placeholder. */
 export const AUTOMATIC_ACTIVITY_TYPES = new Set(['serviceTask', 'scriptTask', 'businessRuleTask', 'sendTask', 'receiveTask']);
@@ -341,8 +343,10 @@ const PLACEHOLDER_NAMES = {
   [UNASSIGNED]: () => CFG.laneFormation.unassignedName,
   [UNIT_UNKNOWN]: () => CFG.laneFormation.unitUnknownName,
   [SYSTEM_UNKNOWN]: () => CFG.laneFormation.systemUnknownName,
+  [AUTOMATIC]: () => CFG.laneFormation.automaticName,
 };
-const placeholderName = (key) => PLACEHOLDER_NAMES[key]();
+/** The name of a placeholder lane; the automatic lane takes the view's `automaticName` when set. */
+const placeholderName = (key, automaticName = null) => (key === AUTOMATIC && automaticName !== null ? automaticName : PLACEHOLDER_NAMES[key]());
 
 /** The modelled processes of an intermediate form: the document itself, or each expanded pool. */
 function processesOf(lc) {
@@ -364,6 +368,7 @@ function keyRank(resolved, key, laneBy) {
   if (laneBy === 'system') return key === SYSTEM_UNKNOWN ? resolved.systemOrder.size : resolved.systemOrder.get(key);
   if (key === UNASSIGNED) return resolved.order.size;
   if (key === UNIT_UNKNOWN) return resolved.order.size + 1;
+  if (key === AUTOMATIC) return resolved.order.size + 2;
   return resolved.order.get(key);
 }
 
@@ -374,8 +379,14 @@ function keyRank(resolved, key, laneBy) {
  * view the key of steps 2–3 is the activity's system: every activity (automatic or not, a
  * subprocess included) has one, `SYSTEM_UNKNOWN` (H20) without a recorded system; assignments play
  * no part, and the fallback of the later steps is `SYSTEM_UNKNOWN`.
+ *
+ * With `automatic === 'lane'` (never in the system view) the rounds run exactly as without it;
+ * only after them every automatic activity still without a performer key takes `AUTOMATIC`
+ * instead of its inherited key or the fallback (no H08 for it), and is listed in `moved` (H19,
+ * written once the lanes exist). Boundary events on it follow in step 7. Every other node keeps
+ * the key it has without the switch: the placeholder is never passed on by inheritance.
  */
-function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
+function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix, automatic = 'neighbour') {
   const hints = [];
   const flowNodes = proc.container.nodes.filter(isFlowNode);
   const ids = new Set(flowNodes.map((n) => n.id));
@@ -466,8 +477,13 @@ function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
     if (!round(other)) break;
   }
   const inherited = [];
+  const moved = [];
+  const moveAutomatic = automatic === 'lane' && laneBy !== 'system';
   for (const n of keyless) {
-    if (key.has(n.id)) {
+    if (moveAutomatic && isAuto(n)) {
+      key.set(n.id, AUTOMATIC);
+      moved.push(n);
+    } else if (key.has(n.id)) {
       if (isAuto(n)) inherited.push(n);
     } else {
       key.set(n.id, fallback);
@@ -486,7 +502,7 @@ function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
       hints.push({ code: 'H08', message: `${prefix}Boundary event ${nodeLabel(n)} has no host with a lane: lane "${placeholderName(fallback)}".`, elements: [n.id] });
     }
   }
-  return { key, hints, inherited };
+  return { key, hints, inherited, moved };
 }
 
 /**
@@ -513,7 +529,7 @@ export function normalizeLanesOption(lanes) {
   throw new TypeError(`unknown lanes option ${JSON.stringify(lanes)}`);
 }
 
-const isPlaceholder = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN || key === SYSTEM_UNKNOWN;
+const isPlaceholder = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN || key === SYSTEM_UNKNOWN || key === AUTOMATIC;
 
 /** Every lane of a lane tree, depth-first in declaration order. */
 function allLanes(laneList, out = []) {
@@ -527,10 +543,11 @@ function allLanes(laneList, out = []) {
  * holds its own steps in the extra first child `L.<process>.<unit>._own`, named like the unit, so
  * no parent lane holds a node itself; the placeholders are top-level lanes after the tree. A key
  * that is no unit (a kind-less actor naming itself) follows its own chain, as the level does;
- * without `partOf` that is a top-level lane without children.
+ * without `partOf` that is a top-level lane without children. `automaticName` names the automatic
+ * lane (null: the configured name).
  * @returns {{ laneList: object[], laneOf: Map<string, object> }} `laneOf`: key → its leaf lane
  */
-function laneTree(processId, keys, resolved) {
+function laneTree(processId, keys, resolved, automaticName = null) {
   const lane = (id, name, key) => ({ id, name, _derived: 'lane', _laneBy: 'unit', _laneActor: key });
   const byRank = (a, b) => keyRank(resolved, a, 'unit') - keyRank(resolved, b, 'unit');
   const units = keys.filter((k) => !isPlaceholder(k));
@@ -564,7 +581,7 @@ function laneTree(processId, keys, resolved) {
   };
   const laneList = [...roots].sort(byRank).map(build);
   for (const k of keys.filter(isPlaceholder)) {
-    const l = lane(laneIdFor(processId, k), placeholderName(k), k);
+    const l = lane(laneIdFor(processId, k), placeholderName(k, automaticName), k);
     laneList.push(l);
     laneOf.set(k, l);
   }
@@ -574,11 +591,14 @@ function laneTree(processId, keys, resolved) {
 /**
  * Forms the lanes of the chosen view (`role`, `unit`, `system`, `none` or the object form, see
  * `normalizeLanesOption`) from the assignments of an intermediate form made by `resolveFields`,
- * or in the system view from the systems of its tasks (`_systemRef`).
+ * or in the system view from the systems of its tasks (`_systemRef`). With `automatic: 'lane'`
+ * (role and unit view) every automatic task without performer is in the lane
+ * `L.<process>._automatic`, named `automaticName` or `laneFormation.automaticName`, with one H19
+ * each where H03 would be; without it such a task goes with its neighbour (H03).
  * Neither argument is changed. A C10 collision stops the run: `{ lc: null, hints: [], errors }`.
  */
 export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
-  const { by: lanes, level, nested } = normalizeLanesOption(lanesOption);
+  const { by: lanes, level, nested, automatic, automaticName } = normalizeLanesOption(lanesOption);
   const out = clone(lc);
   if (lanes === 'none') return { lc: out, hints: [], errors: [] };
 
@@ -599,17 +619,17 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
       hints.push({ code: 'H06', message: `${proc.prefix}No assignments in process "${proc.label}": no lanes.`, elements: [proc.id] });
       continue;
     }
-    const { key, hints: found, inherited } = inheritKeys(proc, resolved, lanes, level, performerOf, proc.prefix);
+    const { key, hints: found, inherited, moved } = inheritKeys(proc, resolved, lanes, level, performerOf, proc.prefix, automatic);
 
     // step 8: one lane per key used, in declaration order; nested, the tree along the organigram
     const keys = [...new Set(key.values())].sort((a, b) => keyRank(resolved, a, lanes) - keyRank(resolved, b, lanes));
     const nameOf = (k) => {
-      if (isPlaceholder(k)) return placeholderName(k);
+      if (isPlaceholder(k)) return placeholderName(k, automaticName);
       return (lanes === 'system' ? resolved.systemById : resolved.byId).get(k).name;
     };
     let laneList;
     let laneOf;
-    if (nested) ({ laneList, laneOf } = laneTree(proc.id, keys, resolved));
+    if (nested) ({ laneList, laneOf } = laneTree(proc.id, keys, resolved, automaticName));
     else {
       laneList = keys.map((k) => ({
         id: laneIdFor(proc.id, k),
@@ -646,7 +666,15 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
       const l = laneOf.get(key.get(n.id));
       found.push({
         code: 'H03',
-        message: `${proc.prefix}Automatic step ${nodeLabel(n)} has no performer; it is placed with its neighbour in lane "${l.name}".`,
+        message: `${proc.prefix}Automatic step ${nodeLabel(n)} has no performer; it is placed with its neighbour in lane "${l.name}". Set lanes.automatic to "lane" for a lane of its own.`,
+        elements: [n.id, l.id],
+      });
+    }
+    for (const n of moved) {
+      const l = laneOf.get(AUTOMATIC);
+      found.push({
+        code: 'H19',
+        message: `${proc.prefix}Automatic step ${nodeLabel(n)} has no performer: lane "${l.name}".`,
         elements: [n.id, l.id],
       });
     }
@@ -670,8 +698,9 @@ export function formLanes(lc, resolved, { lanes: lanesOption } = {}) {
       }
       for (const v of [l.id, `${l.id}_di`]) if (!taken.has(v)) taken.set(v, l.id);
     }
-    // an own lane bears its parent's name: the parent's H05 covers it
-    for (const l of allLanes(laneList).filter((x) => !x.id.endsWith('._own'))) {
+    // an own lane bears its parent's name: the parent's H05 covers it; the automatic lane's name is
+    // capped at LANE_NAME_LIMIT code points by the view gate, so it never gets one
+    for (const l of allLanes(laneList).filter((x) => !x.id.endsWith('._own') && x._laneActor !== AUTOMATIC)) {
       if (l.name.length > LANE_NAME_LIMIT) {
         hints.push({
           code: 'H05',
