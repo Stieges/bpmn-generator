@@ -40,7 +40,7 @@ export function messageCatcherHints(lc) {
         const named = typeof node.name === 'string' && node.name !== '' ? ` ("${node.name}")` : '';
         hints.push({
           code: 'H17',
-          message: `The ${KIND[node.type]} "${node.id}"${named} waits for a message, but no message flow arrives at it. Draw the message flow from the sender to it, or remove the message marker.`,
+          message: `The ${KIND[node.type]} "${node.id}"${named} waits for a message, but no message flow arrives at it. Draw the message flow from the sender to it, ${node.type === 'receiveTask' ? 'or make it a plain task' : 'or remove the message marker'}.`,
           elements: [node.id],
         });
       }

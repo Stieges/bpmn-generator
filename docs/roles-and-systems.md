@@ -216,7 +216,7 @@ the XML and reported by rule S15.
 ```
 
 **Planned:** dedicated views that draw a model by these fields — lanes per role, lanes per system,
-systems as pools — without changing the model. Until they exist, use sections 1–4.
+systems as pools — without changing the model. Until they exist, use sections 1–4. For format 2.0 models the lanes views `rollen`, `einheiten` and `organigramm` exist already, see [section 6](#6-format-20-quick-start).
 
 ## 6. Format 2.0 quick start
 
@@ -298,4 +298,3 @@ errors:
 The names are set in `scripts/config.json` under `laneFormation` (`unassignedName`, `unitUnknownName`).
 In the example, `Archive file` lands in `(nicht zugeordnet)` and, in the unit views, `Pay claim` in
 `(Einheit nicht erhoben)`.
-

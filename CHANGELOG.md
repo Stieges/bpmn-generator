@@ -163,7 +163,7 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 - **Hint `H16`: a label broken inside a word.** A word wider than its line, with no blank, hyphen
   or soft hyphen to break at, is cut mid-word, in the SVG and in bpmn.io alike (the breaking
   reproduces bpmn.io's and is unchanged). One hint per label (task and subprocess text, event,
-  gateway, data object and group labels, sequence and message flow labels, text annotations,
+  gateway, data object, data store and group labels, sequence and message flow labels, text annotations,
   participant, collapsed pool and lane names) names the element and every such word, and says that
   a soft hyphen (U+00AD) in the name sets where the word may break. Any format; after H15 in
   `validation.hints`; never fails `--strict`. `layoutText` returns the words as `cuts`. Models

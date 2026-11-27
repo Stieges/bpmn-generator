@@ -24,7 +24,7 @@ Used as a Claude Code Skill (SKILL.md) — the LLM extracts Logic-Core JSON from
 
 ## Architecture
 
-7 top-level scripts (standalone tooling) + 32 bpmn-pipeline + 20 dmn (growing) + 14 shared + 2 cross-notation + 7 agent +
+7 top-level scripts (standalone tooling) + 39 bpmn-pipeline + 20 dmn (growing) + 14 shared + 2 cross-notation + 7 agent +
 11 robustness + 6 scenarios (growing) modules under `scripts/`. Verify current inventory with
 `find scripts -name '*.js' -not -path '*/node_modules/*' -not -name '*.test.js' | wc -l`.
 
@@ -942,8 +942,7 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - `--wrap` (`layout.elkWrapping: 'auto'`, threshold 20 nodes) with lanes is accepted but the result is a
   staircase: the laned pool is one flat ELK graph, so the wrapped rows are not aligned to lane bands, and the
   lane bands are rebuilt afterwards from the y spans of their nodes. Each band grows to span several
-  rows and the rows shift against each other. A 26-node chain over three lanes measures 4752 x 550 px without
-  `--wrap` and 4032 x 2360 px with it, the three bands 120/160/160 px against 844/703/703 px. Nothing
+  rows and the rows shift right and down like a staircase, each lane band growing to span all rows. Nothing
   warns; leave `--wrap` off for a model with lanes (a format 2.x model included, its lanes come from the view).
 - DMN views: the DRD SVG clips requirement edges at a shape's bounding box (as the DMNDI does), so
   an edge to a knowledge source or BKM ends at the box, not the wavy/clipped outline; decision tables
@@ -1028,7 +1027,7 @@ node scenarios/pipeline.js input.json --decisions table.dmn
 - `example-rechnungspruefung`'s "Ja" flow (`f412`) leaves "Betrag über 10.000 EUR?" at the bottom vertex and runs through the gateway's own label: `placeNodeLabelsAvoidingFlows` finds every candidate blocked (below and right-below by `f412` itself, above by `f409`/`f410`, left-below by `f410`) and keeps the default box. Its `f410` carries a 10 px jog from `repairCrossings` (6 bends) that no later pass straightens (#91)
 - Artifacts (annotations, data objects, data stores) are placed below the element they are associated with, stacked. They are kept out of the ELK graph on purpose: an artifact without an association is disconnected and ELK hands it the first layer — measured, an unattached data store pushed the start event 184 px right. Because ELK therefore sizes an expanded subprocess without its artifacts, `layout.js` reserves a band at the subprocess's bottom for the artifacts it declares (`artifactReserveHeight`, sized for the worst case — every artifact stacked under one anchor), and `placeArtifacts` puts unassociated ones into that band — last, onto free slots, because an anchor near the bottom hangs its own artifact into the same band; without it they landed below the whole collaboration, outside both subprocess and participant (#56). Over-reserving costs whitespace, under-reserving a DI06
 - Participant ordering is exact up to 8 participants and heuristic above. Some crossings are unavoidable: a communication cycle across three or more participants cannot be linearised, and a participant with three or more message partners has only two neighbours in the column, which is why DI05 is a WARNING. For a format 2.x model `classifyUnavoidableDi05` (`di-check.js`) marks a DI05 no order avoids (clause in the message, hint H15 from `runPipeline`), and the CLI's `--strict` does not count it; it decides by an exact search up to 16 participants (`UNAVOIDABLE_DI05_MAX_PARTICIPANTS`) whether any order is crossing-free, with DI05's mapping of a node to its participant (top-level nodes only), and marks every DI05 of the drawn order when none is, also one a better order would avoid (`poolOrder: "declared"`); a model that some order draws crossing-free still fails `--strict`. The picture still shows the crossing
-- The DI check (`di-check.js`) covers participants, lane bands, node containment, message flow crossings, and (DI07) that a sequence flow starts and ends on its own node, (DI08) that no sequence-flow end runs along its own endpoint's outline, (DI09) that no sequence flow runs through its own source or target, (DI10) that no message flow runs through a shape that is not one of its endpoints, and (DI11) that no sequence flow runs through a shape that is neither its source nor its target. It says nothing about sequence-flow *crossings*, label collisions or readability
+- The DI check (`di-check.js`) covers participants, lane bands, node containment, message flow crossings, and (DI07) that a sequence flow starts and ends on its own node, (DI08) that no sequence-flow end runs along its own endpoint's outline, (DI09) that no sequence flow runs through its own source or target, (DI10) that no message flow runs through a shape that is not one of its endpoints, and (DI11) that no sequence flow runs through a shape that is neither its source nor its target. It says nothing about sequence-flow *crossings*, label collisions (reported as hint H18 by `label-check.js`) or readability
 - A single-process Logic-Core (no `pools`) may omit `id` (`input-schema.json`'s `SingleProcess`
   branch, unlike `Pool`). `assignProcessId` (`topology.js`) gives it `Process_1` (`_2`, … on a
   collision). Callers reach it through the pure `withProcessId`: `generateBpmnXml` (which

@@ -126,7 +126,7 @@ npm test
 | `--dot` | Also write a Graphviz DOT export |
 | `--import-dot` | Treat the input as DOT and write Logic-Core JSON |
 | `--doc` | Also write a Markdown documentation companion |
-| `--strict` | Write nothing on any unresolved warning (rule engine, diagram integrity, serialization) |
+| `--strict` | Write nothing on any unresolved warning (rule engine, diagram integrity, serialization). A DI05 that hint `H15` names (format 2.x: no participant order avoids it) is printed but not counted. |
 | `--optimize` | Enable the opt-in Optimization Advisory layer |
 | `--refine` | Switch every visual-refinement pass on (lane compaction and label repair already are by default) |
 | `--no-refine` | Switch every visual-refinement pass off (mutually exclusive with `--refine`) |
