@@ -1,6 +1,7 @@
 node_modules/
 *.bpmn
 *.svg
+*.png
 !references/**
 !tests/**
 !docs/**
