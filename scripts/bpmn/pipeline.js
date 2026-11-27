@@ -851,14 +851,16 @@ async function main() {
   // no catch can stop) still leaves the model files, the documentation and the DOT export. A
   // failure is reported but does not undo them: exit 1 through process.exitCode, so the rest of
   // the output still prints.
-  const writePngs = (targets) => {
+  // `checked`: the single path ran the DI/NC gates on the model; drill-down bypasses them, so its
+  // message claims only that the files were written.
+  const writePngs = (targets, { checked }) => {
     for (const r of writePngPreviews(targets, pngRenderer)) {
       if (r.ok) {
         // Floored, so a capped scale never prints as "2.00".
         const scale = r.scale < 2 ? ` at scale ${(Math.floor(r.scale * 100) / 100).toFixed(2)}` : '';
         console.log(`✓ PNG preview → ${r.base}.png${r.parts ? ` (+${r.parts} parts)` : ''}${scale}`);
       } else {
-        console.error(`✗ PNG preview failed: ${r.message.replace(/\.$/, '')}. ${r.base}.bpmn and ${r.base}.svg were written and are valid.`);
+        console.error(`✗ PNG preview failed: ${r.message.replace(/\.$/, '')}. ${r.base}.bpmn and ${r.base}.svg were written${checked ? ' and are valid' : ''}.`);
         process.exitCode = 1;
       }
     }
@@ -1027,7 +1029,7 @@ async function main() {
       writeFileSync(`${outputBase}_index.html`, indexHtml, 'utf8');
       console.log(`✓ Navigation → ${outputBase}_index.html`);
     }
-    if (png) writePngs(pngTargets);
+    if (png) writePngs(pngTargets, { checked: false });
     console.log(`\n📊 Drill-Down: 1 parent + ${Object.keys(diagramSet.subProcesses).length} subprocess diagram(s)`);
     return;
   }
@@ -1191,7 +1193,7 @@ async function main() {
     console.log(`✓ DOT graph → ${dotPath}`);
   }
 
-  if (png) writePngs([{ svg: result.svg, base: outputBase }]);
+  if (png) writePngs([{ svg: result.svg, base: outputBase }], { checked: true });
 
   // Summary
   const lc = parsedInput;
