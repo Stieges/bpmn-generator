@@ -452,7 +452,8 @@ async function createRenderer(importModule, fontPath) {
   let resvg;
   try {
     const mod = await importModule(RENDERER_PACKAGE);
-    // The package is CommonJS: from ESM its exports arrive on `default`.
+    // import() resolves the package's ESM build (named exports); `default` covers a
+    // CommonJS build or a wrapped module.
     resvg = mod?.default ?? mod;
     if (typeof resvg?.initWasm !== 'function' || typeof resvg?.Resvg !== 'function')
       throw new Error(`${RENDERER_PACKAGE} exports neither initWasm nor Resvg`);
