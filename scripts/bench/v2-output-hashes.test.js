@@ -39,9 +39,9 @@ describe('format 2.0 golden diagrams', () => {
     expect(r.svg).toBe(golden(name, viewName, 'svg'));
   });
 
-  test.each(V2_PAIRS)('%s × %s: no hints, view, catalogue fingerprint and the information assignment', (name, viewName) => {
+  test.each(V2_PAIRS)('%s × %s: no hints but H18, view, catalogue fingerprint and the information assignment', (name, viewName) => {
     const r = generated(name, viewName);
-    expect(r.validation.hints).toEqual([]);
+    expect(r.validation.hints.filter((h) => h.code !== 'H18')).toEqual([]);
     expect(r.bpmnXml).toContain(`bg:view="${viewName}"`);
     expect(r.bpmnXml).toContain(`bg:catalog="${CATALOG_HASH[name]}"`);
     expect(r.bpmnXml).toContain('<bg:assignment type="I" actor="sb_schaden" />');

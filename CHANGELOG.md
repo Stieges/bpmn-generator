@@ -174,8 +174,22 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   hint naming it. The marker is the one the XML writer writes, so the hint matches the
   `messageEventDefinition`; an event subprocess start and a catcher inside a subprocess count; a
   flow that ends at the enclosing subprocess or pool does not. A single-participant model gets none.
-  Any format; after H16, last in `validation.hints`; generate path only; never fails `--strict`.
+  Any format; after H16 in `validation.hints`; generate path only; never fails `--strict`.
   Models that already lacked the flow gain the hint; the output files are unchanged.
+- **Hint `H18`: a label in the way or in the wrong place.** No diagnostic looked at labels, so a flow
+  through a gateway's label passed `--strict` unseen. One hint per finding, three cases, each named
+  in the message: a sequence or message flow that crosses the label of an event, a gateway, a data
+  object or store, or of another flow (`crosses the label of`; its own label does not count, the
+  label of the node it starts or ends at does); an edge label more than 6 px from its own route and
+  more than 10 px nearer to a shape that is neither its source nor its target (`sits nearer to`);
+  two labels that overlap or are less than 2 px apart (`overlaps`, `is too close to`; each pair
+  once). A route has to run at least 2 px inside a label box to cross it. The boxes are the
+  `BPMNLabel` bounds the DI writes and the SVG draws, the routes the written waypoints, after every
+  layout pass; nothing is moved. `elements` names the two elements. Any format; after H17, last in
+  `validation.hints`; generate path only; never fails `--strict`. Of the fixtures,
+  `bpmn-generator-pipeline.json` (the loop-back `fu6` through the label of `gw_ok`, and four more),
+  five example models and the format 2.0 golden `schaden × einheiten` (the `ja` flow through the
+  label `nein`) gain the hint; the output files are unchanged.
 
 ### Fixed
 

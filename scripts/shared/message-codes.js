@@ -46,6 +46,7 @@ export const MESSAGE_CODES = Object.freeze({
   H15: entry('hint', 'a message flow crosses an uninvolved participant in every order of the stacked participants; its DI05 does not fail --strict'),
   H16: entry('hint', 'a label is broken inside a word that has no break point; a soft hyphen (U+00AD) in the name sets one'),
   H17: entry('hint', 'a message start, catch or boundary event or a receive task has no incoming message flow in a model with more than one participant'),
+  H18: entry('hint', 'a flow crosses a label, an edge label sits nearer to a foreign shape than to its own flow, or two labels overlap or nearly touch'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 

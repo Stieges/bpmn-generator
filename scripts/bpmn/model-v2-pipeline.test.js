@@ -78,7 +78,7 @@ describe('runPipeline — format 2.0, the two views of design 5.6', () => {
     expect(Object.keys(result.coordMap.laneCoords).sort()).toEqual(Object.keys(expected).sort());
     expect(laneMembers(result.bpmnXml)).toEqual(expected);
     expect(result.bpmnXml).toContain(`bg:view="${name}"`);
-    expect(result.validation.hints).toEqual([]);
+    expect(result.validation.hints.filter((h) => h.code !== 'H18')).toEqual([]);
   });
 
   test('without a view a 2.0 model gets role lanes', async () => {
