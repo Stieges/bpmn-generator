@@ -15,6 +15,8 @@
  * `formLanes` under the view `rollen`, and every top-level flow node of a process with lanes (no
  * boundary event, no subprocess child) that sat in a lane is compared with its new lane. An activity
  * that lands elsewhere has an MG03 already; an event or gateway that lands elsewhere gets MG04.
+ * Boundary events are not compared: they are drawn on their host in both formats, and the 1.x `lane`
+ * on a boundary event only places it.
  *
  * `migrateModel` is pure: neither argument is changed, and it never throws on its input; a refused
  * input gives `model: null` and the reason in the report.
@@ -60,7 +62,9 @@ function orderEntries(entries) {
 const DEVIATION_CODES = ['MG03', 'MG04', 'MG05'];
 
 /**
- * The report's summary, the same shape for every status (a refusal counts what it read, the rest 0):
+ * The report's summary, the same shape for every status. A refusal at the gate (the 1.x schema, a
+ * duplicate id, the catalogue, a process id) is all 0; a later refusal (MG02, the final self-check,
+ * the lane comparison) counts the `processes`, `lanes` and `activities` it read, the rest 0:
  * `processes`, `lanes` (every lane at any depth), `actors` (created), `activities` (top-level, no
  * boundary event), `assigned` (activities with an assignment), `laneMatches` (compared top-level flow
  * nodes whose new lane under `rollen` is the actor of their original lane) and `deviations`
@@ -75,8 +79,33 @@ function refused(entries, counted) {
   return { model: null, supplement: null, catalog: null, report: { status: 'refused', entries, summary: summaryOf(counted) } };
 }
 
-function refuse(reason, elements = []) {
-  return refused([entry(REFUSED_CODE, `input refused: ${reason}`, elements)]);
+function refuse(reason, elements = [], counted = undefined) {
+  return refused([entry(REFUSED_CODE, `input refused: ${reason}`, elements)], counted);
+}
+
+/**
+ * The ids that occur more than once in a 1.x model, in order of first occurrence, with their count.
+ * BPMN ids are unique in the document, so one id space holds: the process or every pool and
+ * collapsed pool, the lanes at any depth, the nodes at any depth (flow nodes, artefacts, data
+ * nodes), the sequence flows at every level, the message flows, the associations and the
+ * top-level definitions. A sequence flow without id takes part with none.
+ */
+function duplicateIds(lc) {
+  const count = new Map();
+  const add = (item) => { if (isPlainObject(item) && typeof item.id === 'string') count.set(item.id, (count.get(item.id) ?? 0) + 1); };
+  const lanes = (list) => { for (const l of list || []) { add(l); lanes(l.children); } };
+  const holder = (h) => {
+    for (const n of h.nodes || []) { add(n); holder(n); }
+    for (const e of h.edges || []) add(e);
+  };
+  const processes = Array.isArray(lc.pools) ? lc.pools : [lc];
+  for (const proc of processes) {
+    add(proc);
+    lanes(proc.lanes);
+    holder(proc);
+  }
+  for (const list of [lc.collapsedPools, lc.messageFlows, lc.associations, lc.definitions]) for (const x of list || []) add(x);
+  return [...count].filter(([, n]) => n > 1);
 }
 
 /** The schema gate's errors as one line: distinct lines, `; `-joined, without their own code (the line is MG01). */
@@ -237,7 +266,7 @@ export function compareLanes(sites) {
       const laneId = s.laneOfActor.get(s.newKey);
       entries.push(entry('MG04', `${head} the inheritance rule places it in lane "${q(laneId)}".`, [s.nodeId, s.originalLaneId, laneId]));
     } else if (isPlaceholderKey(s.newKey)) {
-      entries.push(entry('MG04', `${head} the inheritance rule places it in the placeholder lane "${s.newKey}".`, [s.nodeId, s.originalLaneId, s.newKey]));
+      entries.push(entry('MG04', `${head} the inheritance rule places it in the placeholder lane "${q(s.newKey)}".`, [s.nodeId, s.originalLaneId, s.newKey]));
     } else {
       entries.push(entry('MG04', `${head} the inheritance rule places it with actor "${q(s.newKey)}", which is no lane of its 1.x process.`, [s.nodeId, s.originalLaneId, s.newKey]));
     }
@@ -279,6 +308,15 @@ export function migrateModel(lc, options = {}) {
   }
   const gate = validateLogicCoreSchema(lc);
   if (!gate.valid) return refuse(`it fails the 1.x schema: ${schemaReason(gate.errors)}`);
+  const duplicates = duplicateIds(lc);
+  if (duplicates.length) {
+    const tail = 'an id names one element of the document';
+    const [[id, n]] = duplicates;
+    const reason = duplicates.length === 1
+      ? `the id "${q(id)}" occurs ${n} times; ${tail}`
+      : `the ids ${duplicates.map(([d, k]) => `"${q(d)}" (${k} times)`).join(', ')} occur more than once; ${tail}`;
+    return refuse(reason, duplicates.map(([d]) => d));
+  }
 
   const { performs, error: catalogError } = schemeOf(catalog);
   if (catalogError) return refuse(catalogError);
@@ -441,15 +479,19 @@ export function migrateModel(lc, options = {}) {
 
   // (8) the result must pass the 2.0 gate and the catalogue schema (a lane name over the catalogue's bounds, an empty process)
   const check = validateModelSchema(model, { accept: ['2'] });
-  if (!check.valid) return refuse(`the translation fails the format 2.0 schema: ${schemaReason(check.errors)}`);
+  if (!check.valid) return refuse(`the translation fails the format 2.0 schema: ${schemaReason(check.errors)}`, [], counted);
   const catalogProblems = catalogErrors(effective);
-  if (catalogProblems.length) return refuse(`the translated actors fail the catalogue schema: ${catalogProblems.join('; ')}`);
+  if (catalogProblems.length) return refuse(`the translated actors fail the catalogue schema: ${catalogProblems.join('; ')}`, [], counted);
 
   // (9) the lane comparison: the result's lanes under the view rollen against the original lanes
   const fields = resolveFields(model, { catalog: withCatalog ? catalog : supplement });
-  if (fields.errors.length) return refuse(`the translation fails the catalogue check: ${fields.errors.join('; ')}`);
+  if (fields.errors.length) return refuse(`the translation fails the catalogue check: ${fields.errors.join('; ')}`, [], counted);
   const formed = formLanes(fields.lc, fields.resolved, { lanes: 'role' });
-  if (formed.errors.length) return refuse(`the translation's lanes under the view rollen fail: ${formed.errors.join('; ')}`);
+  if (formed.errors.length) {
+    // C10: a lane id L.<process>.<actor> (or its _di) meets an id of the document; the 1.x model has to rename one
+    const collisions = formed.errors.map((e) => e.replace(/^\[C10\] /, '').replace(/; rename the catalogue id$/, ''));
+    return refuse(`the translation's lanes under the view rollen collide: ${collisions.join('; ')}; rename the lane or flow id in the 1.x model`, [], counted);
+  }
   const keys = newLaneKeys(formed.lc);
   const compared = compareLanes(sites.map(({ procId, ...s }) => ({ ...s, newKey: keys.get(procId)?.get(s.nodeId) ?? null })));
   entries.push(...compared.entries);
