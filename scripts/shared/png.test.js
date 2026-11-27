@@ -1,8 +1,17 @@
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { inflateSync } from 'node:zlib';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   PNG_PREVIEW, previewScale, svgSize, planParts, cropRgba, crc32, encodePng, pngSize,
+  PngUnavailableError, PngRenderError, loadPngRenderer, renderPreview,
 } from './png.js';
+import { runPipeline } from '../bpmn/pipeline.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURES = join(__dirname, '..', '..', 'tests', 'fixtures');
 
 /** Split a PNG into its chunks: `{ type, data, crc }`, after checking the 8-byte signature. */
 function chunks(png) {
@@ -223,5 +232,122 @@ describe('png — pure helpers', () => {
     ]);
     expect(() => cropRgba(rgba, width, { x: 3, y: 0, w: 2, h: 1 })).toThrow(RangeError);
     expect(() => cropRgba(rgba, width, { x: 0, y: 3, w: 1, h: 2 })).toThrow(RangeError);
+  });
+});
+
+/** Pixels whose luma (ITU-R BT.601) is below 128 in a tightly packed RGBA image. */
+function darkPixels(rgba) {
+  let n = 0;
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2] < 128) n++;
+  }
+  return n;
+}
+
+/** The SVG that `runPipeline` renders for a fixture model. */
+async function fixtureSvg(name) {
+  const result = await runPipeline(JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')));
+  expect(typeof result.svg).toBe('string');
+  return result.svg;
+}
+
+describe('png — renderer', () => {
+  let tmp;
+  beforeAll(() => { tmp = mkdtempSync(join(tmpdir(), 'png-renderer-')); });
+  afterAll(() => { rmSync(tmp, { recursive: true, force: true }); });
+
+  test('loadPngRenderer reports a missing renderer', async () => {
+    const importModule = () => Promise.reject(Object.assign(
+      new Error("Cannot find package '@resvg/resvg-wasm'"), { code: 'ERR_MODULE_NOT_FOUND' }));
+    const err = await loadPngRenderer({ importModule }).catch((e) => e);
+    expect(err).toBeInstanceOf(PngUnavailableError);
+    expect(err.code).toBe('PNG_UNAVAILABLE');
+    expect(err.message).toContain('@resvg/resvg-wasm');
+    expect(err.message).toContain('npm install');
+  });
+
+  test('loadPngRenderer reports a missing font', async () => {
+    const fontPath = join(tmp, 'no-such-font.ttf');
+    const err = await loadPngRenderer({ fontPath }).catch((e) => e);
+    expect(err).toBeInstanceOf(PngUnavailableError);
+    expect(err.message).toContain(fontPath);
+  });
+
+  test('loadPngRenderer refuses a file that is not a font', async () => {
+    const fontPath = join(tmp, 'not-a-font.ttf');
+    writeFileSync(fontPath, 'This is a plain text file, not a TrueType font.\n');
+    const err = await loadPngRenderer({ fontPath }).catch((e) => e);
+    expect(err).toBeInstanceOf(PngUnavailableError);
+    expect(err.message).toContain(fontPath);
+  });
+
+  test('the default renderer is loaded once', async () => {
+    const first = await loadPngRenderer();
+    const second = await loadPngRenderer();
+    expect(second).toBe(first);
+    expect(typeof first.renderRgba).toBe('function');
+  });
+
+  test('text renders', async () => {
+    const renderer = await loadPngRenderer();
+    const svg = await fixtureSvg('example-bestellung-versand.json');
+    const withoutText = svg.replace(/<text\b[^>]*>[\s\S]*?<\/text>/g, '');
+    expect(withoutText.length).toBeLessThan(svg.length);
+    const full = renderer.renderRgba(svg, 2);
+    const bare = renderer.renderRgba(withoutText, 2);
+    expect([bare.width, bare.height]).toEqual([full.width, full.height]);
+    // Measured once on this fixture at scale 2 (resvg-wasm 2.6.2, Arimo Regular, 5020 × 2396 px):
+    // the text adds 0.174 % of all pixels as dark pixels (luma < 128). A threshold of 0.05 % is
+    // about a third of that, so antialiasing or small layout changes cannot trip it, and it is
+    // far above 0, so a render that drops the text (no usable font draws nothing, without any
+    // error) fails. 0.2 % would have been above the measured value for this wide, sparse diagram.
+    const ratio = (darkPixels(full.rgba) - darkPixels(bare.rgba)) / (full.width * full.height);
+    expect(ratio).toBeGreaterThan(0.0005);
+  });
+
+  test('the empty-diagram SVG renders its text', async () => {
+    const renderer = await loadPngRenderer();
+    // The exact string bpmn/svg.js returns for a diagram without elements: no width, height or
+    // font-family, so the renderer's default size and default font family apply.
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><text y="20">No elements</text></svg>';
+    const { rgba } = renderer.renderRgba(svg, 2);
+    expect(darkPixels(rgba)).toBeGreaterThan(0);
+  });
+
+  test('renderPreview at scale 2 for a small diagram', async () => {
+    const renderer = await loadPngRenderer();
+    const svg = await fixtureSvg('simple-approval.json');
+    const { width: W, height: H } = svgSize(svg);
+    const out = renderPreview(svg, renderer);
+    expect(out.scale).toBe(2);
+    expect(Math.abs(out.width - 2 * W)).toBeLessThanOrEqual(1);
+    expect(Math.abs(out.height - 2 * H)).toBeLessThanOrEqual(1);
+    expect(out.parts).toEqual([]);
+    expect(pngSize(out.png)).toEqual({ width: out.width, height: out.height });
+  });
+
+  test('renderPreview caps wide-pipeline at 8192 px and cuts four parts', async () => {
+    const renderer = await loadPngRenderer();
+    const svg = await fixtureSvg('wide-pipeline.json');
+    const out = renderPreview(svg, renderer);
+    expect(out.scale).toBeLessThan(2);
+    expect(out.width).toBeLessThanOrEqual(8192);
+    expect(pngSize(out.png)).toEqual({ width: out.width, height: out.height });
+    expect(out.parts).toHaveLength(4);
+    for (const part of out.parts) expect(pngSize(part.png)).toEqual({ width: part.w, height: part.h });
+    const last = out.parts[3];
+    expect(last.x + last.w).toBe(out.width);
+  });
+
+  test('a render error is a PngRenderError and the next render still works', async () => {
+    const svg = await fixtureSvg('simple-approval.json');
+    const failing = { renderRgba() { throw new WebAssembly.RuntimeError('unreachable'); } };
+    const err = (() => { try { renderPreview(svg, failing); } catch (e) { return e; } return null; })();
+    expect(err).toBeInstanceOf(PngRenderError);
+    expect(err.cause).toBeDefined();
+    expect(err.cause.message).toBe('unreachable');
+    expect(err.message).toContain('unreachable');
+    const out = renderPreview(svg, await loadPngRenderer());
+    expect(pngSize(out.png)).toEqual({ width: out.width, height: out.height });
   });
 });
