@@ -6,7 +6,7 @@
 import { describe, test, expect } from '@jest/globals';
 import {
   resolveFields, formLanes, normalizeLanesOption, laneIdFor, checkProjection, UNASSIGNED, UNIT_UNKNOWN, SYSTEM_UNKNOWN,
-  AUTOMATIC_ACTIVITY_TYPES,
+  AUTOMATIC, AUTOMATIC_ACTIVITY_TYPES,
 } from './model-v2.js';
 import { runPipeline } from './pipeline.js';
 import { loadNamedView, assertView, ViewRejectedError } from '../shared/view.js';
@@ -74,7 +74,7 @@ describe('formLanes — the cases of design 7.2', () => {
     expect(members(out.lc)).toEqual({ A: ['S', 'X', 'T', 'E'] });
     expect(out.hints).toEqual([{
       code: 'H03',
-      message: 'Automatic step "X" (X) has no performer; it is placed with its neighbour in lane "Rolle A".',
+      message: 'Automatic step "X" (X) has no performer; it is placed with its neighbour in lane "Rolle A". Set lanes.automatic to "lane" for a lane of its own.',
       elements: ['X', 'L.P.A'],
     }]);
   });
@@ -259,7 +259,7 @@ describe('formLanes — pinned edge cases', () => {
     expect(out.errors).toEqual([]);
     expect(out.hints).toEqual([
       { code: 'H02', message: 'No performer for "Ohne Zuständigkeit" (u): lane "(nicht zugeordnet)".', elements: ['u'] },
-      { code: 'H03', message: 'Automatic step "Automatik" (x) has no performer; it is placed with its neighbour in lane "(nicht zugeordnet)".', elements: ['x', 'L.Process_Schaden._unassigned'] },
+      { code: 'H03', message: 'Automatic step "Automatik" (x) has no performer; it is placed with its neighbour in lane "(nicht zugeordnet)". Set lanes.automatic to "lane" for a lane of its own.', elements: ['x', 'L.Process_Schaden._unassigned'] },
     ]);
   });
 
@@ -353,7 +353,7 @@ describe('formLanes — further behaviour', () => {
     const sorted = [...out.hints].sort((a, b) => a.code.localeCompare(b.code));
     expect(sorted).toEqual([
       { code: 'H02', message: '[Pool Eins] No performer for "U" (U): lane "(nicht zugeordnet)".', elements: ['U'] },
-      { code: 'H03', message: '[Pool Eins] Automatic step "X" (X) has no performer; it is placed with its neighbour in lane "Abteilung mit sehr langem Namen".', elements: ['X', 'L.p1.ulong'] },
+      { code: 'H03', message: '[Pool Eins] Automatic step "X" (X) has no performer; it is placed with its neighbour in lane "Abteilung mit sehr langem Namen". Set lanes.automatic to "lane" for a lane of its own.', elements: ['X', 'L.p1.ulong'] },
       { code: 'H04', message: '[Pool Eins] Unit of performer "Rolle 2" not recorded: "T2" (T2) is in lane "(Einheit nicht erhoben)".', elements: ['T2', 'r2'] },
       { code: 'H05', message: '[Pool Eins] Lane name "Abteilung mit sehr langem Namen" is longer than 25 characters; shorten the catalogue name.', elements: ['L.p1.ulong', 'ulong'] },
       { code: 'H06', message: '[p2] No assignments in process "p2": no lanes.', elements: ['p2'] },
@@ -455,6 +455,8 @@ describe('formLanes — further behaviour', () => {
     expect([...AUTOMATIC_ACTIVITY_TYPES].every((t) => TASK_TYPES.has(t))).toBe(true);
     expect(AUTOMATIC_ACTIVITY_TYPES.size).toBe(5);
     expect(LANE_NAME_LIMIT).toBe(25);
+    expect(AUTOMATIC).toBe('_automatic');
+    expect(laneIdFor('P', AUTOMATIC)).toBe('L.P._automatic');
   });
 });
 
@@ -676,5 +678,208 @@ describe('formLanes — the system view', () => {
     const err = await runPipeline(oneX, { view: loadNamedView('systeme') }).catch((e) => e);
     expect(err).toBeInstanceOf(ViewRejectedError);
     expect(err.message).toBe('view "systeme" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
+  });
+});
+
+// ─── the view switch lanes.automatic "lane": performer-less automatic tasks in a lane of their own ──
+describe('formLanes — the automatic lane (lanes.automatic "lane")', () => {
+  const LANE = { by: 'role', automatic: 'lane' };
+  const UNIT_LANE = { by: 'unit', automatic: 'lane' };
+  const h19 = (id, prefix = '', proc = 'P') => ({
+    code: 'H19', message: `${prefix}Automatic step "${id}" (${id}) has no performer: lane "(automatisch)".`, elements: [id, `L.${proc}._automatic`],
+  });
+  // the catalogue ABC with one unit U that A, B and C belong to, for the unit run of the property
+  const ABC_U = { actors: [{ id: 'U', name: 'Einheit U', kind: 'unit' }, ...ABC.actors.map((a) => ({ ...a, unit: 'U' }))] };
+
+  const CASE_B = proc(
+    [node('S', 'startEvent'), node('X', 'serviceTask'), node('T', 'userTask', 'A'), node('E', 'endEvent')],
+    [['S', 'X'], ['X', 'T'], ['T', 'E']],
+  );
+  const CASE_E = proc(
+    [node('S', 'startEvent', 'A'), node('U', 'userTask'), node('G', 'exclusiveGateway'), node('X', 'serviceTask'), node('E', 'endEvent')],
+    [['S', 'U'], ['U', 'G'], ['G', 'X'], ['X', 'E']],
+  );
+  const CASE_G2 = proc(
+    [node('T', 'userTask', 'A'), node('W', 'serviceTask'), node('BE', 'boundaryEvent', undefined, { attachedTo: 'W' }),
+      node('K', 'userTask', 'B')],
+    [['T', 'W'], ['BE', 'K']],
+  );
+  const CASE_H08 = proc([node('T', 'userTask', 'A'), node('X', 'scriptTask'), node('I', 'intermediateThrowEvent')], []);
+  const CASE_TIE = proc(
+    [node('T1', 'userTask', 'B'), node('T2', 'userTask', 'A'), node('X', 'serviceTask'), node('T3', 'userTask', 'C')],
+    [['T1', 'X'], ['T2', 'X'], ['X', 'T3'], ['T3', 'T1']],
+  );
+
+  test('(a1) 7.2 (b): the automatic task moves, start and end stay in A; one H19', () => {
+    const out = form(CASE_B, { lanes: LANE });
+    expect(out.errors).toEqual([]);
+    expect(members(out.lc)).toEqual({ A: ['S', 'T', 'E'], [AUTOMATIC]: ['X'] });
+    expect(out.hints).toEqual([h19('X')]);
+    expect(out.lc.lanes.map((l) => [l.id, l.name])).toEqual([['L.P.A', 'Rolle A'], ['L.P._automatic', '(automatisch)']]);
+  });
+
+  test('(a2) 7.2 (e): the end event keeps the placeholder it inherited through X', () => {
+    const out = form(CASE_E, { lanes: LANE });
+    expect(members(out.lc)).toEqual({ A: ['S'], [UNASSIGNED]: ['U', 'G', 'E'], [AUTOMATIC]: ['X'] });
+    expect(codes(out.hints)).toEqual(['H02', 'H19']);
+    expect(out.lc.lanes.map((l) => l._laneActor)).toEqual(['A', UNASSIGNED, AUTOMATIC]);
+  });
+
+  test('(a3) 7.2 (g2): the boundary event follows its moved host, without a hint of its own', () => {
+    const out = form(CASE_G2, { lanes: LANE });
+    expect(members(out.lc)).toEqual({ A: ['T'], [AUTOMATIC]: ['W', 'BE'], B: ['K'] });
+    expect(out.hints).toEqual([h19('W')]);
+  });
+
+  test('(a4) an automatic task without a neighbour moves instead of falling back (no H08 for it)', () => {
+    const off = form(CASE_H08);
+    expect(members(off.lc)).toEqual({ A: ['T'], [UNASSIGNED]: ['X', 'I'] });
+    expect(off.hints.map((h) => [h.code, h.elements])).toEqual([['H08', ['X']], ['H08', ['I']]]);
+    const on = form(CASE_H08, { lanes: LANE });
+    expect(members(on.lc)).toEqual({ A: ['T'], [AUTOMATIC]: ['X'], [UNASSIGNED]: ['I'] });
+    expect(on.hints).toEqual([
+      { code: 'H08', message: 'No neighbour with a lane: "I" (I) is in lane "(nicht zugeordnet)".', elements: ['I'] },
+      h19('X'),
+    ]);
+  });
+
+  test('(a5) the tie loop: X moves, the others keep their keys', () => {
+    expect(members(form(CASE_TIE, { lanes: LANE }).lc)).toEqual({ B: ['T1'], A: ['T2'], [AUTOMATIC]: ['X'], C: ['T3'] });
+  });
+
+  test('(a6) only performer-less automatic tasks and their boundary events move; the placeholder is not inherited', () => {
+    const keysOf = (container) => {
+      const byLane = new Map(container.lanes.map((l) => [l.id, l._laneActor]));
+      return new Map(container.nodes.filter((n) => n.lane !== undefined).map((n) => [n.id, byLane.get(n.lane)]));
+    };
+    const runs = [['role', LANE, ABC], ['unit', UNIT_LANE, ABC_U]];
+    for (const model of [CASE_B, CASE_E, CASE_G2, CASE_H08, CASE_TIE]) {
+      const byId = new Map(model.nodes.map((n) => [n.id, n]));
+      const isMover = (n) => !n.assignments && AUTOMATIC_ACTIVITY_TYPES.has(n.type);
+      const shouldMove = (n) => isMover(n) || (n.type === 'boundaryEvent' && isMover(byId.get(n.attachedTo)));
+      for (const [offLanes, onLanes, catalog] of runs) {
+        const off = keysOf(form(model, { catalog, lanes: offLanes }).lc);
+        const on = keysOf(form(model, { catalog, lanes: onLanes }).lc);
+        expect([...on.keys()]).toEqual([...off.keys()]);
+        for (const n of model.nodes) {
+          if (shouldMove(n)) expect([n.id, on.get(n.id)]).toEqual([n.id, AUTOMATIC]);
+          else expect([n.id, on.get(n.id)]).toEqual([n.id, off.get(n.id)]);
+        }
+        expect([...off.values()]).not.toContain(AUTOMATIC);
+        const inLane = [...on].filter(([, k]) => k === AUTOMATIC).map(([id]) => id);
+        expect(inLane.length).toBeGreaterThan(0);
+        expect(inLane.every((id) => shouldMove(byId.get(id)))).toBe(true);
+      }
+    }
+  });
+
+  test.each([...AUTOMATIC_ACTIVITY_TYPES])('(a7) a performer-less %s moves', (type) => {
+    const out = form(proc(
+      [node('S', 'startEvent'), node('X', type), node('T', 'userTask', 'A'), node('E', 'endEvent')],
+      [['S', 'X'], ['X', 'T'], ['T', 'E']],
+    ), { lanes: LANE });
+    expect(members(out.lc)).toEqual({ A: ['S', 'T', 'E'], [AUTOMATIC]: ['X'] });
+    expect(out.hints).toEqual([h19('X')]);
+  });
+
+  test('(a7) other activities without performer stay in the placeholder (H02); a performer wins; children form no lane', () => {
+    for (const [type, extra] of [['userTask'], ['manualTask'], ['callActivity'], ['subProcess', { isExpanded: true, nodes: [], edges: [] }]]) {
+      const out = form(proc(
+        [node('S', 'startEvent'), node('X', type, undefined, extra), node('T', 'userTask', 'A'), node('E', 'endEvent')],
+        [['S', 'X'], ['X', 'T'], ['T', 'E']],
+      ), { lanes: LANE });
+      expect(out.errors).toEqual([]);
+      expect(members(out.lc)[UNASSIGNED]).toContain('X');
+      expect(codes(out.hints)).toEqual(['H02']);
+      expect(out.lc.lanes.map((l) => l._laneActor)).not.toContain(AUTOMATIC);
+    }
+    const performed = form(proc([node('T', 'userTask', 'A'), node('X', 'serviceTask', 'B')], [['T', 'X']]), { lanes: LANE });
+    expect(members(performed.lc)).toEqual({ A: ['T'], B: ['X'] });
+    expect(performed.hints).toEqual([]);
+    const child = form(proc(
+      [node('S', 'startEvent'), node('SP', 'subProcess', 'A', { isExpanded: true, nodes: [node('c1', 'serviceTask')], edges: [] }), node('E', 'endEvent')],
+      [['S', 'SP'], ['SP', 'E']],
+    ), { lanes: LANE });
+    expect(child.errors).toEqual([]);
+    expect(child.lc.lanes.map((l) => l.id)).toEqual(['L.P.A']);
+    expect(child.hints).toEqual([]);
+  });
+
+  test('(a8) automatic "neighbour" is the default', () => {
+    expect(form(CASE_B, { lanes: { by: 'role', automatic: 'neighbour' } })).toEqual(form(CASE_B, { lanes: 'role' }));
+  });
+
+  test('(a9) automaticName names the lane and the hint; the id stays', () => {
+    const out = form(CASE_B, { lanes: { ...LANE, automaticName: '(maschinell)' } });
+    expect(out.lc.lanes.map((l) => [l.id, l.name])).toEqual([['L.P.A', 'Rolle A'], ['L.P._automatic', '(maschinell)']]);
+    expect(out.hints).toEqual([{ ...h19('X'), message: 'Automatic step "X" (X) has no performer: lane "(maschinell)".' }]);
+  });
+
+  test('a name of 25 code points that is 50 UTF-16 units long gives no H05', () => {
+    const name = '\u{1F600}'.repeat(25);
+    const out = form(CASE_B, { lanes: { ...LANE, automaticName: name } });
+    expect(out.lc.lanes.find((l) => l._laneActor === AUTOMATIC).name).toBe(name);
+    expect(codes(out.hints)).toEqual(['H19']);
+  });
+
+  test('(a10) a process whose only activity is a performer-less automatic task: no lanes, H06, also with the switch', () => {
+    const model = proc([node('S', 'startEvent'), node('X', 'serviceTask'), node('E', 'endEvent')], [['S', 'X'], ['X', 'E']]);
+    for (const lanes of ['role', LANE]) {
+      const out = form(model, { lanes });
+      expect(out.lc).not.toHaveProperty('lanes');
+      expect(out.hints).toEqual([{ code: 'H06', message: 'No assignments in process "P": no lanes.', elements: ['P'] }]);
+    }
+  });
+
+  test('(a11) two pools: one H19 per pool with its prefix and lane', () => {
+    const out = form({
+      $schemaVersion: '2.0',
+      pools: [
+        { id: 'p1', name: 'Pool Eins', nodes: [node('S', 'startEvent'), node('X', 'serviceTask'), node('T', 'userTask', 'A')], edges: flows([['S', 'X'], ['X', 'T']]) },
+        { id: 'p2', nodes: [node('S2', 'startEvent'), node('Y', 'serviceTask'), node('T2', 'userTask', 'B')], edges: flows([['S2', 'Y'], ['Y', 'T2']]) },
+      ],
+    }, { lanes: LANE });
+    expect(out.errors).toEqual([]);
+    expect(out.hints).toEqual([h19('X', '[Pool Eins] ', 'p1'), h19('Y', '[p2] ', 'p2')]);
+  });
+
+  test('(a12) C10: an edge with the id of the automatic lane', () => {
+    const model = copy(CASE_B);
+    model.edges[1].id = 'L.P._automatic';
+    const out = form(model, { lanes: LANE });
+    expect(out.lc).toBeNull();
+    expect(out.errors).toEqual(['[C10] lane id "L.P._automatic" (actor "_automatic") collides with "L.P._automatic"; rename the catalogue id']);
+  });
+
+  test('(a13) the system view never moves; the object form with by system is refused', () => {
+    const model = sysProc(
+      [sysNode('S', 'startEvent'), sysNode('X', 'serviceTask', 'A'), sysNode('Y', 'serviceTask'), sysNode('E', 'endEvent')],
+      [['S', 'X'], ['X', 'Y'], ['Y', 'E']],
+    );
+    const out = formSys(model);
+    expect(out.errors).toEqual([]);
+    expect(members(out.lc)).toEqual({ A: ['S', 'X'], [SYSTEM_UNKNOWN]: ['Y', 'E'] });
+    expect(out.hints).toEqual([h20('Y')]);
+    expect(codes(out.hints)).not.toContain('H19');
+    expect(codes(out.hints)).not.toContain('H03');
+    expect(out.lc.lanes.some((l) => l.id.endsWith('._automatic'))).toBe(false);
+    expect(() => form(model, { catalog: SYS, lanes: { by: 'system', automatic: 'lane' } })).toThrow(TypeError);
+  });
+
+  test('(a14) the arguments are unchanged', () => {
+    const model = copy(MODEL_56);
+    model.nodes.push({ id: 'x', type: 'serviceTask', name: 'Automatik' });
+    model.edges.push({ source: 'regr', target: 'x' }, { source: 'x', target: 'zahlen' });
+    for (const lanes of [LANE, UNIT_LANE, { by: 'unit', nested: true, automatic: 'lane', automaticName: '(maschinell)' }]) {
+      const { lc, resolved } = resolve(model, CATALOG_56);
+      const option = copy(lanes);
+      const snap = () => [JSON.stringify(lc), JSON.stringify(resolved.actors), JSON.stringify(resolved.scheme),
+        JSON.stringify([...resolved.byId]), JSON.stringify([...resolved.order]), JSON.stringify(option)];
+      const before = snap();
+      const out = formLanes(lc, resolved, { lanes: option });
+      expect(out.lc).not.toBe(lc);
+      expect(codes(out.hints)).toContain('H19');
+      expect(snap()).toEqual(before);
+    }
   });
 });
