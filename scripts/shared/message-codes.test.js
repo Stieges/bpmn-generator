@@ -25,13 +25,14 @@ describe('registry', () => {
   test('holds exactly the registered codes', () => {
     expect(Object.keys(MESSAGE_CODES).sort()).toEqual([
       'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C10', 'C11', 'C12', 'C13',
-      'F01', 'F02', 'F03', 'F04', 'F05', 'H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H08', 'H09', 'H10', 'H11', 'H12', 'H13', 'H14', 'H15', 'H16', 'H17', 'H18', 'N01',
+      'F01', 'F02', 'F03', 'F04', 'F05', 'H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10', 'H11', 'H12', 'H13', 'H14', 'H15', 'H16', 'H17', 'H18',
+      'MG01', 'MG02', 'MG03', 'MG04', 'MG05', 'MG06', 'MG07', 'N01',
     ]);
   });
 
   test('every entry has a family and a summary; the registry is frozen', () => {
     for (const [code, entry] of Object.entries(MESSAGE_CODES)) {
-      expect(['catalogue', 'format', 'hint', 'notice']).toContain(entry.family);
+      expect(['catalogue', 'format', 'hint', 'migrate', 'notice']).toContain(entry.family);
       expect(typeof entry.summary).toBe('string');
       expect(entry.summary.length).toBeGreaterThan(0);
       expect(code).toMatch(/^[A-Z]{1,2}\d{2}$/);
@@ -89,12 +90,12 @@ describe('fences', () => {
   });
 
   // Codes carried by an object or a constant, or in the middle of a literal. Only the registry families
-  // (C, F, H, N) are read here: rule ids (S, M, P, WF), DI and NC codes are not registry codes.
+  // (C, F, H, MG, N) are read here: rule ids (S, M, P, WF), DI and NC codes are not registry codes.
   const OBJECT_FORMS = {
-    'code field or variable': /\bcode\s*[:=]\s*(?:[^;\n]*?\?\s*)?['"]([CFHN]\d{2})['"]/g,
-    'errorFindings(…, code)': /\berrorFindings\([^;]*?,\s*['"]([CFHN]\d{2})['"]\s*\)/g,
-    'constant *_CODE': /_CODE\s*=\s*['"]([CFHN]\d{2})['"]/g,
-    'prefix inside a literal': /['"`][^'"`\n]*?\[([CFHN]\d{2})\] /g,
+    'code field or variable': /\bcode\s*[:=]\s*(?:[^;\n]*?\?\s*)?['"]((?:[CFHN]|MG)\d{2})['"]/g,
+    'errorFindings(…, code)': /\berrorFindings\([^;]*?,\s*['"]((?:[CFHN]|MG)\d{2})['"]\s*\)/g,
+    'constant *_CODE': /_CODE\s*=\s*['"]((?:[CFHN]|MG)\d{2})['"]/g,
+    'prefix inside a literal': /['"`][^'"`\n]*?\[((?:[CFHN]|MG)\d{2})\] /g,
   };
 
   test('fence 1b: every code carried by an object, a constant or a mid-literal prefix is registered', () => {
@@ -115,11 +116,13 @@ describe('fences', () => {
       expect([form, [...all.matchAll(re)].length > 0]).toEqual([form, true]);
     }
     const seen = new Set(Object.values(OBJECT_FORMS).flatMap((re) => [...all.matchAll(re)].map((m) => m[1])));
-    for (const c of seen) expect(c).toMatch(/^[CFHN]\d{2}$/);
-    for (const c of ['H01', 'F01', 'F02', 'F03', 'F05', 'N01']) expect(seen.has(c)).toBe(true);
+    for (const c of seen) expect(c).toMatch(/^(?:[CFHN]|MG)\d{2}$/);
+    for (const c of ['H01', 'F01', 'F02', 'F03', 'F05', 'N01', 'MG01']) expect(seen.has(c)).toBe(true);
     expect('code: "S02"').not.toMatch(OBJECT_FORMS['code field or variable']);
     expect("code: 'NC03'").not.toMatch(OBJECT_FORMS['code field or variable']);
     expect("code: 'WF01'").not.toMatch(OBJECT_FORMS['code field or variable']);
+    expect("code: 'M01'").not.toMatch(OBJECT_FORMS['code field or variable']);
+    expect("code: 'MG99'").toMatch(OBJECT_FORMS['code field or variable']);
   });
 
   test('fence 1 sees the sources it is meant to read', () => {

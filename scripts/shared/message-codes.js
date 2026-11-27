@@ -8,7 +8,7 @@
  * `withCode(…)` names a code of this registry, and every code has a row in the "Message codes"
  * section of references/api-reference.md.
  *
- * No dependencies. Families: `catalogue` (C), `format` (F), `hint` (H), `notice` (N).
+ * No dependencies. Families: `catalogue` (C), `format` (F), `hint` (H), `migrate` (MG), `notice` (N).
  */
 
 const entry = (family, summary) => Object.freeze({ family, summary });
@@ -36,6 +36,7 @@ export const MESSAGE_CODES = Object.freeze({
   H04: entry('hint', 'the unit of a performer is not recorded'),
   H05: entry('hint', 'a lane name is longer than the lane name limit'),
   H06: entry('hint', 'a process has no assignments, so no lanes'),
+  H07: entry('hint', 'migrate: a lane or a role became an actor without kind; check its kind'),
   H08: entry('hint', 'a node has no neighbour with a lane (or a boundary event no host with a lane) and is placed in the unassigned lane'),
   H09: entry('hint', 'a catalogue entry is replaced by an actor of the process file'),
   H10: entry('hint', 'the marker of an event was inferred from its name, under the declared language'),
@@ -47,6 +48,13 @@ export const MESSAGE_CODES = Object.freeze({
   H16: entry('hint', 'a label is broken inside a word that has no break point; a soft hyphen (U+00AD) in the name sets one'),
   H17: entry('hint', 'a message start, catch or boundary event or a receive task has no incoming message flow in a model with more than one participant'),
   H18: entry('hint', 'a flow crosses a label, an edge label sits nearer to a foreign shape than to its own flow, or two labels overlap or nearly touch'),
+  MG01: entry('migrate', 'migrate refuses the input: not a valid 1.x model (a format 2.x model included), a process or pool id outside the 2.0 pattern, or a malformed catalogue'),
+  MG02: entry('migrate', 'a field format 2.0 cannot hold yet (system, a data object or data store reference, an association touching one, a role that becomes no assignment); refused, or dropped and listed with dropUnsupported'),
+  MG03: entry('migrate', 'an activity\'s role differs from its lane: the role actor performs it; also says when that role actor gets no unit because its activities sit in several lanes'),
+  MG04: entry('migrate', 'an event or gateway lands in another lane under the inheritance rule than in the 1.x model'),
+  MG05: entry('migrate', 'an activity without lane in a process with lanes gets no assignment'),
+  MG06: entry('migrate', 'an id was renamed to fit format 2.0, or a process without id was given one'),
+  MG07: entry('migrate', 'a lane or role was mapped by its name to an actor of the given catalogue'),
   N01: entry('notice', 'a format 2.0 import notice'),
 });
 
