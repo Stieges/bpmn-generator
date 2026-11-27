@@ -22,6 +22,11 @@ const snippets = Object.fromEntries(
   [...readFileSync(GUIDE, 'utf8').matchAll(/<!-- quickstart: ([\w.-]+) -->\n```(?:jsonc|bash)\n([\s\S]*?)```/g)].map((m) => [m[1], m[2]]),
 );
 const commands = (snippets.cli || '').split('\n').map((l) => l.trim()).filter(Boolean);
+const LANES = {
+  rollen: ['Claims handler', 'Team lead', 'Accountant', '(nicht zugeordnet)'],
+  einheiten: ['Claims department', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
+  organigramm: ['Claims department', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
+};
 
 describe('docs/roles-and-systems.md — the format 2.0 quick start runs', () => {
   test('the guide marks a catalogue, a model and the commands', () => {
@@ -48,6 +53,11 @@ describe('docs/roles-and-systems.md — the format 2.0 quick start runs', () => 
       expect(existsSync(`${out}.svg`)).toBe(true);
       expect(readFileSync(`${out}.bpmn`, 'utf8')).toMatch(/<bpmn:definitions/);
       expect(run.stdout).not.toMatch(/⚠ Warnings/);
+      const view = /--view=(\w+)/.exec(command)[1];
+      const lanes = [...readFileSync(`${out}.bpmn`, 'utf8').matchAll(/<bpmn:lane [^>]*name="([^"]*)"/g)].map((m) => m[1]);
+      expect(lanes).toEqual(LANES[view]);
+      expect(run.stdout).toContain('[H02]');
+      expect(/\[H04\]/.test(run.stdout)).toBe(view !== 'rollen');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

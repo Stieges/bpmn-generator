@@ -82,7 +82,13 @@ describe('H17 positives', () => {
     expect(h17(r)[0].message).toBe('The message catch event "b_c" ("Reply arrived") waits for a message, but no message flow arrives at it. Draw the message flow from the sender to it, or remove the message marker.');
   }, 30_000);
 
-  test('H17 comes after H16, last', async () => {
+  test('a receive task is told to become a plain task, an event to lose its marker', async () => {
+    const t = await runPipeline(twoPools(receiveTask()));
+    expect(h17(t)[0].message).toMatch(/, or make it a plain task\.$/);
+    expect(h17(t)[0].message).not.toContain('message marker');
+  }, 30_000);
+
+  test('H17 comes after H16', async () => {
     const m = twoPools(receiveTask());
     m.pools[0].nodes[1].name = 'Verylongwordthatdoesnotfitanywhereontheline';
     const r = await runPipeline(m);
