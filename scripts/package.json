@@ -72,7 +72,8 @@
   "overrides": {
     "@istanbuljs/load-nyc-config": {
       "js-yaml": "^4.1.1"
-    }
+    },
+    "minimatch": "^11.0.1"
   },
   "optionalDependencies": {
     "@resvg/resvg-wasm": "2.6.2"
