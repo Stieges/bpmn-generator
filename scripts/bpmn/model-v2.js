@@ -491,18 +491,24 @@ function inheritKeys(proc, resolved, laneBy, level, performerOf, prefix) {
 
 /**
  * The lanes option of a view in one shape: the strings `role`, `unit`, `system`, `none` or the
- * object `{ by: 'unit', level?, nested? }` (unit only); `undefined` means `role`. Anything else is
- * an unknown option and throws instead of being treated as a default.
- * @returns {{ by: 'role'|'unit'|'system'|'none', level: number|null, nested: boolean }}
+ * object `{ by: 'role'|'unit', level?, nested?, automatic?, automaticName? }` (`level` and `nested`
+ * for `unit` only; `automaticName` only with `automatic: 'lane'`); `undefined` means `role`.
+ * Anything else is an unknown option and throws instead of being treated as a default.
+ * @returns {{ by: 'role'|'unit'|'system'|'none', level: number|null, nested: boolean, automatic: 'neighbour'|'lane', automaticName: string|null }}
  */
 export function normalizeLanesOption(lanes) {
-  if (lanes === undefined) return { by: 'role', level: null, nested: false };
-  if (lanes === 'role' || lanes === 'unit' || lanes === 'system' || lanes === 'none') return { by: lanes, level: null, nested: false };
-  if (isPlainObject(lanes) && lanes.by === 'unit'
-    && Object.keys(lanes).every((k) => k === 'by' || k === 'level' || k === 'nested')
+  const plain = { level: null, nested: false, automatic: 'neighbour', automaticName: null };
+  if (lanes === undefined) return { by: 'role', ...plain };
+  if (lanes === 'role' || lanes === 'unit' || lanes === 'system' || lanes === 'none') return { by: lanes, ...plain };
+  if (isPlainObject(lanes) && (lanes.by === 'unit' || lanes.by === 'role')
+    && Object.keys(lanes).every((k) => k === 'by' || k === 'automatic' || k === 'automaticName' || (lanes.by === 'unit' && (k === 'level' || k === 'nested')))
     && (lanes.level === undefined || (Number.isInteger(lanes.level) && lanes.level >= 1 && lanes.level <= 16))
-    && (lanes.nested === undefined || typeof lanes.nested === 'boolean')) {
-    return { by: 'unit', level: lanes.level ?? null, nested: lanes.nested ?? false };
+    && (lanes.nested === undefined || typeof lanes.nested === 'boolean')
+    && (lanes.automatic === undefined || lanes.automatic === 'neighbour' || lanes.automatic === 'lane')
+    && (lanes.automaticName === undefined
+      || (lanes.automatic === 'lane' && typeof lanes.automaticName === 'string' && lanes.automaticName.length >= 1
+        && lanes.automaticName.length <= LANE_NAME_LIMIT && /\S/.test(lanes.automaticName)))) {
+    return { by: lanes.by, level: lanes.level ?? null, nested: lanes.nested ?? false, automatic: lanes.automatic ?? 'neighbour', automaticName: lanes.automaticName ?? null };
   }
   throw new TypeError(`unknown lanes option ${JSON.stringify(lanes)}`);
 }
