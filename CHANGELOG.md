@@ -229,6 +229,19 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   translate without `--drop-unsupported` (before: 19); a `system` off a task stays MG02. New codes: C14, C15,
   F06, H20, MG08. The quick start in `docs/roles-and-systems.md` is format 2.1 and gains the view `systeme`.
 
+- **Automatic steps in a lane of their own (view switch).** A view file can set
+  `lanes: { "by": "role" | "unit", "automatic": "lane", "automaticName"? }` (for `unit` also `level` and
+  `nested`). Every automatic task (service, script, business rule, send, receive) without a performer then goes
+  into the placeholder lane `(automatisch)` (`config.json` `laneFormation.automaticName`, or the view's own
+  `automaticName`, 1-25 characters) instead of its neighbour's lane, each with the new hint H19. Only these tasks,
+  their boundary events and the annotations attached to them move; events and gateways keep their lane, and the
+  placeholder is never passed on by inheritance. The view `systeme` does not take the switch. The default is
+  `"neighbour"`, and no shipped view sets the switch, so the default output is unchanged. The object form of
+  `lanes` now also takes `by: "role"`. Known limit: the switch is set in a view file, so it is reached by the
+  CLI (`--view <path>`), an inline view over HTTP and the library (`runPipeline`), but not by the MCP tools
+  `generate_bpmn` and `validate_bpmn`, which take a view by name only. Rules:
+  `references/logic-core-schema.md`, section Lanes by view.
+
 ### Changed
 
 - The F02 message names both accepted versions: `$schemaVersion "<v>" is not supported; only "2.0" and
@@ -236,6 +249,8 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   (a 2.x response only). A model with `"$schemaVersion": "2.1"` now reaches the format-2.0 refusal F03
   at `redesign-cli.js` and the scenario pipeline, where it got F02 before. Messages that say "format 2.0"
   (F03, F04, N01, C13) mean the 2 line and stay as they are.
+- The text of hint H03 gains ` Set lanes.automatic to "lane" for a lane of its own.` (a format 2.x hint
+  only; no XML or SVG changes).
 - The hint pattern of the response schema admits `H20`; H06, H08 and H09 also cover the system view and
   system entries, and the lanes views list is seven long (`systeme` added).
 - The MCP `catalog` parameter of `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn` is described as

@@ -304,7 +304,7 @@ node bpmn/pipeline.js ../quickstart.json ../quickstart-systeme --strict --view=s
 A `"2.0"` model that uses `system` or `systems` is refused with one error F06 per use; change the
 version to `"2.1"`. A `system` must name a system of the catalogue (C14) and sits on a task (C15).
 
-Three **placeholder lanes** appear when the model or the catalogue is incomplete. All are hints, never
+Four **placeholder lanes** appear when the model or the catalogue is incomplete. All are hints, never
 errors:
 
 | Lane | Meaning | Hint |
@@ -312,8 +312,27 @@ errors:
 | `(nicht zugeordnet)` | An activity has no performer, or a node could take no lane from its neighbours | H02, H08 |
 | `(Einheit nicht erhoben)` | The performer's unit is not in the catalogue; only in the unit views | H04 |
 | `(System nicht erhoben)` | A task has no system; only in the view `systeme` | H20 |
+| `(automatisch)` | An automatic task (service, script, business rule, send, receive) has no performer; only with the view option `"automatic": "lane"` | H19 |
 
 The names are set in `scripts/config.json` under `laneFormation` (`unassignedName`, `unitUnknownName`,
-`systemUnknownName`). In the example, `Archive file` lands in `(nicht zugeordnet)` and, in the unit
+`systemUnknownName`, `automaticName`). In the example, `Archive file` lands in `(nicht zugeordnet)` and, in the unit
 views, `Pay claim` in `(Einheit nicht erhoben)`; in the view `systeme`, `Approve payout` and `Archive file`
 land in `(System nicht erhoben)`.
+
+By default an automatic task without a performer sits in its neighbour's lane (hint H03). A view file of
+your own can give these tasks a lane instead:
+
+```jsonc
+// my-view.json (a view file of your own; use "unit" instead of "role" for the unit lanes)
+{
+  "view": "mine",
+  "version": "1.0",
+  "lanes": { "by": "role", "automatic": "lane", "automaticName": "(automatisch)" }
+}
+```
+
+With it, an automatic task without a performer lands in `(automatisch)` with hint H19. Only
+automatic tasks without a performer (and their boundary events) move; events and gateways keep their
+lane. `automaticName` is optional (1-25 characters) and only valid with `"automatic": "lane"`; the view
+`systeme` does not take the switch. Known limit: you reach it with `--view <path>`, an inline view over
+HTTP or `runPipeline`; the MCP tools take a view by name only, and no shipped view sets it.

@@ -561,7 +561,8 @@ external source; the design chose them deliberately, so treat them as this proje
 not as a quotation of a standard.
 
 **Lanes by view.** The view's `lanes` (`role`, `unit`, `system`, `none`, or the object form
-`{ "by": "unit", "level"?: 1–16, "nested"?: boolean }`; `{ "by": "system" }` is refused, use the
+`{ "by": "role" | "unit", "level"?: 1–16, "nested"?: boolean, "automatic"?: "neighbour" | "lane",
+"automaticName"?: string }`, where `level` and `nested` belong to `unit`; `{ "by": "system" }` is refused, use the
 string) forms the lanes. Shipped:
 `views/rollen-view.json` (`role`), `views/einheiten-view.json` (`unit`),
 `views/organigramm-view.json` (`{ "by": "unit", "nested": true }`) and `views/systeme-view.json`
@@ -595,12 +596,25 @@ every surface.
   With `level` as well, the steps are mapped to depth `k` first, so the deepest lane is the unit at
   depth `k`. The placeholders are top-level lanes after the tree. Every lane of the tree, parent and
   own lane included, carries `bg:derived` with the unit's id as `actor`.
+- `automatic: "lane"` (with `by: "role"` or `by: "unit"`, nested included): the inheritance rule runs as
+  without it; after its rounds every automatic task without a performer goes into the placeholder lane
+  `L.<process-id>._automatic`, and so do its boundary events and the text annotations attached to it. An
+  automatic task that would otherwise fall back to `(nicht zugeordnet)` (H08) goes there too. Events,
+  gateways and every other node keep the lane they get without the switch; the placeholder is never passed on
+  by inheritance. The lane is named `(automatisch)` (`scripts/config.json` `laneFormation.automaticName`) or by
+  the view's `automaticName`, 1–25 characters with a non-blank one, and only with `automatic: "lane"` (else the
+  view is refused). It is declared after the other placeholders and then sorted by flow like every lane; in
+  the nested organigram view it is a top-level lane after the tree. A process without any performer still
+  gets no lanes (H06). The system view takes only its string form, so it never runs the move. The default,
+  `"neighbour"`, is the behaviour described above. Known limit: the switch comes with a view file or an inline
+  view (CLI `--view <path>`, HTTP, `runPipeline`); the MCP tools take a view by name only and no shipped view
+  sets it, so MCP does not reach it yet.
 
 **The inheritance rule.** Only top-level flow nodes of each modelled process take a lane (children of
 subprocesses get none, and only sequence flows count), and a node with a performer takes the lane of that
 performer. An activity without performer goes to the placeholder `(nicht zugeordnet)` (H02), unless it is an
 automatic task (`serviceTask`, `scriptTask`, `businessRuleTask`, `sendTask`, `receiveTask`), which is placed
-with its neighbour (H03). Every other node without a lane inherits one from its neighbours, in rounds until
+with its neighbour (H03) or, with the view option `automatic: "lane"`, after the rounds in `(automatisch)` (H19). Every other node without a lane inherits one from its neighbours, in rounds until
 nothing changes:
 
 - Direction by node kind: a start event and a merging gateway (two or more incoming flows, at most one
@@ -630,12 +644,13 @@ with H08.
 
 A process without any performer gets no lanes (hint H06; in the system view: a process without any
 system). The placeholders are ids
-`L.<process-id>._unassigned`, `L.<process-id>._unitUnknown` and `L.<process-id>._systemUnknown` with the names `(nicht zugeordnet)`,
-`(Einheit nicht erhoben)` and `(System nicht erhoben)`; ordinary lane ids are `L.<process-id>.<actor-id>`. A collision of a
+`L.<process-id>._unassigned`, `L.<process-id>._unitUnknown`, `L.<process-id>._systemUnknown` and
+`L.<process-id>._automatic` with the names `(nicht zugeordnet)`,
+`(Einheit nicht erhoben)`, `(System nicht erhoben)` and `(automatisch)`; ordinary lane ids are `L.<process-id>.<actor-id>`. A collision of a
 lane id, or of its `<lane-id>_di`, with another id of the document is error C10, never a rename.
 
 **Hints.** Hints go to `validation.hints` and never fail `--strict`. H02 (activity without
-performer), H03 (automatic step placed with its neighbour), H04 (unit not recorded), H05 (lane name
+performer), H03 (automatic step placed with its neighbour; its text points to the view option `lanes.automatic`), H19 (automatic step without performer placed in the lane `(automatisch)`, only with that option), H04 (unit not recorded), H05 (lane name
 over 25 characters), H06 (process without performer; in the system view, without a system), H09 (a catalogue entry, actor or system, replaced by the process file), H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation; in the system view it places the node in `(System nicht erhoben)`) and H20 (an activity without a recorded system, system view only)
 come from the lane formation; H01 is the view's join-gateway derivation.
 
@@ -682,7 +697,7 @@ as `[N01] …`, MCP as a second text block holding the JSON `{"notices":[…]}`,
 
 **Message codes.** The messages of the 2.0-specific path (catalogue, format, lane formation, import notice) carry a code
 from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C07, C10–C15, F01–F04, F06; the redesign and
-scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06, H08, H09 and H20,
+scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06, H08, H09, H19 and H20,
 `validation.findings`, notices), a thrown `CatalogRejectedError` has `messageCode`. Rule messages (S, M, P, WF) keep their text and get their id only in `validation.findings`. C12
 covers the catalogue's bounds and schema; a model-carried `actors` list shares the catalogue's Actor
 schema, so its schema failures surface as F01 at the format gate and only its bounds reach C12. The

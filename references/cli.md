@@ -62,7 +62,7 @@ model's `"catalog"` field (relative to the model file; on standard input only `-
 The lanes come from the view: `--view=rollen` gives lanes per performer, `--view=einheiten` lanes per
 unit of the performer, `--view=organigramm` lanes per unit nested along the organigram (`partOf`), `--view=systeme` lanes per system
 of the task (format 2.1: the catalogue's `systems` and `system` on a task; a task without system goes to
-`(System nicht erhoben)`), and without a lanes view a 2.0 model gets role lanes. A lanes view on a 1.x model is an error. The model's
+`(System nicht erhoben)`), and without a lanes view a 2.0 model gets role lanes. A lanes view on a 1.x model is an error. A view file of your own can set `"lanes": { "by": "role", "automatic": "lane" }` (`--view <path>`): automatic tasks without performer then get the lane `(automatisch)` (H19) instead of their neighbour's. The model's
 own `actors` beside a catalogue (`--catalog` or the `catalog` field) replace entries of it by id or
 add new ids (hint H09 per replaced entry); a `scheme` there is C13. A unit cycle in `partOf` is C07.
 
@@ -81,7 +81,7 @@ section Multi-Agent Orchestration.
 
 The optional top-level `language` of a model (`"de"`, `"en"`, `"en-GB"`) selects the naming conventions of M01, M02, M05 and M06 and the event-marker inference; the CLI prints its hints (`ℹ [H10]` to `[H14]`) like `H01`, and they never fail `--strict`. Without `language` nothing changes. `BPMN_NAMING=<file>` extends the word lists of a shipped language (`references/naming-schema.json`, `$defs/Overlay`; read when a naming strategy is first used); a file that cannot be used makes the pipeline print `Pipeline error: NamingDataError: naming data "<path>" …` followed by a stack trace and exit 1. The shipped files `references/naming/<language>.json` carry the optional top-level `purpose` and `listNotes` (why each list exists; documentation only, the overlay has neither). Details: `references/modeling-guide.md`.
 
-A 2.x model's hints (H02–H06, H08, H09, H20) are listed in `validation.hints` and never fail `--strict`. The messages of the 2.0-specific path (catalogue, format, lane formation) lead with their code, for example `✗ [C11] …` or `[F04] …` (exit 1, no stack trace). Rule messages (S, M, P, WF) keep their text unprefixed; their rule id is the `code` in `validation.findings`, a field of the library result that the CLI does not print. `--view=aligned-ports` docks message flows to or from a participant level with their other end. 1.x output is unchanged. The codes are in [`api-reference.md`](api-reference.md#message-codes). `node bpmn/import.js` prints `[N01] …` on stderr for a diagram generated from a 2.0 model. The
+A 2.x model's hints (H02–H06, H08, H09, H19, H20) are listed in `validation.hints` and never fail `--strict`. The messages of the 2.0-specific path (catalogue, format, lane formation) lead with their code, for example `✗ [C11] …` or `[F04] …` (exit 1, no stack trace). Rule messages (S, M, P, WF) keep their text unprefixed; their rule id is the `code` in `validation.findings`, a field of the library result that the CLI does not print. `--view=aligned-ports` docks message flows to or from a participant level with their other end. 1.x output is unchanged. The codes are in [`api-reference.md`](api-reference.md#message-codes). `node bpmn/import.js` prints `[N01] …` on stderr for a diagram generated from a 2.0 model. The
 full rule for lanes and the entry points that accept 2.0 are in
 [`logic-core-schema.md`](logic-core-schema.md#format-20-catalogue-and-lane-views).
 
