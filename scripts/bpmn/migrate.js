@@ -9,7 +9,8 @@
  * to its lane's actor (or its role's); events, gateways, boundary events and subprocess children get
  * none, and a role on them is dropped (MG05). `lanes`, `lane` and `role` are stripped; `system`, data
  * nodes and the flows and associations touching them are fields 2.0 cannot hold yet (MG02): refused
- * by default, dropped and listed with `dropUnsupported`. Everything else is kept as given.
+ * by default, dropped and listed with `dropUnsupported`. Everything else is kept as given. With a
+ * catalogue, a lane or role named exactly like one of its actors is that actor (MG07, see `migrateModel`).
  *
  * The report then compares the lanes (plan "Check"): the result goes through `resolveFields` and
  * `formLanes` under the view `rollen`, and every top-level flow node of a process with lanes (no
@@ -290,10 +291,21 @@ function newLaneKeys(formed) {
  * performs type the assignments use (absent: DEMI, `D`); the new actor ids avoid its ids.
  * `dropUnsupported` drops the fields 2.0 cannot hold yet instead of refusing the model.
  *
- * Without `catalog` the model carries neither a catalogue path nor actors: `catalog` of the result
- * (equal to the supplement) is what a library caller passes to `runPipeline(model, { catalog })`.
- * With `catalog` the model carries the new actors itself (decision 2) and `catalog` of the result is
- * the given catalogue with the supplement appended.
+ * Against a catalogue (decision 2), a lane whose name (`lane.name`, else its id) equals an actor's
+ * `name` exactly is that actor (the first of that name in catalogue order, said in the MG07 text);
+ * matching ignores `kind`. It creates no actor and no H07; MG07 `[laneId, actorId]`. A new child lane
+ * of such a lane gets it as `unit`, except when it is a `role` actor (C02): then the child has no unit
+ * and its H07 says why; a role actor created from a role string follows the same rule. A role string
+ * is resolved in this order: the lane actor of the same process with that name (its own lane's first),
+ * then an actor of the catalogue with that name (MG07 `[role, actorId]`, once per role), else a new
+ * `role_<slug>` actor. The catalogue is never changed.
+ *
+ * Which catalogue the caller passes to `runPipeline(model, { catalog })` (and `resolveFields`):
+ * - with `catalog` given: the given catalogue. The model carries the new actors itself (`actors`,
+ *   the same as `supplement.actors`); passing `result.catalog` as well gives an H09 per new actor.
+ * - without `catalog`: `result.catalog` (equal to the supplement); the model carries no actors.
+ * `catalog` of the result is the merged view for the author (given catalogue with the supplement
+ * appended, or the supplement alone), not the generation input when a catalogue was given.
  *
  * @returns {{ model: object|null, supplement: { actors: object[] }|null, catalog: object|null,
  *   report: { status: 'translated'|'refused', entries: { code, message, elements }[],
@@ -349,20 +361,40 @@ export function migrateModel(lc, options = {}) {
   }
 
   // (4) one actor per lane. Lane ids that are actor ids keep their id (first come); every other lane is renamed.
-  const taken = new Set(Array.isArray(catalog?.actors) ? catalog.actors.map((a) => a.id) : []);
+  const given = Array.isArray(catalog?.actors) ? catalog.actors : [];
+  const taken = new Set(given.map((a) => a.id));
+  const roleKind = new Set(given.filter((a) => a.kind === 'role').map((a) => a.id));
+  const byName = new Map(); // exact actor name → the catalogue's actors of that name, in catalogue order
+  for (const a of given) byName.set(a.name, [...(byName.get(a.name) ?? []), a.id]);
+  const existing = (name) => byName.get(name)?.[0];
+  const several = (name) => (byName.get(name).length > 1
+    ? ` The catalogue holds ${byName.get(name).length} actors of that name (${byName.get(name).map((i) => `"${q(i)}"`).join(', ')}); the first is taken.`
+    : '');
   const keeps = new Set();
   for (const lanes of allLanes) {
     for (const { lane } of lanes) {
+      if (existing(lane.name || lane.id) !== undefined) continue; // maps to a catalogue actor: no id of its own
       if (ACTOR_ID.test(lane.id) && !taken.has(lane.id)) { taken.add(lane.id); keeps.add(lane); }
     }
   }
   const actors = [];
-  const created = []; // [actor, 'Lane' | 'Role', source name]
+  const created = []; // [actor, 'Lane' | 'Role', source name, note]
+  /** The actor `unit` that cannot be set, and the H07 note that says why: a unit must not be a role (C02). */
+  const unitNote = (what, laneId, unitId) => ` It has no unit: its ${what} "${q(laneId)}" is the role actor "${q(unitId)}", and a unit must not be a role.`;
   const laneActor = processes.map(() => new Map()); // per process: lane id → actor id
   const actorName = new Map(); // lane actor id → its name
   const laneByName = processes.map(() => new Map()); // per process: lane actor name → the first such actor id
   allLanes.forEach((lanes, p) => {
     for (const { lane, parent } of lanes) {
+      const name = lane.name || lane.id;
+      const known = existing(name);
+      if (known !== undefined) {
+        if (!laneActor[p].has(lane.id)) laneActor[p].set(lane.id, known);
+        actorName.set(known, name);
+        if (!laneByName[p].has(name)) laneByName[p].set(name, known);
+        entries.push(entry('MG07', `Lane "${q(lane.id)}" maps by its name "${q(name)}" to the existing actor "${q(known)}".${several(name)}`, [lane.id, known]));
+        continue;
+      }
       let id = lane.id;
       if (!keeps.has(lane)) {
         const valid = ACTOR_ID.test(lane.id);
@@ -371,29 +403,43 @@ export function migrateModel(lc, options = {}) {
         entries.push(entry('MG06', `lane id "${q(lane.id)}" ${why}; the actor is "${id}".`, [lane.id, id]));
       }
       if (!laneActor[p].has(lane.id)) laneActor[p].set(lane.id, id);
-      const actor = { id, name: lane.name || lane.id };
-      actorName.set(id, actor.name);
-      if (!laneByName[p].has(actor.name)) laneByName[p].set(actor.name, id);
-      if (parent) actor.unit = laneActor[p].get(parent.id);
+      const actor = { id, name };
+      actorName.set(id, name);
+      if (!laneByName[p].has(name)) laneByName[p].set(name, id);
+      let note = '';
+      if (parent) {
+        const parentActor = laneActor[p].get(parent.id);
+        if (roleKind.has(parentActor)) note = unitNote('parent lane', parent.id, parentActor);
+        else actor.unit = parentActor;
+      }
       actors.push(actor);
-      created.push([actor, 'Lane', actor.name]);
+      created.push([actor, 'Lane', name, note]);
     }
   });
 
   // (5) one actor per distinct role of the activities that take an assignment, in document order.
   // A role equal to the name of a lane actor of the same process is that lane actor (its own lane's
-  // first, else the first in document order): such a node creates no role actor.
+  // first, else the first in document order); else a role equal to the name of an actor of the given
+  // catalogue is that actor (the first of that name): such a node creates no role actor.
   const laneOf = (proc, p, node) => {
     const laneId = resolveLaneId(proc, node);
     return laneActor[p].has(laneId) ? { laneId, actor: laneActor[p].get(laneId) } : null;
   };
-  const namesake = (p, lane, role) => (lane && actorName.get(lane.actor) === role ? lane.actor : laneByName[p].get(role));
+  const namesake = (p, lane, role) => (lane && actorName.get(lane.actor) === role ? lane.actor : laneByName[p].get(role)) ?? existing(role);
+  const mapped = new Set(); // roles that name a catalogue actor and have their MG07 already
   const roles = new Map(); // role → { actor, sites: [{ laneId, actor } | null] }
   processes.forEach((proc, p) => {
     for (const node of proc.nodes || []) {
       if (node.role === undefined || !takesAssignment(proc, node)) continue;
       const lane = laneOf(proc, p, node);
-      if (namesake(p, lane, node.role) !== undefined) continue;
+      const named = namesake(p, lane, node.role);
+      if (named !== undefined) {
+        if (named === existing(node.role) && !mapped.has(node.role) && !laneByName.some((m) => m.has(node.role))) {
+          mapped.add(node.role);
+          entries.push(entry('MG07', `Role "${q(node.role)}" maps by its name to the existing actor "${q(named)}".${several(node.role)}`, [node.role, named]));
+        }
+        continue;
+      }
       if (!roles.has(node.role)) {
         const actor = { id: uniqueId(roleBase(node.role), taken), name: node.role };
         roles.set(node.role, { actor, sites: [] });
@@ -403,12 +449,16 @@ export function migrateModel(lc, options = {}) {
   });
   for (const { actor, sites } of roles.values()) {
     const distinct = new Set(sites.map((s) => s?.actor ?? null));
-    if (distinct.size === 1 && !distinct.has(null)) actor.unit = sites[0].actor;
+    let note = '';
+    if (distinct.size === 1 && !distinct.has(null)) {
+      if (roleKind.has(sites[0].actor)) note = unitNote('lane', sites[0].laneId, sites[0].actor);
+      else actor.unit = sites[0].actor;
+    }
     actors.push(actor);
-    created.push([actor, 'Role', actor.name]);
+    created.push([actor, 'Role', actor.name, note]);
   }
-  for (const [actor, kind, name] of created) {
-    entries.push(entry('H07', `${kind} "${q(name)}" became actor "${actor.id}" without kind; check its kind.`, [actor.id]));
+  for (const [actor, kind, name, note] of created) {
+    entries.push(entry('H07', `${kind} "${q(name)}" became actor "${actor.id}" without kind; check its kind.${note}`, [actor.id]));
   }
 
   // (6) assignments, in document order; a role on a node that gets no assignment is dropped (MG05)
