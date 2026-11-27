@@ -16,13 +16,13 @@ const FIX_HINT = 'node .github/scripts/fetch-bpmn-xsd.mjs';
 const BATCH = 50;
 // Floors for the corpus, so it cannot shrink silently (a fixture that stopped generating is
 // skipped, not failed). Currently 54 generated (plain and explicit-joins) + 14 committed in
-// tests/fixtures (.expected.bpmn, .refined.bpmn) + 3 committed in
-// tests/fixtures-v2 = 71. To update after adding fixtures: raise a floor
+// tests/fixtures (.expected.bpmn, .refined.bpmn) + 4 committed in
+// tests/fixtures-v2 = 72. To update after adding fixtures: raise a floor
 // to the new count of that folder (temporarily set a floor too high: the failure message shows the real count).
 // Never lower a floor to make a run pass.
 const MIN_GENERATED = 54;
 const MIN_COMMITTED_FIXTURES = 14;
-const MIN_COMMITTED_FIXTURES_V2 = 3;
+const MIN_COMMITTED_FIXTURES_V2 = 4;
 
 const status = bpmnXsdStatus();
 
