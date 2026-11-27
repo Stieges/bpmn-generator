@@ -238,8 +238,8 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   placeholder is never passed on by inheritance. The view `systeme` does not take the switch. The default is
   `"neighbour"`, and no shipped view sets the switch, so the default output is unchanged. The object form of
   `lanes` now also takes `by: "role"`. Known limit: the switch is set in a view file, so it is reached by the
-  CLI (`--view <path>`), an inline view over HTTP and the library (`runPipeline`), but not by the MCP tools
-  `generate_bpmn` and `validate_bpmn`, which take a view by name only. Rules:
+  CLI (`--view <path>`), an inline view over HTTP and the library (`runPipeline`), but not by the MCP tools, which take a view
+  by name only. Rules:
   `references/logic-core-schema.md`, section Lanes by view.
 
 ### Changed

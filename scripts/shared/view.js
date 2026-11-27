@@ -143,7 +143,7 @@ export function loadNamedView(name) {
  * `layout.alignParticipantPorts` is one such key (read from the schema like the rest): the view
  * `aligned-ports` switches it on, the explicit option still wins, config.json's `false` otherwise.
  * A view names its rule profile, which resolves inside rules/ only (loadNamedRuleProfile); a
- * name that does not resolve rejects the view. The view's `derivations` and `lanes` (a string or the object form `{ by: 'unit', level?, nested? }`) and its name
+ * name that does not resolve rejects the view. The view's `derivations` and `lanes` (a string or the object form `{ by: 'role'|'unit', level?, nested?, automatic?, automaticName? }`) and its name
  * (`viewName`) are passed on as given; without a view all three are `undefined`.
  *
  * @param {object|null} view - a view that passed assertView, or null

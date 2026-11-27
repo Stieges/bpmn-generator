@@ -207,7 +207,7 @@ function errorFindings(errors, code = null) {
  *   `ruleProfile` and `layout` values apply where the matching option is not given, and its
  *   `derivations` add elements after validation — the rules judge the author's model, every step
  *   from gateway directions on sees the derived one. An invalid view rejects with ViewRejectedError.
- *   A view's `lanes` (`role`, `unit`, `system`, `none`) forms the lanes of a format 2.x model from its
+ *   A view's `lanes` (`role`, `unit`, `system`, `none`, or the object form, see `normalizeLanesOption`) forms the lanes of a format 2.x model from its
  *   assignments or systems (absent: `role`); on a 1.x model, which carries its own lanes, such a view rejects
  *   with ViewRejectedError, whose text names the translator `node bpmn/migrate.js`
  * @param {object} [opts.catalog] - the catalogue `{ actors, systems?, scheme? }` of a format 2.x model, as an
