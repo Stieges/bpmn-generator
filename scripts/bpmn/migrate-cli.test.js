@@ -5,7 +5,7 @@
  */
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, realpathSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,6 +91,34 @@ describe('migrate CLI: the three files', () => {
     migrate([input, 'k'], tmp);
     expect(readFileSync(input).equals(bytes)).toBe(true);
   });
+
+  test('--force never overwrites a hard link to the input', () => {
+    const input = join(tmp, 'in.json');
+    writeFileSync(input, readFileSync(fixturePath('simple-approval.json')));
+    linkSync(input, join(tmp, 'h.json'));
+    const bytes = readFileSync(input);
+    const r = migrate([input, 'h', '--force'], tmp);
+    expect(r.status).toBe(1);
+    expect(r.err).toMatch(/^✗ h\.json is the input file/);
+    expect(readFileSync(input).equals(bytes)).toBe(true);
+    expect(readFileSync(join(tmp, 'h.json')).equals(bytes)).toBe(true);
+  });
+
+  test('--force never overwrites the input under a base that differs only in letter case', () => {
+    const input = join(tmp, 'in.json');
+    writeFileSync(input, readFileSync(fixturePath('simple-approval.json')));
+    const caseInsensitive = existsSync(join(tmp, 'IN.json'));
+    const bytes = readFileSync(input);
+    const r = migrate([input, 'IN', '--force'], tmp);
+    expect(readFileSync(input).equals(bytes)).toBe(true);
+    if (caseInsensitive) {
+      expect(r.status).toBe(1);
+      expect(r.err).toMatch(/^✗ IN\.json is the input file/);
+    } else {
+      // a case-sensitive file system: IN.json is a different file, so the run translates
+      expect(r.status).toBe(0);
+    }
+  });
 });
 
 describe('migrate CLI: overwrite rule', () => {
@@ -137,6 +165,17 @@ describe('migrate CLI: the given catalogue is never overwritten', () => {
     expect(r.err).toBe(`✗ ${file} is the given catalogue; choose another output base\n`);
     expect(readFileSync(join(tmp, file), 'utf8')).toBe(given);
     expect(readdirSync(tmp)).toEqual([file]);
+  });
+
+  test('--force never overwrites a hard link to the given catalogue', () => {
+    const given = JSON.stringify({ actors: [{ id: 'dl', name: 'Default Lane', kind: 'role' }] });
+    writeFileSync(join(tmp, 'cat.json'), given);
+    linkSync(join(tmp, 'cat.json'), join(tmp, 'k.catalog.json'));
+    const r = migrate([fixturePath('simple-approval.json'), 'k', '--catalog', 'cat.json', '--force'], tmp);
+    expect(r.status).toBe(1);
+    expect(r.err).toBe('✗ k.catalog.json is the given catalogue; choose another output base\n');
+    expect(readFileSync(join(tmp, 'cat.json'), 'utf8')).toBe(given);
+    expect(readdirSync(tmp).sort()).toEqual(['cat.json', 'k.catalog.json']);
   });
 });
 
