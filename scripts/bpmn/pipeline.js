@@ -207,13 +207,13 @@ function errorFindings(errors, code = null) {
  *   `ruleProfile` and `layout` values apply where the matching option is not given, and its
  *   `derivations` add elements after validation — the rules judge the author's model, every step
  *   from gateway directions on sees the derived one. An invalid view rejects with ViewRejectedError.
- *   A view's `lanes` (`role`, `unit`, `none`) forms the lanes of a format 2.0 model from its
- *   assignments (absent: `role`); on a 1.x model, which carries its own lanes, such a view rejects
+ *   A view's `lanes` (`role`, `unit`, `system`, `none`) forms the lanes of a format 2.x model from its
+ *   assignments or systems (absent: `role`); on a 1.x model, which carries its own lanes, such a view rejects
  *   with ViewRejectedError, whose text names the translator `node bpmn/migrate.js`
- * @param {object} [opts.catalog] - the actor catalogue `{ actors, scheme? }` of a format 2.0 model, as an
+ * @param {object} [opts.catalog] - the catalogue `{ actors, systems?, scheme? }` of a format 2.x model, as an
  *   object (shared/catalog.js loadCatalog reads a file); a string throws a TypeError, and so does a
- *   catalogue with a 1.x model. A 2.0 model first passes resolveFields (format schema, catalogue,
- *   assignments: C01–C06); its findings, or `mode` optimize/soll, return early like a validation error
+ *   catalogue with a 1.x model. A 2.x model first passes resolveFields (format schema, catalogue,
+ *   assignments and systems: C01–C06, C14, C15); its findings, or `mode` optimize/soll, return early like a validation error
  * @returns {Promise<{
  *   bpmnXml: string|null,
  *   svg: string|null,

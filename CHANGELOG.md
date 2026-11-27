@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Views.** A view is a small named JSON file under `views/`, outside the model, that decides how
   a model is processed: its rule profile, layout switches and derivations. The model is not
-  changed. Six views ship (`aligned-ports`, `default`, `einheiten`, `explicit-joins`, `organigramm`, `rollen`); `default` derives nothing. Choose one with
+  changed. Seven views ship (`aligned-ports`, `default`, `einheiten`, `explicit-joins`, `organigramm`, `rollen`, `systeme`); `default` derives nothing. Choose one with
   `--view=<name|path>` (CLI), `view` (a name on MCP `generate_bpmn`, `validate_bpmn` and
   `orchestrate_bpmn`; an inline object on HTTP `/api/v1/generate`, `/api/v1/validate` and
   `/api/v1/orchestrate`) or `runPipeline(lc, { view })`, which takes a path or an object. An
@@ -211,8 +211,36 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   the flag and all 28 with it. There is no MCP tool or HTTP endpoint for it yet. Mapping and rules:
   `references/logic-core-schema.md`, section Translating 1.x models; flags and exit codes: `references/cli.md`.
 
+- **Systems (format 2.1).** The catalogue gains a list `systems` (`{ id, name }`, one id space with
+  `actors`) and a task names the system it uses by id: `"system": "s_portal"`, one per task. A model that
+  uses them declares `"$schemaVersion": "2.1"`; a model without them stays `"2.0"` and its output is
+  byte-identical. A `"2.0"` model with `system` or `systems` gets one error F06 per use. The
+  references are checked by C01 (an assignment naming a system), C03 (an id in both lists), C14 (a
+  `system` that names no system, an actor, or no catalogue) and C15 (a `system` off a task); H09 also
+  names a system the process file replaces. The XML keeps the system as `<bg:system ref="…">name</bg:system>`,
+  a system lane is marked `<bg:derived by="system" system="…">`, and the fingerprint `bg:catalog` covers
+  `systems` only when there are any, so catalogues without systems keep their value. The new view
+  `systeme` (`lanes: "system"`, `views/systeme-view.json`) forms one lane per system of the task; a task
+  without one goes to the placeholder lane `(System nicht erhoben)` with the new hint H20, and a process
+  without any system gets no lanes (H06). `migrate` carries a 1.x `system` on a task into the
+  catalogue as `sys_<slug>` (MG08; MG07 for a system of a given catalogue; MG06 when a lane id meets a
+  system id) and writes `"2.1"` when it created or reused a system, so 20 of the 28 1.x fixtures
+  translate without `--drop-unsupported` (before: 19); a `system` off a task stays MG02. New codes: C14, C15,
+  F06, H20, MG08. The quick start in `docs/roles-and-systems.md` is format 2.1 and gains the view `systeme`.
+
 ### Changed
 
+- The F02 message names both accepted versions: `$schemaVersion "<v>" is not supported; only "2.0" and
+  "2.1" are supported`, and its `params` are `{ supported: ["2.0", "2.1"] }` instead of `{ allowedValue }`
+  (a 2.x response only). A model with `"$schemaVersion": "2.1"` now reaches the format-2.0 refusal F03
+  at `redesign-cli.js` and the scenario pipeline, where it got F02 before. Messages that say "format 2.0"
+  (F03, F04, N01, C13) mean the 2 line and stay as they are.
+- The hint pattern of the response schema admits `H20`; H06, H08 and H09 also cover the system view and
+  system entries, and the lanes views list is seven long (`systeme` added).
+- The MCP `catalog` parameter of `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn` is described as
+  `{ actors, systems?, scheme? }` of a format 2.x model.
+- `node bpmn/migrate.js -h` and `--help`, anywhere on the command line, print the usage on stdout and exit 0
+  (an unknown flag still exits 1).
 - The error for a lanes view on a 1.x model now ends with `translate it with node bpmn/migrate.js`
   (still uncoded). It is the only change to a response for a 1.x model.
 

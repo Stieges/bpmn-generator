@@ -1,5 +1,5 @@
 /**
- * The format 2.0 quick start of `docs/roles-and-systems.md` (section 6) is runnable: the catalogue,
+ * The format 2.1 quick start of `docs/roles-and-systems.md` (section 6) is runnable: the catalogue,
  * the model and the command lines are read from the document, written to a temporary directory laid
  * out like the repository (files next to a `scripts/` directory), and every command is run with
  * `--strict`. A snippet is marked by the HTML comment `<!-- quickstart: <name> -->` on the line
@@ -26,13 +26,14 @@ const LANES = {
   rollen: ['Claims handler', 'Team lead', 'Accountant', '(nicht zugeordnet)'],
   einheiten: ['Claims department', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
   organigramm: ['Claims department', '(Einheit nicht erhoben)', '(nicht zugeordnet)'],
+  systeme: ['Claims portal', 'Payment system', '(System nicht erhoben)'],
 };
 
-describe('docs/roles-and-systems.md — the format 2.0 quick start runs', () => {
+describe('docs/roles-and-systems.md — the format 2.1 quick start runs', () => {
   test('the guide marks a catalogue, a model and the commands', () => {
     expect(Object.keys(snippets).sort()).toEqual(['catalog.json', 'cli', 'quickstart.json']);
-    expect(commands).toHaveLength(3);
-    expect(commands.map((c) => /--view=(\w+)/.exec(c)?.[1])).toEqual(['rollen', 'einheiten', 'organigramm']);
+    expect(commands).toHaveLength(4);
+    expect(commands.map((c) => /--view=(\w+)/.exec(c)?.[1])).toEqual(['rollen', 'einheiten', 'organigramm', 'systeme']);
   });
 
   test.each(commands.map((c) => [c]))('%s', (command) => {
@@ -56,8 +57,9 @@ describe('docs/roles-and-systems.md — the format 2.0 quick start runs', () => 
       const view = /--view=(\w+)/.exec(command)[1];
       const lanes = [...readFileSync(`${out}.bpmn`, 'utf8').matchAll(/<bpmn:lane [^>]*name="([^"]*)"/g)].map((m) => m[1]);
       expect(lanes).toEqual(LANES[view]);
-      expect(run.stdout).toContain('[H02]');
-      expect(/\[H04\]/.test(run.stdout)).toBe(view !== 'rollen');
+      expect(run.stdout.includes('[H02]')).toBe(view !== 'systeme');
+      expect(run.stdout.includes('[H20]')).toBe(view === 'systeme');
+      expect(/\[H04\]/.test(run.stdout)).toBe(view === 'einheiten' || view === 'organigramm');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
