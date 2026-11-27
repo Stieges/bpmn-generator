@@ -215,7 +215,7 @@ describe('formatDiWarnings with more DI05 than the group threshold', () => {
 });
 
 describe('runPipeline and the CLI', () => {
-  test('message-hub (format 2.0, view rollen): DI05 with the clause, H15 last in hints', async () => {
+  test('message-hub (format 2.0, view rollen): DI05 with the clause, H15 after the naming hints', async () => {
     const r = await runPipeline(hub(), { catalog: hubCatalog(), view: resolve(here, '../../views/rollen-view.json') });
     expect(r.bpmnXml).toBeTruthy();
     expect(r.diagnostics.issues.filter((i) => i.code === 'DI05'))

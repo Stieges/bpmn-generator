@@ -9,7 +9,7 @@ import { runPipeline } from './pipeline.js';
 import { bpmnToLogicCore } from './import.js';
 import { layoutText } from '../shared/text-layout.js';
 
-const SHY = '­';
+const SHY = '\u00AD';
 const STYLE = { fontSize: 11, lineHeight: 1.2, wrapWidth: 90 };
 
 const task = (id, name) => ({ id, type: 'userTask', name, lane: 'L1' });
@@ -40,7 +40,7 @@ describe('layoutText cuts', () => {
   test('a word cut over several lines is named once, whole; every cut word is named', () => {
     const r = layoutText('Pauschaleinwilligungsprüfung und Schweigepflichtentbindung', STYLE);
     expect(r.cuts).toEqual(['Pauschaleinwilligungsprüfung', 'Schweigepflichtentbindung']);
-    expect(r.lines.join('|').replace(/\|/g, '')).toBe('Pauschaleinwilligungsprüfung undSchweigepflichtentbindung'.replace(' und', ' und'));
+    expect(r.lines.join('|').replace(/\|/g, '')).toBe('Pauschaleinwilligungsprüfung undSchweigepflichtentbindung');
   });
 
   test('the lines are the cut ones', () => {

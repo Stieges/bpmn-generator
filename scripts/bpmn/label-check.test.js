@@ -21,6 +21,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = resolve(here, 'pipeline.js');
 const FIXTURES = resolve(here, '..', '..', 'tests', 'fixtures');
+const FIXTURES_V2 = resolve(here, '..', '..', 'tests', 'fixtures-v2');
 
 const h18 = (r) => r.validation.hints.filter((h) => h.code === 'H18');
 const box = (x, y, w, h) => ({ x, y, w, h });
@@ -236,4 +237,50 @@ describe('H18 on the fixtures', () => {
   test('simple-approval.json, a tidy diagram, gets none', async () => {
     expect(h18(await runPipeline(fixture('simple-approval.json')))).toEqual([]);
   }, 30_000);
+});
+
+describe('the hints H15 to H18 together', () => {
+  // schaden.json in a pool, three black-box partners with one message flow each (no participant order
+  // avoids a DI05), a receive task nobody sends to, and a word longer than a line.
+  const combo = () => {
+    const base = JSON.parse(readFileSync(join(FIXTURES_V2, 'schaden.json'), 'utf8'));
+    const nodes = structuredClone(base.nodes);
+    nodes.find((n) => n.id === 'zahlen').name = 'Zahlungsfreigabeanweisungsbearbeitungsvorgang anweisen';
+    nodes.splice(nodes.length - 1, 0, {
+      id: 'rt', type: 'receiveTask', name: 'Bestätigung empfangen', assignments: [{ type: 'D', actor: 'zahlung' }],
+    });
+    const edges = base.edges.filter((e) => !(e.source === 'zahlen' && e.target === 'end'));
+    edges.push({ source: 'zahlen', target: 'rt' }, { id: 'f_rt', source: 'rt', target: 'end' });
+    return {
+      $schemaVersion: '2.0', catalog: 'schaden-catalog.json',
+      pools: [{ id: base.id, name: base.name, nodes, edges }],
+      collapsedPools: [{ id: 'P_A', name: 'Kunde' }, { id: 'P_B', name: 'Werkstatt' }, { id: 'P_C', name: 'Bank' }],
+      messageFlows: [
+        { id: 'm1', source: 'pruefen', target: 'P_A' }, { id: 'm2', source: 'regr', target: 'P_B' },
+        { id: 'm3', source: 'zahlen', target: 'P_C' },
+      ],
+    };
+  };
+  const catalog = () => JSON.parse(readFileSync(join(FIXTURES_V2, 'schaden-catalog.json'), 'utf8'));
+
+  test('they come in the order H15, H16, H17, H18 in validation.hints', async () => {
+    const r = await runPipeline(combo(), { catalog: catalog(), view: resolve(here, '../../views/einheiten-view.json') });
+    expect(r.validation.errors).toEqual([]);
+    expect(r.validation.hints.map((h) => h.code).filter((c) => /^H1[5-8]$/.test(c))).toEqual(['H15', 'H16', 'H17', 'H18']);
+  }, 60_000);
+
+  test('CLI --strict exits 0 and writes the files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'h15-18-'));
+    try {
+      writeFileSync(join(dir, 'combo.json'), JSON.stringify(combo()));
+      writeFileSync(join(dir, 'schaden-catalog.json'), JSON.stringify(catalog()));
+      const out = join(dir, 'combo');
+      const res = spawnSync(process.execPath, [PIPELINE, join(dir, 'combo.json'), out, '--strict', '--view=einheiten'], { encoding: 'utf8' });
+      expect(res.status).toBe(0);
+      for (const code of ['H15', 'H16', 'H17', 'H18']) expect(res.stdout).toContain(`[${code}]`);
+      expect(existsSync(`${out}.bpmn`) && existsSync(`${out}.svg`)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
