@@ -410,6 +410,135 @@ function segmentEntersShape([a, z], box, shape) {
 }
 
 /**
+ * Up to this many participants `classifyUnavoidableDi05` searches for the order with the fewest
+ * crossings; above it the answer is "unknown" and every DI05 stays as it is. The search is a
+ * dynamic programme over the subsets of participants, 2^n · n steps: 16 participants take a few
+ * milliseconds, and the bound keeps a pathological input far below a second.
+ */
+const UNAVOIDABLE_DI05_MAX_PARTICIPANTS = 16;
+
+/** Appended to the message of a DI05 that `classifyUnavoidableDi05` marks unavoidable. */
+const UNAVOIDABLE_DI05_CLAUSE = ' No order of the participants avoids every crossing.';
+
+/**
+ * The fewest participant crossings any vertical order of `n` stacked participants can have:
+ * min over orders of Σ weight[i][j] · (|pos(i) − pos(j)| − 1) over the pairs i < j, with
+ * `weight[i][j]` the number of message flows between i and j (symmetric, zero diagonal). That is
+ * DI05's count in a full-width column: a flow crosses every participant between its two ends.
+ *
+ * Σ w·|Δ| is the sum, over the n − 1 gaps of the order, of the weight that spans the gap, which is
+ * the cut between the participants above the gap and the rest. f(S), the least such sum for the
+ * set S placed first, is min over v in S of f(S \ v) + cut(S). Exact; 2^n · n steps.
+ */
+function minimumCrossings(n, weight) {
+  const size = 1 << n;
+  const degree = weight.map((row) => row.reduce((s, w) => s + w, 0));
+  const flows = degree.reduce((s, d) => s + d, 0) / 2;
+  const cut = new Float64Array(size);
+  const best = new Float64Array(size);
+  for (let set = 1; set < size; set++) {
+    const v = 31 - Math.clz32(set & -set);
+    const rest = set ^ (1 << v);
+    let inner = 0;
+    for (let r = rest; r; r &= r - 1) inner += weight[v][31 - Math.clz32(r & -r)];
+    cut[set] = cut[rest] + degree[v] - 2 * inner;
+    let min = Infinity;
+    for (let r = set; r; r &= r - 1) {
+      const prev = best[set ^ (r & -r)];
+      if (prev < min) min = prev;
+    }
+    best[set] = min + cut[set];
+  }
+  return best[size - 1] - flows;
+}
+
+/**
+ * Marks the DI05 findings no participant order could avoid (`checkDiagramIntegrity`'s issues,
+ * mutated: each DI05 message gains UNAVOIDABLE_DI05_CLAUSE). Every participant is stacked in one
+ * column at full width, so a message flow crosses exactly the participants between its two ends,
+ * and a crossing-free order exists only when every participant has at most two message partners
+ * and the partners form no cycle (each group of partners is then a chain that fits a column).
+ *
+ * The findings are marked when (1) the layout is that column and the order read from it explains
+ * every DI05 exactly, (2) no crossing-free order exists, and (3) the order the layout chose has
+ * the fewest crossings any order has (an exact search, up to UNAVOIDABLE_DI05_MAX_PARTICIPANTS
+ * participants). The orders searched are all orders of all participants — what `poolOrder: "auto"`
+ * can produce; `"declared"` produces some of them, so a crossing it leaves that another order
+ * avoids is not marked. Any other case returns null and changes nothing: a crossing-free order the
+ * layout missed is a layout defect, not an unavoidable crossing.
+ *
+ * @returns {{ flows: string[], hubs: Array<{ id: string, partners: number }>, cycle: string[]|null }|null}
+ *   the marked flows (in issue order), the participants with more than two partners, or, without
+ *   such a participant, the participants of a cycle of partners
+ */
+function classifyUnavoidableDi05(coordMap, lc, issues, opts = {}) {
+  const maxParticipants = opts.maxParticipants ?? UNAVOIDABLE_DI05_MAX_PARTICIPANTS;
+  const tol = opts.tolerance ?? DEFAULT_TOLERANCE;
+  const di05 = (issues || []).filter((i) => i.code === 'DI05');
+  if (!di05.length) return null;
+
+  const participants = Object.entries(coordMap?.poolCoords || {})
+    .filter(([id]) => id !== '_singlePool')
+    .map(([id, c]) => ({ id, ...c }))
+    .filter((p) => [p.x, p.y, p.w, p.h].every(Number.isFinite));
+  const n = participants.length;
+  if (n < 3 || n > maxParticipants) return null;
+  if (participants.some((p) => Math.abs(p.x - participants[0].x) > tol || Math.abs(p.w - participants[0].w) > tol)) return null;
+  participants.sort((a, b) => a.y - b.y);
+  const position = new Map(participants.map((p, i) => [p.id, i]));
+
+  const ownerOf = {};
+  for (const proc of (lc.pools || [])) for (const node of flattenNodes(proc.nodes)) ownerOf[node.id] = proc.id;
+  for (const p of participants) ownerOf[p.id] ??= p.id;
+
+  const reported = new Map(di05.map((i) => [i.elements[0], new Set(i.elements.slice(1))]));
+  const explained = new Set();
+  const weight = participants.map(() => new Array(n).fill(0));
+  let crossings = 0;
+  for (const mf of (lc.messageFlows || [])) {
+    const id = mf.id || `mf_${mf.source}_${mf.target}`;
+    const pts = (coordMap.edgeCoords || {})[id];
+    if (!pts || pts.length < 2) continue; // DI05 skips an unrouted flow too
+    const a = position.get(ownerOf[mf.source]);
+    const b = position.get(ownerOf[mf.target]);
+    if (a === undefined || b === undefined) return null;
+    const between = participants.slice(Math.min(a, b) + 1, Math.max(a, b)).map((p) => p.id);
+    const seen = reported.get(id) ?? new Set();
+    if (seen.size !== between.length || between.some((p) => !seen.has(p))) return null;
+    explained.add(id);
+    if (a === b) continue;
+    weight[a][b]++;
+    weight[b][a]++;
+    crossings += between.length;
+  }
+  if ([...reported.keys()].some((id) => !explained.has(id))) return null;
+
+  const partners = weight.map((row) => row.filter((w) => w > 0).length);
+  const hubs = participants.map((p, i) => ({ id: p.id, partners: partners[i] })).filter((h) => h.partners > 2);
+  let cycle = null;
+  if (!hubs.length) {
+    // Every participant has at most two partners: a group of partners is a chain or a cycle, and
+    // a group with as many partner pairs as participants is a cycle.
+    const root = participants.map((_, i) => i);
+    const find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+    const pairs = [];
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (weight[i][j] > 0) pairs.push([i, j]);
+    for (const [i, j] of pairs) root[find(i)] = find(j);
+    const members = new Map();
+    for (let i = 0; i < n; i++) (members.get(find(i)) ?? members.set(find(i), []).get(find(i))).push(i);
+    const pairsIn = new Map();
+    for (const [i] of pairs) pairsIn.set(find(i), (pairsIn.get(find(i)) || 0) + 1);
+    const closed = [...members].find(([r, m]) => m.length > 2 && (pairsIn.get(r) || 0) >= m.length);
+    if (!closed) return null;
+    cycle = closed[1].map((i) => participants[i].id);
+  }
+  if (crossings !== minimumCrossings(n, weight)) return null;
+
+  for (const issue of di05) issue.message += UNAVOIDABLE_DI05_CLAUSE;
+  return { flows: di05.map((i) => i.elements[0]), hubs, cycle };
+}
+
+/**
  * DI05 findings grouped by the participant each flow leaves (#43). Presentation only: the per-flow
  * `issues` stay the machine contract (HTTP, MCP, tests). Largest group first, then participant id.
  */
@@ -455,5 +584,8 @@ function formatDiWarnings(issues, lc, { groupThreshold = 5 } = {}) {
   return lines;
 }
 
-export { checkDiagramIntegrity, groupDi05BySource, formatDiWarnings };
+export {
+  checkDiagramIntegrity, groupDi05BySource, formatDiWarnings,
+  classifyUnavoidableDi05, minimumCrossings, UNAVOIDABLE_DI05_MAX_PARTICIPANTS, UNAVOIDABLE_DI05_CLAUSE,
+};
 

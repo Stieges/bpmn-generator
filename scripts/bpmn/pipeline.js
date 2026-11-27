@@ -35,7 +35,7 @@ import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
 import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
-import { checkDiagramIntegrity, formatDiWarnings } from './di-check.js';
+import { checkDiagramIntegrity, formatDiWarnings, classifyUnavoidableDi05 } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
 import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, rerouteAfterCompaction } from './edge-simplify.js';
@@ -125,6 +125,22 @@ function derivationHints(derived, lc) {
     message: `${process === null ? '' : `[${poolName.get(process)}] `}Join gateway "${id}" derived in front of "${target}", which more than one flow enters.`,
     elements: [id, target, edge],
   }));
+}
+
+/**
+ * H15 for the DI05 findings no order of the participants avoids (di-check.js
+ * classifyUnavoidableDi05), `elements` the flows: the CLI's --strict does not count those findings.
+ */
+function unavoidableCrossingHint({ flows, hubs, cycle }) {
+  const quote = (ids) => ids.map((id) => `"${id}"`).join(', ');
+  const why = hubs.length === 1 ? `"${hubs[0].id}" exchanges messages with ${hubs[0].partners} participants`
+    : hubs.length ? `${quote(hubs.map((h) => h.id))} each exchange messages with more than two participants`
+    : `${quote(cycle)} exchange messages in a cycle`;
+  return {
+    code: 'H15',
+    message: `No order of the participants avoids every crossing: stacked in one column a participant has at most two neighbours, and ${why}. DI05 on ${quote(flows)} is reported but does not fail --strict. Accept the crossing, or reduce the message partners (for example, merge black-box participants that play the same part).`,
+    elements: [...flows],
+  };
 }
 
 /**
@@ -488,6 +504,11 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // DI integrity: the rule engine never sees a coordinate, so a layout defect
   // passes validation green. This pass inspects the produced geometry.
   const diagnostics = checkDiagramIntegrity(coordMap, lc, { alongOutlineMinPx: CFG.layout?.alongOutlineMinPx });
+  // Format 2.x only: a DI05 no participant order avoids keeps its code and gains a clause; H15,
+  // last in `hints`, names its flows, and the CLI's --strict does not count them. A 1.x model gets
+  // neither (its responses stay as they were), so its --strict still counts every DI05.
+  const unavoidable = v2 ? classifyUnavoidableDi05(coordMap, lc, diagnostics.issues) : null;
+  if (unavoidable) hints.push(unavoidableCrossingHint(unavoidable));
 
   return {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
@@ -983,8 +1004,11 @@ async function main() {
     diErrors.forEach(i => console.error(`  · ${i.code} ${i.message}`));
     process.exit(1);
   }
-  if (strict && diWarnings.length) {
-    console.error(`\n✗ --strict: ${diWarnings.length} diagram diagnostic(s). No files written.`);
+  // A DI05 that H15 names is unavoidable: reported above, not counted here.
+  const unavoidableFlows = new Set((result.validation.hints ?? []).filter(h => h.code === 'H15').flatMap(h => h.elements));
+  const strictDiWarnings = diWarnings.filter(i => !(i.code === 'DI05' && unavoidableFlows.has(i.elements[0])));
+  if (strict && strictDiWarnings.length) {
+    console.error(`\n✗ --strict: ${strictDiWarnings.length} diagram diagnostic(s). No files written.`);
     process.exit(1);
   }
 

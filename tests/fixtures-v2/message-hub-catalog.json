@@ -1,0 +1,21 @@
+{
+  "actors": [
+    {
+      "id": "u_ops",
+      "name": "Operations",
+      "kind": "unit"
+    },
+    {
+      "id": "clerk",
+      "name": "Clerk",
+      "kind": "role",
+      "unit": "u_ops"
+    },
+    {
+      "id": "reviewer",
+      "name": "Reviewer",
+      "kind": "role",
+      "unit": "u_ops"
+    }
+  ]
+}
