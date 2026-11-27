@@ -240,7 +240,7 @@ describe('a 1.x model under a view with lanes is a view error (design 6)', () =>
   });
 });
 
-describe('$schemaVersion: only "2.0" is format 2.0', () => {
+describe('$schemaVersion: only "2.0" and "2.1" are format 2.x', () => {
   const versioned = (v) => ({ ...copy(MODEL), $schemaVersion: v });
   const refusal = (v) => `[F02] /$schemaVersion $schemaVersion "${v}" is not supported; only "2.0" and "2.1" are supported`;
 
@@ -297,7 +297,7 @@ describe('$schemaVersion: only "2.0" is format 2.0', () => {
 });
 
 describe('response contract', () => {
-  test('the hint code pattern in api-schema.json accepts H01–H19', () => {
+  test('the hint code pattern in api-schema.json accepts H01–H20', () => {
     const api = JSON.parse(readFileSync(resolve(root, 'references/api-schema.json'), 'utf8'));
     const find = (v) => {
       if (v && typeof v === 'object') {

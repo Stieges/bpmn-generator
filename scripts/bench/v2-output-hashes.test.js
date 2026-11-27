@@ -21,7 +21,7 @@ const CATALOG_HASH = {
   'schaden-systeme.json': 'sha256:ca38a972cb2661579c6d2ded39f4625c3a3bab332d58c9ef9c7eb5f56be6fc43',
 };
 
-describe('format 2.0 golden diagrams', () => {
+describe('format 2.x golden diagrams', () => {
   test('exactly four pairs: the two flat views of design 9, the nested organigram view and the system view', () => {
     expect(V2_PAIRS).toEqual([['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['schaden-systeme.json', 'systeme']]);
   });
@@ -48,7 +48,7 @@ describe('format 2.0 golden diagrams', () => {
     expect(r.bpmnXml).toContain('<bg:assignment type="I" actor="sb_schaden" />');
   });
 
-  const OLD_PAIRS = V2_PAIRS.slice(0, 3);
+  const OLD_PAIRS = [['schaden.json', 'rollen'], ['schaden.json', 'einheiten'], ['organigramm.json', 'organigramm']];
   test.each(OLD_PAIRS)('%s × %s: no performer, resource or system in the golden', (name, viewName) => {
     const xml = golden(name, viewName, 'bpmn');
     expect(xml).not.toMatch(/<bpmn:(performer|humanPerformer|resource)\b/);

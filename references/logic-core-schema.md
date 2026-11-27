@@ -692,8 +692,8 @@ table and the list of messages that stay uncoded are in
 ## Translating 1.x models
 
 `node bpmn/migrate.js <input.json> [output-base]` translates a 1.x model into a format 2.x model, so
-that the lane views (`rollen`, `einheiten`, `systeme`) can be applied to it. It writes `<base>.json` (the 2.0
-model), `<base>.catalog.json` (the actors and systems it created, to merge into your catalogue) and
+that the lane views (`rollen`, `einheiten`, `systeme`) can be applied to it. It writes `<base>.json` (the 2.0 model, or 2.1 when systems
+are carried), `<base>.catalog.json` (the actors and systems it created, to merge into your catalogue) and
 `<base>.migrate-report.json`; flags, exit codes and the overwrite rule are in
 [`cli.md`](cli.md#migrate-1x-to-20). The library function is `migrateModel(lc, { catalog,
 dropUnsupported })` in `scripts/bpmn/migrate.js`. No byte-identity is promised across the
