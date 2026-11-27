@@ -199,6 +199,23 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   Known limitation, now documented where `--wrap` is: with lanes it is accepted, but the result is a
   staircase (the rows shift and the lane bands grow tall); leave it off for a laned model.
 
+- **`migrate`: translate a 1.x model into format 2.0.** `node bpmn/migrate.js <input.json> [output-base]
+  [--catalog <path>] [--drop-unsupported] [--force]` (library: `migrateModel`) turns each lane into an actor
+  without `kind` and gives each activity the assignment of its lane (or role). It writes the 2.0 model
+  (`<base>.json`), a catalogue supplement (`<base>.catalog.json`) and a report (`<base>.migrate-report.json`).
+  New codes: hint H07 (a lane or role became an actor without kind) and MG01-MG07 (input refused, field
+  without a place in 2.0, role differs from lane, node moved by the inheritance rule, activity without
+  lane, id renamed, lane matched to a catalogue actor). Data nodes and `system` have no place in 2.0 yet
+  and are refused (MG02) unless `--drop-unsupported` drops them. A 1.x model with the same lane id in two
+  pools, or any duplicate id, is refused by `migrate` (MG01). Of the 28 1.x fixtures, 19 translate without
+  the flag and all 28 with it. There is no MCP tool or HTTP endpoint for it yet. Mapping and rules:
+  `references/logic-core-schema.md`, section Translating 1.x models; flags and exit codes: `references/cli.md`.
+
+### Changed
+
+- The error for a lanes view on a 1.x model now ends with `translate it with node bpmn/migrate.js`
+  (still uncoded). It is the only change to a response for a 1.x model.
+
 ### Fixed
 
 - **An unavoidable DI05 no longer blocks `--strict` (format 2.x).** All participants are stacked in

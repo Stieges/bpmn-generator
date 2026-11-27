@@ -29,7 +29,7 @@ const PREFIXED_WARNING = `[Main Pool] ${WARNING}`;
 const FULL_VALIDATION = `{"errors":[],"warnings":${JSON.stringify([PREFIXED_WARNING])},"infos":[],"advisories":[],"metrics":{},"xmlWarnings":[],"hints":[]}`;
 const SHORT_VALIDATION = `{"errors":[],"warnings":${JSON.stringify([PREFIXED_WARNING])},"infos":[],"advisories":[],"metrics":{}}`;
 
-const VIEW_ERROR = 'view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes';
+const VIEW_ERROR = 'view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js';
 
 describe('format 1.x characterisation: library and CLI', () => {
   test('runPipeline: the exact validation object', async () => {

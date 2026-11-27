@@ -8,6 +8,7 @@ schema gate (`references/input-schema.json`) enforces.
 - [Overview](#overview)
 - [Schema Modes](#schema-modes)
 - [Format 2.0 (catalogue and lane views)](#format-20-catalogue-and-lane-views)
+- [Translating 1.x models](#translating-1x-models)
 - [Top-Level Fields](#top-level-fields)
 - [NodeObject](#nodeobject)
 - [EdgeObject](#edgeobject)
@@ -660,6 +661,55 @@ covers the catalogue's bounds and schema; a model-carried `actors` list shares t
 schema, so its schema failures surface as F01 at the format gate and only its bounds reach C12. The
 table and the list of messages that stay uncoded are in
 [`api-reference.md`](api-reference.md#message-codes). A 1.x model gets responses without codes.
+
+## Translating 1.x models
+
+`node bpmn/migrate.js <input.json> [output-base]` translates a 1.x model into a format 2.0 model, so
+that the lane views (`rollen`, `einheiten`) can be applied to it. It writes `<base>.json` (the 2.0
+model), `<base>.catalog.json` (the actors it created, to merge into your catalogue) and
+`<base>.migrate-report.json`; flags, exit codes and the overwrite rule are in
+[`cli.md`](cli.md#migrate-1x-to-20). The library function is `migrateModel(lc, { catalog,
+dropUnsupported })` in `scripts/bpmn/migrate.js`. No byte-identity is promised across the
+translator: the 2.0 model is a new document, the 1.x file stays as it is.
+
+**Mapping.**
+
+- Each lane becomes an actor without `kind` (`id` = the lane id, `name` = the lane name or id) and
+  hint H07 asks you to check its kind. A lane id that is no valid actor id, or that collides with an
+  id of a given catalogue, is renamed (MG06). A child lane gets `unit` = its parent lane's actor
+  (none when the parent maps to a catalogue actor of `kind: "role"`, C02).
+- An activity in a lane gets the assignment `{ type: <the scheme's performs type>, actor }`, `D`
+  with the default demi scheme.
+- A `role` on an activity names its performer: the lane actor of the same process with that name,
+  else a catalogue actor of that name (MG07), else a new actor without `kind`, `role_<slug>`. Where
+  the performer differs from the lane the report says so (MG03). A role actor's `unit` is the actor of
+  its one lane; it has none when its activities sit in several lanes.
+- Events, gateways, boundary events and subprocess children get no assignments; their lane follows
+  the inheritance rule of the lane views. Where that differs from the 1.x lane the report says so
+  (MG04); boundary events are not compared. An activity without a lane in a process with lanes gets
+  no assignment (MG05; a role's actor performs it).
+- A process without lanes gets no assignments (hint H06 when you generate it).
+- `language` and every event `marker` are kept; `$schemaVersion` becomes `"2.0"`.
+
+**Refused.** `system`, data objects and data stores and the flows and associations touching them
+have no place in format 2.0 yet; they are refused (MG02) unless `--drop-unsupported` drops and lists
+them. A duplicate id anywhere in the document (so also the same lane id in two pools), a 2.0 input or
+a schema failure is refused as MG01. A refused input writes the report only.
+
+**With `--catalog`.** A lane or role whose name equals an actor's name in that catalogue, exactly, is
+that actor (MG07). The 2.0 model names that catalogue and carries the new actors itself; the supplement
+lists the same new actors for merging. `migrate` never writes the given catalogue.
+
+**Views afterwards.** Under `rollen` the lanes are those of the 1.x model (plus the effects of MG03
+and MG04). Under `einheiten` a migrated top-level lane's actor has no `unit`, so its nodes land in the
+placeholder lane "(Einheit nicht erhoben)"; child lanes appear under their parent's actor. That is
+expected: add units to the catalogue to get unit lanes.
+
+**Measured on the 28 1.x fixtures** (`tests/bench/migrate-fixtures.json`): `translated 19 of 28
+(67.9 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0`. The 9 refusals are all MG02 (8
+for data nodes, 1 for `system`). Under `rollen` the lane names and the placement of the nodes equal
+the 1.x model for 20 of 28; the other 8 differ only by events or gateways that moved (each with MG04) or
+by role lanes (MG03). The errors of the rules are identical to the 1.x run for all 28.
 
 ## Views (outside the model)
 

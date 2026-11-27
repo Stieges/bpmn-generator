@@ -18,7 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const simpleApproval = () => JSON.parse(readFileSync(resolve(root, 'tests/fixtures/simple-approval.json'), 'utf8'));
-const LANES_ON_1X = 'view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes';
+const LANES_ON_1X = 'view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js';
 
 // The pair of design 5.6.
 const CATALOG = {

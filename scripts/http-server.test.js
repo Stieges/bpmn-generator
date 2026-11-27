@@ -596,7 +596,7 @@ describe('LLM provider failures are not reflected to the client', () => {
 });
 
 describe('POST /api/v1/orchestrate — a lanes view on a 1.x model', () => {
-  const VIEW_ERROR = 'view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes';
+  const VIEW_ERROR = 'view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js';
   const view = { view: 'rollen', version: '1.0', lanes: 'role' };
   beforeEach(() => _resetRateLimit());
 
@@ -1079,7 +1079,7 @@ describe('views over HTTP — inline objects only, gated, bounded', () => {
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.status).toBe('view_error');
-    expect(data.error).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+    expect(data.error).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
   });
 
   test.each(['/api/v1/validate', '/api/v1/orchestrate'])('%s: an inline lanes view on a 1.x model is a view_error', async (path) => {
@@ -1087,7 +1087,7 @@ describe('views over HTTP — inline objects only, gated, bounded', () => {
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.status).toBe('view_error');
-    expect(data.error).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+    expect(data.error).toBe('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
   });
 
   test('/api/v1/generate: an inline view with alignParticipantPorts gives the aligned routes', async () => {

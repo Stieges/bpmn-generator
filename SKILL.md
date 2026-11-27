@@ -141,6 +141,8 @@ node bpmn/pipeline.js process.json out --view=explicit-joins      # joins as exp
 
 Format 2.0 (actor catalogue, lanes chosen by a view such as `--view=rollen` or `--view=organigramm`) is read by the CLI generate path, the library and, with the catalogue as an embedded `catalog` object, by MCP and HTTP; the extraction rules above describe format 1.x. See `references/logic-core-schema.md`, section Format 2.0.
 
+A 1.x model that should get lanes from a view is translated first: `node bpmn/migrate.js process.json out/process` writes `out/process.json` (format 2.0), `.catalog.json` and `.migrate-report.json`; read the report, then `node bpmn/pipeline.js out/process.json out/process --view=rollen`. Data objects and `system` are refused (MG02) unless `--drop-unsupported`. Details: `references/cli.md` (migrate), `references/logic-core-schema.md` (Translating 1.x models).
+
 Outputs: `*.bpmn` opens in Camunda Modeler, bpmn.io, ADONIS, Signavio; `*.svg` in a browser or
 Office; `*.dmn` in dmn.io or Camunda Modeler; `*.tables.html` pastes into a wiki page. Keep the Logic-Core JSON — it is the source for every
 later amendment. All flags: `references/cli.md`.

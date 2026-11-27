@@ -410,6 +410,26 @@ The messages of the 2.0-specific path (catalogue, format, lane formation, import
 `code` in `validation.findings`. Responses for 1.x models are unchanged. The table is in
 [`references/api-reference.md`](references/api-reference.md#message-codes).
 
+### Translating a 1.x model to format 2.0
+
+A lanes view (`rollen`, `einheiten`) on a 1.x model is a view error, because a 1.x model carries its own
+lanes. To use the views on one, translate it first:
+
+```bash
+cd scripts
+node bpmn/migrate.js ../my-process.json out/my-process     # out/my-process.json, .catalog.json, .migrate-report.json
+node bpmn/pipeline.js out/my-process.json out/my-process --view=rollen
+```
+
+Each lane becomes an actor without `kind`, each activity of a process with lanes gets the assignment of
+its lane (or role), and the report lists what to check (hint H07, codes MG01-MG07). Data objects, data
+stores and `system` have no place in 2.0 yet: the translator refuses them (MG02) unless you pass
+`--drop-unsupported`. Of the 28 1.x test fixtures, 19 translate as they are and all 28 with the flag.
+Under `einheiten` a migrated top-level lane has no unit, so its nodes land in "(Einheit nicht erhoben)"
+until you add units to the catalogue. `migrate` is a CLI and library function only, with no MCP tool or
+HTTP endpoint. Mapping: [`references/logic-core-schema.md`](references/logic-core-schema.md#translating-1x-models);
+flags and exit codes: [`references/cli.md`](references/cli.md#migrate-1x-to-20).
+
 ## Programmatic API
 
 ```javascript

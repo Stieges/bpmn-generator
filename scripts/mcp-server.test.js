@@ -214,7 +214,7 @@ describe('view over MCP is a name inside views/, never a path or an object', () 
 
   test('generate_bpmn with a lanes view on a 1.x model rejects with the view error', async () => {
     await expect(call('generate_bpmn', { logicCore: lc, view: 'rollen' }))
-      .rejects.toThrow('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+      .rejects.toThrow('view "rollen" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
   });
 
   // Review Focus 2: every tool that takes a view answers a lanes view on a 1.x model with the same
@@ -227,7 +227,7 @@ describe('view over MCP is a name inside views/, never a path or an object', () 
     let err;
     try { await call(name, { logicCore: fixture('expanded-subprocess.json'), view: 'einheiten', ...extra }); } catch (e) { err = e; }
     expect(err?.name).toBe('ViewRejectedError');
-    expect(err.message).toBe('view "einheiten" forms lanes from assignments; this model (format 1.x) carries its own lanes');
+    expect(err.message).toBe('view "einheiten" forms lanes from assignments; this model (format 1.x) carries its own lanes — translate it with node bpmn/migrate.js');
   });
 
   test('orchestrate_bpmn forwards the view to the layout agent', async () => {
