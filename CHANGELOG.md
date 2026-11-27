@@ -160,6 +160,14 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   not run that check (an embedding library caller), and the path goes only to the server log. A
   naming data failure that `orchestrate` survives (an LLM amendment, the compliance gate) puts only
   that fixed text into `history` and `compliance.errors`; the detail goes to stderr.
+- **Hint `H16`: a label broken inside a word.** A word wider than its line, with no blank, hyphen
+  or soft hyphen to break at, is cut mid-word, in the SVG and in bpmn.io alike (the breaking
+  reproduces bpmn.io's and is unchanged). One hint per label (task and subprocess text, event,
+  gateway, data object and group labels, sequence and message flow labels, text annotations,
+  participant, collapsed pool and lane names) names the element and every such word, and says that
+  a soft hyphen (U+00AD) in the name sets where the word may break. Any format; last in
+  `validation.hints`; never fails `--strict`. `layoutText` returns the words as `cuts`. Models
+  whose labels were already cut gain the hint; the output files are unchanged.
 
 ### Fixed
 

@@ -148,6 +148,25 @@ function unavoidableCrossingHint({ flows, hubs, cycle }) {
   };
 }
 
+const CUT_LABEL_KIND = {
+  activity: 'The text of', label: 'The label of', flow: 'The label of the flow', annotation: 'The text of',
+  pool: 'The name of the participant', lane: 'The name of the lane',
+};
+
+/**
+ * H16 for one label whose text the SVG (and bpmn.io, which breaks text the same way) had to cut
+ * inside a word: the word is wider than the line and has no blank, hyphen or soft hyphen to break
+ * at. `elements` is the element the label belongs to.
+ */
+function labelCutHint({ id, kind, words }) {
+  const quoted = words.map(w => `"${w}"`).join(', ');
+  return {
+    code: 'H16',
+    message: `${CUT_LABEL_KIND[kind]} "${id}" is broken inside ${words.length === 1 ? 'the word' : 'the words'} ${quoted}: ${words.length === 1 ? 'it is' : 'they are'} wider than the line and ${words.length === 1 ? 'has' : 'have'} no place to break. Put a soft hyphen (U+00AD) in the name where the word may break, or shorten the word.`,
+    elements: [id],
+  };
+}
+
 /**
  * A pipeline result that stopped before any diagram: `errors`, and `rest` for the other validation
  * lists. `findings` is given on format 2.x runs only; without it the result has no `findings` key.
@@ -501,7 +520,8 @@ async function runPipeline(logicCore, callerOpts = {}) {
   }
 
   const bpmnXml   = await generateBpmnXml(lc, coordMap);
-  const svg       = generateSvg(lc, coordMap);
+  const cutLabels = [];
+  const svg       = generateSvg(lc, coordMap, { onCut: c => cutLabels.push(c) });
 
   // Round-trip XML validation: parse back through moddle to catch structural issues
   const roundTrip = await validateBpmnXml(bpmnXml);
@@ -514,6 +534,8 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // neither (its responses stay as they were), so its --strict still counts every DI05.
   const unavoidable = v2 ? classifyUnavoidableDi05(coordMap, lc, diagnostics.issues) : null;
   if (unavoidable) hints.push(unavoidableCrossingHint(unavoidable));
+  // H16, last: one per label the SVG cut inside a word, taken from the layout that drew it (any format).
+  hints.push(...cutLabels.map(labelCutHint));
 
   return {
     bpmnXml, svg, coordMap, diagnostics, netDiagnostics,
