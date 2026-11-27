@@ -23,7 +23,7 @@
  * input gives `model: null` and the reason in the report.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { resolve, dirname, basename, relative, sep } from 'node:path';
 import { validateLogicCoreSchema, validateModelSchema, modelFormat, formatSchemaErrors, FORMAT_V2_VERSION } from './schema-gate.js';
 import { resolveLaneId, collectDocumentIds } from './topology.js';
@@ -645,14 +645,21 @@ function main(argv = process.argv.slice(2)) {
     writes.unshift([modelFile, `${JSON.stringify(model, null, 2)}\n`], [catalogFile, `${JSON.stringify(result.supplement, null, 2)}\n`]);
   }
 
-  const inputReal = realpathSync(resolve(args.input));
-  const catalogReal = args.catalogArg === null ? null : realpathSync(resolve(args.catalogArg));
+  // File identity (device and inode), not path strings: a case-variant path on a case-insensitive
+  // file system and a hard link name the same file.
+  const identity = (path) => {
+    const st = statSync(path);
+    return `${st.dev}:${st.ino}`;
+  };
+  const inputId = identity(resolve(args.input));
+  const catalogId = args.catalogArg === null ? null : identity(resolve(args.catalogArg));
   const problems = [];
   for (const [file] of writes) {
     const abs = resolve(file);
-    if (existsSync(abs) && realpathSync(abs) === inputReal) problems.push(`✗ ${file} is the input file; choose another output base`);
-    else if (existsSync(abs) && realpathSync(abs) === catalogReal) problems.push(`✗ ${file} is the given catalogue; choose another output base`);
-    else if (existsSync(abs) && !args.force) problems.push(`✗ ${file} exists; pass --force to overwrite`);
+    const id = existsSync(abs) ? identity(abs) : null;
+    if (id !== null && id === inputId) problems.push(`✗ ${file} is the input file; choose another output base`);
+    else if (id !== null && id === catalogId) problems.push(`✗ ${file} is the given catalogue; choose another output base`);
+    else if (id !== null && !args.force) problems.push(`✗ ${file} exists; pass --force to overwrite`);
   }
   if (problems.length) fail(problems.join('\n'));
 
