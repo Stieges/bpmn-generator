@@ -30,7 +30,7 @@ node bpmn/pipeline.js <input.json | -> [output-basename] [flags]
 
 | Flag | Effect |
 |------|--------|
-| `--strict` | every warning is fatal: rule engine, diagram integrity (DI), Petri-net translation (NC), XML serialisation. Exit 1, no files written. **Use it before every delivery.** |
+| `--strict` | every warning is fatal: rule engine, diagram integrity (DI), Petri-net translation (NC), XML serialisation. Exit 1, no files written. **Use it before every delivery.** A DI05 that hint `H15` names (format 2.x: no order of the participants avoids the crossing) is printed but not counted. |
 | `--optimize` | `optimize` mode: adds the opt-in optimisation advisories (O01–O04). Also `--mode=optimize` / `--mode=soll` |
 | `--doc` | also writes `<output>.md`, a prose documentation of the process |
 | `--decisions <a.json,b.dmn>` | Decision-Core JSON or `.dmn` files (routed by content); every `businessRuleTask` with a `decisionRef` gets its decision table in its documentation, as a marked section replaced on every run (`references/dmn.md`). Also `--decisions=<files>` |
