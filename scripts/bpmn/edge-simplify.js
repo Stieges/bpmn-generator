@@ -1284,7 +1284,28 @@ export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), 
     }
   };
 
+  // tryEnd is a function of the end, the vertex and the routes of the gateway's own flows (every other
+  // route stays put while one gateway is worked on), and the plans below try the same moves from the
+  // same routes again and again: per gateway, its answer is kept under exactly those inputs and
+  // replayed — the same route array, so the plans see what a fresh call would build.
+  let tipMemo = null, tipInvolved = [];
+  const routeIds = new WeakMap();
+  let nextRouteId = 0;
+  const routeId = (pts) => { if (!routeIds.has(pts)) routeIds.set(pts, ++nextRouteId); return routeIds.get(pts); };
   const tryEnd = (end, side, box) => {
+    if (!tipMemo) return tryEndNow(end, side, box);
+    const key = `${end.entry.id}|${end.role}|${side}|${tipInvolved.map(en => routeId(en.points)).join(',')}`;
+    const hit = tipMemo.get(key);
+    if (hit) {
+      if (hit.pts) { end.entry.points = hit.pts; changed.set(end.entry.id, hit.pts); }
+      return hit.ok;
+    }
+    const before = end.entry.points;
+    const ok = tryEndNow(end, side, box);
+    tipMemo.set(key, { ok, pts: end.entry.points !== before ? end.entry.points : null });
+    return ok;
+  };
+  const tryEndNow = (end, side, box) => {
     const { entry } = end;
     const path = pathOf(end);
     if (isOnGatewayTip(path[0], box, side) && leavingSide(path) === side) return true;
@@ -1329,6 +1350,8 @@ export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), 
   };
 
   for (const [gw, ends] of byGateway) {
+    tipMemo = new Map();
+    tipInvolved = [...new Set(ends.map(e => e.entry))];
     const box = coords[gw];
     const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
     const centre = (id) => { const b = coords[id]; return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : { x: cx, y: cy }; };
