@@ -7475,7 +7475,7 @@ describe('boundary event flows', () => {
         }
       }
     }
-  }, 30000);
+  }, 120000); // the four boundary fixtures × two modes (8 pipelines, example-rechnungspruefung the slowest), ~7 s under the full parallel run; CI runners are several times slower (#78)
 
   test('a boundary flow starts at the event, including inside a subprocess', async () => {
     // The nested case is the one that regressed: §5.0- and §5.2 used to walk
@@ -7498,7 +7498,7 @@ describe('boundary event flows', () => {
         }
       }
     }
-  }, 30000);
+  }, 120000); // the four boundary fixtures × two modes (8 pipelines, example-rechnungspruefung the slowest), ~7 s under the full parallel run; CI runners are several times slower (#78)
 
   test('routing the flow away from its host clears realistic-collaboration (visualRefinement: false)', async () => {
     const lc = loadFixture('realistic-collaboration.json');
@@ -7531,7 +7531,7 @@ describe('boundary event flows', () => {
           .toBe(`${name} vr=${visualRefinement}: 0`);
       }
     }
-  }, 30000);
+  }, 120000); // the four boundary fixtures × three modes (12 pipelines, example-rechnungspruefung the slowest), ~11 s under the full parallel run; CI runners are several times slower (#78)
 });
 
 describe('lane compaction keeps sequence flows off lane lines', () => {
