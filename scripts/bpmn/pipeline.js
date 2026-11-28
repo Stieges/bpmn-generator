@@ -198,6 +198,7 @@ function errorFindings(errors, code = null) {
  * @param {boolean} [opts.alignParticipantPorts] - a message flow to or from a participant (black-box or expanded pool as endpoint) docks level with its other end, not at the middle of the band (routeMessageFlows); default config.json -> layout.alignParticipantPorts (false); a view can set it (views/aligned-ports-view.json)
  * @param {boolean} [opts.messageFlowLabelRepair] - message-flow labels off routes, shapes, labels, headers and lane separators (repairMessageFlowLabels); default config.json -> layout.messageFlowLabelRepair (true)
  * @param {boolean} [opts.nodeLabelsAvoidFlows] - event and gateway labels off their flows (placeNodeLabelsAvoidingFlows); default config.json -> layout.nodeLabelsAvoidFlows (true)
+ * @param {boolean} [opts.gatewayTips] - every sequence flow of a gateway docks on a vertex of the diamond (snapGatewayTips); default config.json -> layout.gatewayTips (true)
  * @param {boolean} [opts.foreignShapeRepair] - the stuck-end pass also re-routes a sequence flow through a foreign shape (reclipStuckEnds' foreignShapes, #91); default config.json -> layout.foreignShapeRepair (true)
  * @param {boolean|'off'|'auto'|'always'} [opts.elkWrapping] - ELK row wrapping for long chains (default config.json -> layout.elkWrapping, 'off'); independent of visualRefinement. If ELK fails with wrapping on, the layout is retried without it and `validation.infos` says so
  * @param {string} [opts.mode='document'] - 'document' (IST, faithful) or 'optimize'/'soll' (enables the Optimization Advisory layer)
@@ -489,8 +490,9 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // diamond, one flow per vertex — ELK spreads two flows of one side over that side and §5.1 clips
   // them onto the facet. After the bend rule, the last pass that moves a route, so it judges the
   // routes as they will be drawn and nothing moves an end off its vertex again; before edge-label
-  // repair, which then sees the final routes. On by default (config.json -> layout.gatewayTips).
-  if (CFG.layout?.gatewayTips !== false) {
+  // repair, which then sees the final routes. On by default (config.json -> layout.gatewayTips); per
+  // call `gatewayTips` (runPipeline only).
+  if (opts.gatewayTips ?? (CFG.layout?.gatewayTips !== false)) {
     const { shapeOf } = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
     const beforeTips = coordMap.edgeCoords;
     coordMap.edgeCoords = snapGatewayTips(beforeTips, coordMap.coords, allEdges, skipSimplify, { shapeOf });
