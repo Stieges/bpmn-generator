@@ -126,8 +126,8 @@
         <di:waypoint x="266" y="100" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flow_pruefen_gw_di" bpmnElement="flow_pruefen_gw">
-        <di:waypoint x="366" y="100" />
-        <di:waypoint x="446.5" y="100" />
+        <di:waypoint x="366" y="99.5" />
+        <di:waypoint x="446" y="99.5" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flow_gw_rueck_di" bpmnElement="flow_gw_rueck">
         <di:waypoint x="496" y="99.5" />
