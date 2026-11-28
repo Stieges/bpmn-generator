@@ -496,7 +496,7 @@ function analyticShapes(s, out, t, inn, limits) {
   return res;
 }
 
-function makeChecker(entry, entries, ctx, cfg) {
+function makeChecker(entry, entries, ctx, cfg, footprint = null) {
   const { limits, guards } = cfg;
   const curPts = entry.points;
   const sb = ctx.coords[entry.source], tb = ctx.coords[entry.target];
@@ -528,6 +528,7 @@ function makeChecker(entry, entries, ctx, cfg) {
   };
   // Cheap geometric tests first, the ones comparing against every other route last.
   const check = (pts, outDir, inDir) => {
+    if (footprint) addToFootprint(footprint, pts);
     if (!isOrthogonal(pts)) return false;
     const S = segsOf(pts);
     if (!S.length) return false;
@@ -556,11 +557,11 @@ function makeChecker(entry, entries, ctx, cfg) {
  * 0/1/2-bend shapes first, the orthogonal router only when none of them qualifies. `targetSide`
  * restricts the target port to one entry side. Returns { minBends, cands: [{ pts, moved }] } or null.
  */
-function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = null } = {}) {
+function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = null, footprint = null, routeCache = null } = {}) {
   const cur = entry.points;
   const curSegs = segsOf(cur);
   if (!curSegs.length) return null;
-  const { check, obstacles, sb, tb } = makeChecker(entry, entries, ctx, cfg);
+  const { check, obstacles, sb, tb } = makeChecker(entry, entries, ctx, cfg, footprint);
   const mfGuard = cfg.guards.messageFlowPorts;
   const centre = (b) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
   const margin = cfg.limits.portCornerMarginPx;
@@ -590,8 +591,16 @@ function search(entry, entries, ctx, cfg, { maxBends = Infinity, targetSide = nu
   for (const s of sPorts) for (const t of tPorts) {
     const s1 = { x: s.p.x + s.dir[0] * cfg.stubPx, y: s.p.y + s.dir[1] * cfg.stubPx };
     const e1 = { x: t.p.x - t.dir[0] * cfg.stubPx, y: t.p.y - t.dir[1] * cfg.stubPx };
-    const mid = routeAroundObstacles(s1, dirName(s.dir), e1, dirName(t.dir), [...obstacles, sb, tb],
-      { maxGridPoints: cfg.routerMaxGridPoints });
+    // The router sees node boxes only, never another route: its answer for one flow and one pair of
+    // ports holds for as long as the boxes do (routeCache, kept with the memo of applyBendRule).
+    const key = routeCache && JSON.stringify([entry.source, entry.target, s1, dirName(s.dir), e1, dirName(t.dir)]);
+    let mid;
+    if (routeCache?.has(key)) mid = routeCache.get(key)?.map((q) => ({ ...q })) ?? null;
+    else {
+      mid = routeAroundObstacles(s1, dirName(s.dir), e1, dirName(t.dir), [...obstacles, sb, tb],
+        { maxGridPoints: cfg.routerMaxGridPoints });
+      routeCache?.set(key, mid && mid.map((q) => ({ ...q })));
+    }
     if (!mid) continue;
     const pts = withoutCollinear([s.p, ...mid, t.p]);
     const b = bendCount(pts);
@@ -639,20 +648,30 @@ function lexCompare(x, y) {
  * @param {Set<string>} [opts.skipIds] edge ids never touched and never counted (associations)
  * @param {object} [opts.limits] overrides of bendRuleLimits()
  * @param {object} [opts.guards] guards to switch off — tests only
+ * @param {object|false} [opts.memo] an object kept across calls on the same layout (start with `{}`):
+ *   searches that cannot have a different answer since the last call are skipped (see below);
+ *   `false` runs every search — the reference the skip is tested against
  */
 export function applyBendRule(coordMap, lc, opts = {}) {
   const cfg = resolveConfig(opts);
   const ctx = buildContext(coordMap, lc);
   const entries = entriesOf(coordMap, opts.edges ?? sequenceFlowsOf(lc), opts.skipIds ?? new Set());
+  // opts.memo false: every search runs (tests compare against it); anything else skips, see below.
+  const skip = opts.memo !== false;
+  const memo = openMemo(opts.memo || {}, coordMap, lc, opts, entries);
+  const reach = Math.max(cfg.limits.crowdingPx, cfg.limits.collinearPx) + 1;
   const changed = new Map();
   let progress = true;
   while (progress) {
     progress = false;
     for (const en of entries) {
       if (!inScope(en, ctx.coords)) continue;
+      if (skip && unaffected(memo, en, reach)) continue;
+      const footprint = footprintOf(en.points);
       const curBends = bendCount(en.points), curPenalty = sidePenalty(en.points, en, ctx);
-      const r = search(en, entries, ctx, cfg, { maxBends: curBends });
-      if (!r) continue;
+      const r = search(en, entries, ctx, cfg, { maxBends: curBends, footprint, routeCache: skip ? memo.routes : null });
+      const keep = () => memo.evals.set(en.id, { sig: sigOf(en.points), fp: footprint, logLen: memo.log.length });
+      if (!r) { keep(); continue; }
       const scored = r.cands.map((c) => {
         const S = segsOf(c.pts), a = c.pts[0], z = c.pts[c.pts.length - 1];
         let offCentre = 0;
@@ -665,16 +684,102 @@ export function applyBendRule(coordMap, lc, opts = {}) {
       scored.sort((x, y) => lexCompare(x.score, y.score));
       const best = scored[0];
       if (r.minBends < curBends || (r.minBends === curBends && best.score[0] < curPenalty)) {
+        logChange(memo, en, en.points, best.pts);
+        memo.evals.delete(en.id);
         en.points = best.pts;
         changed.set(en.id, best.pts);
         progress = true;
-      }
+      } else keep();
     }
   }
+  closeMemo(memo, entries);
   if (!changed.size) return coordMap.edgeCoords;
   const out = { ...coordMap.edgeCoords };
   for (const [id, p] of changed) out[id] = p;
   return out;
+}
+
+// ── Skipping a search whose answer cannot have changed ─────────────────────────────────────────
+//
+// A search for one flow reads the other flows in exactly these ways (makeChecker, the score):
+// segment intersections (crossings), parallel segments closer than collinearPx (collinearOverlap)
+// or crowdingPx (crowdPairs), and, at a node the two flows share, the other flow's end there — its
+// point and the side it runs through (sideConflicts, sharedPorts). Everything else it reads — node
+// boxes, lanes, node labels, the configuration — is fixed while the routes change. So when a
+// flow's search found nothing better, and since then only flows changed whose ends at a node it
+// shares stayed put and whose old and new segments all stay more than `reach` px clear of every
+// segment that search looked at (its footprint: the current route and every candidate checked),
+// the search would run on the same inputs and find nothing better again: it is skipped. That holds
+// from one sweep to the next and, through `opts.memo`, from one call to the next on the same layout
+// (the pipeline's rerun after snapGatewayTips, which moves a few gateway flows). The routes come out
+// the same as without the skip; only searches that cannot change them are left out.
+
+const sigOf = (pts) => JSON.stringify(pts);
+function footprintOf(pts) {
+  const fp = { box: { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }, segs: [] };
+  addToFootprint(fp, pts);
+  return fp;
+}
+function addToFootprint(fp, pts) {
+  const b = fp.box;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    if (p.x < b.x0) b.x0 = p.x;
+    if (p.x > b.x1) b.x1 = p.x;
+    if (p.y < b.y0) b.y0 = p.y;
+    if (p.y > b.y1) b.y1 = p.y;
+    if (i) {
+      const q = pts[i - 1];
+      fp.segs.push({ x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y) });
+    }
+  }
+}
+const boxesMeet = (a, b, d) => a.x0 - d <= b.x1 && b.x0 - d <= a.x1 && a.y0 - d <= b.y1 && b.y0 - d <= a.y1;
+const samePt = (p, q) => p.x === q.x && p.y === q.y;
+
+/** The memo for this call: emptied when the layout it was filled on differs (boxes, lanes, node
+ *  labels, options, the set of flows); every route that differs from what the last call left is
+ *  logged as a change. */
+function openMemo(memo, coordMap, lc, opts, entries) {
+  const key = JSON.stringify([coordMap.coords, coordMap.laneCoords ?? null, coordMap.poolCoords ?? null,
+    coordMap.nodeLabels ?? null, opts.limits ?? null, opts.guards ?? null, entries.map((e) => e.id),
+    CFG.layout?.orthogonalRouterEnabled ?? null, CFG.layout?.orthogonalRouterMaxGridPoints ?? null, CFG.layout?.endStubPx ?? null]);
+  if (memo.key !== key || memo.lc !== lc) {
+    memo.key = key; memo.lc = lc;
+    memo.evals = new Map(); memo.log = []; memo.seen = new Map(); memo.routes = new Map();
+  }
+  for (const en of entries) {
+    const prev = memo.seen.get(en.id);
+    if (prev && prev.sig !== sigOf(en.points)) logChange(memo, en, prev.pts, en.points);
+  }
+  return memo;
+}
+function closeMemo(memo, entries) {
+  memo.seen = new Map(entries.map((en) => [en.id, { pts: en.points, sig: sigOf(en.points) }]));
+}
+function logChange(memo, en, before, after) {
+  const fp = footprintOf(before);
+  addToFootprint(fp, after);
+  memo.log.push({
+    id: en.id, source: en.source, target: en.target, fp,
+    startMoved: !samePt(before[0], after[0]) || exitSide(before) !== exitSide(after),
+    endMoved: !samePt(before[before.length - 1], after[after.length - 1]) || entrySide(before) !== entrySide(after),
+  });
+}
+function unaffected(memo, en, reach) {
+  const rec = memo.evals.get(en.id);
+  if (!rec || rec.sig !== sigOf(en.points)) return false;
+  const at = (node) => node === en.source || node === en.target;
+  for (let i = rec.logLen; i < memo.log.length; i++) {
+    const c = memo.log[i];
+    if (c.id === en.id || (at(c.source) && c.startMoved) || (at(c.target) && c.endMoved)) return false;
+    if (!boxesMeet(c.fp.box, rec.fp.box, reach)) continue;
+    for (const s of c.fp.segs) {
+      if (!boxesMeet(s, rec.fp.box, reach)) continue;
+      for (const q of rec.fp.segs) if (boxesMeet(s, q, reach)) return false;
+    }
+  }
+  return true;
 }
 
 /**

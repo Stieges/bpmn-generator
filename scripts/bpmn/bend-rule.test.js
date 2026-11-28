@@ -462,3 +462,48 @@ describe('labels of re-routed flows (urlaubsantrag, "Resturlaub ausreichend?")',
     expect(labelHitsRoute(edgeLabelBox(r.coordMap.edgeLabels.f210), f209)).toBe(false);
   }, 30000);
 });
+
+describe('the memo skips only searches whose answer cannot change', () => {
+  // The pipeline runs the rule, moves a few gateway flows (snapGatewayTips) and runs it again with
+  // the same memo. Reproduced here on every fixture: the rule on the routes with layout.gatewayTips
+  // off fills the memo, then the rule on the routes with it on — same boxes, a few flows moved —
+  // must give exactly what the rule gives with every search run (memo: false).
+  for (const name of FIXTURES) {
+    test(`${name}: memo, no memo and a fresh memo agree`, async () => {
+      const lc = normalizeEdgeIds(load(name));
+      const off = await runPipeline(structuredClone(lc), { gatewayTips: false });
+      if (!off.coordMap) return; // blocked on purpose
+      const on = await runPipeline(structuredClone(lc), {});
+      const edges = sequenceFlowsOf(lc);
+      const skipIds = new Set((lc.associations || []).map((a) => a.id));
+      const memo = {};
+      const first = applyBendRule({ ...off.coordMap }, lc, { edges, skipIds, memo });
+      expect(JSON.stringify(first)).toBe(JSON.stringify(applyBendRule({ ...off.coordMap }, lc, { edges, skipIds, memo: false })));
+      const moved = { ...off.coordMap, edgeCoords: on.coordMap.edgeCoords };
+      const reference = JSON.stringify(applyBendRule({ ...moved }, lc, { edges, skipIds, memo: false }));
+      expect(JSON.stringify(applyBendRule({ ...moved }, lc, { edges, skipIds, memo }))).toBe(reference);
+      expect(JSON.stringify(applyBendRule({ ...moved }, lc, { edges, skipIds }))).toBe(reference);
+    }, 30_000);
+  }
+});
+
+describe('the memo: a flow that moves away frees another flow\'s straight route', () => {
+  // x runs a → b under c (out of a's bottom, into b's bottom: two bends), because y (c → d, d a
+  // tall box above) crosses its straight line. Then y is re-routed round the right of b, away from
+  // every node x touches: the rule, run again with the memo of the first run, must search x again
+  // and straighten it — y lay on x's straight candidate.
+  const lc = { id: 'P', nodes: ['a', 'b', 'c', 'd'].map((id) => ({ id, type: 'task' })),
+    edges: [{ id: 'x', source: 'a', target: 'b' }, { id: 'y', source: 'c', target: 'd' }] };
+  const coords = { a: { x: 0, y: 0, w: 100, h: 80 }, b: { x: 400, y: 0, w: 100, h: 80 },
+    c: { x: 200, y: 150, w: 100, h: 80 }, d: { x: 200, y: -600, w: 100, h: 580 } };
+  const under = [P(50, 80), P(50, 260), P(450, 260), P(450, 80)];
+  test('first run keeps x, the run after y moved straightens it, as without the memo', () => {
+    const memo = {};
+    const first = applyBendRule({ coords, edgeCoords: { x: under, y: [P(250, 150), P(250, -20)] } }, lc, { memo });
+    expect(first.x).toBe(under);
+    const moved = { coords, edgeCoords: { x: under, y: [P(300, 190), P(550, 190), P(550, -310), P(300, -310)] } };
+    const want = applyBendRule({ ...moved }, lc, { memo: false });
+    expect(bendCount(want.x)).toBe(0);
+    expect(applyBendRule({ ...moved }, lc, { memo })).toEqual(want);
+  });
+});
