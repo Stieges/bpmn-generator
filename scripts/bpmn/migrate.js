@@ -9,11 +9,19 @@
  * to its lane's actor (or its role's); events, gateways, boundary events and subprocess children get
  * none, and a role on them is dropped (MG05). `lanes`, `lane` and `role` are stripped. Each distinct
  * `system` text on a task becomes a system `sys_<slug>` of the catalogue (MG08) and the task names
- * it by id; the model is then format "2.1", else "2.0". A `system` off a task, data nodes and the
- * flows and associations touching them are fields 2.x cannot hold yet (MG02): refused by default,
- * dropped and listed with `dropUnsupported`. Everything else is kept as given. With a catalogue, a
- * lane or role named exactly like one of its actors is that actor, and a system text named exactly
- * like one of its systems is that system (MG07, see `migrateModel`).
+ * it by id. Each data node (`dataObjectReference`, `dataStoreReference`, any depth) becomes a data
+ * item of the catalogue (MG09; nodes of the same name, kind and collection marker become one item),
+ * and each association between a data node and an activity becomes an entry of the activity's
+ * `dataAccess` (directed towards the activity: `read`, away from it: `write`, undirected: access not
+ * recorded); a data node linked to no activity keeps its item (MG10). The model is format "2.1" when
+ * it carries a 2.1 field (a system id, a `dataAccess`, or with a catalogue new `systems` or `data`),
+ * else "2.0". A `system` off a task, a data node field other than `id`, `type`, `name`,
+ * `isCollection`, `lane` and `role`, a sequence or message flow touching a data node and an
+ * association linking one to anything but an activity are fields 2.x cannot hold (MG02): refused by
+ * default, dropped and listed with `dropUnsupported`. Everything else is kept as given. With a
+ * catalogue, a lane or role named exactly like one of its actors is that actor, a system text named
+ * exactly like one of its systems is that system, and a data node named exactly like one of its data
+ * items of a fitting kind is that item (MG07, see `migrateModel`).
  *
  * The report then compares the lanes (plan "Check"): the result goes through `resolveFields` and
  * `formLanes` under the view `rollen`, and every top-level flow node of a process with lanes (no
@@ -46,19 +54,26 @@ const ACTOR_ID = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const PROCESS_ID = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const ACTOR_ID_MAX = 64;
 const DATA_NODE_TYPES = new Set(['dataObjectReference', 'dataStoreReference']);
+/** The fields of a 1.x data node that format 2.x carries or drops by rule; any other one is MG02. */
+const DATA_NODE_FIELDS = new Set(['id', 'type', 'name', 'isCollection', 'lane', 'role']);
+const ACTIVITIES_ONLY = 'format 2.x records data access on activities only';
 
-/** The format version of a translation that names systems (a 1.x `system` on a task); without them FORMAT_V2_VERSION. */
-const SYSTEMS_VERSION = '2.1';
+/**
+ * The format version of a translation that carries a field of format 2.1 (a task's system id, a
+ * `dataAccess`, or beside a given catalogue new `systems` or `data`); without one FORMAT_V2_VERSION.
+ */
+const FIELDS_2_1_VERSION = '2.1';
 
 /** The code of every refusal of the input. */
 const REFUSED_CODE = 'MG01';
 
 /**
  * The order of the report's entry groups; within a group, document order. MG04 (the lane
- * comparison), MG07 (a lane, role or system matched to an existing catalogue entry) and MG08 (a new
- * system) have their place already.
+ * comparison), MG07 (a lane, role, system or data node matched to an existing catalogue entry), MG08
+ * (a new system), MG09 (a new data item) and MG10 (a data node linked to no activity) have their
+ * place already.
  */
-const ENTRY_ORDER = ['MG01', 'MG02', 'MG06', 'MG07', 'MG08', 'H07', 'MG03', 'MG05', 'MG04'];
+const ENTRY_ORDER = ['MG01', 'MG02', 'MG06', 'MG07', 'MG08', 'MG09', 'MG10', 'H07', 'MG03', 'MG05', 'MG04'];
 
 const entry = (code, text, elements) => ({ code, message: coded(code, text), elements });
 
@@ -136,10 +151,13 @@ function uniqueId(base, taken) {
   return id;
 }
 
-/** The slug of a lane id that is no actor id: runs outside `[A-Za-z0-9_-]` become `_`, a leading non-letter gets `L_` in front. */
-function laneSlug(id) {
+/**
+ * The slug of a lane id (prefix `L`) or data node id (prefix `D`) that is no actor id: runs outside
+ * `[A-Za-z0-9_-]` become `_`, a leading non-letter gets `<prefix>_` in front.
+ */
+function idSlug(id, prefix = 'L') {
   const slug = String(id).replace(/[^A-Za-z0-9_-]+/g, '_');
-  return /^[A-Za-z]/.test(slug) ? slug : `L_${slug}`;
+  return /^[A-Za-z]/.test(slug) ? slug : `${prefix}_${slug}`;
 }
 
 /** The `Resource_` slug rule of bpmn-xml.js `buildResources`, under `prefix` (`role`, `sys`); an empty slug gives the prefix alone. */
@@ -184,21 +202,31 @@ function schemeOf(catalog) {
 }
 
 /**
- * The MG02 entries of the input, in document order: per process its nodes depth-first (`system`
- * off a task, a data node), then the flows and associations touching a data node.
+ * Scans the fields of the input. Returns its MG02 entries, in document order: per process its nodes depth-first (`system`
+ * off a task, a field of a data node that format 2.x has no place for), then the sequence and
+ * message flows touching a data node, then the associations linking a data node to anything but an
+ * activity. Also returns the data nodes (document order, any depth; objects of `lc`) and the links
+ * the translation carries: every association between a data node and an activity, in association
+ * order, as `{ id, node, step, access }` (`access` 'read', 'write' or undefined).
  */
-function unsupportedFields(processes, lc, dropUnsupported) {
+function scanFields(processes, lc, dropUnsupported) {
   const entries = [];
   const dataIds = new Set();
+  const dataNodes = [];
+  const typeOf = new Map(); // node id at any depth → its type
   const tail = dropUnsupported ? '; dropped.' : '.';
   const visit = (nodes) => {
     for (const node of nodes || []) {
+      typeOf.set(node.id, node.type);
       if (node.system !== undefined && !carriesSystem(node)) {
         entries.push(entry('MG02', `node "${q(node.id)}": field "system" ("${q(node.system)}") on ${q(node.type)} has no place in format 2.x: a system belongs on a task${tail}`, [node.id]));
       }
       if (DATA_NODE_TYPES.has(node.type)) {
         dataIds.add(node.id);
-        entries.push(entry('MG02', `node "${q(node.id)}": ${node.type} has no place in format 2.0 yet${tail}`, [node.id]));
+        dataNodes.push(node);
+        for (const field of Object.keys(node)) {
+          if (!DATA_NODE_FIELDS.has(field)) entries.push(entry('MG02', `node "${q(node.id)}": field "${q(field)}" of a data node has no place in format 2.x${tail}`, [node.id]));
+        }
       }
       visit(node.nodes);
     }
@@ -207,7 +235,7 @@ function unsupportedFields(processes, lc, dropUnsupported) {
   const touching = (kind, list) => {
     for (const c of list || []) {
       const node = dataIds.has(c.source) ? c.source : dataIds.has(c.target) ? c.target : null;
-      if (node !== null) entries.push(entry('MG02', `${kind} "${q(c.id ?? `${c.source}->${c.target}`)}" touches the data node "${q(node)}", which has no place in format 2.0 yet${tail}`, [c.id ?? null].filter(Boolean)));
+      if (node !== null) entries.push(entry('MG02', `${kind} "${q(c.id ?? `${c.source}->${c.target}`)}" touches the data node "${q(node)}"; ${ACTIVITIES_ONLY}${tail}`, [c.id ?? null].filter(Boolean)));
     }
   };
   const edgesIn = (nodes, out = []) => {
@@ -216,13 +244,26 @@ function unsupportedFields(processes, lc, dropUnsupported) {
   };
   for (const proc of processes) touching('sequence flow', [...(proc.edges || []), ...edgesIn(proc.nodes)]);
   touching('message flow', lc.messageFlows);
-  touching('association', lc.associations);
-  return { entries, dataIds };
+  const pools = new Set([...processes, ...(lc.collapsedPools || [])].map((p) => p.id));
+  const links = [];
+  for (const a of lc.associations || []) {
+    const fromData = dataIds.has(a.source);
+    if (!fromData && !dataIds.has(a.target)) continue;
+    const [node, other] = fromData ? [a.source, a.target] : [a.target, a.source];
+    const type = typeOf.get(other) ?? (pools.has(other) ? 'pool' : 'element');
+    if (isActivity(type)) {
+      links.push({ id: a.id, node, step: other, access: a.directed === true ? (fromData ? 'read' : 'write') : undefined });
+    } else {
+      entries.push(entry('MG02', `association "${q(a.id)}" links the data node "${q(node)}" to ${q(type)} "${q(other)}"; ${ACTIVITIES_ONLY}${tail}`, [a.id]));
+    }
+  }
+  return { entries, dataIds, dataNodes, links };
 }
 
 /**
- * Strips the 1.x-only fields in place at every depth; drops data nodes and every connection touching
- * one. A task's `system` text becomes its system id (`systemId`: text → id); any other `system` goes.
+ * Strips the 1.x-only fields in place at every depth; drops the data nodes (their items and links
+ * are carried already) and every connection touching one. A task's `system` text becomes its system
+ * id (`systemId`: text → id); any other `system` goes.
  */
 function strip(processes, m, dataIds, systemId) {
   const touches = (c) => dataIds.has(c.source) || dataIds.has(c.target);
@@ -244,6 +285,145 @@ function strip(processes, m, dataIds, systemId) {
   }
   if (Array.isArray(m.messageFlows)) m.messageFlows = m.messageFlows.filter((f) => !touches(f));
   if (Array.isArray(m.associations)) m.associations = m.associations.filter((a) => !touches(a));
+}
+
+/** `"a", "b"` for a list of ids. */
+const idList = (ids) => ids.map((id) => `"${q(id)}"`).join(', ');
+
+/**
+ * The data items of the data nodes (step 5c). Nodes of the same name, kind (`dataObjectReference`:
+ * `object`, `dataStoreReference`: `store`) and collection marker are one item, in document order; a
+ * node without name counts as named by its id, and a store's collection marker is dropped. With a
+ * catalogue, the first of its data items with that exact name whose `kind` is the node's or absent
+ * is the item of the group (MG07, written by `carryDataAccess`). Every other group becomes a new
+ * item `{ id, name, kind, isCollection? }`: its id is the id of its first node when that is an actor
+ * id not taken (first come, before any id is minted), else `uniqueId` of the node id's `idSlug`
+ * with the prefix `D` (MG06). `taken` holds the ids of the given catalogue and the new actors and
+ * systems, and gains the new data ids.
+ * @returns {{ groups: object[], items: object[], dataIdOf: Map<string, string> }}
+ */
+function collectData(dataNodes, givenData, taken, withCatalog, entries) {
+  const groups = new Map();
+  for (const node of dataNodes) {
+    const name = node.name || node.id;
+    const kind = node.type === 'dataStoreReference' ? 'store' : 'object';
+    const isCollection = kind === 'object' && node.isCollection === true;
+    const key = JSON.stringify([name, kind, isCollection]);
+    if (!groups.has(key)) groups.set(key, { name, kind, isCollection, nodes: [], fitting: [], dataId: undefined, item: null });
+    groups.get(key).nodes.push(node);
+  }
+  const list = [...groups.values()];
+  for (const g of list) {
+    if (withCatalog) g.fitting = givenData.filter((d) => d.name === g.name && (d.kind === undefined || d.kind === g.kind));
+    if (g.fitting.length) g.dataId = g.fitting[0].id;
+  }
+  const keeps = new Set();
+  for (const g of list) {
+    const { id } = g.nodes[0];
+    if (g.dataId === undefined && ACTOR_ID.test(id) && !taken.has(id)) { taken.add(id); keeps.add(g); }
+  }
+  const items = [];
+  for (const g of list) {
+    if (g.dataId !== undefined) continue;
+    const { id } = g.nodes[0];
+    if (keeps.has(g)) {
+      g.dataId = id;
+    } else {
+      const valid = ACTOR_ID.test(id);
+      g.dataId = uniqueId(valid ? id : idSlug(id, 'D'), taken);
+      entries.push(entry('MG06', `data node id "${q(id)}" ${valid ? 'collides with another catalogue id' : 'is no catalogue id'}; the data item is "${g.dataId}".`, [id, g.dataId]));
+    }
+    g.item = { id: g.dataId, name: g.name, kind: g.kind, ...(g.isCollection ? { isCollection: true } : {}) };
+    items.push(g.item);
+  }
+  const dataIdOf = new Map();
+  for (const g of list) for (const n of g.nodes) dataIdOf.set(n.id, g.dataId);
+  return { groups: list, items, dataIdOf };
+}
+
+/**
+ * Carries the links into the steps' `dataAccess` (step 5c), in place: per activity its links in
+ * association order as `{ data, access? }`, where an identical entry is one access and an entry
+ * without access beside a recorded one of the same item is not carried (C16 would refuse the pair).
+ * Then the entries: MG09 per new item (naming its nodes; the merged and the not-carried links are
+ * said there), MG07 per node of a reused item (said on its first node's MG07 instead), MG10 per data
+ * node linked to no activity.
+ * @returns {boolean} whether any step carries data access
+ */
+function carryDataAccess(processes, unsupported, data, entries) {
+  const steps = new Map(); // activity id at any depth → its node in the translation
+  const walk = (nodes) => { for (const n of nodes || []) { if (isActivity(n.type)) steps.set(n.id, n); walk(n.nodes); } };
+  for (const proc of processes) walk(proc.nodes);
+  const perStep = new Map(); // step id → [{ data, access, ids }]
+  for (const link of unsupported.links) {
+    const d = data.dataIdOf.get(link.node);
+    if (!perStep.has(link.step)) perStep.set(link.step, []);
+    const list = perStep.get(link.step);
+    const same = list.find((e) => e.data === d && e.access === link.access);
+    if (same) same.ids.push(link.id);
+    else list.push({ data: d, access: link.access, ids: [link.id] });
+  }
+  const notes = new Map(); // data id → the sentences its MG09 (or first MG07) appends
+  const note = (d, text) => notes.set(d, [...(notes.get(d) ?? []), text]);
+  const accessed = new Set();
+  for (const [stepId, list] of perStep) {
+    const recorded = new Set(list.filter((e) => e.access !== undefined).map((e) => e.data));
+    const kept = [];
+    for (const e of list) {
+      if (e.access === undefined && recorded.has(e.data)) {
+        note(e.data, e.ids.length === 1
+          ? ` The association ${idList(e.ids)} has no direction and adds nothing to the recorded access of step "${q(stepId)}"; it is not carried.`
+          : ` The associations ${idList(e.ids)} have no direction and add nothing to the recorded access of step "${q(stepId)}"; they are not carried.`);
+        continue;
+      }
+      if (e.ids.length > 1) note(e.data, ` The associations ${idList(e.ids)} are one access of step "${q(stepId)}".`);
+      kept.push(e);
+      accessed.add(e.data);
+    }
+    steps.get(stepId).dataAccess = kept.map((e) => (e.access === undefined ? { data: e.data } : { data: e.data, access: e.access }));
+  }
+  const reuses = []; // [node, group, text without the notes]
+  for (const g of data.groups) {
+    const tail = (notes.get(g.dataId) ?? []).join('');
+    const ids = g.nodes.map((n) => n.id);
+    if (g.item) {
+      const head = g.nodes.length === 1
+        ? `Data node "${q(ids[0])}" became data item "${g.dataId}" of the catalogue.${g.nodes[0].name ? '' : ` It has no name; its id "${q(ids[0])}" is the name of the item.`}`
+        : `Data nodes ${idList(ids)} became data item "${g.dataId}" of the catalogue (same name and kind).${g.nodes.filter((n) => !n.name).map((n) => ` Data node "${q(n.id)}" has no name; its id is the name of the item.`).join('')}`;
+      entries.push(entry('MG09', `${head}${tail}`, [g.dataId, ...ids]));
+      continue;
+    }
+    const several = g.fitting.length > 1
+      ? ` The catalogue holds ${g.fitting.length} data items of that name and a fitting kind (${idList(g.fitting.map((d) => d.id))}); the first is taken.`
+      : '';
+    const itemIsCollection = g.fitting[0].isCollection === true;
+    const marker = g.kind !== 'object' || g.isCollection === itemIsCollection ? ''
+      : g.isCollection ? ' The catalogue item is not a collection; the node\'s collection marker is not carried.'
+        : ' The catalogue item is a collection; the node has no collection marker, and the item\'s marker applies.';
+    for (const n of g.nodes) {
+      const by = n.name ? `its name "${q(g.name)}"` : `its id "${q(n.id)}" (it has no name)`;
+      reuses.push([n, g, `Data node "${q(n.id)}" maps by ${by} to the existing data item "${q(g.dataId)}".${several}${marker}`]);
+    }
+  }
+  // MG07 in document order of the nodes; the notes of an item once, on its first node (groups of
+  // another collection marker can map to the same item)
+  const position = new Map(unsupported.dataNodes.map((n, i) => [n, i]));
+  const told = new Set();
+  for (const [n, g, text] of reuses.sort(([a], [b]) => position.get(a) - position.get(b))) {
+    const tail = told.has(g.dataId) ? '' : (notes.get(g.dataId) ?? []).join('');
+    told.add(g.dataId);
+    entries.push(entry('MG07', `${text}${tail}`, [n.id, g.dataId]));
+  }
+  const linked = new Set(unsupported.links.map((l) => l.node));
+  for (const node of unsupported.dataNodes) {
+    if (linked.has(node.id)) continue;
+    const d = data.dataIdOf.get(node.id);
+    const head = `Data node "${q(node.id)}" ("${q(node.name || node.id)}") is linked to no activity`;
+    entries.push(entry('MG10', accessed.has(d)
+      ? `${head}; its data item "${q(d)}" is drawn through the other data nodes of that item.`
+      : `${head}: data item "${q(d)}" stays in the catalogue and is not drawn.`, [node.id, d]));
+  }
+  return perStep.size > 0;
 }
 
 const isPlaceholderKey = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN;
@@ -305,14 +485,19 @@ function newLaneKeys(formed) {
 }
 
 /**
- * Translates a 1.x model into format 2.x. `catalog` (`{ actors, systems?, scheme? }`) gives the scheme
- * whose performs type the assignments use (absent: DEMI, `D`); the new actor and system ids avoid its
- * ids. `dropUnsupported` drops the fields 2.x cannot hold yet instead of refusing the model.
+ * Translates a 1.x model into format 2.x. `catalog` (`{ actors, systems?, data?, scheme? }`) gives the
+ * scheme whose performs type the assignments use (absent: DEMI, `D`); the new actor, system and data
+ * ids avoid its ids. `dropUnsupported` drops the fields 2.x cannot hold instead of refusing the model.
  *
  * Each distinct `system` text of a task (any depth, exact comparison, document order) becomes one
  * system `{ id: 'sys_<slug>', name: <text> }` (MG08), or, against a catalogue, the first of its
- * systems with that `name` (MG07 `[text, systemId]`); the task's `system` becomes the id. The model
- * is "2.1" when at least one system was created or reused, else "2.0".
+ * systems with that `name` (MG07 `[text, systemId]`); the task's `system` becomes the id.
+ *
+ * The data nodes become data items (MG09, see `collectData`), against a catalogue the first of its
+ * items with that exact name and a fitting kind (MG07 `[nodeId, dataId]`); their links to activities
+ * become the activities' `dataAccess` (see `carryDataAccess`), and a node linked to no activity gets
+ * MG10. The model is "2.1" when it carries a 2.1 field (a system id, a `dataAccess`, or beside a given
+ * catalogue new `systems` or `data`), else "2.0".
  *
  * Against a catalogue (decision 2), a lane whose name (`lane.name`, else its id) equals an actor's
  * `name` exactly is that actor (the first of that name in catalogue order, said in the MG07 text);
@@ -325,13 +510,14 @@ function newLaneKeys(formed) {
  *
  * Which catalogue the caller passes to `runPipeline(model, { catalog })` (and `resolveFields`):
  * - with `catalog` given: the given catalogue. The model carries the new actors itself (`actors`,
- *   the same as `supplement.actors`) and the new systems (`systems`, only when there are any);
- *   passing `result.catalog` as well gives an H09 per new entry.
- * - without `catalog`: `result.catalog` (equal to the supplement); the model carries no actors or systems.
+ *   the same as `supplement.actors`), the new systems and the new data items (`systems`, `data`,
+ *   only when there are any); passing `result.catalog` as well gives an H09 per new entry.
+ * - without `catalog`: `result.catalog` (equal to the supplement); the model carries no actors,
+ *   systems or data.
  * `catalog` of the result is the merged view for the author (given catalogue with the supplement
  * appended, or the supplement alone), not the generation input when a catalogue was given.
  *
- * @returns {{ model: object|null, supplement: { actors: object[], systems?: object[] }|null, catalog: object|null,
+ * @returns {{ model: object|null, supplement: { actors: object[], systems?: object[], data?: object[] }|null, catalog: object|null,
  *   report: { status: 'translated'|'refused', entries: { code, message, elements }[],
  *   summary: { processes, lanes, actors, activities, assigned, laneMatches,
  *     deviations: { MG03, MG04, MG05 } } } }} (summary: see `summaryOf`)
@@ -370,8 +556,8 @@ export function migrateModel(lc, options = {}) {
   const activities = processes.reduce((n, p) => n + (p.nodes || []).filter((node) => isActivity(node.type) && !isBoundaryEvent(node)).length, 0);
   const counted = { processes: processes.length, lanes: allLanes.reduce((n, l) => n + l.length, 0), actors: 0, activities, assigned: 0 };
 
-  // (2) fields 2.0 cannot hold yet
-  const unsupported = unsupportedFields(processes, m, dropUnsupported);
+  // (2) fields 2.x cannot hold
+  const unsupported = scanFields(processes, m, dropUnsupported);
   if (unsupported.entries.length && !dropUnsupported) return refused(unsupported.entries, counted);
   const entries = [...unsupported.entries];
 
@@ -387,9 +573,12 @@ export function migrateModel(lc, options = {}) {
   // (4) one actor per lane. Lane ids that are actor ids keep their id (first come); every other lane is renamed.
   const given = Array.isArray(catalog?.actors) ? catalog.actors : [];
   const givenSystems = Array.isArray(catalog?.systems) ? catalog.systems : [];
-  // actors and systems share one id space (C03): a new id avoids both lists of the given catalogue
-  const taken = new Set([...given.map((a) => a.id), ...givenSystems.map((s) => s.id)]);
+  const givenData = Array.isArray(catalog?.data) ? catalog.data : [];
+  const withCatalog = catalog !== null && catalog !== undefined;
+  // actors, systems and data share one id space (C03): a new id avoids every list of the given catalogue
+  const taken = new Set([...given.map((a) => a.id), ...givenSystems.map((s) => s.id), ...givenData.map((d) => d.id)]);
   const systemIds = new Set(givenSystems.map((s) => s.id));
+  const dataIdsGiven = new Set(givenData.map((d) => d.id));
   const roleKind = new Set(given.filter((a) => a.kind === 'role').map((a) => a.id));
   /** exact name → the ids of that name, in catalogue order */
   const namesOf = (list) => {
@@ -432,8 +621,9 @@ export function migrateModel(lc, options = {}) {
       let id = lane.id;
       if (!keeps.has(lane)) {
         const valid = ACTOR_ID.test(lane.id);
-        id = uniqueId(valid ? lane.id : laneSlug(lane.id), taken);
-        const why = !valid ? 'is no actor id' : systemIds.has(lane.id) ? 'collides with a system id of the catalogue' : 'collides with another actor id';
+        id = uniqueId(valid ? lane.id : idSlug(lane.id), taken);
+        const why = !valid ? 'is no actor id' : systemIds.has(lane.id) ? 'collides with a system id of the catalogue'
+          : dataIdsGiven.has(lane.id) ? 'collides with a data id of the catalogue' : 'collides with another actor id';
         entries.push(entry('MG06', `lane id "${q(lane.id)}" ${why}; the actor is "${id}".`, [lane.id, id]));
       }
       if (!laneActor[p].has(lane.id)) laneActor[p].set(lane.id, id);
@@ -520,11 +710,14 @@ export function migrateModel(lc, options = {}) {
   };
   for (const proc of processes) collectSystems(proc.nodes);
 
+  // (5c) the data nodes and their links, after the systems, so no actor or system id moves
+  const data = collectData(unsupported.dataNodes, givenData, taken, withCatalog, entries);
+  const carriesAccess = carryDataAccess(processes, unsupported, data, entries);
+
   // (6) assignments, in document order; a role on a node that gets no assignment is dropped (MG05)
   let assigned = 0;
   const droppedRoles = (nodes) => {
     for (const node of nodes || []) {
-      if (unsupported.dataIds.has(node.id)) continue; // dropped under MG02 already
       if (node.role !== undefined) {
         entries.push(entry('MG05', `role "${q(node.role)}" on ${q(node.type)} "${q(node.id)}" is dropped: migrate gives this node no assignment.`, [node.id]));
       }
@@ -582,13 +775,19 @@ export function migrateModel(lc, options = {}) {
   strip(processes, m, unsupported.dataIds, systemId);
   delete m.$schemaVersion;
   const newSystems = () => (systems.length ? { systems: clone(systems) } : {});
-  const supplement = { actors, ...(systems.length ? { systems } : {}) };
-  const withCatalog = catalog !== null && catalog !== undefined;
-  const version = systemId.size ? SYSTEMS_VERSION : FORMAT_V2_VERSION;
-  const model = { $schemaVersion: version, ...m, ...(withCatalog ? { actors: clone(actors), ...newSystems() } : {}) };
+  const newData = () => (data.items.length ? { data: clone(data.items) } : {});
+  const supplement = { actors, ...(systems.length ? { systems } : {}), ...(data.items.length ? { data: data.items } : {}) };
+  const carries21 = systemId.size > 0 || carriesAccess || (withCatalog && (systems.length > 0 || data.items.length > 0));
+  const version = carries21 ? FIELDS_2_1_VERSION : FORMAT_V2_VERSION;
+  const model = { $schemaVersion: version, ...m, ...(withCatalog ? { actors: clone(actors), ...newSystems(), ...newData() } : {}) };
   const effective = withCatalog
-    ? { ...clone(catalog), actors: [...clone(catalog.actors), ...clone(actors)], ...(systems.length ? { systems: [...clone(givenSystems), ...clone(systems)] } : {}) }
-    : { actors: clone(actors), ...newSystems() };
+    ? {
+      ...clone(catalog),
+      actors: [...clone(catalog.actors), ...clone(actors)],
+      ...(systems.length ? { systems: [...clone(givenSystems), ...clone(systems)] } : {}),
+      ...(data.items.length ? { data: [...clone(givenData), ...clone(data.items)] } : {}),
+    }
+    : { actors: clone(actors), ...newSystems(), ...newData() };
 
   // (8) the result must pass the 2.x gate and the catalogue schema (a lane or system name over the catalogue's bounds, an empty process)
   const check = validateModelSchema(model, { accept: ['2'] });
@@ -598,6 +797,11 @@ export function migrateModel(lc, options = {}) {
 
   // (9) the lane comparison: the result's lanes under the view rollen against the original lanes
   const fields = resolveFields(model, { catalog: withCatalog ? catalog : supplement });
+  if (fields.errors.length && fields.errors.every((e) => e.startsWith('[C17] '))) {
+    // C17: an id derived for a data reference or its link meets an id of the document; the 1.x model has to rename one
+    const collisions = fields.errors.map((e) => e.replace(/^\[C17\] /, '').replace(/; rename (that id of the model|one of the steps or data items)$/, ''));
+    return refuse(`the translation's data references collide: ${collisions.join('; ')}; rename the step, the data node or the colliding id in the 1.x model`, [], counted);
+  }
   if (fields.errors.length) return refuse(`the translation fails the catalogue check: ${fields.errors.join('; ')}`, [], counted);
   const formed = formLanes(fields.lc, fields.resolved, { lanes: 'role' });
   if (formed.errors.length) {

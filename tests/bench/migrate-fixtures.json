@@ -3,22 +3,23 @@
   "excluded": {},
   "fixtures": {
     "all-element-classes.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 2,
       "laneMatches": 6,
       "codes": {
         "H07": 1,
-        "MG02": 3
+        "MG09": 2,
+        "MG10": 1
       }
     },
     "artifacts-laneless-pool.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 2,
       "laneMatches": 0,
       "codes": {
-        "MG02": 6
+        "MG09": 3
       }
     },
     "boundary-event-shapes.json": {
@@ -57,46 +58,46 @@
       }
     },
     "example-bestellung-versand.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 7,
       "laneMatches": 12,
       "codes": {
         "H07": 3,
-        "MG02": 2,
-        "MG04": 2
+        "MG04": 2,
+        "MG09": 1
       }
     },
     "example-kreditantrag.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 12,
       "laneMatches": 22,
       "codes": {
         "H07": 4,
-        "MG02": 2
+        "MG09": 1
       }
     },
     "example-onboarding.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 8,
       "laneMatches": 12,
       "codes": {
         "H07": 3,
-        "MG02": 2,
-        "MG04": 3
+        "MG04": 3,
+        "MG09": 1
       }
     },
     "example-rechnungspruefung.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 7,
       "laneMatches": 13,
       "codes": {
         "H07": 4,
-        "MG02": 2,
-        "MG04": 1
+        "MG04": 1,
+        "MG09": 1
       }
     },
     "example-schadenmeldung.json": {
@@ -110,14 +111,14 @@
       }
     },
     "example-urlaubsantrag.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 7,
       "laneMatches": 10,
       "codes": {
         "H07": 3,
-        "MG02": 2,
-        "MG04": 3
+        "MG04": 3,
+        "MG09": 1
       }
     },
     "expanded-subprocess.json": {
@@ -218,12 +219,13 @@
       }
     },
     "subprocess-child-fidelity.json": {
-      "status": "refused",
+      "status": "translated",
       "statusWithDrop": "translated",
       "activities": 1,
       "laneMatches": 0,
       "codes": {
-        "MG02": 2
+        "MG09": 2,
+        "MG10": 2
       }
     },
     "subprocess-collapsed-children.json": {

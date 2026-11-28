@@ -38,7 +38,7 @@ const UPDATE = process.env.UPDATE_MIGRATE_TABLE === '1';
 // Floor of the corpus, so it cannot shrink silently. Raise it when fixtures are added; never lower it.
 const MIN_CORPUS = 28;
 // The pinned summary line (i); it must agree with the pinned table.
-const SUMMARY = 'translated 20 of 28 (71.4 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0';
+const SUMMARY = 'translated 28 of 28 (100.0 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0';
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const processesOf = (model) => (Array.isArray(model.pools) ? model.pools : [model]);
@@ -168,7 +168,9 @@ describe('migrate over every 1.x fixture', () => {
     }
   });
 
-  test('(b) every refusal has only MG02 entries, and the flag translates it', () => {
+  test('(b) no fixture is refused; a refusal would have only MG02 entries, and the flag would translate it', () => {
+    const pinned = JSON.parse(readFileSync(TABLE, 'utf8'));
+    expect(Object.entries(pinned.fixtures).filter(([, f]) => f.status === 'refused').map(([file]) => file)).toEqual([]);
     for (const [file, { plain, drop }] of runs) {
       if (plain.report.status !== 'refused') continue;
       const codes = [...new Set(plain.report.entries.map((e) => e.code))];
@@ -367,13 +369,24 @@ describe('migrate over every 1.x fixture', () => {
     expect(checked).toBeGreaterThan(0);
   });
 
-  test('(k) every fixture whose original has no system gives "2.0" and a supplement without systems', () => {
+  test('(k) no system: the data fixtures with a link give "2.1", every other one "2.0"; the supplement has actors, plus data exactly when the original has data nodes', () => {
+    const LINKED_DATA = ['all-element-classes.json', 'artifacts-laneless-pool.json', 'example-bestellung-versand.json', 'example-kreditantrag.json',
+      'example-onboarding.json', 'example-rechnungspruefung.json', 'example-urlaubsantrag.json'];
+    const UNLINKED_DATA = ['subprocess-child-fidelity.json'];
+    let plain20 = 0;
     for (const [file, { input, plain, drop }] of runs) {
       if (JSON.stringify(input).includes('"system"')) continue;
+      const dataNodes = /"type":"data(Object|Store)Reference"/.test(JSON.stringify(input));
+      expect({ file, dataNodes }).toEqual({ file, dataNodes: LINKED_DATA.includes(file) || UNLINKED_DATA.includes(file) });
+      const version = LINKED_DATA.includes(file) ? '2.1' : '2.0';
+      if (version === '2.0' && !dataNodes) plain20++;
       for (const r of [plain, drop].filter((x) => x.model)) {
-        expect({ file, version: r.model.$schemaVersion, keys: Object.keys(r.supplement) }).toEqual({ file, version: '2.0', keys: ['actors'] });
+        expect({ file, version: r.model.$schemaVersion, keys: Object.keys(r.supplement) })
+          .toEqual({ file, version, keys: dataNodes ? ['actors', 'data'] : ['actors'] });
       }
     }
+    // 20 fixtures have no data node; nested-lanes-role-system.json has systems and is "2.1" for them ((j))
+    expect(plain20).toBe(19);
   });
 
   test('(i) the summary', () => {

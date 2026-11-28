@@ -180,29 +180,45 @@ describe('migrate CLI: the given catalogue is never overwritten', () => {
 });
 
 describe('migrate CLI: refusal', () => {
-  test('example-onboarding exits 2, writes only the report and says why on stderr', () => {
-    const r = migrate([fixturePath('example-onboarding.json'), 'n'], tmp);
+  /** A 1.x model that migrate refuses: a system on a gateway (MG02). */
+  const refusedModel = () => {
+    const path = join(tmp, 'refused.json');
+    writeFileSync(path, JSON.stringify({
+      id: 'Process_G', name: 'G', language: 'de',
+      lanes: [{ id: 'vt', name: 'Vertrieb' }],
+      nodes: [
+        { id: 's', type: 'startEvent', name: 'Bestellung eingegangen', lane: 'vt' },
+        { id: 'g', type: 'exclusiveGateway', name: 'Bestellung vollständig?', lane: 'vt', system: 'Shop' },
+        { id: 'e', type: 'endEvent', name: 'Bestellung erledigt', lane: 'vt' }],
+      edges: [{ source: 's', target: 'g' }, { source: 'g', target: 'e' }],
+    }));
+    return path;
+  };
+
+  test('a refused model exits 2, writes only the report and says why on stderr', () => {
+    const input = refusedModel();
+    const r = migrate([input, 'n'], tmp);
     expect(r.status).toBe(2);
-    expect(readdirSync(tmp)).toEqual(['n.migrate-report.json']);
+    expect(readdirSync(tmp).sort()).toEqual(['n.migrate-report.json', 'refused.json']);
     const report = readJson(join(tmp, 'n.migrate-report.json'));
     expect(report.status).toBe('refused');
     expect(r.out).toBe('');
     const lines = r.err.trimEnd().split('\n');
     expect(lines.slice(0, report.entries.length)).toEqual(report.entries.map((e) => `✗ ${e.message}`));
-    expect(lines[lines.length - 1]).toBe(`✗ ${fixturePath('example-onboarding.json')} not translated; the reasons are in n.migrate-report.json`);
-    expect(report.entries.every((e) => e.code === 'MG02')).toBe(true);
+    expect(lines[lines.length - 1]).toBe(`✗ ${input} not translated; the reasons are in n.migrate-report.json`);
+    expect(report.entries.map((e) => e.code)).toEqual(['MG02']);
   });
 
   test('--drop-unsupported translates the same input', () => {
-    const r = migrate([fixturePath('example-onboarding.json'), 'n', '--drop-unsupported'], tmp);
+    const r = migrate([refusedModel(), 'n', '--drop-unsupported'], tmp);
     expect(r.status).toBe(0);
-    expect(readdirSync(tmp).sort()).toEqual(['n.catalog.json', 'n.json', 'n.migrate-report.json']);
+    expect(readdirSync(tmp).sort()).toEqual(['n.catalog.json', 'n.json', 'n.migrate-report.json', 'refused.json']);
   });
 
   test('a refusal leaves an earlier model and catalogue of the same base alone', () => {
     writeFileSync(join(tmp, 'n.json'), 'old model');
     writeFileSync(join(tmp, 'n.catalog.json'), 'old catalogue');
-    const r = migrate([fixturePath('example-onboarding.json'), 'n'], tmp);
+    const r = migrate([refusedModel(), 'n'], tmp);
     expect(r.status).toBe(2);
     expect(readFileSync(join(tmp, 'n.json'), 'utf8')).toBe('old model');
     expect(readFileSync(join(tmp, 'n.catalog.json'), 'utf8')).toBe('old catalogue');
@@ -210,7 +226,7 @@ describe('migrate CLI: refusal', () => {
 
   test('a refusal with an existing report needs --force, and the report is the only file touched', () => {
     writeFileSync(join(tmp, 'n.migrate-report.json'), 'old report');
-    const args = [fixturePath('example-onboarding.json'), 'n'];
+    const args = [refusedModel(), 'n'];
     const r = migrate(args, tmp);
     expect(r.status).toBe(1);
     expect(r.err).toBe('✗ n.migrate-report.json exists; pass --force to overwrite\n');
