@@ -348,7 +348,7 @@ function collectData(dataNodes, givenData, taken, withCatalog, entries) {
  * Then the entries: MG09 per new item (naming its nodes; the merged and the not-carried links are
  * said there), MG07 per node of a reused item (said on its first node's MG07 instead), MG10 per data
  * node linked to no activity.
- * @returns {boolean} whether any step carries data access
+ * @returns {{ any: boolean }} whether any step carries data access
  */
 function carryDataAccess(processes, unsupported, data, entries) {
   const steps = new Map(); // activity id at any depth → its node in the translation
@@ -423,7 +423,54 @@ function carryDataAccess(processes, unsupported, data, entries) {
       ? `${head}; its data item "${q(d)}" is drawn through the other data nodes of that item.`
       : `${head}: data item "${q(d)}" stays in the catalogue and is not drawn.`, [node.id, d]));
   }
-  return perStep.size > 0;
+  return { any: perStep.size > 0 };
+}
+
+/**
+ * The expectation of the data check (9b), computed from the scanned links alone, not from the carry:
+ * identical (step, item, access) links are one, and an undirected link beside a recorded access of
+ * the same item on the same step is not carried. `{ links, refs }` with the reference ids
+ * `<step>__<data>`, one per distinct (step, item) pair.
+ */
+function expectedAccess(links, dataIdOf) {
+  const facts = new Set(links.map((l) => `${l.step}\u0000${dataIdOf.get(l.node)}\u0000${l.access ?? ''}`));
+  const recorded = new Set([...facts].filter((f) => !f.endsWith('\u0000')).map((f) => f.slice(0, f.lastIndexOf('\u0000'))));
+  const kept = [...facts].filter((f) => !f.endsWith('\u0000') || !recorded.has(f.slice(0, f.lastIndexOf('\u0000'))));
+  const pairs = new Set(kept.map((f) => f.slice(0, f.lastIndexOf('\u0000')).replace('\u0000', '__')));
+  return { links: kept.length, refs: [...pairs] };
+}
+
+/**
+ * The data check of the self-check (9b) over the resolved intermediate form `lc`: its derived
+ * associations (private carrier `_access`) are as many as the links carried (`expected.links`, after
+ * deduplication and without the not-carried undirected ones), and its derived references (carrier
+ * `_dataRef`) are exactly the distinct (step, item) pairs (`expected.refs`, ids `<step>__<data>`).
+ * Anything else is a bug of `migrateModel`, never a finding about the input, and throws
+ * `Error('migrate internal error: …')`. Exported for its test; `migrateModel` is its only caller.
+ */
+export function compareDataAccess(lc, expected) {
+  let associations = 0;
+  const walkAssociations = (holder) => {
+    for (const a of holder.associations || []) if (a && a._access !== undefined) associations++;
+  };
+  const refs = [];
+  const walk = (nodes) => {
+    for (const n of nodes || []) {
+      if (n._dataRef !== undefined) refs.push(n.id);
+      walk(n.nodes);
+    }
+  };
+  walkAssociations(lc);
+  walk(lc.nodes);
+  for (const pool of lc.pools || []) { walkAssociations(pool); walk(pool.nodes); }
+  if (associations !== expected.links) {
+    throw new Error(`migrate internal error: ${associations} derived data associations for ${expected.links} carried links`);
+  }
+  const want = [...expected.refs].sort();
+  const got = [...refs].sort();
+  if (got.length !== want.length || got.some((id, i) => id !== want[i])) {
+    throw new Error(`migrate internal error: derived data references [${got.join(', ')}] differ from the (step, item) pairs [${want.join(', ')}]`);
+  }
 }
 
 const isPlaceholderKey = (key) => key === UNASSIGNED || key === UNIT_UNKNOWN;
@@ -712,7 +759,7 @@ export function migrateModel(lc, options = {}) {
 
   // (5c) the data nodes and their links, after the systems, so no actor or system id moves
   const data = collectData(unsupported.dataNodes, givenData, taken, withCatalog, entries);
-  const carriesAccess = carryDataAccess(processes, unsupported, data, entries);
+  const access = carryDataAccess(processes, unsupported, data, entries);
 
   // (6) assignments, in document order; a role on a node that gets no assignment is dropped (MG05)
   let assigned = 0;
@@ -777,7 +824,7 @@ export function migrateModel(lc, options = {}) {
   const newSystems = () => (systems.length ? { systems: clone(systems) } : {});
   const newData = () => (data.items.length ? { data: clone(data.items) } : {});
   const supplement = { actors, ...(systems.length ? { systems } : {}), ...(data.items.length ? { data: data.items } : {}) };
-  const carries21 = systemId.size > 0 || carriesAccess || (withCatalog && (systems.length > 0 || data.items.length > 0));
+  const carries21 = systemId.size > 0 || access.any || (withCatalog && (systems.length > 0 || data.items.length > 0));
   const version = carries21 ? FIELDS_2_1_VERSION : FORMAT_V2_VERSION;
   const model = { $schemaVersion: version, ...m, ...(withCatalog ? { actors: clone(actors), ...newSystems(), ...newData() } : {}) };
   const effective = withCatalog
@@ -803,6 +850,7 @@ export function migrateModel(lc, options = {}) {
     return refuse(`the translation's data references collide: ${collisions.join('; ')}; rename the step, the data node or the colliding id in the 1.x model`, [], counted);
   }
   if (fields.errors.length) return refuse(`the translation fails the catalogue check: ${fields.errors.join('; ')}`, [], counted);
+  compareDataAccess(fields.lc, expectedAccess(unsupported.links, data.dataIdOf));
   const formed = formLanes(fields.lc, fields.resolved, { lanes: 'role' });
   if (formed.errors.length) {
     // C10: a lane id L.<process>.<actor> (or its _di) meets an id of the document; the 1.x model has to rename one

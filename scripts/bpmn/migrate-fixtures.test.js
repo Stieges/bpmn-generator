@@ -23,6 +23,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bpmnXsdStatus, xsdDir } from '../../.github/scripts/fetch-bpmn-xsd.mjs';
 import { migrateModel } from './migrate.js';
+import { bpmnToLogicCore } from './import.js';
 import { runPipeline } from './pipeline.js';
 import { modelFormat, validateModelSchema } from './schema-gate.js';
 import { resolveLaneId } from './topology.js';
@@ -107,6 +108,47 @@ function corpus() {
     else models.push({ file, input: value });
   }
   return { models, excluded };
+}
+
+const DATA_TYPES = { dataObjectReference: 'object', dataStoreReference: 'store' };
+const xmlAttr = (v) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Every node of a model at any depth, with its process id. */
+function allNodes(model) {
+  const out = [];
+  const walk = (nodes) => { for (const n of nodes || []) { out.push(n); walk(n.nodes); } };
+  for (const proc of processesOf(model)) walk(proc.nodes);
+  return out;
+}
+
+/** The data–activity links of a 1.x model as `step|name|kind|access` (access `-` when undirected); the not-carried undirected link beside a recorded access is left out. */
+function originalFacts(input) {
+  const nodes = allNodes(input);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const links = new Set();
+  for (const holder of [input, ...(Array.isArray(input.pools) ? input.pools : [])]) {
+    for (const a of holder.associations || []) {
+      const [s, t] = [byId.get(a.source), byId.get(a.target)];
+      if (!s || !t) continue;
+      const data = DATA_TYPES[s.type] ? s : DATA_TYPES[t.type] ? t : null;
+      const step = data === s ? t : s;
+      if (!data || !isActivity(step.type)) continue;
+      const access = a.directed !== true ? '-' : data === s ? 'read' : 'write';
+      links.add(`${step.id}|${data.name || data.id}|${DATA_TYPES[data.type]}|${access}`);
+    }
+  }
+  const recorded = new Set([...links].filter((l) => !l.endsWith('|-')).map((l) => l.split('|').slice(0, 3).join('|')));
+  return [...links].filter((l) => !l.endsWith('|-') || !recorded.has(l.split('|').slice(0, 3).join('|'))).sort();
+}
+
+/** The same facts of a 2.1 model: its steps' `dataAccess` through the catalogue's data items. */
+function carriedFacts(model, catalog) {
+  const items = new Map((catalog.data || []).map((d) => [d.id, d]));
+  const out = [];
+  for (const n of allNodes(model)) {
+    for (const e of n.dataAccess || []) out.push(`${n.id}|${items.get(e.data).name}|${items.get(e.data).kind}|${e.access ?? '-'}`);
+  }
+  return out.sort();
 }
 
 const countCodes = (entries) => {
@@ -261,16 +303,70 @@ describe('migrate over every 1.x fixture', () => {
     const dir = mkdtempSync(join(tmpdir(), 'migrate-fixtures-'));
     try {
       const files = [];
+      let withData = 0;
       for (const [file, { migrated }] of runs) {
         if (migrated.bpmnXml === null) continue; // blocked by its model error, see (f)
+        if (/<bpmn:data(Object|Store)Reference /.test(migrated.bpmnXml)) withData++;
         const path = join(dir, file.replace(/\.json$/, '.bpmn'));
         writeFileSync(path, migrated.bpmnXml);
         files.push(path);
       }
       execFileSync('xmllint', ['--noout', '--schema', join(xsdDir(), 'BPMN20.xsd'), ...files], { encoding: 'utf8', stdio: 'pipe' });
+      expect(withData).toBe(7); // the migrated data XML is among the validated files
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test('(l) every original data–activity link is a dataAccess entry and a native element of the XML under rollen; an orphan data node has MG10 and no reference', () => {
+    let links = 0;
+    let orphans = 0;
+    for (const [file, { input, drop, migrated }] of runs) {
+      const dataNodes = allNodes(input).filter((n) => DATA_TYPES[n.type]);
+      expect({ file, facts: carriedFacts(drop.model, drop.catalog) }).toEqual({ file, facts: originalFacts(input) });
+      if (dataNodes.length === 0) continue;
+      const items = new Map((drop.catalog.data || []).map((d) => [d.id, d]));
+      const accessed = new Set();
+      for (const n of allNodes(drop.model)) {
+        for (const e of n.dataAccess || []) {
+          const item = items.get(e.data);
+          accessed.add(e.data);
+          const id = `${n.id}__${e.data}`;
+          const tag = item.kind === 'store' ? 'dataStoreReference' : 'dataObjectReference';
+          expect({ file, ref: migrated.bpmnXml.includes(`<bpmn:${tag} id="${id}" name="${xmlAttr(item.name)}"`) }).toEqual({ file, ref: true });
+          const link = e.access === 'read' ? `<bpmn:dataInputAssociation id="${id}__read">`
+            : e.access === 'write' ? `<bpmn:dataOutputAssociation id="${id}__write">`
+              : `<bpmn:association id="${id}__link"`;
+          expect({ file, link, present: migrated.bpmnXml.includes(link) }).toEqual({ file, link, present: true });
+          links++;
+        }
+      }
+      const mg10 = new Map(drop.report.entries.filter((e) => e.code === 'MG10').map((e) => e.elements));
+      for (const node of dataNodes) {
+        const byId = new Map(allNodes(input).map((n) => [n.id, n]));
+        const hasLink = (input.associations || []).concat(...(input.pools || []).map((p) => p.associations || []))
+          .some((a) => (a.source === node.id && isActivity(byId.get(a.target)?.type)) || (a.target === node.id && isActivity(byId.get(a.source)?.type)));
+        if (hasLink) continue;
+        orphans++;
+        expect({ file, node: node.id, mg10: mg10.has(node.id) }).toEqual({ file, node: node.id, mg10: true });
+        const itemId = mg10.get(node.id);
+        if (!accessed.has(itemId)) expect({ file, node: node.id, drawn: new RegExp(`id="[^"]*__${itemId}"`).test(migrated.bpmnXml ?? '') }).toEqual({ file, node: node.id, drawn: false });
+      }
+    }
+    expect(links).toBeGreaterThan(0);
+    expect(orphans).toBeGreaterThan(0);
+  });
+
+  test('(m) closure: importing the XML under rollen and migrating it again gives the same (name, kind, step, access) set', async () => {
+    let checked = 0;
+    for (const [file, { drop, migrated }] of runs) {
+      if (migrated.bpmnXml === null || !(drop.model.$schemaVersion === '2.1' && allNodes(drop.model).some((n) => n.dataAccess))) continue;
+      const again = migrateModel(await bpmnToLogicCore(migrated.bpmnXml));
+      expect({ file, status: again.report.status, mg02: again.report.entries.filter((e) => e.code === 'MG02').length }).toEqual({ file, status: 'translated', mg02: 0 });
+      expect({ file, facts: carriedFacts(again.model, again.catalog) }).toEqual({ file, facts: carriedFacts(drop.model, drop.catalog) });
+      checked++;
+    }
+    expect(checked).toBe(7);
   });
 
   test('(g) per laned process the new lane names are the original lanes that hold a node (or the performers); a placeholder only with MG04/MG05', () => {
