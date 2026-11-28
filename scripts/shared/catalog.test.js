@@ -35,6 +35,19 @@ describe('catalogErrors', () => {
     }
   });
 
+  test('a catalogue with data (object, store, collection) is valid; a malformed data entry is C12', () => {
+    expect(catalogErrors({ actors: [], data: [
+      { id: 'order', name: 'Order', kind: 'object', layer: 'business' }, { id: 'items', name: 'Items', kind: 'object', isCollection: true },
+      { id: 'db', name: 'Order DB', kind: 'store', layer: 'technical' }, { id: 'bare', name: 'Bare' }] })).toEqual([]);
+    expect(catalogErrors({ ...catalog56, data: [] })).toEqual([]);
+    for (const [entry, path] of [[{ id: 'db', name: 'D', kind: 'store', isCollection: true }, '/data/0/isCollection'], [{ id: 'db', name: 'D', kind: 'file' }, '/data/0/kind'],
+      [{ id: 'db', name: 'D', extra: 1 }, '/data/0'], [{ id: '1x', name: 'D' }, '/data/0/id']]) {
+      const errors = catalogErrors({ actors: [], data: [entry] });
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors.every((e) => e.startsWith(`[C12] ${path}`) || e.startsWith(`[C12] "${path}"`))).toBe(true);
+    }
+  });
+
   test.each([
     ['kind position', { id: 'a', name: 'A', kind: 'position' }, '/actors/0/kind'],
     ['id starting with a digit', { id: '1abc', name: 'A' }, '/actors/0/id'],
@@ -130,6 +143,21 @@ describe('canonicalJson and fingerprint', () => {
     const withSystem = catalogFingerprint(actors56, demi, [{ id: 'sys_a', name: 'A' }]);
     expect(withSystem).not.toBe(pinned);
     expect(withSystem).toBe(`sha256:${createHash('sha256').update(canonicalJson({ actors: actors56, scheme: demi, systems: [{ id: 'sys_a', name: 'A' }] }), 'utf8').digest('hex')}`);
+  });
+
+  test('data absent, undefined or empty keep the pinned fingerprint; one data item changes it', () => {
+    const pinned = 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273';
+    const demi = resolveScheme('demi');
+    const sys = [{ id: 'sys_a', name: 'A' }];
+    expect(catalogFingerprint(actors56, demi, undefined, undefined)).toBe(pinned);
+    expect(catalogFingerprint(actors56, demi, [], [])).toBe(pinned);
+    expect(catalogFingerprint(actors56, demi, undefined, [])).toBe(pinned);
+    const data = [{ id: 'order', name: 'Order' }];
+    const withData = catalogFingerprint(actors56, demi, undefined, data);
+    expect(withData).not.toBe(pinned);
+    expect(withData).toBe(`sha256:${createHash('sha256').update(canonicalJson({ actors: actors56, scheme: demi, data }), 'utf8').digest('hex')}`);
+    expect(catalogFingerprint(actors56, demi, sys, [])).toBe(catalogFingerprint(actors56, demi, sys));
+    expect(catalogFingerprint(actors56, demi, sys, data)).not.toBe(withData);
   });
 
   test('permuting the keys of each actor changes nothing; order of actors does', () => {

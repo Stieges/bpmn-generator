@@ -1,14 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bpmn-generator.local/catalog.schema.json",
-  "title": "Actor and system catalogue",
-  "description": "The catalogue of actors (roles, units), of systems (`systems`, format 2.1; actors and systems share one id space) and the responsibility scheme a 2.x model refers to. Design 5.2 and 5.3.",
+  "title": "Actor, system and data catalogue",
+  "description": "The catalogue of actors (roles, units), of systems (`systems`) and data (`data`; both format 2.1; actors, systems and data share one id space) and the responsibility scheme a 2.x model refers to. Design 5.2 and 5.3.",
   "type": "object",
   "additionalProperties": false,
   "required": ["actors"],
   "properties": {
     "actors": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/Actor" } },
     "systems": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/System" } },
+    "data": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/Data" } },
     "scheme": { "$ref": "#/$defs/SchemeRef" },
     "description": { "type": "string", "maxLength": 1000 }
   },
@@ -44,6 +45,20 @@
         "id": { "$ref": "#/$defs/ActorId" },
         "name": { "type": "string", "minLength": 1, "maxLength": 200 }
       }
+    },
+    "Data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ActorId" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "kind": { "enum": ["object", "store"] },
+        "layer": { "enum": ["business", "technical"] },
+        "isCollection": { "type": "boolean" }
+      },
+      "if": { "required": ["kind"], "properties": { "kind": { "const": "store" } } },
+      "then": { "properties": { "isCollection": false } }
     },
     "SchemeName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
     "SchemeKey": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,7}$" },
