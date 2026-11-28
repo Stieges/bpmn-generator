@@ -175,7 +175,9 @@ export function dataReferenceIds(pools) {
  * `kind` 'input': one entry per `sourceRefs` id that names a data reference, from the reference
  * to `owner`. 'output': `targetRef` must name a data reference; one entry from `owner` to it.
  * The first entry keeps `id`; a later one gets `<id>_<n>` (n ≥ 2), with suffixes skipping every id
- * in `used` (which gains each minted id), as `assignEdgeIds` does. An element without an id is
+ * in `used` (which gains each minted id), as `assignEdgeIds` does. `used` holds the ids of the
+ * import result plus the ids of all data associations the reader keeps — not every id in the XML
+ * (a property or a DataObject id is not in it). An element without an id is
  * skipped (it could carry no DI), and so is a ref that names no data reference (a property, an
  * ioSpecification data input).
  */

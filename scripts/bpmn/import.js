@@ -20,7 +20,7 @@ import {
   dataReferenceIds, dataAssociationEntries,
 } from './moddle-import.js';
 import { collectDocumentIds } from './topology.js';
-import { isBpmnArtifact, isEvent, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
+import { isBpmnArtifact, isEvent, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER, ACTIVITY_TYPES, CONTAINER_TYPES } from './types.js';
 import { MARKER_NONE } from './naming/markers.js';
 import { isMainModule } from '../shared/entry-point.js';
 import { removeDerivedElements, DERIVED_JOIN_FLOW } from './derivations.js';
@@ -297,9 +297,25 @@ function readLegacy(xml) {
 }
 
 /**
+ * Where the BPMN schema allows a data association: an input on an Activity or a ThrowEvent, an
+ * output on an Activity or a CatchEvent. bpmn-moddle keeps them only there (it drops one on a
+ * gateway, an input on a start event, an output on an end event), so the raw reader keeps them
+ * only there too, or the two readers would disagree.
+ */
+const DATA_INPUT_OWNERS = new Set([...ACTIVITY_TYPES, 'intermediateThrowEvent', 'endEvent']);
+const DATA_OUTPUT_OWNERS = new Set([...ACTIVITY_TYPES, 'startEvent', 'intermediateCatchEvent', 'boundaryEvent']);
+/** An element's own data associations of one kind, if the schema allows them on its tag. */
+function ownDataAssociations(element, tag, kind) {
+  if (kind === 'input') return DATA_INPUT_OWNERS.has(tag) ? findChildren(element, 'dataInputAssociation') : [];
+  return DATA_OUTPUT_OWNERS.has(tag) ? findChildren(element, 'dataOutputAssociation') : [];
+}
+
+/**
  * The native data associations of a DOM process, read as directed associations — the twin of
  * `readDataAssociations` in moddle-import.js over the raw DOM, with the shared rule in
- * `dataAssociationEntries`.
+ * `dataAssociationEntries`. A known difference: the `sourceRef`/`targetRef` text is taken as this
+ * parser trims it, while bpmn-moddle resolves it as written, so a ref padded with whitespace may
+ * be read here and missed there.
  */
 function readDataAssociations(proc, dataRefIds, used) {
   const out = [];
@@ -307,13 +323,13 @@ function readDataAssociations(proc, dataRefIds, used) {
     for (const child of container.children) {
       const tag = stripNs(child.tag);
       if (!SUPPORTED_NODE_TYPES.has(tag)) continue;
-      for (const da of findChildren(child, 'dataInputAssociation')) {
+      for (const da of ownDataAssociations(child, tag, 'input')) {
         out.push(...dataAssociationEntries({
           kind: 'input', id: da.attrs.id, owner: child.attrs.id,
           sourceRefs: findChildren(da, 'sourceRef').map(ref => ref.text),
         }, dataRefIds, used));
       }
-      for (const da of findChildren(child, 'dataOutputAssociation')) {
+      for (const da of ownDataAssociations(child, tag, 'output')) {
         out.push(...dataAssociationEntries({
           kind: 'output', id: da.attrs.id, owner: child.attrs.id, targetRef: findChild(da, 'targetRef')?.text,
         }, dataRefIds, used));
@@ -325,12 +341,18 @@ function readDataAssociations(proc, dataRefIds, used) {
   return out;
 }
 
-/** The ids of every native data association in a DOM process, at any depth, into `used`. */
-function collectDataAssociationIds(element, used) {
-  for (const child of element.children || []) {
+/**
+ * The ids of the data associations of a DOM process into `used`: from the same places the moddle
+ * twin collects them (allowed owners, in every flow-element container at any depth).
+ */
+function collectDataAssociationIds(container, used) {
+  for (const child of container.children || []) {
     const tag = stripNs(child.tag);
-    if ((tag === 'dataInputAssociation' || tag === 'dataOutputAssociation') && child.attrs.id) used.add(child.attrs.id);
-    collectDataAssociationIds(child, used);
+    for (const kind of ['input', 'output']) {
+      for (const da of ownDataAssociations(child, tag, kind)) if (da.attrs.id) used.add(da.attrs.id);
+    }
+    // Every container bpmn-moddle holds `flowElements` in (a call activity has no children to visit).
+    if (CONTAINER_TYPES.has(tag)) collectDataAssociationIds(child, used);
   }
 }
 

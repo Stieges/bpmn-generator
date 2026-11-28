@@ -31,8 +31,6 @@ const readBoth = async (xml) => {
   return moddle;
 };
 
-const dataAssociationsOf = (lc) => (lc.associations || []).filter(a => !/^Association_/.test(a.id));
-
 describe('importers read native data associations as directed associations', () => {
   test('review-set file: both readers add the three linked data associations', async () => {
     const xml = readFileSync(REVIEW_SET, 'utf8');
@@ -135,6 +133,51 @@ describe('importers read native data associations as directed associations', () 
       { id: 'read_3', source: 'stock', target: 't', directed: true },
     ]);
     expect(validateLogicCoreSchema(lc)).toEqual({ valid: true, errors: [] });
+  });
+
+  test('both readers ignore a data association the schema does not allow on its element', async () => {
+    // An input on a gateway or a start event and an output on an end event are not read; the id
+    // of the gateway's element does not count as used, so the minted suffix is `_2` in both readers.
+    const xml = definitions(`  <bpmn:process id="Process_order" isExecutable="false">
+    <bpmn:startEvent id="s" name="Bestellung eingegangen">
+      <bpmn:dataInputAssociation id="start_reads">
+        <bpmn:sourceRef>order</bpmn:sourceRef>
+      </bpmn:dataInputAssociation>
+    </bpmn:startEvent>
+    <bpmn:task id="t" name="Bestellung prüfen">
+      <bpmn:property id="t_prop" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="read">
+        <bpmn:sourceRef>order</bpmn:sourceRef>
+        <bpmn:sourceRef>stock</bpmn:sourceRef>
+        <bpmn:targetRef>t_prop</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g" name="Bestellung vollständig?">
+      <bpmn:dataInputAssociation id="read_2">
+        <bpmn:sourceRef>order</bpmn:sourceRef>
+      </bpmn:dataInputAssociation>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="e" name="Bestellung abgeschlossen">
+      <bpmn:dataInputAssociation id="end_reads">
+        <bpmn:sourceRef>stock</bpmn:sourceRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation id="end_writes">
+        <bpmn:targetRef>order</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:endEvent>
+    <bpmn:dataObjectReference id="order" name="Bestellung" dataObjectRef="order_do" />
+    <bpmn:dataObject id="order_do" />
+    <bpmn:dataStoreReference id="stock" name="Lagerbestand" />
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t" />
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="g" />
+    <bpmn:sequenceFlow id="f3" sourceRef="g" targetRef="e" />
+  </bpmn:process>`);
+    const lc = await readBoth(xml);
+    expect(lc.associations).toEqual([
+      { id: 'read', source: 'order', target: 't', directed: true },
+      { id: 'read_2', source: 'stock', target: 't', directed: true },
+      { id: 'end_reads', source: 'stock', target: 'e', directed: true },
+    ]);
   });
 
   test('throw and catch events', async () => {

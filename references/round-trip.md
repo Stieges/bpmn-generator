@@ -42,7 +42,11 @@ store to the element, an output from the element to it. They follow the plain as
 ones get the id `<id>_2`, `<id>_3`, … (skipping ids already in use). A data association without an
 `id` is skipped, and so is a reference to something that is no data object or data store reference
 (a property, an input of an `ioSpecification`). Regenerating such a file writes plain directed
-associations.
+associations. A data association where the BPMN schema does not allow one (on a gateway, an input on
+a start event, an output on an end event) is not read.
+
+Not read yet (a known limitation): plain `bpmn:association` elements inside a subprocess's
+artifacts. Only associations at process level are read.
 
 ## What to expect
 
