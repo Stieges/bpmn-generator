@@ -1,6 +1,6 @@
 /**
  * The actor catalogue — the list of roles and units a 2.x model points at, the systems its tasks
- * use (format 2.1; one id space with the actors), and the responsibility scheme (DEMI by default)
+ * use and the data its steps read or write (format 2.1; one id space with the actors), and the responsibility scheme (DEMI by default)
  * that names the assignment types.
  *
  * A catalogue is client input, so it has the standing of a view: bounded, then schema-gated
@@ -25,7 +25,7 @@ import { coded, withCode } from './message-codes.js';
 export const CATALOG_LIMITS = Object.freeze({
   inlineBytes: 1024 * 1024, // estimated JSON size of a catalogue object, checked before the schema
   fileBytes: 1024 * 1024,   // size of a catalogue file, checked before it is read
-  depth: 5,                 // object/array nesting (root, actors, actor, scheme types, type)
+  depth: 5,                 // object/array nesting (root, actors, actor, scheme types, type; root, data, entry)
   messages: 20,             // errors listed before "… and N more"
   schemaErrors: 5,          // schema problems listed in one refusal
   token: 80,                // characters of one client-derived token in a message
@@ -140,10 +140,13 @@ export function canonicalJson(value) {
 
 /**
  * `sha256:<hex>` over the UTF-8 bytes of the canonical JSON of `{ actors, scheme }` (scheme as a
- * resolved object), or of `{ actors, scheme, systems }` when `systems` is a non-empty list: a
- * catalogue without systems (absent or empty) keeps the fingerprint it had before systems existed.
+ * resolved object), plus `systems` when it is a non-empty list, plus `data` when it is a non-empty
+ * list: a catalogue without systems or data (absent or empty) keeps the fingerprint it had before
+ * they existed.
  */
-export function catalogFingerprint(actors, scheme, systems = undefined) {
-  const hashed = Array.isArray(systems) && systems.length > 0 ? { actors, scheme, systems } : { actors, scheme };
+export function catalogFingerprint(actors, scheme, systems = undefined, data = undefined) {
+  const hashed = { actors, scheme };
+  if (Array.isArray(systems) && systems.length > 0) hashed.systems = systems;
+  if (Array.isArray(data) && data.length > 0) hashed.data = data;
   return `sha256:${createHash('sha256').update(canonicalJson(hashed), 'utf8').digest('hex')}`;
 }

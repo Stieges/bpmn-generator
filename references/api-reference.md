@@ -597,7 +597,7 @@ The messages of the format 2.0-specific path (catalogue C, format F, lane format
 | F03 | format | format 2.0 is not accepted at this entry point |
 | F04 | format | an option or mode that is not available for format 2.0 |
 | F05 | format | a `decisions` option that fails the Decision-Core schema |
-| F06 | format | a field of a later 2.x version in a model that declares an earlier one: `system` or `systems` in a "2.0" model, one entry per use after the schema errors (`"system" needs format 2.1; set "$schemaVersion" to "2.1"` at `/nodes/<i>/system`, at any depth and in each pool; `"systems" needs …` at `/systems`; `params` `{ field, version: "2.1" }`) |
+| F06 | format | a field of a later 2.x version in a model that declares an earlier one: `system`, `systems`, `data` or `dataAccess` in a "2.0" model, one entry per use after the schema errors (`"system" needs format 2.1; set "$schemaVersion" to "2.1"` at `/nodes/<i>/system`, at any depth and in each pool; `"systems" needs …` at `/systems`; `"data" needs …` at `/data`; `"dataAccess" needs …` at `/nodes/<i>/dataAccess`; `params` `{ field, version: "2.1" }`) |
 | H01 | hint | a join gateway was derived in front of a node that more than one flow enters |
 | H02 | hint | a node has no performer and is placed in the unassigned lane |
 | H03 | hint | an automatic step has no performer and is placed in its neighbour's lane (view default; `lanes.automatic` `"lane"` gives it a lane of its own, H19) (`Automatic step "<name>" (<id>) has no performer; it is placed with its neighbour in lane "<lane>". Set lanes.automatic to "lane" for a lane of its own.`, `elements` is `[nodeId, laneId]`) |

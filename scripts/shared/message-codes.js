@@ -32,7 +32,7 @@ export const MESSAGE_CODES = Object.freeze({
   F03: entry('format', 'format 2.0 is not accepted at this entry point'),
   F04: entry('format', 'an option or mode that is not available for format 2.0'),
   F05: entry('format', 'a decisions option that fails the Decision-Core schema'),
-  F06: entry('format', 'a field of a later 2.x version in a model that declares an earlier one (system or systems in a "2.0" model)'),
+  F06: entry('format', 'a field of a later 2.x version in a model that declares an earlier one (system, systems, data or dataAccess in a "2.0" model)'),
   H01: entry('hint', 'a join gateway was derived in front of a node that more than one flow enters'),
   H02: entry('hint', 'a node has no performer and is placed in the unassigned lane'),
   H03: entry('hint', 'an automatic step has no performer and is placed in its neighbour\'s lane (view default; lanes.automatic "lane" gives it a lane of its own, H19)'),

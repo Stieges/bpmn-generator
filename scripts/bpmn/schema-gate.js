@@ -55,7 +55,7 @@ export function modelFormat(input) {
 
 export const FORMAT_V2_VERSION = '2.0';
 
-/** The accepted values of `$schemaVersion` on the 2 line: "2.1" adds systems (`systems`, a task's `system`). */
+/** The accepted values of `$schemaVersion` on the 2 line: "2.1" adds systems (`systems`, a task's `system`) and data (`data`, an activity's `dataAccess`). */
 export const FORMAT_V2_VERSIONS = Object.freeze(['2.0', '2.1']);
 
 /**
@@ -96,19 +96,21 @@ const laterFieldError = (path, field) => ({
 });
 
 /**
- * F06: one entry per use of a format 2.1 field in a model that declares "2.0" — the root `systems`
- * first, then every node with the key `system`, depth-first in document order (top-level `nodes`,
- * then each pool's). Shape-tolerant: the walk also runs when the schema check failed.
+ * F06: one entry per use of a format 2.1 field in a model that declares "2.0" — the root `systems`,
+ * the root `data`, then per node, depth-first in document order (top-level `nodes`, then each
+ * pool's), its `system` and then its `dataAccess`. Shape-tolerant: the walk also runs when the schema check failed.
  */
 function laterFieldErrors(input) {
   if (!isPlainObject(input) || input.$schemaVersion !== FORMAT_V2_VERSION) return [];
   const errors = [];
   if (Object.hasOwn(input, 'systems')) errors.push(laterFieldError('/systems', 'systems'));
+  if (Object.hasOwn(input, 'data')) errors.push(laterFieldError('/data', 'data'));
   const walk = (nodes, base) => {
     if (!Array.isArray(nodes)) return;
     nodes.forEach((node, i) => {
       if (!isPlainObject(node)) return;
       if (Object.hasOwn(node, 'system')) errors.push(laterFieldError(`${base}/${i}/system`, 'system'));
+      if (Object.hasOwn(node, 'dataAccess')) errors.push(laterFieldError(`${base}/${i}/dataAccess`, 'dataAccess'));
       walk(node.nodes, `${base}/${i}/nodes`);
     });
   };

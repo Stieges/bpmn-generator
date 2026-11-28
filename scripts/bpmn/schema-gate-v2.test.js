@@ -51,11 +51,12 @@ describe('v2 schema drift fence against the 1.x schema', () => {
     expect(v2.$defs.NodeType.enum).toEqual(v1.$defs.NodeType.enum.filter((t) => !['dataObjectReference', 'dataStoreReference'].includes(t)));
   });
 
-  test('Node.properties is 1.x minus lane, role plus assignments; system differs; the rest is equal', () => {
-    const expected = Object.keys(v1.$defs.Node.properties).filter((k) => !['lane', 'role'].includes(k)).concat('assignments');
+  test('Node.properties is 1.x minus lane, role plus assignments and dataAccess; system differs; the rest is equal', () => {
+    const expected = Object.keys(v1.$defs.Node.properties).filter((k) => !['lane', 'role'].includes(k)).concat('assignments', 'dataAccess');
     expect(Object.keys(v2.$defs.Node.properties).sort()).toEqual(expected.sort());
-    for (const k of expected.filter((x) => x !== 'assignments' && x !== 'system')) expect(v2.$defs.Node.properties[k]).toEqual(v1.$defs.Node.properties[k]);
+    for (const k of expected.filter((x) => !['assignments', 'dataAccess', 'system'].includes(x))) expect(v2.$defs.Node.properties[k]).toEqual(v1.$defs.Node.properties[k]);
     expect(v2.$defs.Node.properties.system.$ref).toMatch(/#\/\$defs\/ActorId$/);
+    expect(v2.$defs.Node.properties.dataAccess.items.properties.data.$ref).toMatch(/#\/\$defs\/ActorId$/);
   });
 
   test('no Lane definition and no lanes property anywhere', () => {
@@ -190,6 +191,44 @@ describe('validateModelSchema', () => {
       expect(errorsOf(bad).map((e) => [e.code, e.path])).toEqual([['F01', '/nodes/2/system']]);
       const noName = { ...m56(), $schemaVersion: '2.1', systems: [{ id: 'crm' }] };
       expect(errorsOf(noName).map((e) => [e.code, e.path])).toEqual([['F01', '/systems/0']]);
+    });
+
+    test('dataAccess on a node: one F06 at its path, no F01; empty too', () => {
+      expect(errorsOf(withNode({ dataAccess: [{ data: 'order', access: 'read' }] }))).toEqual([f06('/nodes/2/dataAccess', 'dataAccess')]);
+      expect(errorsOf(withNode({ dataAccess: [] }))).toEqual([f06('/nodes/2/dataAccess', 'dataAccess')]);
+    });
+
+    test('root data, even empty: one F06 at /data', () => {
+      expect(errorsOf({ ...m56(), data: [] })).toEqual([f06('/data', 'data')]);
+    });
+
+    test('root systems before root data, then nodes: system before dataAccess', () => {
+      const m = { ...m56(), data: [], systems: [] };
+      m.nodes[2].dataAccess = [];
+      m.nodes[2].system = 'crm';
+      expect(errorsOf(m).map((e) => e.path)).toEqual(['/systems', '/data', '/nodes/2/system', '/nodes/2/dataAccess']);
+    });
+
+    test('a collaboration: system and dataAccess on one nested node give two F06, system first', () => {
+      const m = collab();
+      m.pools[0].nodes.splice(1, 0, { id: 'sp', type: 'subProcess', isExpanded: true,
+        nodes: [{ id: 's1', type: 'startEvent' }, { id: 's2', type: 'userTask', name: 'B', dataAccess: [{ data: 'd' }], system: 'crm' }], edges: [] });
+      expect(errorsOf(m)).toEqual([f06('/pools/0/nodes/1/nodes/1/system', 'system'), f06('/pools/0/nodes/1/nodes/1/dataAccess', 'dataAccess')]);
+    });
+
+    test('as "2.1" data and dataAccess are valid, an empty dataAccess too; access "update" is F01', () => {
+      const m = { ...m56(), $schemaVersion: '2.1', data: [{ id: 'order', name: 'Order', kind: 'object' }, { id: 'db', name: 'DB', kind: 'store' }] };
+      m.nodes[2].dataAccess = [{ data: 'order', access: 'read' }, { data: 'db', access: 'write' }, { data: 'order' }];
+      m.nodes[3].dataAccess = [];
+      expect(validateModelSchema(m, BOTH)).toEqual({ valid: true, format: '2', errors: [] });
+      m.nodes[2].dataAccess = [{ data: 'order', access: 'update' }];
+      expect(errorsOf(m).map((e) => [e.code, e.path])).toEqual([['F01', '/nodes/2/dataAccess/0/access']]);
+    });
+
+    test('dataAccess holds at most 5000 entries, like the other lists', () => {
+      const m = { ...m56(), $schemaVersion: '2.1' };
+      m.nodes[2].dataAccess = Array.from({ length: 5001 }, () => ({ data: 'order' }));
+      expect(errorsOf(m).map((e) => [e.code, e.path])).toEqual([['F01', '/nodes/2/dataAccess']]);
     });
 
     test('formatSchemaErrors writes the F06 line with a colon', () => {
