@@ -14,5 +14,9 @@
   "bestellung-systeme.json × systeme": {
     "xml": "f2e02fd0d170a95d850347e5e0e513aabd85900397a5d011697c492c16a90e6e",
     "svg": "e2e2f0fa6876316a6c67f39de399760e1e916903ea518c0b80872090a54cb9d8"
+  },
+  "bestellung-daten.json × rollen": {
+    "xml": "b66991c9260909a8cbe2653c255be41a704eb513ddc741b617583a2903de6058",
+    "svg": "64365e3a0cc084fed8614fba824eaf1b31d4f1bca67d06aabc55b59dc8e9345d"
   }
 }

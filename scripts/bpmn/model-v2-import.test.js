@@ -20,10 +20,14 @@ import { loadNamedView, ViewRejectedError } from '../shared/view.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
 const GOLDEN_MODEL = { organigramm: 'organigramm', systeme: 'bestellung-systeme' };
-const golden = (view) => resolve(root, `tests/fixtures-v2/${GOLDEN_MODEL[view] ?? 'bestellung'}.${view}.expected.bpmn`);
+/** The golden of a view (its usual model) or of an explicit pair: `golden('bestellung-daten', 'rollen')`. */
+const golden = (viewOrModel, view) => (view === undefined
+  ? resolve(root, `tests/fixtures-v2/${GOLDEN_MODEL[viewOrModel] ?? 'bestellung'}.${viewOrModel}.expected.bpmn`)
+  : resolve(root, `tests/fixtures-v2/${viewOrModel}.${view}.expected.bpmn`));
 const read = (path) => readFileSync(path, 'utf8');
 const CATALOG = 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273';
 const CATALOG_ORG = 'sha256:19836e2ecd105136b1682f33b53a4ebd32a8a5039625fc09dde25578ae38c00b';
+const CATALOG_DATA = 'sha256:2f48cfeb7c399a484050ba01813ec7c945ba239a28a71db702d15895779067c2';
 const CATALOG_SYS = 'sha256:c5ac5f1c62842fdd693bb58878cffa81b217335d2c9f16500b8ce7d3fb3a5cdb';
 const LANE_IDS = {
   rollen: ['L.Process_Bestellung.sb_einkauf', 'L.Process_Bestellung.leitung', 'L.Process_Bestellung.zahlung'],
@@ -114,6 +118,46 @@ describe('the systeme golden', () => {
     const { status, stderr } = spawnSync(process.execPath, [resolve(here, 'import.js'), golden('systeme')], { encoding: 'utf8' });
     expect(status).toBe(0);
     expect(stderr.match(/\[N01\]/g)).toHaveLength(1);
+  });
+});
+
+// The data golden: references import as data nodes without a lane; nodes with a lane are the steps and events.
+describe('the bestellung-daten golden', () => {
+  const dataGolden = () => read(golden('bestellung-daten', 'rollen'));
+  const REFS = ['pruefen__d_bestellung', 'pruefen__d_register', 'rueck__d_bestellung', 'zahlen__d_bestellung', 'zahlen__d_rechnungen'];
+  for (const [rname, reader] of Object.entries(READERS)) {
+    test(`${rname}: imports to a valid 1.x model; the five references have no lane, every flow node has one`, async () => {
+      const lc = await reader(dataGolden());
+      expect(validateLogicCoreSchema(lc).valid).toBe(true);
+      const proc = lc.processes ? lc.processes[0] : lc;
+      const nodes = proc.nodes;
+      for (const id of REFS) {
+        const n = nodes.find((x) => x.id === id);
+        expect(n).toBeDefined();
+        expect(n.lane).toBeUndefined();
+      }
+      for (const n of nodes.filter((x) => !REFS.includes(x.id))) expect(LANE_IDS.rollen).toContain(n.lane);
+    });
+  }
+  test('carries the 2.1 marker with the catalogue fingerprint of the data catalogue', () => {
+    expect(readModelMarker(dataGolden())).toEqual({ modelVersion: '2.1', view: 'rollen', catalog: CATALOG_DATA });
+  });
+
+  test('both readers give the same model', async () => {
+    expect(await bpmnToLogicCore(dataGolden())).toEqual(await bpmnToLogicCoreLegacy(dataGolden()));
+  });
+
+  test('the imported associations: five directed, the plain link of rueck undirected', async () => {
+    const lc = await bpmnToLogicCore(dataGolden());
+    const sorted = [...lc.associations].sort((a, b) => (a.id < b.id ? -1 : 1));
+    expect(sorted).toEqual([
+      { id: 'pruefen__d_bestellung__read', source: 'pruefen__d_bestellung', target: 'pruefen', directed: true },
+      { id: 'pruefen__d_register__write', source: 'pruefen', target: 'pruefen__d_register', directed: true },
+      { id: 'rueck__d_bestellung__link', source: 'rueck__d_bestellung', target: 'rueck', directed: false },
+      { id: 'zahlen__d_bestellung__read', source: 'zahlen__d_bestellung', target: 'zahlen', directed: true },
+      { id: 'zahlen__d_rechnungen__read', source: 'zahlen__d_rechnungen', target: 'zahlen', directed: true },
+      { id: 'zahlen__d_rechnungen__write', source: 'zahlen', target: 'zahlen__d_rechnungen', directed: true },
+    ]);
   });
 });
 

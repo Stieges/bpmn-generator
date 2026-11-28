@@ -2,7 +2,7 @@
 /**
  * v2-output-hashes.mjs
  *
- * The four golden diagrams, generated with default options: tests/fixtures-v2/bestellung.json
+ * The five golden diagrams, generated with default options: tests/fixtures-v2/bestellung.json
  * with its catalogue, once in view `rollen` and once in view `einheiten` (design 9, slice 1), and
  * tests/fixtures-v2/organigramm.json, the same model on a catalogue whose units nest with `partOf`,
  * in view `organigramm`: the one diagram with lanes nested along the organigram, including
@@ -10,10 +10,13 @@
  * them; their hashes live in tests/bench/v2-output-hashes.json, apart from default-output-hashes.json.
  * The fourth pair, tests/fixtures-v2/bestellung-systeme.json (format 2.1, the same process with a system
  * on each task) in view `systeme`, earns its place because the system view is the only new lane path.
- * No more pairs than these four: the flat level view adds no layout path the two flat goldens do
+ * The fifth pair, tests/fixtures-v2/bestellung-daten.json (format 2.1, the same process with data access on three
+ * tasks) in view `rollen`, earns its place because it is the only diagram that draws data references: two data
+ * objects, a collection and a data store, placed in a row below their step with native data associations.
+ * No more pairs than these five: the flat level view adds no layout path the two flat goldens do
  * not already draw, and is pinned by unit tests instead.
  *
- * Rewrite the hash file and the eight golden files: `node bench/v2-output-hashes.mjs` from `scripts/`.
+ * Rewrite the hash file and the ten golden files: `node bench/v2-output-hashes.mjs` from `scripts/`.
  * Regenerate only when a change to the 2.0 output is intended, after inspecting the diff like a golden.
  * Fenced by v2-output-hashes.test.js.
  */
@@ -30,7 +33,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_V2_DIR = join(__dirname, '..', '..', 'tests', 'fixtures-v2');
 export const V2_SNAPSHOT_PATH = join(__dirname, '..', '..', 'tests', 'bench', 'v2-output-hashes.json');
 
-export const V2_PAIRS = [['bestellung.json', 'rollen'], ['bestellung.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['bestellung-systeme.json', 'systeme']];
+export const V2_PAIRS = [['bestellung.json', 'rollen'], ['bestellung.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['bestellung-systeme.json', 'systeme'], ['bestellung-daten.json', 'rollen']];
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 

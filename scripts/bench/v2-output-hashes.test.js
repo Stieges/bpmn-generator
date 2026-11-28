@@ -1,6 +1,6 @@
 /**
- * The four golden diagrams (format 2.0: bestellung × rollen, bestellung × einheiten, organigramm ×
- * organigramm; format 2.1: bestellung-systeme × systeme): each pair equals its golden files byte for byte and its entry in
+ * The five golden diagrams (format 2.0: bestellung × rollen, bestellung × einheiten, organigramm ×
+ * organigramm; format 2.1: bestellung-systeme × systeme, bestellung-daten × rollen): each pair equals its golden files byte for byte and its entry in
  * tests/bench/v2-output-hashes.json. See
  * v2-output-hashes.mjs; regenerate with `node bench/v2-output-hashes.mjs` only when the change is intended.
  */
@@ -14,16 +14,17 @@ import { loadCatalog } from '../shared/catalog.js';
 import { loadNamedView } from '../shared/view.js';
 import { V2_PAIRS, V2_SNAPSHOT_PATH, FIXTURES_V2_DIR, goldenBase, generateV2, computeV2Hashes } from './v2-output-hashes.mjs';
 
-/** The fingerprint of each pair's catalogue: bestellung-catalog.json, organigramm-catalog.json. */
+/** The fingerprint of each pair's catalogue: bestellung-catalog.json, organigramm-catalog.json, bestellung-systeme-catalog.json, bestellung-daten-catalog.json. */
 const CATALOG_HASH = {
   'bestellung.json': 'sha256:bbe131aa583483354fce5fede3ed1d170ce97b1fa90a1341b5a6af5af6d77273',
   'organigramm.json': 'sha256:19836e2ecd105136b1682f33b53a4ebd32a8a5039625fc09dde25578ae38c00b',
   'bestellung-systeme.json': 'sha256:c5ac5f1c62842fdd693bb58878cffa81b217335d2c9f16500b8ce7d3fb3a5cdb',
+  'bestellung-daten.json': 'sha256:2f48cfeb7c399a484050ba01813ec7c945ba239a28a71db702d15895779067c2',
 };
 
 describe('format 2.x golden diagrams', () => {
-  test('exactly four pairs: the two flat views of design 9, the nested organigram view and the system view', () => {
-    expect(V2_PAIRS).toEqual([['bestellung.json', 'rollen'], ['bestellung.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['bestellung-systeme.json', 'systeme']]);
+  test('exactly five pairs: the two flat views of design 9, the nested organigram view, the system view and the data references', () => {
+    expect(V2_PAIRS).toEqual([['bestellung.json', 'rollen'], ['bestellung.json', 'einheiten'], ['organigramm.json', 'organigramm'], ['bestellung-systeme.json', 'systeme'], ['bestellung-daten.json', 'rollen']]);
   });
 
   // Each pair is generated once; generateV2 reads the fixture afresh on every call, so no run sees a model another run changed.
@@ -62,7 +63,10 @@ describe('format 2.x golden diagrams', () => {
     const { lc } = formLanes(fields.lc, fields.resolved, { lanes: loadNamedView(viewName).lanes });
     const bare = JSON.parse(JSON.stringify(lc, (k, v) => (k.startsWith('_') ? undefined : v)));
     const { bpmnXml } = await runPipeline(bare);
-    expect(await bpmnToLogicCore(golden(name, viewName, 'bpmn'))).toEqual(await bpmnToLogicCore(bpmnXml));
+    // XML document order is the topological order, not the model order: compare the associations by id.
+    const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    const sorted = (m) => (m.associations ? { ...m, associations: [...m.associations].sort(byId) } : m);
+    expect(sorted(await bpmnToLogicCore(golden(name, viewName, 'bpmn')))).toEqual(sorted(await bpmnToLogicCore(bpmnXml)));
   }, 60000);
 
   test('bestellung-systeme × systeme: three system references, two system lanes, nothing else', () => {
@@ -96,6 +100,50 @@ describe('format 2.x golden diagrams', () => {
     expect(r.bpmnXml.match(/<bg:system\b/g)).toHaveLength(3);
     expect(stripped).toBe(base);
   }, 60000);
+
+  test('bestellung-daten × rollen: five references, two data objects, one data store, the lanes of bestellung × rollen', () => {
+    const xml = golden('bestellung-daten.json', 'rollen', 'bpmn');
+    const count = (re) => (xml.match(re) || []).length;
+    for (const id of ['pruefen__d_bestellung', 'pruefen__d_register', 'rueck__d_bestellung', 'zahlen__d_bestellung', 'zahlen__d_rechnungen']) {
+      expect(xml).toContain(`bpmnElement="${id}"`);
+    }
+    expect(count(/<bpmn:dataObjectReference\b/g)).toBe(4);
+    expect(count(/<bpmn:dataStoreReference\b/g)).toBe(1);
+    expect(count(/<bpmn:dataObject\b/g)).toBe(2);
+    expect(count(/<bpmn:dataStore\b/g)).toBe(1);
+    expect(count(/<bpmn:dataInputAssociation\b/g)).toBe(3);
+    expect(count(/<bpmn:dataOutputAssociation\b/g)).toBe(2);
+    expect(count(/<bpmn:association\b/g)).toBe(1);
+    expect(count(/<bpmn:property\b/g)).toBe(2);
+    expect(xml).toContain('bg:modelVersion="2.1"');
+    const lanes = (x) => x.match(/<bpmn:laneSet[\s\S]*?<\/bpmn:laneSet>/)[0];
+    expect(lanes(xml)).toBe(lanes(golden('bestellung.json', 'rollen', 'bpmn')));
+  });
+
+  test('bestellung-daten × rollen: each reference lies inside the lane band of its step', () => {
+    const xml = golden('bestellung-daten.json', 'rollen', 'bpmn');
+    const bounds = (id) => {
+      const m = xml.match(new RegExp(`<bpmndi:BPMNShape[^>]*bpmnElement="${id.replace(/\./g, '\\.')}"[^>]*>\\s*<dc:Bounds x="([\\d.-]+)" y="([\\d.-]+)" width="([\\d.-]+)" height="([\\d.-]+)"`));
+      expect(m).not.toBeNull();
+      return { x: +m[1], y: +m[2], w: +m[3], h: +m[4] };
+    };
+    const laneOf = { pruefen: 'sb_einkauf', rueck: 'leitung', zahlen: 'zahlung' };
+    for (const ref of ['pruefen__d_bestellung', 'pruefen__d_register', 'rueck__d_bestellung', 'zahlen__d_bestellung', 'zahlen__d_rechnungen']) {
+      const r = bounds(ref);
+      const l = bounds(`L.Process_Bestellung.${laneOf[ref.split('__')[0]]}`);
+      expect(r.y).toBeGreaterThanOrEqual(l.y);
+      expect(r.y + r.h).toBeLessThanOrEqual(l.y + l.h);
+      expect(r.x).toBeGreaterThanOrEqual(l.x);
+      expect(r.x + r.w).toBeLessThanOrEqual(l.x + l.w);
+      const lm = xml.match(new RegExp(`bpmnElement="${ref}">\\s*<dc:Bounds[^>]*/>\\s*<bpmndi:BPMNLabel>\\s*<dc:Bounds x="([\\d.-]+)" y="([\\d.-]+)" width="([\\d.-]+)" height="([\\d.-]+)"`));
+      expect(lm).not.toBeNull();
+      const [lx, ly, lw, lh] = lm.slice(1).map(Number);
+      expect(ly).toBeGreaterThanOrEqual(l.y);
+      expect(ly + lh).toBeLessThanOrEqual(l.y + l.h);
+      expect(lx).toBeGreaterThanOrEqual(l.x);
+      expect(lx + lw).toBeLessThanOrEqual(l.x + l.w);
+    }
+  });
 
   test('organigramm: the lanes nest along partOf, Beschaffung holds its own steps in the first child lane', () => {
     const xml = golden('organigramm.json', 'organigramm', 'bpmn');

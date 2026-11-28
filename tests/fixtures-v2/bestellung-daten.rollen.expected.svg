@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1338" height="790" viewBox="0 0 1338 790" font-family="Arial, sans-serif">
+<defs>
+  <!-- Sequence flow: filled triangle (OMG spec Fig 10.43) -->
+  <marker id="seq-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15 Z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <!-- Default flow: diagonal slash at source (OMG spec Fig 10.47) -->
+  <marker id="seq-default-src" viewBox="0 0 20 20" refX="0" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 6 4 L 10 16" fill="none" stroke="#22242a" stroke-width="2" stroke-linecap="round"/>
+  </marker>
+  <!-- Conditional flow: open diamond at source (OMG spec Fig 10.48) -->
+  <marker id="seq-conditional-src" viewBox="0 0 20 20" refX="-1" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 0 10 L 8 6 L 16 10 L 8 14 Z" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
+  </marker>
+  <!-- Message flow: open circle at source (OMG spec Fig 9.5) -->
+  <marker id="msg-start" viewBox="0 0 20 20" refX="6" refY="6"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <circle cx="6" cy="6" r="3.5" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-dasharray="10000, 1"/>
+  </marker>
+  <!-- Message flow: open arrowhead at target -->
+  <marker id="msg-end" viewBox="0 0 20 20" refX="8.5" refY="5"
+    markerWidth="20" markerHeight="20" orient="auto">
+    <path d="m 1 5 l 0 -3 l 7 3 l -7 3 z" fill="#ffffff" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10000, 1"/>
+  </marker>
+  <!-- Association: open chevron -->
+  <marker id="assoc-end" viewBox="0 0 20 20" refX="11" refY="10"
+    markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M 1 5 L 11 10 L 1 15" fill="none" stroke="#22242a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10000, 1"/>
+  </marker>
+</defs>
+<rect width="1338" height="790" fill="#ffffff"/>
+<rect x="50" y="50" width="1238" height="680" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="1.5"/>
+<path d="M 80 50 L 80 730" stroke="#22242a" stroke-width="1.5" fill="none"/>
+<text x="68.6" y="390" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,68.6,390)">Bestellung abwickeln</text>
+<rect x="80" y="50" width="1208" height="200" fill="#ffffff" fill-opacity="0.25" stroke="#22242a" stroke-width="1.5"/>
+<text x="98.6" y="150" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,98.6,150)">Sachbearbeitung Einkauf</text>
+<rect x="80" y="250" width="1208" height="240" fill="#ffffff" fill-opacity="0.25" stroke="#22242a" stroke-width="1.5"/>
+<text x="98.6" y="370" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,98.6,370)">Abteilungsleitung</text>
+<rect x="80" y="490" width="1208" height="240" fill="#ffffff" fill-opacity="0.25" stroke="#22242a" stroke-width="1.5"/>
+<text x="98.6" y="610" text-anchor="middle" font-size="12" fill="#22242a" transform="rotate(-90,98.6,610)">Zahlungsverkehr</text>
+<g data-element-id="start">
+<circle cx="188" cy="109.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="188" y="147.4">Bestellung</tspan><tspan x="188" y="160.6">eingegangen</tspan></text>
+</g>
+<g data-element-id="pruefen">
+<rect x="326.5" y="70" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="376.5" y="113.6" text-anchor="middle" font-size="12" fill="#22242a">Auftrag prüfen</text>
+<g transform="translate(326.5,70)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+</g>
+<g data-element-id="gw">
+<polygon points="573,84.5 598,109.5 573,134.5 548,109.5" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2" stroke-linejoin="round"/>
+<g transform="translate(548,84.5)"><path d="m 16,15 7.429,9.714 -7.429,9.714 3.429,0 5.714,-7.464 5.714,7.464 3.429,0 -7.429,-9.714 7.429,-9.714 -3.429,0 -5.714,7.464 -5.714,-7.464 -3.429,0 z" fill="#22242a" stroke="#22242a" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="573" y="70.4">Rückfrage nötig?</tspan></text>
+</g>
+<g data-element-id="rueck">
+<rect x="758" y="310" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="808" y="353.6" text-anchor="middle" font-size="12" fill="#22242a">Lieferant klären</text>
+<g transform="translate(758,310)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+</g>
+<g data-element-id="zahlen">
+<rect x="974.9" y="550" width="100" height="80" rx="10" ry="10" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="2"/>
+<text x="1024.9" y="586.4" text-anchor="middle" font-size="12" fill="#22242a">Zahlung</text>
+<text x="1024.9" y="600.8" text-anchor="middle" font-size="12" fill="#22242a">anweisen</text>
+<g transform="translate(974.9,550)"><path d="m 15,12 c 0.909,-0.845 1.594,-2.049 1.594,-3.385 0,-2.554 -1.805,-4.62199999 -4.357,-4.62199999 -2.55199998,0 -4.28799998,2.06799999 -4.28799998,4.62199999 0,1.348 0.974,2.562 1.89599998,3.405 -0.52899998,0.187 -5.669,2.097 -5.794,4.7560005 v 6.718 h 17 v -6.718 c 0,-2.2980005 -5.5279996,-4.5950005 -6.0509996,-4.7760005 zm -8,6 l 0,5.5 m 11,0 l 0,-5" fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m 2.162,1.009 c 0,2.4470005 -2.158,4.4310005 -4.821,4.4310005 -2.66499998,0 -4.822,-1.981 -4.822,-4.4310005 " fill="#ffffff" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/><path d="m 15,12 m -6.9,-3.80 c 0,0 2.25099998,-2.358 4.27399998,-1.177 2.024,1.181 4.221,1.537 4.124,0.965 -0.098,-0.57 -0.117,-3.79099999 -4.191,-4.13599999 -3.57499998,0.001 -4.20799998,3.36699999 -4.20699998,4.34799999 z" fill="#22242a" stroke="#22242a" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+</g>
+<g data-element-id="end">
+<circle cx="1210" cy="589.5" r="18" fill="#ffffff" fill-opacity="0.95" stroke="#22242a" stroke-width="4"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="1210" y="627.4">Auftrag erledigt</tspan></text>
+</g>
+<g data-element-id="pruefen__d_bestellung">
+<g transform="translate(308.7,180)"><path d="m 0,0 28.235,0 7.059,8.197 0,40.984 -35.294,0 0,-49.18 28.235,0 0,8.197 7.059,0" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill-opacity="0.95"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="326.7" y="244.9">Bestellung</tspan></text>
+</g>
+<g data-element-id="pruefen__d_register">
+<g transform="translate(392.2,180)"><path d="m  0,6.65 l  0,36.885 c  1.639,8.197 47.541,8.197  49.18,0 l  0,-36.885 c -1.639,-8.197 -47.541,-8.197 -49.18,0c  1.639,8.197 47.541,8.197  49.18,0 m  -49.18,5.738c  1.639,8.197 47.541,8.197 49.18,0m  -49.18,5.738c  1.639,8.197 47.541,8.197  49.18,0" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill-opacity="0.95"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="417.2" y="244.9">Bestellregister</tspan></text>
+</g>
+<g data-element-id="rueck__d_bestellung">
+<g transform="translate(790,420)"><path d="m 0,0 28.235,0 7.059,8.197 0,40.984 -35.294,0 0,-49.18 28.235,0 0,8.197 7.059,0" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill-opacity="0.95"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="808" y="484.9">Bestellung</tspan></text>
+</g>
+<g data-element-id="zahlen__d_bestellung">
+<g transform="translate(960.7,660)"><path d="m 0,0 28.235,0 7.059,8.197 0,40.984 -35.294,0 0,-49.18 28.235,0 0,8.197 7.059,0" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill-opacity="0.95"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="978.7" y="724.9">Bestellung</tspan></text>
+</g>
+<g data-element-id="zahlen__d_rechnungen">
+<g transform="translate(1047.5,660)"><path d="m 0,0 28.235,0 7.059,8.197 0,40.984 -35.294,0 0,-49.18 28.235,0 0,8.197 7.059,0" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill-opacity="0.95"/><path d="m11.88,32 m 3,2 l 0,10 m 3,-10 l 0,10 m 3,-10 l 0,10" fill="#ffffff" stroke="#22242a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="1065.5" y="724.9">Rechnungen</tspan></text>
+</g>
+<path data-element-id="flow_start_pruefen" data-waypoints="206,110 326.5,110" d="M 206 110 L 326.5 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="flow_pruefen_gw" data-waypoints="426.5,110 548.5,110" d="M 426.5 110 L 548.5 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="flow_gw_rueck" data-waypoints="598,109.5 808,109.5 808,310" d="M 598 109.5 L 803 109.5 C 805.5 109.5 808 112 808 114.5 L 808 310" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="703" y="101.4">ja</tspan></text>
+<path data-element-id="flow_gw_zahlen" data-waypoints="573,134.5 573,590 974.9,590" d="M 573 134.5 L 573 585 C 573 587.5 575.5 590 578 590 L 974.9 590" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
+<text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="773.9" y="581.9">nein</tspan></text>
+<path data-element-id="flow_rueck_zahlen" data-waypoints="858,350 1024.9,350 1024.9,550" d="M 858 350 L 1019.9 350 C 1022.4 350 1024.9 352.5 1024.9 355 L 1024.9 550" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="flow_zahlen_end" data-waypoints="1074.9,590 1192,590" d="M 1074.9 590 L 1192 590" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="rueck__d_bestellung__link" data-waypoints="808,420 808,390" d="M 808 420 L 808 390" stroke="#22242a" stroke-width="2" fill="none" stroke-dasharray="0, 5" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-element-id="pruefen__d_bestellung__read" data-waypoints="339.8,180 355.5,150" d="M 339.8 180 L 355.5 150" stroke="#22242a" stroke-width="2" fill="none" stroke-dasharray="0, 5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#assoc-end)"/>
+<path data-element-id="pruefen__d_register__write" data-waypoints="393.7,150 406.5,180" d="M 393.7 150 L 406.5 180" stroke="#22242a" stroke-width="2" fill="none" stroke-dasharray="0, 5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#assoc-end)"/>
+<path data-element-id="zahlen__d_bestellung__read" data-waypoints="990.8,660 1005.4,630" d="M 990.8 660 L 1005.4 630" stroke="#22242a" stroke-width="2" fill="none" stroke-dasharray="0, 5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#assoc-end)"/>
+<path data-element-id="zahlen__d_rechnungen__read" data-waypoints="1050.5,660 1037.6,630" d="M 1050.5 660 L 1037.6 630" stroke="#22242a" stroke-width="2" fill="none" stroke-dasharray="0, 5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#assoc-end)"/>
+<path data-element-id="zahlen__d_rechnungen__write" data-waypoints="1046.3,630 1059.2,660" d="M 1046.3 630 L 1059.2 660" stroke="#22242a" stroke-width="2" fill="none" stroke-dasharray="0, 5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#assoc-end)"/>
+</svg>

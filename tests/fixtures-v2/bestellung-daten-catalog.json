@@ -1,0 +1,8 @@
+{ "scheme": "demi",
+  "actors": [ { "id": "abt_einkauf", "name": "Einkauf", "kind": "unit" }, { "id": "abt_buchhaltung", "name": "Buchhaltung", "kind": "unit" },
+              { "id": "sb_einkauf", "name": "Sachbearbeitung Einkauf", "kind": "role", "unit": "abt_einkauf" },
+              { "id": "leitung", "name": "Abteilungsleitung", "kind": "role", "unit": "abt_einkauf" },
+              { "id": "zahlung", "name": "Zahlungsverkehr", "kind": "role", "unit": "abt_buchhaltung" } ],
+  "data": [ { "id": "d_bestellung", "name": "Bestellung", "kind": "object", "layer": "business" },
+            { "id": "d_rechnungen", "name": "Rechnungen", "kind": "object", "isCollection": true },
+            { "id": "d_register", "name": "Bestellregister", "kind": "store", "layer": "technical" } ] }

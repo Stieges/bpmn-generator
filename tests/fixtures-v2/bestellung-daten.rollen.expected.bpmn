@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bg="http://bpmn-generator/schema/1.0" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-generator" bg:modelVersion="2.1" bg:view="rollen" bg:catalog="sha256:2f48cfeb7c399a484050ba01813ec7c945ba239a28a71db702d15895779067c2">
+  <bpmn:dataStore id="d_register__store" name="Bestellregister" />
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_Process_Bestellung" name="Bestellung abwickeln" processRef="Process_Bestellung" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Bestellung" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Bestellung">
+      <bpmn:lane id="L.Process_Bestellung.sb_einkauf" name="Sachbearbeitung Einkauf">
+        <bpmn:extensionElements>
+          <bg:derived by="role" actor="sb_einkauf">lane</bg:derived>
+        </bpmn:extensionElements>
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>pruefen</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L.Process_Bestellung.leitung" name="Abteilungsleitung">
+        <bpmn:extensionElements>
+          <bg:derived by="role" actor="leitung">lane</bg:derived>
+        </bpmn:extensionElements>
+        <bpmn:flowNodeRef>rueck</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="L.Process_Bestellung.zahlung" name="Zahlungsverkehr">
+        <bpmn:extensionElements>
+          <bg:derived by="role" actor="zahlung">lane</bg:derived>
+        </bpmn:extensionElements>
+        <bpmn:flowNodeRef>zahlen</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Bestellung eingegangen">
+      <bpmn:outgoing>flow_start_pruefen</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="pruefen" name="Auftrag prüfen">
+      <bpmn:extensionElements>
+        <bg:assignment type="D" actor="sb_einkauf" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_start_pruefen</bpmn:incoming>
+      <bpmn:outgoing>flow_pruefen_gw</bpmn:outgoing>
+      <bpmn:property id="pruefen__input" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="pruefen__d_bestellung__read">
+        <bpmn:sourceRef>pruefen__d_bestellung</bpmn:sourceRef>
+        <bpmn:targetRef>pruefen__input</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation id="pruefen__d_register__write">
+        <bpmn:targetRef>pruefen__d_register</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="gw" name="Rückfrage nötig?" gatewayDirection="Diverging" default="flow_gw_zahlen">
+      <bpmn:incoming>flow_pruefen_gw</bpmn:incoming>
+      <bpmn:outgoing>flow_gw_rueck</bpmn:outgoing>
+      <bpmn:outgoing>flow_gw_zahlen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="rueck" name="Lieferant klären">
+      <bpmn:extensionElements>
+        <bg:assignment type="D" actor="leitung" />
+        <bg:assignment type="I" actor="sb_einkauf" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_gw_rueck</bpmn:incoming>
+      <bpmn:outgoing>flow_rueck_zahlen</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="zahlen" name="Zahlung anweisen">
+      <bpmn:extensionElements>
+        <bg:assignment type="D" actor="zahlung" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_gw_zahlen</bpmn:incoming>
+      <bpmn:incoming>flow_rueck_zahlen</bpmn:incoming>
+      <bpmn:outgoing>flow_zahlen_end</bpmn:outgoing>
+      <bpmn:property id="zahlen__input" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="zahlen__d_bestellung__read">
+        <bpmn:sourceRef>zahlen__d_bestellung</bpmn:sourceRef>
+        <bpmn:targetRef>zahlen__input</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataInputAssociation id="zahlen__d_rechnungen__read">
+        <bpmn:sourceRef>zahlen__d_rechnungen</bpmn:sourceRef>
+        <bpmn:targetRef>zahlen__input</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation id="zahlen__d_rechnungen__write">
+        <bpmn:targetRef>zahlen__d_rechnungen</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:userTask>
+    <bpmn:endEvent id="end" name="Auftrag erledigt">
+      <bpmn:incoming>flow_zahlen_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:dataObjectReference id="pruefen__d_bestellung" name="Bestellung" dataObjectRef="Process_Bestellung__d_bestellung">
+      <bpmn:extensionElements>
+        <bg:data ref="d_bestellung" />
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+    <bpmn:dataStoreReference id="pruefen__d_register" name="Bestellregister" dataStoreRef="d_register__store">
+      <bpmn:extensionElements>
+        <bg:data ref="d_register" />
+      </bpmn:extensionElements>
+    </bpmn:dataStoreReference>
+    <bpmn:dataObjectReference id="rueck__d_bestellung" name="Bestellung" dataObjectRef="Process_Bestellung__d_bestellung">
+      <bpmn:extensionElements>
+        <bg:data ref="d_bestellung" />
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+    <bpmn:dataObjectReference id="zahlen__d_bestellung" name="Bestellung" dataObjectRef="Process_Bestellung__d_bestellung">
+      <bpmn:extensionElements>
+        <bg:data ref="d_bestellung" />
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+    <bpmn:dataObjectReference id="zahlen__d_rechnungen" name="Rechnungen" dataObjectRef="Process_Bestellung__d_rechnungen">
+      <bpmn:extensionElements>
+        <bg:data ref="d_rechnungen" />
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+    <bpmn:sequenceFlow id="flow_start_pruefen" sourceRef="start" targetRef="pruefen" />
+    <bpmn:sequenceFlow id="flow_pruefen_gw" sourceRef="pruefen" targetRef="gw" />
+    <bpmn:sequenceFlow id="flow_gw_rueck" name="ja" sourceRef="gw" targetRef="rueck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">ja</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_gw_zahlen" name="nein" sourceRef="gw" targetRef="zahlen" />
+    <bpmn:sequenceFlow id="flow_rueck_zahlen" sourceRef="rueck" targetRef="zahlen" />
+    <bpmn:sequenceFlow id="flow_zahlen_end" sourceRef="zahlen" targetRef="end" />
+    <bpmn:dataObject id="Process_Bestellung__d_bestellung" name="Bestellung" />
+    <bpmn:dataObject id="Process_Bestellung__d_rechnungen" name="Rechnungen" isCollection="true" />
+    <bpmn:association id="rueck__d_bestellung__link" sourceRef="rueck__d_bestellung" targetRef="rueck" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Participant_Process_Bestellung_di" bpmnElement="Participant_Process_Bestellung" isHorizontal="true">
+        <dc:Bounds x="0" y="40" width="1238" height="680" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L.Process_Bestellung.sb_einkauf_di" bpmnElement="L.Process_Bestellung.sb_einkauf" isHorizontal="true">
+        <dc:Bounds x="30" y="40" width="1208" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L.Process_Bestellung.leitung_di" bpmnElement="L.Process_Bestellung.leitung" isHorizontal="true">
+        <dc:Bounds x="30" y="240" width="1208" height="240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="L.Process_Bestellung.zahlung_di" bpmnElement="L.Process_Bestellung.zahlung" isHorizontal="true">
+        <dc:Bounds x="30" y="480" width="1208" height="240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="120" y="81.5" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="106.2" y="127.5" width="63.6" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
+        <dc:Bounds x="276.5" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true">
+        <dc:Bounds x="498" y="74.5" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="481.4" y="50.5" width="83.1" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="rueck_di" bpmnElement="rueck">
+        <dc:Bounds x="708" y="300" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zahlen_di" bpmnElement="zahlen">
+        <dc:Bounds x="924.9" y="540" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end">
+        <dc:Bounds x="1142" y="561.5" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1122.7" y="607.5" width="74.6" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen__d_bestellung_di" bpmnElement="pruefen__d_bestellung">
+        <dc:Bounds x="258.7" y="170" width="36" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="251" y="225" width="51.4" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen__d_register_di" bpmnElement="pruefen__d_register">
+        <dc:Bounds x="342.2" y="170" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="332.4" y="225" width="69.7" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="rueck__d_bestellung_di" bpmnElement="rueck__d_bestellung">
+        <dc:Bounds x="740" y="410" width="36" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="732.3" y="465" width="51.4" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zahlen__d_bestellung_di" bpmnElement="zahlen__d_bestellung">
+        <dc:Bounds x="910.7" y="650" width="36" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="903" y="705" width="51.4" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zahlen__d_rechnungen_di" bpmnElement="zahlen__d_rechnungen">
+        <dc:Bounds x="997.5" y="650" width="36" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="984.4" y="705" width="62.4" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="flow_start_pruefen_di" bpmnElement="flow_start_pruefen">
+        <di:waypoint x="156" y="100" />
+        <di:waypoint x="276.5" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_pruefen_gw_di" bpmnElement="flow_pruefen_gw">
+        <di:waypoint x="376.5" y="100" />
+        <di:waypoint x="498.5" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_gw_rueck_di" bpmnElement="flow_gw_rueck">
+        <di:waypoint x="548" y="99.5" />
+        <di:waypoint x="758" y="99.5" />
+        <di:waypoint x="758" y="300" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="648.7" y="81.5" width="8.6" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_gw_zahlen_di" bpmnElement="flow_gw_zahlen">
+        <di:waypoint x="523" y="124.5" />
+        <di:waypoint x="523" y="580" />
+        <di:waypoint x="924.9" y="580" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="713.5" y="562" width="20.8" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_rueck_zahlen_di" bpmnElement="flow_rueck_zahlen">
+        <di:waypoint x="808" y="340" />
+        <di:waypoint x="974.9" y="340" />
+        <di:waypoint x="974.9" y="540" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_zahlen_end_di" bpmnElement="flow_zahlen_end">
+        <di:waypoint x="1024.9" y="580" />
+        <di:waypoint x="1142" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="rueck__d_bestellung__link_di" bpmnElement="rueck__d_bestellung__link">
+        <di:waypoint x="758" y="410" />
+        <di:waypoint x="758" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pruefen__d_bestellung__read_di" bpmnElement="pruefen__d_bestellung__read">
+        <di:waypoint x="289.8" y="170" />
+        <di:waypoint x="305.5" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pruefen__d_register__write_di" bpmnElement="pruefen__d_register__write">
+        <di:waypoint x="343.7" y="140" />
+        <di:waypoint x="356.5" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="zahlen__d_bestellung__read_di" bpmnElement="zahlen__d_bestellung__read">
+        <di:waypoint x="940.8" y="650" />
+        <di:waypoint x="955.4" y="620" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="zahlen__d_rechnungen__read_di" bpmnElement="zahlen__d_rechnungen__read">
+        <di:waypoint x="1000.5" y="650" />
+        <di:waypoint x="987.6" y="620" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="zahlen__d_rechnungen__write_di" bpmnElement="zahlen__d_rechnungen__write">
+        <di:waypoint x="996.3" y="620" />
+        <di:waypoint x="1009.2" y="650" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
