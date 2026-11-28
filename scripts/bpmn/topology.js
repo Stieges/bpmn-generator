@@ -219,12 +219,16 @@ export function leafLaneBands(proc, laneCoords = {}) {
 export function orderLanesByFlow(proc) {
   const lanes = proc.lanes || [];
   const nodes = proc.nodes || [];
+  // A data reference a step's dataAccess derived (format 2.1, `_dataRef`) is appended after the
+  // flow nodes and takes its step's lane: counted, it would pull that lane towards the end. Only
+  // these are skipped; a 1.x artifact still counts, so 1.x output keeps its lane order.
+  const counts = (n) => !n._dataRef;
   if (hasNestedLanes(proc)) {
     const nodeIndex = {};
     nodes.forEach((n, i) => { nodeIndex[n.id] = i; });
     const measure = (lane) => {
       const ids = new Set(flattenLanes([lane]).map(l => l.id));
-      const own = nodes.filter(n => ids.has(n.lane));
+      const own = nodes.filter(n => counts(n) && ids.has(n.lane));
       return {
         score: own.length ? own.reduce((s, n) => s + (nodeIndex[n.id] || 0), 0) / own.length : 9999,
         starts: own.filter(n => n.type === 'startEvent').length,
@@ -252,7 +256,7 @@ export function orderLanesByFlow(proc) {
   const laneStartCount = {};
 
   for (const lane of lanes) {
-    const laneNodes = nodes.filter(n => n.lane === lane.id);
+    const laneNodes = nodes.filter(n => counts(n) && n.lane === lane.id);
     if (laneNodes.length === 0) {
       laneScores[lane.id] = 9999;
       laneStartCount[lane.id] = 0;

@@ -163,6 +163,7 @@
     "externalText": { "fontSize": 11, "lineHeight": 1.2 }
   },
   "layout": {
+    "_comment": "Geometry of the layout, in px. dataLinkPairGap: the distance between the two parallel lines of a step that reads and writes the same data item (format 2.1 dataAccess, coordinates.js associationRoute).",
     "laneHeaderWidth": 30,
     "lanePadding": 60,
     "labelDistance": 10,
@@ -174,6 +175,7 @@
     "collabPadding": 20,
     "messageFlowFan": 14,
     "artifactGap": 30,
+    "dataLinkPairGap": 8,
     "subProcessTitleBand": 40,
     "poolOrder": "auto",
     "elkWrapping": "off",

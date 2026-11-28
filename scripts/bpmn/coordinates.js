@@ -35,6 +35,9 @@ function buildCoordinateMap(elkResult, lc) {
   // containerId → the band at the bottom of an expanded subprocess that layout.js kept free for
   // the artifacts it declares (see artifactReserveHeight there). placeArtifacts fills it.
   const artifactBands = {};
+  // Steps whose ELK box is wider than their shape (data references, layout.js `_dataPadX`): ELK
+  // ends their flows on the box, so §5.1 clips them onto the shape at any depth.
+  const dataPadded = new Set();
 
   const collectNodes = (node, offX = 0, offY = 0) => {
     const ax = (node.x || 0) + offX;
@@ -91,7 +94,10 @@ function buildCoordinateMap(elkResult, lc) {
       // shape-center coincides with the bbox-center, which is what ELK aligns.
       const bboxH = node.height;
       const yOffset = Math.max(0, (bboxH - specSz.h) / 2);
-      coords[node.id] = { x: ax, y: ay + yOffset, w: specSz.w, h: specSz.h };
+      // A step with data references has an ELK box as wide as their row (layout.js): the shape sits
+      // in its middle, `_dataPadX` from the box's left edge.
+      coords[node.id] = { x: ax + (node._dataPadX || 0), y: ay + yOffset, w: specSz.w, h: specSz.h };
+      if (node._dataPadX) dataPadded.add(node.id);
     }
 
     for (const c of node.children || []) collectNodes(c, ax, ay);
@@ -516,6 +522,9 @@ function buildCoordinateMap(elkResult, lc) {
   // there, so widening this set is a no-op for everything except the routes
   // §5.0- just deleted.
   const allProcessEdges = allProcesses.flatMap(p => flattenProcessEdges(p));
+  // A nested node is looked up only when its box was widened for data references: a nested 1.x
+  // node's ELK box is its shape, and its flows were never clipped here.
+  const paddedNode = (id) => (dataPadded.has(id) ? allProcesses.flatMap(p => flattenProcessNodes(p.nodes)).find(n => n.id === id) : undefined);
   for (const edge of allProcessEdges) {
     const eid = edge.id;
     const pts = edgeCoords[eid];
@@ -523,8 +532,8 @@ function buildCoordinateMap(elkResult, lc) {
 
     const srcCoord = coords[edge.source];
     const tgtCoord = coords[edge.target];
-    const srcNode  = allProcessNodes.find(n => n.id === edge.source);
-    const tgtNode  = allProcessNodes.find(n => n.id === edge.target);
+    const srcNode  = allProcessNodes.find(n => n.id === edge.source) ?? paddedNode(edge.source);
+    const tgtNode  = allProcessNodes.find(n => n.id === edge.target) ?? paddedNode(edge.target);
 
     if (srcCoord && srcNode) {
       pts[0] = clipOrthogonal(srcCoord, srcNode.type, pts[0], pts[1], 'source');
@@ -569,11 +578,14 @@ function buildCoordinateMap(elkResult, lc) {
   //       and bpmn-xml.js independently, both drawing centre-to-centre, which
   //       runs the line into the middle of both shapes. Here they get a route
   //       clipped to the shape borders, from the same source both renderers read.
+  //       A step that reads and writes one data item (format 2.1, `_access`) has two links
+  //       between the same two shapes: they get parallel routes (associationRoute).
+  const dataPairs = dataLinkPairs(lc.associations);
   for (const assoc of (lc.associations || [])) {
     const s = coords[assoc.source];
     const t = coords[assoc.target];
     if (!s || !t) continue;
-    edgeCoords[assoc.id] = clipStraight(s, t);
+    edgeCoords[assoc.id] = associationRoute(assoc, coords, dataPairs);
   }
 
   // §5.5  Final zigzag cleanup: detect and replace routes that zigzag excessively.
@@ -1177,12 +1189,24 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
   };
   for (const proc of allProcesses) indexContainers(proc.nodes, null);
 
+  const dataRows = new Map(); // anchorId → the data references a step's dataAccess derived (format 2.1)
   for (const proc of allProcesses) {
     for (const node of flattenProcessNodes(proc.nodes)) {
       if (!isArtifact(node.type) || coords[node.id]) continue;
       const sz = artifactSize(node);
       const anchor = coords[partnerOf[node.id]];
       const containerId = containerOf[node.id];
+      if (node._dataRef) {
+        // A derived data reference goes in a row below its step, after the 1.x stack (below). Its
+        // step inside a collapsed subprocess has no coordinates: then it has none either. It stays
+        // in the XML semantics, with no shape, no edge and nothing in the SVG.
+        if (!anchor) continue;
+        const anchorId = partnerOf[node.id];
+        node.lane ??= laneOfNode(proc.nodes.find(n => n.id === anchorId), proc);
+        if (!dataRows.has(anchorId)) dataRows.set(anchorId, { containerId, refs: [] });
+        dataRows.get(anchorId).refs.push({ node, sz });
+        continue;
+      }
       if (!anchor && artifactBands[containerId]) { bandOrphans.push({ node, sz, containerId }); continue; }
       if (!anchor) { orphans.push({ node, sz, proc }); continue; }
 
@@ -1204,6 +1228,8 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
       }, sz);
     }
   }
+
+  if (dataRows.size > 0) placeDataRows(coords, allProcesses, dataRows, stackBelow);
 
   // Band artifacts last: an associated artifact whose anchor sits near the container's bottom
   // hangs into the band, so the band's free slots are only known once every anchored one is down.
@@ -1250,6 +1276,235 @@ function placeArtifacts(coords, allProcesses, lc, artifactBands = {}) {
       x += sz.w + ARTIFACT_GAP;
     }
   }
+}
+
+/**
+ * The box a derived data reference's row needs per reference, `{ slotW, rowH }`: the wider of shape
+ * and label plus `ARTIFACT_GAP`, and shape + `layout.dataLabelDistance` + label + `ARTIFACT_GAP`.
+ * One function for placeDataRows here and the band layout.js keeps free in an expanded subprocess.
+ */
+function dataRefSlot(node) {
+  const sz = artifactSize(node);
+  const label = node.name ? edgeLabelLayout(node.name) : { w: 0, h: 0 };
+  const gap = CFG.layout?.dataLabelDistance ?? 5;
+  return { slotW: Math.max(sz.w, label.w) + ARTIFACT_GAP, rowH: sz.h + (node.name ? gap + label.h : 0) + ARTIFACT_GAP };
+}
+
+/**
+ * Place the data references a format 2.1 step's dataAccess derived (`_dataRef`): those of one step
+ * in one row below it, below any 1.x artifacts stacked there. Each reference gets a slot as wide as
+ * the wider of its shape and its label (dataRefSlot); the row is centred under the step. layout.js
+ * gave the step an ELK box as wide as the row, so ELK already kept the columns apart.
+ *
+ * The rest is a safety net, for what ELK does not see: a node below the step in the same lane, the
+ * label of an event or gateway, a 1.x artifact, the row of a step in the same column. A row is free
+ * when no shape or label box of it overlaps any of those (another row kept at least half
+ * `ARTIFACT_GAP` away), no line from the step to one of its references runs through one, and no
+ * earlier row's line runs through it. Only what shares the step's process, container and lane
+ * counts: lanes are moved apart afterwards (§5.0a), so a node of another lane says nothing yet. The
+ * row stays within the x-range of its process's content and, inside an expanded subprocess, within
+ * the subprocess above its bottom padding (layout.js reserves one row height per step there).
+ * Search: sideways in 10 px steps up to half the row's width, then one row height lower, up to 8
+ * rows. Nothing free: the same check again below the lowest box under the row's span, with a reach
+ * of the row's width plus two tasks to either side, up to 4 rows; still nothing: centred there.
+ */
+function placeDataRows(coords, allProcesses, dataRows, stackBelow) {
+  const step = 10;
+  const half = ARTIFACT_GAP / 2;
+  const encloses = (c, r) => c.x <= r.x && c.y <= r.y && c.x + c.w >= r.x + r.w && c.y + c.h >= r.y + r.h;
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+  // node id → { key: process | container | lane of its top-level ancestor, proc }
+  const where = new Map();
+  const range = new Map(); // process id → x-range of its placed content (references excluded)
+  for (const proc of allProcesses) {
+    const walk = (nodes, containerId, lane) => {
+      for (const n of nodes || []) {
+        const ownLane = containerId ? lane : laneOfNode(n, proc);
+        where.set(n.id, { node: n, key: `${proc.id}\u0000${containerId ?? ''}\u0000${ownLane ?? ''}`, proc });
+        const c = coords[n.id];
+        if (c && !n._dataRef) {
+          const r = range.get(proc.id) ?? { min: Infinity, max: -Infinity };
+          range.set(proc.id, { min: Math.min(r.min, c.x), max: Math.max(r.max, c.x + c.w) });
+        }
+        if (n.nodes?.length) walk(n.nodes, n.id, ownLane);
+      }
+    };
+    walk(proc.nodes, null, null);
+  }
+
+  // What is already there, by key: every placed node's box (a container enclosing a candidate is
+  // skipped below) and the label box of each event and gateway.
+  const obstacles = new Map();
+  const add = (key, o) => { if (!obstacles.has(key)) obstacles.set(key, []); obstacles.get(key).push(o); };
+  for (const [id, c] of Object.entries(coords)) {
+    const w = where.get(id);
+    if (!w) continue;
+    add(w.key, { id, box: c });
+    const n = w.node;
+    const label = isEvent(n.type) || isGateway(n.type) ? nodeLabelBox(n, c) : null;
+    if (label) add(w.key, { id, box: label });
+  }
+  const placedLines = new Map(); // key → lines of the rows placed so far
+
+  for (const [anchorId, { containerId, refs }] of dataRows) {
+    const anchor = coords[anchorId];
+    const { key, proc } = where.get(anchorId);
+    if (!obstacles.has(key)) obstacles.set(key, []);
+    const own = obstacles.get(key);
+    const lines = placedLines.get(key) ?? [];
+    const slots = refs.map(({ node }) => dataRefSlot(node));
+    const total = slots.reduce((s, x) => s + x.slotW, 0);
+    const rowH = Math.max(...slots.map(x => x.rowH));
+    const baseY = anchor.y + anchor.h + ARTIFACT_GAP + (stackBelow[anchorId] ?? 0);
+    const container = containerId ? coords[containerId] : null;
+    const xr = range.get(proc.id);
+    const build = (x0, y) => {
+      let x = x0;
+      return refs.map(({ node, sz }, i) => {
+        const box = { x: x + (slots[i].slotW - sz.w) / 2, y, w: sz.w, h: sz.h };
+        x += slots[i].slotW;
+        return { node, sz, box, label: nodeLabelBox(node, box), line: clipStraight(anchor, box) };
+      });
+    };
+    const blocks = (o, b) => o.id !== anchorId && !encloses(o.box, b)
+      // another step's row keeps half a gap away, so the two rows do not read as one
+      && overlaps(o.row ? { x: o.box.x - half, y: o.box.y - half, w: o.box.w + 2 * half, h: o.box.h + 2 * half } : o.box, b);
+    const free = (row) => {
+      const boxes = row.flatMap(r => [r.box, r.label].filter(Boolean));
+      if (container) {
+        const inner = { x: container.x + 20, y: container.y, w: container.w - 40, h: container.h - 20 };
+        if (!boxes.every(b => encloses(inner, b))) return false;
+      } else if (xr && total <= xr.max - xr.min) {
+        if (row[0].box.x - (slots[0].slotW - row[0].sz.w) / 2 < xr.min) return false;
+        const last = row[row.length - 1];
+        if (last.box.x + last.sz.w + (slots[row.length - 1].slotW - last.sz.w) / 2 > xr.max) return false;
+      }
+      for (const b of boxes) if (own.some(o => blocks(o, b))) return false;
+      for (const r of row) {
+        const [p, q] = r.line;
+        // 2 px clear of a node, a label or another row: a line grazing a corner reads as crossing it
+        if (own.some(o => o.id !== anchorId && !encloses(o.box, anchor) && segmentCrossesBox(p, q, o.box, 2))) return false;
+        for (const other of row) {
+          if (other === r) continue;
+          if ([other.box, other.label].some(b => b && segmentCrossesBox(p, q, b))) return false;
+        }
+      }
+      for (const pts of lines) {
+        if (boxes.some(b => segmentCrossesBox(pts[0], pts[1], b))) return false;
+      }
+      return true;
+    };
+    const centred = anchor.x + anchor.w / 2 - total / 2;
+    const search = (fromY, levels, reach) => {
+      for (let level = 0; level < levels; level++) {
+        const y = fromY + level * rowH;
+        for (let k = 0; k * step <= reach; k++) {
+          for (const dx of k === 0 ? [0] : [k * step, -k * step]) {
+            const candidate = build(centred + dx, y);
+            if (free(candidate)) return candidate;
+          }
+        }
+      }
+      return null;
+    };
+    let row = search(baseY, 8, total / 2);
+    if (!row) {
+      // Below what lies under the row's span in its lane (a node beside it does not count), with
+      // the full check, lines included, and a wider reach: a boundary event on the step's bottom
+      // border, for one, crosses the middle line of every row centred under the step.
+      const x0 = xr && total <= xr.max - xr.min ? Math.min(Math.max(centred, xr.min), xr.max - total) : centred;
+      const span = { x: Math.min(x0, centred) - ARTIFACT_GAP, w: total + Math.abs(x0 - centred) + 2 * ARTIFACT_GAP };
+      const under = own.filter(o => !encloses(o.box, anchor) && o.box.x < span.x + span.w && span.x < o.box.x + o.box.w);
+      const lowest = Math.max(baseY - ARTIFACT_GAP, ...under.map(o => o.box.y + o.box.h));
+      row = search(lowest + ARTIFACT_GAP, 4, total + 2 * (SHAPE.task?.w ?? 100))
+        // nothing free even there: below the span, where no box can be in the way
+        ?? build(x0, lowest + ARTIFACT_GAP);
+    }
+    for (const r of row) {
+      coords[r.node.id] = withLines(r.box, r.sz);
+      add(key, { id: r.node.id, box: r.box, row: true });
+      if (r.label) add(key, { id: r.node.id, box: r.label, row: true });
+      lines.push(r.line);
+    }
+    placedLines.set(key, lines);
+  }
+}
+
+/**
+ * The read and write links (format 2.1, `_access`) that join the same step and data reference:
+ * read link id → 'read', write link id → 'write', for pairs only. Plain associations and an
+ * unrecorded link never appear (beside a read or write of the same item it is C16).
+ */
+function dataLinkPairs(associations = []) {
+  const byPair = new Map();
+  for (const a of associations) {
+    if (a._access !== 'read' && a._access !== 'write') continue;
+    const key = [a.source, a.target].sort().join('\u0000');
+    if (!byPair.has(key)) byPair.set(key, []);
+    byPair.get(key).push(a);
+  }
+  const out = new Map();
+  for (const links of byPair.values()) {
+    if (links.length !== 2) continue;
+    for (const a of links) out.set(a.id, a._access);
+  }
+  return out;
+}
+
+/**
+ * The route of one association, clipped to both shapes. A read or write link that has a partner in
+ * `dataPairs` runs parallel to the centre line, `layout.dataLinkPairGap` px from its partner: the
+ * read line first in reading order (for a reference below its step: the read line on the left on
+ * screen, the write line on the right).
+ * Every other association: the straight centre-to-centre line (clipStraight).
+ */
+function associationRoute(a, coords, dataPairs) {
+  const s = coords[a.source];
+  const t = coords[a.target];
+  const access = dataPairs.get(a.id);
+  if (!access) return clipStraight(s, t);
+  const [stepC, refC] = access === 'read' ? [t, s] : [s, t];
+  const sc = { x: stepC.x + stepC.w / 2, y: stepC.y + stepC.h / 2 };
+  const rc = { x: refC.x + refC.w / 2, y: refC.y + refC.h / 2 };
+  const len = Math.hypot(rc.x - sc.x, rc.y - sc.y) || 1;
+  const d = { x: (rc.x - sc.x) / len, y: (rc.y - sc.y) / len };
+  // the normal (-d.y, d.x) points to screen-left for a reference below its step (y grows down)
+  const half = (CFG.layout?.dataLinkPairGap ?? 8) / 2 * (access === 'read' ? 1 : -1);
+  const off = { x: -d.y * half, y: d.x * half };
+  const a0 = { x: sc.x + off.x, y: sc.y + off.y };
+  const b0 = { x: rc.x + off.x, y: rc.y + off.y };
+  const fromStep = exitPoint(a0, d, stepC);
+  const atRef = exitPoint(b0, { x: -d.x, y: -d.y }, refC);
+  return access === 'read' ? [atRef, fromStep] : [fromStep, atRef];
+}
+
+/** Where the ray from `p` (inside `rect`) along unit vector `d` leaves `rect`. */
+function exitPoint(p, d, rect) {
+  const ts = [];
+  if (d.x > 0) ts.push((rect.x + rect.w - p.x) / d.x);
+  if (d.x < 0) ts.push((rect.x - p.x) / d.x);
+  if (d.y > 0) ts.push((rect.y + rect.h - p.y) / d.y);
+  if (d.y < 0) ts.push((rect.y - p.y) / d.y);
+  const t = ts.length ? Math.max(0, Math.min(...ts)) : 0;
+  return { x: p.x + d.x * t, y: p.y + d.y * t };
+}
+
+/**
+ * Does the segment p→q run through box `r` grown by `pad` px on every side? The default -1 shrinks it,
+ * so a touch is no cross; a positive `pad` keeps the segment that far away.
+ */
+function segmentCrossesBox(p, q, r0, pad = -1) {
+  const r = { x: r0.x - pad, y: r0.y - pad, w: r0.w + 2 * pad, h: r0.h + 2 * pad };
+  if (r.w <= 0 || r.h <= 0) return false;
+  let t0 = 0, t1 = 1;
+  const dx = q.x - p.x, dy = q.y - p.y;
+  for (const [pp, qq] of [[-dx, p.x - r.x], [dx, r.x + r.w - p.x], [-dy, p.y - r.y], [dy, r.y + r.h - p.y]]) {
+    if (pp === 0) { if (qq < 0) return false; continue; }
+    const t = qq / pp;
+    if (pp < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t0 < t1;
 }
 
 /**
@@ -2377,6 +2632,7 @@ function shiftParticipantsBelow(coordMap, lc, boxes, index, delta) {
       if (edgeLabels[e.id]) edgeLabels[e.id] = down(edgeLabels[e.id]);
     }
   }
+  const dataPairs = dataLinkPairs(lc.associations);
   // Associations once each, after every participant moved: an association between two moved
   // participants is shifted once, not once per participant.
   for (const a of (lc.associations || [])) {
@@ -2385,7 +2641,7 @@ function shiftParticipantsBelow(coordMap, lc, boxes, index, delta) {
       if (edgeCoords[a.id]) edgeCoords[a.id] = downPts(edgeCoords[a.id]);
       if (edgeLabels[a.id]) edgeLabels[a.id] = down(edgeLabels[a.id]);
     } else if ((moved.has(a.source) || moved.has(a.target)) && coords[a.source] && coords[a.target]) {
-      edgeCoords[a.id] = clipStraight(coords[a.source], coords[a.target]);
+      edgeCoords[a.id] = associationRoute(a, coords, dataPairs);
     }
   }
 }
@@ -2475,4 +2731,4 @@ function besideDistance(L, a, b, horizontal) {
   return Math.hypot(L.x - a.x, dy);
 }
 
-export { buildCoordinateMap, artifactSize, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
+export { buildCoordinateMap, artifactSize, dataRefSlot, textAnnotationTextStyle, placeNodeLabels, placeNodeLabelsAvoidingFlows, nodeLabelCandidates, enforceOrthogonal, findNodeInAllProcesses, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, unclearMessageFlowLabels, participantHeaders, participantOutlines, participantBoxes, computeSequenceFlowLabel, edgeLabelLayout, edgeLabelTextStyle, edgeLabelBox, placeEdgeLabel, labelHitsRoute, boxWithin, boxCrossesLines, innerLaneLines, flattenProcessNodes, flattenProcessEdges };
