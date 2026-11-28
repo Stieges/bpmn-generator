@@ -210,6 +210,7 @@
     "alongOutlineMinPx": 5,
     "crossingGuard": true,
     "endpointReclip": true,
+    "gatewayTips": true,
     "bendRule": true,
     "nodeLabelsAvoidFlows": true,
     "foreignShapeRepair": true,

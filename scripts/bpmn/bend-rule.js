@@ -311,7 +311,9 @@ function sideConflicts(entry, pts, entries) {
  * 12.5 px apart, read as one bundle (rechnungspruefung, "Betrag über 10.000 EUR?") and put one
  * branch's label on the other's line; on a rectangle it is the endpoint itself (within collinearPx),
  * since two ports on one side of a task are fine. Flows in opposite directions on one side are
- * sideConflicts' business.
+ * sideConflicts' business. snapGatewayTips (edge-simplify.js), which runs after this pass, keeps the
+ * same reading: it separates the flows of one side onto different vertices, so this guard and that
+ * pass agree on what counts as one side.
  */
 function sharedPorts(entry, pts, entries, ctx, tolerance) {
   const same = (node, p, side, q, qSide) => (ctx.shapeOf(node) === 'rect'

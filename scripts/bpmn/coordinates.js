@@ -869,7 +869,9 @@ function placeNodeLabelsAvoidingFlows(coordMap, lc) {
   for (const mf of (lc.messageFlows || [])) { const k = messageFlowKey(mf); addEnd(mf.source, k, 'start'); addEnd(mf.target, k, 'end'); }
   // The trigger: one of the node's own flows docks at its bottom, or runs through the label below
   // it — ELK docks a gateway's second flow on the diamond's lower facet, not at its bottom vertex,
-  // and that flow then turns down through the label just the same.
+  // and that flow then turns down through the label just the same. With layout.gatewayTips on,
+  // snapGatewayTips (edge-simplify.js) has moved such a flow onto the bottom vertex, where the first
+  // test catches it; the second stays for a flow it left on the facet (more flows than vertices).
   // `labelSideY` is the y of the side the default label sits on: the bottom, or the top for a
   // boundary event on its host's top edge.
   const flowAtLabel = (id, c, below, labelSideY) => (ends[id] || []).some(({ pts, at }) => {
