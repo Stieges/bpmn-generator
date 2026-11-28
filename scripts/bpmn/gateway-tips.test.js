@@ -23,6 +23,9 @@ const run = (coords, routes) => {
 const sideOfStart = (pts) => Object.keys(TIP).find((s) => isOnGatewayTip(pts[0], G, s)) ?? null;
 const sideOfEnd = (pts) => Object.keys(TIP).find((s) => isOnGatewayTip(pts[pts.length - 1], G, s)) ?? null;
 const orthogonal = (pts) => pts.every((p, i) => i === 0 || p.x === pts[i - 1].x || p.y === pts[i - 1].y);
+// Bends of an orthogonal route without collinear waypoints: every waypoint between the ends.
+const bends = (pts) => pts.filter((p, i) => i > 0 && i < pts.length - 1
+  && !((p.x === pts[i - 1].x && p.x === pts[i + 1].x) || (p.y === pts[i - 1].y && p.y === pts[i + 1].y))).length;
 
 describe('snapGatewayTips — one, two and three flows on one side', () => {
   test('one flow half a pixel off the centre: the end moves onto the vertex, the target end follows on its side', () => {
@@ -85,6 +88,48 @@ describe('snapGatewayTips — one, two and three flows on one side', () => {
     expect(out.fin).toEqual([P(125, 300), TIP.bottom]);
     expect(sideOfStart(out.fa)).toBe('right');
     expect(out.fb[0]).toEqual(DOWN_RIGHT);                 // no free vertex towards b: stays on the facet
+  });
+});
+
+describe('snapGatewayTips — at most one bend more per snapped end', () => {
+  test('a straight flow whose far end cannot follow to the vertex level: no Z for the tip, the end keeps its facet dock', () => {
+    // The target spans y 40..120, so the far end cannot slide down to the right vertex's level
+    // (y 125); reaching the vertex would need a Z, two bends more than the straight route.
+    const coords = { g: G, a: { x: 300, y: 40, w: 100, h: 80 } };
+    const { out, edgeCoords } = run(coords, { f: { s: 'g', t: 'a', pts: [UP_RIGHT, P(300, 112.5)] } });
+    expect(out).toBe(edgeCoords);
+  });
+
+  test('one bend more is fine: a flow moved to the bottom vertex turns once towards its target', () => {
+    // fb leaves the lower facet to the right and turns down into the top of b (one bend); from the
+    // bottom vertex it goes down, across and down again (two bends).
+    const coords = { g: G, a: { x: 300, y: 85, w: 100, h: 80 }, b: { x: 170, y: 250, w: 100, h: 80 } };
+    const { out } = run(coords, {
+      fa: { s: 'g', t: 'a', pts: [UP_RIGHT, P(300, 112.5)] },
+      fb: { s: 'g', t: 'b', pts: [DOWN_RIGHT, P(220, 137.5), P(220, 250)] },
+    });
+    expect(sideOfStart(out.fa)).toBe('right');
+    expect(sideOfStart(out.fb)).toBe('bottom');
+    expect(out.fb[out.fb.length - 1]).toEqual(P(220, 250));
+    expect(bends(out.fb)).toBe(2);
+    expect(orthogonal(out.fb)).toBe(true);
+  });
+});
+
+describe('snapGatewayTips — no jog on a long back edge', () => {
+  // Segments between two bends shorter than 30 px: the jogs of a route.
+  const jogs = (pts) => pts.slice(1, -2).filter((p, i) => Math.hypot(pts[i + 2].x - p.x, pts[i + 2].y - p.y) < 30).length;
+
+  test('a loop-back entering the right facet keeps its detour rather than cut it short with a 10 px step', () => {
+    // The loop-back comes from "s" 800 px to the right, runs over an element (not modelled: only the
+    // route matters here), drops to y 135 and enters the upper right facet at y 112.5. Joining its
+    // last leg from the right vertex (y 125) would save two bends but leave a 10 px step at x 500.
+    const coords = { g: G, s: { x: 900, y: 95, w: 100, h: 80 } };
+    const pts = [P(900, 135), P(500, 135), P(500, 40), P(200, 40), P(200, 112.5), UP_RIGHT];
+    const { out } = run(coords, { back: { s: 's', t: 'g', pts } });
+    expect(sideOfEnd(out.back)).toBe('right');
+    expect(jogs(out.back)).toBe(0);
+    expect(out.back).toEqual([P(900, 135), P(500, 135), P(500, 40), P(200, 40), P(200, 125), TIP.right]);
   });
 });
 

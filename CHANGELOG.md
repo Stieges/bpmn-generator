@@ -291,7 +291,9 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   side (the outgoing one on the right, the incoming one on the left), the others move to the top or
   bottom vertex towards their other end, with a rebuilt orthogonal end segment. A single flow sits on
   the exact vertex, no longer half a pixel off. A flow with no free vertex towards its other end keeps
-  its dock on the facet. Changes the default output of every model with a gateway.
+  its dock on the facet, and so does a flow that would need more than one extra bend for the vertex,
+  or a jog (two bends under 30 px apart) on a loop-back spanning 300 px or more. Changes the default
+  output of every model with a gateway.
 - The F02 message names both accepted versions: `$schemaVersion "<v>" is not supported; only "2.0" and
   "2.1" are supported`, and its `params` are `{ supported: ["2.0", "2.1"] }` instead of `{ allowedValue }`
   (a 2.x response only). A model with `"$schemaVersion": "2.1"` now reaches the format-2.0 refusal F03

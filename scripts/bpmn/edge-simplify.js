@@ -1030,6 +1030,41 @@ export function reclipOptionsFor(nodes) {
 const TIP_EPS = 0.01;
 /** Most keeper combinations snapGatewayTips tries for one gateway. */
 const MAX_TIP_PLANS = 24;
+/** Bends a route may gain for each of its gateway ends snapGatewayTips moves, counted against the
+ *  route as it came into the pass. A vertex is worth one turn of the route, not a detour: a Z for a
+ *  12.5 px offset trades a small dock defect for two corners the reader has to follow. */
+const TIP_EXTRA_BENDS_PER_END = 1;
+/**
+ * A jog: two bends close together, i.e. a segment between two bends shorter than this (px). The
+ * step a route needs to reach a vertex is at most half the gateway (25 px for the 50 px diamond;
+ * ELK docks two flows of one side 12.5 px off the vertex), so twice END_STUB_PX, 30 px, catches
+ * every step taken only for the vertex. In the example set the steps snapping added were 13 px and
+ * 24.5 px, while a leg between two bends of a route this pass leaves alone is 42 px or longer
+ * outside one 10 px leg ELK drew itself — jogCount compares against the route as it came in, so
+ * that one is no reason to refuse anything.
+ */
+const JOG_MAX_PX = 2 * END_STUB_PX;
+/**
+ * A long back edge: a flow whose source lies at least this far (px, centre to centre) right of its
+ * target, against the left-to-right flow direction (elk.direction RIGHT), i.e. a loop-back routed
+ * past at least one other element. A back edge to the element right before it spans 155 px
+ * (gateway half 25 + layer gap 80 + task half 50) up to 235 px in the example set; one element in
+ * between adds at least a 50 px gateway and another 80 px gap, 310 px and more. On such a route a
+ * jog taken only to reach the vertex puts a kink into a long line the reader follows across the
+ * diagram; the facet dock is the smaller defect, so the end keeps it.
+ */
+const LONG_BACK_EDGE_PX = 300;
+
+/** Segments between two bends shorter than JOG_MAX_PX — the jogs of an orthogonal route. */
+function jogCount(points) {
+  const segs = segmentsOf(withoutCollinear(points));
+  let n = 0;
+  for (let i = 1; i + 1 < segs.length; i++) {
+    const [a, b] = segs[i];
+    if (Math.hypot(b.x - a.x, b.y - a.y) < JOG_MAX_PX) n++;
+  }
+  return n;
+}
 
 /** Side a route leaves its first point through, read from the first segment's direction; null
  *  when there is no segment or it is diagonal. */
@@ -1178,8 +1213,10 @@ function foreignBoxHits(points, coords, entry) {
  * The moved end gets an orthogonal end segment (see tipCandidates). A candidate is taken only when
  * it is orthogonal, leaves the vertex on its side, has no more end defects (endDefects), runs
  * through no more foreign shapes, crosses no more flows and lies on no more of another flow's line
- * than the current route, and has at most two bends more; best by bends, crossings, collinear
- * overlap, length. No candidate: the end stays where it is.
+ * than the current route, has at most one bend more per moved gateway end than the route as it came
+ * into the pass (TIP_EXTRA_BENDS_PER_END) and, on a long back edge (LONG_BACK_EDGE_PX), no more
+ * jogs (JOG_MAX_PX) than that route; best by bends, crossings, collinear overlap, length. No
+ * candidate: the end stays where it is — on its facet, which is the lesser defect than a detour.
  *
  * Ends already exactly on their vertex are not touched. A boundary event is never a gateway, so its
  * fixed endpoint is never moved. Pure: returns a new edgeCoords object when a route changed,
@@ -1191,9 +1228,20 @@ export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), 
     if (skipIds.has(e.id)) continue;
     const points = edgeCoords[e.id];
     if (!points || points.length < 2) continue;
-    entries.push({ id: e.id, source: e.source, target: e.target, points, order: entries.length });
+    entries.push({ id: e.id, source: e.source, target: e.target, points, original: points, order: entries.length });
   }
   const contains = (o, i) => o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
+  const centreX = (id) => { const b = coords[id]; return b ? b.x + b.w / 2 : NaN; };
+  // Gateway ends of `pts` that are not where the route had them when it came into the pass: each
+  // may cost the route TIP_EXTRA_BENDS_PER_END bends (the bend budget is per end, not per attempt, so
+  // an end moved twice in one plan — keeper, then handed on — still gets one bend).
+  const movedGatewayEnds = (entry, pts) => {
+    const o = entry.original;
+    const moved = (p, q) => Math.abs(p.x - q.x) >= TIP_EPS || Math.abs(p.y - q.y) >= TIP_EPS;
+    return (shapeOf(entry.source) === 'diamond' && moved(pts[0], o[0]) ? 1 : 0)
+      + (shapeOf(entry.target) === 'diamond' && moved(pts[pts.length - 1], o[o.length - 1]) ? 1 : 0);
+  };
+  const isLongBackEdge = (entry) => centreX(entry.source) - centreX(entry.target) >= LONG_BACK_EDGE_PX;
   const byGateway = new Map();
   for (const entry of entries) {
     if (entry.source === entry.target) continue;
@@ -1232,6 +1280,8 @@ export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), 
       overlap: collinearOverlap(entry.points, entry, entries),
       bends: bendCount(entry.points),
     };
+    const bendBudget = (pts) => bendCount(entry.original) + TIP_EXTRA_BENDS_PER_END * movedGatewayEnds(entry, pts);
+    const noJogs = isLongBackEdge(entry) ? jogCount(entry.original) : Infinity;
     let best = null;
     for (const cand of tipCandidates(path, box, side, { box: farBox, shape: shapeOf(end.far) }, { obstacles, softObstacles })) {
       if (!isOrthogonal(cand) || leavingSide(cand) !== side || !isOnGatewayTip(cand[0], box, side)) continue;
@@ -1239,7 +1289,8 @@ export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), 
       if (endDefects(pts, srcBox, tgtBox, srcShape, tgtShape) > now.defects) continue;
       if (foreignBoxHits(pts, coords, entry) > now.hits) continue;
       const bends = bendCount(pts);
-      if (bends > now.bends + 2) continue;
+      if (bends > bendBudget(pts)) continue;
+      if (jogCount(pts) > noJogs) continue;
       const crossings = crossingsAgainstOthers(entry, pts, entries);
       if (crossings > now.crossings) continue;
       const overlap = collinearOverlap(pts, entry, entries);
