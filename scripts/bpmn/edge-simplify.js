@@ -1055,6 +1055,27 @@ const JOG_MAX_PX = 2 * END_STUB_PX;
  */
 const LONG_BACK_EDGE_PX = 300;
 
+/**
+ * Proper crossings of a route with the routes that share a node with it — crossingsAgainstOthers
+ * leaves those out, since they touch by construction. Here only an intersection inside both
+ * segments counts (no shared end, no T-touch), which two flows of one gateway can only get by being
+ * routed across each other: when snapGatewayTips hands one of them to a perpendicular vertex.
+ */
+function crossingsWithNeighbours(entry, points, others) {
+  let n = 0;
+  const proper = (p1, p2, p3, p4) => {
+    const o = [orientation(p1, p2, p3), orientation(p1, p2, p4), orientation(p3, p4, p1), orientation(p3, p4, p2)];
+    return !o.includes(0) && o[0] !== o[1] && o[2] !== o[3];
+  };
+  for (const other of others) {
+    if (other.id === entry.id || !adjacent(entry, other)) continue;
+    for (const [p1, p2] of segmentsOf(points)) {
+      for (const [p3, p4] of segmentsOf(other.points)) if (proper(p1, p2, p3, p4)) n++;
+    }
+  }
+  return n;
+}
+
 /** Segments between two bends shorter than JOG_MAX_PX — the jogs of an orthogonal route. */
 function jogCount(points) {
   const segs = segmentsOf(withoutCollinear(points));
@@ -1212,8 +1233,9 @@ function foreignBoxHits(points, coords, entry) {
  *
  * The moved end gets an orthogonal end segment (see tipCandidates). A candidate is taken only when
  * it is orthogonal, leaves the vertex on its side, has no more end defects (endDefects), runs
- * through no more foreign shapes, crosses no more flows and lies on no more of another flow's line
- * than the current route, has at most one bend more per moved gateway end than the route as it came
+ * through no more foreign shapes, crosses no more flows — those sharing a node with it included,
+ * so a flow handed to another vertex does not cut across its sibling — and lies on no more of
+ * another flow's line than the current route, has at most one bend more per moved gateway end than the route as it came
  * into the pass (TIP_EXTRA_BENDS_PER_END) and, on a long back edge (LONG_BACK_EDGE_PX), no more
  * jogs (JOG_MAX_PX) than that route; best by bends, crossings, collinear overlap, length. No
  * candidate: the end stays where it is — on its facet, which is the lesser defect than a detour.
@@ -1277,6 +1299,7 @@ export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), 
       defects: endDefects(entry.points, srcBox, tgtBox, srcShape, tgtShape),
       hits: foreignBoxHits(entry.points, coords, entry),
       crossings: crossingsAgainstOthers(entry, entry.points, entries),
+      neighbourCrossings: crossingsWithNeighbours(entry, entry.points, entries),
       overlap: collinearOverlap(entry.points, entry, entries),
       bends: bendCount(entry.points),
     };
@@ -1293,6 +1316,7 @@ export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), 
       if (jogCount(pts) > noJogs) continue;
       const crossings = crossingsAgainstOthers(entry, pts, entries);
       if (crossings > now.crossings) continue;
+      if (crossingsWithNeighbours(entry, pts, entries) > now.neighbourCrossings) continue;
       const overlap = collinearOverlap(pts, entry, entries);
       if (overlap > now.overlap + 0.5) continue;
       const score = [bends, crossings, overlap, pathLength(pts)];

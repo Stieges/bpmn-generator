@@ -116,6 +116,34 @@ describe('snapGatewayTips — at most one bend more per snapped end', () => {
   });
 });
 
+describe('snapGatewayTips — two flows of one gateway do not cross each other', () => {
+  // Proper crossings (interior of both segments) between two routes.
+  const crossings = (a, b) => {
+    let n = 0;
+    for (let i = 0; i + 1 < a.length; i++) for (let j = 0; j + 1 < b.length; j++) {
+      const [p, q, r, s] = [a[i], a[i + 1], b[j], b[j + 1]];
+      const h = p.y === q.y ? [p, q] : [r, s], v = p.y === q.y ? [r, s] : [p, q];
+      if (h[0].y !== h[1].y || v[0].x !== v[1].x) continue;
+      const x = v[0].x, y = h[0].y;
+      if (x > Math.min(h[0].x, h[1].x) && x < Math.max(h[0].x, h[1].x) && y > Math.min(v[0].y, v[1].y) && y < Math.max(v[0].y, v[1].y)) n++;
+    }
+    return n;
+  };
+
+  test('join from below: the flow handed to the left vertex goes round the one that keeps the bottom, not across it', () => {
+    // multi-pool-collaboration's merge, reduced: "low" already enters the bottom vertex, "up" the
+    // lower left facet; "up" is better aligned and ranks first for the bottom. Sending "low" to the
+    // left vertex would cross "up" on its way; sending "up" there does not.
+    const coords = { g: G, low: { x: -100, y: 360, w: 100, h: 80 }, up: { x: -50, y: 200, w: 100, h: 80 } };
+    const { out } = run(coords, {
+      fLow: { s: 'low', t: 'g', pts: [P(0, 400), P(125, 400), TIP.bottom] },
+      fUp: { s: 'up', t: 'g', pts: [P(50, 240), P(112.5, 240), P(112.5, 137.5)] },
+    });
+    expect(crossings(out.fLow, out.fUp)).toBe(0);
+    expect([sideOfEnd(out.fLow), sideOfEnd(out.fUp)]).toEqual(['bottom', 'left']);
+  });
+});
+
 describe('snapGatewayTips — no jog on a long back edge', () => {
   // Segments between two bends shorter than 30 px: the jogs of a route.
   const jogs = (pts) => pts.slice(1, -2).filter((p, i) => Math.hypot(pts[i + 2].x - p.x, pts[i + 2].y - p.y) < 30).length;
