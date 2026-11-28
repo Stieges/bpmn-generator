@@ -84,7 +84,7 @@ section Multi-Agent Orchestration.
 
 The optional top-level `language` of a model (`"de"`, `"en"`, `"en-GB"`) selects the naming conventions of M01, M02, M05 and M06 and the event-marker inference; the CLI prints its hints (`ℹ [H10]` to `[H14]`) like `H01`, and they never fail `--strict`. Without `language` nothing changes. `BPMN_NAMING=<file>` extends the word lists of a shipped language (`references/naming-schema.json`, `$defs/Overlay`; read when a naming strategy is first used); a file that cannot be used makes the pipeline print `Pipeline error: NamingDataError: naming data "<path>" …` followed by a stack trace and exit 1. The shipped files `references/naming/<language>.json` carry the optional top-level `purpose` and `listNotes` (why each list exists; documentation only, the overlay has neither). Details: `references/modeling-guide.md`.
 
-A 2.x model's hints (H02–H06, H08, H09, H19, H20) are listed in `validation.hints` and never fail `--strict`. The messages of the 2.0-specific path (catalogue, format, lane formation) lead with their code, for example `✗ [C11] …` or `[F04] …` (exit 1, no stack trace). Rule messages (S, M, P, WF) keep their text unprefixed; their rule id is the `code` in `validation.findings`, a field of the library result that the CLI does not print. `--view=aligned-ports` docks message flows to or from a participant level with their other end. 1.x output is unchanged. The codes are in [`api-reference.md`](api-reference.md#message-codes). `node bpmn/import.js` prints `[N01] …` on stderr for a diagram generated from a 2.0 model. The
+A 2.x model's hints (H02–H06, H08, H09, H19, H20, H21) are listed in `validation.hints` and never fail `--strict`. The messages of the 2.0-specific path (catalogue, format, lane formation) lead with their code, for example `✗ [C11] …` or `[F04] …` (exit 1, no stack trace). Rule messages (S, M, P, WF) keep their text unprefixed; their rule id is the `code` in `validation.findings`, a field of the library result that the CLI does not print. `--view=aligned-ports` docks message flows to or from a participant level with their other end. 1.x output is unchanged. The codes are in [`api-reference.md`](api-reference.md#message-codes). `node bpmn/import.js` prints `[N01] …` on stderr for a diagram generated from a 2.0 model. The
 full rule for lanes and the entry points that accept 2.0 are in
 [`logic-core-schema.md`](logic-core-schema.md#format-20-catalogue-and-lane-views).
 
@@ -108,12 +108,12 @@ node bpmn/migrate.js <input.json> [output-base] [--catalog <path>] [--drop-unsup
 
 Translates a 1.x model into a format 2.x model. Lanes become actors without `kind`, each activity
 of a process with lanes gets the assignment of its lane (or role), each `system` on a task becomes
-a system of the catalogue, and the report lists every place you should check. It writes three files:
+a system of the catalogue, each data node becomes a data item of the catalogue, and the report lists every place you should check. It writes three files:
 
 | File | Content |
 |------|---------|
 | `<base>.json` | the 2.x model; its `"catalog"` field names the catalogue, relative to the model file |
-| `<base>.catalog.json` | the supplement `{ "actors": [...], "systems"?: [...] }`, never a `scheme` |
+| `<base>.catalog.json` | the supplement `{ "actors": [...], "systems"?: [...], "data"?: [...] }`, never a `scheme` |
 | `<base>.migrate-report.json` | the report (`status`, `entries`, `summary`), 2-space JSON |
 
 Without `--catalog` the model names the supplement as its catalogue, and the demi scheme applies.
@@ -121,15 +121,27 @@ With `--catalog <path>` (or `--catalog=<path>`, relative to the working director
 named exactly like an actor of that catalogue is that actor (`MG07`); the model then carries only
 the new actors and `"catalog"` names the given file, relative to the model; the given catalogue's
 scheme applies and the supplement is written for reference. `--drop-unsupported` drops what 2.x
-cannot hold yet (data nodes and their flows, a `system` on a node that is no task) and lists it
-(`MG02`) instead of refusing.
+cannot hold (a `system` on a node that is no task, a field of a data node other than `name`,
+`isCollection`, `lane` and `role`, a sequence or message flow that touches a data node, an association
+that links one to anything but an activity) and lists it (`MG02`) instead of refusing.
 
 A `system` on a task is carried: each distinct text becomes one system `sys_<slug>` of the
 supplement (`MG08`), and the task names it by id. With `--catalog`, a text named exactly like a
 system of that catalogue is that system (`MG07`), and the model carries only the new systems. A
-model that names a system is format `"2.1"`; one without stays `"2.0"`, and its supplement has no
-`systems`. After you merge the supplement into your catalogue, remove the model's own `actors` and
-`systems`; otherwise each of them gives H09.
+model that names a system or carries data access is format `"2.1"`; one with neither stays `"2.0"`,
+and its supplement has no `systems`.
+
+A data node (`dataObjectReference` or `dataStoreReference`, at any depth) is carried as well: it becomes
+a data item of the supplement (`MG09`; nodes of the same name, kind and collection marker become one
+item), and each association between it and an activity becomes an entry of the activity's `dataAccess`
+(towards the activity: `read`, away from it: `write`, no direction: access not recorded). A data node
+that is linked to no activity keeps its item in the catalogue and is not drawn (`MG10`; unless another
+data node of that item is linked: then the item is drawn through it). With
+`--catalog`, a data node named exactly like a data item of that catalogue of a fitting kind is that
+item (`MG07`), and an id that is no catalogue id or collides is renamed (`MG06`). A model with data
+access is format `"2.1"`; so is one that gains `data` in a given catalogue. All 28 of the 28 1.x test
+fixtures translate without the flag. After you merge the supplement into your catalogue, remove the model's own `actors`,
+`systems` and `data`; otherwise each of them gives H09.
 
 The default base is `<input basename without .json>.v2` in the working directory, never beside the
 input. A base is used as given (`out/m` writes `out/m.json`); its directory is created when it is

@@ -2,8 +2,8 @@
 
 A process model answers two questions beside *what happens*: **who** does a step, and **which IT
 system** is involved. This page shows how to get the common pictures for both **today**, with the
-lanes and pools the generator already draws, and what the new `role` and `system` fields on an
-activity are for.
+lanes and pools the generator already draws, what the `role` and `system` fields on an
+activity are for, and, in format 2.1, how a step records the data it reads or writes.
 
 Every `json` block on this page (sections 1 to 5) is a complete Logic-Core document. Save one as `example.json` and run
 
@@ -24,6 +24,7 @@ quick start in section 6 is run, command by command, by `scripts/bpmn/roles-and-
 | What happens inside the system as well | an expanded pool of its own + message flows | [4](#4-systems-as-expanded-pools) |
 | The facts only, without changing the picture | `role` / `system` on the activity | [5](#5-the-role-and-system-fields) |
 | Lanes formed from a catalogue of actors and systems (format 2.x) | `assignments`, `system` + a lanes view | [6](#6-format-21-quick-start) |
+| Which data a step reads or writes (format 2.1) | `data` + `dataAccess` | [7](#7-data-objects-and-data-stores-format-21) |
 
 ## 1. Responsibility lanes
 
@@ -230,8 +231,8 @@ on a task, which system it uses (`system`, format 2.1); the actors and the syste
 lanes or system lanes without an edit. The full rules are in
 [`references/logic-core-schema.md`](../references/logic-core-schema.md#format-20-catalogue-and-lane-views).
 
-A minimal catalogue: one unit, two roles in it, one role whose unit is not recorded, and two systems.
-Actors and systems share one id space. Save it as `catalog.json`.
+A minimal catalogue: one unit, two roles in it, one role whose unit is not recorded, two systems and
+three data items. Actors, systems and data share one id space. Save it as `catalog.json`.
 
 <!-- quickstart: catalog.json -->
 ```jsonc
@@ -245,13 +246,18 @@ Actors and systems share one id space. Save it as `catalog.json`.
   "systems": [
     { "id": "s_orders", "name": "Order system" },
     { "id": "s_payments", "name": "Payment system" }
+  ],
+  "data": [
+    { "id": "d_order", "name": "Order", "kind": "object", "layer": "business" },
+    { "id": "d_invoice", "name": "Invoice", "kind": "object" },
+    { "id": "d_register", "name": "Order register", "kind": "store", "layer": "technical" }
   ]
 }
 ```
 
-A minimal 2.1 model, `quickstart.json` (`"2.1"` because it uses `system`; a model without systems stays
-`"2.0"`). English names declare `"language": "en"`. The last activity has no performer on purpose,
-and only two tasks name a system.
+A minimal 2.1 model, `quickstart.json` (`"2.1"` because it uses `system` and `dataAccess`; a model with
+neither stays `"2.0"`). English names declare `"language": "en"`. The last activity has no performer on purpose,
+only two tasks name a system, and two tasks record the data they use.
 
 <!-- quickstart: quickstart.json -->
 ```jsonc
@@ -264,9 +270,9 @@ and only two tasks name a system.
       "name": "Order handling",
       "nodes": [
         { "id": "start", "type": "startEvent", "name": "Order received", "assignments": [{ "type": "D", "actor": "r_worker" }] },
-        { "id": "check", "type": "userTask", "name": "Check order", "system": "s_orders", "assignments": [{ "type": "D", "actor": "r_worker" }] },
+        { "id": "check", "type": "userTask", "name": "Check order", "system": "s_orders", "dataAccess": [{ "data": "d_order", "access": "read" }, { "data": "d_register", "access": "write" }], "assignments": [{ "type": "D", "actor": "r_worker" }] },
         { "id": "approve", "type": "userTask", "name": "Approve order", "assignments": [{ "type": "D", "actor": "r_lead" }] },
-        { "id": "pay", "type": "userTask", "name": "Pay invoice", "system": "s_payments", "assignments": [{ "type": "D", "actor": "r_finance" }] },
+        { "id": "pay", "type": "userTask", "name": "Pay invoice", "system": "s_payments", "dataAccess": [{ "data": "d_invoice", "access": "read" }, { "data": "d_order" }], "assignments": [{ "type": "D", "actor": "r_finance" }] },
         { "id": "archive", "type": "userTask", "name": "Archive order" },
         { "id": "end", "type": "endEvent", "name": "Order completed" }
       ],
@@ -301,8 +307,10 @@ node bpmn/pipeline.js ../quickstart.json ../quickstart-systeme --strict --view=s
   `system` takes a lane of its own; events and gateways follow their neighbours, and the performers play
   no part. A model without any `system` gets no lanes in this view (hint H06).
 
-A `"2.0"` model that uses `system` or `systems` is refused with one error F06 per use; change the
-version to `"2.1"`. A `system` must name a system of the catalogue (C14) and sits on a task (C15).
+A `"2.0"` model that uses `system`, `systems`, `data` or `dataAccess` is refused with one error F06 per
+use; change the version to `"2.1"`. A `system` must name a system of the catalogue (C14) and sits on a
+task (C15). The data of the quick start is explained in [section 7](#7-data-objects-and-data-stores-format-21);
+it changes none of the lanes above.
 
 Four **placeholder lanes** can appear: three when the model or the catalogue is incomplete, and one when a
 view asks for it. All are hints, never errors:
@@ -336,3 +344,53 @@ automatic tasks without a performer (and their boundary events) move; events and
 lane. `automaticName` is optional (1-25 characters, not blank) and only valid with `"automatic": "lane"`; the view
 `systeme` does not take the switch. Known limit: you reach it with `--view <path>`, an inline view over
 HTTP or `runPipeline`; the MCP tools take a view by name only, and no shipped view sets it.
+
+## 7. Data objects and data stores (format 2.1)
+
+A step can record which data it reads or writes. The data items come from the catalogue, in the list
+`data` (`{ id, name, kind?, layer?, isCollection? }`, one id space with actors and systems). `kind` is
+`object` (a data object) or `store` (a data store); a business item and a technical one differ only in
+the optional `layer`, which is kept in the catalogue and changes no drawing. An activity (any task,
+`subProcess`, `transaction`, `callActivity`) lists its use in `dataAccess`, each entry naming a catalogue
+item and, optionally, `read` or `write`:
+
+```jsonc
+// on the step "check" of the quick start
+"dataAccess": [
+  { "data": "d_order", "access": "read" },
+  { "data": "d_register", "access": "write" }
+]
+```
+
+What the generator draws for each step, whatever the view:
+
+- One data reference per distinct item, in a row below the step. An `object` is a data object
+  reference, a `store` a data store reference. `isCollection: true` draws the collection marker on an
+  object; a store cannot be a collection.
+- A `read` is an arrow from the data to the step, a `write` an arrow from the step to the data. An entry
+  without `access` is a plain line without an arrow: the access is not recorded.
+- The references follow their step in every lanes view. They never form
+  a lane and never change the order of the lanes of a view.
+- Several steps that use the same object share one data object element per process in the XML; a data store is one
+  element of the whole diagram. Each step still gets its own reference, so each step has its own picture.
+
+In the quick start the step `Check order` reads `Order` and writes `Order register`; `Pay invoice` reads
+`Invoice` and uses `Order` with no recorded access. The XML holds 4 references, 2 input associations,
+1 output association, 1 plain association and 1 data store.
+
+The checks: a `dataAccess` entry must name a data item of the catalogue (C16, also for an actor or system id,
+for an exact duplicate, for an item both with and without a recorded access on one step,
+and for data without any catalogue), it sits on an activity (C15), and the ids the
+generator derives for the references and their connections must not collide with an id of the model (C17).
+An item without `kind` is drawn as a data object and reported once with hint H21. A model that names no
+data keeps its output byte for byte.
+
+Both importers read the result back: the references become data nodes, and a native
+`dataInputAssociation` or `dataOutputAssociation` (also one drawn in a modeler) becomes a directed
+association. The plain line of an unrecorded access comes back as an undirected association, so the
+information is not lost, but a regenerated diagram does not distinguish it from a link someone drew.
+
+Known limits: data on events and gateways, data states and hiding data in a view are not covered yet.
+The data references of a step inside a collapsed subprocess are written to the XML but not drawn, and the
+rows do not avoid the routes of sequence or message flows. A 1.x model keeps its data nodes as before;
+`node bpmn/migrate.js` turns them into catalogue items and data access of the steps.

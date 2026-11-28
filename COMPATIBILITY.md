@@ -39,7 +39,7 @@ The generated `.bpmn` files are designed to be compatible with [bpmn.io](https:/
 | Text Annotations | Yes | Yes | |
 | Groups | Yes | Yes | |
 | Associations | Yes | Yes | Directed/undirected |
-| Data input/output associations | No (import only) | Yes | Read on import as directed associations, regenerated as plain directed associations |
+| Data input/output associations | Format 2.1 only | Yes | Read on import as directed associations, regenerated as plain directed associations; a format 2.1 model writes them natively (see references/omg-compliance.md) |
 
 ### DI (Diagram Interchange) Support
 

@@ -57,6 +57,15 @@ describe('docs/roles-and-systems.md — the format 2.1 quick start runs', () => 
       const view = /--view=(\w+)/.exec(command)[1];
       const lanes = [...readFileSync(`${out}.bpmn`, 'utf8').matchAll(/<bpmn:lane [^>]*name="([^"]*)"/g)].map((m) => m[1]);
       expect(lanes).toEqual(LANES[view]);
+      // The data of the quick start never changes the lanes (LANES above is the pin) and is drawn per step.
+      const xml = readFileSync(`${out}.bpmn`, 'utf8');
+      const count = (re) => (xml.match(re) || []).length;
+      expect(count(/<bpmn:dataObjectReference /g) + count(/<bpmn:dataStoreReference /g)).toBe(4);
+      expect(count(/<bpmn:dataInputAssociation /g)).toBe(2);
+      expect(count(/<bpmn:dataOutputAssociation /g)).toBe(1);
+      expect(count(/<bpmn:association /g)).toBe(1);
+      expect(count(/<bpmn:dataStore /g)).toBe(1);
+      expect(run.stdout).not.toMatch(/\[H21\]/);
       expect(run.stdout.includes('[H02]')).toBe(view !== 'systeme');
       expect(run.stdout.includes('[H20]')).toBe(view === 'systeme');
       expect(/\[H04\]/.test(run.stdout)).toBe(view === 'einheiten' || view === 'organigramm');
