@@ -213,23 +213,24 @@ describe('H18 from runPipeline: the six-node review model', () => {
 describe('H18 on the fixtures', () => {
   const fixture = (name) => JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
 
-  test('bpmn-generator-pipeline.json: the loop-back fu6 crosses the label of gw_ok; five findings, all crossings, last in hints', async () => {
+  // fo8 ("Iteration < Max") left gw_maxiter's lower facet and turned down through its label until
+  // layout.gatewayTips; it now leaves the right vertex and misses the label (#122).
+  test('bpmn-generator-pipeline.json: the loop-back fu6 crosses the label of gw_ok; four findings, all crossings, last in hints', async () => {
     const r = await runPipeline(fixture('bpmn-generator-pipeline.json'));
     expect(h18(r).map((h) => h.elements)).toEqual([
-      ['fu6', 'gw_ok'], ['fo8', 'gw_maxiter'], ['fo9', 'gw_maxiter'], ['fo10', 'fo9'], ['mf3', 'fo3'],
+      ['fu6', 'gw_ok'], ['fo9', 'gw_maxiter'], ['fo10', 'fo9'], ['mf3', 'fo3'],
     ]);
     expect(h18(r)[0].message).toBe('The sequence flow "fu6" crosses the label of the gateway "gw_ok": the line runs through the text. Move the label or the flow in a modeler, or shorten the name.');
-    expect(h18(r)[4].message).toBe('The message flow "mf3" crosses the label of the sequence flow "fo3": the line runs through the text. Move the label or the flow in a modeler, or shorten the name.');
+    expect(h18(r)[3].message).toBe('The message flow "mf3" crosses the label of the sequence flow "fo3": the line runs through the text. Move the label or the flow in a modeler, or shorten the name.');
     const codes = r.validation.hints.map((h) => h.code);
-    expect(codes.slice(codes.indexOf('H18'))).toEqual(['H18', 'H18', 'H18', 'H18', 'H18']);
+    expect(codes.slice(codes.indexOf('H18'))).toEqual(['H18', 'H18', 'H18', 'H18']);
   }, 30_000);
 
-  test('the format 2.0 goldens: in bestellung × einheiten the "ja" flow runs through the label "nein"; the others get none', async () => {
-    expect(h18(await generateV2('bestellung.json', 'einheiten'))).toEqual([{
-      code: 'H18',
-      message: 'The sequence flow "flow_gw_rueck" crosses the label of the sequence flow "flow_gw_zahlen": the line runs through the text. Move the label or the flow in a modeler, or shorten the name.',
-      elements: ['flow_gw_rueck', 'flow_gw_zahlen'],
-    }]);
+  // In bestellung × einheiten the "ja" flow ran through the label "nein" while "nein" left the
+  // gateway's lower facet sideways; with layout.gatewayTips "nein" leaves the bottom vertex, its
+  // label sits on its own leg and "ja" misses it (#122). The positive v2 case is the combination below.
+  test('the format 2.0 goldens get none', async () => {
+    expect(h18(await generateV2('bestellung.json', 'einheiten'))).toEqual([]);
     expect(h18(await generateV2('bestellung.json', 'rollen'))).toEqual([]);
     expect(h18(await generateV2('organigramm.json', 'organigramm'))).toEqual([]);
   }, 60_000);
@@ -241,16 +242,20 @@ describe('H18 on the fixtures', () => {
 
 describe('the hints H15 to H18 together', () => {
   // bestellung.json in a pool, three black-box partners with one message flow each (no participant order
-  // avoids a DI05), a receive task nobody sends to, and a word longer than a line.
+  // avoids a DI05), a receive task nobody sends to, a word longer than a line, and a loop-back from
+  // "Lieferant klären" to "Auftrag prüfen" under a two-line gateway name (as in REVIEW above): the
+  // loop-back runs through the gateway's label (H18).
   const combo = () => {
     const base = JSON.parse(readFileSync(join(FIXTURES_V2, 'bestellung.json'), 'utf8'));
     const nodes = structuredClone(base.nodes);
     nodes.find((n) => n.id === 'zahlen').name = 'Zahlungsfreigabeanweisungsbearbeitungsvorgang anweisen';
+    nodes.find((n) => n.id === 'gw').name = 'Rückfrage beim Lieferanten nötig?';
     nodes.splice(nodes.length - 1, 0, {
       id: 'rt', type: 'receiveTask', name: 'Bestätigung empfangen', assignments: [{ type: 'D', actor: 'zahlung' }],
     });
     const edges = base.edges.filter((e) => !(e.source === 'zahlen' && e.target === 'end'));
-    edges.push({ source: 'zahlen', target: 'rt' }, { id: 'f_rt', source: 'rt', target: 'end' });
+    edges.push({ source: 'zahlen', target: 'rt' }, { id: 'f_rt', source: 'rt', target: 'end' },
+      { id: 'f_loop', source: 'rueck', target: 'pruefen' });
     return {
       $schemaVersion: '2.0', catalog: 'bestellung-catalog.json',
       pools: [{ id: base.id, name: base.name, nodes, edges }],
@@ -267,6 +272,7 @@ describe('the hints H15 to H18 together', () => {
     const r = await runPipeline(combo(), { catalog: catalog(), view: resolve(here, '../../views/einheiten-view.json') });
     expect(r.validation.errors).toEqual([]);
     expect(r.validation.hints.map((h) => h.code).filter((c) => /^H1[5-8]$/.test(c))).toEqual(['H15', 'H16', 'H17', 'H18']);
+    expect(h18(r).map((h) => h.elements)).toEqual([['f_loop', 'gw']]);
   }, 60_000);
 
   test('CLI --strict exits 0 and writes the files', () => {
