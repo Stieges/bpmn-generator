@@ -31,13 +31,14 @@ const { computeSequenceFlowLabel } = await import('./coordinates.js');
 describe('edge labels follow a route the crossing guard reverted', () => {
   test('simple-approval: the reverted edge is labelled on its final route', async () => {
     const lc = JSON.parse(readFileSync('../tests/fixtures/simple-approval.json', 'utf8'));
-    // The endpoint re-clip runs after the guard and would refresh the label on its own when it
-    // moves the reverted route — switched off so the guard is the last pass to touch the route.
+    // The endpoint re-clip and the gateway-tip pass run after the guard and would refresh the label
+    // on their own when they move the reverted route (in simple-approval a flow of the gateway) —
+    // both switched off so the guard is the last pass to touch the route.
     const reclip = CFG.layout.endpointReclip;
     let r;
     try {
       CFG.layout.endpointReclip = false;
-      r = await runPipeline(lc, { visualRefinement: false });
+      r = await runPipeline(lc, { visualRefinement: false, gatewayTips: false });
     } finally {
       CFG.layout.endpointReclip = reclip;
     }
