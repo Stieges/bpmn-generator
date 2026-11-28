@@ -18,6 +18,12 @@ import { MODEL_V2_IMPORT_NOTICE } from './bpmn/import.js';
 let baseUrl;
 
 beforeAll(async () => {
+  // Server and fetch share this process, and several tests run runPipeline in-process between two
+  // requests: while it runs, the event loop is blocked. A kept-alive socket idle for longer than the
+  // server's keepAliveTimeout (5 s by default) is closed by the server just as fetch reuses it for
+  // the next request — "fetch failed", ECONNRESET, on a slow runner after the in-process runs on
+  // example-rechnungspruefung. The test server keeps idle sockets for longer than any test runs.
+  server.keepAliveTimeout = 120_000;
   await new Promise((resolve) => server.listen(0, resolve));
   const { port } = server.address();
   baseUrl = `http://127.0.0.1:${port}`;
