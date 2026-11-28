@@ -119,6 +119,10 @@ describe('text annotation — the box fits its text', () => {
       const r = await runPipeline(lc);
       const di06 = r.diagnostics.issues.filter(i => i.code === 'DI06');
       expect({ associated, di06 }).toEqual({ associated, di06: [] });
+      // Both ends nested: the association is still written, with a BPMNEdge that resolves.
+      expect({ associated, xmlWarnings: r.validation.xmlWarnings }).toEqual({ associated, xmlWarnings: [] });
+      expect(r.bpmnXml.includes('<bpmndi:BPMNEdge id="a1_di" bpmnElement="a1">')).toBe(associated);
+      expect(/<bpmn:association [^>]*id="a1"/.test(r.bpmnXml)).toBe(associated);
       const n = r.coordMap.coords.sn, sp = r.coordMap.coords.sp;
       expect(n.lines.length).toBeGreaterThan(1);
       expect(n.y + n.h).toBeLessThanOrEqual(sp.y + sp.h);
