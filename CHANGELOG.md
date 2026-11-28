@@ -271,7 +271,8 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 - `node bpmn/migrate.js -h` and `--help`, anywhere on the command line, print the usage on stdout and exit 0
   (an unknown flag still exits 1).
 - The error for a lanes view on a 1.x model now ends with `translate it with node bpmn/migrate.js`
-  (still uncoded). It is the only change to a response for a 1.x model.
+  (still uncoded). Besides the two 1.x changes named below (the import of native data associations and
+  the written nested association), it is the only change to a response for a 1.x model.
 - The format 2.x examples and the label cut test use a neutral order-handling domain: the fixtures,
   catalogues and goldens under `tests/fixtures-v2/`, the inline models of the 2.x tests, the label
   cut words, `docs/roles-and-systems.md` and the examples in `references/logic-core-schema.md`.
