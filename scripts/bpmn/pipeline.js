@@ -214,10 +214,10 @@ function errorFindings(errors, code = null) {
  *   A view's `lanes` (`role`, `unit`, `system`, `none`, or the object form, see `normalizeLanesOption`) forms the lanes of a format 2.x model from its
  *   assignments or systems (absent: `role`); on a 1.x model, which carries its own lanes, such a view rejects
  *   with ViewRejectedError, whose text names the translator `node bpmn/migrate.js`
- * @param {object} [opts.catalog] - the catalogue `{ actors, systems?, scheme? }` of a format 2.x model, as an
+ * @param {object} [opts.catalog] - the catalogue `{ actors, systems?, data?, scheme? }` of a format 2.x model, as an
  *   object (shared/catalog.js loadCatalog reads a file); a string throws a TypeError, and so does a
  *   catalogue with a 1.x model. A 2.x model first passes resolveFields (format schema, catalogue,
- *   assignments and systems: C01–C06, C14, C15); its findings, or `mode` optimize/soll, return early like a validation error
+ *   assignments, systems and data access: C01–C06, C14–C16); its findings, or `mode` optimize/soll, return early like a validation error
  * @returns {Promise<{
  *   bpmnXml: string|null,
  *   svg: string|null,
@@ -234,7 +234,8 @@ function errorFindings(errors, code = null) {
  *                hints: Array<{code: string, message: string, elements: string[]}>,
  *                infos?: string[], xmlWarnings?: string[],
  *                findings?: Array<{code: string, severity: string, message: string}>}
- *     `hints` (always present, empty on an early return): first the lane hints of a format 2.0
+ *     `hints` (always present, empty on an early return): first H09 per catalogue entry the process file
+ *     replaces and H21 per used data item without a recorded kind (resolveFields, `elements: [id]`), then the lane hints of a format 2.0
  *     model (formLanes: H02–H06, H08), then one entry per element the view derived — H01 a join
  *     gateway and its onward flow, `elements: [gatewayId, targetId, flowId]` —, then, for a model
  *     with a supported `language`, H10 per event marker inferred from the name and H11 per event

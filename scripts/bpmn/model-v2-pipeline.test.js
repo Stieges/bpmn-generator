@@ -297,7 +297,7 @@ describe('$schemaVersion: only "2.0" and "2.1" are format 2.x', () => {
 });
 
 describe('response contract', () => {
-  test('the hint code pattern in api-schema.json accepts H01–H20', () => {
+  test('the hint code pattern in api-schema.json accepts H01–H21', () => {
     const api = JSON.parse(readFileSync(resolve(root, 'references/api-schema.json'), 'utf8'));
     const find = (v) => {
       if (v && typeof v === 'object') {
@@ -308,7 +308,7 @@ describe('response contract', () => {
     };
     const re = new RegExp(find(api));
     for (const code of ['H01', 'H02', 'H06', 'H08', 'H09', 'H10', 'H11', 'H12', 'H13', 'H14']) expect(re.test(code)).toBe(true);
-    for (const code of ['H00', 'H21', 'H1', 'H100']) expect(re.test(code)).toBe(false);
+    for (const code of ['H00', 'H22', 'H1', 'H100']) expect(re.test(code)).toBe(false);
   });
 });
 
