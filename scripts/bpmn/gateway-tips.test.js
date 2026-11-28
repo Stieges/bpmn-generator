@@ -247,3 +247,37 @@ describe('snapGatewayTips in the pipeline — an order-handling model with a def
       expect(r.diagnostics.issues.filter((i) => /^DI0[7-9]|^DI1[01]/.test(i.code))).toEqual([]);
     }, 60_000);
 });
+
+describe('snapGatewayTips moves sequence flows at gateways and nothing else', () => {
+  // A format 2.1 model with data objects and data stores in a row below their steps: with the pass
+  // on, every DI element other than a sequence flow at a gateway — data shapes, data associations,
+  // tasks, events, other flows — is byte-identical to the output with the pass off. A gateway's own
+  // shape may only differ in its label, which avoids the moved flows.
+  test('bestellung-daten × rollen: data shapes and data associations stay where they are', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { loadCatalog } = await import('../shared/catalog.js');
+    const { loadNamedView } = await import('../shared/view.js');
+    const dir = join('..', 'tests', 'fixtures-v2');
+    const model = JSON.parse(readFileSync(join(dir, 'bestellung-daten.json'), 'utf8'));
+    const opts = { catalog: loadCatalog(join(dir, model.catalog)), view: loadNamedView('rollen') };
+    const off = await runPipeline(structuredClone(model), { ...opts, gatewayTips: false });
+    const on = await runPipeline(structuredClone(model), opts);
+    const types = Object.fromEntries([...on.bpmnXml.matchAll(/<bpmn:(\w+)\b[^>]*\bid="([^"]+)"/g)].map((m) => [m[2], m[1]]));
+    const ends = Object.fromEntries([...on.bpmnXml.matchAll(/<bpmn:sequenceFlow\b[^>]*\bid="([^"]+)"[^>]*sourceRef="([^"]+)"[^>]*targetRef="([^"]+)"/g)]
+      .map((m) => [m[1], [m[2], m[3]]]));
+    const di = (xml) => Object.fromEntries([...xml.matchAll(/<bpmndi:(BPMNShape|BPMNEdge)\b[^>]*bpmnElement="([^"]+)"[^>]*>([\s\S]*?)<\/bpmndi:\1>/g)]
+      .map((m) => [m[2], m[3]]));
+    const a = di(off.bpmnXml), b = di(on.bpmnXml);
+    expect(Object.keys(b).sort()).toEqual(Object.keys(a).sort());
+    const withoutLabel = (s) => s.replace(/<bpmndi:BPMNLabel>[\s\S]*<\/bpmndi:BPMNLabel>/, '');
+    const data = Object.keys(b).filter((id) => /^data(Object|Store)Reference$|^data(Input|Output)Association$/.test(types[id]));
+    expect(data.length).toBeGreaterThanOrEqual(8);
+    const moved = Object.keys(b).filter((id) => a[id] !== b[id]).filter((id) => {
+      if (ends[id]) return !ends[id].some((n) => isGateway(types[n]));
+      return !(isGateway(types[id]) && withoutLabel(a[id]) === withoutLabel(b[id]));
+    });
+    expect(moved).toEqual([]);
+    expect(on.bpmnXml.replace(/<bpmndi:BPMNDiagram[\s\S]*$/, '')).toBe(off.bpmnXml.replace(/<bpmndi:BPMNDiagram[\s\S]*$/, ''));
+  }, 60_000);
+});
