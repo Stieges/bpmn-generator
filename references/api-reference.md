@@ -396,6 +396,8 @@ BPMN 2.0 XML → Logic-Core JSON (round-trip via the DOM parser).
 
 For a diagram generated from a format 2.0 model (the attributes `bg:modelVersion`, `bg:view`, `bg:catalog` on `bpmn:definitions`), the response also carries `"notices": [{ "code": "N01", "message": "Diagram generated from a format 2.0 model. Changes belong in the model. Importing yields a format 1.x model; assignments and catalogue references are lost." }]`. The import never refuses: `logicCore` is a format 1.x model (formed lanes as ordinary lanes). A modeler that drops the `bg:` attributes on saving also drops the notice. A 1.x response has no `notices` key. The CLI (`node bpmn/import.js`) prints `[N01] <message>` on stderr; MCP `import_bpmn` adds a second text block, the JSON `{"notices":[…]}` (see "Message codes").
 
+Native data associations (`dataInputAssociation`, `dataOutputAssociation`) on a task, subprocess or event, at any depth, come back in `logicCore.associations` as directed associations between the element and its data object or data store reference, for 1.x diagrams too; one without an `id`, or one that names a property or an `ioSpecification` input, is skipped. Details: [`round-trip.md`](round-trip.md).
+
 **Errors:** `500 { correlationId, status: "internal_error", error }` — parse failure.
 
 **Example:**
