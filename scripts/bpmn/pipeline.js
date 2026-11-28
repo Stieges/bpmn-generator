@@ -480,9 +480,12 @@ async function runPipeline(logicCore, callerOpts = {}) {
   // every pass that moves a shape or a route, so it judges the final geometry and nothing re-routes
   // its choice; before edge-label repair and routeMessageFlows. On by default (config.json ->
   // layout.bendRule); per call `bendRule`, CLI --no-bend-rule / --bend-rule.
+  // One memo for both runs of the rule (this one and the rerun after snapGatewayTips): the rerun
+  // searches again only the flows the snap moved and those near them (bend-rule.js, applyBendRule).
+  const bendMemo = {};
   if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
     const beforeBend = coordMap.edgeCoords;
-    coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
+    coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify, memo: bendMemo });
     refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines, { avoidOtherRoutes: true });
   }
 
@@ -516,7 +519,7 @@ async function runPipeline(logicCore, callerOpts = {}) {
       // than it does now.
       if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
         const beforeBend = coordMap.edgeCoords;
-        coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
+        coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify, memo: bendMemo });
         refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines, { avoidOtherRoutes: true });
       }
     }
