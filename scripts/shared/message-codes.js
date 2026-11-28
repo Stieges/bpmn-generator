@@ -28,6 +28,7 @@ export const MESSAGE_CODES = Object.freeze({
   C14: entry('catalogue', 'a system reference that names no system of the catalogue (an unknown id, an actor id, a data id), or systems without a catalogue'),
   C15: entry('catalogue', 'a step field on a node that cannot carry it: system off a task, data access off an activity'),
   C16: entry('catalogue', 'a data access that names no data item of the catalogue (an unknown id, an actor or system id), lists the same access twice or both recorded and not recorded, or data without a catalogue'),
+  C17: entry('catalogue', 'an id derived for a data reference, its connection, placeholder, data object or data store collides with another id of the model'),
   F01: entry('format', 'a format 2.0 schema violation (one per schema error)'),
   F02: entry('format', 'a $schemaVersion of the 2 line other than "2.0" and "2.1"'),
   F03: entry('format', 'format 2.0 is not accepted at this entry point'),
