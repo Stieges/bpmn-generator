@@ -121,6 +121,21 @@ describe('#64 id-less edges', () => {
   });
 });
 
+describe('minted ids avoid the ids the writer derives from format 2.1 data carriers', () => {
+  test('a DataObject, DataStore or placeholder id is taken; without the carriers the id is the same as before', () => {
+    const carriers = { _dataObject: 'flow_a_b', _dataStore: 'flow_a_b_2', _dataProperty: 'flow_a_b_3' };
+    const lc = { id: 'p', name: 'P', nodes: [{ id: 'a', type: 'userTask', name: 'A', _dataProperty: carriers._dataProperty },
+      { id: 'b', type: 'endEvent', name: 'B' },
+      { id: 'r', type: 'dataObjectReference', name: 'R', _dataObject: carriers._dataObject },
+      { id: 's', type: 'dataStoreReference', name: 'S', _dataStore: carriers._dataStore }],
+    edges: [{ source: 'a', target: 'b' }] };
+    expect(assignEdgeIds(lc).edges[0].id).toBe('flow_a_b_4');
+    const plain = JSON.parse(JSON.stringify(lc, (k, v) => (k.startsWith('_') ? undefined : v)));
+    delete plain.edges[0].id;
+    expect(assignEdgeIds(plain).edges[0].id).toBe('flow_a_b');
+  });
+});
+
 describe('#64 ruling 3: normalised BEFORE validation and the net check', () => {
   test('a rule finding about an id-less edge names the generated flow id', async () => {
     const lc = {

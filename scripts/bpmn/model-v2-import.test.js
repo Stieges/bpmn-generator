@@ -13,6 +13,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bpmnToLogicCore, bpmnToLogicCoreLegacy, readModelMarker, readModelLanguage, MODEL_V2_IMPORT_NOTICE, MODEL_V2_IMPORT_NOTICE_CODE } from './import.js';
 import { validateLogicCoreSchema } from './schema-gate.js';
+import { resolveFields } from './model-v2.js';
 import { runPipeline } from './pipeline.js';
 import { loadNamedView, ViewRejectedError } from '../shared/view.js';
 
@@ -297,5 +298,109 @@ describe('readModelLanguage', () => {
       expect(stderr).not.toContain(MODEL_V2_IMPORT_NOTICE);
       expect(stdout).toContain('"language": "de"');
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+// ─── format 2.1 data: the import of native data associations, shared objects and stores ────────
+describe('format 2.1 data: both readers read the output into a 1.x model', () => {
+  const fixture = (name) => JSON.parse(read(resolve(root, `tests/fixtures-v2/${name}`)));
+  const DATA_CATALOG = { ...fixture('bestellung-catalog.json'), data: [
+    { id: 'd_bestellung', name: 'Bestellung', kind: 'object' },
+    { id: 'd_rechnungen', name: 'Rechnungen', kind: 'object', isCollection: true },
+    { id: 'd_register', name: 'Bestellregister', kind: 'store' },
+  ] };
+  const copy = (v) => JSON.parse(JSON.stringify(v));
+  /** bestellung.json as "2.1" with the data access of `edit`, optionally an expanded subprocess `sp` holding `buchen`. */
+  const model = (edit, { sub = false } = {}) => {
+    const m = { ...fixture('bestellung.json'), $schemaVersion: '2.1' };
+    delete m.catalog;
+    for (const n of m.nodes) if (edit[n.id]) Object.assign(n, edit[n.id]);
+    if (sub) {
+      m.nodes.splice(5, 0, { id: 'sp', type: 'subProcess', name: 'Zahlung buchen', isExpanded: true, assignments: [{ type: 'D', actor: 'zahlung' }],
+        nodes: [
+          { id: 'sp_s', type: 'startEvent', name: 'Buchung beginnt' },
+          { id: 'buchen', type: 'userTask', name: 'Rechnung buchen', dataAccess: [{ data: 'd_bestellung', access: 'read' }, { data: 'd_rechnungen', access: 'write' }] },
+          { id: 'sp_e', type: 'endEvent', name: 'Rechnung gebucht' }],
+        edges: [{ source: 'sp_s', target: 'buchen' }, { source: 'buchen', target: 'sp_e' }] });
+      m.edges = m.edges.filter((e) => !(e.source === 'zahlen' && e.target === 'end'));
+      m.edges.push({ source: 'zahlen', target: 'sp' }, { source: 'sp', target: 'end' });
+    }
+    return m;
+  };
+  const MAIN = model({
+    pruefen: { dataAccess: [{ data: 'd_bestellung', access: 'read' }, { data: 'd_register', access: 'write' }] },
+    rueck: { dataAccess: [{ data: 'd_bestellung' }] },
+    zahlen: { dataAccess: [{ data: 'd_rechnungen', access: 'write' }] },
+  }, { sub: true });
+  const generate = async (m) => {
+    const r = await runPipeline(copy(m), { catalog: copy(DATA_CATALOG), view: loadNamedView('rollen') });
+    expect(r.validation.errors).toEqual([]);
+    expect(r.validation.xmlWarnings).toEqual([]);
+    return r.bpmnXml;
+  };
+  /** The intermediate associations as a 1.x import gives them: no `_access`, a link undirected. */
+  const expectedAssociations = (m) => {
+    const { lc, errors } = resolveFields(copy(m), { catalog: copy(DATA_CATALOG) });
+    expect(errors).toEqual([]);
+    return lc.associations.map(({ _access, ...a }) => ({ ...a, directed: a.directed === true }));
+  };
+  const byId = (list) => [...list].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const allNodes = (nodes, out = []) => { for (const n of nodes ?? []) { out.push(n); allNodes(n.nodes, out); } return out; };
+
+  for (const [name, reader] of Object.entries(READERS)) {
+    test(`${name}: passes the 1.x gate; references are nodes with names and isCollection; associations by id`, async () => {
+      const lc = await reader(await generate(MAIN));
+      expect(validateLogicCoreSchema(lc)).toEqual({ valid: true, errors: [] });
+      const refs = allNodes(lc.nodes).filter((n) => n.type.startsWith('data'))
+        .map(({ id, type, name: label, isCollection }) => ({ id, type, name: label, ...(isCollection ? { isCollection } : {}) }));
+      expect(byId(refs)).toEqual([
+        { id: 'buchen__d_bestellung', type: 'dataObjectReference', name: 'Bestellung' },
+        { id: 'buchen__d_rechnungen', type: 'dataObjectReference', name: 'Rechnungen', isCollection: true },
+        { id: 'pruefen__d_bestellung', type: 'dataObjectReference', name: 'Bestellung' },
+        { id: 'pruefen__d_register', type: 'dataStoreReference', name: 'Bestellregister' },
+        { id: 'rueck__d_bestellung', type: 'dataObjectReference', name: 'Bestellung' },
+        { id: 'zahlen__d_rechnungen', type: 'dataObjectReference', name: 'Rechnungen', isCollection: true },
+      ]);
+      const expected = expectedAssociations(MAIN);
+      expect(expected.find((a) => a.id === 'rueck__d_bestellung__link').directed).toBe(false);
+      expect(expected.filter((a) => a.directed)).toHaveLength(5);
+      expect(byId(lc.associations)).toEqual(byId(expected));
+      expect(JSON.stringify(lc)).not.toMatch(/bg:|__input|__store|Process_Bestellung__/);
+      expect(keysOf(lc).filter((k) => k.startsWith('_') || k.startsWith('$'))).toEqual([]);
+    });
+  }
+
+  test('both readers give the same model', async () => {
+    const xml = await generate(MAIN);
+    expect(await bpmnToLogicCore(xml)).toEqual(bpmnToLogicCoreLegacy(xml));
+  });
+
+  test('the CLI prints one N01 notice', async () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'import-data-'));
+    try {
+      const file = resolve(dir, 'data.bpmn');
+      writeFileSync(file, await generate(MAIN));
+      const { status, stderr } = spawnSync(process.execPath, [resolve(here, 'import.js'), file], { encoding: 'utf8' });
+      expect(status).toBe(0);
+      expect(stderr.match(/\[N01\]/g)).toHaveLength(1);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('a model listed out of flow order: the associations equal as a set, though the orders differ', async () => {
+    const m = model({
+      pruefen: { dataAccess: [{ data: 'd_bestellung', access: 'read' }, { data: 'd_register', access: 'write' }] },
+      zahlen: { dataAccess: [{ data: 'd_rechnungen', access: 'write' }, { data: 'd_bestellung', access: 'read' }] },
+    });
+    const at = (id) => m.nodes.findIndex((n) => n.id === id);
+    const [zahlen] = m.nodes.splice(at('zahlen'), 1);
+    m.nodes.splice(at('pruefen'), 0, zahlen);
+    expect(at('zahlen')).toBeLessThan(at('pruefen'));
+    const expected = expectedAssociations(m);
+    const xml = await generate(m);
+    for (const reader of Object.values(READERS)) {
+      const lc = await reader(xml);
+      expect(lc.associations.map((a) => a.id)).not.toEqual(expected.map((a) => a.id));
+      expect(byId(lc.associations)).toEqual(byId(expected));
+    }
   });
 });

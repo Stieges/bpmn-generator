@@ -340,6 +340,9 @@ const HUMAN_PERFORMER_TYPES = new Set(['userTask', 'manualTask']);
  */
 function buildDataObject(node, refEl) {
   if (node.type !== 'dataObjectReference') return null;
+  // A reference a format 2.1 step derived from its data access shares the process's DataObject
+  // (`_dataObject`), which `linkDerivedData` creates and links; it gets no `<id>_do` of its own.
+  if (node._dataObject) return null;
   const attrs = { id: `${node.id}_do` };
   for (const spec of OMG_NODE_FIELD_SCOPE) {
     // The generic loop's other half: `writeSite: 'fieldLoop'` is what puts a row in a loop at all,
@@ -545,6 +548,11 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
   // derived — the element is not the author's but a view's (derivations.js), so the import can
   // drop it again. Only a derived node carries the key: without a view the XML gains nothing.
   if (node._derived) extensionValues.push(derivedMarker(node._derived));
+  // data — the catalogue item a derived data reference stands for (format 2.1). Only a reference
+  // the step's data access derived carries `_dataRef`.
+  if (node._dataRef) {
+    extensionValues.push(moddle.createAny(`${EXTENSION_PREFIX}:data`, EXTENSION_NS, { ref: node._dataRef }));
+  }
   if (extensionValues.length) {
     el.extensionElements = create('bpmn:ExtensionElements', { values: extensionValues });
   }
@@ -556,6 +564,12 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
     const resource = topLevelDefsMap.resources.get(node.role);
     const performerType = HUMAN_PERFORMER_TYPES.has(node.type) ? 'bpmn:HumanPerformer' : 'bpmn:Performer';
     el.get('resources').push(create(performerType, { resourceRef: resource }));
+  }
+
+  // The placeholder a data input association of the step targets (format 2.1): only a step that
+  // reads a data item carries `_dataProperty`. moddle writes it in the place tActivity wants.
+  if (node._dataProperty) {
+    el.get('properties').push(create('bpmn:Property', { id: node._dataProperty, name: '__targetRef_placeholder' }));
   }
 
   registerNode(node, el);
@@ -612,7 +626,7 @@ function buildFlowNode(node, topLevelDefsMap, registerNode, parent = null) {
  * Build a single BPMN process with all flow elements.
  * Returns { process, flowNodeMap } where flowNodeMap maps node.id → moddle element.
  */
-function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
+function buildProcess(proc, defaultFlowMap, topLevelDefsMap, associations = []) {
   const nodes = proc.nodes || [];
   const edges = proc.edges || [];
 
@@ -718,6 +732,8 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
     const dataObject = buildDataObject(node, flowNodeMap.get(node.id));
     if (dataObject) flowElements.push(dataObject);
   }
+  // …then the shared DataObjects of the references format 2.1 derived, and their associations.
+  flowElements.push(...linkDerivedData(builtNodes, flowNodeMap, topLevelDefsMap, associations));
 
   // Associations
   // (handled at caller level since they can span processes)
@@ -753,6 +769,69 @@ function buildProcess(proc, defaultFlowMap, topLevelDefsMap) {
   }
 
   return { process: processEl, flowNodeMap, categories };
+}
+
+/**
+ * The data references a format 2.1 step derived from its data access (one reference per
+ * step and item, `_dataRef`), linked the way BPMN wants them; returns the process's new DataObjects.
+ *
+ * - A `dataObjectReference` with `_dataObject` points at ONE DataObject per process and item, at
+ *   any depth: a nested reference points to the process-level object. The objects are created in
+ *   first-use order (the order of `builtNodes`), named after the item, `isCollection` from the
+ *   reference.
+ * - A `dataStoreReference` with `_dataStore` points at the root DataStore of that id, created on
+ *   first use into `topLevelDefsMap.dataStores` (the caller writes them as root elements).
+ * - An association with `_access` 'read' becomes a DataInputAssociation of its target step (from
+ *   the reference to the step's placeholder property), 'write' a DataOutputAssociation of its
+ *   source step (to the reference). Only steps of this process are handled; each element goes into
+ *   `flowNodeMap`, so its BPMNEdge gets a real `bpmnElement`.
+ *
+ * Every branch is keyed on a private carrier the 1.x path never sets, so 1.x output is unchanged.
+ */
+function linkDerivedData(builtNodes, flowNodeMap, topLevelDefsMap, associations) {
+  const dataObjects = new Map();
+  const placeholderOf = new Map();
+  for (const { node, el } of builtNodes) {
+    if (node._dataProperty) placeholderOf.set(node.id, node._dataProperty);
+    if (node.type === 'dataObjectReference' && node._dataObject) {
+      if (!dataObjects.has(node._dataObject)) {
+        const attrs = { id: node._dataObject, name: node.name || '' };
+        if (node.isCollection === true) attrs.isCollection = true;
+        dataObjects.set(node._dataObject, create('bpmn:DataObject', attrs));
+      }
+      el.dataObjectRef = dataObjects.get(node._dataObject);
+    } else if (node.type === 'dataStoreReference' && node._dataStore) {
+      const stores = topLevelDefsMap.dataStores;
+      if (!stores.has(node._dataStore)) {
+        stores.set(node._dataStore, create('bpmn:DataStore', { id: node._dataStore, name: node.name || '' }));
+      }
+      el.dataStoreRef = stores.get(node._dataStore);
+    }
+  }
+  for (const assoc of associations) {
+    if (assoc._access === 'read') {
+      const step = flowNodeMap.get(assoc.target);
+      const ref = flowNodeMap.get(assoc.source);
+      // Not this process's step. A read/write whose ends no process holds is unreachable: resolveFields
+      // puts the reference in the step's own container.
+      if (!step || !ref) continue;
+      const property = step.get('properties').find((p) => p.id === placeholderOf.get(assoc.target));
+      const input = create('bpmn:DataInputAssociation', { id: assoc.id, targetRef: property });
+      input.get('sourceRef').push(ref);
+      step.get('dataInputAssociations').push(input);
+      flowNodeMap.set(assoc.id, input);
+    } else if (assoc._access === 'write') {
+      const step = flowNodeMap.get(assoc.source);
+      const ref = flowNodeMap.get(assoc.target);
+      // Not this process's step. A read/write whose ends no process holds is unreachable: resolveFields
+      // puts the reference in the step's own container.
+      if (!step || !ref) continue;
+      const output = create('bpmn:DataOutputAssociation', { id: assoc.id, targetRef: ref });
+      step.get('dataOutputAssociations').push(output);
+      flowNodeMap.set(assoc.id, output);
+    }
+  }
+  return [...dataObjects.values()];
 }
 
 function buildLane(lane, nodes, flowNodeMap) {
@@ -1073,6 +1152,8 @@ async function generateBpmnXml(lc, coordMap) {
   // 1b. One <bpmn:resource> per distinct role name (RootElements, like the definitions above).
   const { elements: resourceElements, byName: resourceByName } = buildResources(lc, processes);
   topLevelDefsMap.resources = resourceByName;
+  // 1c. The root DataStores of format 2.1 store references, filled while the processes are built.
+  topLevelDefsMap.dataStores = new Map();
 
   // 2. Build processes
   const allFlowNodeMaps = new Map();
@@ -1084,7 +1165,7 @@ async function generateBpmnXml(lc, coordMap) {
     // Need to infer gateway directions before building default flow map
     inferGatewayDirections(proc.nodes || [], proc.edges || []);
     const defaultFlowMap = buildDefaultFlowMap(proc);
-    const { process: processEl, flowNodeMap, categories } = buildProcess(proc, defaultFlowMap, topLevelDefsMap);
+    const { process: processEl, flowNodeMap, categories } = buildProcess(proc, defaultFlowMap, topLevelDefsMap, associations);
     processElements.push(processEl);
     processFlowNodeMaps.push(flowNodeMap);
     categoryElements.push(...categories);
@@ -1145,6 +1226,9 @@ async function generateBpmnXml(lc, coordMap) {
 
   // 4. Associations (at process level)
   for (const assoc of associations) {
+    // A read or write of a format 2.1 step is a native data association of the step, built with
+    // the process; only the link of an unrecorded access stays a plain association.
+    if (assoc._access === 'read' || assoc._access === 'write') continue;
     // The first process whose TOP-LEVEL elements hold either end. Search flowElements AND
     // artifacts: an association's whole job is to tie an annotation to something, and annotations
     // live in artifacts. Looking in flowElements alone would drop exactly the associations that
@@ -1219,6 +1303,9 @@ async function generateBpmnXml(lc, coordMap) {
   // Resources next: a performer's resourceRef must resolve when the process is read. Empty for
   // every model without a `role`, so their output is unchanged.
   for (const el of resourceElements) rootElements.push(el);
+
+  // DataStores (format 2.1) after the resources; empty for every model without a derived store.
+  for (const el of topLevelDefsMap.dataStores.values()) rootElements.push(el);
 
   // Categories carry the Groups' labels and must be resolvable when the
   // Groups' categoryValueRef is read, so they go in ahead of the processes.
