@@ -426,7 +426,7 @@ describe('format 2.0 models with an embedded catalogue', () => {
   test.each(['generate_bpmn', 'validate_bpmn', 'orchestrate_bpmn'])('%s declares the catalog object parameter', (name) => {
     expect(props(name).catalog).toEqual({
       type: 'object',
-      description: 'Catalogue { actors, systems?, scheme? } of a format 2.x model; embedded, paths are never read',
+      description: 'Catalogue { actors, systems?, data?, scheme? } of a format 2.x model; embedded, paths are never read',
     });
   });
 

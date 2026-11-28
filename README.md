@@ -427,9 +427,10 @@ node bpmn/pipeline.js out/my-process.json out/my-process --view=rollen
 
 Each lane becomes an actor without `kind`, each activity of a process with lanes gets the assignment of
 its lane (or role), each `system` on a task becomes a system of the catalogue (the model is then format `"2.1"`), and the report lists what to
-check (hint H07, codes MG01-MG08). Data objects and data stores have no place in format 2.x yet, nor has a `system` off a
-task: the translator refuses them (MG02) unless you pass `--drop-unsupported`. Of the 28 1.x test fixtures, 20 translate as they
-are and all 28 with the flag.
+check (hint H07, codes MG01-MG10). A data object or data store becomes a data item of the catalogue and
+each association to an activity becomes a `dataAccess` entry of that activity (the model is then format
+`"2.1"`). What format 2.x cannot hold, such as a `system` off a task, is refused (MG02) unless you pass
+`--drop-unsupported`. All 28 of the 28 1.x test fixtures translate as they are.
 Under `einheiten` a migrated top-level lane has no unit, so its nodes land in "(Einheit nicht erhoben)"
 until you add units to the catalogue. `migrate` is a CLI and library function only, with no MCP tool or
 HTTP endpoint. Mapping: [`references/logic-core-schema.md`](references/logic-core-schema.md#translating-1x-models);

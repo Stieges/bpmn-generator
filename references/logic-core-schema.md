@@ -493,13 +493,14 @@ How each connection is drawn:
 ## Format 2.0 (catalogue and lane views)
 
 Format 2.0 is a second input format next to 1.x. A model says `"$schemaVersion": "2.0"`, or `"2.1"`
-when it uses systems, and is validated by [`input-schema-v2.json`](input-schema-v2.json). A model
+when it uses systems or data, and is validated by [`input-schema-v2.json`](input-schema-v2.json). A model
 without the field, or with `1.x`, is a 1.x model and is unchanged. Exactly the strings `"2.0"` and
 `"2.1"` are format 2.x: any other value of the 2 line (`"2"`, `"2.2"`, `"2.7"`) is refused with one
 error (F02) that names the value and says that only `"2.0"` and `"2.1"` are supported. Version 2.1
-adds the catalogue list `systems` and the field `system` on a task and nothing else; a `"2.0"` model
-that uses either gets one error F06 per use (`"system" needs format 2.1; set "$schemaVersion" to
-"2.1"`), and a `"2.1"` model without systems is the same model as its `"2.0"` twin. The generated XML
+adds the catalogue lists `systems` and `data`, the field `system` on a task and the field `dataAccess`
+on an activity, and nothing else; a `"2.0"` model that uses any of them gets one error F06 per use
+(`"system" needs format 2.1; set "$schemaVersion" to "2.1"`), and a `"2.1"` model without systems or
+data is the same model as its `"2.0"` twin. The generated XML
 carries `bg:modelVersion` with the declared version. In messages, "format 2.0" means the 2 line.
 
 **What 2.0 is:**
@@ -522,6 +523,21 @@ carries `bg:modelVersion` with the declared version. In messages, "format 2.0" m
   `unit` or `partOf` naming one `is a system, not a unit`); a `system` naming an unknown id, an actor
   or no catalogue at all is C14, a `system` on any other node is C15. A model's own `systems` beside a
   catalogue replace entries of the same id and add new ones, like `actors` (H09 per replacement).
+- Data (2.1) come from the same catalogue: `{ "data": [ { "id", "name", "kind"?, "layer"?,
+  "isCollection"? } ] }`. `kind` is `object` or `store` (omitted: not recorded, drawn as a data object,
+  hint H21); `layer` is `business` or `technical` and is kept in the catalogue only; `isCollection` marks
+  a collection and is not allowed on a store. An activity (any task, `subProcess`, `transaction`,
+  `callActivity`) lists the data it uses in `dataAccess`: `[ { "data": "d_order", "access": "read" } ]`,
+  `access` being `read`, `write` or missing (not recorded). Actors, systems and data share one id space
+  (a clash is C03, an assignment naming a data item is C01 with the text `is a data item, not an actor`,
+  a `unit` or `partOf` naming one `is a data item, not a unit`, a `system` naming one is C14). A
+  `dataAccess` entry naming an unknown id, an actor, a system, or any id without a catalogue is C16; the
+  same entry twice, or an item both with an access and with access not recorded on one step, is C16 as
+  well; `dataAccess` on a node that is no activity is C15. A model's own `data` beside a catalogue
+  replaces entries of the same id and adds new ones, like `actors` (H09 per replacement). Each step
+  draws one reference per distinct item (see "Output of a 2.0 model (XML)"); the id the generator
+  derives for it, for its connections, its placeholder property, the shared data object and the data
+  store must not collide with an id of the model (C17).
 - Every process needs an `id` matching `^[A-Za-z_][A-Za-z0-9_-]*$`; it is part of the lane ids.
 
 **The organigram.** `partOf` names the parent unit and is allowed on units (`kind: "unit"`) and on
@@ -532,8 +548,11 @@ as a unit: an actor with `kind: "unit"`, and an actor without `kind` that anothe
 unit. The organigram only matters to a view whose `lanes` is the object form (see "Lanes by
 view").
 
-**What 2.0 is not (yet):** no data nodes (they arrive in a later 2.x version), no systems as pools,
-no positions or persons, no matrices (RACI).
+**What 2.0 is not (yet):** no systems as pools, no positions or persons, no matrices (RACI). Data
+(2.1) has these limits: none on events and gateways, no data states, and no way to hide the data in a
+view (planned); the data references of a step inside a collapsed subprocess are written to the XML but
+not drawn; the data rows are placed below their step and do not avoid the routes of sequence or message
+flows.
 
 **The catalogue (three ways to pass it).**
 
@@ -544,11 +563,11 @@ no positions or persons, no matrices (RACI).
 3. Library: `runPipeline(model, { catalog })` with a catalogue object. A string is a `TypeError`;
    read a file with `loadCatalog` (`scripts/shared/catalog.js`) first.
 
-A model may carry `actors` (and `systems`, `scheme`) itself, without a catalogue. Beside a catalogue (the file's
-`catalog` field, `--catalog`, or the `catalog` option) its `actors` and `systems` **replace** the entry of the same
+A model may carry `actors` (and `systems`, `data`, `scheme`) itself, without a catalogue. Beside a catalogue (the file's
+`catalog` field, `--catalog`, or the `catalog` option) its `actors`, `systems` and `data` **replace** the entry of the same
 id as a whole, in place, and an entry with a new id is appended after the catalogue's entries of its
 list in the model's order; hint H09 names each replaced entry (`elements` is `[id]`): one id then means different
-things in two processes. Rules C01–C07 and C14 judge the effective catalogue, so replacing a unit by a role
+things in two processes. Rules C01–C07, C14 and C16 judge the effective catalogue, so replacing a unit by a role
 (or the reverse) that other actors reference is C02. A `scheme` beside a catalogue is error C13; the
 process file cannot change the scheme. The fingerprint `bg:catalog` is over the effective catalogue.
 `--catalog` with a 1.x model is an error.
@@ -610,6 +629,12 @@ every surface.
   view (CLI `--view <path>`, HTTP, `runPipeline`); the MCP tools take a view by name only and no shipped view
   sets it, so MCP does not reach it yet.
 
+**Data and lanes.** The data references of a step (see `dataAccess`) follow their step in every lanes
+view (`rollen`, `einheiten`, `organigramm`, `systeme`), and with lanes `none`. They are not flow nodes: they
+take no lane of their own, form none, and count in no lane order; the lanes of a 2.1 model with data
+are the lanes of the same model without it. (Only the 1.x path counts data references when it orders
+lanes, so regenerating an imported 2.1 diagram as a 1.x model may order its lanes differently.)
+
 **The inheritance rule.** Only top-level flow nodes of each modelled process take a lane (children of
 subprocesses get none, and only sequence flows count), and a node with a performer takes the lane of that
 performer. An activity without performer goes to the placeholder `(nicht zugeordnet)` (H02), unless it is an
@@ -651,8 +676,8 @@ lane id, or of its `<lane-id>_di`, with another id of the document is error C10,
 
 **Hints.** Hints go to `validation.hints` and never fail `--strict`. H02 (activity without
 performer), H03 (automatic step placed with its neighbour; its text points to the view option `lanes.automatic`), H04 (unit not recorded), H05 (lane name
-over 25 characters), H06 (process without performer; in the system view, without a system), H09 (a catalogue entry, actor or system, replaced by the process file), H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation; in the system view it places the node in `(System nicht erhoben)`), H19 (automatic step without performer placed in the lane `(automatisch)`, only with that option) and H20 (an activity without a recorded system, system view only)
-come from the lane formation; H01 is the view's join-gateway derivation.
+over 25 characters), H06 (process without performer; in the system view, without a system), H09 (a catalogue entry, actor, system or data item, replaced by the process file), H08 (node without a neighbour with a lane, or boundary event without a host with a lane: the step-7 fallback, reached only without prior validation; in the system view it places the node in `(System nicht erhoben)`), H19 (automatic step without performer placed in the lane `(automatisch)`, only with that option) and H20 (an activity without a recorded system, system view only)
+come from the lane formation; H21 (a data item a step uses has no `kind`, drawn as a data object; once per item, `elements` is `[dataId]`) is raised when the data is resolved; H01 is the view's join-gateway derivation.
 
 **Output of a 2.0 model (XML).** The assignments and the origin are kept in the XML so that the
 diagram can be read back:
@@ -664,6 +689,17 @@ diagram can be read back:
 - `<bg:derived by="role" actor="sb_einkauf">lane</bg:derived>` in the `extensionElements` of a
   formed lane (`by` is `role`, `unit` or `system`; the lane of a system carries `system="sys_ordersystem"`
   instead of `actor`);
+- `<bg:data ref="d_order"/>` in the `extensionElements` of a data reference: the catalogue id of its item;
+- data (2.1), for a step `s` with the item `d` in the process `p`: a `dataObjectReference` (or
+  `dataStoreReference`) `s__d` in the step's container below its nodes, named like the item (a
+  collection object also gets `isCollection="true"` on the shared object), pointing with `dataObjectRef`
+  to the shared `<bpmn:dataObject id="p__d">` of the process (one per process and item, for nested
+  references too), or with `dataStoreRef` to the root element `<bpmn:dataStore id="d__store">`. Every
+  `read` is a `<bpmn:dataInputAssociation id="s__d__read">` on the step, from the reference to the
+  placeholder property `<bpmn:property id="s__input" name="__targetRef_placeholder"/>` (only a step with at
+  least one read has it); every `write` is a `<bpmn:dataOutputAssociation id="s__d__write">` to the
+  reference; an access not recorded is a plain undirected `<bpmn:association id="s__d__link">` at process
+  level. Each of them has its BPMNEdge, and a reference has a BPMNShape in a row below its step;
 - on `bpmn:definitions`: `bg:modelVersion="2.0"` (`"2.1"` for a model declared as 2.1), `bg:view="<name>"`, `bg:catalog="sha256:<64 hex>"`
   and `exporter="bpmn-generator"`; there is no `exporterVersion`.
 
@@ -673,9 +709,9 @@ attributes as `bg:language="<tag>"` on `bpmn:definitions`. Importing such a diag
 with the same `language`.
 
 The fingerprint is SHA-256 (hex, prefixed `sha256:`) over the UTF-8 bytes of the canonical JSON of
-`{ "actors": …, "scheme": …, "systems"?: … }`, with the scheme resolved to its object, keys sorted at
-every level, arrays in their order, and no whitespace; `systems` is part of it only when the effective
-list is not empty, so a catalogue without systems keeps its fingerprint. A 2.x output has no
+`{ "actors": …, "scheme": …, "systems"?: …, "data"?: … }`, with the scheme resolved to its object, keys
+sorted at every level, arrays in their order, and no whitespace; `systems` and `data` are part of it only
+when the effective list is not empty, so a catalogue without them keeps its fingerprint. A 2.x output has no
 `bpmn:performer` or `bpmn:resource`, and a `bg:system` only where a task names a system.
 
 **Which entry points read 2.0.** The CLI generate path (`node bpmn/pipeline.js`), the library
@@ -696,8 +732,8 @@ as `[N01] …`, MCP as a second text block holding the JSON `{"notices":[…]}`,
 `notices: [{ code, message }]`); the result is a 1.x model.
 
 **Message codes.** The messages of the 2.0-specific path (catalogue, format, lane formation, import notice) carry a code
-from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C07, C10–C15, F01–F04, F06; the redesign and
-scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06, H08, H09, H19 and H20,
+from `scripts/shared/message-codes.js`: a string leads with `[<code>] ` (C01–C07, C10–C17, F01–F04, F06; the redesign and
+scenarios CLIs print `✗ [F03] …`), an object has a `code` field (gate errors, hints H01–H06, H08, H09 and H19–H21,
 `validation.findings`, notices), a thrown `CatalogRejectedError` has `messageCode`. Rule messages (S, M, P, WF) keep their text and get their id only in `validation.findings`. C12
 covers the catalogue's bounds and schema; a model-carried `actors` list shares the catalogue's Actor
 schema, so its schema failures surface as F01 at the format gate and only its bounds reach C12. The
@@ -708,7 +744,7 @@ table and the list of messages that stay uncoded are in
 
 `node bpmn/migrate.js <input.json> [output-base]` translates a 1.x model into a format 2.x model, so
 that the lane views (`rollen`, `einheiten`, `systeme`) can be applied to it. It writes `<base>.json` (the 2.0 model, or 2.1 when systems
-are carried), `<base>.catalog.json` (the actors and systems it created, to merge into your catalogue) and
+or data are carried), `<base>.catalog.json` (the actors, systems and data items it created, to merge into your catalogue) and
 `<base>.migrate-report.json`; flags, exit codes and the overwrite rule are in
 [`cli.md`](cli.md#migrate-1x-to-20). The library function is `migrateModel(lc, { catalog,
 dropUnsupported })` in `scripts/bpmn/migrate.js`. No byte-identity is promised across the
@@ -738,29 +774,41 @@ translator: the 2.0 model is a new document, the 1.x file stays as it is.
   document order): id `sys_<slug>`, the name the text, and the task's `system` is that id. Given a
   catalogue, a text equal to a system's name is that system (MG07). A lane id that is also a system id
   of the given catalogue is renamed (MG06). A `system` on a node that is no task is MG02.
+- A data node (`dataObjectReference` or `dataStoreReference`, at any depth) becomes a data item of the
+  catalogue (MG09): `kind` `object` or `store`, `isCollection` kept on an object, the name the node's
+  name or id; nodes of the same name, kind and collection marker become one item. The item id is the
+  node id when that is a valid catalogue id that is still free; otherwise it is minted from the lane
+  slug rule with the prefix `D` (MG06). Given a catalogue, a node named exactly like a data item of a
+  fitting kind is that item (MG07; a collection marker the item lacks is reported there). An
+  association between a data node and an activity becomes an entry of the activity's `dataAccess`:
+  directed towards the activity `read`, away from it `write`, undirected access not recorded. The data
+  nodes and their associations leave the model. A data node linked to no activity keeps its item in
+  the catalogue and is not drawn (MG10; unless another data node of that item is linked: then the item is drawn through it).
 - `language` and every event `marker` are kept; `$schemaVersion` becomes `"2.0"`, or `"2.1"` when the
-  model creates or reuses a system.
+  model creates or reuses a system, or carries `data` or `dataAccess`.
 
-**Refused.** A `system` off a task, data objects and data stores and the flows and associations
-touching them have no place in format 2.x yet; they are refused (MG02) unless `--drop-unsupported`
-drops and lists them. A duplicate id anywhere in the document (so also the same lane id in two pools), a 2.0 input or
+**Refused.** A `system` off a task, a field of a data node other than `name`, `isCollection`, `lane`
+and `role`, a sequence or message flow that touches a data node, and an association that links a data
+node to anything but an activity have no place in format 2.x; they are refused (MG02) unless
+`--drop-unsupported` drops and lists them. A duplicate id anywhere in the document (so also the same lane id in two pools), a 2.0 input or
 a schema failure is refused as MG01. A refused input writes the report only.
 
 **With `--catalog`.** A lane or role whose name equals an actor's name in that catalogue, exactly, is
 that actor (MG07). The 2.0 model names that catalogue and carries the new actors itself; the supplement
-lists the same new actors (and systems) for merging. `migrate` never writes the given catalogue. After you merge the
-supplement into your catalogue, remove the model's own `actors` and `systems`; otherwise each of them gives H09.
+lists the same new actors (and systems and data) for merging. `migrate` never writes the given catalogue. After you merge the
+supplement into your catalogue, remove the model's own `actors`, `systems` and `data`; otherwise each of them gives H09.
 
 **Views afterwards.** Under `rollen` the lanes are those of the 1.x model (plus the effects of MG03
 and MG04). Under `einheiten` a migrated top-level lane's actor has no `unit`, so its nodes land in the
 placeholder lane "(Einheit nicht erhoben)"; child lanes appear under their parent's actor. That is
 expected: add units to the catalogue to get unit lanes.
 
-**Measured on the 28 1.x fixtures** (`tests/bench/migrate-fixtures.json`): `translated 20 of 28
-(71.4 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0`. The 8 refusals are all MG02
-for data nodes. Under `rollen` the lane names and the placement of the nodes equal
+**Measured on the 28 1.x fixtures** (`tests/bench/migrate-fixtures.json`): `translated 28 of 28
+(100.0 %), 28 of 28 with --drop-unsupported; MG03 3, MG04 16, MG05 0`. No fixture is refused any more.
+Under `rollen` the lane names and the placement of the nodes equal
 the 1.x model for 20 of 28; the other 8 differ only by events or gateways that moved (each with MG04) or
-by role lanes (MG03). The errors of the rules are identical to the 1.x run for all 28.
+by role lanes (MG03). A translated model draws its data again, one reference per step, so a data node
+shared by two activities is drawn once per activity (its position is not kept). The errors of the rules are identical to the 1.x run for all 28.
 
 ## Views (outside the model)
 
@@ -846,6 +894,12 @@ there are just more crossings, and the DI check reports them as DI05.
 
 **Usage:** Associations connect Data Objects, Data Stores, and Text Annotations
 to flow nodes. They are dotted lines, not sequence flows.
+
+**Import.** A native `dataInputAssociation` or `dataOutputAssociation` on a task, subprocess or event
+is read as a directed association (input: data reference to the element; output: element to the
+data reference), in 1.x and 2.x diagrams; a plain association is read as it is. Plain associations
+inside a subprocess's artifacts are not read (see [`round-trip.md`](round-trip.md)). A format 2.1
+diagram imports as a 1.x model whose data references are data nodes, linked by these associations.
 
 In the XML an `<association>` (with `associationDirection`) sits in the process's `<artifacts>`,
 next to the TextAnnotation or Group it connects — never in `<flowElements>` (OMG §10.7).

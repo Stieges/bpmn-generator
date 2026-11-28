@@ -199,17 +199,18 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   Known limitation, now documented where `--wrap` is: with lanes it is accepted, but the result is a
   staircase (the rows shift and the lane bands grow tall); leave it off for a laned model.
 
-- **`migrate`: translate a 1.x model into format 2.0 (2.1 when it carries systems).** `node bpmn/migrate.js <input.json> [output-base]
+- **`migrate`: translate a 1.x model into format 2.0 (2.1 when it carries systems or data).** `node bpmn/migrate.js <input.json> [output-base]
   [--catalog <path>] [--drop-unsupported] [--force]` (library: `migrateModel`) turns each lane into an actor
   without `kind` and gives each activity the assignment of its lane (or role). It writes the 2.0 model
   (`<base>.json`), a catalogue supplement (`<base>.catalog.json`) and a report (`<base>.migrate-report.json`).
-  New codes: hint H07 (a lane or role became an actor without kind) and MG01-MG08 (input refused, field
+  New codes: hint H07 (a lane or role became an actor without kind) and MG01-MG10 (input refused, field
   without a place in 2.x, role differs from lane, node moved by the inheritance rule, activity without
-  lane, id renamed, lane or system matched to a catalogue entry, system carried into the catalogue; see
-  the bullet "Systems (format 2.1)" below). Data nodes and a `system` off a task have no place in
-  format 2.x yet and are refused (MG02) unless `--drop-unsupported` drops them. A 1.x model with the same lane id in two
-  pools, or any duplicate id, is refused by `migrate` (MG01). Of the 28 1.x fixtures, 20 translate without
-  the flag and all 28 with it. There is no MCP tool or HTTP endpoint for it yet. Mapping and rules:
+  lane, id renamed, lane or system matched to a catalogue entry, system carried into the catalogue, data node carried, data node linked to no activity; see
+  the bullet "Systems (format 2.1)" below; data nodes are carried too, see "Data objects and data
+  stores (format 2.1)"). A `system` off a task has no place in
+  format 2.x and is refused (MG02) unless `--drop-unsupported` drops it. A 1.x model with the same lane id in two
+  pools, or any duplicate id, is refused by `migrate` (MG01). All 28 of the 28 1.x fixtures translate without
+  the flag. There is no MCP tool or HTTP endpoint for it yet. Mapping and rules:
   `references/logic-core-schema.md`, section Translating 1.x models; flags and exit codes: `references/cli.md`.
 
 - **Systems (format 2.1).** The catalogue gains a list `systems` (`{ id, name }`, one id space with
@@ -226,8 +227,35 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   without any system gets no lanes (H06). `migrate` carries a 1.x `system` on a task into the
   catalogue as `sys_<slug>` (MG08; MG07 for a system of a given catalogue; MG06 when a lane id meets a
   system id) and writes `"2.1"` when it created or reused a system, so 20 of the 28 1.x fixtures
-  translate without `--drop-unsupported` (before: 19); a `system` off a task stays MG02. New codes: C14, C15,
+  translate without `--drop-unsupported` (before: 19; with the data nodes carried, all 28, see below); a `system` off a task stays MG02. New codes: C14, C15,
   F06, H20, MG08. The quick start in `docs/roles-and-systems.md` is format 2.1 and gains the view `systeme`.
+- **Data objects and data stores (format 2.1).** The catalogue gains a list `data`
+  (`{ id, name, kind?, layer?, isCollection? }`, `kind` `object` or `store`, `layer` `business` or
+  `technical`, one id space with `actors` and `systems`), and an activity (a task, `subProcess`,
+  `transaction` or `callActivity`) names the data it uses in `dataAccess`:
+  `[{ "data": "d_order", "access": "read" }]`, `access` being `read`, `write` or missing (not
+  recorded). A model that uses `data` or `dataAccess` declares `"$schemaVersion": "2.1"`; one without
+  stays as it was, byte for byte. The generator draws one reference per distinct item in a row below
+  the step (a data object reference, or a data store reference), and in every lanes view; the
+  references never change a lane or the order of the lanes. The XML is native: `<bg:data ref="…"/>` on
+  the reference, a shared `bpmn:dataObject` per process and item (`<process>__<data>`), a root
+  `bpmn:dataStore` per store (`<data>__store`), a `dataInputAssociation` per read (from the reference to
+  the placeholder property `<step>__input` of the step) and a `dataOutputAssociation` per write; an
+  access that is not recorded is a plain association without a direction. The derived ids are
+  `<step>__<data>` for the reference and `<step>__<data>__read`, `__write` or `__link` for its link.
+  New codes: C16 (a `dataAccess` entry that names no data item, lists the same access twice or both a
+  recorded and an unrecorded access of one item, or data without a catalogue), C17 (a derived id
+  collides with another id of the model), H21 (a data item used by a step has no `kind`, drawn as a
+  data object), MG09 and MG10. C01, C03, C14, C15, F06 and H09 are widened to data (C15 now also says
+  data access off an activity). `migrate` carries each 1.x data node into the catalogue `data` and each
+  association between a data node and an activity into that activity's `dataAccess` (MG09; MG10 for a
+  node linked to no activity; MG07 and MG06 for a given catalogue and for ids), so all 28 of the 28
+  1.x fixtures translate without `--drop-unsupported` (before: 20). Both importers read the diagram back
+  (see the changed entry about native data associations). Not covered yet: data on events and
+  gateways, data states, hiding data in a view; the references of a step in a collapsed subprocess are
+  written to the XML but not drawn, and the data rows do not avoid the routes of sequence or message
+  flows. Regenerating an imported 2.1 diagram as a 1.x model may order its lanes differently, because
+  the 1.x path still counts data references when it orders the lanes.
 - **PNG preview (`--png`).** `node bpmn/pipeline.js model.json out --png` also writes `out.png`, the
   whole diagram at scale 2 with no side larger than 8192 px (a wider diagram renders at a smaller
   scale, which the console prints). A diagram larger than one part also gets
@@ -264,15 +292,18 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   (F03, F04, N01, C13) mean the 2 line and stay as they are.
 - The text of hint H03 gains ` Set lanes.automatic to "lane" for a lane of its own.` (a format 2.x hint
   only; no XML or SVG changes).
-- The hint pattern of the response schema admits `H20`; H06, H08 and H09 also cover the system view and
+- The hint pattern of the response schema admits `H20` and `H21`; H06, H08 and H09 also cover the system view and
   system entries, and the lanes views list is seven long (`systeme` added).
 - The MCP `catalog` parameter of `generate_bpmn`, `validate_bpmn` and `orchestrate_bpmn` is described as
-  `{ actors, systems?, scheme? }` of a format 2.x model.
+  `{ actors, systems?, data?, scheme? }` of a format 2.x model.
 - `node bpmn/migrate.js -h` and `--help`, anywhere on the command line, print the usage on stdout and exit 0
   (an unknown flag still exits 1).
 - The error for a lanes view on a 1.x model now ends with `translate it with node bpmn/migrate.js`
   (still uncoded). Besides the two 1.x changes named below (the import of native data associations and
   the written nested association), it is the only change to a response for a 1.x model.
+- The F06 and C15 scopes grew with the data: F06 also
+  covers `data` and `dataAccess` in a `"2.0"` model, and C15 covers data access off an activity.
+  The rule count (63) and the version of the view schema stay.
 - The format 2.x examples and the label cut test use a neutral order-handling domain: the fixtures,
   catalogues and goldens under `tests/fixtures-v2/`, the inline models of the 2.x tests, the label
   cut words, `docs/roles-and-systems.md` and the examples in `references/logic-core-schema.md`.
