@@ -1,6 +1,6 @@
 /**
  * Format 2.x, first stage (design 7.3 step 2, 7.5, 8): `resolveFields` checks a 2.x model against its
- * actor, system and data catalogue and responsibility scheme (rules C01–C07, C14–C16, hints H09, H21)
+ * actor, system and data catalogue and responsibility scheme (rules C01–C07, C14–C17, hints H09, H21)
  * and translates it into the intermediate form the pipeline already reads — the 1.x shape without lanes, plus private
  * carrier fields.
  *
@@ -10,8 +10,10 @@
  * the catalogue and the chosen view, by the inheritance rule of design 7.2.
  *
  * Data (format 2.1): the model's `data` merges into the catalogue's like `systems`; a node's
- * `dataAccess` is checked against it (C15 on a node that is no activity, C16) and, with the root
- * `data`, left out of the intermediate form.
+ * `dataAccess` is checked against it (C15 on a node that is no activity, C16) and resolved into
+ * data references, their connections and input placeholders (private carriers `_dataRef`,
+ * `_dataObject`, `_dataStore`, `_dataProperty`, `_access`; C17 when a derived id collides); the
+ * keys `data` and `dataAccess` are left out of the intermediate form.
  */
 
 import { validateModelSchema } from './schema-gate.js';
@@ -393,13 +395,126 @@ export function resolveFields(model, options) {
   // the intermediate form: a task's system as the 1.x writer reads it (the name), its id kept private
   const lc = clone(model);
   for (const key of ['$schemaVersion', 'catalog', 'actors', 'systems', 'data', 'scheme']) delete lc[key];
+  const steps = dataSteps(lc);
   for (const node of allNodes(lc)) {
     if (node.assignments !== undefined) { node._assignments = node.assignments; delete node.assignments; }
     delete node.dataAccess;
     if (node.system !== undefined) { node._systemRef = node.system; node.system = systemById.get(node.system).name; }
   }
+  const collisions = deriveData(lc, steps, dataById);
+  if (collisions.length) return fail(collisions);
   lc._modelInfo = { version: model.$schemaVersion, view: viewName, catalogFingerprint: fingerprint };
   return { lc, resolved, errors: [], hints };
+}
+
+/**
+ * The steps with data access of an intermediate form, depth-first in document order (top level,
+ * or each pool): `{ node, container, processId, access }`, `container` the node list the step sits in.
+ */
+function dataSteps(lc) {
+  const steps = [];
+  const walk = (nodes, processId) => {
+    if (!Array.isArray(nodes)) return;
+    for (const node of nodes) {
+      if (!isPlainObject(node)) continue;
+      if (Array.isArray(node.dataAccess) && node.dataAccess.length > 0) {
+        steps.push({ node, container: nodes, processId, access: node.dataAccess });
+      }
+      walk(node.nodes, processId);
+    }
+  };
+  if (Array.isArray(lc.pools)) for (const pool of lc.pools) { if (isPlainObject(pool)) walk(pool.nodes, pool.id); }
+  else walk(lc.nodes, lc.id);
+  return steps;
+}
+
+/**
+ * Derives, in place, the data references, their connections and the input placeholders of the
+ * checked `steps` (design of format 2.1): per step and distinct item a reference `s__d` appended
+ * to the step's container, a link `s__d__read` / `s__d__write` / `s__d__link` per access, and
+ * `_dataProperty = 's__input'` on a step that reads. Root `associations`: the model's own, then
+ * every not-recorded link, then per step its reads and then its writes.
+ *
+ * C17 first: every derived id (and the `_di` / `_do` forms the writers give it) against the ids
+ * of the document as it stands (catalogue keys already gone) and their `_di` / `_do` forms, and
+ * the derived ids against each other. The DataObject `p__d` and the DataStore `d__store` are one
+ * id however many steps use them. Returns the C17 messages; with any, `lc` must not be used.
+ */
+function deriveData(lc, steps, dataById) {
+  if (steps.length === 0) return [];
+  const taken = new Map();
+  for (const id of collectDocumentIds(lc)) {
+    for (const v of [id, `${id}_di`, `${id}_do`]) if (!taken.has(v)) taken.set(v, id);
+  }
+  const errors = [];
+  const derived = new Map();
+  const self = (o) => (o.kind === 'placeholder' ? `input placeholder of step "${q(o.step)}"`
+    : o.kind === 'object' ? `data object of data "${q(o.data)}" in process "${q(o.process)}"`
+      : o.kind === 'store' ? `data store of data "${q(o.data)}"`
+        : `step "${q(o.step)}", data "${q(o.data)}"`);
+  const other = (o) => (o.kind === 'placeholder' || o.kind === 'object' || o.kind === 'store' ? `the ${self(o)}` : `the data id of ${self(o)}`);
+  // one finding per derived id: the model first, then the derived ids before it
+  const claim = (id, forms, owner) => {
+    const inModel = forms.find((v) => taken.has(v));
+    const inDerived = forms.find((v) => derived.has(v) && derived.get(v) !== owner);
+    if (inModel !== undefined) {
+      errors.push(`[C17] data id "${q(id)}" (${self(owner)}) collides with "${q(taken.get(inModel))}"; rename that id of the model`);
+    } else if (inDerived !== undefined) {
+      errors.push(`[C17] data id "${q(id)}" (${self(owner)}) collides with ${other(derived.get(inDerived))}; rename one of the steps or data items`);
+    }
+    for (const v of forms) if (!derived.has(v)) derived.set(v, owner);
+  };
+  const shared = new Map();
+  const sharedOwner = (key, make) => {
+    if (!shared.has(key)) shared.set(key, { owner: make(), claimed: false });
+    return shared.get(key);
+  };
+
+  const links = [];
+  const readWrite = [];
+  const appended = new Map();
+  for (const { node, container, processId, access } of steps) {
+    const s = node.id;
+    const reads = access.filter((e) => e.access === 'read');
+    if (reads.length > 0) {
+      node._dataProperty = `${s}__input`;
+      claim(node._dataProperty, [node._dataProperty], { kind: 'placeholder', step: s });
+    }
+    const items = [...new Set(access.map((e) => e.data))];
+    for (const d of items) {
+      const item = dataById.get(d);
+      const id = `${s}__${d}`;
+      const ref = { id, type: item.kind === 'store' ? 'dataStoreReference' : 'dataObjectReference', name: item.name };
+      if (item.kind !== 'store' && item.isCollection === true) ref.isCollection = true;
+      ref._dataRef = d;
+      claim(id, [id, `${id}_di`, `${id}_do`], { kind: 'reference', step: s, data: d });
+      const target = item.kind === 'store'
+        ? sharedOwner(`store\u0000${d}`, () => ({ kind: 'store', data: d, id: `${d}__store` }))
+        : sharedOwner(`object\u0000${processId}\u0000${d}`, () => ({ kind: 'object', data: d, process: processId, id: `${processId}__${d}` }));
+      if (item.kind === 'store') ref._dataStore = target.owner.id;
+      else ref._dataObject = target.owner.id;
+      if (!target.claimed) { target.claimed = true; claim(target.owner.id, [target.owner.id], target.owner); }
+      if (!appended.has(container)) appended.set(container, []);
+      appended.get(container).push(ref);
+    }
+    const owned = { reads: [], writes: [] };
+    for (const entry of access) {
+      const d = entry.data;
+      const ref = `${s}__${d}`;
+      const suffix = entry.access === 'read' ? 'read' : entry.access === 'write' ? 'write' : 'link';
+      const id = `${ref}__${suffix}`;
+      claim(id, [id, `${id}_di`], { kind: 'link', step: s, data: d });
+      if (entry.access === 'read') owned.reads.push({ id, source: ref, target: s, directed: true, _access: 'read' });
+      else if (entry.access === 'write') owned.writes.push({ id, source: s, target: ref, directed: true, _access: 'write' });
+      else links.push({ id, source: ref, target: s, _access: 'unrecorded' });
+    }
+    readWrite.push(...owned.reads, ...owned.writes);
+  }
+  if (errors.length) return errors;
+  for (const [container, refs] of appended) container.push(...refs);
+  const derivedLinks = [...links, ...readWrite];
+  if (derivedLinks.length > 0) lc.associations = [...(lc.associations ?? []), ...derivedLinks];
+  return [];
 }
 
 // ---------------------------------------------------------------------------------------------

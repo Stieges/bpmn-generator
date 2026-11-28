@@ -217,7 +217,7 @@ function errorFindings(errors, code = null) {
  * @param {object} [opts.catalog] - the catalogue `{ actors, systems?, data?, scheme? }` of a format 2.x model, as an
  *   object (shared/catalog.js loadCatalog reads a file); a string throws a TypeError, and so does a
  *   catalogue with a 1.x model. A 2.x model first passes resolveFields (format schema, catalogue,
- *   assignments, systems and data access: C01–C06, C14–C16); its findings, or `mode` optimize/soll, return early like a validation error
+ *   assignments, systems and data access: C01–C06, C14–C17); its findings, or `mode` optimize/soll, return early like a validation error
  * @returns {Promise<{
  *   bpmnXml: string|null,
  *   svg: string|null,

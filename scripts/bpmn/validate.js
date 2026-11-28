@@ -42,7 +42,7 @@ function validateLogicCore(lc, profileOrPath = null, { withFindings = false } = 
 /**
  * The verdict on a model of either format, as `/validate`, `validate_bpmn`, the reviewer and
  * compliance give it. A 1.x model: `validateLogicCore(model, profile)`, unchanged. A format 2.0
- * model passes resolveFields (format schema, catalogue, assignments, systems and data access: C01–C07, C12–C16); its errors
+ * model passes resolveFields (format schema, catalogue, assignments, systems and data access: C01–C07, C12–C17); its errors
  * are the verdict, else the rules judge the resolved model with `findings` of every severity.
  * No lanes are formed: C10 depends on the view, so only generate reports it.
  * @param {object} model - Logic-Core of format 1.x or 2.0
