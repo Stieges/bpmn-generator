@@ -1023,3 +1023,349 @@ export function reclipOptionsFor(nodes) {
   const isFlowNode = (id) => id in typeOf && !isArtifact(typeOf[id]);
   return { shapeOf, fixedEndpoints, isFlowNode };
 }
+
+// ── Gateway tips ─────────────────────────────────────────────────────────
+
+/** An end counts as on its tip within this distance (px) — floating-point slack, not a tolerance. */
+const TIP_EPS = 0.01;
+/** Most keeper combinations snapGatewayTips tries for one gateway. */
+const MAX_TIP_PLANS = 24;
+
+/** Side a route leaves its first point through, read from the first segment's direction; null
+ *  when there is no segment or it is diagonal. */
+function leavingSide(path) {
+  const s = segmentsOf(path)[0];
+  if (!s) return null;
+  const dx = s[1].x - s[0].x, dy = s[1].y - s[0].y;
+  if (Math.abs(dx) > 1e-6 && Math.abs(dy) > 1e-6) return null;
+  if (Math.abs(dx) > 1e-6) return dx > 0 ? 'right' : 'left';
+  return dy > 0 ? 'bottom' : 'top';
+}
+
+/** Is `p` the vertex of the diamond in `box` on `side`? */
+export function isOnGatewayTip(p, box, side) {
+  const t = sideMidpoint(box, side);
+  return Math.abs(p.x - t.x) < TIP_EPS && Math.abs(p.y - t.y) < TIP_EPS;
+}
+
+/** The far end of a straight route moved to `value` on the route's axis (y for a horizontal route,
+ *  x for a vertical one), still on its shape's outline on the same side; null when that point is
+ *  not on the outline (outside the side, or a diamond — whose vertex is its own gateway's business). */
+function slideFarEnd(box, shape, p, horizontal, value) {
+  const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+  if (shape === 'diamond') return null;
+  if (shape === 'circle') {
+    const r = box.w / 2, d = value - (horizontal ? cy : cx);
+    if (Math.abs(d) > r - 1) return null;
+    const off = Math.sqrt(r * r - d * d);
+    return horizontal ? { x: p.x < cx ? cx - off : cx + off, y: value } : { x: value, y: p.y < cy ? cy - off : cy + off };
+  }
+  if (horizontal) return value < box.y + 1 || value > box.y + box.h - 1 ? null : { x: p.x, y: value };
+  return value < box.x + 1 || value > box.x + box.w - 1 ? null : { x: value, y: p.y };
+}
+
+/**
+ * Candidate routes from the tip of `box` on `side` to the far end of `path` — a route oriented away
+ * from the gateway (an incoming flow reversed). Each keeps the far end and as much of the current
+ * route as it can; the caller judges them.
+ *  - slide: the end moves along its own side to the tip and the waypoint after it follows on the
+ *    perpendicular leg (a straight route moves its far end instead, when that stays on its outline);
+ *  - join: a leg out of the tip, at least END_STUB_PX long, meets the current route at a waypoint
+ *    or runs into a perpendicular leg of it and follows it from there;
+ *  - jog: a straight route whose far end cannot follow gets a Z in the middle of its leg;
+ *  - router: orthogonal-router.js from a stub at the tip to the far end's current end segment.
+ */
+function tipCandidates(path, box, side, far, routerArgs) {
+  const T = sideMidpoint(box, side);
+  const [ox, oy] = OUTWARD[side];
+  const horizontal = ox !== 0;
+  const p = path.map(q => ({ x: q.x, y: q.y }));
+  const n = p.length;
+  const F = p[n - 1];
+  const out = [];
+  const lead = (q) => (horizontal ? (q.x - T.x) * ox : (q.y - T.y) * oy);
+
+  if (leavingSide(p) === side) {
+    if (n > 2) {
+      const q = p.map(v => ({ ...v }));
+      q[0] = T;
+      q[1] = horizontal ? { x: q[1].x, y: T.y } : { x: T.x, y: q[1].y };
+      out.push(q);
+    } else {
+      const moved = slideFarEnd(far.box, far.shape, F, horizontal, horizontal ? T.y : T.x);
+      if (moved) out.push([T, moved]);
+      if (lead(F) >= 2 * END_STUB_PX) {
+        const m = horizontal ? (T.x + F.x) / 2 : (T.y + F.y) / 2;
+        out.push(horizontal
+          ? [T, { x: m, y: T.y }, { x: m, y: F.y }, F]
+          : [T, { x: T.x, y: m }, { x: F.x, y: m }, F]);
+      }
+    }
+  }
+  for (let k = 1; k < n - 1; k++) {
+    const corner = horizontal ? { x: p[k].x, y: T.y } : { x: T.x, y: p[k].y };
+    if (lead(corner) >= END_STUB_PX) out.push([T, corner, ...p.slice(k)]);
+  }
+  for (let k = 0; k < n - 1; k++) {
+    const a = p[k], b = p[k + 1];
+    // a leg perpendicular to the tip's axis that spans the tip's level: run into it, follow it on
+    const perp = horizontal ? Math.abs(a.x - b.x) < 1e-6 : Math.abs(a.y - b.y) < 1e-6;
+    if (!perp) continue;
+    const level = horizontal ? T.y : T.x;
+    const lo = horizontal ? Math.min(a.y, b.y) : Math.min(a.x, b.x);
+    const hi = horizontal ? Math.max(a.y, b.y) : Math.max(a.x, b.x);
+    if (level <= lo || level >= hi) continue;
+    const corner = horizontal ? { x: a.x, y: T.y } : { x: T.x, y: a.y };
+    if (lead(corner) >= END_STUB_PX) out.push([T, corner, ...p.slice(k + 1)]);
+  }
+  if (routerArgs) {
+    const endSide = leavingSide([...p].reverse());          // the side the route enters the far end through
+    if (endSide) {
+      const s1 = { x: T.x + ox * END_STUB_PX, y: T.y + oy * END_STUB_PX };
+      const inn = OUTWARD[endSide];
+      const e1 = { x: F.x + inn[0] * END_STUB_PX, y: F.y + inn[1] * END_STUB_PX };
+      const middle = routeAroundObstacles(s1, OUT_DIR_NAME[side], e1, IN_DIR_NAME[endSide],
+        routerArgs.obstacles, { softObstacles: routerArgs.softObstacles });
+      if (middle) out.push([T, ...middle, F]);
+    }
+  }
+  return out.map(withoutCollinear);
+}
+
+/** Count of the boxes in `coords` a route runs through (shapeClearance padding), not counting the
+ *  edge's own two shapes nor a box containing one of them (its expanded subprocess). */
+function foreignBoxHits(points, coords, entry) {
+  const srcBox = coords[entry.source], tgtBox = coords[entry.target];
+  const contains = (o, i) => o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
+  let n = 0;
+  for (const [id, box] of Object.entries(coords)) {
+    if (id === entry.source || id === entry.target || !Number.isFinite(box?.x)) continue;
+    if ((srcBox && contains(box, srcBox)) || (tgtBox && contains(box, tgtBox))) continue;
+    for (let i = 0; i + 1 < points.length; i++) {
+      if (!segmentClearOfBox(points[i], points[i + 1], box)) { n++; break; }
+    }
+  }
+  return n;
+}
+
+/**
+ * Gateway tips: every sequence flow docks on a vertex of its gateway's diamond, one flow per vertex.
+ *
+ * ELK knows a gateway only as a box (layout.js: elk.portConstraints FREE), so it spreads two flows
+ * that share a side over that side, and clipOrthogonal (coordinates.js §5.1) then clips each one
+ * along its segment's axis onto the slanted facet — 12.5 px off the vertex for two flows, and half
+ * a pixel off for one flow where the routes come out of ELK half a pixel off the gateway's centre.
+ *
+ * Per gateway, the ends are grouped by the side their end segment runs through (leaving for an
+ * outgoing flow, entering for an incoming one). On every side one end — the keeper — keeps the side
+ * and moves onto its vertex. Every other end on that side moves to the free perpendicular vertex
+ * towards its other end (top or bottom for a flow on the left or right, left or right for one on
+ * the top or bottom), in model order; a vertex already used by another end, in either direction, is
+ * not free. Then: a keeper that could not reach its vertex tries the free one towards its other end;
+ * an end still without a vertex may take its side when the keeper can move on to a free vertex
+ * towards ITS other end. An end that is left over keeps its dock on the facet (more flows than
+ * vertices towards their other ends): two flows on one vertex would draw as one line, and a vertex
+ * facing away from the other end would need a loop around the gateway.
+ *
+ * Keepers are ranked: flow direction first (the outgoing flow on the right, the incoming one on the
+ * left), then the other end best aligned with the gateway's centre on that axis, then the other end
+ * not a gateway, then the end nearest the vertex, then fewer bends, then model order — on the right
+ * of a split that is the main branch (the ranking follows the right-out preference of the
+ * multi-out tip proposal in #152). Every combination of keepers is tried (MAX_TIP_PLANS at most)
+ * and the one with the fewest ends off a vertex or sharing one wins, then the fewest bends over the
+ * gateway's flows, then rank.
+ *
+ * The moved end gets an orthogonal end segment (see tipCandidates). A candidate is taken only when
+ * it is orthogonal, leaves the vertex on its side, has no more end defects (endDefects), runs
+ * through no more foreign shapes, crosses no more flows and lies on no more of another flow's line
+ * than the current route, and has at most two bends more; best by bends, crossings, collinear
+ * overlap, length. No candidate: the end stays where it is.
+ *
+ * Ends already exactly on their vertex are not touched. A boundary event is never a gateway, so its
+ * fixed endpoint is never moved. Pure: returns a new edgeCoords object when a route changed,
+ * `edgeCoords` itself otherwise.
+ */
+export function snapGatewayTips(edgeCoords, coords, edges, skipIds = new Set(), { shapeOf = () => 'rect' } = {}) {
+  const entries = [];
+  for (const e of edges || []) {
+    if (skipIds.has(e.id)) continue;
+    const points = edgeCoords[e.id];
+    if (!points || points.length < 2) continue;
+    entries.push({ id: e.id, source: e.source, target: e.target, points, order: entries.length });
+  }
+  const contains = (o, i) => o.x <= i.x && o.y <= i.y && o.x + o.w >= i.x + i.w && o.y + o.h >= i.y + i.h;
+  const byGateway = new Map();
+  for (const entry of entries) {
+    if (entry.source === entry.target) continue;
+    for (const role of ['out', 'in']) {
+      const node = role === 'out' ? entry.source : entry.target;
+      if (shapeOf(node) !== 'diamond' || !coords[node]) continue;
+      if (!byGateway.has(node)) byGateway.set(node, []);
+      byGateway.get(node).push({ entry, role, node, far: role === 'out' ? entry.target : entry.source });
+    }
+  }
+  const changed = new Map();
+  const pathOf = (end) => (end.role === 'out' ? end.entry.points : [...end.entry.points].reverse());
+  const save = (list) => list.map(en => ({ en, points: en.points, had: changed.has(en.id), was: changed.get(en.id) }));
+  const restore = (saved) => {
+    for (const { en, points, had, was } of saved) {
+      en.points = points;
+      if (had) changed.set(en.id, was); else changed.delete(en.id);
+    }
+  };
+
+  const tryEnd = (end, side, box) => {
+    const { entry } = end;
+    const path = pathOf(end);
+    if (isOnGatewayTip(path[0], box, side) && leavingSide(path) === side) return true;
+    const farBox = coords[end.far];
+    if (!farBox) return false;
+    const srcBox = coords[entry.source], tgtBox = coords[entry.target];
+    const srcShape = shapeOf(entry.source), tgtShape = shapeOf(entry.target);
+    const obstacles = Object.values(coords).filter(b => Number.isFinite(b?.x) &&
+      (b === srcBox || b === tgtBox || (!contains(b, srcBox) && !contains(b, tgtBox))));
+    const softObstacles = entries.filter(o => o.id !== entry.id && !adjacent(entry, o)).map(o => o.points);
+    const now = {
+      defects: endDefects(entry.points, srcBox, tgtBox, srcShape, tgtShape),
+      hits: foreignBoxHits(entry.points, coords, entry),
+      crossings: crossingsAgainstOthers(entry, entry.points, entries),
+      overlap: collinearOverlap(entry.points, entry, entries),
+      bends: bendCount(entry.points),
+    };
+    let best = null;
+    for (const cand of tipCandidates(path, box, side, { box: farBox, shape: shapeOf(end.far) }, { obstacles, softObstacles })) {
+      if (!isOrthogonal(cand) || leavingSide(cand) !== side || !isOnGatewayTip(cand[0], box, side)) continue;
+      const pts = end.role === 'out' ? cand : [...cand].reverse();
+      if (endDefects(pts, srcBox, tgtBox, srcShape, tgtShape) > now.defects) continue;
+      if (foreignBoxHits(pts, coords, entry) > now.hits) continue;
+      const bends = bendCount(pts);
+      if (bends > now.bends + 2) continue;
+      const crossings = crossingsAgainstOthers(entry, pts, entries);
+      if (crossings > now.crossings) continue;
+      const overlap = collinearOverlap(pts, entry, entries);
+      if (overlap > now.overlap + 0.5) continue;
+      const score = [bends, crossings, overlap, pathLength(pts)];
+      if (!best || lexLess(score, best.score)) best = { pts, score };
+    }
+    if (!best) return false;
+    entry.points = best.pts;
+    changed.set(entry.id, best.pts);
+    return true;
+  };
+
+  for (const [gw, ends] of byGateway) {
+    const box = coords[gw];
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    const centre = (id) => { const b = coords[id]; return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : { x: cx, y: cy }; };
+    // The perpendicular vertex towards an end's other end, seen from the side it docks on now.
+    // Other end level with the gateway: the side of the centre the end docks on now decides.
+    const towardOf = (end, side) => {
+      const c = centre(end.far), p = pathOf(end)[0];
+      const pick = (d, lo, hi) => (d < -0.5 ? lo : d > 0.5 ? hi : null);
+      return side === 'left' || side === 'right'
+        ? pick(c.y - cy, 'top', 'bottom') ?? pick(p.y - cy, 'top', 'bottom')
+        : pick(c.x - cx, 'left', 'right') ?? pick(p.x - cx, 'left', 'right');
+    };
+    const groups = {};
+    for (const end of ends) {
+      const side = leavingSide(pathOf(end));
+      if (side) (groups[side] ??= []).push(end);
+    }
+    for (const side of SIDES) {
+      const g = groups[side];
+      if (!g) continue;
+      const horizontal = side === 'left' || side === 'right';
+      const offset = (end) => { const c = centre(end.far); return horizontal ? Math.abs(c.y - cy) : Math.abs(c.x - cx); };
+      const farIsGateway = (end) => (shapeOf(end.far) === 'diamond' ? 1 : 0);
+      // Flow direction first: on the right the outgoing flow keeps the vertex, on the left the incoming one.
+      const against = (end) => ((side === 'right' && end.role === 'in') || (side === 'left' && end.role === 'out') ? 1 : 0);
+      const tip = sideMidpoint(box, side);
+      const away = (end) => { const p = pathOf(end)[0]; return Math.hypot(p.x - tip.x, p.y - tip.y); };
+      g.sort((a, b) => against(a) - against(b) || Math.round(offset(a)) - Math.round(offset(b))
+        || farIsGateway(a) - farIsGateway(b) || away(a) - away(b)
+        || bendCount(a.entry.points) - bendCount(b.entry.points) || a.entry.order - b.entry.order);
+    }
+
+    // One plan: `keeper` names the end that keeps each side; see the function comment for the rest.
+    const runPlan = (keeper) => {
+      const owner = { ...keeper };
+      const displaced = [];
+      for (const side of SIDES) if (groups[side]) displaced.push(...groups[side].filter(e => e !== keeper[side]));
+      const failed = SIDES.filter(side => owner[side] && !tryEnd(owner[side], side, box));
+      displaced.sort((a, b) => a.entry.order - b.entry.order || (a.role === 'out' ? -1 : 1));
+      const unplaced = [];
+      for (const end of displaced) {
+        const toward = towardOf(end, leavingSide(pathOf(end)));
+        if (toward && !owner[toward] && tryEnd(end, toward, box)) owner[toward] = end;
+        else unplaced.push(end);
+      }
+      // A vertex the first try could not reach may have been blocked by a sibling that has moved on
+      // since (a flow still docked on that vertex, then moved to its own): one more try each. A
+      // keeper that still cannot reach its own vertex — a flow that leaves a side only to turn at
+      // once, its other end level with that vertex — tries the free one towards its other end and
+      // hands its side on.
+      for (const side of failed) {
+        const end = owner[side];
+        if (tryEnd(end, side, box)) continue;
+        const toward = towardOf(end, side);
+        if (toward && !owner[toward] && tryEnd(end, toward, box)) { owner[toward] = end; owner[side] = null; }
+      }
+      // An end with no free vertex towards its other end: its side's keeper may make way, when the
+      // keeper has a free vertex towards ITS other end — then the end takes the side. Undone when
+      // the end cannot reach the vertex after all.
+      for (const end of unplaced) {
+        const side = leavingSide(pathOf(end));
+        const holder = side && owner[side];
+        if (!holder || holder === end) continue;
+        const toward = towardOf(holder, side);
+        if (!toward || owner[toward]) continue;
+        const keep = save([holder.entry]);
+        if (!tryEnd(holder, toward, box)) continue;
+        if (tryEnd(end, side, box)) { owner[toward] = holder; owner[side] = end; continue; }
+        restore(keep);
+      }
+    };
+
+    // Which end keeps a side is not decided by rank alone: every combination of keepers is tried
+    // (at most MAX_TIP_PLANS, the rest of the sides then keep their first-ranked end), and the one
+    // with the fewest ends off a vertex or sharing one wins, then the fewest bends over this
+    // gateway's flows, then rank — so a default flow already on the bottom vertex with one bend is
+    // not pushed round to the right with three for a sibling that would gain nothing.
+    const sides = SIDES.filter(side => groups[side]);
+    let plans = [{}];
+    for (const side of sides) {
+      const next = plans.flatMap(p => groups[side].map(e => ({ ...p, [side]: e })));
+      plans = next.length <= MAX_TIP_PLANS ? next : plans.map(p => ({ ...p, [side]: groups[side][0] }));
+    }
+    const involved = [...new Set(ends.map(e => e.entry))];
+    const start = save(involved);
+    const judge = () => {
+      const used = new Map();
+      let bad = 0;
+      for (const end of ends) {
+        const p = pathOf(end)[0];
+        const side = SIDES.find(sd => isOnGatewayTip(p, box, sd));
+        if (!side) { bad++; continue; }
+        used.set(side, (used.get(side) || 0) + 1);
+      }
+      for (const n of used.values()) if (n > 1) bad += n - 1;
+      return [bad, involved.reduce((n, en) => n + bendCount(en.points), 0)];
+    };
+    let best = null;
+    if (plans.length > 1) {
+      plans.forEach((plan, rank) => {
+        restore(start);
+        runPlan(plan);
+        const score = [...judge(), rank];
+        if (!best || lexLess(score, best.score)) best = { plan, score };
+      });
+      restore(start);
+    }
+    runPlan(best ? best.plan : plans[0]);
+  }
+
+  if (!changed.size) return edgeCoords;
+  const out = { ...edgeCoords };
+  for (const [id, points] of changed) out[id] = points;
+  return out;
+}

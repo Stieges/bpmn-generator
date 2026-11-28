@@ -34,11 +34,11 @@ import { resolveFields, formLanes } from './model-v2.js';
 import { resolveRuleProfile } from './rules.js';
 import { inferGatewayDirections, sortNodesTopologically, orderLanesByFlow, preprocessLogicCore, identifyHappyPathNodes, normalizeEdgeIds } from './topology.js';
 import { logicCoreToElk, runElkLayout } from './layout.js';
-import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes } from './coordinates.js';
+import { buildCoordinateMap, placeNodeLabels, placeNodeLabelsAvoidingFlows, enforceOrthogonal, clipOrthogonal, routeMessageFlows, repairMessageFlowLabels, growParticipantGapsForLabels, computeSequenceFlowLabel, flattenProcessEdges, flattenProcessNodes, edgeLabelBox, labelHitsRoute } from './coordinates.js';
 import { checkDiagramIntegrity, formatDiWarnings, classifyUnavoidableDi05 } from './di-check.js';
 import { checkNetIntegrity } from './net-check.js';
 import { bpmnToPN } from './workflow-net.js';
-import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, rerouteAfterCompaction } from './edge-simplify.js';
+import { simplifyAllEdges, repairCrossings, guardAgainstLegacy, reclipStuckEnds, reclipOptionsFor, rerouteAfterCompaction, snapGatewayTips } from './edge-simplify.js';
 import { applyBendRule } from './bend-rule.js';
 import { generateBpmnXml, validateBpmnXml } from './bpmn-xml.js';
 import { generateSvg } from './svg.js';
@@ -483,6 +483,41 @@ async function runPipeline(logicCore, callerOpts = {}) {
     const beforeBend = coordMap.edgeCoords;
     coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
     refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines, { avoidOtherRoutes: true });
+  }
+
+  // Gateway tips (snapGatewayTips): every sequence flow of a gateway docks on a vertex of the
+  // diamond, one flow per vertex — ELK spreads two flows of one side over that side and §5.1 clips
+  // them onto the facet. After the bend rule, the last pass that moves a route, so it judges the
+  // routes as they will be drawn and nothing moves an end off its vertex again; before edge-label
+  // repair, which then sees the final routes. On by default (config.json -> layout.gatewayTips).
+  if (CFG.layout?.gatewayTips !== false) {
+    const { shapeOf } = reclipOptionsFor(allProcesses.flatMap(p => flattenProcessNodes(p.nodes || [])));
+    const beforeTips = coordMap.edgeCoords;
+    coordMap.edgeCoords = snapGatewayTips(beforeTips, coordMap.coords, allEdges, skipSimplify, { shapeOf });
+    if (coordMap.edgeCoords !== beforeTips) {
+      refreshMovedLabels(coordMap, allEdges, beforeTips, laneLines, { avoidOtherRoutes: true });
+      // A route moved onto a vertex can now run through the label of a flow that stayed put (two
+      // flows on one side, one moved to the vertex 12.5 px closer to the other): re-place that label.
+      const moved = allEdges.filter(e => beforeTips[e.id] !== coordMap.edgeCoords[e.id]).map(e => coordMap.edgeCoords[e.id]);
+      for (const e of allEdges) {
+        const label = coordMap.edgeLabels[e.id];
+        if (!label || beforeTips[e.id] !== coordMap.edgeCoords[e.id]) continue;
+        const box = edgeLabelBox(label);
+        if (!moved.some(pts => labelHitsRoute(box, pts))) continue;
+        const avoidRoutes = Object.entries(coordMap.edgeCoords).filter(([id]) => id !== e.id).map(([, pts]) => pts);
+        const placed = computeSequenceFlowLabel(e, coordMap.edgeCoords[e.id], coordMap.coords, { laneLines, avoidRoutes });
+        if (placed) coordMap.edgeLabels[e.id] = placed;
+      }
+      // The bend rule once more on the new docks: a vertex can open a route with fewer bends, and the
+      // final routes stay a fixed point of the rule. It keeps every vertex — a diamond's ports are
+      // its vertices and the current end — and its shared-port guard lets no flow share more ports
+      // than it does now.
+      if (opts.bendRule ?? (CFG.layout?.bendRule === true)) {
+        const beforeBend = coordMap.edgeCoords;
+        coordMap.edgeCoords = applyBendRule(coordMap, lc, { edges: allEdges, skipIds: skipSimplify });
+        refreshMovedLabels(coordMap, allEdges, beforeBend, laneLines, { avoidOtherRoutes: true });
+      }
+    }
   }
   if (refine.edgeLabelCollisionRepair) {
     repairEdgeLabels(coordMap, {
