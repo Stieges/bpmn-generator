@@ -1077,6 +1077,8 @@ async function generateBpmnXml(lc, coordMap) {
   // 2. Build processes
   const allFlowNodeMaps = new Map();
   const processElements = [];
+  // Per process (same index as processElements): every node it contains, at any depth.
+  const processFlowNodeMaps = [];
   const categoryElements = [];
   for (const proc of processes) {
     // Need to infer gateway directions before building default flow map
@@ -1084,6 +1086,7 @@ async function generateBpmnXml(lc, coordMap) {
     const defaultFlowMap = buildDefaultFlowMap(proc);
     const { process: processEl, flowNodeMap, categories } = buildProcess(proc, defaultFlowMap, topLevelDefsMap);
     processElements.push(processEl);
+    processFlowNodeMaps.push(flowNodeMap);
     categoryElements.push(...categories);
     for (const [k, v] of flowNodeMap) allFlowNodeMaps.set(k, v);
     // Also register sequence flows
@@ -1142,25 +1145,32 @@ async function generateBpmnXml(lc, coordMap) {
 
   // 4. Associations (at process level)
   for (const assoc of associations) {
-    for (const processEl of processElements) {
-      // Search flowElements AND artifacts: an association's whole job is to tie
-      // an annotation to something, and annotations live in artifacts. Looking
-      // in flowElements alone would drop exactly the associations that matter.
+    // The first process whose TOP-LEVEL elements hold either end. Search flowElements AND
+    // artifacts: an association's whole job is to tie an annotation to something, and annotations
+    // live in artifacts. Looking in flowElements alone would drop exactly the associations that
+    // matter.
+    let owner = processElements.find((processEl) => {
       const owned = [...processEl.get('flowElements'), ...processEl.get('artifacts')];
-      const srcInProc = owned.some(fe => fe.id === assoc.source);
-      const tgtInProc = owned.some(fe => fe.id === assoc.target);
-      if (srcInProc || tgtInProc) {
-        const dir = assoc.directed ? 'One' : undefined;
-        const assocEl = create('bpmn:Association', {
-          id: assoc.id,
-          sourceRef: allFlowNodeMaps.get(assoc.source) || assoc.source,
-          targetRef: allFlowNodeMaps.get(assoc.target) || assoc.target,
-          associationDirection: dir,
-        });
-        processEl.get('artifacts').push(assocEl);
-        allFlowNodeMaps.set(assoc.id, assocEl);
-        break;
-      }
+      return owned.some(fe => fe.id === assoc.source || fe.id === assoc.target);
+    });
+    // Only when no process holds an end at its top level (both ends nested): the first process
+    // that holds an end at any depth. The top-level lookup stays first, so an association with a
+    // top-level end keeps the process it always had. Before this fallback such an association was
+    // not written at all, while its BPMNEdge was, with `bpmnElement="undefined"`.
+    if (!owner) {
+      const index = processFlowNodeMaps.findIndex(m => m.has(assoc.source) || m.has(assoc.target));
+      if (index >= 0) owner = processElements[index];
+    }
+    if (owner) {
+      const dir = assoc.directed ? 'One' : undefined;
+      const assocEl = create('bpmn:Association', {
+        id: assoc.id,
+        sourceRef: allFlowNodeMaps.get(assoc.source) || assoc.source,
+        targetRef: allFlowNodeMaps.get(assoc.target) || assoc.target,
+        associationDirection: dir,
+      });
+      owner.get('artifacts').push(assocEl);
+      allFlowNodeMaps.set(assoc.id, assocEl);
     }
   }
 

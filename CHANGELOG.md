@@ -289,6 +289,13 @@ before. Every `validation` result gains the key `hints`, an empty array without 
 
 ### Fixed
 
+- **An association whose two ends are nested is written** (1.x too). An association between two
+  elements inside a subprocess (an annotation and a task in an expanded subprocess, say) was silently
+  dropped from the XML, while its BPMNEdge was written with `bpmnElement="undefined"` and
+  `validation.xmlWarnings` reported `unresolved reference <undefined>`. It is now written at the level
+  of the process that contains it, with its DI, and both importers read it back. An association with
+  an end at the top level of a process stays where it was written before; no committed fixture
+  changes its output.
 - **An unavoidable DI05 no longer blocks `--strict` (format 2.x).** All participants are stacked in
   one column, so a participant with three or more message partners (or partners that exchange
   messages in a cycle) always has a message flow crossing an uninvolved participant, and `--strict`

@@ -1,10 +1,11 @@
 /**
- * Native data associations on import.
+ * Native data associations on import, and the association between two nested elements on write.
  *
  * A `bpmn:dataInputAssociation` / `bpmn:dataOutputAssociation` (an editor's link between a task
  * or an event and a data object or data store) is read by both importers as a directed 1.x
  * association: input from the data reference to the owning node, output from the owning node to
- * the data reference.
+ * the data reference. The writer, in turn, keeps an association whose two ends both sit inside a
+ * subprocess (it used to drop it and leave a BPMNEdge pointing at nothing).
  */
 import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
@@ -175,5 +176,77 @@ describe('importers read native data associations as directed associations', () 
     }
     expect(xml).not.toMatch(/dataInputAssociation|dataOutputAssociation/);
     expect(r.validation.xmlWarnings).toEqual([]);
+  });
+});
+
+describe('the writer keeps an association whose two ends are nested', () => {
+  const nestedModel = () => ({
+    id: 'Process_order', name: 'Bestellung',
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Bestellung eingegangen' },
+      {
+        id: 'sp', type: 'subProcess', name: 'Bestellung bearbeiten', isExpanded: true,
+        nodes: [
+          { id: 'ss', type: 'startEvent', name: 'Beginn' },
+          { id: 'st', type: 'task', name: 'Bestellung prüfen' },
+          { id: 'se', type: 'endEvent', name: 'Geprüft' },
+          { id: 'sn', type: 'textAnnotation', name: 'Vier-Augen-Prinzip' },
+        ],
+        edges: [{ id: 'sf1', source: 'ss', target: 'st' }, { id: 'sf2', source: 'st', target: 'se' }],
+      },
+      { id: 'e', type: 'endEvent', name: 'Bestellung bearbeitet' },
+    ],
+    edges: [{ id: 'f1', source: 's', target: 'sp' }, { id: 'f2', source: 'sp', target: 'e' }],
+    associations: [{ id: 'a1', source: 'sn', target: 'st' }],
+  });
+
+  test('an association between two nested nodes is written', async () => {
+    const r = await runPipeline(nestedModel());
+    expect(r.validation.xmlWarnings).toEqual([]);
+    expect(r.bpmnXml.match(/<bpmn:association /g)).toHaveLength(1);
+    expect(r.bpmnXml).toMatch(/<bpmn:association [^>]*id="a1"[^>]*sourceRef="sn"[^>]*targetRef="st"/);
+    expect(r.bpmnXml).toContain('<bpmndi:BPMNEdge id="a1_di" bpmnElement="a1">');
+    expect(r.bpmnXml).not.toContain('bpmnElement="undefined"');
+    const back = await readBoth(r.bpmnXml);
+    expect(back.associations).toEqual([{ id: 'a1', source: 'sn', target: 'st', directed: false }]);
+  });
+
+  test('a cross-pool association with a top-level end keeps its pool', async () => {
+    const lc = {
+      pools: [
+        {
+          id: 'P1', name: 'Vertrieb',
+          nodes: [
+            { id: 's1', type: 'startEvent', name: 'Bestellung eingegangen' },
+            {
+              id: 'sp1', type: 'subProcess', name: 'Bestellung bearbeiten', isExpanded: true,
+              nodes: [
+                { id: 'ss1', type: 'startEvent', name: 'Beginn' },
+                { id: 'st1', type: 'task', name: 'Bestellung prüfen' },
+                { id: 'se1', type: 'endEvent', name: 'Geprüft' },
+              ],
+              edges: [{ id: 'sf1', source: 'ss1', target: 'st1' }, { id: 'sf2', source: 'st1', target: 'se1' }],
+            },
+            { id: 'e1', type: 'endEvent', name: 'Bestellung bearbeitet' },
+          ],
+          edges: [{ id: 'f1', source: 's1', target: 'sp1' }, { id: 'f2', source: 'sp1', target: 'e1' }],
+        },
+        {
+          id: 'P2', name: 'Lager',
+          nodes: [
+            { id: 's2', type: 'startEvent', name: 'Auftrag eingegangen' },
+            { id: 't2', type: 'task', name: 'Ware kommissionieren' },
+            { id: 'e2', type: 'endEvent', name: 'Ware bereit' },
+            { id: 'n2', type: 'textAnnotation', name: 'Nach Lagerplatz sortiert' },
+          ],
+          edges: [{ id: 'g1', source: 's2', target: 't2' }, { id: 'g2', source: 't2', target: 'e2' }],
+        },
+      ],
+      associations: [{ id: 'cross', source: 'n2', target: 'st1' }],
+    };
+    const r = await runPipeline(lc);
+    const processes = [...r.bpmnXml.matchAll(/<bpmn:process id="([^"]+)"[\s\S]*?<\/bpmn:process>/g)];
+    const owner = processes.filter(m => m[0].includes('<bpmn:association id="cross"')).map(m => m[1]);
+    expect(owner).toEqual(['P2']);
   });
 });
