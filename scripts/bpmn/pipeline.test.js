@@ -6847,8 +6847,20 @@ describe('geometry contract — the two renderers agree on node labels', () => {
         // the tests above, which a grandchild's flow (not drawn) would skew here.
         const dx = Math.min(...got.map(g => g.x)) - Math.min(...want.map(w => w.x));
         const dy = Math.min(...got.map(g => g.y)) - Math.min(...want.map(w => w.y));
+        // svg.js rounds every coordinate to 0.1 px (rn), and dx/dy come from those rounded values,
+        // so a line sits within 0.1 px of the exact translation, not always on its 0.1 px rounding:
+        // each drawn line must match a wanted line of the same text within that.
+        const TOL = 0.1 + 1e-6;
         const fmt = (l, ox = 0, oy = 0) => `${r1(l.x + ox)},${r1(l.y + oy)} ${l.text}`;
-        expect(got.map(l => fmt(l)).sort()).toEqual(want.map(l => fmt(l, dx, dy)).sort());
+        const left = want.map(w => ({ ...w, x: w.x + dx, y: w.y + dy }));
+        const unmatched = got.filter((g) => {
+          const i = left.findIndex(w => w.text === g.text && Math.abs(w.x - g.x) <= TOL && Math.abs(w.y - g.y) <= TOL);
+          if (i < 0) return true;
+          left.splice(i, 1);
+          return false;
+        });
+        expect({ drawn: unmatched.map(l => fmt(l)).sort(), wanted: left.map(l => fmt(l)).sort() })
+          .toEqual({ drawn: [], wanted: [] });
       }, 30000);
     }
   }
