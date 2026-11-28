@@ -1,18 +1,22 @@
 /**
  * Format 2.x, first stage (design 7.3 step 2, 7.5, 8): `resolveFields` checks a 2.x model against its
- * actor and system catalogue and responsibility scheme (rules C01–C07, C14, C15) and translates it
- * into the intermediate form the pipeline already reads — the 1.x shape without lanes, plus private
+ * actor, system and data catalogue and responsibility scheme (rules C01–C07, C14–C16, hints H09, H21)
+ * and translates it into the intermediate form the pipeline already reads — the 1.x shape without lanes, plus private
  * carrier fields.
  *
  * The C rules run here and are not entries of the rule register (design 8). `resolveFields` sets
  * no `role` or `lane`; a task's `system` (format 2.1, a catalogue id) becomes the 1.x `system` text,
  * the entry's name, with the id kept in `_systemRef`. `formLanes` forms the lanes afterwards from
  * the catalogue and the chosen view, by the inheritance rule of design 7.2.
+ *
+ * Data (format 2.1): the model's `data` merges into the catalogue's like `systems`; a node's
+ * `dataAccess` is checked against it (C15 on a node that is no activity, C16) and, with the root
+ * `data`, left out of the intermediate form.
  */
 
 import { validateModelSchema } from './schema-gate.js';
 import { coded } from '../shared/message-codes.js';
-import { isEvent, isGateway, isActivity, isBoundaryEvent, FLOW_NODE_TYPES, TASK_TYPES } from './types.js';
+import { isEvent, isGateway, isActivity, isBoundaryEvent, FLOW_NODE_TYPES, TASK_TYPES, ACTIVITY_TYPES } from './types.js';
 import { findBackEdges, collectDocumentIds } from './topology.js';
 import { LANE_NAME_LIMIT } from './rules.js';
 import { CFG } from '../shared/utils.js';
@@ -103,10 +107,10 @@ const NO_CATALOG_HELP = 'pass one with --catalog=<path>, the "catalog" field of 
 
 /**
  * Checks a 2.x model and translates it into the intermediate form. Neither argument is changed.
- * `catalog` is `{ actors, systems?, scheme? }`; the model's `actors` and `systems` then replace or
- * extend it (its `scheme` is C13); a model without one may carry `actors`, `systems` (and `scheme`) itself.
- * `hints` lists H09 per catalogue entry the model replaces (its `actors` in model order, then its
- * `systems`). With findings the result is `{ lc: null, resolved: null, errors, hints: [] }`.
+ * `catalog` is `{ actors, systems?, data?, scheme? }`; the model's `actors`, `systems` and `data` then
+ * replace or extend it (its `scheme` is C13); a model without one may carry `actors`, `systems`, `data`
+ * (and `scheme`) itself. `hints` lists H09 per catalogue entry the model replaces (its `actors` in
+ * model order, then its `systems`, then its `data`), then H21 per used data item without `kind`. With findings the result is `{ lc: null, resolved: null, errors, hints: [] }`.
  */
 export function resolveFields(model, options) {
   const { catalog, viewName = 'default' } = options ?? {};
@@ -116,12 +120,13 @@ export function resolveFields(model, options) {
   const gate = validateModelSchema(model, { accept: ['2'] });
   if (!gate.valid) return fail(gate.errors.map((e) => (e.code ? coded(e.code, `${e.path} ${e.message}`) : e.message)));
 
-  // (2) the source of the actors and systems. With a catalogue object the model's own `actors` and
-  // `systems` replace entries of it (same id, in place) or are appended (new id); the C rules then
+  // (2) the source of the actors, systems and data. With a catalogue object the model's own `actors`,
+  // `systems` and `data` replace entries of it (same id, in place) or are appended (new id); the C rules then
   // run on those effective lists.
   let source = null;
   let ownActors = null;
   let ownSystems = null;
+  let ownData = null;
   const hints = [];
   const replacedHints = (ids) => {
     for (const id of ids) hints.push({ code: 'H09', message: `Catalogue entry "${q(id)}" is replaced by the process file.`, elements: [id] });
@@ -131,7 +136,7 @@ export function resolveFields(model, options) {
     const problems = catalogErrors(catalog);
     if (problems.length) return fail(problems);
     source = catalog;
-    if (model.actors !== undefined || model.systems !== undefined) {
+    if (model.actors !== undefined || model.systems !== undefined || model.data !== undefined) {
       source = { ...catalog };
       if (model.actors !== undefined) {
         ownActors = model.actors;
@@ -145,14 +150,21 @@ export function resolveFields(model, options) {
         source.systems = merged;
         replacedHints(replaced);
       }
+      if (model.data !== undefined) {
+        ownData = model.data;
+        const { merged, replaced } = mergeEntries(catalog.data ?? [], ownData);
+        source.data = merged;
+        replacedHints(replaced);
+      }
       const effective = catalogErrors(source);
       if (effective.length) return fail(effective);
     }
   } else if (typeof model.catalog === 'string') {
     return fail([coded('C13', `the model names catalogue "${q(model.catalog)}" but no catalogue object was passed — the CLI reads it relative to the model file, a library caller passes { catalog }`)]);
-  } else if (model.actors !== undefined || model.systems !== undefined) {
+  } else if (model.actors !== undefined || model.systems !== undefined || model.data !== undefined) {
     source = { actors: model.actors ?? [] };
     if (model.systems !== undefined) source.systems = model.systems;
+    if (model.data !== undefined) source.data = model.data;
     if (model.scheme !== undefined) source.scheme = model.scheme;
     const problems = catalogErrors(source);
     if (problems.length) return fail(problems);
@@ -163,6 +175,7 @@ export function resolveFields(model, options) {
 
   const actors = source ? clone(source.actors) : [];
   const systems = source?.systems ? clone(source.systems) : [];
+  const data = source?.data ? clone(source.data) : [];
   const schemeRef = source ? source.scheme : undefined;
   const scheme = resolveScheme(schemeRef);
 
@@ -195,7 +208,13 @@ export function resolveFields(model, options) {
   } else {
     duplicates(systems, 'the catalogue', 'system');
   }
-  // C03: actors and systems share one id space (effective lists).
+  if (ownData) {
+    duplicates(catalog.data ?? [], 'the catalogue', 'data');
+    duplicates(ownData, 'the data of the process file', 'data');
+  } else {
+    duplicates(data, 'the catalogue', 'data');
+  }
+  // C03: actors, systems and data share one id space (effective lists).
   const systemById = new Map();
   const systemOrder = new Map();
   systems.forEach((system, index) => {
@@ -204,8 +223,18 @@ export function resolveFields(model, options) {
     systemOrder.set(system.id, index);
     if (byId.has(system.id)) errors.push(`[C03] id "${q(system.id)}" is both an actor and a system in the catalogue`);
   });
-  // A reference to an actor or unit that names a system says so (C01).
-  const missing = (ref, as) => (systemById.has(ref) ? `is a system, not ${as}` : 'is not in the catalogue');
+  const dataById = new Map();
+  const dataOrder = new Map();
+  data.forEach((item, index) => {
+    if (dataById.has(item.id)) return;
+    dataById.set(item.id, item);
+    dataOrder.set(item.id, index);
+    if (byId.has(item.id)) errors.push(`[C03] id "${q(item.id)}" is both an actor and a data item in the catalogue`);
+    if (systemById.has(item.id)) errors.push(`[C03] id "${q(item.id)}" is both a system and a data item in the catalogue`);
+  });
+  // A reference to an actor or unit that names a system or a data item says so (C01).
+  const missing = (ref, as) => (systemById.has(ref) ? `is a system, not ${as}`
+    : dataById.has(ref) ? `is a data item, not ${as}` : 'is not in the catalogue');
 
   const nodes = allNodes(model);
   // No catalogue handed over at all (no source): one leading error instead of a C01 line per
@@ -279,15 +308,66 @@ export function resolveFields(model, options) {
       if (systemById.has(node.system)) continue;
       errors.push(byId.has(node.system)
         ? `[C14] node "${q(node.id)}": "${q(node.system)}" is an actor, not a system`
-        : `[C14] node "${q(node.id)}": system "${q(node.system)}" is not in the catalogue`);
+        : dataById.has(node.system)
+          ? `[C14] node "${q(node.id)}": "${q(node.system)}" is a data item, not a system`
+          : `[C14] node "${q(node.id)}": system "${q(node.system)}" is not in the catalogue`);
     }
   }
   for (const node of withSystem) {
     if (!TASK_TYPES.has(node.type)) errors.push(`[C15] node "${q(node.id)}": a system belongs on a task, not on ${q(node.type)}`);
   }
+
+  // C15: data access only on an activity. C16: it names a data item of the catalogue, lists no
+  // access twice and does not mix a recorded and a not-recorded access to one item; with no
+  // catalogue source at all, one leading error instead of a line per node.
+  const withAccess = nodes.filter((n) => n.dataAccess !== undefined);
+  for (const node of withAccess) {
+    if (!ACTIVITY_TYPES.has(node.type)) errors.push(`[C15] node "${q(node.id)}": data access belongs on an activity, not on ${q(node.type)}`);
+  }
+  if (!source && withAccess.some((n) => n.dataAccess.length > 0)) {
+    errors.push(`[C16] the model names data but no catalogue was given; ${NO_CATALOG_HELP}`);
+  } else {
+    for (const node of withAccess) {
+      const byItem = new Map();
+      for (const entry of node.dataAccess) {
+        if (!byItem.has(entry.data)) byItem.set(entry.data, []);
+        byItem.get(entry.data).push(entry.access ?? null);
+      }
+      for (const [ref, accesses] of byItem) {
+        const who = `[C16] node "${q(node.id)}":`;
+        if (!dataById.has(ref)) {
+          errors.push(byId.has(ref) ? `${who} "${q(ref)}" is an actor, not a data item`
+            : systemById.has(ref) ? `${who} "${q(ref)}" is a system, not a data item`
+              : `${who} data "${q(ref)}" is not in the catalogue`);
+          continue;
+        }
+        const counts = new Map();
+        for (const a of accesses) counts.set(a, (counts.get(a) ?? 0) + 1);
+        for (const [a, n] of counts) {
+          if (n > 1) errors.push(`${who} data access to "${q(ref)}" (${a ?? 'access not recorded'}) is listed ${n} times`);
+        }
+        const recorded = accesses.find((a) => a !== null);
+        if (recorded !== undefined && counts.has(null)) {
+          errors.push(`${who} data access to "${q(ref)}" is both recorded (${recorded}) and not recorded; keep one form`);
+        }
+      }
+    }
+  }
   if (errors.length) return fail(errors);
 
-  const fingerprint = catalogFingerprint(actors, scheme, systems);
+  // H21: a used data item without a recorded kind, once, in order of first use
+  const kindless = new Set();
+  for (const node of withAccess) {
+    for (const entry of node.dataAccess) {
+      const item = dataById.get(entry.data);
+      if (item.kind === undefined && !kindless.has(item.id)) {
+        kindless.add(item.id);
+        hints.push({ code: 'H21', message: `Data item "${q(item.name)}" (${q(item.id)}) has no recorded kind: drawn as a data object.`, elements: [item.id] });
+      }
+    }
+  }
+
+  const fingerprint = catalogFingerprint(actors, scheme, systems, data);
   const namedAsUnit = new Set();
   for (const actor of actors) {
     for (const ref of [actor.unit, actor.partOf]) if (ref !== undefined && ref !== actor.id) namedAsUnit.add(ref);
@@ -307,14 +387,15 @@ export function resolveFields(model, options) {
     return chain;
   };
   const resolved = {
-    actors, byId, order, systems, systemById, systemOrder, scheme: clone(scheme), performsType, fingerprint, parentOf, isUnit, unitChain,
+    actors, byId, order, systems, systemById, systemOrder, data, dataById, dataOrder, scheme: clone(scheme), performsType, fingerprint, parentOf, isUnit, unitChain,
   };
 
   // the intermediate form: a task's system as the 1.x writer reads it (the name), its id kept private
   const lc = clone(model);
-  for (const key of ['$schemaVersion', 'catalog', 'actors', 'systems', 'scheme']) delete lc[key];
+  for (const key of ['$schemaVersion', 'catalog', 'actors', 'systems', 'data', 'scheme']) delete lc[key];
   for (const node of allNodes(lc)) {
     if (node.assignments !== undefined) { node._assignments = node.assignments; delete node.assignments; }
+    delete node.dataAccess;
     if (node.system !== undefined) { node._systemRef = node.system; node.system = systemById.get(node.system).name; }
   }
   lc._modelInfo = { version: model.$schemaVersion, view: viewName, catalogFingerprint: fingerprint };
