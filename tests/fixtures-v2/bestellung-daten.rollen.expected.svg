@@ -91,7 +91,7 @@
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="1065.5" y="724.9">Rechnungen</tspan></text>
 </g>
 <path data-element-id="flow_start_pruefen" data-waypoints="206,110 326.5,110" d="M 206 110 L 326.5 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="flow_pruefen_gw" data-waypoints="426.5,110 548.5,110" d="M 426.5 110 L 548.5 110" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="flow_pruefen_gw" data-waypoints="426.5,109.5 548,109.5" d="M 426.5 109.5 L 548 109.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="flow_gw_rueck" data-waypoints="598,109.5 808,109.5 808,310" d="M 598 109.5 L 803 109.5 C 805.5 109.5 808 112 808 114.5 L 808 310" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="703" y="101.4">ja</tspan></text>
 <path data-element-id="flow_gw_zahlen" data-waypoints="573,134.5 573,590 974.9,590" d="M 573 134.5 L 573 585 C 573 587.5 575.5 590 578 590 L 974.9 590" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>

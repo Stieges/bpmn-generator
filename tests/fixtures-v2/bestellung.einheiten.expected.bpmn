@@ -88,7 +88,7 @@
       <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true">
         <dc:Bounds x="416" y="87.5" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="399.4" y="147.5" width="83.1" height="14" />
+          <dc:Bounds x="399.4" y="63.5" width="83.1" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="rueck_di" bpmnElement="rueck">
@@ -108,23 +108,22 @@
         <di:waypoint x="236" y="113" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flow_pruefen_gw_di" bpmnElement="flow_pruefen_gw">
-        <di:waypoint x="336" y="113" />
-        <di:waypoint x="416.5" y="113" />
+        <di:waypoint x="336" y="112.5" />
+        <di:waypoint x="416" y="112.5" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flow_gw_rueck_di" bpmnElement="flow_gw_rueck">
-        <di:waypoint x="453.5" y="100" />
-        <di:waypoint x="626" y="100" />
+        <di:waypoint x="466" y="112.5" />
+        <di:waypoint x="626" y="112.5" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="535.5" y="67" width="8.6" height="14" />
+          <dc:Bounds x="541.7" y="94.5" width="8.6" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flow_gw_zahlen_di" bpmnElement="flow_gw_zahlen">
-        <di:waypoint x="466" y="112.5" />
-        <di:waypoint x="596" y="112.5" />
-        <di:waypoint x="596" y="273" />
+        <di:waypoint x="441" y="137.5" />
+        <di:waypoint x="441" y="273" />
         <di:waypoint x="806" y="273" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="520.6" y="94.5" width="20.8" height="14" />
+          <dc:Bounds x="613.1" y="255" width="20.8" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flow_rueck_zahlen_di" bpmnElement="flow_rueck_zahlen">

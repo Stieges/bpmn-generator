@@ -72,7 +72,7 @@
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="1054" y="480.9">Auftrag erledigt</tspan></text>
 </g>
 <path data-element-id="flow_start_pruefen" data-waypoints="206,112 286,112" d="M 206 112 L 286 112" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
-<path data-element-id="flow_pruefen_gw" data-waypoints="386,112 466.5,112" d="M 386 112 L 466.5 112" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
+<path data-element-id="flow_pruefen_gw" data-waypoints="386,111.5 466,111.5" d="M 386 111.5 L 466 111.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <path data-element-id="flow_gw_rueck" data-waypoints="516,111.5 726,111.5 726,234" d="M 516 111.5 L 721 111.5 C 723.5 111.5 726 114 726 116.5 L 726 234" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"  marker-end="url(#seq-end)"/>
 <text text-anchor="middle" font-size="11" fill="#22242a"><tspan x="621" y="103.4">ja</tspan></text>
 <path data-element-id="flow_gw_zahlen" data-waypoints="491,136.5 491,443.5 856,443.5" d="M 491 136.5 L 491 438.5 C 491 441 493.5 443.5 496 443.5 L 856 443.5" stroke="#22242a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#seq-default-src)" marker-end="url(#seq-end)"/>
