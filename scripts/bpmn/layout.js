@@ -5,7 +5,7 @@
 
 import { isEvent, isGateway, isBoundaryEvent, isArtifact } from './types.js';
 import { SHAPE, LANE_HEADER_W, LANE_PADDING, EXTERNAL_LABEL_H, POOL_GAP, COLLAB_PADDING, ARTIFACT_GAP } from './constants.js';
-import { artifactSize } from './coordinates.js';
+import { artifactSize, dataRefSlot } from './coordinates.js';
 import { CFG } from '../shared/utils.js';
 import { boundText } from '../shared/safe-text.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
@@ -82,7 +82,7 @@ function resolveWrappingOpts(lc, opts) {
   };
 }
 
-function buildSingleProcessElk(proc, wrappingOpts = {}) {
+function buildSingleProcessElk(proc, wrappingOpts = {}, dataRows = dataRowsOf(proc)) {
   const nodes = proc.nodes || [];
   const edges = proc.edges || [];
   const lanes = proc.lanes || [];
@@ -90,14 +90,14 @@ function buildSingleProcessElk(proc, wrappingOpts = {}) {
   const hasPools = lanes.length > 0;
 
   if (hasPools) {
-    return buildLanedProcessElk(proc, wrappingOpts);
+    return buildLanedProcessElk(proc, wrappingOpts, dataRows);
   }
 
   return {
     id: 'root',
     properties: { ...elkDefaults(), ...wrappingOpts },
     children: nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
-                   .map(n => buildElkNode(n)),
+                   .map(n => buildElkNode(n, dataRows)),
     edges: buildElkEdges(nodes, edges),
   };
 }
@@ -130,7 +130,7 @@ function buildElkEdges(nodes, edges) {
     .map((e, i) => buildElkEdge(e, i));
 }
 
-function buildLanedProcessElk(proc, wrappingOpts = {}) {
+function buildLanedProcessElk(proc, wrappingOpts = {}, dataRows = dataRowsOf(proc)) {
   const nodes = proc.nodes || [];
   const edges = proc.edges || [];
   const lanes = proc.lanes || [];
@@ -152,7 +152,7 @@ function buildLanedProcessElk(proc, wrappingOpts = {}) {
 
   const flatChildren = nodes
     .filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
-    .map(n => buildElkNode(n));
+    .map(n => buildElkNode(n, dataRows));
 
   // ALL edges (intra-lane + cross-lane) in one flat list
   const flatEdges = buildElkEdges(nodes, edges);
@@ -176,7 +176,7 @@ function buildLanedProcessElk(proc, wrappingOpts = {}) {
   };
 }
 
-function buildMultiPoolElk(lc, wrappingOpts = {}) {
+function buildMultiPoolElk(lc, wrappingOpts = {}, dataRows = dataRowsOf(lc)) {
   const pools = lc.pools || [];
   const collapsedPools = lc.collapsedPools || [];
   const poolElkChildren = [];
@@ -189,7 +189,7 @@ function buildMultiPoolElk(lc, wrappingOpts = {}) {
         // (it is also used as a standalone root). Spreading it after `id`
         // would give every laned pool the same ELK id and collapse them
         // onto identical coordinates.
-        ...buildLanedProcessElk(pool, wrappingOpts),
+        ...buildLanedProcessElk(pool, wrappingOpts, dataRows),
         id: pool.id,
         labels: [{ text: pool.name || pool.id }],
       });
@@ -205,7 +205,7 @@ function buildMultiPoolElk(lc, wrappingOpts = {}) {
           ...wrappingOpts,  // merge wrapping into laneless pool's layered layout
         },
         children: nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
-                       .map(n => buildElkNode(n)),
+                       .map(n => buildElkNode(n, dataRows)),
         edges: buildElkEdges(nodes, edges),
       });
     }
@@ -243,7 +243,7 @@ function buildMultiPoolElk(lc, wrappingOpts = {}) {
   };
 }
 
-function buildElkNode(node) {
+function buildElkNode(node, dataRows = NO_DATA_ROWS) {
   const needsExternalLabel = isEvent(node.type) || isGateway(node.type);
   const props = {
     'elk.nodeLabels.placement': 'INSIDE V_CENTER H_CENTER',
@@ -261,9 +261,9 @@ function buildElkNode(node) {
   if (node.isExpanded && node.nodes && node.nodes.length > 0) {
     const minSz = SHAPE._expandedSubProcess || { w: 350, h: 200 };
     const childNodes = node.nodes.filter(n => !isBoundaryEvent(n) && !isArtifact(n.type))
-                                 .map(n => buildElkNode(n));
+                                 .map(n => buildElkNode(n, dataRows));
     const childEdges = buildElkEdges(node.nodes, node.edges || []);
-    const artifactReserve = artifactReserveHeight(node.nodes);
+    const artifactReserve = artifactReserveHeight(node.nodes, dataRows);
     return {
       id: node.id,
       width: minSz.w,
@@ -283,6 +283,20 @@ function buildElkNode(node) {
   }
 
   const sz = SHAPE[node.type] || SHAPE.task;
+  // A step with data references (format 2.1): its ELK box is as wide as the row below it, so ELK
+  // spaces the columns for the row; coordinates.js centres the shape in the box (`_dataPadX`).
+  const rowW = dataRows.has(node.id) ? dataRows.get(node.id).reduce((w, ref) => w + dataRefSlot(ref).slotW, 0) : 0;
+  if (rowW > sz.w) {
+    return {
+      id: node.id,
+      width: rowW,
+      height: sz.h + (needsExternalLabel ? EXTERNAL_LABEL_H : 0),
+      labels: [{ text: node.name || node.id }],
+      properties: props,
+      _shapeH: sz.h,
+      _dataPadX: (rowW - sz.w) / 2,
+    };
+  }
   return {
     id: node.id,
     width:  sz.w,
@@ -291,6 +305,30 @@ function buildElkNode(node) {
     properties: props,
     _shapeH: sz.h,
   };
+}
+
+const NO_DATA_ROWS = new Map();
+
+/**
+ * The data references a format 2.1 step's dataAccess derived, by step: step id → its reference
+ * nodes (`_dataRef`), from the links that carry `_access` (a write runs step → reference, a read
+ * and an unrecorded link reference → step). Empty for every model without data.
+ */
+function dataRowsOf(lc) {
+  const links = (lc?.associations || []).filter(a => a._access);
+  if (links.length === 0) return NO_DATA_ROWS;
+  const byId = new Map();
+  const walk = (nodes) => { for (const n of nodes || []) { byId.set(n.id, n); walk(n.nodes); } };
+  for (const p of lc.pools || [lc]) walk(p.nodes);
+  const rows = new Map();
+  for (const a of links) {
+    const [step, refId] = a._access === 'write' ? [a.source, a.target] : [a.target, a.source];
+    const ref = byId.get(refId);
+    if (!ref?._dataRef) continue;
+    if (!rows.has(step)) rows.set(step, []);
+    if (!rows.get(step).includes(ref)) rows.get(step).push(ref);
+  }
+  return rows;
 }
 
 /**
@@ -304,11 +342,16 @@ function buildElkNode(node) {
  * than from the associations, which are a collaboration-level list that buildElkNode never sees.
  * Over-reserving costs whitespace; under-reserving puts a shape outside its container (DI06).
  */
-function artifactReserveHeight(nodes) {
-  const artifacts = nodes.filter(n => isArtifact(n.type));
-  if (artifacts.length === 0) return 0;
+function artifactReserveHeight(nodes, dataRows = NO_DATA_ROWS) {
+  // The data references a step's dataAccess derived (format 2.1, `_dataRef`) take one row per step,
+  // as tall as its tallest reference with its label (dataRefSlot), so a label cannot end below the
+  // bottom padding. coordinates.js placeDataRows puts each row below its step.
+  const artifacts = nodes.filter(n => isArtifact(n.type) && !n._dataRef);
+  const dataReserve = nodes.filter(n => dataRows.has(n.id))
+    .reduce((sum, n) => sum + Math.max(...dataRows.get(n.id).map(ref => dataRefSlot(ref).rowH)), 0);
+  if (artifacts.length === 0) return dataReserve;
   const tallest = Math.max(...artifacts.map(n => artifactSize(n).h));
-  return artifacts.length * (tallest + ARTIFACT_GAP);
+  return artifacts.length * (tallest + ARTIFACT_GAP) + dataReserve;
 }
 
 function buildElkEdge(edge, idx) {
