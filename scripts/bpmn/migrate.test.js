@@ -520,29 +520,51 @@ describe('migrateModel — activities without lane, lane-less processes, data no
     expect(keysIn(r.model).has('role')).toBe(false);
   });
 
-  test('data nodes and their associations: MG02 each; dropped with dropUnsupported', async () => {
+  test('data nodes become data items; links become dataAccess', async () => {
     const input = fixture('artifacts-laneless-pool.json');
-    const refused = migrateModel(input);
-    expect(refused.report.status).toBe('refused');
-    expect(entriesOf(refused, 'MG02').map((e) => e.elements)).toEqual([
-      ['formular'], ['anlagen'], ['register'], ['as_formular'], ['as_anlagen'], ['as_register'],
-    ]);
-    expect(codes(refused).every((c) => c === 'MG02')).toBe(true);
-    const r = migrateModel(input, { dropUnsupported: true });
+    const r = migrateModel(input);
     expectTranslatedAndValid(r);
+    expect(migrateModel(input, { dropUnsupported: true })).toEqual(r);
+    expect(r.model.$schemaVersion).toBe('2.1');
+    expect(nodeOf(r.model, 'pruefen').dataAccess).toEqual([
+      { data: 'formular', access: 'read' }, { data: 'anlagen', access: 'write' }, { data: 'register', access: 'read' },
+    ]);
+    expect(r.supplement.data).toEqual([
+      { id: 'formular', name: 'Antragsformular', kind: 'object' },
+      { id: 'anlagen', name: 'Anlagen', kind: 'object', isCollection: true },
+      { id: 'register', name: 'Antragsregister', kind: 'store' },
+    ]);
+    expect(r.catalog.data).toEqual(r.supplement.data);
+    expect(r.model.data).toBeUndefined();
+    expect(entriesOf(r, 'MG09')).toEqual([
+      { code: 'MG09', message: '[MG09] Data node "formular" became data item "formular" of the catalogue.', elements: ['formular', 'formular'] },
+      { code: 'MG09', message: '[MG09] Data node "anlagen" became data item "anlagen" of the catalogue.', elements: ['anlagen', 'anlagen'] },
+      { code: 'MG09', message: '[MG09] Data node "register" became data item "register" of the catalogue.', elements: ['register', 'register'] },
+    ]);
+    expect(codes(r)).toEqual(['MG09', 'MG09', 'MG09']);
     const types = processesOf(r.model).flatMap((p) => p.nodes).map((n) => n.type);
     expect(types).not.toContain('dataObjectReference');
     expect(types).not.toContain('dataStoreReference');
-    // its three associations each touch a data node
+    // its three associations became the step's data access
     expect(r.model.associations).toEqual([]);
     await generate(r, { lanes: false });
   });
 
-  test('data nodes inside a subprocess are dropped too', () => {
-    const r = migrateModel(fixture('subprocess-child-fidelity.json'), { dropUnsupported: true });
+  test('data nodes inside a subprocess without any link: MG09 and MG10 each, the model stays "2.0"', () => {
+    const r = migrateModel(fixture('subprocess-child-fidelity.json'));
     expectTranslatedAndValid(r);
-    expect(JSON.stringify(r.model)).not.toMatch(/data(Object|Store)Reference/);
-    expect(entriesOf(r, 'MG02').map((e) => e.elements[0]).sort()).toEqual(['c_data', 'g_data']);
+    expect(r.model.$schemaVersion).toBe('2.0');
+    expect(JSON.stringify(r.model)).not.toMatch(/data(Object|Store)Reference|dataAccess/);
+    expect(entriesOf(r, 'MG09').map((e) => e.elements)).toEqual([['g_data', 'g_data'], ['c_data', 'c_data']]);
+    expect(entriesOf(r, 'MG10')).toEqual([
+      { code: 'MG10', message: '[MG10] Data node "g_data" ("Archive batch") is linked to no activity: data item "g_data" stays in the catalogue and is not drawn.', elements: ['g_data', 'g_data'] },
+      { code: 'MG10', message: '[MG10] Data node "c_data" ("Case file") is linked to no activity: data item "c_data" stays in the catalogue and is not drawn.', elements: ['c_data', 'c_data'] },
+    ]);
+    expect(r.supplement.data).toEqual([
+      { id: 'g_data', name: 'Archive batch', kind: 'object', isCollection: true },
+      { id: 'c_data', name: 'Case file', kind: 'object', isCollection: true },
+    ]);
+    expect(entriesOf(r, 'MG02')).toEqual([]);
   });
 });
 
@@ -637,13 +659,16 @@ describe('migrateModel — fix round 1', () => {
     expect(nodeOf(r.model, 'b').assignments).toBeUndefined();
   });
 
-  test('a role on a data node dropped under MG02 gives no MG05', () => {
+  test('a role on a data node gives one MG05, no MG02; its lane goes without an entry', () => {
     const m = base();
     m.nodes.push({ id: 'd', type: 'dataObjectReference', name: 'Formular', lane: 'la', role: 'Clerk' });
-    const r = migrateModel(m, { dropUnsupported: true });
+    const r = migrateModel(m);
     expectTranslatedAndValid(r);
-    expect(entriesOf(r, 'MG02').map((e) => e.elements)).toEqual([['d']]);
-    expect(entriesOf(r, 'MG05')).toEqual([]);
+    expect(entriesOf(r, 'MG02')).toEqual([]);
+    expect(entriesOf(r, 'MG05')).toEqual([{
+      code: 'MG05', message: '[MG05] role "Clerk" on dataObjectReference "d" is dropped: migrate gives this node no assignment.', elements: ['d'],
+    }]);
+    expect(codes(r)).toEqual(['MG09', 'MG10', 'H07', 'H07', 'MG05']);
   });
 
   test('an activity with role but no lane: the role actor performs, MG05 [nodeId, actorId]', () => {
@@ -965,8 +990,13 @@ describe('migrateModel — the report compares the lanes (Task 2)', () => {
   });
 
   test('a refusal carries the same summary shape', () => {
-    const r = migrateModel(fixture('example-onboarding.json'));
+    const m = proc([
+      { id: 's', type: 'startEvent', name: 'Bestellung eingegangen', lane: 'A' },
+      { id: 'g', type: 'exclusiveGateway', name: 'Bestellung vollständig?', lane: 'A', system: 'Shop' },
+      { id: 'e', type: 'endEvent', name: 'Bestellung erledigt', lane: 'A' }], flow('s', 'g', 'e'));
+    const r = migrateModel(m);
     expect(r.report.status).toBe('refused');
+    expect(codes(r)).toEqual(['MG02']);
     expect(r.report.summary).toMatchObject({ laneMatches: 0, deviations: { MG03: 0, MG04: 0, MG05: 0 } });
   });
 
@@ -1142,5 +1172,305 @@ describe('migrateModel — against an existing catalogue (Task 3)', () => {
     expectTranslatedAndValid(r);
     expect(nodeOf(r.model, 's_review').assignments).toEqual([{ type: 'D', actor: 'cust' }]);
     expect(entriesOf(r, 'MG07').map((e) => e.elements)).toEqual([['c_lane', 'cust'], ['Customer', 'cust']]);
+  });
+});
+
+describe('migrateModel — 1.x data nodes (slice 4b)', () => {
+  const base = () => ({
+    id: 'Process_B', name: 'Bestellung', language: 'de',
+    lanes: [{ id: 'vt', name: 'Vertrieb' }],
+    nodes: [
+      { id: 's', type: 'startEvent', name: 'Bestellung eingegangen', lane: 'vt' },
+      { id: 't1', type: 'userTask', name: 'Bestellung prüfen', lane: 'vt' },
+      { id: 'g', type: 'exclusiveGateway', name: 'Bestellung vollständig?', lane: 'vt' },
+      { id: 't2', type: 'userTask', name: 'Bestellung bestätigen', lane: 'vt' },
+      { id: 'e', type: 'endEvent', name: 'Bestellung bestätigt', lane: 'vt' },
+      { id: 'e2', type: 'endEvent', name: 'Bestellung abgelehnt', lane: 'vt' },
+      { id: 'd1', type: 'dataObjectReference', name: 'Bestellung', lane: 'vt' },
+      { id: 'd2', type: 'dataObjectReference', name: 'Bestellung', lane: 'vt' }],
+    edges: [{ id: 'f1', source: 's', target: 't1' }, { id: 'f2', source: 't1', target: 'g' }, { id: 'f3', source: 'g', target: 't2', label: 'ja' },
+      { id: 'f4', source: 'g', target: 'e2', label: 'nein' }, { id: 'f5', source: 't2', target: 'e' }],
+    associations: [{ id: 'a1', source: 'd1', target: 't1', directed: true }, { id: 'a2', source: 't2', target: 'd2', directed: true }],
+  });
+  const access = (r, id) => nodeOf(r.model, id).dataAccess;
+
+  test('two nodes of the same name and kind become one item; read and write by direction; MG09 names both', async () => {
+    const r = migrateModel(base());
+    expectTranslatedAndValid(r);
+    expect(r.model.$schemaVersion).toBe('2.1');
+    expect(r.supplement.data).toEqual([{ id: 'd1', name: 'Bestellung', kind: 'object' }]);
+    expect(access(r, 't1')).toEqual([{ data: 'd1', access: 'read' }]);
+    expect(access(r, 't2')).toEqual([{ data: 'd1', access: 'write' }]);
+    expect(entriesOf(r, 'MG09')).toEqual([{
+      code: 'MG09', message: '[MG09] Data nodes "d1", "d2" became data item "d1" of the catalogue (same name and kind).', elements: ['d1', 'd1', 'd2'],
+    }]);
+    expect(entriesOf(r, 'MG10')).toEqual([]);
+    expect(codes(r)).toEqual(['MG09', 'H07']);
+    expect(r.model.associations).toEqual([]);
+    const out = await generate(r);
+    expect(out.bpmnXml).toContain('<bpmn:dataObjectReference id="t1__d1"');
+    expect(out.bpmnXml).toContain('<bpmn:dataInputAssociation id="t1__d1__read">');
+    expect(out.bpmnXml).toContain('<bpmn:dataOutputAssociation id="t2__d1__write">');
+  });
+
+  test('a merged node without a link: MG10 says its item is drawn through the other nodes', () => {
+    const m = base();
+    m.nodes.push({ id: 'd3', type: 'dataObjectReference', name: 'Bestellung' });
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG09').map((e) => e.elements)).toEqual([['d1', 'd1', 'd2', 'd3']]);
+    expect(entriesOf(r, 'MG10')).toEqual([{
+      code: 'MG10',
+      message: '[MG10] Data node "d3" ("Bestellung") is linked to no activity; its data item "d1" is drawn through the other data nodes of that item.',
+      elements: ['d3', 'd1'],
+    }]);
+  });
+
+  test('the same name with another kind or collection marker is another item; a store drops its collection marker', () => {
+    const m = base();
+    m.nodes.push({ id: 'd3', type: 'dataStoreReference', name: 'Bestellung', isCollection: true },
+      { id: 'd4', type: 'dataObjectReference', name: 'Bestellung', isCollection: true });
+    m.associations.push({ id: 'a3', source: 't2', target: 'd3', directed: true }, { id: 'a4', source: 'd4', target: 't2' });
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(r.supplement.data).toEqual([
+      { id: 'd1', name: 'Bestellung', kind: 'object' },
+      { id: 'd3', name: 'Bestellung', kind: 'store' },
+      { id: 'd4', name: 'Bestellung', kind: 'object', isCollection: true },
+    ]);
+    expect(access(r, 't2')).toEqual([{ data: 'd1', access: 'write' }, { data: 'd3', access: 'write' }, { data: 'd4' }]);
+  });
+
+  test('a node without name: its id is the item name, and MG09 says so', () => {
+    const m = base();
+    delete m.nodes.find((n) => n.id === 'd2').name;
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(r.supplement.data).toEqual([{ id: 'd1', name: 'Bestellung', kind: 'object' }, { id: 'd2', name: 'd2', kind: 'object' }]);
+    expect(entriesOf(r, 'MG09')[1].message).toBe('[MG09] Data node "d2" became data item "d2" of the catalogue. It has no name; its id "d2" is the name of the item.');
+  });
+
+  test('identical links are one access, and MG09 says which associations', () => {
+    const m = base();
+    m.associations.push({ id: 'a3', source: 'd2', target: 't1', directed: true }, { id: 'a4', source: 'd1', target: 't1', directed: true });
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(access(r, 't1')).toEqual([{ data: 'd1', access: 'read' }]);
+    expect(entriesOf(r, 'MG09')[0].message).toBe('[MG09] Data nodes "d1", "d2" became data item "d1" of the catalogue (same name and kind). The associations "a1", "a3", "a4" are one access of step "t1".');
+  });
+
+  test('a link without direction beside a recorded access of the same step and item is not carried (no C16), and MG09 says so', () => {
+    const m = base();
+    m.associations.splice(1, 0, { id: 'a0', source: 'd2', target: 't1' });
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(access(r, 't1')).toEqual([{ data: 'd1', access: 'read' }]);
+    expect(entriesOf(r, 'MG09')[0].message).toBe('[MG09] Data nodes "d1", "d2" became data item "d1" of the catalogue (same name and kind). The association "a0" has no direction and adds nothing to the recorded access of step "t1"; it is not carried.');
+    // a link without direction alone records no access
+    const only = base();
+    only.associations = [{ id: 'a0', source: 't1', target: 'd1' }];
+    const u = migrateModel(only);
+    expectTranslatedAndValid(u);
+    expect(access(u, 't1')).toEqual([{ data: 'd1' }]);
+    expect(access(u, 't2')).toBeUndefined();
+  });
+
+  test('a data node on a sequence flow is MG02: refused; dropped with the flag, the node kept as an item with MG10', () => {
+    const m = base();
+    m.nodes.push({ id: 'd5', type: 'dataStoreReference', name: 'Kundenkartei' });
+    m.edges.push({ id: 'f6', source: 't2', target: 'd5' });
+    const r = migrateModel(m);
+    expect(r.report.status).toBe('refused');
+    expect(r.report.entries).toEqual([{
+      code: 'MG02', message: '[MG02] sequence flow "f6" touches the data node "d5"; format 2.x records data access on activities only.', elements: ['f6'],
+    }]);
+    const d = migrateModel(m, { dropUnsupported: true });
+    expectTranslatedAndValid(d);
+    expect(entriesOf(d, 'MG02').map((e) => e.message)).toEqual(['[MG02] sequence flow "f6" touches the data node "d5"; format 2.x records data access on activities only; dropped.']);
+    expect(d.model.edges.map((e) => e.id)).toEqual(['f1', 'f2', 'f3', 'f4', 'f5']);
+    expect(d.supplement.data.map((x) => x.id)).toEqual(['d1', 'd5']);
+    expect(entriesOf(d, 'MG10')).toEqual([{
+      code: 'MG10', message: '[MG10] Data node "d5" ("Kundenkartei") is linked to no activity: data item "d5" stays in the catalogue and is not drawn.', elements: ['d5', 'd5'],
+    }]);
+  });
+
+  test('a message flow touching a data node is MG02', () => {
+    const m = { pools: [
+      { id: 'P1', name: 'Kunde', nodes: [{ id: 't1', type: 'sendTask', name: 'Bestellung senden' }, { id: 'd1', type: 'dataObjectReference', name: 'Bestellung' }], edges: [] },
+      { id: 'P2', name: 'Versand', nodes: [{ id: 't2', type: 'receiveTask', name: 'Bestellung empfangen' }], edges: [] }],
+    messageFlows: [{ id: 'm1', source: 'd1', target: 't2' }] };
+    const r = migrateModel(m);
+    expect(r.report.entries.map((e) => e.message)).toEqual(['[MG02] message flow "m1" touches the data node "d1"; format 2.x records data access on activities only.']);
+  });
+
+  test.each([
+    ['a gateway', 'g', 'exclusiveGateway'],
+    ['an event', 's', 'startEvent'],
+    ['another data node', 'd2', 'dataObjectReference'],
+  ])('a data node linked to %s is MG02', (_, target, type) => {
+    const m = base();
+    m.associations.push({ id: 'a3', source: 'd1', target });
+    const r = migrateModel(m);
+    expect(r.report.status).toBe('refused');
+    expect(r.report.entries).toEqual([{
+      code: 'MG02', message: `[MG02] association "a3" links the data node "d1" to ${type} "${target}"; format 2.x records data access on activities only.`, elements: ['a3'],
+    }]);
+    const d = migrateModel(m, { dropUnsupported: true });
+    expectTranslatedAndValid(d);
+    expect(access(d, 't1')).toEqual([{ data: 'd1', access: 'read' }]);
+  });
+
+  test('a data node field other than id, type, name, isCollection, lane and role is MG02 (documentation)', () => {
+    const m = base();
+    m.nodes.find((n) => n.id === 'd1').documentation = 'Die Bestellung des Kunden.';
+    const r = migrateModel(m);
+    expect(r.report.entries).toEqual([{
+      code: 'MG02', message: '[MG02] node "d1": field "documentation" of a data node has no place in format 2.x.', elements: ['d1'],
+    }]);
+    const d = migrateModel(m, { dropUnsupported: true });
+    expectTranslatedAndValid(d);
+    expect(entriesOf(d, 'MG02')[0].message).toBe('[MG02] node "d1": field "documentation" of a data node has no place in format 2.x; dropped.');
+    expect(d.supplement.data).toEqual([{ id: 'd1', name: 'Bestellung', kind: 'object' }]);
+    expect(JSON.stringify(d.model)).not.toContain('Die Bestellung des Kunden.');
+  });
+
+  test('a node id that is no catalogue id is renamed by the lane slug rule with "D_" (MG06); one that collides gets a suffix', () => {
+    const m = base();
+    for (const x of [...m.nodes, ...m.associations]) {
+      if (x.id === 'd1') x.id = '_bestellung';
+      if (x.source === 'd1') x.source = '_bestellung';
+    }
+    const given = { actors: [{ id: 'd2', name: 'Lager' }] };
+    m.nodes.find((n) => n.id === 'd2').name = 'Lieferschein';
+    const r = migrateModel(m, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG06').map((e) => [e.message, e.elements])).toEqual([
+      ['[MG06] data node id "_bestellung" is no catalogue id; the data item is "D__bestellung".', ['_bestellung', 'D__bestellung']],
+      ['[MG06] data node id "d2" collides with another catalogue id; the data item is "d2_2".', ['d2', 'd2_2']],
+    ]);
+    expect(access(r, 't1')).toEqual([{ data: 'D__bestellung', access: 'read' }]);
+    expect(access(r, 't2')).toEqual([{ data: 'd2_2', access: 'write' }]);
+  });
+
+  test('a lane id equal to a data id of the given catalogue is renamed (shared id space)', () => {
+    const m = base();
+    const r = migrateModel(m, { catalog: { actors: [], data: [{ id: 'vt', name: 'Anderes' }] } });
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG06').map((e) => e.message)).toEqual(['[MG06] lane id "vt" collides with a data id of the catalogue; the actor is "vt_2".']);
+  });
+
+  test('with --catalog a node named like a catalogue item of a fitting kind is that item (MG07); the model carries no data then', async () => {
+    const given = { actors: [], data: [{ id: 'order', name: 'Bestellung', kind: 'object' }] };
+    const before = copy(given);
+    const r = migrateModel(base(), { catalog: given });
+    expect(given).toEqual(before);
+    expectTranslatedAndValid(r);
+    expect(r.model.$schemaVersion).toBe('2.1');
+    expect(r.model.data).toBeUndefined();
+    expect(Object.keys(r.supplement)).toEqual(['actors']);
+    expect(r.catalog.data).toEqual(given.data);
+    expect(access(r, 't1')).toEqual([{ data: 'order', access: 'read' }]);
+    expect(access(r, 't2')).toEqual([{ data: 'order', access: 'write' }]);
+    expect(entriesOf(r, 'MG07')).toEqual([
+      { code: 'MG07', message: '[MG07] Data node "d1" maps by its name "Bestellung" to the existing data item "order".', elements: ['d1', 'order'] },
+      { code: 'MG07', message: '[MG07] Data node "d2" maps by its name "Bestellung" to the existing data item "order".', elements: ['d2', 'order'] },
+    ]);
+    expect(entriesOf(r, 'MG09')).toEqual([]);
+    const out = await runPipeline(copy(r.model), { catalog: copy(given), view: loadNamedView('rollen') });
+    expect(out.validation.errors).toEqual([]);
+    expect(out.bpmnXml).toContain('<bg:data ref="order" />');
+  });
+
+  test('reuse: a kind-less catalogue item fits; several of that name: the first; a store item does not fit an object', () => {
+    const given = { actors: [], data: [{ id: 'lager', name: 'Bestellung', kind: 'store' }, { id: 'o1', name: 'Bestellung' }, { id: 'o2', name: 'Bestellung', kind: 'object' }] };
+    const r = migrateModel(base(), { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG07')[0].message).toBe('[MG07] Data node "d1" maps by its name "Bestellung" to the existing data item "o1". The catalogue holds 2 data items of that name and a fitting kind ("o1", "o2"); the first is taken.');
+    expect(access(r, 't1')).toEqual([{ data: 'o1', access: 'read' }]);
+  });
+
+  test('kind mismatch: no reuse; the model carries the new data and is "2.1"', () => {
+    const given = { actors: [], data: [{ id: 'lager', name: 'Bestellung', kind: 'store' }] };
+    const r = migrateModel(base(), { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG07')).toEqual([]);
+    expect(r.model.$schemaVersion).toBe('2.1');
+    expect(r.model.data).toEqual([{ id: 'd1', name: 'Bestellung', kind: 'object' }]);
+    expect(r.supplement.data).toEqual(r.model.data);
+    expect(r.catalog.data).toEqual([...given.data, ...r.model.data]);
+    expect(resolveFields(copy(r.model), { catalog: copy(given) }).errors).toEqual([]);
+  });
+
+  test('two groups mapped to one catalogue item: MG07 in node order, the merged links said once', () => {
+    const m = base();
+    m.nodes.find((n) => n.id === 'd2').isCollection = true;
+    m.nodes.push({ id: 'd3', type: 'dataObjectReference', name: 'Bestellung' });
+    m.associations = [{ id: 'a1', source: 'd1', target: 't1', directed: true }, { id: 'a2', source: 'd2', target: 't1', directed: true },
+      { id: 'a3', source: 'd3', target: 't1', directed: true }];
+    const given = { actors: [], data: [{ id: 'best', name: 'Bestellung', kind: 'object' }] };
+    const r = migrateModel(m, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(access(r, 't1')).toEqual([{ data: 'best', access: 'read' }]);
+    expect(entriesOf(r, 'MG07').map((e) => e.message)).toEqual([
+      '[MG07] Data node "d1" maps by its name "Bestellung" to the existing data item "best". The associations "a1", "a2", "a3" are one access of step "t1".',
+      `[MG07] Data node "d2" maps by its name "Bestellung" to the existing data item "best". The catalogue item is not a collection; the node's collection marker is not carried.`,
+      '[MG07] Data node "d3" maps by its name "Bestellung" to the existing data item "best".',
+    ]);
+  });
+
+  test('reuse with another collection marker: MG07 says so (N3)', () => {
+    const m = base();
+    m.nodes.find((n) => n.id === 'd1').isCollection = true;
+    m.nodes.find((n) => n.id === 'd2').name = 'Lieferschein';
+    const given = { actors: [], data: [{ id: 'order', name: 'Bestellung', kind: 'object' }, { id: 'slip', name: 'Lieferschein', isCollection: true }] };
+    const r = migrateModel(m, { catalog: given });
+    expectTranslatedAndValid(r);
+    expect(entriesOf(r, 'MG07').map((e) => e.message)).toEqual([
+      `[MG07] Data node "d1" maps by its name "Bestellung" to the existing data item "order". The catalogue item is not a collection; the node's collection marker is not carried.`,
+      `[MG07] Data node "d2" maps by its name "Lieferschein" to the existing data item "slip". The catalogue item is a collection; the node has no collection marker, and the item's marker applies.`,
+    ]);
+  });
+
+  test('only links-free nodes: without --catalog "2.0" with data in the supplement; with --catalog the model carries data and is "2.1"', () => {
+    const m = base();
+    m.associations = [];
+    const r = migrateModel(m);
+    expectTranslatedAndValid(r);
+    expect(r.model.$schemaVersion).toBe('2.0');
+    expect(Object.keys(r.supplement)).toEqual(['actors', 'data']);
+    expect(entriesOf(r, 'MG10').map((e) => e.elements)).toEqual([['d1', 'd1'], ['d2', 'd1']]);
+    const c = migrateModel(m, { catalog: { actors: [] } });
+    expectTranslatedAndValid(c);
+    expect(c.model.$schemaVersion).toBe('2.1');
+    expect(c.model.data).toEqual([{ id: 'd1', name: 'Bestellung', kind: 'object' }]);
+  });
+
+  test('a derived data id that meets an id of the 1.x model is refused with MG01 (C17)', () => {
+    const m = base();
+    m.nodes.push({ id: 't1__d1', type: 'textAnnotation', name: 'Hinweis' });
+    const r = migrateModel(m);
+    expect(r.model).toBeNull();
+    expect(r.report.entries).toEqual([{
+      code: 'MG01',
+      message: '[MG01] input refused: the translation\'s data references collide: data id "t1__d1" (step "t1", data "d1") collides with "t1__d1"; rename the step, the data node or the colliding id in the 1.x model',
+      elements: [],
+    }]);
+  });
+
+  test('a data link inside a subprocess is carried; neither argument is changed (deep freeze)', () => {
+    const freeze = (v) => { if (v && typeof v === 'object') { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
+    const m = base();
+    m.nodes.splice(3, 0, { id: 'sp', type: 'subProcess', name: 'Bestellung bearbeiten', lane: 'vt', isExpanded: true,
+      nodes: [{ id: 'c1', type: 'task', name: 'Position prüfen' }, { id: 'cd', type: 'dataObjectReference', name: 'Position', isCollection: true }], edges: [] });
+    m.edges = m.edges.map((e) => (e.id === 'f3' ? { ...e, target: 'sp' } : e));
+    m.edges.push({ id: 'f7', source: 'sp', target: 't2' });
+    m.associations.push({ id: 'a3', source: 'cd', target: 'c1', directed: true });
+    const frozen = freeze(m);
+    const given = freeze({ actors: [], data: [{ id: 'x', name: 'Andere' }] });
+    let r;
+    expect(() => { r = migrateModel(frozen, { catalog: given }); }).not.toThrow();
+    expectTranslatedAndValid(r);
+    expect(nodeOf(r.model, 'sp').nodes[0].dataAccess).toEqual([{ data: 'cd', access: 'read' }]);
+    expect(nodeOf(r.model, 'sp').nodes.map((n) => n.id)).toEqual(['c1']);
   });
 });
