@@ -7,7 +7,7 @@ import { describe, test, expect } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrateModel, compareLanes } from './migrate.js';
+import { migrateModel, compareLanes, compareDataAccess } from './migrate.js';
 import { validateModelSchema } from './schema-gate.js';
 import { runPipeline } from './pipeline.js';
 import { resolveFields } from './model-v2.js';
@@ -1472,5 +1472,20 @@ describe('migrateModel — 1.x data nodes (slice 4b)', () => {
     expectTranslatedAndValid(r);
     expect(nodeOf(r.model, 'sp').nodes[0].dataAccess).toEqual([{ data: 'cd', access: 'read' }]);
     expect(nodeOf(r.model, 'sp').nodes.map((n) => n.id)).toEqual(['c1']);
+  });
+
+  test('derived data associations or references that differ from the carried links are a bug of migrate: "migrate internal error"', () => {
+    const lc = {
+      nodes: [{ id: 's', type: 'userTask' }, { id: 's__d', type: 'dataObjectReference', _dataRef: 'd' }, { id: 's__e', type: 'dataStoreReference', _dataRef: 'e' }],
+      associations: [{ id: 'a', _access: 'read' }, { id: 'b', _access: 'write' }, { id: 'plain' }],
+    };
+    const expected = { links: 2, refs: ['s__d', 's__e'] };
+    expect(() => compareDataAccess(lc, expected)).not.toThrow();
+    expect(() => compareDataAccess(lc, { ...expected, links: 3 })).toThrow(/^migrate internal error: /);
+    expect(() => compareDataAccess(lc, { ...expected, refs: ['s__d'] })).toThrow(/^migrate internal error: /);
+    expect(() => compareDataAccess(lc, { ...expected, refs: ['s__d', 's__x'] })).toThrow(/^migrate internal error: /);
+    expect(() => compareDataAccess({ pools: [{ nodes: [] }] }, expected)).toThrow(/^migrate internal error: /);
+    expect(() => compareDataAccess({ pools: [{ nodes: lc.nodes, associations: lc.associations }] }, expected)).not.toThrow();
+    expect(() => compareDataAccess({ nodes: [] }, { links: 0, refs: [] })).not.toThrow();
   });
 });
