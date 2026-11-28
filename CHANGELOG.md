@@ -279,6 +279,13 @@ before. Every `validation` result gains the key `hints`, an empty array without 
   goldens with them (`bestellung.rollen`, `bestellung.einheiten`, `bestellung-systeme.systeme`);
   the `organigramm` files keep their names. Only names and ids change; the generated geometry is the
   same.
+- **Import reads native data associations** (1.x too). Both importers (`import_bpmn`,
+  `/api/v1/import`, `node bpmn/import.js`) read a `dataInputAssociation` or `dataOutputAssociation`
+  on a task, subprocess or event, at any depth, as a directed association between the element and
+  its data object or data store reference; before, the link was lost. They come after the plain
+  associations in `associations`. An input with several sources gives one association per source
+  (`<id>`, then `<id>_2`, … avoiding ids in use). One without an `id`, or one naming a property or an
+  `ioSpecification` input, is skipped. Regenerating the file writes plain directed associations.
 
 ### Fixed
 

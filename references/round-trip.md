@@ -35,6 +35,15 @@ data objects and data stores, text annotations and groups, associations, documen
 conditional flows, top-level message/signal/error/escalation definitions, and the generator's own
 extensions (`decisionRef`, `system`).
 
+Native data associations (`dataInputAssociation`, `dataOutputAssociation`) on tasks, subprocesses
+and events, at any depth, are read as directed associations: an input from the data object or data
+store to the element, an output from the element to it. They follow the plain associations in
+`associations`. An input with several sources gives one association per source; the second and later
+ones get the id `<id>_2`, `<id>_3`, … (skipping ids already in use). A data association without an
+`id` is skipped, and so is a reference to something that is no data object or data store reference
+(a property, an input of an `ioSpecification`). Regenerating such a file writes plain directed
+associations.
+
 ## What to expect
 
 - **Layout is recomputed.** The importer reads semantics, not coordinates; the pipeline lays the

@@ -167,6 +167,7 @@ the same standard-ahead-of-its-readers split as BPMN. Version index: <https://ww
 | §10.5.1 | conditionExpression on non-default outgoing flows | Implemented | bpmn-xml.js:generateBpmnXml |
 | Data Object Reference (§10.6) | Data Objects | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact |
 | Data Store Reference (§10.6) | Data Stores | Implemented | bpmn-xml.js:generateBpmnXml, svg.js:renderDataArtifact |
+| Data Association (§10.6) | DataInputAssociation / DataOutputAssociation on activities and events, at any depth: read on import as directed associations (reference → element, element → reference); the writer emits plain directed associations | Partial | import.js:readDataAssociations, moddle-import.js:readDataAssociations |
 | §10.7 | Artifacts in `<artifacts>`, not `<flowElements>` (tProcess sequence) | Implemented | bpmn-xml.js:buildProcess |
 | §10.7.1 | Association (sourceRef, targetRef, associationDirection) | Implemented | bpmn-xml.js:generateBpmnXml |
 | Group (§10.7.2) | Group label via categoryValueRef → Category/CategoryValue | Implemented | bpmn-xml.js:buildCategoryForGroup |
