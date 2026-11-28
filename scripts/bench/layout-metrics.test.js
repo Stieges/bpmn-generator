@@ -23,7 +23,7 @@ const load = (name) => JSON.parse(readFileSync(join(fixturesDir, name), 'utf8'))
 // layout.nodeLabelsAvoidFlows (both on since 4.0.0). plain / plain-on: default resp. on with both
 // switches explicitly off — what default and on were before the bend rule; their rows are the
 // former default and on rows, kept verbatim so the pre-switch geometry stays fenced.
-const PLAIN = { bendRule: false, nodeLabelsAvoidFlows: false };
+const PLAIN = { bendRule: false, nodeLabelsAvoidFlows: false, gatewayTips: false };
 const MODES = { default: {}, off: { visualRefinement: false }, on: { visualRefinement: true, elkWrapping: 'auto' },
   plain: PLAIN, 'plain-on': { ...PLAIN, visualRefinement: true, elkWrapping: 'auto' } };
 
@@ -363,35 +363,45 @@ const BUDGET_PLAIN = {
 // against default wherever a moved route left another flow's line: bpmn-generator-pipeline
 // 227 → 187, multi-pool-collaboration 50 → 0, realistic-collaboration 386 → 226, sparse-lanes
 // 184 → 0 (f3).
+// layout.gatewayTips (#122, on since 4.0.0, in default / off / on; plain / plain-on switch it off
+// with the other two so their rows stay the pre-switch geometry): offOver5 falls in every fixture
+// with a gateway whose flows ELK docked on a facet — the ends now sit on the diamond's vertices
+// (boundary-event-shapes, bpmn-generator-pipeline, example-bestellung-versand, -kreditantrag,
+// -onboarding, -rechnungspruefung, -schadenmeldung, loop-with-join, multi-pool-collaboration,
+// parallel-split-join, realistic-collaboration, simple-approval, subprocess-merge-fanout); what
+// stays is non-gateway ends, loop-with-join Flow_7 (a long loop-back left on its facet rather than
+// given a jog) and ends with more flows than vertices. bpmn-generator-pipeline overlapLen falls
+// 270 → 190 (default) and 255 → 175 (off): fo2 leaves its gateway's bottom vertex and no longer
+// shares 80 px of fo3's line. No count rises.
 const BUDGET_DEFAULT = {
   'all-element-classes.json':           r({ bendsMax: 2, offOver5: 2 }),
   'artifacts-laneless-pool.json':       r({}),
-  'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 10 }),
-  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 270 }),
+  'boundary-event-shapes.json':         r({ crossings: 1, bendsMax: 2, offOver5: 9 }),
+  'bpmn-generator-pipeline.json':       r({ bendsMax: 4, mfCrowd: 2, offOver5: 11, overlapLen: 190 }),
   'deadlock-process.json':              null,
   'dense-edge-labels.json':             r({ bendsMax: 1, offOver5: 4 }),
-  'example-bestellung-versand.json':   r({ crossings: 2, bendsMax: 3, offOver5: 6, overlapLen: 197 }),
-  'example-kreditantrag.json':          r({ crossings: 1, bendsMax: 2, offOver5: 10, overlapLen: 62 }),
-  'example-onboarding.json':            r({ bendsMax: 2, offOver5: 10, overlapLen: 92 }),
-  'example-rechnungspruefung.json':     r({ crossings: 1, bendsMax: 6, offOver5: 3 }),
-  'example-schadenmeldung.json':        r({ bendsMax: 2, offOver5: 6, overlapLen: 230 }),
+  'example-bestellung-versand.json':   r({ crossings: 2, bendsMax: 3, offOver5: 4, overlapLen: 197 }),
+  'example-kreditantrag.json':          r({ crossings: 1, bendsMax: 2, offOver5: 8, overlapLen: 62 }),
+  'example-onboarding.json':            r({ bendsMax: 2, offOver5: 7, overlapLen: 92 }),
+  'example-rechnungspruefung.json':     r({ crossings: 1, bendsMax: 6 }),
+  'example-schadenmeldung.json':        r({ bendsMax: 2, offOver5: 3, overlapLen: 230 }),
   'example-urlaubsantrag.json':         r({ bendsMax: 2, offOver5: 4 }),
   'expanded-subprocess.json':           r(),
   'long-lane-names.json':               r({ bendsMax: 1 }),
-  'loop-with-join.json':                r({ bendsMax: 1, offOver5: 7, overlapLen: 23 }),
+  'loop-with-join.json':                r({ bendsMax: 1, offOver5: 5, overlapLen: 23 }),
   // overlapLen 62: mf_ack and mf_inv share the black-box pool's centre column on their last leg —
   // the docking layout.alignParticipantPorts removes (off by default, so every mode keeps it).
   'message-flow-participant-ports.json': r({ overlapLen: 62 }),
   'messageflow-to-subprocess.json':     r({ mfCrowd: 1, overlapLen: 83 }),
-  'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 2 }),
+  'multi-pool-collaboration.json':      r({ bendsMax: 1, offOver5: 1 }),
   'nested-lanes-role-system.json':      r({}),
-  'parallel-split-join.json':           r({ bendsMax: 1, offOver5: 4 }),
-  'realistic-collaboration.json':       r({ bendsMax: 2, offOver5: 4, overlapLen: 226 }),
-  'simple-approval.json':               r({ bendsMax: 1, offOver5: 5 }),
+  'parallel-split-join.json':           r({ bendsMax: 1 }),
+  'realistic-collaboration.json':       r({ bendsMax: 2, offOver5: 2, overlapLen: 226 }),
+  'simple-approval.json':               r({ bendsMax: 1, offOver5: 4 }),
   'sparse-lanes.json':                  r({ bendsMax: 1, offOver5: 4 }),
   'subprocess-child-fidelity.json':     r({ bendsMax: 2, offOver5: 3 }),
   'subprocess-collapsed-children.json': r(),
-  'subprocess-merge-fanout.json':       r({ bendsMax: 1, offOver5: 8 }),
+  'subprocess-merge-fanout.json':       r({ bendsMax: 1, offOver5: 6 }),
   'wide-pipeline.json':                 r(),
   'wrapping-back-edge.json':            r({ bendsMax: 2, offOver5: 2 }),
 };
@@ -414,17 +424,17 @@ const BUDGET_DEFAULT = {
 const BUDGET = Object.fromEntries(Object.entries(BUDGET_DEFAULT).map(([name, row]) => [name,
   { default: row, off: row, on: row, plain: BUDGET_PLAIN[name].default, 'plain-on': BUDGET_PLAIN[name].on }]));
 Object.assign(BUDGET['bpmn-generator-pipeline.json'], {
-  off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 15, overlapLen: 255 }),
-  on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 16, overlapLen: 232 }) });
+  off: r({ bendsMax: 4, mfCrowd: 2, offOver5: 11, overlapLen: 175 }),
+  on: r({ bendsMax: 4, mfCrowd: 2, offOver5: 13, overlapLen: 232 }) });
 Object.assign(BUDGET['example-bestellung-versand.json'], {
-  off: r({ crossings: 2, bendsMax: 3, offOver5: 6, overlapLen: 262 }) });
+  off: r({ crossings: 2, bendsMax: 3, offOver5: 4, overlapLen: 262 }) });
 Object.assign(BUDGET['example-kreditantrag.json'], {
-  on: r({ crossings: 1, bendsMax: 4, offOver5: 11, overlapLen: 62 }) });
+  on: r({ crossings: 1, bendsMax: 4, offOver5: 9, overlapLen: 62 }) });
 Object.assign(BUDGET['example-schadenmeldung.json'], {
-  off: r({ bendsMax: 2, offOver5: 6, overlapLen: 242 }) });
+  off: r({ bendsMax: 2, offOver5: 3, overlapLen: 242 }) });
 Object.assign(BUDGET['realistic-collaboration.json'], {
-  off: r({ bendsMax: 2, offOver5: 4, overlapLen: 356 }),
-  on: r({ bendsMax: 4, mfCrowd: 6, offOver5: 4, overlapLen: 586 }) });
+  off: r({ bendsMax: 2, offOver5: 2, overlapLen: 356 }),
+  on: r({ bendsMax: 4, mfCrowd: 6, offOver5: 3, overlapLen: 586 }) });
 
 // Flow direction (bend-rule.js bendMetrics, through flow-metrics.mjs flowDirectionMetrics), every
 // mode: [avoidableBends, againstFlowEntries]. avoidableBends sums current − fewest admissible bends
