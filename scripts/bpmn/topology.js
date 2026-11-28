@@ -558,6 +558,15 @@ export function collectDocumentIds(lc) {
  */
 export function assignEdgeIds(lc) {
   const used = collectDocumentIds(lc);
+  // The ids the writer derives from private carriers of a format 2.1 data reference or step (the
+  // shared DataObject, the DataStore, the placeholder property) are taken too. A model without
+  // them carries none of these keys, so its set, and every id minted from it, stays as it was.
+  (function collectCarriers(v) {
+    if (Array.isArray(v)) { v.forEach(collectCarriers); return; }
+    if (!v || typeof v !== 'object') return;
+    for (const key of ['_dataObject', '_dataStore', '_dataProperty']) if (typeof v[key] === 'string') used.add(v[key]);
+    for (const k of Object.keys(v)) collectCarriers(v[k]);
+  })(lc);
 
   const assign = (v) => {
     if (Array.isArray(v)) { v.forEach(assign); return; }
