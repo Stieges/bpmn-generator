@@ -11,6 +11,7 @@ import { OMG_NODE_FIELD_SCOPE, SUPPORTED_NODE_TYPES, MARKER_BY_EVENT_DEFINITION,
 import { DERIVED_JOIN_FLOW } from './derivations.js';
 import { EXTENSION_NS } from '../shared/utils.js';
 import { MARKER_NONE } from './naming/markers.js';
+import { collectDocumentIds } from './topology.js';
 
 const moddle = new BpmnModdle();
 
@@ -151,6 +152,93 @@ export function findNodeDeep(nodes, id) {
   return undefined;
 }
 
+/** The node types a native data association may name as its data end. */
+const DATA_REFERENCE_TYPES = new Set(['dataObjectReference', 'dataStoreReference']);
+
+/** Ids of every data object or data store reference in `pools`, at any depth. */
+export function dataReferenceIds(pools) {
+  const ids = new Set();
+  const visit = (nodes) => {
+    for (const n of nodes || []) {
+      if (DATA_REFERENCE_TYPES.has(n.type) && typeof n.id === 'string') ids.add(n.id);
+      visit(n.nodes);
+    }
+  };
+  for (const pool of pools) visit(pool.nodes);
+  return ids;
+}
+
+/**
+ * The entries one native data association contributes, as directed 1.x associations — the rule
+ * both importers share (each walks its own tree and hands over the plain values).
+ *
+ * `kind` 'input': one entry per `sourceRefs` id that names a data reference, from the reference
+ * to `owner`. 'output': `targetRef` must name a data reference; one entry from `owner` to it.
+ * The first entry keeps `id`; a later one gets `<id>_<n>` (n ≥ 2), with suffixes skipping every id
+ * in `used` (which gains each minted id), as `assignEdgeIds` does. An element without an id is
+ * skipped (it could carry no DI), and so is a ref that names no data reference (a property, an
+ * ioSpecification data input).
+ */
+export function dataAssociationEntries({ kind, id, owner, sourceRefs = [], targetRef }, dataRefIds, used) {
+  if (!id || !owner) return [];
+  const ends = kind === 'input'
+    ? sourceRefs.filter(ref => dataRefIds.has(ref)).map(ref => ({ source: ref, target: owner }))
+    : (dataRefIds.has(targetRef) ? [{ source: owner, target: targetRef }] : []);
+  let n = 2;
+  return ends.map((end, i) => {
+    let entryId = id;
+    if (i > 0) {
+      while (used.has(`${id}_${n}`)) n++;
+      entryId = `${id}_${n}`;
+      used.add(entryId);
+      n++;
+    }
+    return { id: entryId, source: end.source, target: end.target, directed: true };
+  });
+}
+
+/**
+ * The native data associations of a moddle process, read as directed associations: every flow node
+ * the importer reads (subprocess and transaction children too), in document order, a node before
+ * its children, and per node its inputs before its outputs.
+ */
+function readDataAssociations(proc, dataRefIds, used) {
+  const out = [];
+  const visit = (container) => {
+    for (const el of container.flowElements || []) {
+      const type = shortType(el.$type);
+      if (!SUPPORTED_NODE_TYPES.has(type)) continue;
+      for (const da of el.dataInputAssociations || []) {
+        out.push(...dataAssociationEntries({
+          kind: 'input', id: da.id, owner: el.id,
+          sourceRefs: (da.sourceRef || []).map(ref => ref?.id ?? ref),
+        }, dataRefIds, used));
+      }
+      for (const da of el.dataOutputAssociations || []) {
+        out.push(...dataAssociationEntries({
+          kind: 'output', id: da.id, owner: el.id, targetRef: da.targetRef?.id ?? da.targetRef,
+        }, dataRefIds, used));
+      }
+      if (type === 'subProcess' || type === 'transaction') visit(el);
+    }
+  };
+  visit(proc);
+  return out;
+}
+
+/** The ids of every native data association in a moddle process, at any depth, into `used`. */
+function collectDataAssociationIds(proc, used) {
+  const visit = (container) => {
+    for (const el of container.flowElements || []) {
+      for (const da of [...(el.dataInputAssociations || []), ...(el.dataOutputAssociations || [])]) {
+        if (da.id) used.add(da.id);
+      }
+      visit(el);
+    }
+  };
+  visit(proc);
+}
+
 /**
  * A `<bpmn:textAnnotation>` or `<bpmn:group>` element → its Logic-Core node, or `null` for
  * anything else in an `artifacts` list (an Association, which is read separately).
@@ -282,6 +370,11 @@ function moddleToLogicCore(definitions) {
       }
     }
   }
+  // Then the native data associations of every process, read as directed associations.
+  const dataRefIds = dataReferenceIds(pools);
+  const usedIds = collectDocumentIds({ pools, collapsedPools, messageFlows, associations, definitions: topLevelDefs });
+  for (const proc of processes) collectDataAssociationIds(proc, usedIds);
+  for (const proc of processes) associations.push(...readDataAssociations(proc, dataRefIds, usedIds));
 
   // Parse bioc: colors from DI
   const diagram = definitions.diagrams?.[0];

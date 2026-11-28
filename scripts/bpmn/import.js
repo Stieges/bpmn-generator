@@ -8,7 +8,8 @@
  *
  * Supports: processes, collaborations, lanes, message flows,
  *           collapsed pools, gateways, all task/event types,
- *           boundary events, loop/MI markers, data objects, associations.
+ *           boundary events, loop/MI markers, data objects, associations,
+ *           data input/output associations (read as directed associations).
  */
 
 import { readFileSync, writeFileSync } from 'fs';
@@ -16,7 +17,9 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import {
   moddleParse, moddleToLogicCore, EVENT_SUBPROCESS_TYPES, INSTANTIATE_TYPES, findNodeDeep, extensionPrefixes, markerNoneAttribute,
+  dataReferenceIds, dataAssociationEntries,
 } from './moddle-import.js';
+import { collectDocumentIds } from './topology.js';
 import { isBpmnArtifact, isEvent, SUPPORTED_NODE_TYPES, EVENT_DEFINITION_BY_MARKER } from './types.js';
 import { MARKER_NONE } from './naming/markers.js';
 import { isMainModule } from '../shared/entry-point.js';
@@ -249,6 +252,11 @@ function readLegacy(xml) {
       });
     }
   }
+  // Then the native data associations of every process, read as directed associations.
+  const dataRefIds = dataReferenceIds(pools);
+  const usedIds = collectDocumentIds({ pools, collapsedPools, messageFlows, associations, definitions: topLevelDefs });
+  for (const proc of processes) collectDataAssociationIds(proc, usedIds);
+  for (const proc of processes) associations.push(...readDataAssociations(proc, dataRefIds, usedIds));
 
   // Parse bioc: color attributes from DI shapes
   const diagram = findChild(defs, 'BPMNDiagram');
@@ -286,6 +294,44 @@ function readLegacy(xml) {
   }
 
   return { id: 'Process_1', name: 'Empty', nodes: [], edges: [], lanes: [] };
+}
+
+/**
+ * The native data associations of a DOM process, read as directed associations — the twin of
+ * `readDataAssociations` in moddle-import.js over the raw DOM, with the shared rule in
+ * `dataAssociationEntries`.
+ */
+function readDataAssociations(proc, dataRefIds, used) {
+  const out = [];
+  const visit = (container) => {
+    for (const child of container.children) {
+      const tag = stripNs(child.tag);
+      if (!SUPPORTED_NODE_TYPES.has(tag)) continue;
+      for (const da of findChildren(child, 'dataInputAssociation')) {
+        out.push(...dataAssociationEntries({
+          kind: 'input', id: da.attrs.id, owner: child.attrs.id,
+          sourceRefs: findChildren(da, 'sourceRef').map(ref => ref.text),
+        }, dataRefIds, used));
+      }
+      for (const da of findChildren(child, 'dataOutputAssociation')) {
+        out.push(...dataAssociationEntries({
+          kind: 'output', id: da.attrs.id, owner: child.attrs.id, targetRef: findChild(da, 'targetRef')?.text,
+        }, dataRefIds, used));
+      }
+      if (tag === 'subProcess' || tag === 'transaction') visit(child);
+    }
+  };
+  visit(proc);
+  return out;
+}
+
+/** The ids of every native data association in a DOM process, at any depth, into `used`. */
+function collectDataAssociationIds(element, used) {
+  for (const child of element.children || []) {
+    const tag = stripNs(child.tag);
+    if ((tag === 'dataInputAssociation' || tag === 'dataOutputAssociation') && child.attrs.id) used.add(child.attrs.id);
+    collectDataAssociationIds(child, used);
+  }
 }
 
 /**
